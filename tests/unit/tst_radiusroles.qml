@@ -60,15 +60,16 @@ TestCase {
         verify(found, "the group's box takes radius.group");
     }
 
-    // Settings no longer borrows the menus' radius for its groups: what is left reads a menu-like popover (the colour well's)
-    // or waits for step 26 (Software Update's sheet).
+    // Settings no longer borrows the menus' radius for its groups: what is left reads a menu-like popover (the colour well's);
+    // Software Update's sheet followed in step 26.
     function test_settingsBorrowsNoMenuRadius() {
-        const left = ["apps/settings/qml/ColorWell.qml", "apps/settings/qml/SoftwareUpdateSheet.qml"];
+        const left = ["apps/settings/qml/ColorWell.qml"];
         for (const path of ["SettingsGroup", "ListFooter", "GestureRow", "GestureHeader", "PaneBanner", "PaneHero", "NetworkRow",
                             "BluetoothDeviceRow", "DisplayHeader", "PrinterRow", "ServiceRow", "LoginItemsPage", "PrivacyCategoryPage",
-                            "SoundDeviceTable", "LayoutPickerSheet", "AddPrinterSheet", "AppPickerSheet", "KeyboardShortcutsSheet", "Main"])
+                            "SoundDeviceTable", "LayoutPickerSheet", "AddPrinterSheet", "AppPickerSheet", "KeyboardShortcutsSheet", "Main",
+                            "SoftwareUpdateSheet"])
             verify(source("apps/settings/qml/" + path + ".qml").indexOf("Tokens.radiusMenu") < 0, path);
-        verify(left.every(p => source(p).indexOf("Tokens.radiusMenu") >= 0), "the two kept on purpose");
+        verify(left.every(p => source(p).indexOf("Tokens.radiusMenu") >= 0), "the one kept on purpose");
     }
 
     function test_theShellsInnerShapes_data() {

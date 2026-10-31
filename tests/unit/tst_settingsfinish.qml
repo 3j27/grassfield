@@ -118,6 +118,24 @@ TestCase {
         verify(preview.tint >= Appearance.glassAlphaOver("controls", preview.transparency, null) - 1e-9, "never clearer");
     }
 
+    // Software Update's three files on the same rules (ADR-0039 step 26): its sheet's lists are groups (radius.group), its page
+    // is built from the shared pieces (Button, InfoButton, the shared Spinner and ProgressBar), no colour or radius of its own.
+    function test_softwareUpdateOnTheSettingsRules() {
+        const read = path => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("../../apps/settings/qml/" + path), false);
+            xhr.send();
+            return xhr.responseText;
+        };
+        const sheet = read("SoftwareUpdateSheet.qml");
+        compare(sheet.indexOf("radiusMenu"), -1, "no menu radius on a group");
+        compare(sheet.split("radius: Tokens.radiusGroup").length - 1, 2, "both lists are groups");
+        const page = read("SoftwareUpdatePage.qml");
+        compare(page.indexOf("colors.textSecondary"), -1);
+        compare(page.indexOf("radius:"), -1, "no radius of its own");
+        verify(page.indexOf("Spinner {") > 0 && page.indexOf("ProgressBar {") > 0, "the shared indicators");
+    }
+
     function test_errorNoteIsInTheWindowsSecondary() {
         const component = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/ErrorNote.qml"));
         compare(component.status, Component.Ready, component.errorString());
