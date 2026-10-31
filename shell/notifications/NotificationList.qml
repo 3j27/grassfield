@@ -22,6 +22,10 @@ ListView {
     // The first and the last Tab stop after the list (Edit Widgets, the close circle).
     required property Item editTarget
     required property Item closeTarget
+    // The Tab stop before the list while it can act (the title's Clear All; ADR-0039 step 7): Tab from the close circle and
+    // Shift+Tab from the first card reach it. Null: the order is the list's and the footer's alone.
+    property Item headTarget: null
+    readonly property bool headReady: list.headTarget !== null && list.headTarget.visible && list.headTarget.enabled
     // Room the footer needs below the list (its height and the gap above it).
     property real bottomReserve: 0
     // Counts the frames of a card sliding out or of the column reflowing (their surfaces move without the list geometry
@@ -104,8 +108,18 @@ ListView {
             radius: height / 2
             // Same backing as the x of a card (A2: the label must stay legible on any wallpaper).
             color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
-            border.width: ctl.activeFocus ? Tokens.controlFocusOutline : 1
-            border.color: ctl.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+            border.width: 1
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+        }
+
+        // The pill keeps its rim; the shared ring goes outside it, after a key only (ADR-0039 step 7).
+        KeyFocus {
+            id: ctlFocus
+        }
+
+        FocusRing {
+            shapeRadius: height / 2
+            visible: ctlFocus.active
         }
 
         Icon {
@@ -594,12 +608,16 @@ ListView {
             }
             dest = list.regionEntry(r + (forward ? 1 : -1), forward);
             if (!dest)
-                dest = forward ? list.editTarget : list.closeTarget;
+                dest = forward ? list.editTarget : (list.headReady ? list.headTarget : list.closeTarget);
         } else if (f === panel || f === list || f === list.contentItem) {
-            // Nothing focused yet: Tab starts at the top card, Shift+Tab at the last control.
-            dest = forward ? list.regionEntry(0, true) : list.closeTarget;
+            // Nothing focused yet: Tab starts at the head (or the top card), Shift+Tab at the last control.
+            dest = forward ? (list.headReady ? list.headTarget : list.regionEntry(0, true)) : list.closeTarget;
         } else if (f === list.closeTarget && forward) {
-            dest = list.regionEntry(0, true);
+            dest = list.headReady ? list.headTarget : list.regionEntry(0, true);
+        } else if (f === list.headTarget) {
+            dest = forward ? list.regionEntry(0, true) : list.closeTarget;
+            if (!dest)
+                dest = list.editTarget;
         } else if (f === list.editTarget && !forward) {
             dest = list.regionEntry(list.count, false);
             if (!dest)
@@ -876,8 +894,17 @@ ListView {
                     anchors.fill: parent
                     radius: width / 2
                     color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
-                    border.width: closeButton.activeFocus ? Tokens.controlFocusOutline : 1
-                    border.color: closeButton.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+                    border.width: 1
+                    border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+                }
+
+                KeyFocus {
+                    id: closeFocus
+                }
+
+                FocusRing {
+                    shapeRadius: width / 2
+                    visible: closeFocus.active
                 }
 
                 Icon {
@@ -900,13 +927,15 @@ ListView {
                 sourceComponent: rowBody
             }
 
-            // Keyboard focus ring.
-            Rectangle {
-                anchors.fill: parent
-                radius: Tokens.radiusBanner
-                color: "transparent"
-                border.width: row.activeFocus ? Tokens.controlFocusOutline : 0
-                border.color: Appearance.focusRingColor
+            // Keyboard focus ring: the shared one outside the card (the list's gutter has room for it), after a key only
+            // (ADR-0039 step 7).
+            KeyFocus {
+                id: rowFocus
+            }
+
+            FocusRing {
+                shapeRadius: Tokens.radiusBanner
+                visible: rowFocus.active
             }
 
             // One floating card: the group header on the first card of an expanded group (a single notification
@@ -1115,9 +1144,13 @@ ListView {
                                     list.handoff(item.appName, "showLess");
                             }
 
+                            KeyFocus {
+                                id: toggleFocus
+                            }
+
                             FocusRing {
                                 shapeRadius: Tokens.radiusBanner
-                                visible: toggle.activeFocus
+                                visible: toggleFocus.active
                             }
 
                             MouseArea {

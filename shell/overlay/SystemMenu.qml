@@ -34,7 +34,7 @@ PopupMenu {
     onCloseRequested: Popups.close()
     onMenuStepRequested: direction => Popups.stepMenu(direction)
 
-    onActivated: item => {
+    onActivated: (item, byPointer) => {
         switch (item.id) {
         case "recentApp":
             Apps.launch(Apps.lookup(item.appId));
@@ -58,7 +58,8 @@ PopupMenu {
             Popups.close();
             break;
         case "forcequit":
-            Popups.openCentered("forcequit", {});
+            // Its list's ring shows on open after Return only, not after a click (Popups.openedByPointer).
+            Popups.withPointer(byPointer, () => Popups.openCentered("forcequit", {}));
             break;
         case "sleep":
             Popups.close();

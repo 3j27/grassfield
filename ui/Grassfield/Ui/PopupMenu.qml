@@ -45,8 +45,9 @@ FocusScope {
         return Qt.size(Math.max(width, sub ? submenuLoader.x + sub.extent.width : 0), Math.max(height, sub ? submenuLoader.y + sub.extent.height : 0));
     }
 
-    // A leaf item was chosen.
-    signal activated(var item)
+    // A leaf item was chosen; `byPointer`: by a click or a release over its row (false: Return or Space). A host that opens
+    // a popup for the item passes it on (the shell's Popups.withPointer), so that a ring shows on open after a key only.
+    signal activated(var item, bool byPointer)
     // Esc on the top-level menu.
     signal closeRequested
     // Right on a row without a submenu (also inside a submenu) or Left in the top-level menu: the menu bar opens the
@@ -109,6 +110,7 @@ FocusScope {
             });
     }
 
+    // The pointer chose the row (a click, a release over it).
     function activateIndex(index: int): void {
         const item = root.displayModel[index];
         if (!MenuNav.selectable(item))
@@ -116,15 +118,15 @@ FocusScope {
         if (MenuNav.hasSubmenu(item))
             openSubmenuAt(index, true, false);
         else if (MenuNav.hasSwatches(item))
-            root.activateSwatch(index, root.swatchIndex);
+            root.activateSwatch(index, root.swatchIndex, true);
         else
-            root.activated(item);
+            root.activated(item, true);
     }
 
-    function activateSwatch(index: int, swatch: int): void {
+    function activateSwatch(index: int, swatch: int, byPointer: bool): void {
         const item = root.displayModel[index];
         if (MenuNav.selectable(item) && MenuNav.hasSwatches(item) && swatch >= 0 && swatch < item.swatches.length)
-            root.activated(item.swatches[swatch]);
+            root.activated(item.swatches[swatch], byPointer);
     }
 
     // ---- Pointer relay (macOS press, drag, release) ----
@@ -237,9 +239,9 @@ FocusScope {
         switch (result.action) {
         case "activate":
             if (MenuNav.hasSwatches(root.displayModel[root.currentIndex]))
-                root.activateSwatch(root.currentIndex, root.swatchIndex);
+                root.activateSwatch(root.currentIndex, root.swatchIndex, false);
             else
-                root.activated(root.displayModel[root.currentIndex]);
+                root.activated(root.displayModel[root.currentIndex], false);
             break;
         case "swatchPrevious":
             root.swatchIndex = MenuNav.stepSwatch(root.displayModel[root.currentIndex], root.swatchIndex, -1);
@@ -306,27 +308,12 @@ FocusScope {
                     MenuSeparator {}
                 }
 
-                // A section title (macOS: small, bold, secondary), aligned with the labels of the rows below it.
+                // A section title, aligned with the labels of the rows below it.
                 Component {
                     id: headerComponent
-                    Item {
-                        implicitWidth: Math.ceil(headerText.x + headerText.implicitWidth + Tokens.menuItemPadding)
-                        implicitHeight: Tokens.menuItemHeight
-                        Accessible.role: Accessible.Heading
-                        Accessible.name: headerText.text
-
-                        Text {
-                            id: headerText
-                            textFormat: Text.PlainText
-                            x: root.checkColumns[row.index] === true ? Tokens.menuCheckInset : Tokens.menuItemPadding
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: row.modelData.text !== undefined ? row.modelData.text : ""
-                            color: Appearance.colors.textSecondary
-                            font.family: Appearance.fontFamily
-                            font.pixelSize: Tokens.typographyCaptionSize
-                            font.letterSpacing: Appearance.tracking(Tokens.typographyCaptionSize)
-                            font.weight: Tokens.typographyMenuBoldWeight
-                        }
+                    MenuHeader {
+                        text: row.modelData.text !== undefined ? row.modelData.text : ""
+                        checkColumn: root.checkColumns[row.index] === true
                     }
                 }
 
@@ -344,7 +331,7 @@ FocusScope {
                             root.currentIndex = row.index;
                             root.swatchIndex = swatch;
                         }
-                        onChosen: swatch => root.activateSwatch(row.index, swatch)
+                        onChosen: swatch => root.activateSwatch(row.index, swatch, true)
                     }
                 }
 
@@ -414,8 +401,8 @@ FocusScope {
         target: submenuLoader.item
         ignoreUnknownSignals: true
 
-        function onActivated(item: var): void {
-            root.activated(item);
+        function onActivated(item: var, byPointer: bool): void {
+            root.activated(item, byPointer);
         }
 
         function onMenuStepRequested(direction: int): void {

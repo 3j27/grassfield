@@ -75,8 +75,15 @@ Column {
                     anchors.fill: parent
                     radius: Tokens.radiusControl
                     color: choice.selected ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: choice.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+                }
+
+                // The shared ring outside the tile, after a key only (ADR-0039 step 7).
+                KeyFocus {
+                    id: choiceFocus
+                }
+
+                FocusRing {
+                    visible: choiceFocus.active
                 }
 
                 Column {

@@ -32,7 +32,7 @@ QtObject {
         statusWarn: "#E0B000",  // own yellow of a status dot, dark appearance: 6.4:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusOff: "#FF6B63",  // own red of a status dot, dark appearance: 4.7:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#25231F",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #232323 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
-        windowTextSecondary: "#DFDDD7",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #DCDCE4 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        windowTextSecondary: "#A4A19C",  // Secondary text drawn directly on the opaque app window, on its group fill or on its sidebar, dark appearance (Appearance.windowSecondary): the owner's answer to ADR-0039 Q3 (2026-10-29), #A1A1A6, close to macOS's secondary label, warm as the owner's warm neutrals of 2026-10-30 make every neutral (ADR-0040: OKLCH hue 85, chroma 0.0075, its lightness kept); 5.6:1 on the window, 5.0:1 on a group, 6.1:1 on the sidebar, tested (tests/visual/test_contrast_tokens.py WindowSurfacePairs); was #DFDDD7, the material's textSecondary, which read like the titles (10.7:1 against the text's 13.4:1); fields, tabs and chips keep textSecondary on their own fills [ref: docs/decisions/ADR-0039-design-polish.md § Questions for the owner]
         chipFill: "#FFFFFF",  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#FF6B63",  // own value: the CPU Load graph's System share (AM29), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
         activityGraphUser: "#5AA2FF",  // own value: the CPU Load graph's User share and the Energy Impact graph (AM29, AM39), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -216,10 +216,10 @@ QtObject {
     readonly property int radiusBanner: 18
     // docs/specs/search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
-    // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
-    readonly property int radiusAlert: 24
-    // F1 gap 13: sheet radius 26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
-    readonly property int radiusSheet: 26
+    // macOS 27 alerts: 25.6-27.3 at the 45-degree point (Mail's Save this message as a draft?, Finder's Empty Trash; 512 Pixels release captures), rounder than the window; the owner's choice of 2026-10-31 over ADR-0039 Q2 (a), which gave alerts the window's 16 when no macOS 27 alert was measured; was 24, the macOS 26 value (Dialog frame: confirm, notice) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int radiusAlert: 26
+    // the window's corner (its 45-degree point, Hyprland rounding 20 at power 2.6: ADR-0024), the owner's answer to ADR-0039 Q2 (a) of 2026-10-29; macOS 27 sheets measure 15.4-17.1 (Print, TextEdit's Open); was 26, the macOS 26 value (the shared Sheet, the shell's Force Quit and About) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int radiusSheet: 16
 
     // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 measurement of a shadow exists]
     readonly property int shadowBlur: 18
@@ -265,6 +265,8 @@ QtObject {
     readonly property real materialBorderOpacity: Appearance.increaseContrast ? 0.5 : 0.14
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHoverOpacity: 0.12
+    // the neutral selection of an item on glass (one role, ADR-0039 step 12, G6): the current tile of the switcher and of a stack's grid, an Overview's minimized window under the pointer or the keyboard, the tiling suggestions' window; the hover ink (black in light, white in dark) at this alpha. macOS 27's App Switcher draws its selection #ACACAC on its #E5E5E5 glass, black at 0.25 (1.8:1; the 512 Pixels release capture Finder-App-Switcher) [ref: docs/audits/design-polish-2026-10-29.md § 3.10 Hover and selection roles]
+    readonly property real materialSelectionOpacity: 0.25
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialSeparatorOpacity: Appearance.increaseContrast ? 0.45 : 0.16
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
@@ -620,6 +622,10 @@ QtObject {
     readonly property int controlButtonHeight: 24
     // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
     readonly property int controlPushPadding: 12
+    // macOS 27 sheet button (Button.sheet): a 24-tall rounded rectangle, not a capsule, its corner's 45-degree point that of a 6.8-pt circle (+-0.9; Print, TextEdit's Open, Finder's Connect to Server), its label pushPadding from each end [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int controlSheetButtonRadius: 7
+    // WCAG 1.4.11 (non-text contrast) for the white knob of a switch or a slider on its on fill (the selection colour, ADR-0039 D-Q4): under it the knob is outlined in the fill's mark colour (Accent.knobOutlined; the yellow and green fills, 2.02:1 and 2.52:1) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property real controlKnobMinContrast: 3.0
     // F1 gap 13: alert capsule buttons 110x28 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlAlertButtonHeight: 28
     // F1 gap 13: gap between alert buttons [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]

@@ -98,12 +98,14 @@ FocusScope {
         color: Appearance.colors.textSecondary
     }
 
-    Rectangle {
-        anchors.fill: parent
-        radius: Tokens.widgetRadius
-        color: "transparent"
-        border.width: root.activeFocus && root.interactive ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
+    // The shared ring outside the widget, after a key only (ADR-0039 step 7).
+    KeyFocus {
+        id: hostFocus
+    }
+
+    FocusRing {
+        shapeRadius: Tokens.widgetRadius
+        visible: hostFocus.active && root.interactive
     }
 
     TapHandler {

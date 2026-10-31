@@ -189,9 +189,14 @@ Variants {
                         height: width
                         radius: Tokens.switcherSelectionRadius
                         visible: tile.current
-                        color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHighlightOpacity)
-                        border.width: Tokens.controlFocusOutline
-                        border.color: Appearance.focusRingColor
+                        // The neutral selection of an item on glass (macOS 27's App Switcher: black at 0.25 in light; one role,
+                        // ADR-0039 step 12, G6), no longer the material's rim token.
+                        color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
+
+                        // The shared ring outside the selection (ADR-0039 step 7).
+                        FocusRing {
+                            shapeRadius: Tokens.switcherSelectionRadius
+                        }
                     }
 
                     TintedIcon {

@@ -135,12 +135,18 @@ Item {
         }
     }
 
-    Rectangle {
+    // The shared ring outside the well, after a key only (ADR-0039 step 7).
+    KeyFocus {
+        id: wellFocus
+    }
+
+    Item {
         anchors.fill: parent
-        radius: width / 2
-        color: "transparent"
-        border.width: root.activeFocus ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
+
+        FocusRing {
+            shapeRadius: width / 2
+            visible: wellFocus.active
+        }
 
         Rectangle {
             anchors.centerIn: parent
@@ -158,6 +164,8 @@ Item {
         cursorShape: Qt.ArrowCursor
         onClicked: {
             root.forceActiveFocus();
+            // The focus the popover takes after a click is the pointer's: no ring (ADR-0039 step 7).
+            squareFocus.pointer = true;
             if (root.open)
                 root.hide();
             else
@@ -178,7 +186,11 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.ArrowCursor
-            onClicked: root.hide()
+            onClicked: {
+                // Closed by a click outside: the well takes the focus back without a ring.
+                wellFocus.pointer = true;
+                root.hide();
+            }
         }
 
         Rectangle {
@@ -257,12 +269,19 @@ Item {
                         event.accepted = true;
                     }
 
+                    // The shared ring outside the square, after a key only (ADR-0039 step 7).
+                    KeyFocus {
+                        id: squareFocus
+                    }
+
+                    FocusRing {
+                        visible: squareFocus.active
+                    }
+
                     Rectangle {
                         anchors.fill: parent
                         radius: Tokens.radiusControl
                         color: PointerColors.fromHsv(root.hue, 1, 1)
-                        border.width: square.activeFocus ? Tokens.controlFocusOutline : 0
-                        border.color: Appearance.focusRingColor
 
                         Rectangle {
                             anchors.fill: parent
@@ -338,8 +357,11 @@ Item {
                     height: Tokens.menuItemHeight + Tokens.spacingXs
                     radius: Tokens.radiusControl
                     color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
-                    border.width: hexField.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+
+                    // A text field's ring shows while it has the focus, outside the field (ADR-0039 step 7).
+                    FocusRing {
+                        visible: hexField.activeFocus
+                    }
 
                     TextInput {
                         id: hexField
