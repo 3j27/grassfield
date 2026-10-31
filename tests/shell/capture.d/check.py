@@ -296,6 +296,17 @@ check(got == "3000,700 400x300", "a click on a window opened over a fullscreen o
 got = clicked(CROSS, (1800, 300))
 check(got == "0,0 1920x1080", "a click on a fullscreen window where another display's window reaches under it: the fullscreen "
       "one [%r]" % got)
+# A named workspace has a negative id too (Hyprland: -1338 and below), yet is no special workspace.
+NAMED_MONITORS = json.dumps([dict(m, activeWorkspace={"id": -1338}) if m["name"] == "HDMI-A-1" else m for m in json.loads(MONITORS)])
+NAMED = json.dumps([
+    client(-1338, [1700, 200], [800, 600], focus=0),
+    client(1, [0, 0], [1920, 1080], fullscreen=2, focus=1)])
+capture("selection", FAKE_SLURP="click:1800,300", FAKE_CLIENTS=NAMED, FAKE_MONITORS=NAMED_MONITORS,
+        FAKE_CURSOR='{"x": 1800, "y": 300}')
+grim = calls("grim")
+got = grim[0]["argv"][1] if grim else None
+check(got == "0,0 1920x1080", "a named workspace's window (a negative id) reaching under a fullscreen one: the fullscreen one "
+      "[%r]" % got)
 capture("selection", FAKE_SLURP="click:200,200", FAKE_CLIENTS=SPECIAL, FAKE_MONITORS=SPECIAL_MONITORS,
         FAKE_CURSOR='{"x": 200, "y": 200}')
 grim = calls("grim")

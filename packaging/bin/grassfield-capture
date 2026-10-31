@@ -110,7 +110,7 @@ def windows(monitors):
     # in Hyprland's stacking order (its clients list goes from the bottom up: a new window is added at the end, a raised one
     # moved there). On a workspace with a fullscreen or zoomed window, that window and the windows drawn over it (pinned, or
     # allowed over it: Hyprland clears that for the others when a window goes fullscreen), never those behind.
-    shown = set()
+    shown, special = set(), set()
     for m in monitors or []:
         if not isinstance(m, dict) or m.get("disabled"):
             continue
@@ -118,6 +118,8 @@ def windows(monitors):
             ws = m.get(key)
             if isinstance(ws, dict) and isinstance(ws.get("id"), int) and ws["id"] != 0:
                 shown.add(ws["id"])
+                if key == "specialWorkspace":
+                    special.add(ws["id"])  # a named workspace's id is negative too: only the shown special ones count
     found = []
     for c in hyprctl("clients") or []:
         try:
@@ -126,7 +128,8 @@ def windows(monitors):
             (x, y), (w, h) = c["at"], c["size"]
             if w > 0 and h > 0:
                 mode = c.get("fullscreen")
-                found.append({"ws": c["workspace"]["id"], "full": isinstance(mode, int) and 1 <= mode <= FULLSCREEN,
+                found.append({"ws": c["workspace"]["id"], "special": c["workspace"]["id"] in special,
+                              "full": isinstance(mode, int) and 1 <= mode <= FULLSCREEN,
                               "over": c.get("pinned") is True or c.get("allowedOverFullscreen") is True,
                               "pinned": c.get("pinned") is True, "floating": c.get("floating") is True, "order": len(found),
                               "rect": {"x": int(x), "y": int(y), "w": int(w), "h": int(h)}})
@@ -149,10 +152,10 @@ def on_top(wins, px, py):
     under = [e for e in wins if contains(e["rect"], px, py)]
     full = [e["ws"] for e in under if e["full"]]
     if full:
-        under = [e for e in under if e["pinned"] or e["ws"] in full or e["ws"] < 0]
+        under = [e for e in under if e["pinned"] or e["ws"] in full or e["special"]]
     if not under:
         return None
-    return max(under, key=lambda e: (e["pinned"], e["ws"] < 0, not e["full"], e["floating"], e["order"]))["rect"]
+    return max(under, key=lambda e: (e["pinned"], e["special"], not e["full"], e["floating"], e["order"]))["rect"]
 
 
 def topmost(wins, sel):
@@ -371,8 +374,7 @@ def notify(paths):
         # The pid is recorded once notify-send has printed the notice's id: from then on SIGINT closes its notice (before, it
         # would only end it, leaving the notice up).
         until = time.monotonic() + WAIT_SECONDS
-        shown = min(until, time.monotonic() + 5)  # the id comes as soon as the notice shows
-        while b"\n" not in out and time.monotonic() < shown:
+        while b"\n" not in out and time.monotonic() < until:
             if select.select([proc.stdout], [], [], 0.1)[0]:
                 chunk = os.read(proc.stdout.fileno(), 4096)
                 if not chunk:
