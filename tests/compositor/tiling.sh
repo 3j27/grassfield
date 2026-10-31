@@ -115,8 +115,11 @@
 #                  the titlebar, and leaves with it (titlebar-reveal false, the bar hidden)
 #   green-popover  the revealed zoom light's popover open, a click on the light leaves full screen and closes it (no overlay
 #                  left, the Dock back on the top layer); off full screen the same click under tile_popover's popover zooms
-#   gather         (without the shell too) a headless output made, the window moved onto it (move_to), the output removed:
-#                  the window lies on an output after (the plugin's log says when it gathered one left off every output)
+#   split-green    (integrator review of 7096305, MAJOR 1) a Split View member's light lies under the menu bar's strip: clicked
+#                  under its open popover it leaves the Split View, no app menu opens, no overlay stays
+#   gather         (without the shell too) a headless output made, the window placed on its area with GF-REF's Desktop kept,
+#                  the output removed: the plugin logs it and centres it across GF-REF's work area; again while the foreign
+#                  locker holds the lock: it stays off every output until the unlock, then comes back (review of 7096305)
 # Gate C1 (integrator re-reviews of 439e1f2 and 20b62e3; always run, last): a window that UNMAPS while the plugin's titlebar
 # drag holds it, the window object alive (its Desktop and layout space are gone: Window.cpp:750, :2639). A closed window is
 # no test: Hyprland unmaps and frees it in one step and the titlebar's destructor drops the drag. The victim is
@@ -2169,7 +2172,25 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       check "split shell popover: the popover closed" test -z "$(open_kind)"
       check "split shell popover: no overlay left mapped" overlay_gone
       check "split shell popover: the other member fills the Split View Desktop" fills_addr "0x$first"
-      unsplit_ipc "0x$first"
+      # D64 on a member (integrator review of 7096305, MAJOR 1): its light lies under the menu bar's strip (the bar is away on
+      # a Split View Desktop); clicked under its open popover, the member leaves the Split View and no app menu opens.
+      close_shell_popup "split green under popover"
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"0x$first\")" >>"$log" 2>&1
+      if event_came ".type == \"tile-hover\" and .address == \"$first\" and .state == \"open\""; then
+        read -r slx sly < <(jq -r '"\((.x + .w / 2) | floor) \((.y + .h / 2) | floor)"' <<<"$last_event")
+        say "  member's light at $slx,$sly"
+        wait_popup_open || true
+        check "split green under popover: the tiling popover is open" test "$(open_kind)" = "tiling@$out"
+        pointer abs $((slx - mx)) $((sly - my)) sleep 100 down sleep 80 up sleep 200 abs 20 $((mh / 2)) sleep 1200
+        check "split green under popover: the member leaves the Split View (D64)" test "$(desktop_of "0x$first")" = "$home"
+        check "split green under popover: no app menu opened, the popover closed" test -z "$(open_kind)"
+        check "split green under popover: no overlay left mapped" overlay_gone
+      else
+        check "split green under popover: tile_popover posts open for the member" false
+      fi
+      split_listed "$next5" "$home" >/dev/null 2>&1 && unsplit_ipc "0x$first"
+      close_shell_popup "split green under popover end"
       check "split shell: ended" split_gone "$next5" "$home"
       tile_ipc "$addr3" previous
       tile_ipc "0x$first" previous
@@ -2295,8 +2316,10 @@ else
 fi
 
 # Step 6c (ADR-0036 D67; integrator nested pass of 12e3dd3: after an unplug a window sat at x = -2919, off every output): a
-# window on an output that goes away ends on an output (Hyprland moves it with its Desktop; the plugin gathers one it left
-# off every output, its log says so). A headless output is made for it and removed.
+# headless output is made and the window placed on its area while its Desktop stays GF-REF's (Hyprland then leaves it where
+# it is when that output goes away: it moves only the removed output's Desktops). The output removed, the plugin gathers it:
+# centred on GF-REF's work area, its log line written. Again while the foreign locker holds the session lock: it stays off
+# every output until the unlock, then comes back (D55). The output is removed again on exit.
 gather_out=GF-GATHER
 on_any_output() { # the foot window's frame meets an output
   local x y w h _a
@@ -2305,23 +2328,64 @@ on_any_output() { # the foot window's frame meets an output
   [[ -n ${x:-} ]] && nestctl monitors -j | jq -e --argjson x "$x" --argjson y "$y" --argjson w "$w" --argjson h "$h" \
     'any(.[]; .x < $x + $w and .x + .width > $x and .y < $y + $h and .y + .height > $y)' >/dev/null
 }
-if declare -F move_to >/dev/null && [[ -n $(geometry) ]] && nestctl output create headless "$gather_out" >>"$log" 2>&1; then
+gathered_on_ref() { # the foot window centred across GF-REF's work area (core gatheredFrame), 1 px of rounding
+  local x _y w _h _a ax _ay aw _ah
+  read -r x _y w _h _a < <(geometry)
+  read -r ax _ay aw _ah < <(area_of "$out")
+  say "  foot at x $x width $w; $out work area x $ax width $aw (centred: $(( ax + (aw - w) / 2 )))"
+  [[ -n ${x:-} && -n ${ax:-} ]] && (( x - (ax + (aw - w) / 2) <= 1 && (ax + (aw - w) / 2) - x <= 1 ))
+}
+gather_place() { # the foot window onto the headless output's area, its Desktop kept: true when it is there, off GF-REF
+  local gx gy x _y _w _h _a
+  read -r gx gy < <(nestctl monitors -j | jq -r --arg o "$gather_out" '.[] | select(.name == $o) | "\(.x) \(.y)"')
+  [[ -n ${gx:-} ]] || return 1
+  nestctl dispatch "hl.dsp.window.move({ x = $((gx + 100)), y = $((gy + 100)), window = 'address:$gaddr' })" >>"$log" 2>&1
+  sleep 0.8
+  read -r x _y _w _h _a < <(geometry)
+  say "  foot placed at x ${x:-?} (output $gather_out at $gx,$gy)"
+  [[ -n ${x:-} ]] && (( x >= gx )) && [[ $(nestctl clients -j | jq -r --arg a "$gaddr" '.[] | select(.address == $a) | .workspace.id') == "$gather_home" ]]
+}
+gather_logged() { # the plugin's gathering line, written since `gather_from`
+  tail -n +"$((gather_from + 1))" "$hyprlog" 2>/dev/null | grep -a "was off every output" >>"$log"
+}
+if [[ -n $(geometry) ]] && nestctl output create headless "$gather_out" >>"$log" 2>&1; then
   sleep 1.5
-  move_to "$gather_out"
-  gather_ws=$(nestctl monitors -j | jq -r --arg o "$gather_out" '.[] | select(.name == $o) | .activeWorkspace.id')
-  check "gather: the window went onto $gather_out's Desktop ($gather_ws)" test "$(nestctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.id')" = "$gather_ws"
+  declare -F free_foot >/dev/null && free_foot
+  gaddr=$(geometry | awk '{print $5}')
+  gather_home=$(nestctl clients -j | jq -r --arg a "$gaddr" '.[] | select(.address == $a) | .workspace.id')
+  check "gather: the window on the headless output's area, still on $out's Desktop ($gather_home)" gather_place
   gather_from=$(log_lines)
   nestctl output remove "$gather_out" >>"$log" 2>&1
   sleep 1.5
   check "gather: Hyprland alive after the unplug" alive
+  check "gather: the plugin logs the window it gathered (D67)" gather_logged
   check "gather: the window lies on an output after the unplug" on_any_output
-  if tail -n +"$((gather_from + 1))" "$hyprlog" 2>/dev/null | grep -a "was off every output" >>"$log"; then
-    say "  the plugin gathered a window left off every output"
+  check "gather: centred across $out's work area at its size" gathered_on_ref
+  # Behind the lock screen: nothing moves until the unlock (D55, D67).
+  if nestctl output create headless "$gather_out" >>"$log" 2>&1; then
+    sleep 1.5
+    check "gather locked: the window on the headless output's area again" gather_place
+    read -r lock_x _ < <(geometry)
+    if lock_session; then
+      gather_from=$(log_lines)
+      nestctl output remove "$gather_out" >>"$log" 2>&1
+      sleep 1.5
+      read -r locked_x _ < <(geometry)
+      check "gather locked: the window stays where it was behind the lock screen (x ${locked_x:-?}, was $lock_x)" test "${locked_x:-}" = "$lock_x"
+      check "gather locked: nothing gathered while locked" bash -c "! tail -n +$((gather_from + 1)) '$hyprlog' 2>/dev/null | grep -aq 'was off every output'"
+    else
+      check "gather locked: the foreign locker holds the session lock (${locked:-no answer})" false
+      nestctl output remove "$gather_out" >>"$log" 2>&1 || true
+    fi
+    check "gather locked: released, Hyprland reports the session unlocked" unlock_session
+    sleep 1
+    check "gather locked: at the unlock, the window lies on an output" on_any_output
+    check "gather locked: at the unlock, centred across $out's work area" gathered_on_ref
   fi
-  free_foot
+  declare -F free_foot >/dev/null && free_foot
 else
   nestctl output remove "$gather_out" >>"$log" 2>&1 || true
-  say "SKIP: gather case (no move_to, no foot window, or no headless output)"
+  say "SKIP: gather case (no foot window, or no headless output)"
 fi
 
 c1_cases
