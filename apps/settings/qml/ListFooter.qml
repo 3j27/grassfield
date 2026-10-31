@@ -33,7 +33,7 @@ Item {
     }
     Rectangle {
         width: parent.width
-        height: 1
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -64,7 +64,7 @@ Item {
                 Rectangle {
                     x: Tokens.settingsFooterButtonWidth
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 1
+                    width: Tokens.appsBorderWidth
                     height: parent.height - 2 * Tokens.spacingXs
                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 }

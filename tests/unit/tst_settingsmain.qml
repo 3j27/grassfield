@@ -120,6 +120,25 @@ TestCase {
     }
 
     // UPower's display device decides: a laptop battery shows Battery, none (or no answer) hides it.
+    // The toolbar's edge (ADR-0039 D3, step 15): no rule while the page is at its top, a hairline once its content has scrolled
+    // under the toolbar, as Files does.
+    function test_theToolbarRuleShowsOnceScrolled() {
+        const t = make(touchpad);
+        t.win.select("desktop");
+        wait(50);
+        const rule = find(t.win.contentItem, i => i.objectName === "toolbarRule");
+        verify(rule !== null);
+        const flick = rule.flick;
+        verify(flick !== null, "the page is a Flickable");
+        flick.contentY = flick.originY;
+        verify(!rule.visible, "at the top: no rule");
+        flick.contentY = flick.originY + Tokens.spacingLg;
+        verify(rule.visible, "scrolled: the rule");
+        compare(rule.height, Tokens.appsBorderWidth);
+        flick.contentY = flick.originY;
+        verify(!rule.visible);
+    }
+
     function test_hasBattery() {
         const t = make(testCase.touchpad);
         compare(t.backend.busQueries.filter(q => q.tag === "main.power").map(q => q.what), ["power.state"]);

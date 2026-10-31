@@ -193,7 +193,7 @@ Window {
         }
 
         Item {
-            width: 1
+            width: Tokens.appsBorderWidth
             height: Tokens.spacingSm
         }
 
@@ -213,7 +213,7 @@ Window {
         }
 
         Item {
-            width: 1
+            width: Tokens.appsBorderWidth
             height: Tokens.spacingMd
         }
 
@@ -239,7 +239,7 @@ Window {
         }
 
         Item {
-            width: 1
+            width: Tokens.appsBorderWidth
             height: Tokens.spacingMd
         }
 
@@ -251,7 +251,7 @@ Window {
         }
 
         Item {
-            width: 1
+            width: Tokens.appsBorderWidth
             height: Tokens.spacingMd
         }
 

@@ -146,7 +146,7 @@ SettingsPage {
             Rectangle {
                 x: Tokens.settingsRowInset
                 width: parent.width - 2 * Tokens.settingsRowInset
-                height: 1
+                height: Tokens.appsBorderWidth
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
@@ -193,9 +193,9 @@ SettingsPage {
             }
         }
 
-        SettingsRow {
+        EmptyListRow {
             visible: deviceModel.count === 0
-            title: qsTr("No paired devices")
+            text: qsTr("No paired devices")
         }
     }
 

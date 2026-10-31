@@ -50,7 +50,7 @@ Item {
                 x: Tokens.settingsChartInset
                 y: band.lineY
                 width: Tokens.settingsChartWidth + 1
-                height: 1
+                height: Tokens.appsBorderWidth
                 color: root.lineColor
             }
 
@@ -82,7 +82,7 @@ Item {
                 visible: column.edge
                 x: column.lineX
                 y: Tokens.settingsChartTop
-                width: 1
+                width: Tokens.appsBorderWidth
                 height: column.lineBottom - Tokens.settingsChartTop
                 color: root.lineColor
             }
@@ -94,7 +94,7 @@ Item {
                     required property int index
                     x: column.lineX
                     y: Tokens.settingsChartTop + index * 2 * Tokens.settingsChartDash
-                    width: 1
+                    width: Tokens.appsBorderWidth
                     height: Tokens.settingsChartDash
                     color: root.lineColor
                 }

@@ -1228,13 +1228,9 @@ QtObject {
     // macOS 26/27 System Settings groups about 10 apart (visual-tahoe-2026-10-25.md Settings) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsGroupGap: 10
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsPageTitleSize: Math.round(20 * Appearance.textScale)
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsGroupLabelWidth: 150
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsPickerWidth: 150
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsShortcutKeyMinWidth: 28
     // estimate: Settings system sections re-read the tools' state while a pane is open [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsSystemRefreshMs: 4000
     // estimate: Displays pane, height of the arrangement preview [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
@@ -1415,8 +1411,6 @@ QtObject {
     readonly property string settingsColorSquareBlack: "#000000"
     // same: transparent black end of the square [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property string settingsColorSquareBlackClear: "#00000000"
-    // estimate: Sound pane, width of the percentage next to a slider [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsVolumeValueWidth: 44
     // gap between the sidebar's groups: the row pitch is 45 across a group boundary instead of 32 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
     readonly property int settingsSidebarGroupGap: 13
     // General's header card: a 48-pt tile, centred [ref: docs/audits/settings-parity-2026-10-26.md § General]

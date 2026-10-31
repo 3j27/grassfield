@@ -42,6 +42,14 @@ Item {
         }
     }
 
+    // ToolButton's states behind the glyph: the hover fill under the pointer, the pressed fill while pressed (ADR-0039 step 15).
+    Rectangle {
+        anchors.fill: parent
+        radius: width / 2
+        color: Appearance.withAlpha(Appearance.colors.hover, mouse.pressed ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
+        visible: mouse.pressed || mouse.containsMouse
+    }
+
     Icon {
         anchors.centerIn: parent
         name: "ellipsis-circle"
@@ -57,6 +65,7 @@ Item {
     MouseArea {
         id: mouse
         anchors.fill: parent
+        hoverEnabled: true
         onClicked: {
             root.clickFocused = true;
             root.forceActiveFocus();

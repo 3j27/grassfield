@@ -157,9 +157,9 @@ SettingsPage {
                     }
                 }
 
-                SettingsRow {
+                EmptyListRow {
                     visible: root.items.length === 0
-                    title: qsTr("No login items")
+                    text: qsTr("No login items")
                 }
             }
 
@@ -206,9 +206,9 @@ SettingsPage {
                 }
             }
         }
-        SettingsRow {
+        EmptyListRow {
             visible: root.units.length === 0
-            title: qsTr("No background items")
+            text: qsTr("No background items")
         }
     }
 

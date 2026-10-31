@@ -652,6 +652,20 @@ Window {
             }
         }
 
+        // The toolbar's edge: a hairline once the page's content has scrolled under the toolbar (ADR-0039 D3, Files' behaviour;
+        // until ADR-0024's scroll-edge glass), above the page.
+        Rectangle {
+            id: toolbarRule
+            objectName: "toolbarRule"
+            readonly property Flickable flick: page.item as Flickable
+            anchors.top: detailToolbar.bottom
+            width: parent.width
+            height: Tokens.appsBorderWidth
+            z: 1
+            visible: !banner.visible && toolbarRule.flick !== null && toolbarRule.flick.contentY > toolbarRule.flick.originY
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        }
+
         Loader {
             id: page
             anchors {

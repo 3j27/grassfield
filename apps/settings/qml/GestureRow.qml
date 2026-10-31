@@ -58,7 +58,7 @@ FocusScope {
         visible: !root.first
         x: root.active ? 0 : Tokens.settingsRowInset
         width: parent.width - 2 * x
-        height: 1
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -66,7 +66,7 @@ FocusScope {
         visible: root.active && !root.last
         y: root.height
         width: parent.width
-        height: 1
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 

@@ -76,9 +76,9 @@ SettingsPage {
             }
         }
 
-        SettingsRow {
+        EmptyListRow {
             visible: grants.loaded && root.apps.length === 0
-            title: qsTr("No apps have asked")
+            text: qsTr("No apps have asked")
         }
     }
 
@@ -130,9 +130,9 @@ SettingsPage {
                     }
                 }
 
-                SettingsRow {
+                EmptyListRow {
                     visible: grants.loaded && root.apps.length === 0
-                    title: qsTr("No saved choices")
+                    text: qsTr("No saved choices")
                 }
             }
 

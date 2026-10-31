@@ -123,7 +123,7 @@ Sheet {
                 height: Math.max(Tokens.settingsDisplayMinSide, tile.size.h * area.view.k)
                 radius: Tokens.settingsDisplayRadius
                 color: Appearance.withAlpha(Appearance.colors.accent, Tokens.materialFillOpacity)
-                border.width: 1
+                border.width: Tokens.appsBorderWidth
                 border.color: Appearance.colors.separator
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button

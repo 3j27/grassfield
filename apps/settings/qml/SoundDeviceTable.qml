@@ -70,7 +70,7 @@ Item {
 
     Rectangle {
         width: parent.width
-        height: 1
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(root.lineColor, Tokens.settingsSoundTableTopLineOpacity)
     }
 
@@ -112,7 +112,7 @@ Item {
         id: headerLine
         y: 1 + Tokens.settingsSoundTableHeaderHeight
         width: parent.width
-        height: 1
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(root.lineColor, Tokens.settingsSoundTableHeaderLineOpacity)
     }
 

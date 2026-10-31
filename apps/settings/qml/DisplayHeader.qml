@@ -54,7 +54,7 @@ Item {
         x: -root.columnX
         y: Tokens.settingsDisplaySeparatorY - Tokens.settingsContentTop
         width: root.paneWidth
-        height: 1
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 

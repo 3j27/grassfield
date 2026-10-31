@@ -16,7 +16,10 @@ Item {
 
     signal moved(real transparency)
 
-    readonly property real tint: Appearance.tintAlpha(Appearance.reduceTransparency ? 0 : root.transparency)
+    // The tint of the glass controls' class (glass.controls), as the shell draws them at this transparency over a backdrop it has
+    // not measured (the worst case), where it was the single tint every class shared before the classes; opaque under Reduce
+    // Transparency (ADR-0039 step 15).
+    readonly property real tint: Appearance.glassAlphaOver("controls", Appearance.reduceTransparency ? 0 : root.transparency, null)
 
     implicitWidth: Tokens.settingsGlassPreviewWidth
     implicitHeight: Tokens.settingsGlassSliderCenter - Tokens.settingsGlassPreviewTop + Tokens.controlSliderKnob

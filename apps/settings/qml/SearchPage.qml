@@ -56,7 +56,7 @@ SettingsPage {
             visible: result.Positioner.index > 1
             x: Tokens.settingsResultTitleX
             width: parent.width - x - Tokens.settingsRowInset
-            height: 1
+            height: Tokens.appsBorderWidth
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
@@ -152,7 +152,7 @@ SettingsPage {
             Rectangle {
                 y: Tokens.settingsResultsHeaderHeight
                 width: parent.width
-                height: 1
+                height: Tokens.appsBorderWidth
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
         }

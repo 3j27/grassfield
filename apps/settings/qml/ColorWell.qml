@@ -193,19 +193,22 @@ Item {
             }
         }
 
-        Rectangle {
+        Item {
             id: card
             // The square, or the preset swatches when they are wider.
             readonly property real contentWidth: Math.max(Tokens.settingsColorSquareWidth, swatches.implicitWidth - 2 * Tokens.menuItemPadding)
             width: card.contentWidth + 2 * Tokens.spacingMd
             height: column.height + 2 * Tokens.spacingMd
-            radius: Tokens.radiusMenu
-            color: Appearance.colors.materialTint
-            border.width: 1
-            border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             onHeightChanged: if (layer.visible) root.place()
             Accessible.role: Accessible.Dialog
             Accessible.name: root.accessibleName
+
+            // A popover on the menus' glass (Material), as every popover Grassfield.Ui draws in an app (ADR-0039 step 15).
+            Material {
+                anchors.fill: parent
+                glassClass: "menu"
+                radius: Tokens.radiusMenu
+            }
 
             // Swallows clicks on the card itself.
             MouseArea {
@@ -352,56 +355,35 @@ Item {
                     onMoved: v => root.setHsv(v, root.sat > 0 ? root.sat : 1, root.val > 0 ? root.val : 1, true)
                 }
 
-                Rectangle {
+                // The shared text field (its fill, ring and selection colours; ADR-0039 step 15).
+                TextField {
+                    id: hexField
+                    objectName: "hexField"
                     width: Tokens.settingsColorHexWidth
                     height: Tokens.menuItemHeight + Tokens.spacingXs
-                    radius: Tokens.radiusControl
-                    color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
-
-                    // A text field's ring shows while it has the focus, outside the field (ADR-0039 step 7).
-                    FocusRing {
-                        visible: hexField.activeFocus
-                    }
-
-                    TextInput {
-                        id: hexField
-                        TextCursor {}
-                        activeFocusOnTab: true
-                        anchors.fill: parent
-                        anchors.leftMargin: Tokens.spacingSm
-                        anchors.rightMargin: Tokens.spacingSm
-                        verticalAlignment: TextInput.AlignVCenter
-                        clip: true
-                        maximumLength: 7
-                        inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhPreferLowercase
-                        color: Appearance.colors.text
-                        selectionColor: Appearance.colors.accent
-                        selectedTextColor: Appearance.colors.accentText
-                        font.family: Appearance.fontFamily
-                        font.pixelSize: Tokens.typographyBodySize
-                        Accessible.role: Accessible.EditableText
-                        Accessible.name: qsTr("Colour (#rrggbb)")
-                        // Follows the colour (see root.onShownChanged); not a binding: assigning `text` below would break it.
-                        Component.onCompleted: text = root.shown
-                        // A complete colour is applied as it is typed; anything else changes nothing.
-                        onTextEdited: {
-                            const c = PointerColors.parseTyped(text);
-                            if (c !== "" && text.trim().length >= 6) {
-                                root.syncHsv(c);
-                                root.pick(c, true);
-                            }
+                    maximumLength: 7
+                    inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhPreferLowercase
+                    accessibleName: qsTr("Colour (#rrggbb)")
+                    // Follows the colour (see root.onShownChanged); not a binding: assigning `text` below would break it.
+                    Component.onCompleted: text = root.shown
+                    // A complete colour is applied as it is typed; anything else changes nothing.
+                    onTextEdited: {
+                        const c = PointerColors.parseTyped(text);
+                        if (c !== "" && text.trim().length >= 6) {
+                            root.syncHsv(c);
+                            root.pick(c, true);
                         }
-                        // Return or leaving the field: a short "#0f0" is expanded to "#00ff00" (only #rrggbb is stored); anything else reverts.
-                        onEditingFinished: {
-                            const c = PointerColors.parseTyped(text);
-                            if (c !== "" && c !== root.shown) {
-                                root.syncHsv(c);
-                                root.pick(c, true);
-                            }
-                            text = root.shown;
-                        }
-                        Keys.onEscapePressed: root.hide()
                     }
+                    // Return or leaving the field: a short "#0f0" is expanded to "#00ff00" (only #rrggbb is stored); anything else reverts.
+                    onEditingFinished: {
+                        const c = PointerColors.parseTyped(text);
+                        if (c !== "" && c !== root.shown) {
+                            root.syncHsv(c);
+                            root.pick(c, true);
+                        }
+                        text = root.shown;
+                    }
+                    Keys.onEscapePressed: root.hide()
                 }
             }
         }
