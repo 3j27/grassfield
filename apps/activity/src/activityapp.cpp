@@ -106,6 +106,12 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
         return it != m_hangs.constEnd() && (it->start == 0 || it->start == start) ? it->count : 0;
     });
     m_appHistory.setUser(userName(m_options.uid));
+    // AM74: App History's period is remembered.
+    m_appHistory.restorePeriod(m_state.appHistoryPeriod);
+    connect(&m_appHistory, &AppHistory::periodChanged, this, [this] {
+        m_state.appHistoryPeriod = m_appHistory.period();
+        scheduleSave();
+    });
     connect(&m_projection, &ProjectionWatch::changed, this, &ActivityApp::applyProjection);
     applyProjection();
     // Never qGuiApp: a static cast, undefined where the application is a QCoreApplication (the backend's tests; UBSan).

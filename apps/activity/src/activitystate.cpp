@@ -122,6 +122,9 @@ ActivityState readState(const QString &path)
     const QJsonValue ask = root.value(QStringLiteral("askEfficiency"));
     if (ask.isBool())
         s.askEfficiency = ask.toBool();
+    const QString period = root.value(QStringLiteral("appHistoryPeriod")).toString();
+    if (period == QLatin1String("12h") || period == QLatin1String("7d") || period == QLatin1String("30d"))
+        s.appHistoryPeriod = period;
     const QJsonObject tabs = root.value(QStringLiteral("tabs")).toObject();
     for (Tab tab : kTabs) {
         const QJsonValue v = tabs.value(tabKey(tab));
@@ -151,6 +154,7 @@ bool writeState(const QString &path, const ActivityState &state)
     root.insert(QStringLiteral("networkGraph"), state.networkGraph);
     root.insert(QStringLiteral("dockIcon"), state.dockIcon);
     root.insert(QStringLiteral("askEfficiency"), state.askEfficiency);
+    root.insert(QStringLiteral("appHistoryPeriod"), state.appHistoryPeriod);
     QJsonObject tabs;
     for (const auto &[tab, t] : state.tabs) {
         QJsonArray columns;

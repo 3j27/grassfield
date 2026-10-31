@@ -1,6 +1,7 @@
 // $XDG_STATE_HOME/grassfield/activity.json (spec AM74, ADR-0020): version 1, written by the app only. What the window
 // remembers: its size, the tab, the view, the update frequency, per tab the columns shown (in order), their widths and
-// the sort, and what the Disk and Network graphs show (step 2b). A broken file or another version is set aside (renamed
+// the sort, and what the Disk and Network graphs show (step 2b); the Dock icon, Efficiency Mode's "Don't ask again" and App
+// History's period (steps 3 and 4). A broken file or another version is set aside (renamed
 // .bad) and the defaults are used.
 #pragma once
 
@@ -33,6 +34,7 @@ struct ActivityState {
     QString networkGraph = QStringLiteral("packets");  // AM44: "packets" or "data"
     QString dockIcon = QStringLiteral("icon");          // AM62: "icon", "network", "disk", "cpu-usage" or "cpu-history"
     bool askEfficiency = true;                          // AM68: false once "Don't ask again" was checked
+    QString appHistoryPeriod = QStringLiteral("12h");   // AM67: "12h", "7d" or "30d"
 };
 
 // AM62: View > Dock Icon's choices, in the menu's order.

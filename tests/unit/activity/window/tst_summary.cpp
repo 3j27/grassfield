@@ -367,3 +367,34 @@ TEST(ActivityState, TheGraphsChoiceIsRemembered)
     EXPECT_EQ(wrong.diskGraph, QStringLiteral("io"));
     EXPECT_EQ(wrong.networkGraph, QStringLiteral("packets"));
 }
+
+// AM74 (steps 3 and 4): the Dock icon, Efficiency Mode's "Don't ask again" and App History's period are remembered; a value
+// of the wrong kind reads as the default.
+TEST(ActivityState, TheLaterChoicesAreRemembered)
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("activity.json"));
+    ActivityState s = defaultState();
+    EXPECT_TRUE(s.askEfficiency);
+    EXPECT_EQ(s.appHistoryPeriod, QStringLiteral("12h"));
+    s.dockIcon = QStringLiteral("cpu-history");
+    s.askEfficiency = false;
+    s.appHistoryPeriod = QStringLiteral("30d");
+    ASSERT_TRUE(writeState(path, s));
+    const ActivityState back = readState(path);
+    EXPECT_EQ(back.dockIcon, QStringLiteral("cpu-history"));
+    EXPECT_FALSE(back.askEfficiency);
+    EXPECT_EQ(back.appHistoryPeriod, QStringLiteral("30d"));
+
+    QFile f(path);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write(QJsonDocument(QJsonObject{{QStringLiteral("version"), 1}, {QStringLiteral("dockIcon"), QStringLiteral("gpu")},
+                                      {QStringLiteral("askEfficiency"), QStringLiteral("no")},
+                                      {QStringLiteral("appHistoryPeriod"), QStringLiteral("1y")}})
+                .toJson());
+    f.close();
+    const ActivityState wrong = readState(path);
+    EXPECT_EQ(wrong.dockIcon, QStringLiteral("icon"));
+    EXPECT_TRUE(wrong.askEfficiency);
+    EXPECT_EQ(wrong.appHistoryPeriod, QStringLiteral("12h"));
+}

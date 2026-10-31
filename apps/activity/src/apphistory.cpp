@@ -175,6 +175,12 @@ void AppHistory::setPeriod(const QString &period)
     reload();
 }
 
+void AppHistory::restorePeriod(const QString &period)
+{
+    if (period == QLatin1String("12h") || period == QLatin1String("7d") || period == QLatin1String("30d"))
+        m_period = period;
+}
+
 void AppHistory::setLocale(const QLocale &locale)
 {
     m_locale = locale;

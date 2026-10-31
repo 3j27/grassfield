@@ -91,6 +91,8 @@ public:
 
     QString period() const { return m_period; }
     void setPeriod(const QString &period);
+    // The period remembered (AM74), set at start: nothing is read until the window opens.
+    void restorePeriod(const QString &period);
     QVariantList periods() const;
     QString caption() const { return m_caption; }
     bool unavailable() const { return m_unavailable; }

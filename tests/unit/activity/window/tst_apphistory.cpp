@@ -118,6 +118,15 @@ TEST(AppHistory, ThreePeriods)
 {
     AppHistory history(nullptr, nullptr);
     EXPECT_EQ(history.period(), QStringLiteral("12h"));
+    // The period remembered (AM74) comes back without a read and without a signal; anything else is ignored.
+    QSignalSpy restored(&history, &AppHistory::periodChanged);
+    history.restorePeriod(QStringLiteral("30d"));
+    EXPECT_EQ(history.period(), QStringLiteral("30d"));
+    EXPECT_FALSE(history.loading());
+    history.restorePeriod(QStringLiteral("1y"));
+    EXPECT_EQ(history.period(), QStringLiteral("30d"));
+    EXPECT_EQ(restored.count(), 0);
+    history.restorePeriod(QStringLiteral("12h"));
     ASSERT_EQ(history.periods().size(), 3);
     EXPECT_EQ(history.periods().at(2).toMap().value(QStringLiteral("title")).toString(), QStringLiteral("Last 30 Days"));
     // A record 13 hours old counts in the last 7 days, not in the last 12 hours.
