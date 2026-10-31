@@ -11,7 +11,9 @@ Ctrl+Shift+Esc. Revised after the integrator's opus review of e3882de (ADR-0038 
 say "review of e3882de". Step 0 is merged (pull request #37). Step 1, the sampler without a window (AM20 to AM49's data,
 AM79's fixture roots as test options; AM-P2 measured), is built in its own pull request: its results are in
 `docs/audits/activity-2026-10-28/step1.md`, and the places it changed say "step 1"; those the integrator's opus review of
-949fc98 changed say "review of 949fc98", and those of its re-review "review of f68789c".
+949fc98 changed say "review of 949fc98", and those of its re-review "review of f68789c". Steps 2a to 2c are merged (pull
+requests #47, #53 and #63); step 2d, Inspect, is built in its own pull request (`docs/audits/activity-2026-10-28/step2d.md`;
+ADR-0038 AD45 to AD47), and the places it changed say "step 2d".
 
 ## macOS reference behavior (Apple's Activity Monitor User Guide, macOS 27; described in words, no Apple image committed)
 - One window: a toolbar with the Stop button, the Info button and an action menu, five tabs (CPU, Memory, Energy, Disk,
@@ -75,7 +77,7 @@ items (Settings does it); a background collector; any network access.
   Stop button (Quit Process, enabled with a selection of own processes); the Info button (Inspect, enabled with one row);
   the action menu (…: Quit Process, Inspect Process, Send Signal to Process…, Efficiency Mode, Copy); the segmented control
   CPU, Memory, Energy, Disk, Network; the search field. Every control has a tooltip, an accessible name and keyboard
-  focus.
+  focus. Step 2d: the Info button sits between Stop and the action menu, in their glass capsule (macOS 27).
 - **AM4** The tab chosen is remembered. Each tab has its own columns, sort and summary.
 - **AM5** The summary area at the bottom of the window has the token height `activity.summaryHeight`; it holds the tab's
   figures (label and value pairs, tokens' type scale) and its graph. Its graphs and the table update at the same sample.
@@ -271,9 +273,9 @@ items (Settings does it); a background collector; any network access.
   sheet "Are you sure you want
   to quit this process?" (several rows: "Are you sure you want to quit these %n processes?"), buttons Cancel, Force Quit,
   Quit; Quit is the default (Return), Esc cancels. Step 2c: the Stop button and the action menu share one glass capsule
-  of the toolbar (macOS 27); the action menu and the context menu hold Quit Process, Send Signal to Process… and Copy
-  (Inspect Process at 2d, Efficiency Mode at step 4); a right click selects the row under the pointer first; the sheet
-  names one process as "“%1” (PID %2)".
+  of the toolbar (macOS 27); the action menu and the context menu hold Quit Process, Inspect Process (step 2d, AM57),
+  Send Signal to Process… and Copy (Efficiency Mode at step 4); a right click selects the row under the pointer first; the
+  sheet names one process as "“%1” (PID %2)".
 - **AM51** Before the sheet shows, the app opens `/proc/<pid>` as a directory descriptor (`O_DIRECTORY`) for each selected
   row, reads `stat` through it with `openat` and compares the start time with the row's; a row whose read fails (the process
   ended) or whose start time differs is dropped (none left: no sheet). The signal of AM52, AM53 or AM55 is sent with
@@ -308,21 +310,35 @@ items (Settings does it); a background collector; any network access.
   ':'); none named, every action is refused. Step 2c (AD42): the nested compositor is not a root, since an app it or the
   nested shell starts is detached and so descends from neither (a test fixture names its own record).
 
-### Inspect (step 2d)
-- **AM57** Info button, double-click, View > Inspect Process (Ctrl+I): a window "<name> (<pid>)" per process (a second
-  request raises it), refreshed at the update frequency while open. For another owner's process the window shows what
-  `stat` and `status` give (the header, the Memory tab but Proportional Memory, Threads, CPU Time, Context Switches,
-  Faults, Started, Nice) and "—" elsewhere; Open Files and Ports says "The open files of another user's process can't be
-  read." and the Quit button is disabled. Header: Parent Process (name and pid; a click inspects
-  it), Process Group (pgid), User, % CPU, Recent hangs (the number of times the projection marked it since the app opened).
-- **AM58** Tabs: **Memory** (Real Memory Size, Virtual Memory Size, Shared Memory Size, Private Memory Size, Proportional
-  Memory Size from `smaps_rollup` `Pss` read at most every 5 s, Swapped, Peak); **Statistics** (Threads, CPU Time user and
-  system, Context Switches voluntary and involuntary summed over the threads, Faults minor and major, Read and Write calls
-  from `io` `syscr`/`syscw`, Started (date and time), Nice, Scheduler policy, Unit (the systemd unit), Command, Executable
-  (`exe`), Working Folder (`cwd`)); **Open Files and Ports** (one line per descriptor: a file's path, a pipe, a TCP or UDP
-  socket with local and remote address and port from `/proc/net/{tcp,tcp6,udp,udp6}` by inode, a local socket's path from
-  `/proc/net/unix`, or the kernel's own name such as `anon_inode:[eventfd]`). A value the kernel refuses is "—".
-- **AM59** Buttons: Quit (AM50's sheet for this process). No Sample button. Environment variables are never read.
+### Inspect (step 2d, built: ADR-0038 AD45 to AD47, `docs/audits/activity-2026-10-28/step2d.md`)
+- **AM57** The Info button, a row's double-click, View > Inspect Process and the action and context menus (Ctrl+I; one row,
+  not the Kernel row): a window "<name> (<pid>)" per process (a second request brings it forward), refreshed at the update
+  frequency while it is on screen (AM8's rule: a read at once when it comes back, then one a second later, which gives its
+  % CPU, then one per interval). For another owner's process the window shows what `stat` and `status` give (the header,
+  the Memory tab but Proportional Memory, Threads, CPU Time, Context Switches, Faults, Started, Nice, Scheduler Policy:
+  step 2d, stat's field 41) and "—" elsewhere; Open Files and Ports says "The open files of another user's process can't be
+  read." and the Quit button is disabled, its tooltip AM50's reason. Header: Parent Process (name and pid; a click inspects
+  it; a parent younger than the process holds a reused pid, AD40, and shows "—"), Process Group (the leader's name and the
+  pgid), User (name and uid), % CPU, Recent hangs (the number of times the projection marked it since the app opened;
+  "—" until step 3's projection, no made-up 0). The window closes when its process ends (AD45), and with the main window
+  (AD17). Every read goes through the `/proc/<pid>` descriptor that AM51's start-time check opened, on the sampler's thread,
+  and covers the header and the tab shown only (AD10).
+- **AM58** Tabs: **Memory** (Real Memory Size `VmRSS`, Virtual Memory Size `VmSize`, Shared Memory Size `RssFile +
+  RssShmem`, Private Memory Size `RssAnon`, Proportional Memory Size from `smaps_rollup` `Pss` read at most every 5 s, the
+  swapped size `VmSwap` titled as the table's column (Compressed Memory, or Swapped Memory under AM34), Peak Memory
+  `VmHWM`, never below Real Memory); **Statistics** (Threads, User and System CPU Time, Voluntary and Involuntary Context
+  Switches summed over the threads' `task/*/status`, Minor and Major Faults, Read and Write Calls from `io`
+  `syscr`/`syscw`, Started (date and time, from `/proc/stat`'s `btime`), Nice, Scheduler Policy (Normal, Real-time first
+  in first out, Real-time round robin, Batch, Idle, Deadline), Unit (the systemd unit: the cgroup's last `.service` or
+  `.scope`, else its last `.slice`), Command, Executable (`exe`), Working Folder (`cwd`)); **Open Files and Ports** (one
+  line per descriptor, by number: a file's path, a pipe, a TCP or UDP socket with local and remote address and port, "*"
+  for any address, a local socket's path, or the kernel's own name such as `anon_inode:[eventfd]`; sockets from the
+  process's own network namespace, `/proc/<pid>/net/{tcp,tcp6,udp,udp6,unix}` through its descriptor (AD46: the app's
+  `/proc/net` misses a sandboxed process's sockets); at most 10 000 lines, and a line saying how many more there are). A
+  value the kernel refuses is "—"; an own process that is not dumpable refuses its descriptors too ("The open files of
+  this process can't be read."). Every text a process chose (paths, the command, socket paths) is sanitized as AM17.
+- **AM59** Buttons: Quit (AM50's sheet for this process alone, with AM51 to AM56's rules: the session warning, AD43, the dev
+  guard). No Sample button. Environment variables are never read.
 
 ### The shell (step 3)
 - **AM60** Projection: while a toplevel with app id `org.grassfield.Activity` exists on its display, the shell writes
@@ -434,7 +450,7 @@ items (Settings does it); a background collector; any network access.
 | Ctrl+C, Ctrl+A | Copy, Select All |
 | Ctrl+1 to Ctrl+6 | the main window, CPU Usage, CPU History, GPU History, Performance, App History |
 | Ctrl+K | Clear CPU History |
-| Ctrl+W, Ctrl+Q | close the window, quit the app |
+| Ctrl+W, Ctrl+Q | close the window (an Inspect window when it has the keyboard, step 2d), quit the app |
 | Up, Down, Home, End, Page Up, Page Down, Shift+arrows | move and extend the selection |
 | Left, Right | collapse and expand a tree row or group |
 | Tab, Shift+Tab | toolbar controls, tabs, search, table, summary pop-ups |
@@ -468,6 +484,8 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | Efficiency Mode outside an app unit or for a session process | the item disabled, AM68's reasons |
 | The app's own row | Quit closes its window; Force Quit and signals refused ("This app can't force quit itself.") |
 | Dev session, a process outside the nested session | AM56's message |
+| Open Files and Ports of another owner's process (step 2d) | "The open files of another user's process can't be read."; the Quit button disabled with AM50's tooltip |
+| Open Files and Ports of an own process that is not dumpable | "The open files of this process can't be read." |
 
 ## Acceptance criteria (each mapped to a test; level)
 | ID | Criterion | Test | Level |
@@ -485,6 +503,8 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | A-S10 | after the review of 949fc98: a name and a command line follow an exec (by `stat`'s name, and by the code addresses with the same name); a title over argv[0], a login shell and a symbolic link named as AM17 says; the owner read on arrival, exec and turn only; the turns as full whatever the pids; the Memory tab on `statm` with `status` in turns; a failed TCP dump and a failed listing change nothing | `tst_sampler.cpp`, `tst_procparse.cpp` | L0 |
 | A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen; no sample while hidden; the size kept | `tests/unit/activity/qml/tst_window.cpp` (the real backend on a fixture tree, offscreen; step 2a), `tests/unit/tst_activitymain.qml` (a fake backend), `tests/unit/activity/window/` (the backend's logic) | L1 |
 | A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent; Send Signal to a fixture classified as a session process shows the second sheet and offers no Stop; the dev guard refuses a process outside its roots | `tests/apps/activity_actions.sh` (the window-qml cases `ActivityActions.*` on the real /proc; step 2c) and `tests/unit/tst_activitymain.qml` (the sheets on a fake backend) | L1 |
+| A-S11 | AM57's and AM58's reads: the parsers (stat's policy after a name with parentheses, `smaps_rollup`, `btime`, the socket tables, the unit), every tab of an own process on a fixture tree, another owner's (no io, unit, command line, links or descriptors), % CPU between two reads, `smaps_rollup` at most every 5 s, a younger parent, a process ended or replaced; a real child's pipe, TCP listener and local socket through its descriptor | `tests/unit/activity/tst_inspect.cpp` (step 2d) | L0 |
+| A-W3 | the Info button's window on the real /proc: its reads, a second request raising it, its Quit sending SIGTERM, the window closing with its process; another owner's process (pid 1) with "—" and Quit off; the windows closed with the main window. The backend: one inspection per process, the tabs' texts, the reads on the worker's thread and only on screen. The window on a fake backend: the Info button, Ctrl+I, the menus, a double-click, the tabs, the parent link, the disabled Quit's tooltip, the keys of the key window | `tests/apps/activity_actions.sh` (`ActivityInspect.*`), `tests/unit/activity/window/tst_inspection.cpp`, `tests/unit/tst_activitymain.qml` (step 2d) | L1 |
 | A-N1 | nested: a SIGSTOP'd foot shows "(Not Responding)" (the ANR stand-in path of ADR-0035), Quit through the shell closes a foot window, the Dock tile graph draws and goes at quit | `tests/apps/activity_nested.sh` + `just shot activity` | L1 |
 | A-N2 | dev guard: an action on a process outside the nested session is refused | `activity_nested.sh` | L1 |
 | A-I1 | `ipc_inventory.sh` lists `activity quit` and finds its caller: its real-session caller scan (today `config/hypr/grassfield/`, `packaging/bin/`, `packaging/shims/`, `packaging/session-bin/` and the screen corners, `ipc_inventory.sh:850`) is extended to the apps' sources that build `shellIpcArgs()` calls (review of e3882de) | `tests/security/ipc_inventory.sh` | L0 |
@@ -568,6 +588,11 @@ measured on the whole app at step 2, and the integrator sets it again then (open
   each tab's plan, limit and ratio, and fails a tab over its limit; the bench prints each sample's user and kernel time.
 - **AM-P3** Minimized: no per-process sample (counted by a dev counter); with a Dock graph at 5 s, ≤ 0.1 % of one core.
 - **AM-P4** Memory: the app's PSS ≤ 120 MB after 10 minutes, and its growth over one hour < 5 MB.
+- Inspect (step 2d): an open Inspect window reads on the sampler's thread at the update frequency, only while it is on
+  screen, and only the header and its tab; `activity-sampler-bench inspect PID` prints one read's CPU time per tab
+  (`step2d.md`: the header 0.01 ms; Statistics 0.43 ms for 64 threads; Open Files and Ports 1.5 to 2 ms for 400 to 1 000
+  descriptors; `smaps_rollup` of a process of 1 GB, 3.1 ms, at most every 5 s). The whole app with one open adds at most
+  about 0.1 % of a core at Normally (5 sec), on Open Files and Ports with a thousand descriptors.
 - The shell: the projection writer and the Dock graph add no measurable CPU at idle (P1) and are measured during a window
   storm (20 windows opened and closed).
 Method: `tests/apps/activity_cost.sh` builds the fixture (as `sampcost spawn` and `sampcost tcp` do), starts the app
@@ -589,6 +614,7 @@ at step 5 (L2), with its own number of processes, threads and descriptors noted 
 - Network per process is TCP only and starts when the app opens (AQ2); UDP, including QUIC video, is only in the totals.
 - Energy Impact is Grassfield's own estimate (AQ3); no 12 hr Power, App Nap or Graphics Card.
 - No Sample Process, Spindump or System Diagnostics.
+- An Inspect window lists at most 10 000 descriptors (the rest counted); its Recent hangs shows "—" until step 3.
 - Wake Ups count voluntary context switches, not package wake-ups from idle, and each process's value is refreshed every
   fifth sample (AM23).
 - GPU figures need a driver that reports `drm-engine-*`; another user's GPU use is not seen.

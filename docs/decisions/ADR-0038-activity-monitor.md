@@ -2,7 +2,7 @@
 Status: Proposed (cloud session, owner brief 2026-10-28, step 0; docs only, no code before the opus PASS). The owner
 answered AQ1 to AQ7 on 2026-10-28 (AskUserQuestion), recorded in "Owner decisions". Every other choice follows the owner's
 rule of 2026-10-28 ("the closest to macOS 27, with no technical step for the end user") and is recorded in "Decisions taken
-under the owner's rule" (AD1 to AD44). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
+under the owner's rule" (AD1 to AD47). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
 MINORs, all answered in "Review history"; each changed place says "review of e3882de"). Step 0 merged (pull request #37, opus
 PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built and measured in its own pull request
 (`docs/audits/activity-2026-10-28/step1.md`); the integrator's notes on the merge of step 0 are answered there and marked
@@ -14,7 +14,8 @@ is split into 2a to 2d ("Delivery order"); 2a, the window and its table, is buil
 (`docs/audits/activity-2026-10-28/step2a.md`; AD34 to AD36), merged (pull request #47, main b345334); 2b, the summaries,
 graphs and grouped views, in its own (`docs/audits/activity-2026-10-28/step2b.md`; AD37 to AD41), merged (pull request
 #53, main 0a2b52b); 2c, Quit, Force Quit and Send Signal, in its own (`docs/audits/activity-2026-10-28/step2c.md`; AD42
-to AD44). · Date: 2026-10-28 ·
+to AD44), merged (pull request #63, main 317cce3); 2d, Inspect, in its own (`docs/audits/activity-2026-10-28/step2d.md`;
+AD45 to AD47). · Date: 2026-10-28 ·
 Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
@@ -371,6 +372,11 @@ not invented (R11): it is absent, or "—" for a process that refuses the read.
 - Other owners' processes are read-only and show only what `stat` and `status` give (A1). Their command lines and their
   rewritten process titles are never read (c, AD25).
 - The user's own command lines are shown (what `ps` shows); environment variables are never read.
+- Inspect (step 2d, AD45, AD46) reads one process through the `/proc/<pid>` descriptor AM51's check opened: a pid taken
+  again is never read. Another owner's process gives its `stat`, `status` and threads' `status` only. For the user's own:
+  `io`, `cgroup`, `cmdline`, `smaps_rollup`'s totals, the `exe` and `cwd` links and the descriptors' links, and its own
+  network namespace's socket tables; never its environment, memory maps or memory. Every path and name shown is
+  sanitized (AM17).
 - One name on the session bus (AD34, step 2a): `org.grassfield.Activity` with one method, `Activate(token)`, which only
   brings the window forward; any process of the user could call it, as it could start the app. The token is kept only if
   it is a short printable string; nothing is read from the caller.
@@ -653,6 +659,33 @@ Answer: A (see "Answers").
   first. The processes of a sheet are fixed when it opens (a descriptor each, AM51) and released when it closes. The Stop
   button and the action menu share one glass capsule in the toolbar (macOS 27); the Stop glyph, an octagon with a cross,
   is our own drawing (`branding/LICENSES.md`).
+- **AD45. Inspect's windows and their reads** (AM57, AM58; step 2d). One window per process, a transient window of the
+  main one in the titlebar-only style (role "info", as Files' Get Info), brought forward by a second request and closed
+  with the main window (AD17). It reads through the `/proc/<pid>` directory descriptor that AM51's start-time check opened
+  (`ProcessHandle`), so a pid another process took is never read, and a read that fails means the process ended: the
+  window then closes (it would show a process that is gone, and its Quit would act on nothing). The reads run on the
+  sampler's thread (AD35: `smaps_rollup` of a process of 1 GB costs 3 ms, too long for the window's thread), at the update
+  frequency and only while the window is on screen (AM8, AD35's ShownWatch); back on screen a read comes at once and the
+  next a second later, the % CPU starting again from the first. A read covers the header (`stat`, `status`, the parent's
+  `stat`) and the tab shown only (AD10): Memory adds `smaps_rollup` at most every 5 s, Statistics the threads' `status`
+  and, for an own process, `io`, `cgroup`, `cmdline`, `exe` and `cwd`, Open Files and Ports the descriptors and their
+  sockets. Another tab's last values stay until it is read again, so no "—" flashes between a tab and its read. The Parent
+  Process is the parent now, and a parent younger than the process holds a reused pid (AD40).
+- **AD46. What an Inspect window reads, and from where** (AM57, AM58; step 2d). Another owner's process gives its `stat`,
+  `status` and its threads' `status` (Context Switches), so its Scheduler Policy (stat's field 41) shows too, which AM57's
+  first list left out; never its `io`, `cgroup`, command line, links or descriptors (AD25). Sockets are looked up in the
+  process's own network namespace, `/proc/<pid>/net/{tcp,tcp6,udp,udp6,unix}` read through its descriptor, not the app's
+  `/proc/net` (the spec's first wording): a process in a sandbox with its own network namespace gets its own sockets, and
+  the tables are read once per read and only when the process holds a socket. At most 10 000 descriptors are listed (a
+  process can hold a million), the rest counted on a last line.
+- **AD47. The window's header, Quit and keys** (AM57, AM59; step 2d). Recent hangs shows "—" until step 3's projection
+  can count them (R11: no made-up 0). Quit opens AM50's sheets for this process alone, through a `ProcessActions` of its
+  own with the same rules (own processes only, the session warning, AD43, the dev guard); quitting the app's own process
+  from its Inspect window closes the main window (AM54). The Info button joins Stop and the action menu in their capsule
+  (macOS 27), with the existing `info` glyph. A key belongs to the key window (as Files' Get Info): while an Inspect window
+  has the keyboard, the main window's keys and its global menu's wait (Ctrl+W closes the Inspect window, never the main
+  one), Ctrl+Q aside. The labels' columns are as wide as their longest label, the token width at least, and always leave
+  the values their room (French labels run longer).
 
 ## Delivery order (owner, AQ7 = A: macOS first)
 Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
@@ -674,7 +707,8 @@ Each step is one pull request to main, reviewed by the integrator (opus), with i
    - **2c. Quit, Force Quit, Send Signal** (AM50 to AM56): the sheets, the `/proc/<pid>` descriptor and
      `pidfd_send_signal`, the session processes' second sheet, the dev guard; the Stop button and the action menu. Built
      (AD42 to AD44; `docs/audits/activity-2026-10-28/step2c.md`).
-   - **2d. Inspect** (AM57 to AM59): the Info button and its windows.
+   - **2d. Inspect** (AM57 to AM59): the Info button and its windows. Built (AD45 to AD47;
+     `docs/audits/activity-2026-10-28/step2d.md`).
 3. **The shell links**: the projection and "(Not Responding)", IPC `activity quit` and Quit of windowed processes, the Dock
    tile graph, End Task and its Settings switch (AQ5), Ctrl+Shift+Esc (AQ6). Spec AM60 to AM64.
 4. **Windows 11's additions**: Processes, by Type, Performance, Efficiency Mode, App History, the Login Items link, the
@@ -882,3 +916,11 @@ no recycled pid can be hit, only the eleven signals are accepted; C++ mutants 23
 | MINOR 3: `activity_actions.sh` keeps `QT_QPA_PLATFORMTHEME` | unset, as `scripts/dev/test.sh` does |
 | MINOR 4: a command run in a terminal is refused by Quit (AD43) | the integrator's decision, built: a controlling terminal and a parent in the same app unit get `SIGTERM`; the unit's own process waits for step 3 (`ATerminalCommandIsQuitBySigterm`, a pseudo-terminal's child) |
 | NITs: an empty `/tmp` directory after the pid-reuse case; the guard's walk from the parent read at the sheet's opening; "can't force quit itself" in Send Signal and its French; mutant Q08 | the test makes and removes the directory; the walk starts from the parent read again through the descriptor; Send Signal says "This app can't send a signal to itself.", the French reads « Cette app ne peut pas forcer sa propre fermeture. »; `test_sendSignal` checks that Cancel releases the processes |
+
+**Step 2c, pull request #63: the integrator's notes at the merge (2026-10-30), answered in step 2d.**
+| Note | Answer |
+|---|---|
+| NIT: `actions.cpp:106-107` reads the terminal's parent unit by path, from the pid read when the sheet opened | `ProcessHandle::parentCgroup`: the parent's pid read again through the process's descriptor, the parent's `/proc` directory opened, its stat checked (not younger than the process: a reused pid, AD40) and its cgroup read through that directory; `TheParentsUnitIsNeverAYoungerProcesss` (a younger parent, a reparenting, an ended parent) |
+| NIT: `currentPpid()` has no test (mutant T7) | `TheParentIsReadAgainThroughTheDescriptor`: a grandchild orphaned under the test as subreaper; `ppid()` keeps the first parent, `currentPpid()` and `parentCgroup()` follow the new one; T7 killed (`step2d.md`) |
+| MINOR and NIT for the design lane: the shared Sheet's destructive label in dark, the sheet against its window, the generic executable icon | the design lane's (Grassfield.Ui), not this one's; listed in STATE |
+| For later nested passes: the nested session's rows are not session processes in a dev pass; sort by PID | noted in `step2d.md` for the nested pass of step 2d |
