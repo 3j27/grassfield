@@ -871,20 +871,21 @@ Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first
   - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels (`SharePicker.js` `regionFor`, `regionKey`, `parseRegion`).
   - The shell refuses an area past its display; the stand-in checks it again (SP3).
 - **Windows that hide from capture:**
-  - When the panel opens, the shell asks `hyprctl -j getprop address:0x<address> no_screen_share` for each listed window with an address, all at once, 1 s each at most, each answer on its own line after its address (`blockedHandles`, which matches answers by address, so one meant for another request marks none).
+  - When the panel opens, the shell asks `hyprctl -j getprop address:0x<address> no_screen_share` for each listed window with an address, 16 at a time (Hyprland's socket keeps a backlog of 10), 1 s each at most, each answer on its own line after its address (`blockedHandles`, which matches answers by address, so one meant for another request marks none). A newer request's query waits for the last one to end; the last one's answers are never taken as its own.
   - Such a window is greyed with "This window can't be shared" and is never answered: no window is answered at all until Hyprland's answers have come (review of step 7b, MINOR 1 and 3).
 - **The indicator:** a status item in the menu bar (`menubar-screenshare`, glyph `screen-share`, popup kind `screenshare`, `ScreenShareMenu.qml`).
   - It shows while xdph has a stream (`sharingStreams`: video nodes whose `node.name` is xdph's program name, `xdg-desktop-portal-hyprland`) and never gives way when the status area is crowded.
-  - Its menu has one row per stream. A row is named by the choice the picker answered within the last 10 s only when that stream is the one new stream and that choice the one waiting (`streamLabels`); otherwise "Screen or window" (a share restored with a token, or two at once: review of step 7b, MINOR 2). Then "To stop sharing, use the app that shares."
+  - Its menu has one row per stream. A row is named by the choice the picker answered within the last 3 s only when that stream is the one new stream and that choice the one waiting (`streamLabels`, best effort: 7-12); otherwise "Screen or window" (a share restored with a token, or two at once: review of step 7b, MINOR 2). Then "To stop sharing, use the app that shares."
 - **Tests:**
   - `tst_sharepicker.qml`: the area, the hidden windows, the streams and their labels.
-  - `share_picker_ipc.sh`, cases 9-11:
+  - `share_picker_ipc.sh`, cases 9-12:
     - an area answered and one past its display refused;
     - a window that hides from capture never answered (a fake getprop);
+    - a request shown while the last one's query is held (gate files): no window answered while its own answers are not in, not even when the last one's arrive, then its own query runs and its windows are answered;
     - with a private PipeWire, a node named as xdph names its streams counted and labelled, then gone.
   - `share_picker_nested.sh`, check 5: an area of the nested display.
 
-Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no technical step for the user):
+Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no technical step for the user; 7-12 and 7-13 after its counter-review):
 - **7-9. What lights the screen-sharing indicator.**
   - Question: D-6 named Hyprland's `screencast` event. Hyprland 0.56.2 raises it for every capture protocol (`ScreenshareFrame.cpp:170`, through `ImageCopyCapture`, `Screencopy` and `ToplevelExport`), so the shell's own thumbnails raise it too: the Overview, the Dock's previews, and this picker's own thumbnails.
   - Options:
@@ -905,6 +906,16 @@ Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no tech
   - Options: (a) read `config/hypr/grassfield/privacy.lua`'s rules in the shell (7-4's second copy); (b) ask Hyprland for each listed window's effective rule (`getprop … no_screen_share`, `HyprCtl.cpp:1621`).
   - **Choice: (b).**
   - Rule applied: Hyprland's own answer, whatever rule set it, with no second copy of a privacy rule. An answer that does not read (a window gone, an older Hyprland) leaves the window ungreyed: Hyprland still leaves it out of every capture.
+- **7-12. How sure the indicator's labels are** (counter-review of step 7b, MINOR A).
+  - Question: the portal does not tell the shell which app a stream belongs to. An app the picker answered "Window: Notes" may not have started its stream yet when another app restores an entire-screen share with its token (no picker): that stream is then the one new stream, with one choice waiting, and took "Window: Notes" within the first build's 10 s.
+  - Options: (a) labels only for screens (a window or an area named nowhere); (b) a short window, 3 s (an app starts its stream as soon as the portal answers it), and the label called best effort; (c) no labels, "Screen or window" for every row.
+  - **Choice: (b).**
+  - Rule applied: the macOS menu names what is shared; the wrong case needs two apps within 3 s, one of them restoring a share without asking. (c) would lose the name in every ordinary share to avoid that rare one. The spec and the code say best effort, not certain.
+- **7-13. A windows' query that cannot run** (counter-review of step 7b, NIT 3).
+  - Question: if `sh` cannot start, Quickshell only stops the query; the Window tab would never enable Share, with no hint.
+  - Options: (a) keep refusing every window; (b) treat it as an answer that does not read: no window greyed, a warning in the shell's log.
+  - **Choice: (b).**
+  - Rule applied: 7-11's rule for an unreadable answer; Hyprland still blacks out a window that hides from capture in every capture, so nothing it hides is shared.
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.
