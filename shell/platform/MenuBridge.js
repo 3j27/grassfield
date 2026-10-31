@@ -302,25 +302,84 @@ function findItem(items, id) {
     return null;
 }
 
-// Shortcut text as the menus show it ("Ctrl+Shift+N"); the first shortcut only.
-var keyNames = {
-    Control: "Ctrl",
-    Super: "Super",
-    Alt: "Alt",
-    Shift: "Shift",
-    plus: "+",
-    minus: "-",
-    space: "Space",
-    Return: "Enter",
-    Delete: "Del",
-    BackSpace: "Backspace",
-    Escape: "Esc"
-};
+// Shortcut text as the menus show it ("Ctrl+Shift+N", in French "Ctrl+Maj+N"); the first shortcut only. The key names are the
+// ones the shell's own menus carry (they are translated: AppMenuModel's shortcuts, MenuShortcut.js maps the same names to the
+// macOS symbols on a Mac), so an application's shortcut and the shell's look the same. A key the table does not know keeps the
+// name the application sent.
+function keyName(k) {
+    // Both naming schemes, in any letter case: GTK/X names (BackSpace, Delete, Escape, Page_Up, space, Prior) and Qt's own
+    // (QKeySequence::toString: Backspace, Del, Esc, PgUp, PgDown, Space, Ins, Print, Return, Enter...).
+    switch (String(k).toLowerCase()) {
+    case "control":
+    case "ctrl":
+        return qsTr("Ctrl");
+    case "shift":
+        return qsTr("Shift");
+    case "alt":
+        return qsTr("Alt");
+    case "super":
+    case "meta":
+    case "win":
+        return qsTr("Super");
+    case "plus":
+        return "+";
+    case "minus":
+        return "-";
+    case "space":
+        return qsTr("Space");
+    case "return":
+    case "enter":
+    case "kp_enter":
+        return qsTr("Enter");
+    case "delete":
+    case "del":
+        return qsTr("Del");
+    case "insert":
+    case "ins":
+        return qsTr("Ins");
+    case "backspace":
+        return qsTr("Backspace");
+    case "escape":
+    case "esc":
+        return qsTr("Esc");
+    case "tab":
+        return qsTr("Tab");
+    case "left":
+        return qsTr("Left");
+    case "right":
+        return qsTr("Right");
+    case "up":
+        return qsTr("Up");
+    case "down":
+        return qsTr("Down");
+    case "home":
+        return qsTr("Home");
+    case "end":
+        return qsTr("End");
+    case "page_up":
+    case "pageup":
+    case "pgup":
+    case "prior":
+        return qsTr("PageUp");
+    case "page_down":
+    case "pagedown":
+    case "pgdown":
+    case "pgdn":
+    case "next":
+        return qsTr("PageDown");
+    case "print":
+    case "printscreen":
+        return qsTr("Print");
+    }
+    if (/^f\d{1,2}$/i.test(k))
+        return String(k).toUpperCase();
+    return k.length === 1 ? k.toUpperCase() : k;
+}
 
 function shortcutText(shortcut) {
     if (!Array.isArray(shortcut) || shortcut.length === 0)
         return "";
-    return shortcut[0].map(k => keyNames[k] !== undefined ? keyNames[k] : (k.length === 1 ? k.toUpperCase() : k)).join("+");
+    return shortcut[0].map(keyName).join("+");
 }
 
 // PopupMenu model of a menu's children: [{id: "bridge", dbusId, text, shortcut, enabled, checked, separator?,
