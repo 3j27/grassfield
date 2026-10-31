@@ -11,7 +11,8 @@ import "../services/SharePicker.js" as Logic
 // through the portal and the stand-in of xdph's picker asked the shell (SharePicker). Entire Screen shows each display, Window
 // each window xdph listed, grouped by app; both as live thumbnails. Nothing is selected at first: Share waits for a choice.
 // Remember this choice (the portal's restore token) is unticked at every opening, whatever the app or xdph.conf ask (owner
-// decision Q14). The picker cannot name the app (xdph does not pass it). Keys: arrows move in the grid, Return shares,
+// decision Q14). Nothing answers keys or clicks until the panel is armed (7-8). The picker cannot name the app (xdph does not
+// pass it). Keys: arrows move in the grid, Return shares,
 // Esc cancels, Cmd-1 and Cmd-2 (Super, forwarded as Ctrl) switch the tabs. Captures stop when the panel goes (the Overlay's
 // Loader unloads it).
 Dialog {
@@ -21,18 +22,29 @@ Dialog {
     // The chosen tile by what it stands for (SharePicker.js keyOf), never by its place: "" for none.
     property string chosen: ""
     property bool remember: false
+    // False until Tokens.panelAlertArmMs after the panel showed, or after the last key pressed meanwhile (the access alert's
+    // rule, AccessAlert.qml): keys typed for another window when it appears (Up then Return in a terminal) and clicks choose
+    // and share nothing. Esc and Cancel always cancel.
+    property bool armed: false
     readonly property var screens: Quickshell.screens
     readonly property var windows: Logic.ordered(SharePicker.windows, appId => Apps.nameFor(appId))
     readonly property var tiles: root.tab === "screen" ? root.screens : root.windows
     readonly property int current: Logic.indexOfKey(root.tab, root.tiles, root.chosen)
     readonly property int columns: Logic.columnsFor(grid.width, Tokens.panelSharePickerTileWidth, Tokens.spacingMd)
 
+    function unarmed(): bool {
+        if (root.armed)
+            return false;
+        arm.restart();
+        return true;
+    }
+
     function choose(index: int): void {
         root.chosen = index >= 0 && index < root.tiles.length ? Logic.keyOf(root.tab, root.tiles[index]) : "";
     }
 
     function shareCurrent(): void {
-        if (root.current < 0)
+        if (root.current < 0 || !root.armed)
             return;
         SharePicker.share(root.tab, root.chosen, root.remember);
     }
@@ -49,6 +61,13 @@ Dialog {
     panelWidth: Tokens.panelSharePickerWidth
 
     onRejected: SharePicker.cancel()
+
+    Timer {
+        id: arm
+        interval: Tokens.panelAlertArmMs
+        running: true
+        onTriggered: root.armed = true
+    }
 
     content: [
         SegmentedControl {
@@ -92,6 +111,10 @@ Dialog {
                 Accessible.name: root.tab === "screen" ? qsTr("Displays") : qsTr("Windows")
 
                 Keys.onPressed: event => {
+                    if (event.key !== Qt.Key_Escape && root.unarmed()) {
+                        event.accepted = true;
+                        return;
+                    }
                     const cmd = (event.modifiers & Qt.ControlModifier) !== 0;
                     const keys = {
                         [Qt.Key_Left]: "left",
@@ -203,10 +226,14 @@ Dialog {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
+                            if (!root.armed)
+                                return;
                             root.choose(tile.index);
                             grid.forceActiveFocus();
                         }
                         onDoubleClicked: {
+                            if (!root.armed)
+                                return;
                             root.choose(tile.index);
                             root.shareCurrent();
                         }
@@ -239,7 +266,7 @@ Dialog {
         Button {
             text: qsTr("Share")
             primary: true
-            enabled: root.current >= 0 && root.current < root.tiles.length
+            enabled: root.armed && root.current >= 0 && root.current < root.tiles.length
             onClicked: root.shareCurrent()
         }
     ]

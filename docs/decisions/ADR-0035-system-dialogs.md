@@ -751,7 +751,7 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
      stand-in's end closes (the stand-in timed out, or xdph ended).
   4. Connected, the shell writes `<id> wait` every 5 s while its panel is open, then one answer line, `<id> <selection>` or
      `<id> cancel`, and closes. The stand-in waits for the user with no overall deadline (the choice may take minutes, as with
-     the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without any line** (the
+     the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without a line of that request** (the
      shell hangs: `grassfield-shell.service` restarts a crashed shell, `Restart=always`, but has no watchdog for a hung one,
      `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 4 s
      after the request when the shell dies before connecting (1 s for the lock's `hyprctl`, 1 s for the shell's answer, 2 s
@@ -764,7 +764,9 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
      restores it), then execs the stock binary named (absolute path, same arguments and environment, SIGPIPE at its default).
 - **While the session is locked** (owner decision Q15, 2026-10-27: cancel): the request is cancelled at once and no picker
   shows, neither the Grassfield one nor the stock one, so no key typed around an unlock can reach a picker. The stand-in checks
-  the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on every monitor, or grassfield-shell's
+  the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on any monitor (the shell's own
+  reading, `LockMachine.compositorLockStateLazy`; counter-review of step 7a, MINOR 1: "every monitor", the omarchy-shell
+  shim's test of a secure lock, was the open way for this check), or grassfield-shell's
   crash-recovery marker is not "unlocked" in the shell's own reading of it (`shell/security/LockMachine.js`: `unlocked` or
   `unlocked sleeps=<n>`, and a count of suspends that is not the machine's now counts as a sleep no shell locked for,
   `sleptSince`; the review of step 7a, BLOCKER 1: the stand-in first read `unlocked sleeps=<n>` as locked, which the shell
@@ -846,11 +848,19 @@ Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first
   - Rule applied: the share still works, and the shell was never asked, so two pickers never show.
 - **7-7. Who may answer on the socket.**
   - Options: (a) check the connecting process with `SO_PEERCRED` and its executable (Quickshell's install path); (b) rely on the
-    channel's place: a 0600 socket in a 0700 directory of this user, a random name, and an id given only to the shell.
+    channel's place: a 0600 socket in a 0700 directory of this user and a random name. The id and the socket's path are in
+    `qs ipc`'s command line, which other users can read, but they cannot reach the directory.
   - **Choice: (b).**
   - Rule applied: only this user's processes can reach the socket. Such a process can already drive the shell's IPC and xdph
     itself, so a check by executable path would add a dependency on where Quickshell is installed and no boundary. A Flatpak
     app sees neither the host's `/proc` nor `$XDG_RUNTIME_DIR/grassfield`.
+- **7-8. Keys and clicks as the panel appears** (counter-review of step 7a, MINOR 2: an arrow then Return typed for a
+  terminal as the panel appeared shared the first display, since an arrow selects the first tile).
+  - Options: (a) arrows select nothing until a click; (b) the access alert's rule (D-5, `AccessAlert.qml`): nothing answers
+    keys or clicks until `panel.alertArmMs` after the panel showed or after the last key pressed meanwhile.
+  - **Choice: (b).**
+  - Rule applied: one rule for every Grassfield surface that asks the user to grant something; keys typed on for another
+    window never arm it. Esc and Cancel always cancel (cancelling shares nothing).
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.

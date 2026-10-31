@@ -281,9 +281,10 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   `screen:`/`region:` output listed by `hyprctl -j monitors`, a region inside that output's logical size. Anything else prints
   nothing.
 - SP4 one picker at a time: a request while a picker is open gets `busy` (cancelled).
-- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on every monitor, or
+- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on any monitor, or
   the shell's crash-recovery marker read as the shell reads it, `shell/security/LockMachine.js`: only `unlocked` or
-  `unlocked sleeps=<n>` with the machine's count of suspends is unlocked) and the shell answers `locked`; either
+  `unlocked sleeps=<n>` is unlocked, and only while `<n>` is the machine's count of suspends or that count cannot be read) and
+  the shell answers `locked`; either
   way the request is cancelled and no picker shows, Grassfield's or stock. Every error counts as locked: `hyprctl` failing or
   silent for 1 s, output that is not the expected JSON, no monitor, a marker file that exists but cannot be read.
 - SP6 the panel: tabs "Entire Screen" (one live thumbnail per display, the display's name), "Window" (live thumbnails of the
@@ -313,7 +314,7 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   that display).
 - A-SP6 (L1) shell stopped, session unlocked: the stock picker opens.
 
-### Built in step 7a (ADR-0035 7-1 to 7-6)
+### Built in step 7a (ADR-0035 7-1 to 7-8)
 - **Stand-ins:**
   - `packaging/session-bin/hyprland-share-picker` (`python3 -I`) and `hyprland-preview-share-picker`, Omarchy's name, which runs it with `--stock-name`.
   - `env-grassfield` puts that directory first in the systemd user manager's PATH, where xdph runs.
@@ -333,6 +334,8 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   - Remember this choice is unticked at every opening.
   - Cancel and Share. Share is dimmed until a tile is chosen; nothing is selected at first (7-3).
   - Arrows move in the grid, Return shares, Esc cancels, Cmd-1 and Cmd-2 switch the tabs, and a double-click shares.
+  - Nothing answers keys or clicks for `panel.alertArmMs` after the panel shows, or after the last key pressed meanwhile (7-8);
+    Esc and Cancel always cancel.
 - **Cancelled:**
   - when another popup takes the panel's place or a click lands outside it (7-5);
   - when the session locks;
@@ -349,7 +352,8 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
 4 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
-requesting app. Until step 7b: no Selection tab, no recording indicator, and a window that hides itself from capture is listed
+requesting app. A shell that hangs with its panel open leaves the panel drawn: the stand-in gives up after 15 s, and if the
+app asks again the stock picker opens beside the frozen panel (only the stock picker can answer). Until step 7b: no Selection tab, no recording indicator, and a window that hides itself from capture is listed
 like any other (Hyprland still leaves it out of the stream).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
