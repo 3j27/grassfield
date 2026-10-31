@@ -390,6 +390,8 @@ Variants {
                     return stackPopup;
                 case "forcequit":
                     return forceQuit;
+                case "sharePicker":
+                    return sharePicker;
                 case "confirm":
                     return confirmDialog;
                 case "appabout":
@@ -474,6 +476,11 @@ Variants {
         Component {
             id: forceQuit
             ForceQuitPanel {}
+        }
+
+        Component {
+            id: sharePicker
+            SharePickerPanel {}
         }
 
         Component {

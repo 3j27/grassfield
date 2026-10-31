@@ -31,4 +31,5 @@ singleton Clipboard 1.0 Clipboard.qml
 singleton TilingHover 1.0 TilingHover.qml
 singleton TilingSuggest 1.0 TilingSuggest.qml
 singleton NotResponding 1.0 NotResponding.qml
+singleton SharePicker 1.0 SharePicker.qml
 singleton SoftwareUpdate 1.0 SoftwareUpdate.qml

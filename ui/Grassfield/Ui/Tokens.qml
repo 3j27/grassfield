@@ -685,6 +685,14 @@ QtObject {
     readonly property int panelForceQuitWidth: 380
     // an app's icon in a Force Quit row: the menu row height less 6, unchanged value, was a literal offset in ForceQuitPanel.qml (ADR-0039 step 3, the literals guard)
     readonly property int panelForceQuitIconSize: 18
+    // estimate: three tiles of panel.sharePickerTileWidth with their gaps inside a sheet's padding (the system screen-sharing picker shows its displays and windows as a grid of thumbnails); no measured value yet, F1 sign-off pending (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerWidth: 620
+    // estimate: a thumbnail wide enough to tell windows apart, three to a row of panel.sharePickerWidth; no measured value yet (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerTileWidth: 176
+    // estimate: panel.sharePickerTileWidth at 16:10, the box a display or a window is fitted into with its own aspect (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerThumbHeight: 110
+    // rows of tiles shown before the grid scrolls, so that the sheet stays smaller than a laptop's display (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerRows: 2
     // the glyphs of a Control Center appearance choice: the menu icon size plus 4, unchanged value, was a literal offset in AppearanceSection.qml (ADR-0039 step 3, the literals guard)
     readonly property int panelAppearanceGlyphSize: 18
     // F1 gap 6: 2x1 module height 63 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
