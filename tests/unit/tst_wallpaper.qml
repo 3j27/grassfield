@@ -947,6 +947,19 @@ TestCase {
         compare(WallpaperConfig.normalize({artwork: "Meadow", artworkVariant: 3}).artworkVariant, "timeOfDay");
     }
 
+    // The desktop reads the resolved settings (WallpaperFeed.cfg): the artwork and its variant must reach every display (a
+    // resolve() that dropped them drew the Grassfield hills whatever was chosen).
+    function test_resolveCarriesTheArtwork() {
+        const cfg = {source: "builtin", artwork: "ridgeline", artworkVariant: "dark", outputs: [{display: {name: "eDP-1", model: "", serial: ""}, color: "#102030"}]};
+        for (const d of [panel, other]) {
+            const r = WallpaperConfig.resolve(cfg, d);
+            compare(r.artwork, "ridgeline", d.name);
+            compare(r.artworkVariant, "dark", d.name);
+        }
+        compare(WallpaperConfig.resolve({}, panel).artwork, "grassfield");
+        compare(WallpaperConfig.resolve({}, panel).artworkVariant, "timeOfDay");
+    }
+
     function test_artworkVariant() {
         const v = WallpaperConfig.artworkVariantFor;
         // Time of Day: the phase in the appearance's set; the Evening until the phase is known.

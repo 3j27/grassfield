@@ -289,7 +289,10 @@ function resolve(cfg, display) {
         interval: base.interval,
         shuffle: base.shuffle,
         videoOnBattery: base.videoOnBattery,
-        provider: base.online.provider
+        provider: base.online.provider,
+        // The artwork and its variant are chosen for every display (Settings > Wallpaper's Grassfield section, ADR-0040 step 2).
+        artwork: base.artwork,
+        artworkVariant: base.artworkVariant
     };
     for (const entry of base.outputs) {
         if (!sameDisplay(entry.display, display))
