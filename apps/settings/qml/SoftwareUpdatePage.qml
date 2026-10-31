@@ -320,7 +320,8 @@ SettingsPage {
         SettingsRow {
             visible: root.view.grassfield !== null
             glyph: "grassfield-logo"
-            tileColor: "green"
+            // The mark's tile in the brand green, as General > About's (ADR-0040 ID-11; review of 5391761).
+            tileColor: "grassfield"
             title: root.view.grassfield ? qsTr("Grassfield %1").arg(SoftwareUpdateLogic.releaseName(root.view.grassfield.available, root.view.grassfield.installed)) : ""
             subtitle: root.view.grassfield ? qsTr("Installed: %1").arg(SoftwareUpdateLogic.displayVersion(root.view.grassfield.installed)) : ""
 

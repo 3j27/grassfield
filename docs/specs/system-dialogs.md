@@ -18,7 +18,8 @@ measurements.
    push buttons at the bottom right); the frame moves into `Grassfield.Ui` (a public type, `docs/specs/ui-api.md`) in the
    first step whose surface lives outside the shell process. The panel material of ADR-0024 and the existing tokens
    (`Tokens.panelAlertWidth`, `radiusAlert`, `panelSheet*`, `radiusSheet`, `buttonHeight`, `alertButtonHeight`,
-   `controlFocusOutline`). No hardcoded value; a new measured value is a new token with its source note. F1 target as ADR-0024 (geometry ±1 pt, tints ±0.1); A2 holds at every transparency ≤ 0.6
+   `controlFocusOutline`). The blur behind a dialog in the shell's Overlay takes the corner the dialog draws
+   (`Dialog.cornerRadius`: an alert's `radiusAlert`, a sheet's `radiusSheet`; ADR-0039 step 4). No hardcoded value; a new measured value is a new token with its source note. F1 target as ADR-0024 (geometry ±1 pt, tints ±0.1); A2 holds at every transparency ≤ 0.6
    and with Reduce Transparency (opaque tint).
 2. **Appearance.** Light, dark and auto follow `appearance` live (`ui/Grassfield/Ui/AutoAppearance.js`; the C++ copy in
    `apps/autoappearance.h` for processes outside the shell); the accent follows `accent.color`; Increase Contrast and Reduce

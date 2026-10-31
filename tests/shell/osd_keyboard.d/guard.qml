@@ -90,6 +90,29 @@ ShellRoot {
         Osd.hide();
         InputSource.feed("garbage");
         check("a malformed event shows nothing", !Osd.shown);
+        // A virtual keyboard with its own keymap is reported with the layout "error": never shown, the layout name is kept.
+        InputSource.feed("wtype,error");
+        check("a virtual keyboard's error shows nothing", !Osd.shown);
+        InputSource.feed("kbd0,English (US)");
+        Osd.hide();
+        InputSource.feed("wtype,error");
+        check("a virtual keyboard's error is not the layout", InputSource.layoutName === "English (US)" && !Osd.shown);
+
+        // Capture defect 4: the machine's real backlights never draw the OSD in a dev session (armed, loaded, the value moves).
+        Osd.hide();
+        check("dev: the real backlight does not drive the OSD", !Osd.hardwareDrives);
+        Brightness.device = "test";
+        Brightness.max = 100;
+        Brightness.loaded = true;
+        Brightness.value = 10;
+        Brightness.value = 40;
+        check("dev: a backlight change shows nothing", !Osd.shown);
+        Brightness.kbdValue = 7;
+        Brightness.kbdValue = 8;
+        check("dev: a keyboard backlight change shows nothing", !Osd.shown);
+        // The keys and the IPC hooks still show it.
+        Osd.brightnessStep("up");
+        check("dev: the brightness key still shows the OSD", Osd.shown && Osd.kind === "brightness");
         finish();
     }
 

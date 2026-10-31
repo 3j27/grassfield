@@ -42,3 +42,17 @@ function hoverStep(counts, app, over) {
 function isHovered(counts, app) {
     return (counts[app] || 0) > 0;
 }
+
+// Where the widget gallery sits on an output of w x h px (macOS: a panel at the bottom left that never covers the Dock). `t` carries
+// the tokens {menubar, inset, insetLeft, width, maxHeight, fraction} and `dock` the Dock's footprint {left, right, bottom} on this
+// output (zeros when the Dock is on another one). The panel keeps clear of the Dock on whichever edge it is, even while the Dock is
+// auto-hidden (it would otherwise be covered the moment the Dock reveals). Returns {x, y, width, height}.
+function galleryRect(w, h, t, dock) {
+    const height = Math.max(0, Math.min(t.maxHeight, (h - t.menubar - dock.bottom) * t.fraction));
+    return {
+        x: t.insetLeft + dock.left,
+        y: h - height - t.inset - dock.bottom,
+        width: t.width,
+        height: height
+    };
+}

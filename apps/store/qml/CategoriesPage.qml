@@ -79,7 +79,7 @@ ScrollPage {
                     anchors.verticalCenter: parent.verticalCenter
                     name: Store.symbolIcon(tile.modelData.symbol)
                     size: Tokens.storeCategoryIconSize
-                    color: Appearance.colors.accent
+                    color: Appearance.colors.accentInk
                 }
 
                 Text {
