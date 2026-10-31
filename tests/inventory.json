@@ -505,6 +505,8 @@
  {"path": "tests/compositor/third_party_chrome.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/top_clamp.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/click_focus.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/compositor/overlay_unmap.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/compositor/overlay_watch.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/cursor_refresh.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/desktop_focus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/double_click_setting.sh", "layer": "nested", "runner": "bare"},

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.menubar
@@ -33,6 +34,20 @@ Variants {
         // item, the surface mapped while that item was created and resized the window under the popup's x and y bindings (a
         // binding loop, integrator nested pass of 12e3dd3).
         readonly property bool hasPopup: open && holder.item !== null
+        readonly property bool holding: release.holding
+        readonly property bool holdRunning: release.hold.running
+
+        // Test hook (tests/compositor/overlay_watch.sh): `qs ipc call overlay.<output> state` -> "visible,open,hasPopup,holding,
+        // holdRunning", "" outside a dev session. Read-only.
+        IpcHandler {
+            target: "overlay." + (win.modelData ? win.modelData.name : "")
+
+            function state(): string {
+                if (!VisualFixtures.dev)
+                    return "";
+                return win.visible + "," + win.open + "," + win.hasPopup + "," + win.holding + "," + win.holdRunning;
+            }
+        }
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
