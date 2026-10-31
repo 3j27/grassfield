@@ -165,6 +165,7 @@
  {"path": "tests/unit/tst_savermodel.qml", "layer": "headless"},
  {"path": "tests/unit/tst_searchsettings.qml", "layer": "headless"},
  {"path": "tests/unit/tst_searchunits.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_sessionexit.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsstore.qml", "layer": "headless"},
  {"path": "tests/unit/tst_storemain.qml", "layer": "headless"},
  {"path": "tests/unit/tst_activitymain.qml", "layer": "headless"},

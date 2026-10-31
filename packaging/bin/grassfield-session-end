@@ -9,13 +9,18 @@ open after the timeout nothing is ended: a notice lists the applications and off
 Anyway"). Unsaved work is never lost silently. Omarchy's equivalent (omarchy-system-logout) closes the windows, waits one
 second and ends the session regardless; this one waits for the applications and lets them veto.
 
+Once the windows have gone (or the user chose "Anyway"), the shell's exit cover fades the whole screen to the ground and the
+session ends under it (ADR-0040 ID-10): the cover is asked for over the shell's IPC and waited for, both within EXIT_WAIT;
+a shell that does not answer costs nothing but the fade. When the session then cannot be ended the cover is lifted and the
+exit status is 4, so the desktop never stays hidden behind it.
+
 An unknown state is never "no windows": a failed `hyprctl -j clients` is retried until the deadline, and a window list that
 stays unknown cancels the logout with a notice (the "Anyway" button is the user's decision, never the script's). Only one run
 exists at a time (a second Log Out click while the first waits exits quietly: its close requests would answer an
 application's "Save?" sheet with Cancel).
 
 Runs in the Grassfield session, started by the shell (shell/services/Power.qml). Standard library only; the helpers it
-runs (hyprctl, notify-send or gdbus, systemctl, uwsm) are found through PATH.
+runs (hyprctl, notify-send or gdbus, systemctl, uwsm, qs) are found through PATH.
 """
 import fcntl
 import glob
@@ -62,6 +67,11 @@ POLL = 0.25
 TIMED_OUT = 124  # returncode of a helper that did not answer in time
 SETTLE_EMPTY = 2  # consecutive empty window lists before the windows count as gone
 ASK_TIMEOUT = 295  # seconds a "<Action> Anyway" notice waits before it is closed (GRASSFIELD_SESSION_END_ASK_TIMEOUT, tests)
+# The shell's exit cover (ADR-0040 ID-10), its instance called by its path as grassfield-lid and hyprland-dialog call it; whole
+# command lines, so that tests/security/ipc_inventory.sh finds this helper as the caller of `session cover` and `session lift`.
+COVER = "qs ipc -p /usr/share/grassfield/shell call session cover"
+LIFT = "qs ipc -p /usr/share/grassfield/shell call session lift"
+EXIT_WAIT = 1.0  # session.exitWaitMs (ui/tokens/tokens.json; tests/shell/session_end.sh holds them equal): the exit cover's bound
 
 
 def run(argv, **kw):
@@ -120,14 +130,36 @@ def app_names(open_windows):
     return names
 
 
+def shell_call(command, timeout):
+    """COVER or LIFT on the shell's instance; its answer, None when it did not answer. Quickshell's option variables are
+    cleared as every `qs ipc` caller of the session does (a stray QS_MANIFEST made `qs ipc -p` exit 108)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("QS_CONFIG_PATH", "QS_CONFIG_NAME", "QS_MANIFEST")}
+    r = run(command.split(), timeout=timeout, env=env)
+    if r is None or r.returncode != 0:
+        return None
+    return r.stdout.strip()
+
+
+def cover():
+    """ADR-0040 ID-10: the shell's exit cover, one fade of the whole screen to the ground, asked for and waited for within
+    EXIT_WAIT. True when the shell put it up (it is lifted again if the session does not end)."""
+    deadline = time.monotonic() + EXIT_WAIT
+    answer = shell_call(COVER, EXIT_WAIT)
+    if answer is None:
+        return False
+    fade = bounded_seconds(answer, 0.0, 0.0, EXIT_WAIT * 1000) / 1000  # the fade's milliseconds; anything else waits nothing
+    time.sleep(max(0.0, min(fade, deadline - time.monotonic())))
+    return True
+
+
 def end_session(action):
-    """The step that really ends the session."""
+    """The step that really ends the session. False when it could not be started (the command failed or did not answer)."""
     if action == "logout":
         # uwsm stops the compositor unit and the session's services in order; the compositor's own exit is the fallback.
         r = run(["uwsm", "stop"])
         if r is None or r.returncode != 0:
-            run(["hyprctl", "dispatch", "hl.dsp.exit()"])
-        return
+            r = run(["hyprctl", "dispatch", "hl.dsp.exit()"])
+        return r is not None and r.returncode == 0
     state = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
     # Omarchy keeps "reboot required" and "restart <service> required" markers; a restart or shutdown satisfies them.
     for marker in glob.glob(os.path.join(state, "omarchy", "re*-required")):
@@ -135,7 +167,19 @@ def end_session(action):
             os.remove(marker)
         except OSError:
             pass
-    run(["systemctl", "reboot" if action == "restart" else "poweroff", "--no-wall"])
+    r = run(["systemctl", "reboot" if action == "restart" else "poweroff", "--no-wall"])
+    return r is not None and r.returncode == 0
+
+
+def finish(action):
+    """The exit cover, then the end of the session; the cover is lifted when the session cannot be ended (exit 4)."""
+    covered = cover()
+    if end_session(action):
+        return 0
+    print("grassfield-session-end: the session could not be ended (%s)" % action, file=sys.stderr)
+    if covered:
+        shell_call(LIFT, EXIT_WAIT)
+    return 4
 
 
 def notify_plain(title, body):
@@ -304,8 +348,7 @@ def main(argv):
                     return 3
     else:
         time.sleep(bounded_seconds(os.environ.get("GRASSFIELD_SESSION_END_GRACE"), 1.0, 0.0, 30.0))
-    end_session(action)
-    return 0
+    return finish(action)
 
 
 if __name__ == "__main__":

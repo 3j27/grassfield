@@ -429,6 +429,8 @@ ShellRoot {
     Banners {}
     NotificationCenter {}
     OsdWindow {}
+    // Log Out, Restart and Shut Down end under one fade to the ground (ADR-0040 ID-10; grassfield-session-end asks for it).
+    ExitCover {}
     Search {
         id: searchSurface
     }

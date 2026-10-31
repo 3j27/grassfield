@@ -2849,6 +2849,17 @@ QtObject {
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
 
+    // ADR-0040 ID-21 (section 5): Log Out, Restart and Shut Down proceed by themselves when their confirmation is left alone this many seconds, as macOS's (“… automatically in 60 seconds”, ASSUMPTION from memory)
+    readonly property int sessionExitCountdownSeconds: 60
+    // ADR-0040 section 6 (ID-10): the exit cover's one fade of the whole screen to the ground once the windows have closed; an estimate until P3 (Reduce Motion: motion.reducedMax)
+    readonly property int sessionExitFadeMs: 400
+    // ADR-0040 section 6 (ID-10): the longest packaging/bin/grassfield-session-end waits for the shell's exit cover, the ask included, before it ends the session (P-6 bounded waits; tests/shell/session_end.sh holds the helper's own bound to it)
+    readonly property int sessionExitWaitMs: 1000
+    // estimate: the exit cover lifts by itself when the session is still there this long after it came up (the helper that asked was killed before ending the session), so an exit that did not happen never leaves an opaque screen over the desktop (ADR-0040 ID-10, P-6 bounded waits)
+    readonly property int sessionExitCoverHoldMs: 20000
+    // ADR-0040 ID-2 (P-1 one ground): the colour the exit cover fades to, the session's Hyprland background_color of config/hypr/grassfield/looknfeel.lua (held equal by tests/unit/tst_sessionexit.qml) until step 3 makes the ground the shown wallpaper's
+    readonly property string sessionGround: "#1E1C18"
+
     // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
     readonly property int windowLightDiameter: 14
     // ADR-0015 / f1-reference-gaps.md:103: gap between two light edges (pitch 23); plugin kButtonSpacing

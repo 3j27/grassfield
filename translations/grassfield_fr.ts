@@ -8088,6 +8088,33 @@
     </message>
 </context>
 <context>
+    <name>PopupKinds</name>
+    <message>
+        <source>If you do nothing, you will be logged out automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, votre session sera fermée automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, you will be logged out automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, votre session sera fermée automatiquement dans %1 secondes.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will restart automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, l’ordinateur redémarrera automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will restart automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, l’ordinateur redémarrera automatiquement dans %1 secondes.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will shut down automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, l’ordinateur s’éteindra automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will shut down automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, l’ordinateur s’éteindra automatiquement dans %1 secondes.</translation>
+    </message>
+</context>
+<context>
     <name>Power</name>
     <message>
         <source>Sleep</source>
@@ -9478,10 +9505,6 @@
     <message>
         <source>Are you sure you want to restart your computer now?</source>
         <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
-    </message>
-    <message>
-        <source>Open applications will be closed.</source>
-        <translation>Les applications ouvertes seront fermées.</translation>
     </message>
     <message>
         <source>Are you sure you want to shut down your computer now?</source>
@@ -11703,10 +11726,6 @@
     <message>
         <source>Are you sure you want to restart your computer now?</source>
         <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
-    </message>
-    <message>
-        <source>Open applications will be closed.</source>
-        <translation>Les applications ouvertes seront fermées.</translation>
     </message>
     <message>
         <source>Restart</source>
