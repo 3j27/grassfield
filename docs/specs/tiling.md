@@ -529,7 +529,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   its edge brings it back over the window (`DockModel.hides`, `overlayLayer`); its reserved area does not change. After an
   output goes away, a floating window left off every output comes back centred on the work area of its Desktop's output at
   its size, at most the area's (core `strayFrame`, `gatheredFrame`; not a full-screen, Stages strip or minimized window).
-  The picker's deadline for the plugin's reply is 6 s (D68). Step 6d: the titles hidden and revealed at the top of a Split
+  The picker's deadline for the plugin's reply is 6 s (D68); a reply adopts a Split View's picker unless it answers the
+  shell's own ask (`WindowTiling.replyPicker`), so an earlier ask still open never hides a new Split View's picker. Step 6d: the titles hidden and revealed at the top of a Split
   View Desktop, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full Screen) and the Overview's
   drop targets for a Split View Desktop.
 
