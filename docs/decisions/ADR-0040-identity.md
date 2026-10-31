@@ -193,7 +193,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
   Step 1c as built: Settings > Appearance's first swatch is "Grassfield", one disc of the brand green (the colour wheel is
   gone); the stored value stays `multicolor` (no grassfield.json to migrate). The pickable Green is `#6DB53C` with dark
   text `#10240A` (6.5:1) in the light appearance, the owner's choice B of 2026-10-30 (below): OKLab distance 0.21 from the
-  brand green, where `#3A7512` was 0.04; the dark appearance keeps `#8BD34E` (0.12 already). Like yellow it holds dark
+  brand green `#26763F` and 0.29 from the deeper `#195E3F` of 2026-10-30, where `#3A7512` was 0.04; the dark appearance keeps `#8BD34E` (0.12 already). Like yellow it holds dark
   text, so its dark-appearance selection pair is its light pair (`color.selectionDark.green`, the rule that a selection
   is never darker than the light accent), its focus ring falls back to the text colour on light grounds
   (`Accent.focusRing`), its thin marks in the GTK themes are pinned at 2.32:1 and 2.48:1 (`tests/ci/gtk_themes.py`), and
