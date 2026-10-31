@@ -1137,6 +1137,148 @@ Recommendation: S2, delivered after D-8 has made the stock prompts follow the ap
 **Owner decision Q1 (2026-10-27): S2.** Q10: the NetworkManager secret agent is part of the same step. Q11: KIO's network
 passwords too (D-12). Q12: the amendment text above.
 
+**Delivered in step 9a (the bridge; the shell's queue and sheets are step 9b, udiskie 9c, the NetworkManager agent 9d,
+KIO's password server 9e).** The security rule is amended with Q12's text (CLAUDE.md, master-prompt R12, ADR-0010
+"Amendment 2026-10-31"), in force from the integrator's merge of this step. `bridges/prompter` (C++20, Qt Core, libgcr-4,
+GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), installed as
+`/usr/lib/grassfield/grassfield-prompter`, run by `packaging/systemd/grassfield-prompter.service`, which
+`config/hypr/grassfield/autostart.lua` starts before the shell without waiting for it.
+- **gcr's side.** libgcr's `GcrSystemPrompter` (mode MULTIPLE, decision 9-2) is registered at `/org/gnome/keyring/Prompter`
+  on the bridge's own GDBus connection for the bridge's whole life (9-3) and runs gcr's protocol and its `sx-aes-1`
+  exchange. Its prompts are `GfPrompt` objects (`src/Prompt.{h,cpp}`, a GObject class written in C++ implementing
+  `GcrPrompt`): each hands its request to the bridge and is answered once, or ends "cancelled" (the caller's
+  `StopPrompting` or departure cancels gcr's cancellable; the prompt then withdraws the request and completes it in a
+  later main loop turn). The password arrives in gcr's secure memory; libgcr encrypts it for the caller at once and the
+  prompt zeroes and frees its copy in the next turn, and in any case before its next request and when it goes. A bus filter
+  (`src/Filter.{h,cpp}`, 9-1) tells each prompt its caller.
+- **The name.** `org.gnome.keyring.SystemPrompter` is requested (flags 0: queued behind an owner, never replaceable) when
+  the shell says hello and released when the shell goes; a request that reaches the bridge with no shell is answered
+  "cancelled" at once. The bridge follows the name's owner through `GetNameOwner` after every reply and `NameAcquired` or
+  `NameLost` signal, and tells the shell "released", "queued" or "owned" (9-10).
+- **The socket.** `$XDG_RUNTIME_DIR/grassfield/prompter.sock`: directory 0700 (created only in a parent of the user's
+  alone, an existing one lstat-checked and narrowed), socket 0600 (umask 077 around `bind`, checked after), a live socket
+  of another bridge refused, a stale one replaced, removed at exit only when it is still the bridge's own (device and
+  inode). A peer is accepted when `SO_PEERCRED` says it is the user and its cgroup is the `--peer-unit` unit's (9-7); one
+  shell at a time. Reads go into a buffer of gcr's secure memory that is wiped line by line (9-5).
+- **Identification** (`src/Identity.{h,cpp}`): `GetConnectionCredentials` of the caller, `ProcessFD`, its PID from
+  `/proc/self/fdinfo`, `/proc/<pid>/exe` read and opened, the pidfd checked again; trusted only when the path names that
+  same file now and the file and every directory above it are root's and not writable by group or others; then
+  "keyring", "gnupg", "app" (one desktop entry whose Exec is exactly that program) or "unidentified" with the path (9-4).
+  Caller text and desktop-entry text are flattened and capped (`src/Text.{h,cpp}`, 9-13).
+- **The protocol** `prompter/1` (`src/Protocol.{h,cpp}`; spec section 5, "prompter/1 protocol"): hello both ways, name,
+  prompt, cancel and error from the bridge, answer from the shell; at most 8 requests outstanding (the 9th is answered
+  "cancelled" without reaching the shell); errors fail closed (9-6). Kinds `password` and `confirm`; `nm`, `kio` and
+  `bluetooth` are reserved for 9d, 9e and step 10 (9-9).
+- **Packaging.** The unit (no namespace option, seccomp, no core file, no swap, non-dumpable, 9-8); the PKGBUILD builds the
+  bridge, runs its unit tests in `check()` and installs it with its unit; `grassfield-desktop` and the build declare
+  `gcr-4` (already installed with gnome-keyring, probe P15). libsecret is not used yet (9e).
+- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (35 cases, also under ASan and UBSan): the flattening and caps, the
+  line parser on valid, malformed, oversized and hostile lines, the messages, the bound of 8 and ids never reused, the
+  cgroup line and the unit names, the socket peer of a socket pair, the socket directory checks, trusted executables and
+  desktop entries on temporary trees, processes through their pidfd (alive, then gone), the bus filter on bodies and
+  messages, and the GcrPrompt object (answers, the strength and the choice reported back, withdrawals, closing, the
+  password wiped). `tests/security/prompter_bridge.sh` (headless; a private dbus-daemon, a fake shell
+  `tests/fixtures/prompter-shell.py`, real libgcr clients `tests/fixtures/prompter-client.py` and Arch's
+  `pinentry-gnome3`, fake name holders): refusals at start; the socket's modes; the process not dumpable; no name without
+  a shell; a peer outside the expected unit, a second shell, another protocol version, an answer before hello refused;
+  the name owned after hello; a password and a confirmation through the exchange, the caller identified from its pidfd,
+  its text flattened, the choice back; a caller that names another connection in its own properties shown as itself;
+  pinentry-gnome3 shown as GnuPG and given its PIN; StopPrompting and a caller killed reach the shell as "cancel"; nine
+  requests at once (eight shown, the ninth cancelled at once, the eight answered); an answer to an unknown id ignored, a
+  wrong answer cancelling its request, an over-long line closing the connection; the shell's departure cancelling and
+  releasing, its return taking the name again; an attacker asking to replace the owner only queued and never called; the
+  bridge queued behind a holder, then owning the name; no test password in the output. `tests/shell/session_services.sh`
+  checks the unit, the autostart and the PKGBUILD.
+- **What 9a changes for the user: nothing.** No shell connects before step 9b, and without a connected shell the bridge
+  never asks for the name: every prompt is the stock gcr-prompter's, as before.
+
+**Decisions of step 9a** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **9-1. How does the bridge learn which caller a prompt serves?** libgcr's `GcrSystemPrompter` creates each `GcrPrompt`
+  without telling it its caller (`gcr/gcr-system-prompter.c` `active_prompt_create`), and D-9 shows the caller resolved
+  from the bus. Options: (a) a filter on the bridge's GDBus connection rewrites every incoming `PerformPrompt` call to the
+  prompter object before it is dispatched: only GcrPrompt's own caller properties pass (right types, strings up to
+  16 KiB) and a private property `grassfield-caller` carries the message's sender, which the bus daemon writes; gcr sets
+  the properties on the caller's prompt (`prompt_update_properties`) right before asking it; (b) match `BeginPrompting`
+  messages to new prompts by their order; (c) speak gcr's prompter protocol in the bridge, with libgcr's
+  `GcrSecretExchange` for the cryptography only; (d) interpose GLib's `g_dbus_connection_register_object` to see each
+  call's sender. **Choice: (a).** Rule applied: D-9 keeps libgcr for the protocol and the cryptography; the identity comes
+  from the bus header, never from an order of events or from the caller; (b) misattributes silently as soon as GDBus
+  refuses a call before gcr sees it, (c) adds protocol code on the secret path, (d) depends on symbol interposition. The
+  property is never notified, so libgcr never echoes it to a caller; no sender gives "Unidentified program"; a
+  `PerformPrompt` of another shape is dropped.
+- **9-2. One prompt at a time in gcr, or all at once?** Options: (a) `GCR_SYSTEM_PROMPTER_SINGLE`, gcr's own queue;
+  (b) `MULTIPLE`, every caller gets its prompt at once. **Choice: (b).** Rule applied: D-9's one queue is the shell's
+  (with the polkit sheet); a second queue inside gcr would hide waiting requests from the shell and from the bound of 8.
+- **9-3. When is gcr's prompter object registered?** Options: (a) only while a shell is connected; (b) for the bridge's
+  whole life, only the name following the shell. **Choice: (b).** Rule applied: fail closed, never blocking. With no
+  shell a request is answered "cancelled" at once; unregistering while a prompt is in flight would race libgcr's own
+  clean-up (an answer arriving after it would be sent on a cleared connection). Releasing the name is enough: libgcr's
+  clients watch the prompter's name and cancel when its owner goes (`gcr/gcr-system-prompt.c` `on_prompter_vanished`).
+- **9-4. Which requesters are named?** Options: (a) the rule of the step's brief: a desktop entry of the same executable,
+  "Keyring" for gnome-keyring, "GnuPG" for gpg-agent and pinentry, anything else "Unidentified program" with the path;
+  (b) also a trusted executable's own file name. **Choice: (a)**, with the entry rule made strict: the entry's `Exec` is
+  the program and field codes only, and exactly one entry of `/usr/share/applications` runs that file (compared by device
+  and inode). Rule applied: macOS names the app or warns; an interpreter (`python3` running any script), a wrapper or a
+  launcher with arguments must never lend an entry's name to whatever it runs. The fixed paths: gnome-keyring is
+  `/usr/bin/gnome-keyring-daemon`; for GnuPG the caller on the bus is `/usr/bin/pinentry-gnome3` (gpg-agent runs it),
+  `/usr/bin/gpg-agent` is listed too.
+- **9-5. How does the bridge read the shell?** Options: (a) `QLocalServer` and `QJsonDocument`, as the menu bridge;
+  (b) a plain Unix socket read into a buffer of gcr's secure memory, a strict parser of flat JSON objects that leaves the
+  password escaped in the line and decodes it straight into gcr's secure memory, the line wiped once handled; outgoing
+  lines (no secret) built with Qt's JSON. **Choice: (b).** Rule applied: D-9 ("the bridge reads it into a buffer it zeroes
+  after handing it to libgcr"); Qt's socket and JSON classes keep copies the bridge cannot wipe. With it, every bus call
+  goes through GDBus, since libgcr's prompter needs a `GDBusConnection`: no QtDBus, no QtNetwork; GLib is already a
+  dependency of `qt6-base` (its event dispatcher) and of `gcr-4`.
+- **9-6. What does a protocol error do?** **Choice:** an answer to an id that is not outstanding (withdrawn, answered,
+  never sent) is ignored; a wrong answer to an outstanding id (an unknown key, a password where none is asked, "ok"
+  without one, a choice where none was shown, a password over 4096 bytes) cancels that request and tells the shell
+  "cancel"; a line that cannot be attributed (not one flat JSON object, over 16 KiB, an answer without a usable id, an
+  answer before hello, another protocol version) closes the connection, which cancels every request and releases the name
+  until the shell reconnects; an unknown message type or a repeated hello is answered "error" and counted, and the ninth
+  such line closes the connection. Rule applied: fail closed, never a password invented (D-9); the menu bridge closes on an
+  over-long line too (ADR-0008).
+- **9-7. Who may connect, and how is the shell's cgroup read?** **Choice:** `SO_PEERCRED`'s user must be the bridge's; the
+  peer's cgroup is read through `SO_PEERPIDFD` (Linux 6.5): the pidfd's PID from its fdinfo, `/proc/<pid>/cgroup`, then
+  the pidfd checked alive, so a reused PID cannot pass. On an older kernel the PID of `SO_PEERCRED` is read (a residual
+  race, in the spec's known limitations). The unified-hierarchy path must end with the `--peer-unit` unit and, in a
+  session, contain `user@<uid>.service`; the unit comes from the systemd unit's command line only (default
+  `grassfield-shell.service`), never from the environment; a development run (on a private test bus only) matches the
+  last component only, as a container has no user manager. One shell at a time ("busy"). The secret sheets share one
+  queue with the polkit sheet, so they live in the polkit agent's process: when ADR-0041 S3 moves the agent to
+  `grassfield-security.service`, the sheets and `--peer-unit` move with it. Rule applied: D-9's socket rule; the brief's
+  "no environment-variable bypass".
+- **9-8. The unit.** **Choice:** hardening without namespaces, as 2c-6 (the bridge reads `/proc/<pid>/exe` of its callers
+  and needs root's files to show as root's): `NoNewPrivileges`, `RestrictAddressFamilies=AF_UNIX`, `RestrictNamespaces`,
+  `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality`, `MemoryDenyWriteExecute`, `SystemCallFilter=@system-service`,
+  an empty capability set; `LimitCORE=0`, `MemorySwapMax=0` and a non-dumpable process; `UnsetEnvironment` of
+  `G_DBUS_DEBUG`, `G_MESSAGES_DEBUG`, `G_DEBUG`, `QDBUS_DEBUG` and `QT_NO_GLIB`; `Restart=on-failure` with the menu
+  bridge's back-off; `RuntimeDirectory=grassfield`, kept, shared with the menu bridge; no `[Install]`: started by
+  `autostart.lua` before the shell with `--no-block`. Budget measured in the container (Qt 6.12, gcr 4.4.1): 18.5 MB
+  resident idle, 21.1 MB after ten prompts, 4 threads; `MemoryHigh=48M`, `MemoryMax=128M`, `TasksMax=16`. Rule applied:
+  section 5.8 (a hardened user unit with a budget).
+- **9-9. Kinds and versions.** **Choice:** each hello lists kinds; the bridge sends a request only of a kind the shell's
+  hello listed (another is answered "cancelled" without showing) and 9a sends `password` and `confirm`; `nm` (9d), `kio`
+  (9e) and `bluetooth` (step 10) are added within `prompter/1` with their own prompt and answer fields; changing the
+  fields of an existing kind means `prompter/2`. Rule applied: one protocol for every secret sheet (D-9), a shell never
+  asked to draw what it cannot.
+- **9-10. The name's state.** **Choice:** the bridge tells the shell "released", "queued" or "owned" after its hello and
+  at every change, and writes who holds the name when it is queued (the owner's executable, from its pidfd). Rule applied:
+  a desktop that cannot show a prompt must be diagnosable without a technical step for the user (the journal says it).
+- **9-11. Limits.** **Choice:** 8 requests outstanding (D-9); 64 gcr prompts open at once (beyond, a new one answers
+  "cancelled"); a password of at most 4096 bytes after decoding, never cut; shell lines of at most 16 KiB; caller strings
+  over 16 KiB dropped by the filter; texts capped in UTF-16 code units, the ellipsis included: title 128, message 256,
+  description 1024, warning 256, check box 128, buttons 32, requester name 128, icon and desktop id 256, path 512. Rule
+  applied: bounded input everywhere on the secret path; macOS alerts show a few lines.
+- **9-12. The password's strength reported to the caller.** Options: (a) a score; (b) 0 for an empty password, 1
+  otherwise, as gcr's own dialog does (gnome-keyring reads it to ask about storing passwords unencrypted). **Choice:
+  (b).** The meter the user sees is the shell's (step 9b). Rule applied: gcr's contract as its own prompter keeps it.
+- **9-13. What "plain, flattened" removes.** **Choice:** control characters, DEL and the line and paragraph separators
+  become spaces; bidirectional marks, embeddings, overrides and isolates, zero-width and invisible formatting characters,
+  interlinear annotation, tag characters and noncharacters are removed; unpaired surrogates become U+FFFD; runs of white
+  space become one space; the result is cut on a code point boundary with an ellipsis. The same rule for desktop-entry
+  names and executable paths. Rule applied: D-9 (caller text plain, flattened, capped) and the `plainText` rule of the
+  settings contract (ADR-0010 amendment of 2026-10-26).
+
 ### D-10. What Omarchy still shows (category D; O1–O11)
 - **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):
   - step "screenshots": Grassfield's bindings call a Grassfield capture script instead of `omarchy-capture-screenshot`. It keeps
@@ -1730,7 +1872,8 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   9, already installed with gnome-keyring) and libsecret (step 9, already installed with pinentry; counter-review of PR #13,
   minor); no libnm.
 - A packaged drop-in keeps Omarchy's `bt-agent` out of the Grassfield session (step 10).
-- The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12).
+- The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12): done in step 9a,
+  in force from the integrator's merge of that step.
 - One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins), `/usr/share/grassfield/xdg` (the
   session's portal configuration) and `/usr/share/grassfield/xdg-config` (the session's `kwalletrc`, Q17-b).
 - The Grassfield session exports `GTK_USE_PORTAL=1`, adds `portals` to `GDK_DEBUG` and prepends `XDG_DATA_DIRS` and

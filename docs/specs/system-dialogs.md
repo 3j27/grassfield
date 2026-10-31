@@ -392,9 +392,11 @@ Hyprland's bar, not a Grassfield notice, shows config errors on 0.56.2 (CE1); it
 that fails) and its other toasts stay Hyprland's too (ADR-0035 D-2).
 
 ## 5. Password prompts (gcr, udiskie, NetworkManager, KIO; S1–S4, S6, S8, K1; ADR-0035 D-9, D-12; owner decisions Q1, Q10–Q12)
-Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12), applied in step 9 after the integrator's
-review and the owner's agreement, before any code; R12 applies (opus PASS, fail closed where a secret is involved, nothing
-logged).
+Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12): applied in step 9a (CLAUDE.md,
+master-prompt R12, ADR-0010 "Amendment 2026-10-31"), in force from the integrator's merge of that step; R12 applies (opus
+PASS, fail closed where a secret is involved, nothing logged). Step 9a builds the bridge, its socket protocol (below) and
+its unit; the shell's queue and sheets come in step 9b, udiskie's helper in 9c, the NetworkManager agent in 9d, KIO's
+password server in 9e. Until 9b no shell connects, so the bridge never takes the name and nothing changes for the user.
 
 ### macOS reference behavior
 System-modal alert centred on the active display, above every window, never on the lock screen: the requesting app's icon,
@@ -485,6 +487,61 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   narrowed to int, a const local that blocked a move), and what remains is Qt's own idiom (static `QStringLiteral`
   constants, `S_IW*` bit masks, a `QDBusArgument` operator returning its argument, an enum's base type).
 
+### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13)
+Transport: the Unix stream socket `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600), served by
+`grassfield-prompter`; UTF-8 JSON, one object per line, ended by a line feed. The bridge accepts one peer at a time, only
+one that runs as the user and whose cgroup is the unit named by the bridge's `--peer-unit` (`grassfield-shell.service`;
+read race-free through `SO_PEERPIDFD` on Linux 6.5 and later). A refused peer gets `{"type":"error","code":"refused"}`, a
+second shell `{"type":"error","code":"busy"}`, and the connection is closed. Nothing secret flows from the bridge to the
+shell; the shell sends a password once, in its answer, and the bridge decodes it straight into gcr's secure memory.
+
+Bridge to shell:
+- `{"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}`: first line, at once.
+- `{"type":"name","state":"released"|"queued"|"owned"}`: after the shell's hello and at every change of
+  `org.gnome.keyring.SystemPrompter`'s ownership (queued: another process holds it, usually the stock gcr-prompter for 10 s
+  after its last prompt; the bridge gets it when that process lets it go).
+- `{"type":"prompt","id":"p<N>","kind":"password"|"confirm","requester":{...},"texts":{...},"choice":{...}|null,
+  "passwordNew":bool,"strength":bool}`:
+  - `id`: `p` and a decimal number, never reused while the bridge runs;
+  - `requester`: `role` (`app`, `keyring`, `gnupg` or `unidentified`), `name` (the desktop entry's unlocalised `Name` for
+    `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG" and `unidentified` "Unidentified program"
+    in its own translated words), `desktopId` and `icon` (the entry's, for `app`), `path` (the caller's executable when
+    known, shown in the secondary style for `unidentified`), `identified` (true for `app`, `keyring`, `gnupg`), `onBehalf`
+    (true for `keyring` and `gnupg`: the caller's text then names the app it asks for, under the fixed row). Only the
+    bridge fills it, from the caller's bus credentials (SC3);
+  - `texts`: `title`, `message`, `description`, `warning`, `continue`, `cancel`: the caller's own text, plain, on one line,
+    capped (title 128, message 256, description 1024, warning 256, buttons 32 UTF-16 code units, an ellipsis when cut);
+    empty when the caller set none (the shell then uses its own words, "OK" and "Cancel");
+  - `choice`: the check box (`label`, capped at 128, and `chosen`, its initial state) or null when there is none;
+  - `passwordNew`: a new password (New and Verify fields); `strength`: show the strength meter (both only for `password`).
+- `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, or the bridge
+  cancelled it after a wrong answer): the shell removes its sheet, shown or still queued, and does not answer it.
+- `{"type":"error","code":"<code>","message":"<text>"}`: `refused`, `busy`, `version`, `bad-line`, `too-long`,
+  `unknown-type`, `bad-answer`.
+
+Shell to bridge (at most 16 KiB per line):
+- `{"v":"prompter/1","type":"hello","shell":"<version>","kinds":[...]}`: the first line, once; `kinds` lists what the
+  shell draws. The bridge asks for the name only after it, and sends only requests of a listed kind (another kind is
+  answered "cancelled" to its caller without reaching the shell).
+- `{"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false}`: `password` only for a
+  `password` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password); `choice`
+  only when the prompt had a check box.
+
+Rules (fail closed: no answer is ever invented):
+- At most 8 requests outstanding; a 9th caller is answered "cancelled" at once and the shell never sees it.
+- An answer to an id that is not outstanding is ignored. A wrong answer to an outstanding id (an unknown key, a password
+  where none is asked or missing for `ok`, a choice where none was shown, a password over 4096 bytes) cancels that request
+  (`cancel` to the shell, "cancelled" to the caller).
+- A line that cannot be attributed (not one flat JSON object of strings, booleans, null and arrays of strings; over
+  16 KiB; an answer without a usable id; anything before hello; another protocol version) closes the connection: every
+  outstanding request is cancelled and the name is released until the shell connects again. The ninth unknown or repeated
+  message of a connection closes it too.
+- When the shell disconnects, every outstanding request is answered "cancelled" and the name is released; the stock
+  gcr-prompter is then activated for the next prompt, as before step 9.
+- Kinds `nm` (Wi-Fi and 802.1X secrets, step 9d), `kio` (server name and password, step 9e) and `bluetooth` (pairing, step
+  10) are reserved; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of an existing
+  kind is `prompter/2`.
+
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
   receives a prompt while the bridge holds it; with the shell disconnected, the fake stock prompter is activated.
@@ -507,6 +564,13 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
 - A-SC7 (L1) nested: pinentry-gnome3 with a throwaway GNUPGHOME and key asks through the Grassfield sheet (screenshot, "visual
   NOT verified" otherwise); udiskie with a loop-mounted LUKS image and an sftp location are the owner's L2 checks.
 - A-SC8 opus PASS.
+- Step 9a covers the bridge's part of A-SC1 (a real libgcr-4 client and pinentry-gnome3 get their password through the
+  exchange; a process queued on the name, even asking to replace its owner, receives no call; with the shell disconnected
+  the name is released), A-SC3 and A-SC3b for the requester the bridge sends (a caller that names another connection in
+  its own properties, a caller that exits, an executable the user can write: `tests/unit/prompter`,
+  `tests/security/prompter_bridge.sh`), the bound of 8 of A-SC2 and A-SC6's mutants of the bridge (the uid and cgroup check,
+  the caller checks, the bound, the buffer wiping); the sheets, the queue's keyboard rule and the polkit sheet's place in
+  the queue are step 9b's.
 - A-SC9 (L0) the handover against fakes on a private bus (`tests/integration/secrets_handover.sh`): the items move once and
   an item the keychain holds is kept; KWallet's own entries (stored as kwalletd 6.29 stores them) move too, and so does an
   older entry KWallet lists only once open; nothing is final from a locked listing that lists nothing; an empty value is
@@ -521,7 +585,17 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
 
 ### Known limitations
 Name ownership is the only authorization (upstream design): a same-user process can still show a fake stock prompt through
-gcr-prompter while the bridge is down; the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
+gcr-prompter while the bridge is down, and one that holds or is queued for `org.gnome.keyring.SystemPrompter` when the
+shell goes gets the next prompts (the bridge releases the name then, by design: never blocking); a same-user process that
+owns the name before the bridge asks for it keeps it (the bridge says "queued" and logs who holds it). The socket's
+checks stop other processes of the user from passing for the shell, not same-user code that sets out to: the user owns
+their systemd manager's cgroups and can move a process into the shell's unit, and the shell's own children that stay in
+its cgroup (its helpers; an application started before `uwsm-app` is detected, ADR-0011) could connect while the shell is
+not connected (out of scope as for every Grassfield socket, security.md); on a kernel without `SO_PEERPIDFD` (before 6.5)
+the cgroup is read through the PID `SO_PEERCRED` gives, and a peer that exits and whose PID a process of the shell's unit
+reuses in between would pass. An interpreter or a launcher that runs other code is shown as "Unidentified program" with
+its path even when the code it runs is an app (9-4). The gcr protocol is unauthenticated: its exchange protects the
+password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); a
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
