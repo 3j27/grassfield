@@ -100,7 +100,9 @@ TestCase {
         const inhibitor = source("shell/security/idle/SleepInhibitor.qml");
         verify(/function afterResume\(\): void \{[\s\S]*?Lock\.resumed\(\);[\s\S]*?\n    \}/.test(inhibitor));
         // The surface's own colour is the ground (ID-2, ID-15), taken once.
-        verify(/Component\.onCompleted: surface\.color = Ground\.of\(surface\.screen \? surface\.screen\.name : ""\)/.test(source("shell/security/lock/Lock.qml")));
+        const lockSrc = source("shell/security/lock/Lock.qml");
+        verify(/function takeGround\(\): void \{\s*if \(surface\.groundTaken \|\| !surface\.screen\)\s*return;\s*surface\.groundTaken = true;\s*surface\.color = Ground\.of\(surface\.screen\.name\);/.test(lockSrc));
+        verify(/onScreenChanged: surface\.takeGround\(\)/.test(lockSrc) && /Component\.onCompleted: surface\.takeGround\(\)/.test(lockSrc));
         // Focus first in the view (review of cbd6ef05).
         verify(/Component\.onCompleted: \{\s*focusField\(\);/.test(v));
     }

@@ -103,6 +103,21 @@ Singleton {
     function prepareStills(): void {
         try {
             const c = Qt.createComponent(Qt.resolvedUrl("LockStills.qml"));
+            // Still loading (a URL served asynchronously): finish when it is ready (counter-review of 830ed088, NIT 2).
+            if (c.status === Component.Loading) {
+                c.statusChanged.connect(() => {
+                    if (c.status !== Component.Loading)
+                        root.finishStills(c);
+                });
+                return;
+            }
+            root.finishStills(c);
+        } catch (e) {
+            console.warn("grassfield-lock: the lock's display data failed (" + e + "); the lock shows the artwork and the initials");
+        }
+    }
+    function finishStills(c: var): void {
+        try {
             if (c.status !== Component.Ready) {
                 console.warn("grassfield-lock: the lock's display data cannot be prepared (" + c.errorString() + "); the lock shows the artwork and the initials");
                 return;
@@ -524,9 +539,18 @@ Singleton {
             id: surface
 
             // The ground under the scrim (ADR-0040 ID-2, ID-15): what shows before the content and until the backdrop is
-            // decided, on a hotplugged output too. Taken once, when the surface is created (the shadow colour until then).
+            // decided, on a hotplugged output too. Taken once, from the surface's own screen as soon as it is known (it may be
+            // set after the surface is created: counter-review of 830ed088, NIT 1); the shadow colour until then.
             color: Tokens.colorDark.shadow
-            Component.onCompleted: surface.color = Ground.of(surface.screen ? surface.screen.name : "")
+            property bool groundTaken: false
+            function takeGround(): void {
+                if (surface.groundTaken || !surface.screen)
+                    return;
+                surface.groundTaken = true;
+                surface.color = Ground.of(surface.screen.name);
+            }
+            onScreenChanged: surface.takeGround()
+            Component.onCompleted: surface.takeGround()
 
             // Keyboard focus left this lock surface: on Hyprland that also happens when another
             // client takes the session lock over or the session is unlocked under it. Ask now
