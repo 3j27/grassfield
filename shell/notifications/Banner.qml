@@ -53,12 +53,13 @@ Item {
         }
     }
 
+    // A banner slides in on the panel motion (ADR-0039 Q6, step 20).
     Behavior on slide {
         enabled: !Appearance.reduceMotion
         NumberAnimation {
-            duration: Appearance.duration(Tokens.motionNormal)
+            duration: Appearance.duration(Tokens.motionPanel)
             easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.curve
+            easing.bezierCurve: Appearance.curvePanel
         }
     }
 

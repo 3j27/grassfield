@@ -149,7 +149,9 @@ Variants {
             Behavior on scale {
                 NumberAnimation {
                     duration: Appearance.duration(Tokens.motionFast)
-                    easing.type: Easing.OutCubic
+                    // Arriving: the enter curve (ADR-0039 step 20).
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.curveEnter
                 }
             }
 

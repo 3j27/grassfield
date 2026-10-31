@@ -732,28 +732,32 @@ Variants {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on ty {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on tw {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on th {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on ox {

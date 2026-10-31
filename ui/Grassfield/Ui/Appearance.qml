@@ -130,6 +130,12 @@ QtObject {
         return pixelSize >= Tokens.typographyDisplayFrom ? displayFamily : fontFamily;
     }
     readonly property var curve: Tokens.motionCurveStandard
+    // One curve per role (ADR-0039 step 20): `curve` moves, `curveEnter` arrives, `curveExit` leaves (the compositor's windows
+    // and layers on the same curves, looknfeel.lua), `curvePanel` carries a panel or a sheet over motion.panel (Apple's default
+    // spring as a stand-in, Q6).
+    readonly property var curveEnter: Tokens.motionCurveEnter
+    readonly property var curveExit: Tokens.motionCurveExit
+    readonly property var curvePanel: Tokens.motionCurvePanel
 
     // Size-dependent tracking of Inter's "dynamic metrics" (the reference's optical tracking): em = a + b * e^(c * px),
     // returned in pixels for Text.font.letterSpacing. Larger text is set tighter, small text slightly looser.

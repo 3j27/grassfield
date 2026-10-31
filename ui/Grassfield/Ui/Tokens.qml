@@ -242,6 +242,14 @@ QtObject {
     readonly property int motionReducedMax: 100
     // estimate; Easing.BezierSpline control points [ref: docs/specs/ui.md § Functional requirements; no F1 capture of motion exists]
     readonly property var motionCurveStandard: [0.2, 0.0, 0.0, 1.0, 1.0, 1.0]
+    // a panel or a sheet arriving or leaving (the Notification Center, a banner sliding in): Apple's documented default spring (response 0.55, no bounce) as a fixed-duration stand-in, the owner's answer to ADR-0039 Q6 (a) of 2026-10-29; menus stay instant; Reduce Motion caps it (Appearance.duration) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property int motionPanel: 650
+    // Easing.BezierSpline control points of the panel motion: the default spring's stand-in, cubic-bezier (0.24, 0.24, 0.15, 1.04) (ADR-0039 Q6 (a)) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property var motionCurvePanel: [0.24, 0.24, 0.15, 1.04, 1.0, 1.0]
+    // estimate: an element arriving (decelerating), one curve for the role: the compositor's own windows and layers open on it (looknfeel.lua gfDecelerate) (ADR-0039 step 20) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property var motionCurveEnter: [0.32, 0.72, 0.0, 1.0, 1.0, 1.0]
+    // estimate: an element leaving (accelerating), one curve for the role: the compositor's windows and layers close on it (looknfeel.lua gfAccelerate) (ADR-0039 step 20) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property var motionCurveExit: [0.4, 0.0, 1.0, 1.0, 1.0, 1.0]
 
     // master-prompt § 5.5 default, owner validates on screenshots
     readonly property real materialDefaultTransparency: 0.25

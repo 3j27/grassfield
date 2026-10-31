@@ -433,12 +433,13 @@ Variants {
                     }
                 }
 
+                // A panel arriving or leaving: the panel motion (Apple's default spring as a stand-in, ADR-0039 Q6, step 20).
                 Behavior on slideOffset {
                     enabled: !Appearance.reduceMotion
                     NumberAnimation {
-                        duration: Appearance.duration(Tokens.motionNormal)
+                        duration: Appearance.duration(Tokens.motionPanel)
                         easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.curve
+                        easing.bezierCurve: Appearance.curvePanel
                     }
                 }
 

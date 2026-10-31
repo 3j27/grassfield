@@ -187,7 +187,9 @@ FocusScope {
         from: 0
         to: 1
         duration: Appearance.duration(Tokens.motionNormal)
-        easing.type: Easing.OutQuad
+        // Arriving: the enter curve (ADR-0039 step 20).
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: Appearance.curveEnter
     }
 
     // What the open stack shows is published for the test hooks (IPC target dockstack, which lives in Popups: a handler inside
