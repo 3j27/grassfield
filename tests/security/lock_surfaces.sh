@@ -391,10 +391,12 @@ for base, _, files in os.walk(f"{root}/shell/security"):
             if not any(a <= m.start() < b for a, b in spans):
                 clock_hits.append(f"{rel}:{text.count(chr(10), 0, m.start()) + 1} {m.group(0)}")
 # The lock screen's clock (review of eee45cc; WallClock since cf6d3df, and a WallClock anywhere else in shell/security is a
-# wall clock too) only feeds the two displayed texts.
+# wall clock too) only feeds the two displayed texts, and is refreshed on resume from sleep (ADR-0040 step 4a, ID-7: one
+# `onResumesChanged: clock.refresh()`, nothing else).
 lockview = nocomments(read("shell/security/lock/LockView.qml"))
-clock_uses = re.findall(r"\bclock\s*\.\s*\w+", lockview)
-if not (len(clock_uses) == 2 and lockview.count("FixedTime.date(clock.date)") == 2):
+clock_uses = sorted(re.sub(r"\s+", "", u) for u in re.findall(r"\bclock\s*\.\s*\w+", lockview))
+if not (clock_uses == ["clock.date", "clock.date", "clock.refresh"] and lockview.count("FixedTime.date(clock.date)") == 2
+        and len(re.findall(r"^\s*onResumesChanged:\s*clock\.refresh\(\)\s*$", lockview, re.M)) == 1):
     clock_hits.append("LockView.qml clock uses " + ", ".join(clock_uses))
 expect("no wall clock in shell/security (" + ", ".join(clock_hits) + ")", not clock_hits)
 lock = code(read("shell/security/lock/Lock.qml"))
@@ -639,6 +641,7 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/idle/IdleModel.js#var FAST_RETRY_MS = 5000;#var FAST_RETRY_MS = 5000; var WALL = WallClock;' \
   'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 500\n    WallClock { id: wallProbe }' \
   'shell/security/lock/LockView.qml#        id: clock#        id: clock\n    }\n    WallClock {\n        id: probe' \
+  'shell/security/lock/LockView.qml#    onResumesChanged: clock.refresh()#    onResumesChanged: clock.enabled = false' \
   'shell/security/idle/IdleModel.js#var FAST_EXIT_MS = 2000;#var FAST_EXIT_MS = 2000 + 0 * new Date().getTime();' \
   'shell/security/idle/IdleModel.js#var MAX_FAST_FAILURES = 5;#var MAX_FAST_FAILURES = 5 + 0 * performance.now();' \
   'shell/security/lock/Lock.qml#readonly property int verifyGraceMs: 500#readonly property int verifyGraceMs: 3600000' \

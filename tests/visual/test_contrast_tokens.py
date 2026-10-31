@@ -515,7 +515,19 @@ class ContrastTokens(unittest.TestCase):
         with open(os.path.join(ROOT, "shell", "security", "PasswordField.qml")) as f:
             field = f.read()
         for line in ("readonly property var colors: Appearance.darkColors",
-                     "color: root.colors.shadow\n        opacity: Tokens.lockDimOpacity",
+                     # The banded scrim (ADR-0040 step 4a, IQ-W4 A): lock.dimOpacity from the top to the bottom of the date and
+                     # clock and from the top of the account column down; the clear band only between them, on the far side
+                     # of each feather; all at lock.dimOpacity without room for it.
+                     "readonly property color dim: Appearance.withAlpha(root.colors.shadow, Tokens.lockDimOpacity)",
+                     "readonly property color clear: Appearance.withAlpha(root.colors.shadow, Tokens.lockScrimClearOpacity)",
+                     "readonly property real upperEdge: (dateClock.y + dateClock.height) / Math.max(1, height)",
+                     "readonly property real lowerEdge: account.y / Math.max(1, height)",
+                     "readonly property real feather: Tokens.lockScrimFeather / Math.max(1, height)",
+                     "readonly property bool banded: lowerEdge - upperEdge > 2 * feather",
+                     "position: scrim.banded ? scrim.upperEdge : 0\n                color: scrim.dim",
+                     "position: scrim.banded ? scrim.upperEdge + scrim.feather : 0\n                color: scrim.banded ? scrim.clear : scrim.dim",
+                     "position: scrim.banded ? scrim.lowerEdge - scrim.feather : 1\n                color: scrim.banded ? scrim.clear : scrim.dim",
+                     "position: scrim.banded ? scrim.lowerEdge : 1\n                color: scrim.dim",
                      "color: Appearance.withAlpha(root.colors.fill, Tokens.lockAvatarFillOpacity)",
                      "textColor: root.colors.text",
                      "placeholderColor: root.colors.textSecondary",
@@ -536,6 +548,14 @@ class ContrastTokens(unittest.TestCase):
         # Every text item on the scrim and the disc uses the primary text colour: date, clock, the user's message, initials,
         # name, error, notice.
         self.assertEqual(view.count("color: root.colors.text\n"), 7)
+        # The clear part of the scrim is lighter than the text bands, and only the two middle stops use it.
+        self.assertLess(self.tok.path("lock.scrimClearOpacity"), self.tok.path("lock.dimOpacity"))
+        self.assertEqual(view.count("scrim.clear"), 2)
+        self.assertEqual(view.count("GradientStop {"), 6)
+        # The date and clock are in the top column, every other text in the account column: the bands' geometry follows
+        # the two columns, so no text lies in the clear band.
+        top = view[view.index("id: dateClock"):view.index("id: account")]
+        self.assertEqual(top.count("Text {"), 2)
         # The error and notice lines (the two AlertMessage items) carry no layer or effect: a failed effect would hide
         # "Authentication service unavailable" / "Crash recovery unavailable" (R12 review of 0513f6e).
         alerts = [i for i in range(len(view)) if view.startswith("Accessible.role: Accessible.AlertMessage", i)]

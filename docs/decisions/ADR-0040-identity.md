@@ -271,6 +271,38 @@ and IQ-B3 here changes the palette only, not which controls read it.
     the feed has given its first result.
     NOT VERIFIED (nested): the first frame at start and at a shell restart, the hotplug, the background colour after a
     change and a reload.
+- **Step 4a as built** (2026-10-31, in the one pull request; `shell/security`, so under the opus security review):
+  - **The data.** The desktop's record of what each output shows (`wallpaper.json` `shown`, step 3) is what the lock draws:
+    `WallpaperState.lockBackdrop` (`WallpaperConfig.lockBackdropOf`) gives a picture only as a plain cache name in the
+    prepared or the video folder (the video's poster), else the colour, else the artwork and variant (also every picture's
+    fallback). Read from that record rather than from the desktop's live objects, so that it survives ADR-0041 S2 (the lock
+    moving into the security process reads the same file).
+  - **Ready before it is needed (ID-7).** `shell/security/lock/LockStill.qml`, one per output in `Lock.qml`, decides the
+    backdrop while the session is unlocked, when the wallpaper changes: a picture is checked again (`/usr/bin/realpath -e`:
+    still a plain cache name in one of the two folders; `/usr/bin/stat`: a regular file of at most
+    `wallpaper.lockStillMaxBytes`; absolute paths, argument vectors, one process per step and request, a superseded answer
+    dropped) and decoded by a hidden `Image` into Qt's pixmap cache (no `sourceSize`: the helper wrote it at the output's
+    physical size, and a `sourceSize` would key the cache on each window's scale). The account picture is decoded the same
+    way (`avatarPreload`, the shell's PNG copy of at most 256 x 256). A lock surface takes its backdrop when created, or
+    when first decided (a hotplugged output, a wallpaper changed just before), at most `wallpaper.firstShowTimeoutMs` later,
+    then the artwork; the name and the picture at creation (the picture only if already decoded, else the initials); then
+    nothing changes but the clock, which `SleepInhibitor.afterResume` refreshes (`Lock.resumed`). Engaging, releasing and
+    restoring the lock read none of it (`tst_lockbackdrop.qml`).
+  - **Ground (ID-2, ID-15).** The lock surface's own colour is its output's ground (`Ground.of`): what shows before the
+    content and while the backdrop is undecided, under the scrim and the text, which are there at once.
+  - **Sharp, banded scrim (IQ-W4 A).** No blur any more (`lock.blurMax` removed); the scrim is `lock.dimOpacity` from the
+    top to the bottom of the date and clock and from the top of the account column to the bottom, `lock.scrimClearOpacity`
+    0.25 between them, `lock.scrimFeather` 48 px ramps on the clear side, bound to the two columns' geometry so every text
+    line lies on 0.6 at every text scale; without room for a clear band the whole surface stays at 0.6. A2: the text roles
+    are unchanged (`contrast-roles.json`, `test_contrast_tokens.py` reads the scrim's lines and the columns).
+  - Tests: `tests/security/tst_lockbackdrop.qml` (the checks, the same pixmap options on both sides, taken once, the
+    clock on resume, the ground, nothing on the lock path; four planted mutants each fail it), `tst_wallpaper.qml`
+    (`lockBackdropOf`), `test_contrast_tokens.py`, `lock_surfaces.sh` (the clock's one refresh, and a mutant). An offscreen
+    render of the real `LockView.qml` with stand-in modules (white and the light Day artwork, 1280 x 800; text layers off,
+    since offscreen Qt draws no `MultiEffect`) shows every text line on the dark bands; it also caught `top` and `bottom`,
+    FINAL properties of `Item` in Qt 6, which would have kept `LockView` from loading. NOT VERIFIED (nested): the still in
+    the lock's first frame (the pixmap cache hit with `asynchronous: true`), a hotplugged output while locked, the clock
+    after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`), L1 to L5.
 - **Lock still.** ADR-0016 §6 (W8) as already specified, plus the preloaded still of ID-7 (section 4).
 - **Legibility (A2).** Every variant goes through `tests/visual/contrast.sh` (menu bar strip, desktop labels, lock);
   the artworks' tones come from their palettes.

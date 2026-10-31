@@ -88,6 +88,27 @@ Singleton {
     readonly property string facePath: Quickshell.env("HOME") ? Quickshell.env("HOME") + "/.face" : ""
     readonly property string avatarSource: Machine.avatarSource(facePath, Machine.accountsIconPath(loginName), path => ThemeIcons.fileSource(path), path => ThemeIcons.fileState(path))
 
+    // ---- ready before it is needed (ADR-0040 step 4a, ID-7; display only) ----
+    // The account picture, decoded while the session is unlocked (Qt's pixmap cache; LockView asks for the same url with the
+    // same options and gets it at once): a lock surface shows it only when it is already decoded, else the initials, and
+    // keeps what it took. Nothing here can unlock or keep the lock from engaging.
+    readonly property string avatarReady: avatarPreload.status === Image.Ready ? String(avatarPreload.source) : ""
+    // One LockStill per output: the backdrop each lock surface adopts (null while undecided). `backdrops` counts the
+    // decisions so that a surface's binding is evaluated again.
+    property int backdrops: 0
+    function backdropOf(output: string): var {
+        for (const s of stills.instances) {
+            if (s.output === output)
+                return s.backdrop;
+        }
+        return null;
+    }
+    // Counts the resumes from sleep (SleepInhibitor.afterResume): each lock surface refreshes its clock (ID-7, T-14).
+    property int resumes: 0
+    function resumed(): void {
+        root.resumes += 1;
+    }
+
     readonly property string markerPath: {
         const dir = Quickshell.env("XDG_RUNTIME_DIR");
         return dir ? dir + "/" + Machine.markerName(Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE"), Quickshell.env("WAYLAND_DISPLAY")) : "";
@@ -482,7 +503,9 @@ Singleton {
         WlSessionLockSurface {
             id: surface
 
-            color: Tokens.colorDark.shadow
+            // The ground under the scrim (ADR-0040 ID-2, ID-15): what shows before the content and until the backdrop is
+            // decided, on a hotplugged output too.
+            color: Ground.of(surface.screen ? surface.screen.name : "")
 
             // Keyboard focus left this lock surface: on Hyprland that also happens when another
             // client takes the session lock over or the session is unlocked under it. Ask now
@@ -514,7 +537,9 @@ Singleton {
                 id: view
                 anchors.fill: parent
                 userName: root.userName
-                avatarSource: root.avatarSource
+                avatarSource: root.avatarReady
+                offeredBackdrop: root.backdrops >= 0 ? root.backdropOf(surface.screen ? surface.screen.name : "") : null
+                resumes: root.resumes
                 showUser: Settings.lockShowUser
                 lockMessage: Settings.lockShowMessage ? Settings.lockMessage : ""
                 authenticating: controller.authenticating
@@ -709,6 +734,24 @@ Singleton {
         printErrors: false
         onLoaded: readable = true
         onLoadFailed: readable = false
+    }
+
+    Variants {
+        id: stills
+        model: Quickshell.screens
+
+        LockStill {
+            onBackdropChanged: root.backdrops += 1
+        }
+    }
+
+    Image {
+        id: avatarPreload
+        visible: false
+        source: VisualFixtures.active ? "" : root.avatarSource
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+        cache: true
     }
 
     FileView {

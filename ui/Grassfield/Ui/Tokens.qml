@@ -1022,10 +1022,12 @@ QtObject {
     readonly property int lockSubmitSize: 22
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockBottomMargin: 112
-    // A2: was 0.28 (clock 1.8:1 over a white wallpaper); shadow-colour scrim over the blurred wallpaper, white text 5.3:1 or more over any wallpaper (white is the worst case), tested in tests/visual/test_contrast_tokens.py
+    // A2: was 0.28 (clock 1.8:1 over a white wallpaper); shadow-colour scrim under the two text bands over the wallpaper (sharp since ADR-0040 step 4a; blurred before), white text 5.3:1 or more over any wallpaper (white is the worst case), tested in tests/visual/test_contrast_tokens.py
     readonly property real lockDimOpacity: 0.6
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
-    readonly property int lockBlurMax: 64
+    // ADR-0040 section 4 (IQ-W4 A, sharp backdrop, banded scrim): the shadow-colour scrim between the date and clock band and the account band, where no text lies; the text bands stay at lock.dimOpacity (gate A2 per band, tests/visual/test_contrast_tokens.py)
+    readonly property real lockScrimClearOpacity: 0.25
+    // ADR-0040 section 4 (IQ-W4 A): px of the ramp from lock.dimOpacity to lock.scrimClearOpacity, on the clear side of each text band (outside every text line at every text scale)
+    readonly property int lockScrimFeather: 48
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockShakeDistance: 12
     // estimate: duration of one shake leg in ms [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]

@@ -7,14 +7,22 @@ import qs.security
 import qs.services
 import "../LockMachine.js" as Machine
 
-// Content of one lock surface (one per screen): blurred and dimmed wallpaper, date and clock at
+// Content of one lock surface (one per screen): the output's wallpaper, sharp, under a banded scrim, date and clock at
 // the top centre, avatar, user name and password field near the bottom centre. Nothing else is
 // rendered here on purpose: no notifications, no window thumbnails, no media (gate L4).
 // Display only: authentication, lock state and crash recovery live in Lock.qml and LockController.
 //
-// Contrast (gate A2, both appearances, any wallpaper): as on macOS, white text with a soft shadow over the blurred
-// wallpaper darkened by a shadow-colour scrim (lock.dimOpacity), and a dark frosted password field
-// (lock.fieldFillOpacity). The scrim alone carries the contrast (the shadow is decoration): every role is computed
+// Ready before it is needed (ADR-0040 step 4a, ID-7): the backdrop (LockStill.qml: the wallpaper's prepared still, decoded
+// while the session was unlocked, else the colour or the artwork the output shows), the account's name and picture are
+// taken once, when the surface is created (the backdrop when it is first decided, at most wallpaper.firstShowTimeoutMs
+// later: the ground shows until then); once the lock shows, nothing on it changes but the clock. The clock is refreshed on
+// resume from sleep (`resumes`). Engaging the lock waits for none of it.
+//
+// Contrast (gate A2, both appearances, any wallpaper): as on macOS, white text with a soft shadow over the wallpaper
+// darkened by a shadow-colour scrim (lock.dimOpacity) under the two text bands (the date and clock, the account column),
+// lighter between them (lock.scrimClearOpacity, IQ-W4 A), and a dark frosted password field (lock.fieldFillOpacity). The
+// band edges (lock.scrimFeather) lie outside every text line at every text scale: they follow the two columns' geometry.
+// The scrim alone carries the contrast (the shadow is decoration): every role is computed
 // in tests/visual/test_contrast_tokens.py ("lock ..." roles) and measured by tests/visual/contrast.sh (surface lock).
 // A missing colour, scrim or shadow token, or a failed colour binding, only loses that colour or the shadow: the
 // password field's geometry, focus and input never depend on them; the field and the error/notice lines have no layer or
@@ -29,10 +37,19 @@ Item {
     property string notice: ""
     property string userName: ""
     // What is drawn for the account name (display only; authentication never reads it). Fixed fake name in the
-    // visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES), else the account's own.
-    readonly property string shownName: VisualFixtures.active ? VisualFixtures.user : userName
-    // file:// URL of the account picture, or "" for the initials disc.
+    // visual-test fixture (GRASSFIELD_DEV and GRASSFIELD_VISUAL_FIXTURES), else the account's own, as it was when the
+    // surface was created.
+    readonly property string shownName: VisualFixtures.active ? VisualFixtures.user : frozenName
+    property string frozenName: ""
+    // file:// URL of the account picture, already decoded (Lock.qml), or "" for the initials disc; taken at creation.
     property string avatarSource: ""
+    property string frozenAvatar: ""
+    // The backdrop Lock.qml offers for this output (LockStill.backdrop: null while undecided); `backdrop` is the one drawn,
+    // adopted once.
+    property var offeredBackdrop: null
+    property var backdrop: null
+    // Counts the resumes from sleep (Lock.qml): each refreshes the clock before anything else changes.
+    property int resumes: 0
     // lock.showUser: the account's picture and name (the password field stays).
     property bool showUser: true
     // lock.showMessage + lock.message: the user's message above them, plain text ("" for none).
@@ -60,7 +77,27 @@ Item {
         field.forceActiveFocus();
     }
 
-    Component.onCompleted: focusField()
+    function adopt(b: var): void {
+        if (root.backdrop === null && b !== null && b !== undefined)
+            root.backdrop = b;
+    }
+
+    onOfferedBackdropChanged: root.adopt(root.offeredBackdrop)
+    onResumesChanged: clock.refresh()
+
+    Component.onCompleted: {
+        root.frozenName = root.userName;
+        root.frozenAvatar = root.avatarSource;
+        root.adopt(root.offeredBackdrop);
+        focusField();
+    }
+
+    // Nothing decided in time (a still that is still being checked, an output that showed no wallpaper yet): the artwork.
+    Timer {
+        interval: Tokens.wallpaperFirstShowTimeoutMs
+        running: root.backdrop === null
+        onTriggered: root.adopt({kind: "art", still: "", color: "", artwork: "", variant: ""})
+    }
 
     // Created with each lock surface, so it shows the right time as the lock appears (WallClock.refresh at completion);
     // not SystemClock, which spins in the repeated hour of a daylight saving fall-back (WallClock.qml).
@@ -77,39 +114,89 @@ Item {
         shadowVerticalOffset: Tokens.lockTextShadowOffsetY
     }
 
-    WallpaperArt {
-        id: wallpaper
+    // The backdrop, sharp (IQ-W4 A), once decided; until then the surface's own colour, the ground, shows (Lock.qml).
+    Item {
         anchors.fill: parent
-        visible: false
+        visible: root.backdrop !== null
 
-        // Dev-only: the wallpaper override of the contrast run (VisualFixtures.wallpaperFile, always "" outside dev),
-        // so that the lock is measured over the same worst-case wallpapers as the desktop. No `visible` binding: under
-        // an invisible effect source, a child turned visible later is never redrawn (Qt only dirties it when its
-        // effective visibility changes); an empty source draws nothing.
-        Image {
+        Rectangle {
             anchors.fill: parent
-            source: VisualFixtures.wallpaperFile !== "" ? "file://" + VisualFixtures.wallpaperFile : ""
+            visible: root.backdrop !== null && root.backdrop.kind === "color"
+            color: root.backdrop !== null && root.backdrop.kind === "color" ? root.backdrop.color : "transparent"
+        }
+
+        // The artwork the output shows, and the picture's fallback (drawn until the still is Ready, and if it fails).
+        WallpaperArt {
+            anchors.fill: parent
+            visible: root.backdrop !== null && root.backdrop.kind !== "color" && still.status !== Image.Ready
+            artwork: root.backdrop !== null ? root.backdrop.artwork : ""
+            variant: root.backdrop !== null ? root.backdrop.variant : ""
+        }
+
+        // The wallpaper's still: the url LockStill checked and decoded, so the pixmap cache gives it at once. Same options as
+        // there (no sourceSize, Stretch): the cache key must match.
+        Image {
+            id: still
+            anchors.fill: parent
+            source: root.backdrop !== null && root.backdrop.kind === "picture" ? root.backdrop.still : ""
             fillMode: Image.Stretch
-            sourceSize: Qt.size(width, height)
             asynchronous: true
-            cache: false
-            smooth: false
+            cache: true
+            retainWhileLoading: false
         }
     }
 
-    MultiEffect {
+    // Dev-only: the wallpaper override of the contrast run (VisualFixtures.wallpaperFile, always "" outside dev), so that the
+    // lock is measured over the same worst-case wallpapers as the desktop; an empty source draws nothing.
+    Image {
         anchors.fill: parent
-        source: wallpaper
-        autoPaddingEnabled: false
-        blurEnabled: true
-        blur: 1.0
-        blurMax: Tokens.lockBlurMax
+        source: VisualFixtures.wallpaperFile !== "" ? "file://" + VisualFixtures.wallpaperFile : ""
+        fillMode: Image.Stretch
+        sourceSize: Qt.size(width, height)
+        asynchronous: true
+        cache: false
+        smooth: false
     }
 
+    // The banded scrim (IQ-W4 A): lock.dimOpacity from the top to the bottom of the date and clock and from the top of the
+    // account column to the bottom, lock.scrimClearOpacity between them, each edge a lock.scrimFeather ramp on the clear
+    // side, so that every text line lies on lock.dimOpacity. Without room for a clear band (a short screen, a large text
+    // scale), the whole surface stays at lock.dimOpacity.
     Rectangle {
+        id: scrim
         anchors.fill: parent
-        color: root.colors.shadow
-        opacity: Tokens.lockDimOpacity
+        readonly property color dim: Appearance.withAlpha(root.colors.shadow, Tokens.lockDimOpacity)
+        readonly property color clear: Appearance.withAlpha(root.colors.shadow, Tokens.lockScrimClearOpacity)
+        readonly property real upperEdge: (dateClock.y + dateClock.height) / Math.max(1, height)
+        readonly property real lowerEdge: account.y / Math.max(1, height)
+        readonly property real feather: Tokens.lockScrimFeather / Math.max(1, height)
+        readonly property bool banded: lowerEdge - upperEdge > 2 * feather
+        gradient: Gradient {
+            GradientStop {
+                position: 0
+                color: scrim.dim
+            }
+            GradientStop {
+                position: scrim.banded ? scrim.upperEdge : 0
+                color: scrim.dim
+            }
+            GradientStop {
+                position: scrim.banded ? scrim.upperEdge + scrim.feather : 0
+                color: scrim.banded ? scrim.clear : scrim.dim
+            }
+            GradientStop {
+                position: scrim.banded ? scrim.lowerEdge - scrim.feather : 1
+                color: scrim.banded ? scrim.clear : scrim.dim
+            }
+            GradientStop {
+                position: scrim.banded ? scrim.lowerEdge : 1
+                color: scrim.dim
+            }
+            GradientStop {
+                position: 1
+                color: scrim.dim
+            }
+        }
     }
 
     // Any click focuses the password field.
@@ -119,6 +206,7 @@ Item {
     }
 
     Column {
+        id: dateClock
         anchors.horizontalCenter: parent.horizontalCenter
         y: Tokens.lockTopMargin
         layer.enabled: true
@@ -211,11 +299,12 @@ Item {
                 id: picture
                 anchors.fill: parent
                 visible: false
-                source: VisualFixtures.active ? "" : root.avatarSource
-                sourceSize: Qt.size(width * 2, height * 2)
+                // Decoded already (Lock.qml's avatarPreload, same options: the pixmap cache key must match): no sourceSize, the
+                // picture is the shell's own copy of at most 256 x 256 pixels (services/image-copy.py).
+                source: VisualFixtures.active ? "" : root.frozenAvatar
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                cache: false
+                cache: true
             }
 
             Rectangle {
