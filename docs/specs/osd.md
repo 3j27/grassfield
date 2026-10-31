@@ -62,7 +62,7 @@ No unit-testable pure logic beyond tokens (covered by `tst_tokens`); L1 steps ab
 
 ## Performance · Accessibility · i18n
 Idle cost: one 1.5 s file read while a backlight exists. The pill exposes `Accessible.ProgressBar` with name "Volume N%" /
-"Brightness N%" (translated through `qsTr`). Reduce Motion shortens the fades.
+"Brightness N%" (translated through `qsTr`). Reduce Motion shortens the fades, and the level jumps instead of gliding (ADR-0039 step 5).
 
 ## Known limitations
 - Top-right pill only, on the active display (the focused output, not the first one); every screen-less surface (Notification Center, Search, Apps, switcher, centred popups, banners, OSD) opens by that one rule.
