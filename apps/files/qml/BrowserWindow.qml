@@ -686,7 +686,7 @@ Window {
                 // Group By (Finder): a capsule with the groups glyph and a chevron; its menu groups and sorts the folder.
                 Rectangle {
                     width: Tokens.filesGroupButtonWidth
-                    height: Tokens.filesToolbarCapsule
+                    height: Tokens.toolbarCapsule
                     radius: height / 2
                     color: Appearance.buttonFill
                     anchors.verticalCenter: parent.verticalCenter
@@ -695,7 +695,7 @@ Window {
                         id: groupButton
                         anchors.fill: parent
                         capsule: true
-                        buttonSize: Tokens.filesToolbarCapsule
+                        buttonSize: Tokens.toolbarCapsule
                         enabled: win.tab !== null && win.tab.groupsShown
                         accessibleName: qsTr("Group By")
                         onClicked: {

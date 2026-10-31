@@ -189,7 +189,7 @@ Window {
             // Custom colour.
             Item {
                 width: parent.width
-                height: Tokens.settingsSearchHeight
+                height: Tokens.toolbarSearchHeight
 
                 Text {
                     textFormat: Text.PlainText
@@ -365,7 +365,7 @@ Window {
             // Any other emoji or symbol: typed or pasted, the first character counts.
             Item {
                 width: parent.width
-                height: Tokens.settingsSearchHeight
+                height: Tokens.toolbarSearchHeight
 
                 Rectangle {
                     x: Tokens.filesInfoLabelWidth + Tokens.spacingSm

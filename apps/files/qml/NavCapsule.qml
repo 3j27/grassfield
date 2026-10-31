@@ -10,7 +10,7 @@ Rectangle {
     required property var tab
 
     width: navRow.width + Tokens.spacingXs
-    height: Tokens.filesToolbarCapsule
+    height: Tokens.toolbarCapsule
     radius: height / 2
     color: Appearance.buttonFill
     Accessible.role: Accessible.Grouping
@@ -22,7 +22,7 @@ Rectangle {
 
         ToolButton {
             capsule: true
-            buttonSize: Tokens.filesToolbarGroupButton
+            buttonSize: Tokens.toolbarGroupButton
             iconName: "chevron-right"
             iconRotation: 180
             enabled: root.tab !== null && root.tab.canBack
@@ -32,7 +32,7 @@ Rectangle {
 
         ToolButton {
             capsule: true
-            buttonSize: Tokens.filesToolbarGroupButton
+            buttonSize: Tokens.toolbarGroupButton
             iconName: "chevron-right"
             enabled: root.tab !== null && root.tab.canForward
             accessibleName: qsTr("Forward")

@@ -16,8 +16,8 @@ Rectangle {
         search.forceActiveFocus();
     }
 
-    width: expanded ? Tokens.filesSearchWidth : Tokens.filesToolbarCapsule
-    height: Tokens.filesToolbarCapsule
+    width: expanded ? Tokens.filesSearchWidth : Tokens.toolbarCapsule
+    height: Tokens.toolbarCapsule
     radius: height / 2
     color: Appearance.buttonFill
     border.width: search.activeFocus ? Tokens.controlFocusOutline : 0

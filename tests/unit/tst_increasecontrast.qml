@@ -32,7 +32,7 @@ TestCase {
         Slider { id: slider; width: 200; value: 0.5 }
         Slider { id: knobless; width: 200; value: 0.5; knobless: true }
         Slider { id: knoblessFull; width: 200; value: 1; knobless: true }
-        RimmedCapsule { id: capsule; width: 200; height: Tokens.settingsSearchHeight }
+        RimmedCapsule { id: capsule; width: 200; height: Tokens.toolbarSearchHeight }
         ComboBox { id: form; width: 180; model: [{id: "a", text: "Automatic"}]; value: "a" }
         ComboBox { id: rowPopUp; inline: true; model: [{id: "a", text: "Icon theme"}]; value: "a" }
     }

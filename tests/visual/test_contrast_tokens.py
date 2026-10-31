@@ -12,7 +12,7 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   window         an opaque app window: color.windowBackground and color.sidebarFill, bare and under a rimmed capsule's fill (the text
-                 colour at settings.fieldFillOpacity or settings.toolbarFillOpacity); the same at every transparency and wallpaper
+                 colour at toolbar.fieldFillOpacity or toolbar.capsuleFillOpacity); the same at every transparency and wallpaper
   accent         the solid accent colour
   selection      the solid selection colour: the light appearance's accent in the light appearance, color.selectionDark in the dark one (Appearance.accentedDark/Light,
                  Accent.withSelection), the fill of a selected row, a default button or a checked box
@@ -231,7 +231,7 @@ def backdrops(tok, role, appearance, t, wallpaper):
         for base_name in ("windowBackground", "sidebarFill"):
             base = tok.color(pal, appearance, base_name)
             out.append(base)
-            for opacity in ("settings.fieldFillOpacity", "settings.toolbarFillOpacity"):
+            for opacity in ("toolbar.fieldFillOpacity", "toolbar.capsuleFillOpacity"):
                 out.append(over(text, tok.path(opacity), base))
         return out
     if kind == "accent":

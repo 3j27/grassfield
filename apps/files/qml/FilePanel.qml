@@ -839,7 +839,7 @@ Window {
                         Rectangle {
                             id: pathButton
                             width: Math.min(pathRow.implicitWidth + 2 * Tokens.spacingMd, Tokens.filesSearchWidth)
-                            height: Tokens.filesToolbarCapsule
+                            height: Tokens.toolbarCapsule
                             radius: height / 2
                             color: Appearance.buttonFill
 
@@ -847,7 +847,7 @@ Window {
                                 id: pathTool
                                 anchors.fill: parent
                                 capsule: true
-                                buttonSize: Tokens.filesToolbarCapsule
+                                buttonSize: Tokens.toolbarCapsule
                                 accessibleName: qsTr("Location: %1").arg(DisplayName.text(tab.title))
                                 onClicked: {
                                     const segments = tab.segments;

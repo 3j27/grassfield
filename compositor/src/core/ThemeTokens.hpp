@@ -133,6 +133,8 @@ namespace gf::theme::tokens {
     inline constexpr int kTilingSuggestTileWidth = 240;
     // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     inline constexpr double kTilingSuggestThumbAspect = 1.6;
+    // a tiling suggestion's window thumbnail rounded as the Overview's (overview.thumbRadius 10); it was square (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    inline constexpr int kTilingSuggestThumbRadius = 10;
     // estimate until measured in nested against the owner's captures: the middle of the stretch two windows of a tile group share along an edge where a drag resizes every window along it (pt; outside it the edge resizes one window, TL30; parity rows M43 and W18) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     inline constexpr int kTilingHandleLength = 120;
     // own value: the shared-edge handle is at least this wide across the edge (pt; the margin between tiled windows is 8; without margins the band takes half from each window, as Hyprland's border grab does, TL30) [ref: docs/specs/tiling.md § Functional requirements]

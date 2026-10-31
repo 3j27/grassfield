@@ -740,6 +740,29 @@ QtObject {
     // estimate: a permission alert takes no click, key or close this long after it became the active window, so one meant for what was there before never answers it (ADR-0035 5a-5) [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
     readonly property int panelAlertArmMs: 500
 
+    // the sidebar search field: #E9E9E9 in its middle on the #ECECEC sidebar, the text colour at 0.012 (moved from settings.fieldFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarFieldFillOpacity: 0.012
+    // the dark rim of the search field and the toolbar capsule, one device pixel: #BDBDBD on the sides, black at 0.2 (moved from settings.rimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarRimOpacity: 0.2
+    // estimate: the dark rim in the dark appearance (no macOS 27 dark capture) (moved from settings.rimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarRimOpacityDark: 0.5
+    // the light rim inside the dark one, one device pixel: #FFFFFF / #F8F8F8 against the #F1F1F1 fill, white at 0.7 (moved from settings.innerRimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarInnerRimOpacity: 0.7
+    // estimate: the light inner rim in the dark appearance (no macOS 27 dark capture) (moved from settings.innerRimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarInnerRimOpacityDark: 0.08
+    // the toolbar's back / forward capsule: #FAFAFA on the white pane, the text colour at 0.02 (moved from settings.toolbarFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarCapsuleFillOpacity: 0.02
+    // the hairline between back and forward: #C7C7C7 on #FAFAFA, black at 0.2 (moved from settings.toolbarDividerOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarDividerOpacity: 0.2
+    // the hairline between back and forward is 19.5 tall, centred (moved from settings.toolbarDividerHeight: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property int toolbarDividerHeight: 20
+    // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) (moved from files.toolbarCapsule: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int toolbarCapsule: 36
+    // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) (moved from files.toolbarGroupButton: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int toolbarGroupButton: 34
+    // a search field (SearchField: the rimmed capsule of an app window's sidebar and toolbar), Settings' 28 (moved from settings.searchHeight, an estimate of the Settings app; ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings]
+    readonly property int toolbarSearchHeight: 28
+
     // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsCell: 63
     // F1 gap 6: gap between modules 12.5-13.3 [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
@@ -1182,8 +1205,6 @@ QtObject {
     readonly property int settingsSidebarItemHeight: 32
     // macOS 27 System Settings sidebar icon tiles 20 x 20 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsSidebarIconSize: 20
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSearchHeight: 28
     // macOS 27 System Settings groups 468 wide with 20 margins in a 508 detail pane (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsContentMaxWidth: 468
     // macOS 27 System Settings plain rows 38 pt apart (Desktop & Dock pane) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
@@ -1458,22 +1479,6 @@ QtObject {
     readonly property real settingsPopupInset: 3.5
     // the header tile's glyph nearly fills it (the gear's ink about 36 on 48: our gear is 18.4 of its 24 units) [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsHeroGlyphSize: 46
-    // the sidebar search field: #E9E9E9 in its middle on the #ECECEC sidebar, the text colour at 0.012 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsFieldFillOpacity: 0.012
-    // the toolbar's back / forward capsule: #FAFAFA on the white pane, the text colour at 0.02 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsToolbarFillOpacity: 0.02
-    // the dark rim of the search field and the toolbar capsule, one device pixel: #BDBDBD on the sides, black at 0.2 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsRimOpacity: 0.2
-    // estimate: the dark rim in the dark appearance (no macOS 27 dark capture) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsRimOpacityDark: 0.5
-    // the light rim inside the dark one, one device pixel: #FFFFFF / #F8F8F8 against the #F1F1F1 fill, white at 0.7 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsInnerRimOpacity: 0.7
-    // estimate: the light inner rim in the dark appearance (no macOS 27 dark capture) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsInnerRimOpacityDark: 0.08
-    // the hairline between back and forward: #C7C7C7 on #FAFAFA, black at 0.2 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsToolbarDividerOpacity: 0.2
-    // the hairline between back and forward is 19.5 tall, centred [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property int settingsToolbarDividerHeight: 20
     // About's header (the device picture and its name) above the first group: the macOS 15 capture's 52 to 233 below the toolbar, less the group gap [ref: docs/audits/settings-parity-2026-10-26.md § About]
     readonly property int settingsAboutHeaderHeight: 169
     // the device picture 40 below the header's top (macOS 15 capture: 104 in the window) [ref: docs/audits/settings-parity-2026-10-26.md § About]
@@ -2403,10 +2408,6 @@ QtObject {
     readonly property int filesListGroupHeight: 28
     // estimate: the header above each group of the icon view, its title and Show All (no capture of the Finder's grouped icon view) [ref: docs/specs/files.md § Views and selection]
     readonly property int filesIconGroupHeight: 32
-    // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
-    readonly property int filesToolbarCapsule: 36
-    // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
-    readonly property int filesToolbarGroupButton: 34
     // macOS 27 Finder: the Group By capsule 46.5 wide, 36 high (Finder-Home at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
     readonly property real filesGroupButtonWidth: 46.5
     // macOS 27 Finder: the groups glyph 8 from the capsule's left end [ref: docs/specs/files.md § Views and selection]

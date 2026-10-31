@@ -229,6 +229,15 @@ Window {
         root.selectedId = root.navState.current;
     }
 
+    // Return in the search field: the first result opens and the list takes the keyboard.
+    function pickFirstResult(event: var): void {
+        list.keyboardRing = true;
+        if (root.filtered.length > 0)
+            root.select(root.filtered[0].id);
+        list.forceActiveFocus();
+        event.accepted = true;
+    }
+
     function focusSearch(): void {
         search.forceActiveFocus();
         search.selectAll();
@@ -287,84 +296,38 @@ Window {
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
         }
 
-        // A capsule search field, as wide as the selection, with the glass rims of macOS 27 (RimmedCapsule).
-        RimmedCapsule {
-            id: searchBox
+        // The search field, as wide as the selection: the shared SearchField (macOS 27's rimmed capsule, with a clear button;
+        // ADR-0039 step 14). Tab, Shift+Tab, Down and Return hand the focus to the list by the keyboard.
+        SearchField {
+            id: search
             x: Tokens.settingsSidebarInset
             y: sidebarToolbar.height + Tokens.spacingSm
             width: parent.width - 2 * Tokens.settingsSidebarInset
-            height: Tokens.settingsSearchHeight
+            activeFocusOnTab: true
+            accessibleName: qsTr("Search settings")
+            onTextChanged: root.query = text
 
-            FocusRing {
-                visible: search.activeFocus
-                shapeRadius: searchBox.radius
+            Keys.onTabPressed: event => {
+                list.keyboardRing = true;
+                event.accepted = false;
             }
-
-            Icon {
-                id: searchIcon
-                name: "search"
-                size: Tokens.menuIconSize
-                color: Appearance.colors.textSecondary
-                x: Tokens.spacingSm
-                anchors.verticalCenter: parent.verticalCenter
+            Keys.onBacktabPressed: event => {
+                list.keyboardRing = true;
+                event.accepted = false;
             }
-
-            TextInput {
-                id: search
-                TextCursor {}
-                anchors {
-                    left: searchIcon.right
-                    leftMargin: Tokens.spacingSm
-                    right: parent.right
-                    rightMargin: Tokens.spacingSm
-                    verticalCenter: parent.verticalCenter
-                }
-                clip: true
-                activeFocusOnTab: true
-                // The selection survives the global menu taking the keyboard (Edit > Cut/Copy act on it).
-                persistentSelection: true
-                color: Appearance.colors.text
-                selectionColor: Appearance.highlight
-                selectedTextColor: Appearance.highlightText
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-                onTextChanged: root.query = text
-                Accessible.role: Accessible.EditableText
-                Accessible.name: qsTr("Search settings")
-                Accessible.searchEdit: true
-
-                Keys.onPressed: event => {
-                    // Tab, Shift+Tab, Down and Return hand the focus to the list by the keyboard.
-                    if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab || event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                        list.keyboardRing = true;
-                    if (event.key === Qt.Key_Down) {
-                        list.forceActiveFocus();
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        if (root.filtered.length > 0)
-                            root.select(root.filtered[0].id);
-                        list.forceActiveFocus();
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Escape && text !== "") {
-                        text = "";
-                        event.accepted = true;
-                    }
-                }
-
-                Text {
-                    textFormat: Text.PlainText
-                    visible: search.text === "" && !search.activeFocus
-                    text: qsTr("Search")
-                    color: Appearance.colors.textSecondary
-                    font: search.font
-                }
+            Keys.onDownPressed: event => {
+                list.keyboardRing = true;
+                list.forceActiveFocus();
+                event.accepted = true;
             }
+            Keys.onReturnPressed: event => root.pickFirstResult(event)
+            Keys.onEnterPressed: event => root.pickFirstResult(event)
         }
 
         ListView {
             id: list
             anchors {
-                top: searchBox.bottom
+                top: search.bottom
                 topMargin: Tokens.spacingMd
                 left: parent.left
                 right: parent.right
@@ -575,16 +538,16 @@ Window {
             // Back and forward: one 72 x 36 glass capsule with a hairline between them (macOS 27).
             leading: RimmedCapsule {
                 width: navRow.width + Tokens.spacingXs
-                height: Tokens.filesToolbarCapsule
-                fillOpacity: Tokens.settingsToolbarFillOpacity
+                height: Tokens.toolbarCapsule
+                fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Navigation")
 
                 Rectangle {
                     anchors.centerIn: parent
                     width: parent.hairline
-                    height: Tokens.settingsToolbarDividerHeight
-                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                    height: Tokens.toolbarDividerHeight
+                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.toolbarDividerOpacity)
                 }
 
                 Row {
@@ -593,7 +556,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         iconRotation: 180
                         enabled: NavHistory.canBack(root.navState)
@@ -603,7 +566,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         enabled: NavHistory.canForward(root.navState)
                         accessibleName: qsTr("Forward")

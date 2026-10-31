@@ -89,17 +89,17 @@ Window {
             RimmedCapsule {
                 id: actionGroup
                 width: actionRow.width + Tokens.spacingXs
-                height: Tokens.filesToolbarCapsule
+                height: Tokens.toolbarCapsule
                 anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                fillOpacity: Tokens.settingsToolbarFillOpacity
+                fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Process actions")
 
                 Rectangle {
                     anchors.centerIn: parent
                     width: parent.hairline
-                    height: Tokens.settingsToolbarDividerHeight
-                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                    height: Tokens.toolbarDividerHeight
+                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.toolbarDividerOpacity)
                 }
 
                 Row {
@@ -108,9 +108,11 @@ Window {
 
                     ToolButton {
                         id: stopButton
+                        // The window's own tooltip names it (toolbarTip, AM3), with more than its name.
+                        tooltip: ""
                         objectName: "stopButton"
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "xmark-octagon"
                         enabled: root.backend.actions.canQuit
                         accessibleName: qsTr("Quit Process")
@@ -123,9 +125,11 @@ Window {
 
                     ToolButton {
                         id: moreButton
+                        // The window's own tooltip names it (toolbarTip, AM3), with more than its name.
+                        tooltip: ""
                         objectName: "moreButton"
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "ellipsis-circle"
                         accessibleName: qsTr("Actions")
                         onClicked: {
