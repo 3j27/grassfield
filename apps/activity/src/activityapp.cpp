@@ -81,8 +81,9 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
         },
         [this](uint32_t uid) { return userName(uid); });
     connect(&m_inspectors, &Inspectors::opened, this, &ActivityApp::inspectRequested);
-    if (qGuiApp)
-        connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, &ActivityApp::focusWindowChanged);
+    // Never qGuiApp: a static cast, undefined where the application is a QCoreApplication (the backend's tests; UBSan).
+    if (auto *gui = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        connect(gui, &QGuiApplication::focusWindowChanged, this, &ActivityApp::focusWindowChanged);
 
     m_timer.setInterval(m_state.interval * 1000);
     connect(&m_timer, &QTimer::timeout, this, [this] {
