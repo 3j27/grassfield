@@ -174,11 +174,11 @@ namespace gf::tiling {
     };
     std::string_view hoverStateName(HoverState state); // its "state" in the event
     // `splittable`: the window fits one half of its output's Split View (TL33; the popover greys Left and Right of Screen).
-    // enter and open also carry "unfitZones" (always, [] when it fits every zone): the zones it does not fit (unfitZones, D69;
-    // the popover greys the places, arrangements and Layouts zones that would put it there). Under kMaxEventBytes even with
-    // every offered zone listed.
+    // enter and open also carry "unfitZones" and "unfitPlaces" (always, [] when it fits everything): the zones and the places it
+    // does not fit (unfitZones, unfitPlaces, D69; the popover greys the arrangements and Layouts zones, and the places, that
+    // would put it there). Under kMaxEventBytes even with every offered zone and every place listed.
     std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false,
-                              std::span<const std::string> unfitZones = {});
+                              std::span<const std::string> unfitZones = {}, std::span<const std::string> unfitPlaces = {});
 
     // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
     // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
@@ -667,10 +667,24 @@ namespace gf::tiling {
     // and Layouts zones).
     std::vector<std::string> unfitZones(const Constraints& c, const Area& area);
 
-    // One window's unfitZones for the state reply (the Window menu reads it again when it opens, as D57's "unfit").
+    // The frame `place` gives a window before its limits, exactly as tile() applies it (TL4, TL7): its zone's frame; for a
+    // half, the rest of the work area beside a tiled neighbour that holds the other side (halfBesideNeighbour over
+    // `neighbourFrames`, the frames of the other Tiled or Resizing windows of that output's Desktop). Not for Center (no zone).
+    Rect placeStartFrame(Place place, const Area& area, std::span<const Rect> neighbourFrames = {});
+
+    // The places (nameOf, in Place order) a window with limits `c` does not fit, each on the frame tile() applies
+    // (placeStartFrame); never Fill or Center (always offered). The "unfitPlaces" of the tile-hover event and of the state
+    // reply: the shell greys those places (halves, quarters, thirds) in the popover and the Window menu, and unfitZones keeps
+    // the arrangements and the Layouts zones, which place every member afresh on the plain zone frames (review of D69, MINOR
+    // 1: a half beside a tiled neighbour is narrower than the half zone).
+    std::vector<std::string> unfitPlaces(const Constraints& c, const Area& area, std::span<const Rect> neighbourFrames = {});
+
+    // One window's unfitZones and unfitPlaces for the state reply (the Window menu reads it again when it opens, as D57's
+    // "unfit").
     struct WindowFit {
         uint64_t                 address = 0;
         std::vector<std::string> zones;
+        std::vector<std::string> places;
     };
 
     // The id of a new Desktop: one past the highest regular workspace id of `ids` (special and named ones are negative), as

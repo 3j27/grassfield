@@ -207,6 +207,10 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   and a zone no window fits stays empty; the suggestion offers only windows that fit its zone; a drag shows no preview over a
   place the window does not fit. Fill and Center are always offered. The shell greys the places, arrangements and Layouts
   zones whose zone is listed (the item's zone: a place's, an arrangement's first, a Layouts zone itself).
+  The review of D69 (MINOR 1): a half beside a tiled neighbour is placed on the rest of the area beside it (TL7), narrower
+  than its zone, so the places are listed apart: the event's `enter` and `open` add `"unfitPlaces":["<place>",…]` (always
+  present; the core place names, never fill or center) and each reply object gains `"places":[…]`, each place checked on the
+  frame `tile` applies. The shell greys a place by `unfitPlaces` and an arrangement or a Layouts zone by `unfitZones`.
 - The Full Screen and Zoom keys (2026-10-30, additive, ADR-0040 step 1b's review): verb `window_size(mode)`, mode
   `"fullscreen"` or `"maximized"` (strict). It returns Hyprland's own `hl.dsp.window.fullscreen({ mode = mode })`, or
   `hl.dsp.no_op()` when the focused window is of fixed size (minimum = maximum, the reply's `fixed`) and not in that mode:
@@ -240,13 +244,13 @@ event overview: state windows reason
 event overview-focus: outcome target id address workspace reason
 event stages: gen on reason
 event tiling: gen reason
-event tile-hover: address state x y w h tileable splittable unfitZones
+event tile-hover: address state x y w h tileable splittable unfitZones unfitPlaces
 event titlebar-reveal: output revealed
 event frames: clock marks monitors name presented refreshHz renders t total unit what loop beats stalls work
 event frames-recording: ms recording
 event error:
 reply grassfield-stages: gen on reason monitors monitor workspace active hidden overlap front address app stages id slot windows x y w h
-reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting unfit fixed unfitZones suggestion output zones
+reply grassfield-tiling: gen outputs name area x y w h class grid windows address state place layout zone sides group splits workspace home waiting unfit fixed unfitZones places suggestion output zones
 enum overview.state: opening open closing closed
 enum overview.reason: invalid no-windows no-chrome unavailable interrupted fullscreen
 enum overview-focus.outcome: pending focused fallback timeout refused superseded unavailable invalid

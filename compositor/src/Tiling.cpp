@@ -422,21 +422,22 @@ namespace gf::tiler {
 
         // The frame a place gives `w` before its limits (TL4, TL7): its zone's; for a half next to a tiled neighbour on the
         // same output and Desktop, the rest of the work area beside it. Not for Center (it keeps the window's size).
-        tiling::Rect startFrame(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
-            const tiling::Zone zone = tiling::zoneOf(place).value_or(tiling::Zone{});
-            if (isHalf(place)) {
-                const auto                strip = stripWindows();
-                std::vector<tiling::Rect> neighbours;
-                for (const auto& r : st().book.records()) {
-                    if (r.id == idOf(w) || r.output != output || r.workspace != workspace || std::ranges::find(strip, r.id) != strip.end())
-                        continue;
-                    if (r.state == tiling::TileState::Tiled || r.state == tiling::TileState::Resizing)
-                        neighbours.push_back(tiling::frameOf(r.box, r.band));
-                }
-                if (const auto beside = tiling::halfBesideNeighbour(place, area, neighbours))
-                    return *beside;
+        // TL7: the frames of the other Tiled or Resizing windows of `output`'s Desktop `workspace` (not those of an inactive stage,
+        // drawn in the strip): what a half beside them leaves.
+        std::vector<tiling::Rect> neighbourFramesOf(const PHLWINDOW& w, std::string_view output, int64_t workspace) {
+            const auto                strip = stripWindows();
+            std::vector<tiling::Rect> neighbours;
+            for (const auto& r : st().book.records()) {
+                if (r.id == idOf(w) || r.output != output || r.workspace != workspace || std::ranges::find(strip, r.id) != strip.end())
+                    continue;
+                if (r.state == tiling::TileState::Tiled || r.state == tiling::TileState::Resizing)
+                    neighbours.push_back(tiling::frameOf(r.box, r.band));
             }
-            return tiling::zoneFrame(zone, area);
+            return neighbours;
+        }
+
+        tiling::Rect startFrame(const PHLWINDOW& w, tiling::Place place, const tiling::Area& area, std::string_view output, int64_t workspace) {
+            return tiling::placeStartFrame(place, area, isHalf(place) ? neighbourFramesOf(w, output, workspace) : std::vector<tiling::Rect>{});
         }
 
         // ADR-0036 D69 (D57's model for every place): `w` fits the frame `place` starts from (startFrame). Fill and Center always
@@ -1827,6 +1828,15 @@ namespace gf::tiler {
         return tiling::unfitZones(constraintsOf(w), areaFor(m, w->m_workspace->m_id)); // the area tile() places it in
     }
 
+    std::vector<std::string> unfitPlaces(const PHLWINDOW& w) {
+        const auto m = w && w->m_workspace ? monitorOf(w) : nullptr;
+        if (!m)
+            return {};
+        // tile() from a key or a menu: its own output's Desktop, the frame startFrame gives (TL7 neighbours included).
+        const int64_t workspace = w->m_workspace->m_id;
+        return tiling::unfitPlaces(constraintsOf(w), areaFor(m, workspace), neighbourFramesOf(w, m->m_name, workspace));
+    }
+
     void moveToRequest(std::string_view addressText, std::string_view outputName) {
         if (gf::deferredFocus::sessionLocked()) {
             logRequest(Log::WARN, "move_to: refused: the session is locked");
@@ -2514,8 +2524,12 @@ namespace gf::tiler {
                     unfit.push_back(idOf(w));
                 if (w && w->m_isMapped && fixedSize(w))
                     fixed.push_back(idOf(w));
-                if (auto zones = w && placeable(w) ? unfitZones(w) : std::vector<std::string>{}; !zones.empty())
-                    fits.push_back(tiling::WindowFit{.address = idOf(w), .zones = std::move(zones)});
+                if (w && placeable(w)) {
+                    auto zones  = unfitZones(w);
+                    auto places = unfitPlaces(w);
+                    if (!zones.empty() || !places.empty())
+                        fits.push_back(tiling::WindowFit{.address = idOf(w), .zones = std::move(zones), .places = std::move(places)});
+                }
             }
         }
         return tiling::stateJson(s.book.generation(), outputs, suggestion ? &*suggestion : nullptr, splits, unfit, fixed, fits);

@@ -108,6 +108,11 @@ namespace gf::tiler {
     // refuse them). Empty for a window on no output.
     std::vector<std::string> unfitZones(const PHLWINDOW& w);
 
+    // The places (core nameOf) `w` does not fit on its output's Desktop, each on the frame tile() would give it (core
+    // unfitPlaces over placeStartFrame: a half beside a tiled neighbour is the rest beside it, TL7): the tile-hover event's
+    // "unfitPlaces" (the popover and the Window menu grey those places). Empty for a window on no output.
+    std::vector<std::string> unfitPlaces(const PHLWINDOW& w);
+
     // hl.plugin.grassfield.move_to(address, output) (TL23, TL26): `w` onto another output: a tiled window into the same place,
     // zone or sides there, any other at the same relative place (core moveToArea); it takes that output's Desktop. Untrusted:
     // the address and the output are compared with the live ones. Refused while locked (reason "locked") and for an

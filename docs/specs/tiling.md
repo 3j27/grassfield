@@ -138,7 +138,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   with shifted rows) a window is placed only in a zone it fits, its minimum with its titlebar band inside the zone's frame
   as the glyph shows it (a half beside a neighbour: the TL7 frame): the popover and the Window menu grey the places,
   arrangements and Layouts zones it does not fit (`unfitZones`, ADR-0007), `tile`, `arrange` and a pick refuse them, a drag
-  shows no preview there, an arrangement's fill gives each remaining zone the topmost window that fits it (a zone no window
+  shows no preview there (a place on the frame `tile` applies, a half beside a neighbour included: `unfitPlaces`),
+  an arrangement's fill gives each remaining zone the topmost window that fits it (a zone no window
   fits stays empty) and the suggestion offers only windows that fit. Fill and Center are always offered. The make-room
   above now serves windows already placed whose work area shrinks (the margins switch, the Dock).
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
