@@ -1,31 +1,37 @@
 #!/usr/bin/python3 -I
 # Grassfield's screenshots (ADR-0035 D-10, step 8; owner decision Q4: re-wired now, saved to the Desktop, the capture toolbar
-# later). Bound by config/hypr/grassfield/system.lua (real session only): `grassfield-capture screen` (Shift-Cmd-3, the
-# focused display) and `grassfield-capture selection` (Shift-Cmd-4, Shift-Cmd-5 and Print: a crosshair over the live screen;
-# a drag picks an area, a click without a drag picks the window under the pointer, Esc cancels; a second press while the
-# crosshair shows cancels it, as Omarchy's capture did). grim takes the picture, slurp draws the crosshair in Grassfield's
-# colours (capture.* in ui/tokens/tokens.json, mirrored below; tests/shell/capture.sh holds them equal). The file is named as
-# on macOS ("Screenshot 2026-10-31 at 14.05.12.png", translated) on the Desktop, copied to the clipboard, and a Grassfield
-# notice shows it with "Open in Preview" (Preview is Grassfield's viewer, org.grassfield.Preview). Nothing names an Omarchy
-# shortcut; no tensaku. Standard library only; strings through tr() (gate I1: scripts/dev/check-i18n.py).
+# later). Bound by config/hypr/grassfield/system.lua (real session only): `grassfield-capture screen` (Shift-Cmd-3: every
+# display, one picture each, as macOS saves them) and `grassfield-capture selection` (Shift-Cmd-4, Shift-Cmd-5 and Print: a
+# crosshair over the live screen; a drag picks an area, a click without a drag picks the window under the pointer, else the
+# display, Esc cancels; a second press while the crosshair shows cancels it, as Omarchy's capture did). grim takes the
+# picture, slurp draws the crosshair in Grassfield's colours (capture.* in ui/tokens/tokens.json, mirrored below;
+# tests/shell/capture.sh holds them equal). Each file is named as on macOS ("Screenshot 2026-10-31 at 14.05.12.png", the
+# next display's " (2)", translated) on the Desktop; the focused display's picture (or the selection) is copied to the
+# clipboard, and a Grassfield notice shows it with "Open in Preview" (Preview is Grassfield's viewer, org.grassfield.Preview),
+# which opens every picture of that capture. Nothing names an Omarchy shortcut; no tensaku. Standard library only; strings
+# through tr() (gate I1: scripts/dev/check-i18n.py).
 import datetime
 import json
 import os
 import re
-import select
 import shutil
+import signal
 import subprocess
 import sys
-import time
 
 # capture.* of ui/tokens/tokens.json, as slurp takes them (#rrggbbaa): the veil over the screen, the selection's fill and
 # border, the windows a click can pick, the border's width in pixels.
 COLOURS = {"veil": "#0000002E", "selection": "#FFFFFF24", "border": "#FFFFFFE6", "box": "#FFFFFF14"}
 BORDER_WIDTH = 1
-# A selection smaller than this many square pixels is a click: the window under the pointer (Omarchy's "smart" rule).
+SLURP = ["slurp", "-b", COLOURS["veil"], "-s", COLOURS["selection"], "-c", COLOURS["border"], "-B", COLOURS["box"],
+         "-w", str(BORDER_WIDTH)]
+# A selection smaller than this many square pixels is a click outside every window (slurp answers 1x1 there): the display.
 CLICK_AREA = 20
+# Hyprland 0.56's clients JSON: "fullscreen" is the window's mode, 2 for fullscreen (FullscreenController.hpp).
+FULLSCREEN = 2
 WAIT_SECONDS = 120
 PREVIEW = "org.grassfield.Preview.desktop"
+PREVIEW_ICON = "org.grassfield.Preview"
 
 TITLE = "Screenshot"
 NAME = "Screenshot %(date)s at %(time)s"
@@ -75,32 +81,41 @@ def logical(m):
         return None
 
 
-def boxes():
-    # What a click can pick: the windows on the displays' shown workspaces, then the displays themselves.
-    monitors = hyprctl("monitors") or []
-    shown = set()
+def displays(monitors):
+    # The enabled displays, the focused one first, then in Hyprland's order: (name, rectangle).
     out = []
-    for m in monitors:
+    for m in monitors or []:
+        if isinstance(m, dict) and not m.get("disabled") and isinstance(m.get("name"), str):
+            r = logical(m)
+            if r:
+                out.append((m["name"], r, bool(m.get("focused"))))
+    return [(n, r) for n, r, f in sorted(out, key=lambda d: not d[2])]
+
+
+def windows(monitors):
+    # What a click can pick: the windows on the displays' shown workspaces. On a workspace with a fullscreen window, only that
+    # window: slurp picks the smallest box under the pointer, and the windows behind it are mapped too.
+    shown = set()
+    for m in monitors or []:
         if not isinstance(m, dict) or m.get("disabled"):
             continue
         for key in ("activeWorkspace", "specialWorkspace"):
             ws = m.get(key)
             if isinstance(ws, dict) and isinstance(ws.get("id"), int) and ws["id"] != 0:
                 shown.add(ws["id"])
+    found = []
     for c in hyprctl("clients") or []:
         try:
             if not c["mapped"] or c["hidden"] or c["workspace"]["id"] not in shown:
                 continue
             (x, y), (w, h) = c["at"], c["size"]
             if w > 0 and h > 0:
-                out.append({"x": int(x), "y": int(y), "w": int(w), "h": int(h)})
+                found.append((c["workspace"]["id"], c.get("fullscreen") == FULLSCREEN,
+                              {"x": int(x), "y": int(y), "w": int(w), "h": int(h)}))
         except (KeyError, TypeError, ValueError):
             continue
-    for m in monitors:
-        r = logical(m) if isinstance(m, dict) and not m.get("disabled") else None
-        if r:
-            out.append(r)
-    return out
+    covered = {ws for ws, full, _ in found if full}
+    return [r for ws, full, r in found if full or ws not in covered]
 
 
 def parse_geometry(text):
@@ -109,7 +124,8 @@ def parse_geometry(text):
 
 
 def snapped(sel, rects):
-    # A click (an area under CLICK_AREA): the first rectangle that holds the point, windows before displays; else nothing.
+    # A click outside every window (slurp answers a 1x1 area there): the first rectangle that holds the point, windows before
+    # displays; else nothing. A click on a window is that window's box already (slurp's own answer).
     if sel["w"] * sel["h"] >= CLICK_AREA:
         return sel
     px, py = sel["x"], sel["y"]
@@ -128,84 +144,117 @@ def desktop():
     # folder itself or the root.
     home = os.path.expanduser("~")
     r = run(["xdg-user-dir", "DESKTOP"])
-    path = r.stdout.decode("utf-8", "replace").strip() if r is not None and r.returncode == 0 else ""
+    path = os.fsdecode(r.stdout).strip() if r is not None and r.returncode == 0 else ""
     if not path or not os.path.isabs(path) or os.path.realpath(path) in ("/", os.path.realpath(home)):
         path = os.path.join(home, "Desktop")
-    os.makedirs(path, exist_ok=True)
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError:
+        return None
     return path
 
 
-def new_file(folder, now):
-    # "Screenshot 2026-10-31 at 14.05.12.png", then " (2)" and on: made here (O_EXCL), never another file overwritten.
-    stem = tr(NAME) % {"date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H.%M.%S")}
-    for n in range(1, 100):
-        path = os.path.join(folder, stem + (".png" if n == 1 else " (%d).png" % n))
+def save(folder, stem, grim):
+    # grim writes a hidden file of this helper's in the folder (made here, O_EXCL), which then takes the first free name:
+    # "<stem>.png", then " (2)" and on, linked so that no other file is ever replaced; the Desktop never shows a picture
+    # being written. Returns the path, or None (nothing left behind).
+    tmp = None
+    for _ in range(10):
+        candidate = os.path.join(folder, ".grassfield-capture-%s.png" % os.urandom(8).hex())
         try:
-            os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644))
-            return path
+            os.close(os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644))
+            tmp = candidate
+            break
         except FileExistsError:
             continue
-    return None
+        except OSError:
+            return None
+    if tmp is None:
+        return None
+    try:
+        r = run(grim + [tmp], timeout=30)
+        if r is None or r.returncode != 0 or os.path.getsize(tmp) == 0:
+            return None
+        for n in range(1, 100):
+            path = os.path.join(folder, stem + (".png" if n == 1 else " (%d).png" % n))
+            try:
+                os.link(tmp, path)
+                return path
+            except FileExistsError:
+                continue
+            except OSError:
+                # A file system without hard links (a Desktop on FAT): a new file of that name, then a copy.
+                try:
+                    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+                except FileExistsError:
+                    continue
+                with os.fdopen(fd, "wb") as out, open(tmp, "rb") as src:
+                    shutil.copyfileobj(src, out)
+                return path
+        return None
+    except OSError:
+        return None
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 
 def selecting():
-    # slurp of this user running: a second press cancels the crosshair.
-    r = run(["pkill", "-u", str(os.getuid()), "-x", "slurp"])
+    # This helper's slurp running (its exact command line, Grassfield's colours): a second press cancels the crosshair; any
+    # other slurp of the user's (a portal's, a script's) is left alone.
+    line = " ".join(SLURP)
+    if not re.fullmatch(r"[A-Za-z0-9# -]+", line):
+        return False
+    r = run(["pkill", "-u", str(os.getuid()), "-f", "-x", line])
     return r is not None and r.returncode == 0
 
 
-def choose():
-    rects = boxes()
-    argv = ["slurp", "-b", COLOURS["veil"], "-s", COLOURS["selection"], "-c", COLOURS["border"], "-B", COLOURS["box"],
-            "-w", str(BORDER_WIDTH)]
-    r = run(argv, timeout=3600, input="".join(geometry_text(b) + "\n" for b in rects).encode())
+def choose(monitors):
+    boxes = windows(monitors)
+    r = run(SLURP, timeout=3600, input="".join(geometry_text(b) + "\n" for b in boxes).encode())
     if r is None or r.returncode != 0:
         return None  # Esc, or cancelled by a second press
     sel = parse_geometry(r.stdout.decode("utf-8", "replace"))
-    return snapped(sel, rects) if sel else None
+    return snapped(sel, boxes + [rect for _, rect in displays(monitors)]) if sel else None
 
 
-def notify(path):
-    # The notice with the picture; a click or its button opens it in Preview. Waits for that at most WAIT_SECONDS, then the
-    # notice goes (its button would do nothing once this helper has ended).
-    argv = ["notify-send", "-a", tr(TITLE), "-h", "string:image-path:" + path, "-t", "0", "-p", "-w",
+def notify(paths):
+    # The notice with the picture; a click or its button opens the capture's pictures in Preview. It is the shell's ordinary
+    # banner (its own time on screen, then the Notification Center); this helper waits for the click at most WAIT_SECONDS,
+    # then asks notify-send to close the notice (SIGINT: notify-send closes the one it showed), since its button would do
+    # nothing once this helper has ended.
+    argv = ["notify-send", "-a", tr(TITLE), "-i", PREVIEW_ICON, "-h", "string:image-path:" + paths[0], "-p", "-w",
             "-A", "default=" + tr(OPEN), "-A", "open=" + tr(OPEN), "--", tr(TITLE), tr(BODY)]
     if not shutil.which("notify-send"):
         run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
-             "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.Notify", tr(TITLE), "0", "",
-             tr(TITLE), tr(BODY), "[]", "{'image-path': <%s>}" % json.dumps(path), "5000"], timeout=10)
+             "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.Notify", tr(TITLE), "0", PREVIEW_ICON,
+             tr(TITLE), tr(BODY), "[]", "{'image-path': <%s>}" % json.dumps(paths[0]), "-1"], timeout=10)
         return
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError:
         return
-    out = b""
-    deadline = time.monotonic() + WAIT_SECONDS
-    while proc.poll() is None and time.monotonic() < deadline:
-        if select.select([proc.stdout], [], [], 0.5)[0]:
-            chunk = os.read(proc.stdout.fileno(), 4096)
-            if not chunk:
-                break
-            out += chunk
-    if proc.poll() is None:
-        words = out.decode("utf-8", "replace").split()
-        proc.kill()
-        proc.wait()
-        if words and re.fullmatch(r"[0-9]{1,10}", words[0]):
-            run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
-                 "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.CloseNotification", words[0]],
-                timeout=10)
+    try:
+        out, _ = proc.communicate(timeout=WAIT_SECONDS)
+    except subprocess.TimeoutExpired:
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
         return
-    out += proc.stdout.read() or b""
     if set(out.decode("utf-8", "replace").split()[1:]) & {"default", "open"}:
-        open_with(PREVIEW, path)
+        open_with(PREVIEW, paths)
 
 
-def open_with(desktop_id, path):
+def open_with(desktop_id, paths):
     # As the Dock starts an app (uwsm-app: its own app scope), from a transient unit of the user manager; without uwsm (a
     # session started another way) Preview's own command.
     launcher = shutil.which("uwsm-app")
-    app = [launcher, "--", desktop_id, path] if launcher else ["grassfield-preview", path]
+    app = [launcher, "--", desktop_id] + paths if launcher else ["grassfield-preview"] + paths
     run(["systemd-run", "--user", "--collect", "--quiet", "--"] + app, timeout=30)
 
 
@@ -214,33 +263,34 @@ def main():
     if mode not in ("screen", "selection"):
         sys.stderr.write("usage: grassfield-capture screen|selection\n")
         return 2
+    monitors = hyprctl("monitors")
     if mode == "selection":
         if selecting():
             return 0
-        sel = choose()
+        sel = choose(monitors)
         if sel is None:
             return 0
-        grim = ["grim", "-g", geometry_text(sel)]
+        shots = [["grim", "-g", geometry_text(sel)]]
     else:
-        focused = next((m for m in hyprctl("monitors") or [] if isinstance(m, dict) and m.get("focused")), None)
-        if not focused or not isinstance(focused.get("name"), str):
+        shots = [["grim", "-o", name] for name, _ in displays(monitors)]
+        if not shots:
             return 1
-        grim = ["grim", "-o", focused["name"]]
-    path = new_file(desktop(), datetime.datetime.now())
-    if path is None:
+    folder = desktop()
+    if folder is None:
         return 1
-    r = run(grim + [path], timeout=30)
-    if r is None or r.returncode != 0 or os.path.getsize(path) == 0:
-        os.unlink(path)
+    now = datetime.datetime.now()
+    stem = tr(NAME) % {"date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H.%M.%S")}
+    paths = [p for p in (save(folder, stem, grim) for grim in shots) if p]
+    if not paths:
         return 1
     # wl-copy stays behind to serve the clipboard: none of its output is waited for.
-    with open(path, "rb") as f:
-        try:
+    try:
+        with open(paths[0], "rb") as f:
             subprocess.run(["wl-copy", "--type", "image/png"], stdin=f, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                            timeout=10)
-        except (OSError, subprocess.SubprocessError):
-            pass
-    notify(path)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    notify(paths)
     return 0
 
 

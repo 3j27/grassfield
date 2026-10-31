@@ -2,7 +2,7 @@
 -- (docs/audits/final-1.0/02-omarchy-compatibility.md §5.3). Loaded by session.lua only: the nested dev session has no
 -- lid, no removable media and must never take screenshots of the owner's screen.
 
--- Screenshots, macOS keys with Super as Command: Command+Shift+3 the screen (the focused display), Command+Shift+4 a
+-- Screenshots, macOS keys with Super as Command: Command+Shift+3 the screen (every display, one picture each), Command+Shift+4 a
 -- selection (a drag, or a click on a window; Esc cancels), Command+Shift+5 and Print the same until the capture toolbar comes
 -- (ADR-0035 D-10, owner decision Q4). Grassfield's capture (grim and slurp in Grassfield's colours) saves to the Desktop as
 -- macOS names it, copies to the clipboard and shows a notice with "Open in Preview". Bound by keycode (digits need Shift on

@@ -211,7 +211,7 @@ package_grassfield-desktop() {
     'localsearch: file results in Search'
     'plocate: file names in Search when localsearch has no index (ADR-0027)'
     'kio-extras: network locations and image thumbnails in Files'
-    'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
+    'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery, a screenshot and its Open in Preview)'
     'udiskie: mounts removable media when they are connected'
     'hyprsunset: Night Light (grassfield-nightshift)'
     'kimageformats: HEIF, AVIF and JPEG XL pictures as wallpapers (the helper reads what Qt can read)'
