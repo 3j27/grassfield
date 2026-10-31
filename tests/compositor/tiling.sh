@@ -1300,6 +1300,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
   # fixed bar (ADR-0040 step 1b's review): a window of fixed size drawn with the plugin's own titlebar (an xdgact window of
   # 420x300, minimum = maximum): its zoom light is disabled (drawn grey with no glyph under the pointer: captured) and a click
   # there leaves its box and its mode; a resizable window's click still zooms (the control).
+  close_shell_popup "fixed bar" # a popup left by the case before would take the clicks below (review of D69, MINOR 3)
   open_xdg gf-fixed-bar 420x300
   if [[ -n $xdg_addr ]]; then
     fixed_addr=$xdg_addr fixed_pid=$xdg_pid
@@ -1316,6 +1317,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     say "  fixed bar: $fixed_addr $fb0"
     fixed_listed() { tiling_state | jq -e --arg a "${fixed_addr#0x}" '(.fixed // []) | index($a) != null' >/dev/null 2>&1; }
     check "fixed bar: the reply lists the window among those of fixed size" fixed_listed
+    close_shell_popup "fixed bar"
     read -r fzx fzy < <(zoom_light_of "$fixed_addr")
     pointer abs $((fzx + 120)) $((fzy + 80)) sleep 200 abs "$fzx" "$fzy" sleep 400
     "$root/scripts/dev/shot.sh" tiling-fixed-bar-light "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-fixed-bar-light.png" "$run/" 2>/dev/null
