@@ -2,7 +2,7 @@
 Status: Proposed (cloud session, owner brief 2026-10-28, step 0; docs only, no code before the opus PASS). The owner
 answered AQ1 to AQ7 on 2026-10-28 (AskUserQuestion), recorded in "Owner decisions". Every other choice follows the owner's
 rule of 2026-10-28 ("the closest to macOS 27, with no technical step for the end user") and is recorded in "Decisions taken
-under the owner's rule" (AD1 to AD47). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
+under the owner's rule" (AD1 to AD52). Revised after the integrator's opus review of e3882de (FAIL: five MAJORs and eight
 MINORs, all answered in "Review history"; each changed place says "review of e3882de"). Step 0 merged (pull request #37, opus
 PASS on f950042). Step 1 (the sampler, no window, with its cost gate) is built and measured in its own pull request
 (`docs/audits/activity-2026-10-28/step1.md`); the integrator's notes on the merge of step 0 are answered there and marked
@@ -15,7 +15,10 @@ is split into 2a to 2d ("Delivery order"); 2a, the window and its table, is buil
 graphs and grouped views, in its own (`docs/audits/activity-2026-10-28/step2b.md`; AD37 to AD41), merged (pull request
 #53, main 0a2b52b); 2c, Quit, Force Quit and Send Signal, in its own (`docs/audits/activity-2026-10-28/step2c.md`; AD42
 to AD44), merged (pull request #63, main 317cce3); 2d, Inspect, in its own (`docs/audits/activity-2026-10-28/step2d.md`;
-AD45 to AD47). · Date: 2026-10-28 ·
+AD45 to AD47). From step 2d the owner asked for one pull request for the rest of the chantier (2026-10-31: steps 2d, 3, 4
+and 5 together, the integrator reviewing them once); steps 3, 4 and 5 are built there (`step3-5.md`; AD48 to AD57;
+Keep CPU Windows on Top not built, AD57).
+· Date: 2026-10-28 ·
 Decider: owner
 (AQ1 to AQ7), integrator (merge after the opus review) · Number: 0038 (0033 to 0037 are merged; 0038 is free on main
 be7eb7c and on the open pull requests #33 and #35)
@@ -687,6 +690,77 @@ Answer: A (see "Answers").
   one), Ctrl+Q aside. The labels' columns are as wide as their longest label, the token width at least, and always leave
   the values their room (French labels run longer).
 
+- **AD48. The projection, as built** (AM60; step 3). The shell's `ActivityLink` service writes `windows.json` while a window
+  of the app is open on its display: Hyprland's list is read again on `openwindow` and `closewindow` (pid and class come
+  with it) and on a change of NotResponding's marks, and the file is written 250 ms after the last of them, only when its
+  body changed. The writer is the shell itself: the script that writes the file names its parent (the shell) by pid and
+  stat start time, then hands the text to `write-private.sh` (0700 folder, 0600 file, a temporary name renamed). The file
+  goes when the app's last window closes. The app watches the folder and the file (inotify) and reads the file again at each
+  sample, so a shell that crashed (its file left behind, its writer gone) stops counting at once. Anything that is not a
+  valid version 1 file from a live writer is no projection (Terms), and the app behaves as without a shell (AM75).
+- **AD49. Quit through the shell waits, a second at most** (AM52, AM61; step 3). Quit of a process that owns windows asks the
+  shell (`qs ipc ... call activity quit <pid>`, through `shellIpcArgs()`) and answers "pending"; the sheet then takes no
+  click or key (Grassfield.Ui's Sheet: a confirm handler may answer `false`, then closes the sheet or shows its error
+  itself). "ok" sends nothing more (the app may ask to save), "no-windows" sends SIGTERM through AM51's descriptor, and
+  "refused" or no answer within a second leaves Force Quit alone. A sheet closed meanwhile drops the answer. With a
+  projection, a process of an app unit that owns no window (an app's helper) gets SIGTERM; without one, AD43 holds.
+- **AD50. The Dock tile's graph** (AM62; step 3). View > Dock Icon (activity.json `dockIcon`): the app writes
+  `dock-tile.json` at each sample (32 samples at most, three decimals, under 2 KiB) and removes it when the icon is chosen
+  and when it quits. While its window is off screen with a graph chosen, the app reads the system's files alone at the
+  interval, no process (AM-P3). The Dock reads its own display's folder only, only while the app's window is open, and draws
+  only a file whose writer owns one of the app's windows now: the shell has no reader of `/proc` in QML, and a window the
+  app owns is proof that it is alive (a crashed app owns none). It draws on a dark plate in both appearances with the dark
+  palette's graph colours (the plate is dark, so those hold their contrast), network and disk mirrored around the middle,
+  CPU history stacked, CPU usage a gauge of ten segments (tokens `dock.tileGraph*`).
+- **AD51. End Task, as built** (AM63, AQ5; step 3). The Dock menu's last rows come from `Launch.quitRows`: End Task after
+  Quit (or after Force Quit for an app that does not respond) while `dock.endTask` is on, never with Option and never on
+  the Files tile; it runs the Option + Force Quit path unchanged. The switch is in Settings > Desktop & Dock under the
+  Dock's other switches; the key comes into the schema, the defaults and the generated contract.
+- **AD52. Ctrl+Shift+Esc, as built** (AM64, AQ6; step 3). `grassfield-launch-key activity` starts the desktop entry through
+  `uwsm app` (nothing in a nested dev session, as its other kinds); the binding is off on the lock screen as the other
+  launch keys and is listed in Settings' keyboard shortcuts ("Activity Monitor").
+
+- **AD53. Processes, by Type, as built** (AM65; step 4). A header per kind with its count, in Windows' order (Apps,
+  Background Processes, Session Processes, System Processes with the Kernel row, Other Users), a kind without a process the
+  search keeps left out. Under Apps, a header per app unit with the app's icon and its count, then the window owners outside
+  such a unit. A unit's identity is a hash of its name the sampler keeps (`unitKey`, never the path, AD25); its name is the
+  window's app (the projection), else the desktop entry of that id, else the entry whose `Exec` runs that command (read once,
+  at the first such lookup), else the unit's `<name>`. Headers collapse and stay collapsed while the app runs, as AM49's.
+- **AD54. Efficiency Mode, as built** (AM68, AM76; step 4). `SetUnitProperties(unit, runtime=true, [CPUWeight])` on the
+  session bus, the user manager's own units (no polkit): 0 (systemd's `idle`, which writes `cpu.idle=1` and leaves
+  `cpu.weight`; checked in systemd v258's `dbus-cgroup.c` and `cgroup.c`), 1 when a systemd older than 252 answers
+  `InvalidArgs`, `UINT64_MAX` (unset) to turn it off. The unit is read again through the process's `/proc` descriptor when
+  the item is chosen; a session unit, another unit or an ended process changes nothing and says so in a sheet; the dev guard
+  is AM56's. The sampler reads each eligible unit's `cpu.idle`, then `cpu.weight`, once per sample while the main window
+  shows (`ReadEfficiency`), so Status and the check mark follow a change made elsewhere. The first time, the sheet; its
+  "Don't ask again" is `askEfficiency` in activity.json. No user manager on the bus at start: the items are absent.
+  Deviation: the menus have no tooltips here (the menu bar's are the shell's, the window's PopupMenu has none), so a
+  disabled item's reason is kept by the backend (`reason`) and not shown; asked of the integrator.
+- **AD55. App History, as built** (AM67; step 4). `journalctl --user --output=json --output-fields=MESSAGE_ID,USER_UNIT,
+  CPU_USAGE_NSEC,MEMORY_PEAK --since=@<start> MESSAGE_ID=ae8f7b866b0347b9af31fe1c80b127c0`, read when the window opens and
+  when the period changes, at most 16 MiB, 30 s at most (else "not available"); a record counts when its `USER_UNIT` is a
+  launch uwsm named (AM65's names: the record does not name the slice). The live app units add their cgroup's `cpu.stat`
+  `usage_usec` and `memory.peak` (a unit whose record came in the same read counts once). systemd writes the record at
+  `info` only when the unit used more than 1 s of CPU, 64 MiB of memory or 1 MiB of disk (`unit.c` MENTIONWORTHY_*), so a
+  light launch is missing from the history; recorded for the owner's check (A6).
+- **AD56. Performance and the CPU windows** (AM66, AM71, AM72; steps 4 and 5). One backend object keeps every resource's
+  history from the samples (the system's files the sampler already reads, plus each processor's user part and each GPU's
+  memory by region) and builds the texts only while one of its windows is on screen. While one is and the main window is
+  not, the app reads the system's files at the interval, and the processes' GPU clients for Performance and GPU History
+  (AM8's rule otherwise holds). Facts that do not change are read once (`machine.cpp`: the processors' topology and caches
+  from `/sys/devices/system/cpu`, a disk's `size`, `queue/rotational` and `device/model`, an interface's kind); the
+  processors' mean `scaling_cur_freq` and `/proc/uptime` at each sample while CPU is shown; a Wi-Fi network's name from
+  NetworkManager on the system bus (read-only, `GetDeviceByIpIface`, `ActiveAccessPoint`, `Ssid`) each time it is selected.
+  CPU Usage lights twenty segments per processor (System, then User, the kernel's split per processor: `/proc/stat` has no
+  owner per processor); Clear CPU History empties the per-processor histories.
+- **AD57. Keep CPU Windows on Top is not built** (AM73; step 5). The compositor plugin places a window's controls by its
+  xdg tag and reads `info` exactly (`compositor/src/Titlebar.cpp`), so a tag for a Hyprland rule needs a plugin change, which
+  only a nested pass can check (C1 to C3). Per AM73 the item is absent without the rule. Proposed for the integrator: the
+  plugin reads the role up to a `+` (`info+on-top` is `info`), the CPU windows carry `info+on-top` while the setting is on
+  (set at map, so the windows open again when it changes), and `config/hypr/grassfield/windows.lua` adds
+  `hl.window_rule({ name = "gf-activity-on-top", match = { class = "^org\\.grassfield\\.Activity$", xdg_tag = "^info\\+on-top$" }, pin = true })`
+  once a nested pass shows that `pin` keeps them above the others.
+
 ## Delivery order (owner, AQ7 = A: macOS first)
 Each step is one pull request to main, reviewed by the integrator (opus), with its nested pass, and merged before the next.
 0. **Docs** (this pull request): ADR-0038, `docs/specs/activity.md`, the parity matrix, the probes.
@@ -710,11 +784,13 @@ Each step is one pull request to main, reviewed by the integrator (opus), with i
    - **2d. Inspect** (AM57 to AM59): the Info button and its windows. Built (AD45 to AD47;
      `docs/audits/activity-2026-10-28/step2d.md`).
 3. **The shell links**: the projection and "(Not Responding)", IPC `activity quit` and Quit of windowed processes, the Dock
-   tile graph, End Task and its Settings switch (AQ5), Ctrl+Shift+Esc (AQ6). Spec AM60 to AM64.
+   tile graph, End Task and its Settings switch (AQ5), Ctrl+Shift+Esc (AQ6). Spec AM60 to AM64. Built in the pull request
+   of steps 2d to 5 (AD48 to AD52; `docs/audits/activity-2026-10-28/step3-5.md`).
 4. **Windows 11's additions**: Processes, by Type, Performance, Efficiency Mode, App History, the Login Items link, the
-   Status column. Spec AM65 to AM70.
+   Status column. Spec AM65 to AM70. Built in the same pull request (AD53 to AD56).
 5. **The small windows and the finish**: CPU Usage, CPU History, GPU History, Keep CPU Windows on Top; F1 against public
-   captures, A2, the budget measured again on the owner's machine (L2). Spec AM71 to AM73.
+   captures, A2, the budget measured again on the owner's machine (L2). Spec AM71 to AM73. Built in the same pull request
+   but Keep CPU Windows on Top (AD56, AD57); F1, A2 and L2 need the integrator's nested pass and the owner's machine.
 
 ## macOS reference (Apple's Activity Monitor User Guide, macOS 27 in its version selector, read 2026-10-28; facts only)
 Five tabs CPU, Memory, Energy, Disk, Network; the bottom of the window summarises each one (System, User and Idle for the

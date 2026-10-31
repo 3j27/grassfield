@@ -320,7 +320,7 @@ items (Settings does it); a background collector; any network access.
   read." and the Quit button is disabled, its tooltip AM50's reason. Header: Parent Process (name and pid; a click inspects
   it; a parent younger than the process holds a reused pid, AD40, and shows "—"), Process Group (the leader's name and the
   pgid), User (name and uid), % CPU, Recent hangs (the number of times the projection marked it since the app opened;
-  "—" until step 3's projection, no made-up 0). The window closes when its process ends (AD45), and with the main window
+  "—" without a projection, AM75: no made-up 0). The window closes when its process ends (AD45), and with the main window
   (AD17). Every read goes through the `/proc/<pid>` descriptor that AM51's start-time check opened, on the sampler's thread,
   and covers the header and the tab shown only (AD10).
 - **AM58** Tabs: **Memory** (Real Memory Size `VmRSS`, Virtual Memory Size `VmSize`, Shared Memory Size `RssFile +
@@ -340,18 +340,25 @@ items (Settings does it); a background collector; any network access.
 - **AM59** Buttons: Quit (AM50's sheet for this process alone, with AM51 to AM56's rules: the session warning, AD43, the dev
   guard). No Sample button. Environment variables are never read.
 
-### The shell (step 3)
+### The shell (step 3, built in the pull request of steps 2d to 5: ADR-0038 AD48 to AD52, `docs/audits/activity-2026-10-28/step3-5.md`)
 - **AM60** Projection: while a toplevel with app id `org.grassfield.Activity` exists on its display, the shell writes
   `windows.json` in the runtime folder (folder 0700, file 0600, written to a temporary name then renamed):
   `{"v":1,"writer":{"pid":N,"start":N},"windows":[{"pid":N,"app":"<app id>","idleInhibit":bool}…],"notResponding":[N…]}`,
   at most 256 windows, from `Compositor.knownWindows()` after `Compositor.refreshToplevels()` on a window opening, closing or
   changing class, and from `NotResponding.marks`, coalesced over 250 ms. No title. The file is removed when the last such
   toplevel closes and when the shell stops. The app reads it on change (inotify) and ignores it when stale (Terms: writer)
-  or invalid (over 64 KiB, another `v`, a value of the wrong type).
+  or invalid (over 64 KiB, another `v`, a value of the wrong type). Step 3 (AD48): the shell's `ActivityLink`; the writer
+  is the shell, named by the script that writes the file (its parent); the app reads the file again at each sample, so a
+  crashed shell's file stops counting. It names a windowed process (AM17: its app's desktop entry name and icon), marks one
+  that does not respond (AM27), lists Windowed Processes (AM12), counts Recent hangs (AM57) and adds a window's idle
+  inhibitor to Preventing Sleep (AM38).
 - **AM61** IPC target `activity`, function `quit(pid: int): string`, class action, caller `grassfield-activity`: refused
   (`refused`) for a pid ≤ 1 or in a dev session for a pid outside the nested session; otherwise refreshes the toplevels,
   closes every window whose client pid is `pid` (`Compositor.close`, as the Dock's Quit) and answers `ok`, or `no-windows`
   when there was none. Never kills. Listed in `docs/specs/security.md` "IPC surface" and `tests/security/ipc_inventory.sh`.
+  Step 3 (AD49): the app's Quit waits for the answer a second at most, the sheet taking no click or key meanwhile; "ok"
+  sends nothing, "no-windows" SIGTERM through AM51's descriptor, "refused" or no answer leaves Force Quit alone. A shell
+  reaches its own compositor's windows only (a nested session's shell, the nested ones).
 - **AM62** Dock tile graph: View > Dock Icon: Show Application Icon (default), Show Network Usage, Show Disk Activity, Show
   CPU Usage, Show CPU History. Other than the icon, the app writes `dock-tile.json` in the runtime folder (0600, renamed
   into place) at each sample: `{"v":1,"writer":{"pid":N,"start":N},"kind":"network|disk|cpu-usage|cpu-history",
@@ -361,20 +368,22 @@ items (Settings does it); a background collector; any network access.
   e3882de), only for the `org.grassfield.Activity` tile while it is running; it rejects a file over 2 KiB, a `v` other than
   1, an unknown kind, a value out of range or a stale writer, and draws the graph over the tile with tokens
   (`dock.tileGraph*`), the running dot and badge unchanged. The app removes the file when the icon is chosen and when it
-  quits.
+  quits. Step 3 (AD50): a live writer is one that owns one of the app's windows now; the graph is drawn on a dark plate
+  with the dark palette's graph colours; off screen with a graph chosen, the app reads the system's files alone.
 - **AM63** End Task (owner, AQ5; AD27): Settings > Desktop & Dock gains the switch "Show End Task in Dock menus" (fr
   « Afficher Fin de tâche dans les menus du Dock »), key `dock.endTask` in `grassfield.json` (boolean, default false; schema
   and settings contract). While it is on, the Dock menu of a running app (not the Files tile, a folder or the Trash) shows
   "End Task" (fr « Fin de tâche ») right after Quit (or after Force Quit when the app does not respond); it runs the menu's
   existing Option + Force Quit: the confirmation "Force quit “%1”?", then `Power.run("forcequit")` on every process of the
   app. With Option held, the menu shows Force Quit as today and no End Task (the two would do the same). The Force Quit panel
-  is unchanged.
+  is unchanged. Step 3 (AD51): `Launch.quitRows`; the switch is the Dock group's last.
 - **AM64** Ctrl+Shift+Esc (owner, AQ6; AD28): `bind("CTRL + SHIFT + ESCAPE", "Activity Monitor", launch("activity"))` in
   `config/hypr/grassfield/bindings.lua`; `packaging/bin/grassfield-launch-key` gains the kind `activity`
   (`org.grassfield.Activity.desktop`, through `uwsm app`, its own scope; nothing in a nested dev session, as its other kinds);
-  a running app comes to the front (AM1). The shortcut is listed with the others in Settings' keyboard shortcuts.
+  a running app comes to the front (AM1). The shortcut is listed with the others in Settings' keyboard shortcuts. Step 3
+  (AD52): built, off on the lock screen as the other launch keys.
 
-### From Windows 11 (step 4)
+### From Windows 11 (step 4, built in the pull request of steps 2d to 5: ADR-0038 AD53 to AD56, `docs/audits/activity-2026-10-28/step3-5.md`)
 - **AM65** Processes, by Type (AD26): groups with a count in their header, in this order: Apps, Background Processes,
   Session Processes (each for own processes), System Processes (system accounts and the Kernel row), Other Users (only
   when such a process runs). An own process is a Session process per AM54; else it is in Apps when its unit is under
@@ -421,7 +430,7 @@ items (Settings does it); a background collector; any network access.
   shell's launch path or `uwsm-app`); nothing of that pane is in the app.
 - **AM70** Status column and Copy: AM27, AM19.
 
-### Small windows (step 5)
+### Small windows (step 5, built in the pull request of steps 2d to 5: ADR-0038 AD56, AD57; AM73 not built, AD57)
 - **AM71** Window > CPU Usage (Ctrl+2): a small window with one vertical bar per logical processor, current share,
   System and User stacked.
 - **AM72** Window > CPU History (Ctrl+3): one small graph per logical processor; Window > GPU History (Ctrl+4): one graph per
@@ -497,13 +506,17 @@ utilisé »; « (ne répond pas) » as the Force Quit panel. Sizes and times in 
 | A-S4 | AM54's and AM65's classification of fixture cgroup paths: a uwsm scope and a uwsm service in `app-graphical.slice` (Apps), `session.slice`, `session-graphical.slice`, `init.scope`, `wayland-session-bindpid@1234.service` in `background.slice` and a login `session-3.scope` (Session), `app.slice` services (Background); unit names from a desktop id and from a command with `\x2d` escapes, unescaped and matched (AD20) | `tst_units.cpp` (step 1; named `tst_kinds.cpp` before) | L0 |
 | A-S5 | sock_diag parsing and socket-to-process matching (captured netlink replies) | `tst_netdiag.cpp` | L0 |
 | A-S6 | AM51's path: `stat` read through the `/proc/<pid>` descriptor; a child that ended and was reaped between the check and the send is never signalled (ESRCH), even when a new process has taken its pid (a pid-reuse fixture); a start-time mismatch drops the row | `tst_signals.cpp` (step 2c: the pid taken again in a user and pid namespace of the test's own, skipped with the reason where the kernel refuses it; AM56's roots), `tests/unit/activity/window/tst_actions.cpp` (the actions' rules) | L0 |
-| A-S7 | projection and Dock tile file validation (sizes, versions, kinds, ranges, a stale writer by pid or by start time); the runtime folder of two displays (a nested display's files never read by the other) | `tst_activityfiles.cpp` (app) and `tests/unit/tst_docktilegraph.qml` (shell) | L0 |
+| A-S7 | projection and Dock tile file validation (sizes, versions, kinds, ranges, a stale writer by pid or by start time); the runtime folder of two displays (a nested display's files never read by the other) | `tests/unit/activity/window/tst_runtimefiles.cpp` (app) and `tests/unit/tst_docktilegraph.qml`, `tst_activitylink.qml`, `tests/shell/activity_projection.sh` (shell; step 3) | L0 |
 | A-S8 | AM17's names: another owner's `argv[0]` title never shown (its `stat` name instead); control and format characters (bidirectional overrides and isolates, zero-width characters) removed from names and command lines | `tst_textclean.cpp` and `tst_sampler.cpp` (step 1; named `tst_names.cpp` before) | L0 |
 | A-S9 | AM23's and AM43's turns: one fifth of the threads and one tenth of the descriptor lists per sample, a new process at once, every process covered within five and ten samples | `tst_sampler.cpp` | L0 |
 | A-S10 | after the review of 949fc98: a name and a command line follow an exec (by `stat`'s name, and by the code addresses with the same name); a title over argv[0], a login shell and a symbolic link named as AM17 says; the owner read on arrival, exec and turn only; the turns as full whatever the pids; the Memory tab on `statm` with `status` in turns; a failed TCP dump and a failed listing change nothing | `tst_sampler.cpp`, `tst_procparse.cpp` | L0 |
 | A-W1 | the window: tabs, columns chooser, sort, search, views, Copy text, offscreen; no sample while hidden; the size kept | `tests/unit/activity/qml/tst_window.cpp` (the real backend on a fixture tree, offscreen; step 2a), `tests/unit/tst_activitymain.qml` (a fake backend), `tests/unit/activity/window/` (the backend's logic) | L1 |
 | A-W2 | Quit sheet → `SIGTERM` for a windowless fixture, Force Quit → `SIGKILL`, ESRCH silent; Send Signal to a fixture classified as a session process shows the second sheet and offers no Stop; the dev guard refuses a process outside its roots | `tests/apps/activity_actions.sh` (the window-qml cases `ActivityActions.*` on the real /proc; step 2c) and `tests/unit/tst_activitymain.qml` (the sheets on a fake backend) | L1 |
 | A-S11 | AM57's and AM58's reads: the parsers (stat's policy after a name with parentheses, `smaps_rollup`, `btime`, the socket tables, the unit), every tab of an own process on a fixture tree, another owner's (no io, unit, command line, links or descriptors), % CPU between two reads, `smaps_rollup` at most every 5 s, a younger parent, a process ended or replaced; a real child's pipe, TCP listener and local socket through its descriptor | `tests/unit/activity/tst_inspect.cpp` (step 2d) | L0 |
+| A-S12 | AM65's groups (kinds in order with their counts, an app unit's header with its name and icon, a window owner outside a unit, the Kernel row with the System Processes, collapsed headers kept, the search); a unit's number for its processes; AM70's Status column in its order | `tests/unit/activity/window/tst_processtable.cpp`, `tst_sampler.cpp` (step 4) | L0 |
+| A-S13 | AM68: available for an own app unit only, the reasons, nothing without the user manager (AM76); the unit read again when chosen; idle on, 1 on an older systemd, unset off; a failure said; the sampler's `cpu.idle` and `cpu.weight` reads, once per unit, a change made elsewhere followed | `tests/unit/activity/window/tst_efficiency.cpp`, `tst_sampler.cpp`, `tests/unit/tst_activitymain.qml` (step 4) | L0 |
+| A-S14 | AM67: the journal's records of the launches only, summed per app with the live units, the period, the caption, the sort, "not available" when journalctl fails | `tests/unit/activity/window/tst_apphistory.cpp`, `tests/unit/tst_activitymain.qml` (step 4) | L0 |
+| A-S15 | AM66, AM71, AM72: the machine's facts on fixture trees (processors, caches once, speeds, uptime, a disk, an interface's kind, a Wi-Fi signal); the sidebar and details built only while shown, Memory's bar whole, a selection that went away, each processor's split and history, Clear CPU History, a GPU without clients idling; the windows on a fake backend | `tests/unit/activity/tst_machine.cpp`, `window/tst_performance.cpp`, `tests/unit/tst_activitymain.qml` (steps 4 and 5) | L0 |
 | A-W3 | the Info button's window on the real /proc: its reads, a second request raising it, its Quit sending SIGTERM, the window closing with its process; another owner's process (pid 1) with "—" and Quit off; the windows closed with the main window. The backend: one inspection per process, the tabs' texts, the reads on the worker's thread and only on screen. The window on a fake backend: the Info button, Ctrl+I, the menus, a double-click, the tabs, the parent link, the disabled Quit's tooltip, the keys of the key window | `tests/apps/activity_actions.sh` (`ActivityInspect.*`), `tests/unit/activity/window/tst_inspection.cpp`, `tests/unit/tst_activitymain.qml` (step 2d) | L1 |
 | A-N1 | nested: a SIGSTOP'd foot shows "(Not Responding)" (the ANR stand-in path of ADR-0035), Quit through the shell closes a foot window, the Dock tile graph draws and goes at quit | `tests/apps/activity_nested.sh` + `just shot activity` | L1 |
 | A-N2 | dev guard: an action on a process outside the nested session is refused | `activity_nested.sh` | L1 |
