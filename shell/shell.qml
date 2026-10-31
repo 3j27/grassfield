@@ -479,6 +479,7 @@ ShellRoot {
     // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing TilingHover makes it listen
     // to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22); referencing TilingSuggest makes it
     // listen to the suggestions that follow a layout or an arrangement (TL28); referencing SoftwareUpdate starts its automatic
-    // checks and registers its IPC target "update" (ADR-0033 d.7).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count)
+    // checks and registers its IPC target "update" (ADR-0033 d.7); referencing ActivityLink registers its IPC target "activity"
+    // and writes Activity Monitor's projection while the app's window is open (ADR-0038 AM60, AM61).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder")
 }

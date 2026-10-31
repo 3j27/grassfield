@@ -2150,6 +2150,20 @@ Scope {
                                     }
                                 }
 
+                                // Activity Monitor's live graph over its tile (ADR-0038 AM62), moving with the icon's hops.
+                                TileGraphView {
+                                    graph: tile.isApp && tile.running && String(tile.modelData.key).toLowerCase() === "org.grassfield.activity" ? ActivityLink.tileGraph : null
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
+                                    transform: Translate {
+                                        x: win.outDir.x * appIcon.lift
+                                        y: win.outDir.y * appIcon.lift
+                                    }
+                                }
+
                                 // Keyboard focus ring.
                                 Rectangle {
                                     visible: tile.activeFocus && root.keyboardMode && !tile.isSeparator
