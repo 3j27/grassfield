@@ -1138,15 +1138,18 @@ The conditions, checked in this order:
 ### s5.3 The channel, and what keeps anything else from using it
 - **The migrations' `sudo`** (`/usr/lib/grassfield/update-sudo/sudo`, alone in its folder, first in the unit's PATH) runs
   as the person and is not the boundary. It takes Omarchy 4.0.6's forms of sudo's command line:
-  - `-n`, `-H`, `-u USER`/`#uid`, `--`;
+  - `-n`, `-H`, `--`, and `-u` with root as the target (`root`, `0`, `#0`);
   - `-v`, `-k`, `-K` without a command: success;
   - `-l`: exit 1.
-  It refuses every other form (`-E`, `-i`, `-s`, a variable before the command, ...): the migration fails and stays pending.
+  It refuses every other form (`-E`, `-i`, `-s`, a variable before the command, ...) and any other target. A process of the
+  person's own identity started by a root unit would be outside the unit's group but inside its `/tmp`, open to the
+  person's other processes (the re-review's MINOR 1, reproduced). Omarchy 4.0.6's migrations never use `-u`. A refused
+  form fails the migration, which stays pending.
   It looks a name up in fixed root-owned folders (`/usr/share/omarchy/bin`, `/usr/local/sbin`, `/usr/local/bin`,
   `/usr/bin`), never in the caller's PATH, so a migration cannot point a root command at a file of the person's. Then it
   runs `systemd-run --wait --pipe --no-ask-password --expand-environment=no` with:
   - a unit named `grassfield-update-root-<32 hex>.service`;
-  - the target user;
+  - root as the user;
   - the caller's working folder, standard input, output and error;
   - the unit's `/tmp`;
   - `SUDO_USER`, `SUDO_UID`, `SUDO_GID`.
@@ -1173,6 +1176,11 @@ The conditions, checked in this order:
     no member and no password. A file of the person's cannot carry the group's setgid bit, since the kernel clears it for
     an owner who is not a member.
 - **What remains.**
+  - **Signals.** They follow the uid: the person's other processes can stop or kill the unit's, or raise their
+    `oom_score_adj`. That gives a delay or a failed migration, as in the terminal, never root. They can list the numbers of
+    its descriptors but not open them.
+  - **A root command that drops to the person itself** (`runuser`, `setpriv`) would make a process outside the unit's group,
+    inside its `/tmp`. No 4.0.6 migration does; the shim's `-u` is refused for that reason.
   - **The person's own files that a migration reads.** A command a migration runs may read the person's configuration, in
     their home folder or their runtime folder. Their session's servers (bus, Hyprland) answer it.
   - **Omarchy's own terminal update has the same exposure, and more.** It authenticates `sudo` once (`sudo -v`, in
@@ -1209,11 +1217,15 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
 - **The channel needs** systemd ≥ 254 (`--expand-environment`), polkit with `system_unit` (128 measured), a bus that hands
   polkit a pidfd (dbus-broker 37 measured) and `JoinsNamespaceOf`. Anything else fails the trial, and the run goes to the
   terminal with nothing changed.
+- **Root commands run in the unit's mount namespace** (its `/tmp`): a root `mount` made by a migration would not be seen
+  outside. No 4.0.6 migration mounts anything.
+- **The migrations' output is cut at 8 MiB only once they end** (it can grow on `/run` meanwhile). A cut that drops the end of
+  a boot image's build says "Don't restart this computer yet", the safe side.
 - **The scan does not follow `source`.** A migration that sources another migration file is judged by its own text alone
   (pre-existing from step 3; the review's NIT 11). It runs in the unit only if it is this update's.
 
 ### s5.6 Evidence (this branch)
-- **`tests/integration/update_migrate.sh` (new, A16): 50 PASS, 0 FAIL.** It runs in a privileged `archlinux:base` container
+- **`tests/integration/update_migrate.sh` (new, A16): 53 PASS, 0 FAIL.** It runs in a privileged `archlinux:base` container
   with systemd 262 as PID 1 (cgroup2 mounted), dbus-broker 37, polkit 128, sudo 1.9.17, and the REAL helper, runner,
   policy, `sudo`, rule and group (no change to any of them).
   - **The channel:**
@@ -1223,6 +1235,9 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
       operation refused;
     - the real sudo blocked; nothing left.
   - **The review's MAJOR:** a process of the person's cannot open the unit's pipe, environment, folder or temporary files.
+    The same holds for the helper's own unit during a real run, for each of its processes: the migration loop, the
+    migration, the `sudo` and its `systemd-run` client. The migration's temporary file never reached the shared `/tmp`.
+  - **`sudo -u` with another target is refused** (the re-review's MINOR 1); `-u root` and `-u #0` work.
   - **Refusals:** outside the unit, in another unit, and without NoNewPrivileges.
   - **The helper from a runner through pkexec:**
     - a user who is not an administrator goes to the terminal (the review's BLOCKER);
@@ -1248,6 +1263,25 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
   - the polkit dialog (the container lets the runner through).
 
 ## Review history
+Software Update step 5 (SU-M2), the same reviewer's re-review of 3b41c95: **PASS**, no BLOCKER or MAJOR. It confirmed the
+premise (Linux's `__ptrace_may_access` compares uids and gids), measured the unit's identity (gid `grassfield-update`,
+NoNewPrivileges), and found both first-round attacks and the marker-deletion path closed. It also checked: `newgrp` refused,
+setgid bits cleared, `cgroup.procs` and `AttachProcessesToUnit` refused, the `systemd-run` clients protected. Two minors and
+six nits, answered in the next commit:
+- **Minor 1**, reproduced to root through the real flow with a synthetic migration: `sudo -u <person>` made a process outside
+  the unit's group inside its `/tmp`. The shim refuses any target but root; s5.3 says what a root command that drops to the
+  person would do.
+- **Minor 2:** the test now probes the helper's own unit during a real run, and checks the temporary file stayed out of the
+  shared `/tmp`.
+- **Nits:**
+  - `wait_root_units` stops waiting, with a message, when systemd cannot list them;
+  - the group must also have a locked password (`!`, `*`);
+  - the copied loop is noted in `docs/upstream/omarchy.lock` beside `omarchy-migrate`'s pin;
+  - s5.5 names the root units' mount namespace and when the output is cut;
+  - s5.3 names signals.
+  - The loop's differences from `omarchy-migrate` (no wait for a concurrent pacman, a fixed environment) are accepted: a
+    concurrent pacman makes the migration fail and stay pending.
+
 Software Update step 5 (SU-M2), an independent opus security review of b369f16 while the integrator was away: **FAIL**, 1
 BLOCKER and 1 MAJOR, both reproduced in a container that runs systemd. The rule itself could not be spoofed, and the
 helper's new inputs held. Answered in the next commit:

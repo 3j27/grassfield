@@ -350,9 +350,11 @@ migrate_unit() { # program [argument...]
 # The root units the migrations' sudo started (one per command): the run waits for them (30 minutes at most), so a long
 # command (pacman) ends under this run's lock and sleep inhibitor, never after it.
 wait_root_units() {
-  local i
+  local i units
   for ((i = 0; i < 1800; i++)); do
-    [[ -z $(systemctl list-units --plain --no-legend --state=activating,active,deactivating 'grassfield-update-root-*' 9<&- 2>/dev/null) ]] && return 0
+    units=$(systemctl list-units --plain --no-legend --state=activating,active,deactivating 'grassfield-update-root-*' 9<&- 2>/dev/null) ||
+      { say "cannot list the migrations' root commands: not waiting for them"; return 0; }
+    [[ -z $units ]] && return 0
     sleep 1
   done
   say "a migration's root command still runs after 30 minutes"
@@ -539,6 +541,8 @@ if ((${#pending[@]})); then
       IFS=: read -r caller_name _ _ caller_gid _ < <(getent passwd "$caller_uid" 2>/dev/null 9<&-)
     fi
     IFS=: read -r _ _ migrate_gid migrate_members < <(getent group "$GU_MIGRATE_GROUP" 2>/dev/null 9<&-)
+    # Nor a password newgrp would take (sysusers locks it: "!*").
+    IFS=: read -r _ migrate_password _ < <(getent gshadow "$GU_MIGRATE_GROUP" 2>/dev/null 9<&-)
     if ! in_unit; then
       why="no systemd unit for this run"
     elif [[ ! $caller_name =~ ^[a-z_][a-z0-9_-]{0,31}\$?$ || ! $caller_gid =~ ^[0-9]{1,10}$ ]]; then
@@ -547,8 +551,9 @@ if ((${#pending[@]})); then
       why="$caller_name is not an administrator ($GU_ADMIN_GROUP)"
     elif ((before > 0)); then
       why="migrations from before this update are pending"
-    elif [[ ! ${migrate_gid-} =~ ^[0-9]{1,10}$ || -n ${migrate_members-} || $migrate_gid == "$caller_gid" ]]; then
-      why="the group $GU_MIGRATE_GROUP is missing, has members, or is the person's own"
+    elif [[ ! ${migrate_gid-} =~ ^[0-9]{1,10}$ || -n ${migrate_members-} || $migrate_gid == "$caller_gid" ||
+      ! ${migrate_password-} =~ ^(!.*|\*)$ ]]; then
+      why="the group $GU_MIGRATE_GROUP is missing, has members or a password, or is the person's own"
     elif [[ ! -f $GU_RULE || -L $GU_RULE || ! -x $GU_SUDO_DIR/sudo || -L $GU_SUDO_DIR/sudo ]]; then
       why="Grassfield's sudo for migrations is not installed"
     elif ! migrate_unit "$GU_SUDO_DIR/sudo" -n /usr/bin/true; then

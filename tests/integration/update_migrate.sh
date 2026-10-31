@@ -135,8 +135,9 @@ r root "$(sudo id -u)"
 echo through-stdin | sudo tee /root/tee-test >/dev/null; r tee "$?"
 cd /tmp && r pwd "$(sudo pwd)"
 sudo sh -c 'exit 7'; r status "$?"
-r as-carol "$(sudo -u carol id -un)"
-r as-carol-hash "$(sudo -u "#$(id -u)" id -un)"
+r as-root "$(sudo -u root id -u):$(sudo -u '#0' id -u)"
+sudo -u carol id -un >/dev/null 2>&1; r as-carol "$?"
+sudo -u "#$(id -u)" id -un >/dev/null 2>&1; r as-carol-hash "$?"
 sudo -v; r validate "$?"
 sudo -n true; r nontty "$?"
 sudo -nH true; r cluster "$?"
@@ -169,7 +170,9 @@ expect "sudo id -u -> 0" test "$(get root)" == 0
 expect "standard input reaches the command (tee as root)" test "$(get tee):$(cat /root/tee-test 2>/dev/null):$(stat -c %U /root/tee-test 2>/dev/null)" == "0:through-stdin:root"
 expect "the working folder is the caller's" test "$(get pwd)" == /tmp
 expect "the command's exit status is sudo's" test "$(get status)" == 7
-expect "sudo -u carol, sudo -u #uid" test "$(get as-carol):$(get as-carol-hash)" == "carol:carol"
+expect "sudo -u root, sudo -u #0 -> root" test "$(get as-root)" == "0:0"
+expect "sudo -u carol, sudo -u #uid -> refused (another target would leave the unit's group; the re-review's MINOR 1)" \
+  test "$(get as-carol):$(get as-carol-hash)" == "1:1"
 expect "sudo -v, sudo -n, sudo -nH -> 0" test "$(get validate):$(get nontty):$(get cluster)" == "0:0:0"
 expect "sudo -l lists nothing -> 1" test "$(get list)" == 1
 expect "sudo -E, sudo -i, a variable before the command -> refused (1)" test "$(get preserve-env):$(get login-shell):$(get assignment)" == "1:1:1"
@@ -250,7 +253,7 @@ omarchy_commands+=("usr/bin/omarchy-migrate:/omarchy/bin/omarchy-migrate" "usr/s
 base_files=("usr/share/omarchy/version=4.0.4" "${omarchy_commands[@]}" "usr/share/omarchy/migrations/100.sh=echo 100 >>\"\$HOME/migrations.log\"")
 # 700 needs root (sudo, and a command that calls it): it writes on both sides, hands a temporary file to a root command (as
 # 4.0.6's 1791403252 does with mktemp and sudo install), and records its session and group.
-m700='echo 700 >>"$HOME/migrations.log"; echo carol-side >"$HOME/su-m2-user"; echo root-side | sudo tee /root/su-m2-root >/dev/null; sudo install -m 644 /dev/null /etc/su-m2-marker; omarchy-gu-indirect; t=$(mktemp); echo from-tmp >"$t"; sudo install -m 644 "$t" /root/su-m2-tmp; echo "${WAYLAND_DISPLAY-} ${HYPRLAND_INSTANCE_SIGNATURE-}" >"$HOME/su-m2-session"'
+m700='echo 700 >>"$HOME/migrations.log"; echo carol-side >"$HOME/su-m2-user"; echo root-side | sudo tee /root/su-m2-root >/dev/null; sudo install -m 644 /dev/null /etc/su-m2-marker; omarchy-gu-indirect; t=$(mktemp); echo from-tmp >"$t"; sudo install -m 644 "$t" /root/su-m2-tmp; echo "$t" >"$HOME/su-m2-tmppath"; echo "${WAYLAND_DISPLAY-} ${HYPRLAND_INSTANCE_SIGNATURE-}" >"$HOME/su-m2-session"; exec 3< <(sleep 12); touch "$HOME/su-m2-holding"; sleep 8'
 m700f="usr/share/omarchy/migrations/700.sh=$m700"
 mkpkg omarchy 1 "${base_files[@]}"
 mkpkg omarchy 2 "${base_files[@]}" "$m700f"
@@ -317,7 +320,31 @@ expect "the unit's group with a member -> done terminal, omarchy stays 1 ($(stat
   test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
 expect "  its log says why" logsays "$op" "grassfield-update is missing, has members"
 gpasswd -d dave grassfield-update >/dev/null
-runner carol; op=$(last)
+# The run in the background: while 700 holds a pipe, a process of carol's outside the unit tries the unit's processes.
+cat >"$W/attacker.sh" <<'EOF'
+#!/bin/bash
+# Every process of the migrations' unit: its descriptors' targets, environment, folder and /tmp; the host's /tmp.
+for p in "$@"; do
+  for f in /proc/$p/fd/*; do { exec 9<"$f" && echo "opened $f"; exec 9<&-; } 2>/dev/null; done
+  cat "/proc/$p/environ" >/dev/null 2>&1 && echo "environ $p"
+  readlink "/proc/$p/cwd" >/dev/null 2>&1 && echo "cwd $p"
+  ls "/proc/$p/root/tmp" >/dev/null 2>&1 && echo "root/tmp $p"
+done
+echo checked
+EOF
+chmod 755 "$W/attacker.sh"
+runner carol &
+runner_pid=$!
+for _ in $(seq 1 600); do [[ -e /home/carol/su-m2-holding ]] && break; sleep 0.2; done
+cg=$(systemctl show -p ControlGroup --value grassfield-update-migrate.service 2>/dev/null)
+pids=$(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null | tr '\n' ' ')
+attack=$(runuser -u carol -- "$W/attacker.sh" $pids 2>/dev/null)
+wait "$runner_pid"
+op=$(last)
+expect "the helper's own unit: carol's other processes get none of its processes' descriptors, environment, folder or /tmp ($(wc -w <<<"$pids") processes)" \
+  test "$(wc -w <<<"$pids"):$attack" != "0:checked" -a "$attack" == checked
+expect "  the migration's temporary file was in the unit's own /tmp, not the shared one" \
+  bash -c 't=$(cat /home/carol/su-m2-tmppath 2>/dev/null); [[ $t == /tmp/* && ! -e $t ]]'
 expect "carol, an administrator: done done, omarchy 2 installed, migrations ran ($(state carol))" \
   test "$(state carol):$(ver omarchy):$(grep -cx 'migrations ran' "$D/$op.exit")" == "done done -:2-1:1"
 expect "  700's sudo commands ran as root (tee, install, a file of its own /tmp)" \

@@ -11,14 +11,17 @@
 # What it takes of sudo's command line (Omarchy 4.0.6's uses; anything else is refused, the migration then fails and stays
 # pending, and Omarchy's terminal update runs it):
 #   -n, --non-interactive, -H, --set-home   accepted (nothing is asked; HOME is the target's)
-#   -u USER, -uUSER, --user=USER, --user USER   the target user (a name, or #uid)
+#   -u root, -u 0, -u #0 (any form)          accepted: root is the target anyway. Another target is refused: a process of
+#                                            the person's own identity outside the migrations' unit, joined to its /tmp,
+#                                            would let the person's other processes reach that /tmp (the step 5
+#                                            re-review's MINOR 1); Omarchy 4.0.6's migrations never use -u
 #   -v, -k, -K and their long forms          without a command: success (no credential to validate or forget)
 #   -l, --list                                 exit 1: nothing is listed (a caller then takes its other path)
 #   --                                         the end of the options
 # The command: a name is looked up as sudo's secure_path does, in fixed root-owned folders (/usr/share/omarchy/bin,
 # /usr/local/sbin, /usr/local/bin, /usr/bin), never in the caller's PATH; a path with a slash is taken as given (made
-# absolute). Its arguments reach it unchanged (no $VAR expansion by systemd). It runs as a transient system service: the
-# target user's identity and home, systemd's own environment for it plus SUDO_USER, SUDO_UID and SUDO_GID, the caller's
+# absolute). Its arguments reach it unchanged (no $VAR expansion by systemd). It runs as a transient system service: root's
+# identity and home, systemd's own environment for it plus SUDO_USER, SUDO_UID and SUDO_GID, the caller's
 # working folder, standard input, output and error passed through, and the unit's own /tmp (PrivateTmp, joined: the files a
 # migration makes there reach its root commands and no other process); its exit status is this program's.
 set -uo pipefail
@@ -67,8 +70,8 @@ if (($# == 0)); then
   refuse "no command"
 fi
 
-[[ $target =~ ^#([0-9]{1,10})$ ]] && target=${BASH_REMATCH[1]}
-[[ $target =~ ^[0-9]{1,10}$ || $target =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || refuse "the user $target is not supported"
+[[ $target == root || $target == 0 || $target == '#0' ]] || refuse "a target user other than root ($target) is not supported"
+target=root
 
 command=$1
 shift

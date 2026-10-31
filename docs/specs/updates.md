@@ -262,7 +262,8 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   - Conditions: systemd; a person (uid 1000 or more) who is an administrator (`wheel`); no migration from before the update
     pending; the unit's group without a member; and a trial `sudo true` through the channel before any change. Otherwise
     U28's terminal, with nothing changed.
-  - The migrations' `sudo` accepts `-n`, `-H`, `-u`, `-v`, `-k`, `-K`, `-l`, `--` and refuses every other option. A migration
+  - The migrations' `sudo` accepts `-n`, `-H`, `-u root`, `-v`, `-k`, `-K`, `-l`, `--` and refuses every other option or
+    target. A migration
     it refuses, or whose command fails, stays pending ("Some of Omarchy's last steps need its terminal.", Finish in
     Terminal…).
 

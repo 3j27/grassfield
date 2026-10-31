@@ -366,4 +366,4 @@ widens step 3's exception; it needs the security reviewer's (opus) PASS before i
 
 Details, the boundary, what remains (the person's own files, as in Omarchy's terminal) and the evidence are in ADR-0033
 "Step 5". Its independent opus review failed the first version (a non-administrator, and `/proc/<pid>/fd`); the conditions
-above answer it.
+above answer it, and the re-review passed (its minors answered: the migrations' `sudo` takes root as its only target).
