@@ -1,8 +1,9 @@
 # ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
 Status: Accepted (the owner answered the twelve questions and B-5 on 2026-10-29: "Owner decisions (2026-10-29)", with the
 integrator's conditions for the four non-recommended choices, W1 C, W2 C, W3 A and L1 C). Step 0 merged (pull request
-#46, e16fa8c), steps 1a, 1b and 1c merged (pull requests #52 a5488a6, #55 12bcda9, #69 837dd2b); the owner's brand green
-and warm neutrals of 2026-10-30 under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to
+#46, e16fa8c), steps 1a, 1b, 1c and 1d merged (pull requests #52 a5488a6, #55 12bcda9, #69 837dd2b, #76 244f16a); the
+owner's brand green and warm neutrals of 2026-10-30 merged (#71 56befa2, #73 5229fd3), their GTK follow-up in #79; step 7
+(the exit) under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to
 macOS 27, no technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
 owner can revisit. Revised after the integrator's opus review of
 b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
@@ -305,6 +306,28 @@ and IQ-B3 here changes the palette only, not which controls read it.
 | Time of day | (none) | a 20 s crossfade at each phase boundary, deferred during a drag or a full-screen window (IQ-W1 C) | step 2 |
 | Wallpaper change | crossfade (ADR-0016) | unchanged | — |
 
+Step 7 as built (ID-21, ID-10). Log Out, Restart and Shut Down, from the System menu and from Search, confirm with the
+countdown as their message ("If you do nothing, the computer will restart automatically in 60 seconds.", one second at a
+time from `session.exitCountdownSeconds`; one and many as separate strings); left alone, the dialog confirms itself
+(`PopupKinds.countsDown`, `countdownMessage`; Force Quit and Empty Trash never act without a click). Closing the dialog stops
+the count: Cancel, Esc, another popup in its place, and the lock (`Lock.qml` closes every popup as it locks, so a countdown
+never ends the session from behind the lock screen; whether macOS's count goes on under its lock is NOT VERIFIED, and the
+stop is the safe side; nothing in `shell/security` changes). Settings > Software Update's own Log Out… and Restart… sheets
+keep their message until that panel's lane has merged. Once `grassfield-session-end` has seen every window go (or the user
+chose "… Anyway", or `--force`), it asks the shell for the exit cover (`qs ipc -p /usr/share/grassfield/shell call session
+cover`, Quickshell's option variables cleared) and waits for the fade it answers (`session.exitFadeMs`; Reduce Motion
+`motion.reducedMax`), the ask included at most `session.exitWaitMs`; a shell that does not answer costs nothing but the fade.
+The cover (`shell/overlay/ExitCover.qml`) is one opaque `grassfield-exit-cover` surface per output on the overlay layer, in
+the ground's colour, faded by the shell alone (`gf-exit-cover-no-anim` in `windows.lua`, ID-4); the black after it is the
+greeter's or the firmware's (`mockups/t1-transitions.svg`). When the session then cannot be ended (`uwsm stop` and the
+compositor's exit both fail, or `systemctl` refuses), the helper lifts the cover and exits 4; a cover nobody lifts (the
+helper was killed) lifts itself after `session.exitCoverHoldMs`; `session cover` and `lift` are actions of the shell's IPC
+surface (`docs/specs/security.md`: another process of the user can hide the desktop for that long at most), `session
+state` a dev hook. Until step 3 the ground is `session.ground`, the session's
+Hyprland background colour (`tests/unit/tst_sessionexit.qml` holds them equal). Tests: `tst_popupkinds.qml`,
+`tst_sessionexit.qml`, `tests/shell/session_end.sh` (the helper against a stand-in `qs`: the real one would reach the
+session's shell), `tests/fuzz/fuzz_helpers.py` session-end (the wait stays within `EXIT_WAIT` whatever the shell answers).
+
 ### 6. Tokens and contract (proposed; every value an estimate until F1 and P3)
 | Token or key | Value | Note |
 |---|---|---|
@@ -313,6 +336,9 @@ and IQ-B3 here changes the palette only, not which controls read it.
 | `session.revealTimeoutMs` | 1500 | the latch's bound (P-6) |
 | `session.revealMs` | 250 | ID-20 (ASSUMPTION for macOS); an ADR-0039 `motion.*` role where one fits |
 | `session.exitFadeMs`, `session.exitWaitMs` | 400, 1000 | ID-10 |
+| `session.exitCountdownSeconds` | 60 | ID-21 (step 7) |
+| `session.exitCoverHoldMs` | 20000 | ID-10, P-6: a cover nobody lifted lifts itself (step 7) |
+| `session.ground` | `#1E1C18`, the session's Hyprland background colour | ID-2, until step 3 makes the ground the shown wallpaper's (step 7) |
 | `wallpaper.firstShowTimeoutMs` | 1500 | ID-3 |
 | `lock.fadeInMs`, `lock.fadeOutMs` | 200, 200 | IQ-T2 A |
 | `lock.scrimClearOpacity`, `lock.scrimFeather` | 0.25, 48 | IQ-W4 A; A2 per band |

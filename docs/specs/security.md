@@ -230,6 +230,8 @@ does not check its gate.
 | brightness | up, down | action | brightness keys |
 | keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
 | capabilities | status | dev | visual tests wait on it |
+| session | cover, lift | action | `packaging/bin/grassfield-session-end` once every window has gone (ADR-0040 ID-10): `cover` brings up the exit cover, one opaque fade to the ground over every output (it answers the fade's length and lifts itself after `session.exitCoverHoldMs`), `lift` takes it down when the session could not be ended. Neither ends the session; another process of the user can hide the desktop for that long at most |
+| session | state | dev | the exit cover's nested check (`shown` or `hidden`) |
 | security | state, heartbeat | action | the security process's own target (`shell/security.qml`, ADR-0041 step 1 S1, a second `qs` instance at `/usr/share/grassfield/shell/security.qml`): what it hosts (`starting` at S1) and a sequence number; read by `packaging/bin/grassfield-security-status` and the S1 measurements; never private state, nothing locks or unlocks |
 | stages | activate, newStage | action | SUPER+ALT+1..4 (the n-th recent stage forward), SUPER+ALT+S (focused window to a stage of its own); they do nothing while Stages is off |
 | stages | status, enable | dev | `tests/visual/scenarios/stages.sh`; `enable` changes the persisted setting |
