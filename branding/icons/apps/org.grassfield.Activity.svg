@@ -1,18 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Grassfield Activity Monitor: an original teal tile with three white bar gauges, the tallest topped by a sprout.
-       CC-BY-SA-4.0, see branding/LICENSES.md. -->
+  <!-- Grassfield Activity Monitor: a gauge on a light tile, its arc filled two thirds in the brand green (ADR-0040 IQ-B5 C, the
+       grammar of the own app icons; no screen and no line graph, away from macOS's own icon). CC-BY-SA-4.0, see
+       branding/LICENSES.md. -->
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4FA6C4"/>
-      <stop offset="1" stop-color="#1D5C78"/>
+      <stop offset="0" stop-color="#F6F8F6"/>
+      <stop offset="1" stop-color="#DCE4DE"/>
     </linearGradient>
   </defs>
-  <rect x="12" y="12" width="104" height="104" rx="26" fill="url(#tile)"/>
-  <path d="M30 94h68" fill="none" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="4" stroke-linecap="round"/>
-  <rect x="35" y="64" width="14" height="24" rx="5" fill="#FFFFFF"/>
-  <rect x="57" y="48" width="14" height="40" rx="5" fill="#FFFFFF"/>
-  <rect x="79" y="72" width="14" height="16" rx="5" fill="#FFFFFF"/>
-  <path d="M64 44V36" fill="none" stroke="#2E8B4E" stroke-width="4" stroke-linecap="round"/>
-  <path d="M64 38c-1-7-6-10-12-9 1 6 5 9 12 9z" fill="#5BC27A"/>
-  <path d="M64 36c1-8 6-12 13-11-1 7-6 11-13 11z" fill="#2E8B4E"/>
+  <rect x="12" y="12" width="104" height="104" rx="23.4" fill="url(#tile)"/>
+  <rect x="12.5" y="12.5" width="103" height="103" rx="22.9" fill="none" stroke="#FFFFFF" stroke-opacity=".35"/>
+  <path d="M30 80A34 34 0 0 1 98 80" fill="none" stroke="#C9D2CC" stroke-width="11" stroke-linecap="round"/>
+  <path d="M30 80A34 34 0 0 1 84.0 52.5" fill="none" stroke="#4FB36B" stroke-width="11" stroke-linecap="round"/>
+  <path d="M64 80L78.7 59.8" stroke="#2B2E35" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="64" cy="80" r="7" fill="#2B2E35"/>
+  <circle cx="64" cy="80" r="2.5" fill="#FFFFFF"/>
+  <rect x="40" y="94" width="48" height="6" rx="3" fill="#26763F" fill-opacity=".35"/>
 </svg>

@@ -72,7 +72,7 @@ first.
 - The mark at boot: Plymouth reads PNG images only, so the mark is rendered at build from its file (112 px, its black fill
   drawn white, the drawing unchanged), where the session's places draw the file itself at run time (the use rule proposed
   with IQ-B1: "only the file's own path, at run time"). IQ-L1 C (« a Plymouth theme with the mark ») makes the boot screen a
-  place of the mark; the white build-time render is the owner's to confirm (legal entry E41), and
+  place of the mark; the owner confirmed the white build-time render on 2026-10-31 (« Oui, marque blanche », legal E41), and
   `tests/ci/login_themes.py` holds that nothing but the fill changes.
 - Activation is the owner's: `plymouth-set-default-theme grassfield` and Omarchy's own initramfs rebuild (the guide asks
   to read Omarchy's refresh script for the exact command on that install; VERIFY), and the revert to Omarchy's theme the

@@ -2146,9 +2146,9 @@ Scope {
                                     }
                                 }
 
-                                // Apps: the icon theme's org.grassfield.Apps (grassfield-icons maps it to the pack's app grid,
-                                // packaging/arch/icons-aliases.txt), in the user's icon mode; a rounded tile with our own grid glyph
-                                // when the theme has none (another icon theme, a dev session without the pack).
+                                // Apps: org.grassfield.Apps, Grassfield's own drawing (ADR-0040 IQ-B5 C; grassfield-desktop installs it
+                                // in hicolor, which every icon theme falls back to), in the user's icon mode; a rounded tile with our
+                                // own grid glyph when no theme has it (a dev session without the package).
                                 TintedIcon {
                                     id: appsThemed
                                     readonly property string themed: Quickshell.iconPath("org.grassfield.Apps", true)

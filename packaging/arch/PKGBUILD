@@ -399,6 +399,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/preview-build"
   # Activity Monitor (ADR-0038; no root part, no polkit action).
   DESTDIR="$pkgdir" cmake --install "$srcdir/activity-build"
+  # The Dock's Apps tile: Grassfield's own drawing (ADR-0040 IQ-B5 C), found through any icon theme's hicolor fallback.
+  install -Dm644 "$root/branding/icons/apps/org.grassfield.Apps.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.grassfield.Apps.svg"
 
   # grassfield-cursors: /usr/share/icons/grassfield-cursors/{index.theme,manifest.hl,hyprcursors,cursors}
   install -d "$pkgdir/usr/share/icons"

@@ -435,6 +435,14 @@ and IQ-B3 here changes the palette only, not which controls read it.
   a light tile and the Apps tile three fanned cards, drawn away from macOS's own Activity Monitor (a dark screen with a
   green graph) and Apps (a grid of coloured squares) icons; whether they are far enough is the owner's legal call
   (E39), asked again with the drawings before step 8 ships them. Mockup: `mockups/b4-app-icons.svg`.
+- **Step 8 as built** (2026-10-31, in the one pull request; nothing in `shell/security`): the owner's legal call on the
+  two drawings, shown at 104 and 16 px in light and dark: « Livrer les deux » (legal E39). `branding/icons/apps/`
+  `org.grassfield.Store.svg` (the bag set on the grammar: 104 tile, radius 23.4, the rim), `org.grassfield.Activity.svg`
+  (the gauge) and `org.grassfield.Apps.svg` (the fanned cards, new; `grassfield-desktop` installs it in hicolor, so every
+  icon theme finds it); the `org.grassfield.Apps` alias to the pack's app grid is gone from
+  `packaging/arch/icons-aliases.txt` (the Store and Activity Monitor never had one); Files, Settings and Preview keep the
+  pack. `branding/LICENSES.md` rows; `docs/specs/dock.md` item 19; ADR-0017's note. NOT VERIFIED: the icons in the Dock,
+  the Apps panel and the Store in a session, in the Dark, Clear and Tinted modes (nested).
 - **Boot and login (IQ-L1, owner: C, an SDDM theme and a Plymouth theme).** Grassfield's look from power-on: a
   login theme in the lock screen's layout for SDDM's own greeter, and a boot theme with the mark for the disk password.
   The integrator's conditions (2026-10-29):
@@ -457,7 +465,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
   first-boot Esc test and the reverts are in `docs/owner-setup/login-boot-themes.md`. `grassfield-login-check` knows the
   theme. Tests: `tests/ci/login_themes.py` (logic layer, 36 mutants), `tests/shell/login_session.sh` (+1),
   `tests/ci/qml_literals.py` (scans the theme). Legal: E41 (the login layout; the mark's boot place and its white build-time
-  render, the owner's to confirm). NOT VERIFIED (owner, real machine): the theme in `sddm-greeter-qt6`, SDDM's fallback, the
+  render, confirmed by the owner on 2026-10-31: « Oui, marque blanche »). NOT VERIFIED (owner, real machine): the theme in `sddm-greeter-qt6`, SDDM's fallback, the
   boot screen with the disk password, Esc to the text prompt, the reverts.
 
 ### 4. Lock screen (security module: display only, opus security review, R12)
