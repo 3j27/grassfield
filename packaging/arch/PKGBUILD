@@ -200,7 +200,7 @@ package_grassfield-desktop() {
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
   conflicts=('quickshell=0.3.2')
-  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0, except the Grassfield logo (branding/icons/symbolic/grassfield-logo.svg:
+  # Own code MIT; own art (symbolic icons, cursor templates) CC-BY-SA-4.0, except the Grassfield logo (branding/icons/symbolic/grassfield-logo*.svg:
   # all rights reserved, the owner's mark, owner decision 2026-10-27: LicenseRef-Grassfield-logo-all-rights-reserved); Unicode-derived grapheme tables Unicode-3.0; the
   # clipboard helper's code generated from hyprland-lock-notify-v1.xml BSD-3-Clause (packaging/licenses/clipboard-protocols-notices.txt).
   license=(MIT CC-BY-SA-4.0 Unicode-3.0 BSD-3-Clause LicenseRef-Grassfield-logo-all-rights-reserved)

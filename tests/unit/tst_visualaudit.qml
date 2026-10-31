@@ -152,6 +152,33 @@ TestCase {
         }
     }
 
+    Component {
+        id: markImage
+
+        Image {
+            sourceSize: Qt.size(96, 96)
+        }
+    }
+
+    // The Grassfield mark's two files (branding/LICENSES.md, ADR-0040 "Brand"): grassfield-logo is the 16-24 px optical
+    // version every place in the UI draws; grassfield-logo-full is the full mark for 32 px and more (the brand kit, the
+    // website, future large About surfaces). Nothing in the shell draws the full mark today (IQ-B1 B: dialogs show their
+    // subject's symbol), so this is the test that keeps it loadable: both decode with Qt's SVG reader, on the 24 grid, and
+    // stay two different drawings.
+    function test_markFilesLoad() {
+        const dir = "../../ui/Grassfield/Ui/icons/";
+        for (const n of ["grassfield-logo", "grassfield-logo-full"]) {
+            const img = createTemporaryObject(markImage, null, {source: Qt.resolvedUrl(dir + n + ".svg")});
+            verify(img, n);
+            tryVerify(() => img.status === Image.Ready || img.status === Image.Error, 3000, n);
+            compare(img.status, Image.Ready, n);
+            compare(img.implicitWidth, 96, n);
+            compare(img.implicitHeight, 96, n);
+            verify(readFile(Qt.resolvedUrl(dir + n + ".svg")).indexOf('viewBox="0 0 24 24"') >= 0, n);
+        }
+        verify(readFile(Qt.resolvedUrl(dir + "grassfield-logo.svg")) !== readFile(Qt.resolvedUrl(dir + "grassfield-logo-full.svg")));
+    }
+
     function test_menuBarClockGap() {
         verify(Tokens.menubarClockGap.length >= 2);
         compare(Clock.join("Sat Oct 17", "09:41", Tokens.menubarClockGap), "Sat Oct 17" + Tokens.menubarClockGap + "09:41");

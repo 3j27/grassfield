@@ -37,6 +37,14 @@ and IQ-B3 here changes the palette only, not which controls read it.
 - **The Grassfield logo is the owner's mark, all rights reserved (decision of 2026-10-27).** Nothing here changes it:
   every mockup uses the path of `branding/icons/symbolic/grassfield-logo.svg` unchanged, and the proposals concern only
   where it appears and in which colour, which the owner decides (IQ-B1, IQ-B2). This ADR calls it "the Grassfield mark".
+  **2026-10-30: the owner replaced the drawing** with a new mark of their own, an AI-assisted concept
+  (`branding/concepts/grassfields-original-refined/`) redrawn as SVG in the proposed brand kit (`branding/brandkit-proposal/`,
+  1342d2d9); its final adoption and legal clearance are the owner's, pending (`docs/legal/visual-review.md` E33). It now
+  lives in two files on the 24 grid: `grassfield-logo-full.svg`, the full mark, unchanged, for 32 px and more (the brand
+  kit, the website, future large About surfaces; no shell or app surface draws it today, and `tests/unit/tst_visualaudit.qml`
+  keeps it loadable), and `grassfield-logo.svg`, its optical version for 16-24 px (the same blades over the same base, fewer
+  and wider gaps), which every place listed under IQ-B1 draws at run time (14-25 px). The step 0 mockups show the old
+  drawing (a grass tuft); they are dated design documents and were not redrawn.
 - Every illustration is made here or under a compatible licence, documented in `docs/legal` (E39). No Apple asset and
   no Apple trademark name (master-prompt §14).
 - The lock screen (`shell/security/lock`) and idle handling are security modules: only `WlSessionLock`,
@@ -178,6 +186,11 @@ and IQ-B3 here changes the palette only, not which controls read it.
   of b44d17e). Places under B: the menu bar's system button (monochrome, the bar's text colour), About This Computer and
   Settings > General > About (the Grassfield green), the Search result for About; shell dialogs show their subject's
   symbol instead of the mark. Only the file's path is used, at run time. Mockup: `mockups/b1-logo-use.svg`.
+  The owner replaced the drawing on 2026-10-30 (see "Rules this ADR works under"); the full mark itself stays untouched,
+  and the places above draw `grassfield-logo.svg`, its optical version (menu bar 16 px, About This Computer's product line 14,
+  Settings rows 15, Search 25), and `grassfield-logo-full.svg` (the full mark, 32 px and more) has no surface under B; the
+  shell dialogs keep showing the mark until step 1d gives them their subject's symbol (a 48 px full mark there was
+  reverted for that reason, 1bdd69e3).
 - **The name (ID-12, IQ-B2).** "Grassfield" names the product in running UI ("Grassfield menu", "Grassfield
   Settings"); "Grassfield Desktop" where the product and its version are stated (About, the session's comment);
   "Grassfield OS" only from M6 (§14). App names keep the owner's decisions (L1, ADR-0038 AQ1). The greeter's "Grassfield
