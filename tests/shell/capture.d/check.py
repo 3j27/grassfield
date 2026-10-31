@@ -85,7 +85,7 @@ elif name == "slurp":
         if not boxes:
             print("selection cancelled", file=sys.stderr)
             sys.exit(1)
-        answer = min(boxes)[2]
+        answer = min(boxes, key=lambda b: (b[0], -b[1]))[2]  # of equal boxes, the last (main.c seat_update_selection)
     print(answer)
 elif name == "hyprctl":
     if sys.argv[2] == "cursorpos":
@@ -154,6 +154,15 @@ FULL = json.dumps([
 STACK = json.dumps([
     client(1, [100, 100], [200, 200], focus=0),
     client(1, [0, 0], [1000, 800], focus=-1)])
+# A fullscreen window on DP-1 (workspace 1) and a window of HDMI-A-1's workspace 2 that reaches over DP-1 (drawn under it).
+CROSS = json.dumps([
+    client(2, [1700, 200], [800, 600], focus=0),
+    client(1, [0, 0], [1920, 1080], fullscreen=2, focus=1)])
+# DP-1 shows the special workspace -98 over workspace 1: its window is drawn above workspace 1's, wherever they are listed.
+SPECIAL_MONITORS = json.dumps([dict(m, specialWorkspace={"id": -98}) if m["name"] == "DP-1" else m for m in json.loads(MONITORS)])
+SPECIAL = json.dumps([
+    client(-98, [100, 100], [400, 300], focus=0),
+    client(1, [50, 50], [600, 500], focus=1)])
 # A Picture-in-Picture window pinned over the browser that has the focus (the pinned one first in the list).
 PIP = json.dumps([
     client(1, [600, 400], [320, 180], focus=1, pinned=True),
@@ -284,6 +293,14 @@ got = clicked(FULL, (2600, 550))
 check(got == "2500,500 300x200", "a click on a pinned window over a fullscreen one: the pinned one [%r]" % got)
 got = clicked(FULL, (3100, 800))
 check(got == "3000,700 400x300", "a click on a window opened over a fullscreen one that has the focus: that window [%r]" % got)
+got = clicked(CROSS, (1800, 300))
+check(got == "0,0 1920x1080", "a click on a fullscreen window where another display's window reaches under it: the fullscreen "
+      "one [%r]" % got)
+capture("selection", FAKE_SLURP="click:200,200", FAKE_CLIENTS=SPECIAL, FAKE_MONITORS=SPECIAL_MONITORS,
+        FAKE_CURSOR='{"x": 200, "y": 200}')
+grim = calls("grim")
+got = grim[0]["argv"][1] if grim else None
+check(got == "100,100 400x300", "a click on a special workspace's window shown over the workspace: that window [%r]" % got)
 count = len(files(desktop))
 r, _ = capture("selection", FAKE_SLURP="")
 check(r.returncode == 0 and calls("grim") == [] and calls("notify-send") == [] and len(files(desktop)) == count,
