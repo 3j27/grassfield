@@ -274,6 +274,7 @@ The integrator's review named nine overlaps. Whichever pull request merges secon
 | `GrassfieldArtwork.qml`'s colours: step 2's allowlist ↔ ID-1 (artwork tokens) | ADR-0040 | step 2's guard drops them from its allowlist when ID-1 lands |
 | The Dock's and menu bar's auto-hide: step 25 ↔ ADR-0040 step 6 | ADR-0040 owns the reveal at login | this lane owns Reduce Motion and the easing of auto-hide |
 | `tests/visual/test_contrast_tokens.py` and `contrast-roles.json` | this lane owns the role table's repair (step 0b) | ADR-0040 adds the roles of its own surfaces (lock scrim bands) |
+| The neutrals: ADR-0040's warm neutrals (the owner, 2026-10-30) ↔ ADR-0024's greys, Q3, Q8 and step 21 | ADR-0040 owns the neutrals' warmth (hue 85, chroma 0.0075 in OKLCH, each lightness kept) | this lane owns which roles read them and the glass classes; the window tokens Q8 and step 21 name read warm (`#FDFCF9`, `#2B2925`) |
 
 The owner answered Q3, Q7 and Q8 directly on 2026-10-29, where the review would have had the integrator decide them under
 the macOS model; the answers are the options that model gives. Q4 was answered before IQ-B3 is asked; IQ-B3 changes the

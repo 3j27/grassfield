@@ -748,7 +748,8 @@ class ContrastTokens(unittest.TestCase):
     def test_glass_worst_case_matches_the_qml_test(self):
         # tests/unit/tst_glasstint.qml asserts the same two numbers for GlassTint.js.
         d = self.tok.path("material.defaultTransparency")
-        self.assertEqual(glass_alpha(self.tok, "light", self.tok.path("glass.menu"), d, None), 0.78)
+        # light 0.79 since the warm neutrals of 2026-10-30 (ADR-0040; 0.78 with the cool ones)
+        self.assertEqual(glass_alpha(self.tok, "light", self.tok.path("glass.menu"), d, None), 0.79)
         self.assertEqual(glass_alpha(self.tok, "dark", self.tok.path("glass.menu"), d, None), 0.82)
 
     def test_search_selection_is_inside_the_material_fill_overlay(self):

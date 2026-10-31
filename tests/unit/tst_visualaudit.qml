@@ -57,7 +57,9 @@ TestCase {
     function test_lightControlFills() {
         const dark = Appearance.dark;
         Appearance.dark = false;
-        compare(Appearance.chipFill.r, 1);
+        // White chips: the warm white #FDFCF9 since the owner's warm neutrals of 2026-10-30 (ADR-0040).
+        compare(Appearance.chipFill.r, Qt.color(Tokens.colorLight.chipFill).r);
+        fuzzyCompare(Appearance.chipFill.r, 1, 0.01);
         fuzzyCompare(Appearance.chipFill.a, Tokens.materialChipFillOpacityLight, 0.01);
         fuzzyCompare(Appearance.buttonFill.a, Tokens.materialFillOpacityLight, 0.01);
         verify(Appearance.buttonFill.r < 0.1);
@@ -201,7 +203,8 @@ TestCase {
     // Priority 4: opaque windows. White window, an app-only lighter secondary text that still holds 4.5:1 on it (A2 for
     // windows; the material's textSecondary stays for the shell surfaces).
     function test_windowSurfaceColours() {
-        compare(Tokens.colorLight.windowBackground, "#FFFFFF");
+        // The warm white (the owner's warm neutrals of 2026-10-30, ADR-0040; #FFFFFF before).
+        compare(Tokens.colorLight.windowBackground, "#FDFCF9");
         for (const palette of [Tokens.colorLight, Tokens.colorDark]) {
             verify(ratio(palette.windowTextSecondary, palette.windowBackground) >= 4.5, palette.windowTextSecondary);
             verify(ratio(palette.text, palette.windowBackground) >= 7);
@@ -214,7 +217,8 @@ TestCase {
     // the neutral grey of ADR-0024 lot 1.
     function test_darkWindowValues() {
         compare(Tokens.colorDark.windowTextSecondary, Tokens.colorDark.textSecondary);
-        compare(Tokens.colorDark.windowBackground, "#292929");
+        // #292929 warmed (the owner's warm neutrals of 2026-10-30, ADR-0040; the same lightness).
+        compare(Tokens.colorDark.windowBackground, "#2B2925");
     }
 
     // Search rows follow Accessibility > Text Size like every other text.
