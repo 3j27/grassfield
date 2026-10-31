@@ -188,6 +188,18 @@ bool confineRenderer()
 #ifdef SYS_open
     denyWritingOpen(SYS_open, 1);
 #endif
+    // A signal only to itself (abort() and raise() send one): never to grassfield-portal, its process group or another process.
+    const uint32_t self = uint32_t(::getpid());
+    const auto onlySelf = [&add, &loadNumber, self](long nr) {
+        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, 3));
+        add(BPF_STMT(BPF_LD | BPF_W | BPF_ABS, uint32_t(offsetof(struct seccomp_data, args))));
+        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, self, 1, 0));
+        add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM));
+        loadNumber();
+    };
+    onlySelf(SYS_kill);
+    onlySelf(SYS_tgkill);
+    onlySelf(SYS_rt_tgsigqueueinfo);
     // openat2's flags are behind a pointer: refused as unknown, so that a caller falls back to openat.
 #ifdef SYS_openat2
     deny(SYS_openat2, ENOSYS);
@@ -203,8 +215,11 @@ bool confineRenderer()
     const long refused[] = {
         // No socket: no bus, no network, no other process.
         SYS_socket, SYS_socketpair, SYS_connect, SYS_bind, SYS_listen, SYS_accept, SYS_accept4,
-        // No program, no other process's memory.
-        SYS_execve, SYS_execveat, SYS_ptrace, SYS_process_vm_readv, SYS_process_vm_writev,
+        // No program, no other process's memory, no signal by a thread's or a process descriptor's number.
+        SYS_execve, SYS_execveat, SYS_ptrace, SYS_process_vm_readv, SYS_process_vm_writev, SYS_tkill, SYS_rt_sigqueueinfo,
+#ifdef SYS_pidfd_send_signal
+        SYS_pidfd_send_signal,
+#endif
         // No change to any file or folder.
         SYS_unlinkat, SYS_renameat, SYS_mkdirat, SYS_linkat, SYS_symlinkat, SYS_fchmod, SYS_fchmodat, SYS_fchown, SYS_fchownat,
         SYS_truncate, SYS_mknodat, SYS_utimensat, SYS_setxattr, SYS_lsetxattr, SYS_fsetxattr, SYS_removexattr, SYS_lremovexattr,

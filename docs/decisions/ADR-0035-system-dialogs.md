@@ -928,8 +928,8 @@ here, numbered after 6a's).
   Options: (a) Qt PDF in grassfield-portal's QML (`PdfDocument`, as Preview draws a file the user opened); (b) a child process
   with limits on memory and CPU time and a deadline (as Files decodes an application's icon, `AppIcons::loadIsolated`); (c) (b)
   with a seccomp filter the child installs before it reads a byte of the document (no socket, so no bus and no network; no
-  program; no write, creation, truncation, removal, renaming, link or mode change of any file; no io_uring, ptrace, namespace
-  or mount), no bus address or display in its environment, no descriptor but its standard input (the private file, read-only),
+  program; no signal but to itself, so never to grassfield-portal or its process group; no write, creation, truncation,
+  removal, renaming, link or mode change of any file; no io_uring, ptrace, namespace or mount), no bus address or display in its environment, no descriptor but its standard input (the private file, read-only),
   output and error, and only a header and raw pixels read back (no image decoder runs on its answer). **Choice: (c).** Rule
   applied: an application's document is data; a flaw in the PDF reader must not reach the bus or the user's files from the
   process that answers the panels; (b) alone would leave the bus open to it. Memory is limited as data in use (`RLIMIT_DATA`,

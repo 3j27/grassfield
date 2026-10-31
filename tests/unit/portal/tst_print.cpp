@@ -1051,7 +1051,8 @@ TEST(WritePdf, OnlyAWholePdfIsWrittenAndNeverThroughALink)
 }
 
 // Step 6b: the child that draws a page installs a filter before it reads the document: it can still read files (the fonts), but
-// it cannot write, make, truncate, remove, rename or change one, open a socket (no bus, no network) or run a program.
+// it cannot write, make, truncate, remove, rename or change one, open a socket (no bus, no network), run a program or signal
+// another process.
 TEST(PrintPreview, TheChildThatDrawsIsConfined)
 {
     QTemporaryDir dir;
@@ -1101,6 +1102,11 @@ TEST(PrintPreview, TheChildThatDrawsIsConfined)
         check(refused(::execv("/bin/true", argv)));
         check(::syscall(SYS_io_uring_setup, 1, nullptr) < 0 && errno == ENOSYS);
         check(refused(::unshare(0x10000000 /* CLONE_NEWUSER */)));
+        // A signal to itself only: never to its parent (grassfield-portal) or its process group.
+        check(::kill(::getpid(), 0) == 0);
+        check(refused(::kill(::getppid(), 0)));
+        check(refused(::kill(0, 0)));
+        check(refused(::syscall(SYS_tgkill, ::getppid(), ::getppid(), 0)));
         ::write(report[1], &failed, sizeof failed);
         ::_exit(0);
     }

@@ -6,9 +6,9 @@
 // reads the PDF itself. Each page is drawn by a child process of its own (this binary, "--print-preview"; Qt PDF, the pdfium that
 // Preview uses), which reads the private file on its standard input and answers the page's pixels on its standard output: no bus
 // address, no display, no descriptor but those three, limits on memory and CPU time, a deadline, killed with its parent, and,
-// before it reads a byte of the document, a seccomp filter that refuses it sockets, programs, and any change to a file (no
-// write, create, truncate, rename, link, removal or mode change; no io_uring, ptrace or namespaces). grassfield-portal then
-// reads only a header and raw pixels (no image decoder runs on what the child answers).
+// before it reads a byte of the document, a seccomp filter that refuses it sockets, programs, a signal to any process but
+// itself, and any change to a file (no write, create, truncate, rename, link, removal or mode change; no io_uring, ptrace or
+// namespaces). grassfield-portal then reads only a header and raw pixels (no image decoder runs on what the child answers).
 #pragma once
 
 #include <QImage>

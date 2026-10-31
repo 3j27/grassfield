@@ -695,8 +695,8 @@ last print's settings back (ADR-0035 6-18).
   the left, one page at a time with "‹ 1 of N ›" and Page Up / Page Down (6-14); Orientation and Scale are not offered (the
   document is laid out), Pages is All Pages or a range, which the printer applies (`page-ranges`), and the paper of the
   document's first page is chosen where the printer has it (6-13). The document is kept in an unlinked private file (6-11) and
-  its pages are drawn by a confined child of grassfield-portal (Qt PDF; a seccomp filter: no socket, no program, no change to
-  any file; raw pixels read back) (6-10). Print sends the job at once from that file and the sheet goes (6-15); a document that
+  its pages are drawn by a confined child of grassfield-portal (Qt PDF; a seccomp filter: no socket, no program, no signal but
+  to itself, no change to any file; raw pixels read back) (6-10). Print sends the job at once from that file and the sheet goes (6-15); a document that
   is not a PDF goes to x-d-p-gtk as it came, or fails when it came on a pipe (6-12).
 - PR3 done with macOS's "PDF" pull-down (6-16): Save as PDF… (6-3's Save panel and writer) and Open in Preview: a private copy
   in `$XDG_RUNTIME_DIR/grassfield-print`, written as Save as PDF writes, opened in Preview started as the Dock starts an
