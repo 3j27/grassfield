@@ -1,0 +1,326 @@
+{
+  "_note": "The wallpaper photographs (ADR-0040 step 2c, the owner's call of 2026-10-31): the one list. packaging/arch/wallpaper-pins.sh repeats id, original and sha1 for the PKGBUILD, held equal by tests/ci/wallpaper_photos.py. Installed as /usr/share/grassfield/wallpapers/photos/photos.json beside <id>.jpg; Settings > Wallpaper reads it (WallpaperConfig.parsePhotos).",
+  "changes": "Resized to at most 5120 pixels wide, re-encoded as JPEG (quality 90), metadata removed (packaging/arch/PKGBUILD, apps/wallpaper-tool grassfield-wallpaper-shrink).",
+  "photos": [
+    {
+      "id": "golden-mist",
+      "name": {
+        "en": "Golden Mist",
+        "fr": "Brume dorée"
+      },
+      "author": "Matt Palmer",
+      "credit": "Matt Palmer / Unsplash, CC0, via Wikimedia Commons",
+      "licenseShort": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Matt_Palmer_2016_(Unsplash).jpg",
+      "file": "Matt Palmer 2016 (Unsplash).jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/0/07/Matt_Palmer_2016_%28Unsplash%29.jpg",
+      "sha1": "a5eeee96a4b9eaaa9edfc29978a51350ae1681f1",
+      "bytes": 14255534,
+      "width": 5760,
+      "height": 3840,
+      "date": "2016-11-10",
+      "place": "Not stated"
+    },
+    {
+      "id": "frosted-meadow",
+      "name": {
+        "en": "Frosted Meadow",
+        "fr": "Prairie givrée"
+      },
+      "author": "Jakub Hałun",
+      "credit": "Jakub Hałun, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:%C5%81%C4%85ki_nad_Wis%C5%82%C4%85_pod_Brze%C5%BAnic%C4%85_po_wschodzie_s%C5%82o%C5%84ca,_20241116_0725_2676.jpg",
+      "file": "Łąki nad Wisłą pod Brzeźnicą po wschodzie słońca, 20241116 0725 2676.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/3/3c/%C5%81%C4%85ki_nad_Wis%C5%82%C4%85_pod_Brze%C5%BAnic%C4%85_po_wschodzie_s%C5%82o%C5%84ca%2C_20241116_0725_2676.jpg",
+      "sha1": "d0b41e3e969f335acd11780e2f113650998abdd7",
+      "bytes": 9050198,
+      "width": 4807,
+      "height": 3198,
+      "date": "2024-11-16 07:25",
+      "place": "Vistula meadows, Brzeźnica, Wadowice County, Poland"
+    },
+    {
+      "id": "valley-fog",
+      "name": {
+        "en": "Valley Fog",
+        "fr": "Brouillard sur la vallée"
+      },
+      "author": "Jakub Hałun",
+      "credit": "Jakub Hałun, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Zamglona_dolina_w_Witowie_w_powiecie_proszowickim,_20241020_0808_6322.jpg",
+      "file": "Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Zamglona_dolina_w_Witowie_w_powiecie_proszowickim%2C_20241020_0808_6322.jpg",
+      "sha1": "0204c6b1c12e800674ffd3423f3c0b903af020f1",
+      "bytes": 12497245,
+      "width": 5340,
+      "height": 3566,
+      "date": "2024-10-20 08:08",
+      "place": "Witów, Proszowice County, Poland"
+    },
+    {
+      "id": "river-mist",
+      "name": {
+        "en": "River Mist",
+        "fr": "Brume sur la rivière"
+      },
+      "author": "George Chernilevsky",
+      "credit": "George Chernilevsky, public domain, via Wikimedia Commons",
+      "licenseShort": "Public domain",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Template:PD-self",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Desna_river_Vinn_meadow_2016_G2.jpg",
+      "file": "Desna river Vinn meadow 2016 G2.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Desna_river_Vinn_meadow_2016_G2.jpg",
+      "sha1": "196669deb715c8b405f4287cd1fd81d50f98c2c0",
+      "bytes": 8947281,
+      "width": 6000,
+      "height": 4000,
+      "date": "2016-07-31 06:15",
+      "place": "Desna river (tributary of the Southern Bug), Vinnytsia Raion, Ukraine"
+    },
+    {
+      "id": "steppe-storm",
+      "name": {
+        "en": "Steppe Storm",
+        "fr": "Orage sur la steppe"
+      },
+      "author": "Aleksandr Rudny",
+      "credit": "Александр Рудный, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:%D0%A7%D1%83%D0%B9%D1%81%D0%BA%D0%B8%D0%B9_%D1%85%D1%80%D0%B5%D0%B1%D0%B5%D1%82_%D0%B8_%D0%9A%D1%83%D1%80%D0%B0%D0%B9%D1%81%D0%BA%D0%B0%D1%8F_%D1%81%D1%82%D0%B5%D0%BF%D1%8C.jpg",
+      "file": "Чуйский хребет и Курайская степь.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/6/6d/%D0%A7%D1%83%D0%B9%D1%81%D0%BA%D0%B8%D0%B9_%D1%85%D1%80%D0%B5%D0%B1%D0%B5%D1%82_%D0%B8_%D0%9A%D1%83%D1%80%D0%B0%D0%B9%D1%81%D0%BA%D0%B0%D1%8F_%D1%81%D1%82%D0%B5%D0%BF%D1%8C.jpg",
+      "sha1": "c575bc76d11b0bf6812a36e809b8554f9564e442",
+      "bytes": 8144665,
+      "width": 4857,
+      "height": 2732,
+      "date": "2019-06-30 11:24",
+      "place": "Kurai steppe below the North Chuya Ridge, Altai Mountains, Russia"
+    },
+    {
+      "id": "evening-fields",
+      "name": {
+        "en": "Evening Fields",
+        "fr": "Champs du soir"
+      },
+      "author": "Qvidemus",
+      "credit": "Qvidemus, CC BY 3.0 <https://creativecommons.org/licenses/by/3.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tatry_-_panorama_z_Polskiego_Spiszu.jpg",
+      "file": "Tatry - panorama z Polskiego Spiszu.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/e/e9/Tatry_-_panorama_z_Polskiego_Spiszu.jpg",
+      "sha1": "d4115b6f9b916be76e481c10136152a2aed63c07",
+      "bytes": 28784540,
+      "width": 8364,
+      "height": 4850,
+      "date": "2016-04-02 18:43",
+      "place": "Polish Spisz, looking south to the Tatra Mountains, Poland"
+    },
+    {
+      "id": "mountain-pasture",
+      "name": {
+        "en": "Mountain Pasture",
+        "fr": "Pâturage"
+      },
+      "author": "Vyacheslav Argenberg",
+      "credit": "© Vyacheslav Argenberg, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ingushetia,_%D0%97%D0%B0%D0%BA%D0%B0%D1%82%D0%BD%D1%8B%D0%B9_%D0%B7%D0%BE%D0%BB%D0%BE%D1%82%D0%BE%D0%B9_%D1%81%D0%B2%D0%B5%D1%82_%D0%BD%D0%B0_%D1%81%D0%BA%D0%BB%D0%BE%D0%BD%D0%B0%D1%85_%D0%B4%D0%BE%D0%BB%D0%B8%D0%BD%D1%8B_%D0%90%D1%80%D0%BC%D1%85%D0%B8,_%D0%B3%D0%BE%D1%80%D1%8B_%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D0%B8,_%D0%9A%D0%B0%D0%B2%D0%BA%D0%B0%D0%B7.jpg",
+      "file": "Ingushetia, Закатный золотой свет на склонах долины Армхи, горы Ингушетии, Кавказ.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Ingushetia%2C_%D0%97%D0%B0%D0%BA%D0%B0%D1%82%D0%BD%D1%8B%D0%B9_%D0%B7%D0%BE%D0%BB%D0%BE%D1%82%D0%BE%D0%B9_%D1%81%D0%B2%D0%B5%D1%82_%D0%BD%D0%B0_%D1%81%D0%BA%D0%BB%D0%BE%D0%BD%D0%B0%D1%85_%D0%B4%D0%BE%D0%BB%D0%B8%D0%BD%D1%8B_%D0%90%D1%80%D0%BC%D1%85%D0%B8%2C_%D0%B3%D0%BE%D1%80%D1%8B_%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D0%B8%2C_%D0%9A%D0%B0%D0%B2%D0%BA%D0%B0%D0%B7.jpg",
+      "sha1": "bd234713779074883e9a1224dfa47ad1b74a7e99",
+      "bytes": 19446147,
+      "width": 6000,
+      "height": 4000,
+      "date": "2017-08-21 17:28",
+      "place": "Armkhi valley, Ingush nature reserve, North Caucasus, Russia"
+    },
+    {
+      "id": "rice-terraces",
+      "name": {
+        "en": "Rice Terraces",
+        "fr": "Rizières en terrasses"
+      },
+      "author": "rikky_photography (FIND/47)",
+      "credit": "rikky_photography / FIND/47, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Hyogo-Rice_terraces_in_Ueyama.(early_autumn.)-xl.jpg",
+      "file": "Hyogo-Rice terraces in Ueyama.(early autumn.)-xl.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Hyogo-Rice_terraces_in_Ueyama.%28early_autumn.%29-xl.jpg",
+      "sha1": "0cfb04ba13187bf1dd97e877d887971cf3a7f7b7",
+      "bytes": 30235119,
+      "width": 6000,
+      "height": 4000,
+      "date": "2020-09-05",
+      "place": "Ueyama rice terraces, Hyogo Prefecture, Japan"
+    },
+    {
+      "id": "morning-dew",
+      "name": {
+        "en": "Morning Dew",
+        "fr": "Rosée du matin"
+      },
+      "author": "Andrey Nagaycev",
+      "credit": "Andrey Nagaycev, CC BY 2.0 <https://creativecommons.org/licenses/by/2.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 2.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/2.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Dew_on_grass_(21677746153).jpg",
+      "file": "Dew on grass (21677746153).jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Dew_on_grass_%2821677746153%29.jpg",
+      "sha1": "2e957c1b62c108c1fde0d40bd0ca7d9ddef9a016",
+      "bytes": 10333879,
+      "width": 5616,
+      "height": 3744,
+      "date": "2015-10-19 09:33",
+      "place": "Siberia, Russia"
+    },
+    {
+      "id": "summer-grass",
+      "name": {
+        "en": "Summer Grass",
+        "fr": "Herbe d’été"
+      },
+      "author": "Yuri Samoilov",
+      "credit": "Yuri Samoilov, CC BY 2.0 <https://creativecommons.org/licenses/by/2.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 2.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/2.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Grass_(14448015527).jpg",
+      "file": "Grass (14448015527).jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/8/84/Grass_%2814448015527%29.jpg",
+      "sha1": "e62fb94310d784ed8a1269cd7d913f269d0bc591",
+      "bytes": 3966209,
+      "width": 5760,
+      "height": 3840,
+      "date": "2014-07-12 12:04",
+      "place": "Not stated"
+    },
+    {
+      "id": "seed-heads",
+      "name": {
+        "en": "Seed Heads",
+        "fr": "Graminées"
+      },
+      "author": "Mikhail Lazarev",
+      "credit": "Михаил Лазарев (Mikhail Lazarev), CC BY 2.0 <https://creativecommons.org/licenses/by/2.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 2.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/2.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Grass_at_Sunrise_(36993588030).jpg",
+      "file": "Grass at Sunrise (36993588030).jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/e/e2/Grass_at_Sunrise_%2836993588030%29.jpg",
+      "sha1": "6a0b778018cb0a7852ed511044465b71640d3610",
+      "bytes": 6120381,
+      "width": 6000,
+      "height": 4000,
+      "date": "2016-10-24 12:48",
+      "place": "Probably Severodvinsk, Russia"
+    },
+    {
+      "id": "terraces-at-dusk",
+      "name": {
+        "en": "Terraces at Dusk",
+        "fr": "Rizières au crépuscule"
+      },
+      "author": "rikky_photography (FIND/47)",
+      "credit": "rikky_photography / FIND/47, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Kyoto-Evening_view_of_Sodeshi_rice_terraces.-xl.jpg",
+      "file": "Kyoto-Evening view of Sodeshi rice terraces.-xl.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/f/f2/Kyoto-Evening_view_of_Sodeshi_rice_terraces.-xl.jpg",
+      "sha1": "0010fd3f3ace11c370043ba827c65e4647127aca",
+      "bytes": 24950548,
+      "width": 6000,
+      "height": 4000,
+      "date": "2024-05-18",
+      "place": "Sodeshi rice terraces, Kyōtango, Kyoto Prefecture, Japan (Sea of Japan coast)"
+    },
+    {
+      "id": "winter-sunrise",
+      "name": {
+        "en": "Winter Sunrise",
+        "fr": "Lever d’hiver"
+      },
+      "author": "Jakub Hałun",
+      "credit": "Jakub Hałun, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Wsch%C3%B3d_s%C5%82o%C5%84ca_nad_%C5%82%C4%85kami_pod_Ty%C5%84cem_w_Krakowie,_20260301_0636_4894.jpg",
+      "file": "Wschód słońca nad łąkami pod Tyńcem w Krakowie, 20260301 0636 4894.jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/1/1c/Wsch%C3%B3d_s%C5%82o%C5%84ca_nad_%C5%82%C4%85kami_pod_Ty%C5%84cem_w_Krakowie%2C_20260301_0636_4894.jpg",
+      "sha1": "25e8e34e0bccfe8682af9271e8e36e473c7e053d",
+      "bytes": 13567831,
+      "width": 4686,
+      "height": 3118,
+      "date": "2026-03-01 06:36",
+      "place": "Meadows in Tyniec, Kraków, Poland"
+    },
+    {
+      "id": "autumn-dew",
+      "name": {
+        "en": "Autumn Dew",
+        "fr": "Rosée d’automne"
+      },
+      "author": "Andrey Nagaycev",
+      "credit": "Andrey Nagaycev, CC BY 2.0 <https://creativecommons.org/licenses/by/2.0>, via Wikimedia Commons",
+      "licenseShort": "CC BY 2.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/2.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Dew_on_grass_(22309335571).jpg",
+      "file": "Dew on grass (22309335571).jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/2/28/Dew_on_grass_%2822309335571%29.jpg",
+      "sha1": "c30b00aa5b61b314e673b65169406697332f5762",
+      "bytes": 10859850,
+      "width": 5616,
+      "height": 3744,
+      "date": "2015-10-19 09:34",
+      "place": "Siberia, Russia"
+    },
+    {
+      "id": "silver-grass",
+      "name": {
+        "en": "Silver Grass",
+        "fr": "Eulalies"
+      },
+      "author": "Thomas Rohlfs",
+      "credit": "Thomas Rohlfs / Unsplash, CC0, via Wikimedia Commons",
+      "licenseShort": "CC0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Waving_grass_under_mountains_(Unsplash).jpg",
+      "file": "Waving grass under mountains (Unsplash).jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/7/74/Waving_grass_under_mountains_%28Unsplash%29.jpg",
+      "sha1": "d2206e38f449f9943eec4f86d2e0140fa0961b05",
+      "bytes": 9235587,
+      "width": 4608,
+      "height": 2592,
+      "date": "2015-10-31",
+      "place": "Not stated (volcanic grass hills, possibly Aso, Japan: unverified)"
+    },
+    {
+      "id": "starlit-hill",
+      "name": {
+        "en": "Starlit Hill",
+        "fr": "Colline étoilée"
+      },
+      "author": "Bureau of Land Management California",
+      "credit": "Bureau of Land Management California, public domain, via Wikimedia Commons",
+      "licenseShort": "Public domain",
+      "licenseUrl": "https://commons.wikimedia.org/wiki/Template:PD-USGov-BLM",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Milky_Way_over_Cronan_Ranch_(52321033535).jpg",
+      "file": "Milky Way over Cronan Ranch (52321033535).jpg",
+      "original": "https://upload.wikimedia.org/wikipedia/commons/a/a2/Milky_Way_over_Cronan_Ranch_%2852321033535%29.jpg",
+      "sha1": "32f20961a05ee28acf6f28055b699b28be79430f",
+      "bytes": 25010675,
+      "width": 6965,
+      "height": 4752,
+      "date": "2022-08-28 22:42",
+      "place": "Cronan Ranch Regional Trails Park, Pilot Hill, California, USA"
+    }
+  ]
+}
