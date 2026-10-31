@@ -128,7 +128,34 @@ guard() {
 type_keys() { guard; "$keys" "$@"; sleep 0.4; }
 ctrl() { guard; "$keys" -M ctrl "$@" -m ctrl; sleep 0.6; }
 ctrl_shift() { guard; "$keys" -M ctrl -M shift "$@" -m shift -m ctrl; sleep 0.6; }
+alt() { guard; "$keys" -M alt "$@" -m alt; sleep 0.6; }
 shot() { "$root/scripts/dev/shot.sh" "files-scenario-$1" "$output" >/dev/null; }
+# Where the window is: its title names the folder ("src — Files"). Every navigation key is followed by expect_at, which waits
+# for the folder it leads to and stops the scenario there when it does not come: a missed key used to cascade (the review's
+# run: Ctrl+Up did not leave src, Ctrl+O then opened alpha.txt and every later step ran in the wrong folder, 11 failures).
+app_title() { "$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -r 'select(.class == "org.grassfield.Files") | .title // empty'; }
+at_location() { [[ $(app_title) == "$1 — "* ]]; }
+expect_at() { # NAME STEP
+  if wait_until 10 at_location "$1"; then
+    pass "$2: the window shows $1"
+    # The listing of the new folder is read before a name is typed into it (type-to-select needs its rows).
+    sleep 1
+    return 0
+  fi
+  fail "$2: the window still shows '$(app_title)', not $1; stopping: every later step depends on it"
+  shot "stopped-at-$1"
+  echo "files_sandbox: $fails failure(s)"
+  exit 1
+}
+
+# The session must be settled first: its output exists and the shell answers, unlocked. A run started right after
+# nested-up found no output GF-REF for its first click, and the shell, still starting, mapped its own surfaces after the
+# window had the compositor's focus: the window showed inactive (grey traffic lights) and no key reached it.
+has_output() { "$root/scripts/nestctl" monitors -j 2>/dev/null | jq -e --arg n "$output" 'any(.[]; .name == $n)' >/dev/null; }
+shell_ready() { [[ $("$root/tests/visual/ipc.sh" lock status 2>/dev/null) == unlocked ]]; }
+wait_until 60 has_output || { echo "FAIL: the nested session has no output $output (nothing typed)"; exit 1; }
+wait_until 60 shell_ready || { echo "FAIL: the nested shell does not answer, or is locked (nothing typed)"; exit 1; }
+sleep 2
 
 # The window opens on the output under the pointer.
 # Clicking the empty desktop focuses that monitor, so the window opens there (centred).
@@ -156,15 +183,45 @@ read -r ox oy <<<"$("$root/scripts/nestctl" monitors -j 2>/dev/null | jq -r --ar
 [[ -n ${wx:-} && -n ${ox:-} ]] && "$pointer" output "$output" abs "$((wx - ox))" "$((wy - oy))" sleep 200 click >/dev/null
 if wait_until 10 app_has_keyboard; then pass "the window of the app has the keyboard before any key is sent"; else guard; fi
 "$root/scripts/nestctl" activewindow -j 2>/dev/null | jq -c "{class, title, focus: .focusHistoryID}" | sed "s/^/files_sandbox: active window: /"
+# The compositor's focus is not the keyboard: a layer surface of the shell can hold the keys while the window is still the
+# active one. Before any key that changes a file, two harmless ones must act in the window: Alt+Up shows the enclosing
+# folder, Back (Ctrl+[) returns to src. Tried three times, with a click into the window between; else the run stops.
+probe_keys() {
+  guard; "$keys" -M alt -k Up -m alt
+  wait_until 5 at_location scenario || return 1
+  sleep 0.5
+  guard; "$keys" -M ctrl -k bracketleft -m ctrl
+  wait_until 5 at_location src
+}
+probed=""
+for try in 1 2 3; do
+  if probe_keys; then probed=$try; break; fi
+  [[ -n ${wx:-} && -n ${ox:-} ]] && "$pointer" output "$output" abs "$((wx - ox))" "$((wy - oy))" sleep 200 click >/dev/null
+  sleep 1
+done
+if [[ -n $probed ]]; then
+  pass "the keys reach the window (Alt+Up and Back acted, try $probed)"
+else
+  fail "the keys do not reach the window (Alt+Up and Back did nothing in 3 tries: '$(app_title)'); stopping before any key that changes a file"
+  shot "keys-lost"
+  echo "files_sandbox: $fails failure(s)"
+  exit 1
+fi
 
-# 1. Copy alpha.txt (type-to-select, Ctrl+C), go up (Ctrl+Up), open dest (type-to-select, Ctrl+O: Return renames, as in
-#    the Finder), paste.
+# 1. Copy alpha.txt (type-to-select, Ctrl+C), go up (Alt+Up), open dest (type-to-select, Ctrl+O: Return renames, as in
+#    the Finder), paste. Up is Alt+Up, Files' other key for Enclosing Folder: Ctrl+Up is also the compositor's Overview bind
+#    in a Grassfield session (macOS Mission Control, config/hypr/grassfield/bindings.lua; the user's Super+Up reaches Files
+#    as a forwarded Ctrl+Up), the one key of this scenario that is, and in the review's run Files never left src after it
+#    (11 failures). Three Ctrl+Up through wtype did not open the Overview in the nested session of 2026-10-31, so that cause
+#    is not proven; whatever misses a step now stops the run there (expect_at).
+expect_at src "back in src after the probe"
 type_keys alpha
 ctrl -k c
-ctrl -k Up
+alt -k Up
+expect_at scenario "Alt+Up goes to the enclosing folder"
 type_keys dest
 ctrl -k o
-sleep 0.8
+expect_at dest "type-to-select dest and Ctrl+O open it"
 ctrl -k v
 check "paste copies alpha.txt into dest" 5 test -f "$scenario/dest/alpha.txt"
 check "source alpha.txt is kept" 1 test -f "$scenario/src/alpha.txt"
@@ -209,7 +266,7 @@ check "the Trash has its .trashinfo" 1 test -f "$trash/info/gamma.txt.trashinfo"
 ctrl_shift -k g
 type_keys "trash:/"
 type_keys -k Return
-sleep 1
+expect_at Trash "Go to Folder trash:/ opens the Trash"
 shot 3-trash
 type_keys gamma
 ctrl -k BackSpace
@@ -218,7 +275,7 @@ check "the sandbox Trash is empty again" 3 bash -c "[[ -z \$(ls -A '$trash/files
 
 # 7. Back to dest (Ctrl+[) and check the listing still matches the filesystem.
 ctrl -k bracketleft
-sleep 0.8
+expect_at dest "Ctrl+[ goes back to dest"
 shot 4-final
 actual=$(cd "$scenario/dest" && ls -A | LC_ALL=C sort | paste -sd, -)
 actual_src=$(cd "$scenario/src" && ls -A | LC_ALL=C sort | paste -sd, -)
@@ -231,7 +288,7 @@ expected="Projects,gamma copy.txt,gamma.txt"
 ctrl_shift -k g
 type_keys "$scenario/uni"
 type_keys -k Return
-sleep 1.5
+expect_at uni "Go to Folder opens the Unicode folder"
 shot 5-unicode
 count=$(find "$scenario/uni" -mindepth 1 -maxdepth 1 | wc -l)
 [[ $count == 7 ]] && pass "the Unicode folder holds its 7 seeded entries" || fail "the Unicode folder holds $count entries, expected 7"
