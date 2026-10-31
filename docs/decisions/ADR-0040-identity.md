@@ -49,8 +49,8 @@ and IQ-B3 here changes the palette only, not which controls read it.
   directions drawn from four reference images the owner shared (`branding/concepts/grassfield-sommet-v6/`: a summit drawn
   as a band of constant width and a nearer relief as a filled shape, parted by one parallel channel; geometric, filled,
   no letter). The same two files carry it: `grassfield-logo-full.svg` is B's drawing (for 32 px and more) and
-  `grassfield-logo.svg` its optical version for 16-24 px (the same slopes, a thicker band, the channel widened from about
-  0.7 to 1.5 px at 16 px, the base on the 16 px pixel grid). The places, colours and rules of IQ-B1 do not change; the
+  `grassfield-logo.svg` its optical version for 16-24 px (the same slopes; measured perpendicular to them, the band from
+  about 1.17 to 1.35 px and the channel from about 0.54 to 1.15 px at 16 px; the base on the 16 px pixel grid). The places, colours and rules of IQ-B1 do not change; the
   brand kit's symbol and lockups follow. Legal clearance of the new shape is the owner's, pending (`docs/legal/visual-review.md` E33).
 - Every illustration is made here or under a compatible licence, documented in `docs/legal` (E39). No Apple asset and
   no Apple trademark name (master-prompt §14).
@@ -193,7 +193,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
   of b44d17e). Places under B: the menu bar's system button (monochrome, the bar's text colour), About This Computer and
   Settings > General > About (the Grassfield green), Software Update's Grassfield release row (the brand green, as About's,
   since 9903e56d), the Search result for About; shell dialogs show their subject's symbol instead of the mark. Only the file's path is used, at run time. Mockup: `mockups/b1-logo-use.svg`.
-  The owner replaced the drawing on 2026-10-30 and again on 2026-10-31 (see "Rules this ADR works under"); the full mark itself stays untouched,
+  The owner replaced the drawing on 2026-10-30 and again on 2026-10-31 (see "Rules this ADR works under"); the places and colours stay as listed,
   and the places above draw `grassfield-logo.svg`, its optical version (menu bar 16 px, About This Computer's product line 14,
   Settings rows 15, Search 25), and `grassfield-logo-full.svg` (the full mark, 32 px and more) has no surface under B (a
   48 px full mark in the dialogs was reverted for that reason, 1bdd69e3).
