@@ -77,6 +77,18 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowItemsGap = 8;
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     inline constexpr int kWindowItemsInset = 8;
+    // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr uint32_t kWindowEdgeDark = 0xFFFFFF;
+    // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr uint32_t kWindowEdgeLight = 0x000000;
+    // the active window's edge, dark appearance: unchanged from the config (rgba(ffffff26)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeActiveOpacityDark = 0.15;
+    // an inactive window's edge, dark appearance: unchanged from the config (rgba(ffffff14)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeInactiveOpacityDark = 0.08;
+    // the active window's edge, light appearance: macOS 27's contact edge, about black at 0.25 (measured 0.27 to 0.47 over its shadow in the release captures) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeActiveOpacityLight = 0.25;
+    // estimate: an inactive window's edge in the light appearance, at the dark appearance's inactive-to-active ratio (0.08 / 0.15) of 0.25, not measured [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeInactiveOpacityLight = 0.13;
     // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
     inline constexpr int kTilingEdge = 4;
     // logical px at the top and bottom of a free side edge where a drag tiles a quarter (kCorner before ADR-0036 step 1; compared with the owner's captures in nested, F1) [ref: docs/specs/tiling.md § Functional requirements]

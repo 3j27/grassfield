@@ -2897,6 +2897,18 @@ QtObject {
     readonly property int windowItemsGap: 8
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     readonly property int windowItemsInset: 8
+    // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property string windowEdgeDark: "#FFFFFF"
+    // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property string windowEdgeLight: "#000000"
+    // the active window's edge, dark appearance: unchanged from the config (rgba(ffffff26)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeActiveOpacityDark: 0.15
+    // an inactive window's edge, dark appearance: unchanged from the config (rgba(ffffff14)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeInactiveOpacityDark: 0.08
+    // the active window's edge, light appearance: macOS 27's contact edge, about black at 0.25 (measured 0.27 to 0.47 over its shadow in the release captures) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeActiveOpacityLight: 0.25
+    // estimate: an inactive window's edge in the light appearance, at the dark appearance's inactive-to-active ratio (0.08 / 0.15) of 0.25, not measured [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeInactiveOpacityLight: 0.13
 
     // estimate: tile box the plugin fits a stage's windows into (macOS model: small live thumbnails in a left-edge strip)
     readonly property int stagesTileWidth: 160

@@ -106,10 +106,11 @@ Rectangle {
         onStatusChanged: if (status === Image.Ready && source !== "")
             slide.loaded()
 
-        // The slides' crossfade, capped under Reduce Motion like every other (ADR-0039 step 5).
+        // The slides' crossfade is a dissolve, not motion: it is kept whole under Reduce Motion, as macOS keeps its dissolves
+        // (capped at 100 ms it read as a cut; the integrator's call on #74, ADR-0039 step 6).
         Behavior on opacity {
             NumberAnimation {
-                duration: Appearance.duration(Tokens.saverSlideFadeMs)
+                duration: Tokens.saverSlideFadeMs
             }
         }
     }

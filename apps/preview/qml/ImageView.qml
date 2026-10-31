@@ -20,6 +20,14 @@ Item {
     property int turns: 0
     property bool fitMode: true
     property real zoom: 1
+    // An animated image under Reduce Motion waits on its first frame with a play control, as macOS does with "Auto-play
+    // animated images" off: Reduce Motion is for the chrome, the content is the viewer's to play (ADR-0039 step 6; the
+    // integrator's call on #74). The viewer's own play lasts until the setting changes.
+    readonly property bool animated: root.info.animated ?? false
+    property bool playRequested: false
+    readonly property bool waiting: root.animated && Appearance.reduceMotion && !root.playRequested
+
+    onInfoChanged: root.playRequested = false
 
     readonly property bool swapped: root.turns % 2 !== 0
     readonly property real natW: root.info.width ?? 1
@@ -99,14 +107,14 @@ Item {
             }
 
             AnimatedImage {
+                id: animatedImage
                 anchors.centerIn: parent
                 width: root.natW * root.viewScale
                 height: root.natH * root.viewScale
                 rotation: root.turns * 90
                 visible: root.info.animated ?? false
                 source: root.info.url && root.info.animated ? root.info.url : ""
-                // Under Reduce Motion an animated image shows its first frame (ADR-0039 step 5).
-                playing: visible && !Appearance.reduceMotion
+                playing: visible && !root.waiting
                 cache: false
                 smooth: true
                 fillMode: Image.Stretch
@@ -132,6 +140,46 @@ Item {
         PinchHandler {
             target: null
             onScaleChanged: delta => root.setZoom(root.viewScale * delta)
+        }
+    }
+
+    // Turning Reduce Motion on puts an animated image back on its first frame; either change ends the viewer's own play.
+    Connections {
+        target: Appearance
+
+        function onReduceMotionChanged(): void {
+            root.playRequested = false;
+            if (Appearance.reduceMotion)
+                animatedImage.currentFrame = 0;
+        }
+    }
+
+    // Play and pause an animated image while Reduce Motion holds it (a glass capsule as the toolbar's).
+    Item {
+        id: playControl
+        objectName: "animatedPlayControl"
+        visible: root.animated && Appearance.reduceMotion
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Tokens.spacingLg
+        width: Tokens.previewToolbarCapsuleHeight
+        height: Tokens.previewToolbarCapsuleHeight
+
+        Material {
+            anchors.fill: parent
+            radius: height / 2
+        }
+
+        ToolButton {
+            anchors.centerIn: parent
+            capsule: true
+            accessibleName: root.playRequested ? qsTr("Pause") : qsTr("Play")
+            onClicked: root.playRequested = !root.playRequested
+
+            Glyph {
+                anchors.centerIn: parent
+                kind: root.playRequested ? "pause" : "play"
+            }
         }
     }
 }

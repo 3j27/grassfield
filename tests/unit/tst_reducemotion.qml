@@ -106,13 +106,31 @@ TestCase {
         return null;
     }
 
-    function test_animatedImagesStandStill() {
+    function test_animatedImagesWaitWithAPlayControl() {
         const image = animatedImageOf(imageView);
         verify(image !== null);
         verify(image.visible, "an animated file shows its AnimatedImage");
+        const control = findChild(imageView, "animatedPlayControl");
+        verify(control !== null);
         Appearance.reduceMotion = false;
         verify(image.playing);
+        verify(!control.visible, "no control while the image plays on its own");
+        // Under Reduce Motion it waits on its first frame with a play control (macOS: "Auto-play animated images" off).
         Appearance.reduceMotion = true;
-        verify(!image.playing, "an animated image shows its first frame under Reduce Motion");
+        verify(!image.playing, "an animated image waits under Reduce Motion");
+        compare(image.currentFrame, 0);
+        verify(control.visible);
+        imageView.playRequested = true;
+        verify(image.playing, "the viewer plays it");
+        imageView.playRequested = false;
+        verify(!image.playing);
+        // The viewer's play ends with the setting's change and with another file.
+        imageView.playRequested = true;
+        Appearance.reduceMotion = false;
+        Appearance.reduceMotion = true;
+        verify(!imageView.playRequested && !image.playing);
+        imageView.playRequested = true;
+        imageView.info = ({animated: true, width: 12, height: 12, url: ""});
+        verify(!imageView.playRequested, "another file starts waiting");
     }
 }
