@@ -3009,9 +3009,9 @@ QtObject {
     readonly property int storeAccountNameGap: 8
     // estimate: the initials in the circle [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeAccountInitialsSize: Math.round(14 * Appearance.textScale)
-    // A2: the capture's grey (about #9EA4AE) darkened until white initials hold 4.5:1 (computed 4.8:1); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #6E7480 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/audits/store-2026-10-27/parity.md]
+    // A2: the capture's grey (about #9EA4AE) darkened until white initials hold 4.5:1 (computed 4.67:1 since the warm neutrals, 4.69:1 before); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #6E7480 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property string storeAccountCircleFill: "#76746F"
-    // white initials on the account circle (4.8:1 on accountCircleFill, computed) [ref: docs/audits/store-2026-10-27/parity.md]
+    // white initials on the account circle (4.67:1 on accountCircleFill, computed) [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property string storeAccountInitials: "#FFFFFF"
     // the page's content 40 pt from the sidebar edge and from the window's right edge (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeContentMargin: 40
