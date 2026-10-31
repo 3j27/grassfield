@@ -177,19 +177,23 @@ def app_scope(entry, uid):
 def scope_state(cgroup, root=None):
     """"gone" (no such cgroup), "empty" (populated 0), "populated" or "unknown" (not readable): the application quit only for
     gone and empty. A cgroup that is missing only counts as gone when the cgroup2 tree itself is there (cgroup.controllers):
-    no tree (an unmounted or hidden /sys/fs/cgroup) is unknown, never "everything quit"."""
+    no tree (an unmounted or hidden /sys/fs/cgroup) is unknown, never "everything quit". A file that is not what the kernel
+    writes (not UTF-8, a "populated" line without its value, oversized) is unknown too, never an exception: the worker
+    thread catches one, but the candidate would then stay pending and be looked at again every poll until its deadline
+    was never reached (found by tests/fuzz/fuzz_helpers.py, seed 1)."""
     base = (root or CGROUP_ROOT) + cgroup
     try:
-        with open(base + "/cgroup.events", encoding="utf-8") as f:
-            for line in f.read().splitlines():
-                if line.startswith("populated "):
-                    return {"0": "empty", "1": "populated"}.get(line.split()[1], "unknown")
+        with open(base + "/cgroup.events", encoding="utf-8", errors="replace") as f:
+            for line in f.read(65536).splitlines():
+                words = line.split()
+                if len(words) >= 2 and words[0] == "populated":
+                    return {"0": "empty", "1": "populated"}.get(words[1], "unknown")
         return "unknown"
     except FileNotFoundError:
         if os.path.isdir(base) or not os.path.isfile((root or CGROUP_ROOT) + "/cgroup.controllers"):
             return "unknown"
         return "gone"
-    except OSError:
+    except (OSError, ValueError):
         return "unknown"
 
 

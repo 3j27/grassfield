@@ -149,3 +149,24 @@ Two small C tools drive the NESTED compositor from tests, built on first use int
 - `tests/tools/xdgact` (a window that activates itself through `xdg_activation_v1`, for the real activation order of Show Desktop): `wayland-scanner`, libwayland-client and `wayland-protocols` (the `xdg-shell` and `xdg-activation` XML files).
 
 All of them are installed as dependencies of Hyprland and Quickshell, so they are build-time requirements of the tests only: they do not belong in the PKGBUILD `depends` (runtime) array. A machine without a C toolchain runs the offline layers; the nested scripts that need a tool say so and stop with exit 2. `tests/tools/hypr-events.py` (python3 standard library) reads Hyprland's event socket for `tests/shell/show_desktop_record.sh`.
+
+## Fuzzing (ADR-0041 step 5)
+
+Every reader of text another process, a file or the compositor hands to Grassfield has a mutation fuzz test next to its
+unit tests, in the tree, with no dependency beyond gtest and Python: a corpus of valid inputs is mutated (bit flips, special
+bytes, JSON tokens, number extremes, escapes, invalid UTF-8, nesting, growth past the payload cap, splices of two entries)
+from a seed, for a budget of iterations, and each parser is held to its contract: no crash or hang, the same answer when
+the same text is read twice, a bounded CPU time per call (wall-clock time would flake on a loaded machine), and every
+invariant its header promises on an accepted input. The same seed gives the same inputs (the runner proves it with two
+runs of one seed); a finding prints the seed and the iteration, so it reproduces.
+
+| Harness | Readers | Run |
+|---|---|---|
+| `compositor/tests/ParserFuzzTest.cpp` (gtest, in the compositor suite) | the gfc/1 requests (`overview`, `overview_focus`, `stages`, `arrange`), the config key/value readers, the window address and D-Bus address validators, `json::CReader`, `jsonEscape` (round trip), `stages::sanitizedText`, and the name readers `isGrassfieldNamespace`, `classifyLayer`, `splitZone`, `capabilityCandidate` | with the suite (2000 iterations per parser); `compositor/build-direct.sh tests-asan` then `GF_FUZZ_ITERATIONS=50000 compositor/build/grassfield-compositor-tests-asan` for the long budget under ASan and UBSan (`scripts/gates/release-check.sh` step `comp-asan`); `GF_FUZZ_SEED` picks another seed |
+| `tests/fuzz/helpers_fuzz.sh` (logic layer; `tests/fuzz/fuzz_helpers.py` and the mutator `tests/fuzz/mutate.py`) | `grassfield-crash-watch` (journal entries, desktop entries, cgroup.events, locale names), `grassfield-session-end` (`hyprctl -j clients`), `grassfield-battery-watch` (sysfs), the ANR stand-in's client matcher, the `omarchy-shell lock status` filter (needs jq), `sleep-lock-gate` (the socket and instance names) and `grassfield-update-check` (checkupdates' and pacman's output, its own time files, the release notes, pacman.conf) | `scripts/dev/test.sh` (1500 iterations in process, 300 per scenario that starts a process); `GF_FUZZ_ITERATIONS=20000 tests/fuzz/helpers_fuzz.sh [scenario...]` for the long budget. The runner starts the harness without the caller's session variables (`HYPRLAND_INSTANCE_SIGNATURE`, `WAYLAND_DISPLAY`, `DISPLAY`, D-Bus) and with every home under its scratch directory: the owner's session is never reachable from a test |
+
+A finding is fixed in its own commit with a deterministic regression case in the reader's unit test (the seed and the
+iteration name it); the harness is not weakened to pass. Still to cover (ADR-0041 step 5): the shell's QML and JS readers
+(the gfc/1 event parser, the Apps model's desktop entries, every state file of the ADR-0020 table), the menu bridge's
+DBusMenu layouts, Activity Monitor's `/proc` readers, the Store's catalog and pacman output readers; they need Qt and
+Quickshell offscreen, which the first harnesses do not.

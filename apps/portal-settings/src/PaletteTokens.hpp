@@ -21,7 +21,7 @@ inline constexpr Accent kAccents[] = {
     {"red", 0xC0302A, 0xF2766E},  // own light-appearance value of the red accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
     {"orange", 0x964D08, 0xF5A04A},  // own light-appearance value of the orange accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
     {"yellow", 0xE0B000, 0xF2D14B},  // own light-appearance value of the yellow accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
-    {"green", 0x3A7512, 0x8BD34E},  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+    {"green", 0x6DB53C, 0x8BD34E},  // own light-appearance value of the green accent (appearance.accent), not copied; fills, selections and focus rings. A light green, as macOS's Green, clearly apart from the brand green color.light.accent (OKLab distance 0.21; #3A7512 was 0.04): the owner's choice B of 2026-10-30 (IQ-B3 A) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
     {"graphite", 0x5C616B, 0xA0A4AE},  // own light-appearance value of the graphite accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
 };
 

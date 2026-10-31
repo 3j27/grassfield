@@ -250,9 +250,14 @@ class Checker:
     def last_success(self):
         text = read_text(self.path("last-success"))
         try:
-            return int(text.strip()) if text else None
+            return self.plausible(int(text.strip())) if text else None
         except ValueError:
             return None
+
+    def plausible(self, t):
+        """A Unix time this program wrote: not negative, not past tomorrow. Anything else is a damaged file and reads as
+        None, so no iso() of it can raise (tests/fuzz/fuzz_helpers.py, update-check)."""
+        return t if 0 <= t <= self.now + 86400 else None
 
     def failed(self, error, message):
         self.result.update(state="failed", error=error, message=message, lastSuccessAt=iso(self.last_success()))
@@ -395,11 +400,13 @@ class Checker:
     def health_failed(self):
         if self.offline:
             return self.failed("offline", self.health_error)
-        first = None
         text = read_text(self.path("failures"))
         try:
-            first = int(json.loads(text)["first"]) if text else None
-        except (ValueError, KeyError, TypeError):
+            value = json.loads(text)["first"] if text else None
+            # 1e999 reads as inf, and int(inf) raised OverflowError (the integrator's review of 265e6c7, minor 4); a bool, a
+            # string or a time this program never wrote is a damaged file: a fresh episode, never a raise.
+            first = self.plausible(int(value)) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+        except (ValueError, KeyError, TypeError, OverflowError, RecursionError):
             first = None
         if first is not None and self.now - first >= BLOCKING_GAP:
             self.failed("unavailable", self.health_error)
@@ -459,7 +466,10 @@ class Checker:
     def parse_notes(self, raw, installed, available):
         if len(raw) > NOTES_CAP:
             raise ValueError("notes larger than 64 KiB")
-        doc = json.loads(raw.decode("utf-8"))
+        try:
+            doc = json.loads(raw.decode("utf-8"))
+        except RecursionError:
+            raise ValueError("notes: nested too deep") from None
         if not isinstance(doc, dict) or doc.get("version") != 1 or not isinstance(doc.get("releases"), list):
             raise ValueError("notes: not version 1")
         if self.result["channel"] in ("stable", "beta") and doc.get("channel") != self.result["channel"]:
@@ -469,8 +479,9 @@ class Checker:
             raise ValueError(f"notes: more than {NOTES_MAX} releases")
         out = []
         for r in releases:
-            if not isinstance(r, dict) or not isinstance(r.get("version"), str) or not VERSION.match(r["version"]) \
-                    or not isinstance(r.get("date"), str) or not DATE.match(r["date"]) or not isinstance(r.get("notes"), dict):
+            # fullmatch: `$` would let a version or a date end in a newline (the same slip as grassfield-session-end's).
+            if not isinstance(r, dict) or not isinstance(r.get("version"), str) or not VERSION.fullmatch(r["version"]) \
+                    or not isinstance(r.get("date"), str) or not DATE.fullmatch(r["date"]) or not isinstance(r.get("notes"), dict):
                 raise ValueError("notes: a release is malformed")
             texts = {}
             for lang in ("en", "fr"):

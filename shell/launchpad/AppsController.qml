@@ -75,7 +75,7 @@ Scope {
             if (s.name === screenName)
                 return Qt.size(s.width, s.height);
         }
-        return Qt.size(1920, 1080);
+        return Qt.size(1920, 1080); // literal-ok geometry: a stand-in screen until the output is known, not a design value
     }
     readonly property var panel: Model.panelRect(screenSize.width, screenSize.height, ({
             width: Tokens.launcherPanelWidth,

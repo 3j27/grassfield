@@ -28,8 +28,10 @@ const KEYS = {
     "del": "⌦", "delete": "⌦", "suppr": "⌦",
     "esc": "⎋", "escape": "⎋", "échap": "⎋",
     "tab": "⇥",
-    "pageup": "⇞", "pagedown": "⇟",
-    "home": "↖", "end": "↘"
+    "pageup": "⇞", "page préc.": "⇞",
+    "pagedown": "⇟", "page suiv.": "⇟",
+    "home": "↖", "début": "↖",
+    "end": "↘", "fin": "↘"
 };
 
 function normalizeStyle(setting) {

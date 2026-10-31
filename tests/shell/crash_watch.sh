@@ -202,6 +202,17 @@ fresh(tree=False)
 w = W(uid, env_en, tmp + "/cg"); w.add(gpu, 0.0); w.step(0.0); w.step(11.0)
 print("no-tree", w.out, len(w.pending), m.scope_state(SPOTIFY, tmp + "/cg"))
 fresh(); print("tree", m.scope_state(SPOTIFY, tmp + "/cg"))
+# A cgroup.events file that is not what the kernel writes is "unknown", never an exception (tests/fuzz/fuzz_helpers.py found
+# both: a non-UTF-8 byte raised UnicodeDecodeError, a "populated" line without its value raised IndexError). The populated
+# line decides wherever it is, and a stray byte on another line does not hide it; a directory in its place is unknown (each
+# guard told apart from the others: the integrator's review of 265e6c7, nit).
+for name, content in (("events-not-utf8", b"populated \xff\n"), ("events-no-value", b"populated\n"), ("events-blank-value", b"populated   \n"),
+                      ("events-long", b"frozen 0\n" * 2000 + b"populated 0\n"), ("events-oversized", b"frozen 0\n" * 20000 + b"populated 0\n"),
+                      ("events-late-garbage", b"populated 1\nfrozen 0\n\xff\n"), ("events-frozen-first", b"frozen 0\npopulated 1\n")):
+    fresh(); cg(SPOTIFY, "populated"); open(tmp + "/cg" + SPOTIFY + "/cgroup.events", "wb").write(content)
+    print(name, m.scope_state(SPOTIFY, tmp + "/cg"))
+fresh(); cg(SPOTIFY, "populated"); os.remove(tmp + "/cg" + SPOTIFY + "/cgroup.events"); os.mkdir(tmp + "/cg" + SPOTIFY + "/cgroup.events")
+print("events-directory", m.scope_state(SPOTIFY, tmp + "/cg"))
 # The Flatpak user installation is under the data home (XDG_DATA_HOME/flatpak/exports/share), not next to it.
 xh = tmp + "/xh"; os.makedirs(xh + "/flatpak/exports/share/applications")
 open(xh + "/flatpak/exports/share/applications/org.f.App.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Flat App\nExec=flatpak run org.f.App\n")
@@ -298,6 +309,8 @@ expect=(
   "case no-exe ('Spotify', 'spotify.desktop', 'spotify.desktop')" "case no-exe-user-unit None" "case no-exe-no-unit None" "case foreign-exe None"
   "chromium ('Chromium', 'chromium.desktop', 'chromium.desktop') ('Chromium fr', 'chromium.desktop', 'chromium.desktop') ('other-bin', 'other-bin', None)"
   "no-tree [] 0 unknown" "tree gone" "flatpak-path True True ('org.f.App.desktop', 'Flat App')"
+  "events-not-utf8 unknown" "events-no-value unknown" "events-blank-value unknown" "events-long empty" "events-oversized unknown"
+  "events-late-garbage populated" "events-frozen-first populated" "events-directory unknown"
 )
 expect_owner=("owner (0, True) (0, False) (0, False) (0, False)")
 desc="a command run from a terminal (qml --version in foot, real dump 128224): the terminal's scope is populated, no notice"
@@ -329,6 +342,8 @@ check has "chromium ('Chromium', 'chromium.desktop', 'chromium.desktop') ('Chrom
 desc="a missing cgroup2 tree is unknown (silence), a tree without the scope is gone"
 check has "no-tree [] 0 unknown"
 check has "tree gone"
+desc="a cgroup.events file that is not the kernel's (not UTF-8, 'populated' without a value, over 64 KiB, a directory) is unknown, never an exception; a long one is still read, the populated line decides wherever it is"
+check bash -c 'for c in "events-not-utf8 unknown" "events-no-value unknown" "events-blank-value unknown" "events-long empty" "events-oversized unknown" "events-late-garbage populated" "events-frozen-first populated" "events-directory unknown"; do grep -qxF "$c" <<<"$1" || exit 1; done' _ "$out"
 desc="the Flatpak user installation is XDG_DATA_HOME/flatpak/exports/share (no '..'), and its entries are found"
 check has "flatpak-path True True ('org.f.App.desktop', 'Flat App')"
 desc="the Dock's scopes (the binary's name) resolve: by id, by Exec binary (nautilus, grassfield-files), by StartupWMClass; localized"
@@ -413,6 +428,10 @@ drop-exec-index|appid in (binary, os.path.basename(keys.get("TryExec", ""))) or|
 drop-generic-rule|shown = [m for m in shown if m[2]]|shown = shown
 unicode-digits|re.fullmatch(r"[0-9]{1,10}", v)|v.isdigit()
 dedupe-by-appid|"key": found[0] if found else cand["exe"]|"key": cand["appid"]
+scope-strict-decode|with open(base + "/cgroup.events", encoding="utf-8", errors="replace") as f:|with open(base + "/cgroup.events", encoding="utf-8", errors="strict") as f:
+scope-no-oserror|    except (OSError, ValueError):|    except ValueError:
+scope-any-line|if len(words) >= 2 and words[0] == "populated":|if len(words) >= 2:
+scope-unbounded-read|for line in f.read(65536).splitlines():|for line in f.read().splitlines():
 EOF
 
 exit $fail

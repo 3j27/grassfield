@@ -177,7 +177,7 @@ fi
 # Plain shell tests: tests/shell/*.sh print PASS/FAIL and exit non-zero on failure. tests/security/*.sh and tests/integration/*.sh
 # run here only when registered with the test.sh runner (the nested ones are bare commands; helpers are not registered).
 # tests/integration/settings_dbus.sh is one: a private bus and fake services, SKIP where Unix sockets are not available.
-for script in tests/shell/*.sh tests/security/*.sh tests/integration/*.sh; do
+for script in tests/shell/*.sh tests/security/*.sh tests/integration/*.sh tests/fuzz/*.sh; do
   [[ -f $script ]] || continue
   [[ $script == tests/security/* || $script == tests/integration/* ]] && [[ ${inv_runner[$script]:-} != test.sh ]] && continue
   layer=$(layer_of "$script") || { status=1; continue; }
@@ -361,6 +361,16 @@ if want logic; then
     record_run logic "compositor/tests (grassfield-compositor-tests)" "$rc" PASS
   else
     record logic "compositor/tests (grassfield-compositor-tests)" skip
+  fi
+  # The same suite under ASan and UBSan when it was built (compositor/build-direct.sh tests-asan; ADR-0041 step 5: the
+  # mutation-fuzzed parsers run inside the compositor).
+  if [[ -x compositor/build/grassfield-compositor-tests-asan ]]; then
+    rc=0
+    compositor/build/grassfield-compositor-tests-asan || rc=1
+    ((rc == 0)) || status=1
+    record_run logic "compositor/tests (grassfield-compositor-tests-asan)" "$rc" PASS
+  else
+    record logic "compositor/tests (grassfield-compositor-tests-asan)" skip
   fi
 fi
 if ((${#skips[@]})); then

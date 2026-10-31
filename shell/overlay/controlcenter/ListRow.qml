@@ -69,7 +69,7 @@ NavItem {
             anchors.verticalCenter: parent.verticalCenter
             size: Tokens.menuIconSize
             name: "checkmark"
-            color: Appearance.colors.accent
+            color: Appearance.colors.accentInk
         }
     }
 

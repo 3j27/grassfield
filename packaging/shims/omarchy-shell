@@ -67,7 +67,13 @@ lock_lock() {
 
 lock_status() {
   secure=false
-  if hyprctl -j monitors 2>/dev/null | jq -e 'length > 0 and all(.[]; (.solitaryBlockedBy // []) | index("LOCK") != null)' >/dev/null 2>&1; then
+  # Fail closed: secure only when the answer is exactly ONE JSON value, a non-empty ARRAY of monitors whose solitaryBlockedBy
+  # is an ARRAY holding "LOCK". jq's index() on a string finds a substring, so a monitor answering a string such as
+  # "UNLOCKED" read as locked; .[] walks an object's values as it walks an array; and without -s, `jq -e` decides on the
+  # LAST of several values, so "[unlocked] [locked]" or "4294967296[locked]" read as locked (tests/fuzz/fuzz_helpers.py,
+  # lock-status; the integrator's review of 265e6c7, major 1). Hyprland 0.56.2 always answers one array of objects with
+  # an array; the checks cover a future shape.
+  if hyprctl -j monitors 2>/dev/null | jq -e -s 'length == 1 and (.[0] | type == "array" and length > 0 and all(.[]; (.solitaryBlockedBy // []) | type == "array" and index("LOCK") != null))' >/dev/null 2>&1; then
     secure=true
   fi
   requested=false
