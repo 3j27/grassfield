@@ -6,6 +6,7 @@ import Grassfield.Ui
 import qs.menubar
 import qs.platform
 import qs.services
+import "../services/PopupKinds.js" as PopupKinds
 
 // Host of every popup (menus, status menus, Control Center, dialogs): one transparent
 // layer-shell window per screen, mapped only while a popup is open on that screen. It takes
@@ -152,16 +153,9 @@ Variants {
         Region {
             id: blurRegion
             item: holder
-            radius: {
-                // A dialog states the corner it draws (an alert's radius.alert, a sheet's radius.sheet: Force Quit, an app's About):
-                // the blur takes it, so its corners are the glass's own (ADR-0039 step 4, G2).
-                const dialog = holder.item as Dialog;
-                if (dialog)
-                    return dialog.cornerRadius;
-                if (Popups.kind === "nowplaying")
-                    return Tokens.quicksettingsRadiusTile;
-                return Tokens.radiusMenu;
-            }
+            // A dialog states the corner it draws (an alert's radius.alert, a sheet's radius.sheet: Force Quit, an app's About):
+            // the blur takes it, so its corners are the glass's own (ADR-0039 step 4, G2; PopupKinds.blurCorner).
+            radius: PopupKinds.blurCorner(Popups.kind, (holder.item as Dialog)?.cornerRadius, Tokens)
 
             // A menu's open submenu (Move & Resize, an app's own submenus, the tiling popover's Full Screen ›) is blurred too, and
             // its own open submenu.
