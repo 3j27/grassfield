@@ -1,0 +1,94 @@
+#!/bin/bash -p
+# sudo, for Omarchy's migrations that Software Update runs (ADR-0033 "Step 5", owner decision SU-M2: one password for
+# Update Now and its migrations' sudo commands). OPUS SECURITY REVIEW REQUIRED: it hands commands to root.
+# Installed as /usr/lib/grassfield/update-sudo/sudo, first in the PATH of grassfield-update-migrate.service, the transient
+# system unit in which grassfield-update-helper runs `omarchy-migrate` as the person who chose Update Now. It runs as that
+# person, never as root, and is not the security boundary: it asks systemd for a transient root unit
+# (`systemd-run`), which polkit grants without a dialog only to a process of grassfield-update-migrate.service, and only
+# for a unit named grassfield-update-root-<32 hex>.service (/usr/share/polkit-1/rules.d/49-grassfield-update.rules).
+# Anywhere else systemd refuses, and no dialog is ever asked (--no-ask-password).
+#
+# What it takes of sudo's command line (Omarchy 4.0.6's uses; anything else is refused, the migration then fails and stays
+# pending, and Omarchy's terminal update runs it):
+#   -n, --non-interactive, -H, --set-home   accepted (nothing is asked; HOME is the target's)
+#   -u USER, -uUSER, --user=USER, --user USER   the target user (a name, or #uid)
+#   -v, -k, -K and their long forms          without a command: success (no credential to validate or forget)
+#   -l, --list                                 exit 1: nothing is listed (a caller then takes its other path)
+#   --                                         the end of the options
+# The command: a name is looked up as sudo's secure_path does, in fixed root-owned folders (/usr/share/omarchy/bin,
+# /usr/local/sbin, /usr/local/bin, /usr/bin), never in the caller's PATH; a path with a slash is taken as given (made
+# absolute). Its arguments reach it unchanged (no $VAR expansion by systemd). It runs as a transient system service: the
+# target user's identity and home, systemd's own environment for it plus SUDO_USER, SUDO_UID and SUDO_GID, the caller's
+# working folder, standard input, output and error passed through; its exit status is this program's.
+set -uo pipefail
+export LC_ALL=C
+
+refuse() {
+  echo "sudo (Grassfield Software Update): $*. Omarchy's terminal update runs this migration." >&2
+  exit 1
+}
+
+target=root list=0 only=0
+while (($#)); do
+  case $1 in
+    --) shift; break ;;
+    -n | --non-interactive | -H | --set-home) ;;
+    -v | --validate | -k | --reset-timestamp | -K | --remove-timestamp) only=1 ;;
+    -l | --list) list=1 ;;
+    -u | --user)
+      (($# >= 2)) || refuse "$1 needs a user"
+      target=$2
+      shift
+      ;;
+    --user=*) target=${1#--user=} ;;
+    -u?*) target=${1#-u} ;;
+    -[nHvkKl][nHvkKl]*)
+      flags=${1#-}
+      while [[ -n $flags ]]; do
+        case ${flags:0:1} in
+          n | H) ;;
+          v | k | K) only=1 ;;
+          l) list=1 ;;
+        esac
+        flags=${flags:1}
+      done
+      ;;
+    -*) refuse "the option $1 is not supported" ;;
+    *=*) refuse "a variable before the command is not supported" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+((list)) && exit 1
+if (($# == 0)); then
+  ((only)) && exit 0
+  refuse "no command"
+fi
+
+[[ $target =~ ^#([0-9]{1,10})$ ]] && target=${BASH_REMATCH[1]}
+[[ $target =~ ^[0-9]{1,10}$ || $target =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || refuse "the user $target is not supported"
+
+command=$1
+shift
+if [[ $command == */* ]]; then
+  [[ $command == /* ]] || command=$PWD/$command
+else
+  found=""
+  for dir in /usr/share/omarchy/bin /usr/local/sbin /usr/local/bin /usr/bin; do
+    if [[ -f $dir/$command && -x $dir/$command ]]; then
+      found=$dir/$command
+      break
+    fi
+  done
+  [[ -n $found ]] || { echo "sudo: $command: command not found" >&2; exit 1; }
+  command=$found
+fi
+
+read -r id </proc/sys/kernel/random/uuid || refuse "no unit name"
+id=${id//-/}
+[[ $id =~ ^[0-9a-f]{32}$ ]] || refuse "no unit name"
+exec /usr/bin/systemd-run --quiet --wait --pipe --collect --no-ask-password --service-type=exec --expand-environment=no \
+  --unit="grassfield-update-root-$id.service" --description="Grassfield Software Update: a migration's sudo command" \
+  --uid="$target" --same-dir --setenv=SUDO_USER="$(id -un)" --setenv=SUDO_UID="$(id -u)" --setenv=SUDO_GID="$(id -g)" \
+  -- "$command" "$@"

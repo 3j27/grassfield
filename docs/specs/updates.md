@@ -230,8 +230,9 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   aquamarine and KF6 by major.minor, Quickshell by its whole version. A missing record fails closed. Otherwise nothing changes
   and the pane says "This update needs a newer version of Grassfield, which isn't available yet." and "Software Update checks
   again later and tells you when it's ready.", with no technical step.
-- U28. What needs a person (ADR-0033 s3.6, the prompt table): a pending migration that names `sudo`, `pkexec`, `su`, `run0`,
-  `doas`, `gum` or `/dev/tty`, or an Omarchy command that does (the command files of `usr/bin/omarchy-*` and
+- U28. What needs a person (ADR-0033 s3.6, the prompt table): a pending migration that names `pkexec`, `su`, `run0`, `doas`,
+  `gum`, `/dev/tty` or a `sudo` by its path, or an Omarchy command that does; a pending migration that needs root (it names
+  `sudo`, or a command that does, or Omarchy's `requires-sudo` header) when U32's conditions do not hold (the command files of `usr/bin/omarchy-*` and
   `usr/share/omarchy/bin/`, Omarchy 4.x's layout); a pending migration the scan cannot read (not a regular file, no command
   file to read, a new package with no migration, a migration or file name outside the scan's forms, more than 64 pending,
   a name the helper refuses); Omarchy's key missing; a package conflict or files no
@@ -252,6 +253,15 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   update could not be installed." and "The updates were not installed…" instead (and the terminal answer of U28 the same);
   one during the transaction "The update stopped before it finished.", and names the snapshot only when one was taken.
   Update Now stays available to try again after every outcome.
+- U32. One password (owner decision SU-M2, ADR-0033 "Step 5"). When the pending migrations need root and nothing that needs a
+  person, the update goes on. After its transaction, the helper runs `omarchy-migrate` as the person, without a terminal and
+  without a second password: each `sudo` command runs as root in its own transient system unit. polkit grants that only to
+  the migrations' unit, `grassfield-update-migrate.service`.
+  - Conditions: systemd, a person (uid 1000 or more), Yama `ptrace_scope` ≥ 1, and a trial `sudo true` through the channel
+    before any change. Otherwise U28's terminal, with nothing changed.
+  - The migrations' `sudo` accepts `-n`, `-H`, `-u`, `-v`, `-k`, `-K`, `-l`, `--` and refuses every other option. A migration
+    it refuses, or whose command fails, stays pending ("Some of Omarchy's last steps need its terminal.", Finish in
+    Terminal…).
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -304,6 +314,7 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 | A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update in Terminal… in Omarchy's floating terminal | owner, real session | L2 |
 | A13 | the update helper as root: usage and privilege refusals, a hostile environment dropped, up to date without touching the sync databases, a `db.lck` held (busy) or left behind (stale) before anything is read, its own lock busy, Omarchy's key missing (after an incompatible update is said so), a plan line it cannot read, pacman's lock taken for the swap and gone after it, Omarchy's 4.x layout (commands in `usr/bin`, links in `usr/share/omarchy/bin`), a migration reading `/dev/tty`, no command file to scan, a migration that is a link, more than 64 pending (the runner), an update through Omarchy's real guard hook, the compatibility check (a toolkit change refused; joined by a matching Grassfield build; major.minor; Quickshell whole; a build without a record), Omarchy's migrations (a new one that calls a `sudo` command through another; a plain one; one named pending), conflicts inside the transaction, the 16 newest operations kept; through real polkitd and pkexec (a password each time, a wrong one, a user refused); the runner as a user (its state file, migrations run as the user without a terminal, a pending one that asks, Omarchy's lock held) | `tests/integration/update_helper.sh` (throwaway Arch container) | L0 (container) |
 | A14 | the pane's run: Update Now's one launch, each phase and count, the bar, the pane opened again mid-run, a runner gone with or without its helper, a reused process id, each outcome's sentence and action, the end's sheet, no restart after a failed startup image, the dev guard | `tests/unit/tst_softwareupdate.qml` (the run's logic), `tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`; the launch vectors in `tst_systemguard.cpp`, `tst_backend.cpp`; captures `software-update-run.png` | L0/L1 |
+| A16 | one password (U32): the migrations' sudo inside its unit (root, input, folder, status, arguments, options, lookup) and refused everywhere else without a dialog; the helper from a user's runner through pkexec: no Yama, the terminal; with Yama, the migration as the user with its sudo as root, `migrations ran`, a failed sudo left pending, a `gum` migration to the terminal, a rule that grants nothing or none installed to the terminal | `tests/integration/update_migrate.sh` (throwaway Arch container run by systemd) | L0 (container) |
 | A15 | real flow: Update Now with a published test channel (the dialog once, the snapshot, the progress, closing and reopening Settings mid-run, Restart Later then Restart); a toolkit update without a matching build refused; an Omarchy release with a `sudo` migration sent to the terminal | owner, real session (the integrator's L2) | L2 |
 
 ## Interfaces / contracts (versions)
@@ -378,6 +389,10 @@ owner decision O22). Omarchy's commands used:
 - No automatic download or install, no install at logout: pacman's cache and the install need root, and the owner wants no
   install without the user.
 - "Update Now" updates the whole system (Omarchy's update), not Grassfield alone.
+- One password (U32). A migration's own `pacman -Syu` is not checked by U27, the same as in Omarchy's terminal. A process a
+  migration leaves running ends with the migrations' unit. The channel needs systemd ≥ 254, polkit with `system_unit` and a
+  bus that hands polkit a pidfd (dbus-broker); without them, the trial fails and U28's terminal follows. Omarchy 4.0.4 →
+  4.0.6 still goes to the terminal: two of its migrations reach `gum` through Omarchy commands (ADR-0033 s5.4).
 - An Omarchy release that ships a migration using `sudo` goes to Omarchy's terminal (U28): Omarchy 4.0.4 → 4.0.6 has three.
   Grassfield gives no migration root and asks no `sudo` password (ADR-0033 s3.6).
 - AUR apps are not updated by Update Now (U28).
