@@ -148,8 +148,9 @@ TestCase {
         const idle = source("shell/security/idle/Idle.qml");
         // The idle lock is requested at once; the dim stays until it holds (bounded); a failed request lifts it at once.
         const lockTimer = block(idle, "Timer {\n        id: lockTimer");
-        verify(/Lock\.fromDim = true;\s*const result = Lock\.lock\("idle"\);/.test(lockTimer));
-        verify(/\} else \{\s*Lock\.fromDim = false;\s*root\.dimmed = false;/.test(lockTimer));
+        // The dim is held before the request: Lock.lock() flips `locked` synchronously and update() runs inside it.
+        verify(/Lock\.fromDim = true;\s*root\.dimUntilLock = true;\s*dimUntilLockBound\.restart\(\);\s*const result = Lock\.lock\("idle"\);/.test(lockTimer));
+        verify(/if \(result !== "ok"\) \{\s*root\.dimUntilLock = false;\s*dimUntilLockBound\.stop\(\);\s*Lock\.fromDim = false;\s*root\.dimmed = false;/.test(lockTimer));
         verify(/interval: IdleModel\.DIM_UNTIL_LOCK_MAX_MS\s*onTriggered: root\.endDimUntilLock\(\)/.test(idle));
         verify(/if \(Lock\.holding\) \{\s*root\.endDimUntilLock\(\);\s*root\.dimmed = false;/.test(idle));
         // A display that turns off for inactivity locks: at once, after the delay, or never.
@@ -166,7 +167,7 @@ TestCase {
         // The lock's content starts at the dim's level.
         const lock = source("shell/security/lock/Lock.qml");
         verify(/startDim: root\.fromDim \? Tokens\.idleDimOpacity : 0/.test(lock));
-        verify(/opacity: root\.frozenDim \* \(1 - root\.contentOpacity\)/.test(source("shell/security/lock/LockView.qml")));
+        verify(/opacity: root\.releasing \? 0 : root\.frozenDim \* \(1 - root\.contentOpacity\)/.test(source("shell/security/lock/LockView.qml")));
         // IQ-T5 A: the red "lock screen died" screen waits past a normal restart (1 to 2 s), not for ever.
         const m = /^\s*lockdead_screen_delay = (\d+),/m.exec(source("config/hypr/grassfield/looknfeel.lua"));
         verify(m !== null);

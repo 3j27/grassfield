@@ -184,7 +184,8 @@ Item {
         anchors.fill: parent
         visible: root.frozenDim > 0
         color: root.colors.shadow
-        opacity: root.frozenDim * (1 - root.contentOpacity)
+        // Only on the way in: the unlock fade does not bring the dim back (opus review of 9a417967, NIT).
+        opacity: root.releasing ? 0 : root.frozenDim * (1 - root.contentOpacity)
     }
 
     // The banded scrim (IQ-W4 A): lock.dimOpacity from the top to the bottom of the date and clock and from the top of the

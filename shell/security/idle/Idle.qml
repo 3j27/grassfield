@@ -184,13 +184,17 @@ Scope {
         id: lockTimer
         interval: root.timing.lockDelayMs
         onTriggered: {
-            // The lock's content starts at the dim's level (ADR-0040 ID-8), and the dim stays until the lock holds.
+            // The lock's content starts at the dim's level (ADR-0040 ID-8), and the dim stays until the lock holds. Set before
+            // the request: Lock.lock() flips `locked` synchronously, which disables the monitor and runs update() at once
+            // (opus review of 9a417967, MINOR 1).
             Lock.fromDim = true;
+            root.dimUntilLock = true;
+            dimUntilLockBound.restart();
             const result = Lock.lock("idle");
-            if (result === "ok") {
-                root.dimUntilLock = true;
-                dimUntilLockBound.restart();
-            } else {
+            if (result !== "ok") {
+                // As before this step: the dim lifts at once, and no new attempt is scheduled (not through update()).
+                root.dimUntilLock = false;
+                dimUntilLockBound.stop();
                 Lock.fromDim = false;
                 root.dimmed = false;
                 console.warn("grassfield-idle: idle lock not engaged:", result);
