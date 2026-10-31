@@ -36,6 +36,10 @@ Singleton {
     readonly property bool waiting: waitProc.running
     // GF-083's updatePending, bound by shell.qml: written to the file for the pane's "Log out to finish updating" (U14).
     property bool logoutPending: false
+    // ADR-0041 step 2b (U31): a toolkit package was replaced under this session (the checker's toolkitMoved, installed at or
+    // after startedAt); once due, a log out stays due until the session ends.
+    property bool toolkitLogout: false
+    readonly property bool logoutDue: logoutPending || toolkitLogout
 
     // A newly found release ("grassfield" or "omarchy", its version and the installed one) or a `blocking` episode.
     signal announce(string kind, string version, string installed)
@@ -124,8 +128,10 @@ Singleton {
                 busyTimer.restart();
             return;
         }
-        const items = SoftwareUpdateLogic.news(file, answer);
-        save(SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items));
+        const items = SoftwareUpdateLogic.news(file, answer, startedAt);
+        if (SoftwareUpdateLogic.toolkitLogout(answer, startedAt))
+            toolkitLogout = true;
+        save(SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items), logoutDue));
         console.info("software update: " + answer.state + (answer.error ? " (" + answer.error + ")" : "") + (items.length > 0 ? ", new: " + items.map(n => n.id).join(", ") : ""));
         if (!user) {
             for (const n of items)
@@ -155,9 +161,9 @@ Singleton {
             stateFile.setText(JSON.stringify(next) + "\n");
     }
 
-    onLogoutPendingChanged: {
-        if (loaded && (file.logoutPending === true) !== logoutPending)
-            save(SoftwareUpdateLogic.withLogoutPending(file, logoutPending));
+    onLogoutDueChanged: {
+        if (loaded && (file.logoutPending === true) !== logoutDue)
+            save(SoftwareUpdateLogic.withLogoutPending(file, logoutDue));
     }
 
     // ---- automatic checks (U7) ----

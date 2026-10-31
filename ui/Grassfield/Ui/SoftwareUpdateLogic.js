@@ -104,9 +104,29 @@ function releases(file) {
     return (isObject(s.grassfield) && s.grassfield.available ? 1 : 0) + (isObject(s.omarchy) && s.omarchy.available ? 1 : 0);
 }
 
-// What an answer brings that was never announced: each Grassfield or Omarchy version found for the first time (U20), and a
-// `blocking` episode (U22). [{id, kind, version, installed}].
-function news(file, answer) {
+// ADR-0041 step 2b: the toolkit packages the checker found moved away from the record this Grassfield was built with, as it
+// lists them ([{name, built, installed, installedAt}], U31); [] when none moved, or when the answer (or the file) carries no
+// list (no record to compare with, an older checker).
+function toolkitMoved(answer) {
+    const list = isObject(answer) && Array.isArray(answer.toolkitMoved) ? answer.toolkitMoved : [];
+    return list.filter(p => isObject(p) && typeof p.name === "string" && p.name !== "" && typeof p.installed === "string");
+}
+
+// The running session loaded a library that was replaced under it: a toolkit package moved and was installed at or after
+// `sessionStartMs`, or at a time the checker could not read (counted as this session, the safe side: a log out asked for
+// nothing is a nuisance, a session kept on libraries it was not built against is a crash waiting). A move installed before
+// the session started is what the session already runs on: no log out for it.
+function toolkitLogout(answer, sessionStartMs) {
+    return toolkitMoved(answer).some(p => {
+        const at = timeOf(p.installedAt);
+        return !(at > 0) || at >= sessionStartMs;
+    });
+}
+
+// What an answer brings that was never announced: each Grassfield or Omarchy version found for the first time (U20), a
+// `blocking` episode (U22), and a toolkit replaced under the running session (U31, once per set of moved versions).
+// [{id, kind, version, installed}].
+function news(file, answer, sessionStartMs) {
     const announced = normalize(file).announced;
     const out = [];
     if (isObject(answer) && LISTING.indexOf(answer.state) >= 0) {
@@ -118,6 +138,8 @@ function news(file, answer) {
     }
     if (isObject(answer) && answer.state === "blocking" && answer.episode)
         out.push({kind: "blocking", version: String(answer.episode), installed: ""});
+    if (toolkitLogout(answer, sessionStartMs))
+        out.push({kind: "toolkit", version: toolkitMoved(answer).map(p => p.name + " " + displayVersion(p.installed)).join(", "), installed: ""});
     return out.map(n => Object.assign(n, {id: n.kind + " " + n.version})).filter(n => announced.indexOf(n.id) < 0);
 }
 

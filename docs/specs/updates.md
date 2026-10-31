@@ -247,6 +247,19 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   "Restart" (or "Log out to finish updating Grassfield" with "Log Out Later" and "Log Out"); Later keeps the pane's row.
   Nothing restarts by itself. When the update could not prepare the startup files (Omarchy's initramfs check), the pane says
   "Don't restart this computer yet" and offers no restart.
+- U31. A toolkit replaced under the running session (ADR-0041 step 2b). Every check, in every state, compares the installed
+  version of each package of U27's record (`qt6-base`, `quickshell`, `hyprland`, `aquamarine`, `kcoreaddons`) with
+  `/usr/share/grassfield/BUILD-DEPS` by U27's rule and dates each move with pacman's own install time of the package
+  (`/var/lib/pacman/local/<name>-<version>/desc`, `%INSTALLDATE%`): the answer's `toolkitMoved` lists them (`[]` when all
+  match, `null` without a record). A move installed at or after the session started (or at a time that cannot be read)
+  means the session runs on libraries that were replaced under it: the shell posts "Log out to finish updating" once per
+  set of moved versions ("The system libraries Grassfield runs on were updated (qt6-base 6.12.0). Log out and back in to
+  use them.", opening Software Update) and writes U14's pending log out, so the pane shows "Log out to finish updating
+  Grassfield" with "Log Out…" and the subtitle "Grassfield and the system libraries it runs on start fresh when you log in
+  again."; a move installed before the session started is what the session already runs on, and asks for nothing. Where
+  the check comes from: the scheduled checks (U7), the check `omarchy update` asks for at its end (U9) and Update Now's
+  own; a `pacman -Syu` typed in a terminal is seen by the next scheduled check or at the next login (the path unit that
+  watches pacman's database is step 2b's second slice).
 - U30. A failure before any change says "The update could not be installed. Nothing was changed." (offline, a mirror, a
   download, a plan pacman refuses or that cannot be read); once the checked sync databases became the system's, it says "The
   update could not be installed." and "The updates were not installed…" instead (and the terminal answer of U28 the same);
@@ -311,6 +324,8 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 - `grassfield-update-check` output, version 1: `{"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":…,
   "error":…,"grassfield":{"installed":…,"available":…,"notes":[…]},"omarchy":{"installed":…,"available":…},"others":N}`.
   Step 2 adds `otherPackages` (the list behind `others`), cut first when the output would pass 256 KiB (ADR-0033 d.3).
+  ADR-0041 step 2b adds `toolkitMoved` (U31: `[{"name","built","installed","installedAt"}]`, `[]`, or `null` without a
+  record), in every state that runs the checker (not in `busy` or `update-running`, answered before it).
 - `software-update.json`, version 1: the last output plus `announced` (versions already notified). State class, ADR-0020.
 - `grassfield.json`: `updates.automaticCheck` (boolean, default true), schema-generated (ADR-0020).
 - Step 3: `/usr/share/grassfield/BUILD-DEPS` (`<name> <version>` lines, U27); `/run/grassfield-update/<op>.progress`

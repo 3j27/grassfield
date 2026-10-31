@@ -30,11 +30,14 @@ Scenarios (each prints one "[fuzz]" line and PASS/FAIL lines; a finding names th
                   searchable and which does not exist, not even as a dangling link); anything else runs it.
   update-check    packaging/bin/grassfield-update-check with stub children (nothing runs): checkupdates' and pacman -Q's
                   output, vercmp's answer, the failures and last-success files, the release notes document, pacman.conf
-                  and the repository file. Contract: nothing raises (parse_notes raises ValueError or UnicodeDecodeError
+                  and the repository file, the BUILD-DEPS record and the local database
+                  entry behind the toolkit comparison (ADR-0041 step 2b). Contract: nothing raises (parse_notes raises ValueError or UnicodeDecodeError
                   only, which its caller catches); the state is one of the documented ones; the other updates are
                   counted as listed, sorted, without Grassfield's or Omarchy's packages; every time is None or ISO 8601;
                   the output line stays under the 256 KiB cap and is JSON; the failures file holds a plausible time
-                  afterwards; a release of the notes has a well-formed version, date and plain-text notes.
+                  afterwards; a release of the notes has a well-formed version, date and plain-text notes; a toolkit
+                  move names a tracked package once, in the record's order, with versions in pacman's grammar whose
+                  compare keys differ, and a time or None.
 Standard library only; the same seed mutates the same inputs (a scenario's seed is a crc32 of its name, never hash()).
 """
 import importlib.machinery
@@ -518,6 +521,11 @@ def update_check():
                    "# Grassfield\nServer = https://repo.example/stable/$arch\nServer = https://mirror.example/stable/$arch # mirror\n",
                    "Server=https://repo.example/beta/$arch\n", ""]
     base = "https://repo.example"
+    record_corpus = [b"qt6-base 6.11.2-1\nquickshell 0.3.1-1\nhyprland 0.56.2-1\naquamarine 0.9.3-1\nkcoreaddons 6.20.0-1\n", b"", b"qt6-base 1:6.12.0-1\n"]
+    desc_corpus = [b"%NAME%\nqt6-base\n\n%VERSION%\n6.12.0-1\n\n%INSTALLDATE%\n1793000500\n\n%VALIDATION%\npgp\n\n", b"%INSTALLDATE%\n\n", b""]
+    toolkit_versions = ["6.11.2-1", "6.12.0-1", "0.3.1-1", "0.3.2-1", "0.56.2-1", "1:0.9.3-1", "6.20.0-1", None]
+    m.BUILD_DEPS = os.path.join(TMP, "update-record")
+    m.PACMAN_LOCAL = os.path.join(TMP, "update-local")
     word = re.compile(r"^\S+$")
     iso = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
     states = {"available", "up-to-date", "not-set-up", "failed"}
@@ -592,10 +600,46 @@ def update_check():
             or m.channel_of(m.servers(conf_corpus[1])[0], base) != "stable":
         sc.finding("the corpus itself: the configuration is not read", conf_corpus)
 
+    def check_toolkit(out, stub):
+        # What installed() answers for each tracked package: the stub's version, or the mutated line's second word when
+        # that line names the package (as the reader demands), else nothing.
+        expected = {}
+        for name, v in stub.installed.items():
+            parts = (stub.installed_text or "%s %s\n" % (name, v)).split()
+            expected[name] = parts[1] if len(parts) == 2 and parts[0] == name else None
+        if out is None:
+            return
+        assert isinstance(out, list), out
+        names = [p["name"] for p in out]
+        assert names == [n for n in m.TRACKED if n in names], names
+        for p in out:
+            assert set(p) == {"name", "built", "installed", "installedAt"}, p
+            assert m.RECORD_VERSION.match(p["built"]) and m.RECORD_VERSION.match(p["installed"]), p
+            assert m.compare_key(p["name"], p["built"]) != m.compare_key(p["name"], p["installed"]), p
+            assert p["installedAt"] is None or iso.match(p["installedAt"]), p
+            assert p["installed"] == expected.get(p["name"]), (p, expected.get(p["name"]))
+
     def body(i):
         mut = sc.mutator
         stub = Stub()
-        if i % 4 == 0:
+        if i % 5 == 4:
+            with open(m.BUILD_DEPS, "wb") as f:
+                f.write(mut.mutate(mut.rng.pick(record_corpus), record_corpus, 8192))
+            stub.installed = {}
+            for name in m.TRACKED:
+                v = mut.rng.pick(toolkit_versions)
+                if v is not None:
+                    stub.installed[name] = mut.text(v, [], 64) if mut.rng.below(4) == 0 else v
+            if mut.rng.below(4) == 0:
+                stub.installed_text = mut.text(mut.rng.pick(installed_corpus), installed_corpus, 4096)
+            entry = os.path.join(m.PACMAN_LOCAL, "qt6-base-6.12.0-1")
+            os.makedirs(entry, exist_ok=True)
+            with open(os.path.join(entry, "desc"), "wb") as f:
+                f.write(mut.mutate(mut.rng.pick(desc_corpus), desc_corpus, 65536))
+            out = checker(stub).toolkit()
+            check_toolkit(out, stub)
+            return bool(out)
+        if i % 5 == 0:
             stub.answers = {"checkupdates": (mut.rng.pick([0, 2, 1]), mut.text(mut.rng.pick(upd_corpus), upd_corpus, 65536), "")}
             if mut.rng.below(4) == 0:
                 stub.installed_text = mut.text(mut.rng.pick(installed_corpus), installed_corpus, 4096)
@@ -607,7 +651,7 @@ def update_check():
             # the other one too); the stub's installed set says which name the result must not count among the others.
             check_updates(r, "omarchy-dev" if "omarchy-dev" in stub.installed else "omarchy")
             return r["state"] == "available"
-        if i % 4 == 1:
+        if i % 5 == 1:
             c = checker(stub, mut.rng.below(4) == 0)
             with open(c.path("failures"), "wb") as f:
                 f.write(mut.mutate(mut.rng.pick(fail_corpus), fail_corpus, 65536))
@@ -617,7 +661,7 @@ def update_check():
             r = c.health_failed()
             check_failed(c, r)
             return r["state"] == "blocking"
-        if i % 4 == 2:
+        if i % 5 == 2:
             if mut.rng.below(4) == 0:
                 stub.answers["vercmp"] = (0, mut.text(mut.rng.pick(["1", "0", "-1", "x"]), [], 64), "")
             c = checker(stub)

@@ -102,6 +102,29 @@ TestCase {
         compare(many.announced[31], "omarchy 4.0.39-1");
     }
 
+    // ADR-0041 step 2b (U31): a toolkit package replaced under the running session asks for a log out, once per set.
+    function test_aMovedToolkitAsksForALogOutOnce() {
+        const moved = [{name: "qt6-base", built: "6.11.2-1", installed: "6.12.0-1", installedAt: "2026-10-28T11:00:00Z"}];
+        const a = answer("up-to-date", {toolkitMoved: moved});
+        const start = Logic.timeOf("2026-10-28T10:00:00Z");
+        verify(Logic.toolkitLogout(a, start), "installed after the session started");
+        verify(!Logic.toolkitLogout(a, Logic.timeOf("2026-10-28T12:00:00Z")), "installed before: the session already runs on it");
+        verify(Logic.toolkitLogout(answer("failed", {toolkitMoved: [{name: "quickshell", built: "0.3.1-1", installed: "0.3.2-1", installedAt: null}]}), start), "an unreadable time counts as this session");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkitMoved: []}), start), "nothing moved");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkitMoved: null}), start), "no record: nothing known");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkitMoved: "junk"}), start), "not a list");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkitMoved: [{installed: 5}, "x", null]}), start), "not entries");
+        let items = Logic.news(Logic.normalize(null), a, start);
+        compare(items.length, 1);
+        compare(items[0].kind, "toolkit");
+        compare(items[0].id, "toolkit qt6-base 6.12.0", "the versions as people read them");
+        const f = Logic.withAnnounced(Logic.combine(Logic.normalize(null), a), items);
+        compare(Logic.news(f, a, start), [], "announced once");
+        compare(Logic.toolkitMoved(f).length, 1, "the file keeps the list for the pane");
+        compare(Logic.news(Logic.normalize(null), a, Logic.timeOf("2026-10-28T12:00:00Z")), [], "nothing to announce when it moved before the session");
+        compare(Logic.news(Logic.normalize(null), available("1.0.1-1"), start).map(n => n.kind), ["grassfield"], "an answer without the list announces as before");
+    }
+
     function test_eachNewReleaseIsAnnouncedOnce() {
         let f = Logic.normalize(null);
         let items = Logic.news(f, available("1.0.1-1", "4.0.6-1"));
