@@ -753,18 +753,22 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
      `<id> cancel`, and closes. The stand-in waits for the user with no overall deadline (the choice may take minutes, as with
      the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without any line** (the
      shell hangs: `grassfield-shell.service` restarts a crashed shell, `Restart=always`, but has no watchdog for a hung one,
-     `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 3 s
-     after the request when the shell dies before connecting, and at most 15 s after the shell's last line when it hangs.
+     `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 4 s
+     after the request when the shell dies before connecting (1 s for the lock's `hyprctl`, 1 s for the shell's answer, 2 s
+     for the connection; review of step 7a, NIT), and at most 15 s after the shell's last line when it hangs.
   5. The stand-in checks the answer before printing it: the id; the grammar; a `window:` handle that is in
      `XDPH_WINDOW_SHARING_LIST`; a `screen:` or `region:` output that Hyprland lists (`hyprctl -j monitors`), with the region
      inside that output's logical size. Anything else prints nothing (cancelled), never a guess.
   6. No answer to step 2 (the shell is absent) and the session is not locked → the stand-in **removes the socket file first**
-     (a late `accepted` then finds nothing to connect to and shows no panel), then execs the stock binary named (absolute path,
-     same arguments and environment).
+     (a late `accepted` then finds nothing to connect to and shows no panel), checks the lock again (a restarting shell
+     restores it), then execs the stock binary named (absolute path, same arguments and environment, SIGPIPE at its default).
 - **While the session is locked** (owner decision Q15, 2026-10-27: cancel): the request is cancelled at once and no picker
   shows, neither the Grassfield one nor the stock one, so no key typed around an unlock can reach a picker. The stand-in checks
   the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on every monitor, or grassfield-shell's
-  crash-recovery marker says "locked" (the test of `packaging/shims/omarchy-shell:64-74`). **Every error counts as locked**
+  crash-recovery marker is not "unlocked" in the shell's own reading of it (`shell/security/LockMachine.js`: `unlocked` or
+  `unlocked sleeps=<n>`, and a count of suspends that is not the machine's now counts as a sleep no shell locked for,
+  `sleptSince`; the review of step 7a, BLOCKER 1: the stand-in first read `unlocked sleeps=<n>` as locked, which the shell
+  writes after every unlock on a machine that sleeps). **Every error counts as locked**
   (counter-review of PR #13, minor; the shim reports "not secure" when `hyprctl` fails): `hyprctl` failing or not answering
   within 1 s, output that is not the expected JSON, no monitor listed, a marker file that exists but cannot be read. The shell
   answers `locked` from `SessionState.refuses("picker")`. A cancelled request also frees xdph.
@@ -840,6 +844,13 @@ Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first
   - Options: (a) cancel; (b) the stock picker.
   - **Choice: (b).**
   - Rule applied: the share still works, and the shell was never asked, so two pickers never show.
+- **7-7. Who may answer on the socket.**
+  - Options: (a) check the connecting process with `SO_PEERCRED` and its executable (Quickshell's install path); (b) rely on the
+    channel's place: a 0600 socket in a 0700 directory of this user, a random name, and an id given only to the shell.
+  - **Choice: (b).**
+  - Rule applied: only this user's processes can reach the socket. Such a process can already drive the shell's IPC and xdph
+    itself, so a check by executable path would add a dependency on where Quickshell is installed and no boundary. A Flatpak
+    app sees neither the host's `/proc` nor `$XDG_RUNTIME_DIR/grassfield`.
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.

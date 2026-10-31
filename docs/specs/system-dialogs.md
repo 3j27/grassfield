@@ -282,7 +282,8 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   nothing.
 - SP4 one picker at a time: a request while a picker is open gets `busy` (cancelled).
 - SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on every monitor, or
-  the shell's crash-recovery marker, the test of `packaging/shims/omarchy-shell:64-74`) and the shell answers `locked`; either
+  the shell's crash-recovery marker read as the shell reads it, `shell/security/LockMachine.js`: only `unlocked` or
+  `unlocked sleeps=<n>` with the machine's count of suspends is unlocked) and the shell answers `locked`; either
   way the request is cancelled and no picker shows, Grassfield's or stock. Every error counts as locked: `hyprctl` failing or
   silent for 1 s, output that is not the expected JSON, no monitor, a marker file that exists but cannot be read.
 - SP6 the panel: tabs "Entire Screen" (one live thumbnail per display, the display's name), "Window" (live thumbnails of the
@@ -347,7 +348,7 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
 
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
-3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
+4 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
 requesting app. Until step 7b: no Selection tab, no recording indicator, and a window that hides itself from capture is listed
 like any other (Hyprland still leaves it out of the stream).
 
