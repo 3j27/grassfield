@@ -145,8 +145,9 @@ answered step by step there; nothing of this ADR's rules changes: `WlSessionLock
 and Quickshell's polkit only, no unlock on a failure.
 
 ## Amendment 2026-10-31 (ADR-0035 D-9, owner decision Q12: the secret sheets)
-In force from the integrator's merge of the step 9a pull request, as the owner was told (ADR-0035 D-9: applied in step 9
-after the integrator's review). The text is the owner's (ADR-0035 "Owner decisions", Q12, 2026-10-27).
+In force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step (ADR-0035 D-9:
+applied in step 9 only after the integrator's review and the owner's agreement on that step). The text is the owner's
+(ADR-0035 "Owner decisions", Q12, 2026-10-27).
 
 **Scope.** The security modules gain the secret sheets fed by `grassfield-prompter` (ADR-0035 D-9, and D-11 for pairing):
 gcr system prompts, KIO network passwords, NetworkManager secrets, BlueZ pairing. The building blocks are WlSessionLock,

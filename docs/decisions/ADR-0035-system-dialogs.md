@@ -1139,7 +1139,7 @@ passwords too (D-12). Q12: the amendment text above.
 
 **Delivered in step 9a (the bridge; the shell's queue and sheets are step 9b, udiskie 9c, the NetworkManager agent 9d,
 KIO's password server 9e).** The security rule is amended with Q12's text (CLAUDE.md, master-prompt R12, ADR-0010
-"Amendment 2026-10-31"), in force from the integrator's merge of this step. `bridges/prompter` (C++20, Qt Core, libgcr-4,
+"Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step. `bridges/prompter` (C++20, Qt Core, libgcr-4,
 GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), installed as
 `/usr/lib/grassfield/grassfield-prompter`, run by `packaging/systemd/grassfield-prompter.service`, which
 `config/hypr/grassfield/autostart.lua` starts before the shell without waiting for it.
@@ -1873,7 +1873,7 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   minor); no libnm.
 - A packaged drop-in keeps Omarchy's `bt-agent` out of the Grassfield session (step 10).
 - The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12): done in step 9a,
-  in force from the integrator's merge of that step.
+  in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step.
 - One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins), `/usr/share/grassfield/xdg` (the
   session's portal configuration) and `/usr/share/grassfield/xdg-config` (the session's `kwalletrc`, Q17-b).
 - The Grassfield session exports `GTK_USE_PORTAL=1`, adds `portals` to `GDK_DEBUG` and prepends `XDG_DATA_DIRS` and
