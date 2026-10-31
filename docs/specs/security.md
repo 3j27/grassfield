@@ -230,6 +230,7 @@ does not check its gate.
 | brightness | up, down | action | brightness keys |
 | keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
 | capabilities | status | dev | visual tests wait on it |
+| security | state, heartbeat | action | the security process's own target (`shell/security.qml`, ADR-0041 step 1 S1, a second `qs` instance at `/usr/share/grassfield/shell/security.qml`): what it hosts (`starting` at S1) and a sequence number; read by `packaging/bin/grassfield-security-status` and the S1 measurements; never private state, nothing locks or unlocks |
 | stages | activate, newStage | action | SUPER+ALT+1..4 (the n-th recent stage forward), SUPER+ALT+S (focused window to a stage of its own); they do nothing while Stages is off |
 | stages | status, enable | dev | `tests/visual/scenarios/stages.sh`; `enable` changes the persisted setting |
 | bartone | status | dev | visual tests |
@@ -961,6 +962,27 @@ Only wrong attempts are ever used for the L2 failure path, and only by the owner
 - A foreign locker that takes over a live Grassfield lock and then dies (no release) leaves the session locked behind
   Hyprland's "lockscreen app died" screen (fail closed); Grassfield's own lock object is no longer used, so the session
   can only be unlocked after the shell restarts (its crash recovery takes the dead lock over).
+
+## The security process (ADR-0041 step 1; the owner's SQ-1 B, ADR-0010 "Separate security process")
+macOS keeps loginwindow (the lock screen and authorization) apart from the Dock and the menu bar; Grassfield moves its
+security modules into a second Quickshell process, `grassfield-security.service` (`qs -n -p
+/usr/share/grassfield/shell/security.qml`, a root of its own next to the UI's `shell.qml`, so `qs.*` resolves from the
+same directory and the modules move without moving a file), one step at a time under the opus review:
+- **S1 (built):** the process and its unit run beside the UI and host nothing moved yet. `shell/security.qml` imports
+  QtQuick, Quickshell and Quickshell.Io only, never reloads on a file change, and answers one IPC target, `security`
+  (`state`: what it hosts, `starting` at S1; `heartbeat`: the state and a sequence number), which
+  `packaging/bin/grassfield-security-status` reads. The unit clears the same environment as the UI's (GF-115),
+  `Restart=always`, `RestartSec=1`, a start limit of 5 starts in 300 s, `PartOf=`/`Requisite=graphical-session.target`,
+  session-only, no `NoNewPrivileges` (the helpers of S2 and S3), provisional resource guards until the S1 measurement
+  (the process's RSS at idle and its start time to the "grassfield-security: ready" line, against gates P2 and P5).
+  `autostart.lua` starts it just before the shell without waiting for it. Every security module stays in the UI: nothing
+  about the lock, the polkit agent, idle or sleep changes at S1. Tests: `tests/security/security_unit.sh` (static),
+  `ipc_inventory.sh` (the target and its caller), `unit_restart_limits.sh`, `session_services.sh`.
+- **S2:** the lock, idle and the sleep inhibitor move together, every `Lock.lock` caller switches to the security instance,
+  `OnFailure=omarchy-sleep-lock.service` and the sleep-lock gate key on the security unit, the UI reads the lock state
+  fail closed (the pushed state OR the compositor's own lock signal OR no state, a stale heartbeat or a stopped security
+  unit). **S3:** the polkit agent. **S4:** safe mode. The invariant of each state (who locks, either process down, sleep)
+  is the table at the end of ADR-0041 step 1.
 
 ## Implementation (M2)
 | Path | Role |

@@ -22,8 +22,8 @@ Scenarios (each prints one "[fuzz]" line and PASS/FAIL lines; a finding names th
                   mutated and random titles. Contract: it prints nothing (the stock dialog runs) or exactly a pid above 1,
                   0 or 1, and a class without a newline; an exception prints nothing.
   lock-status     the jq filter of `omarchy-shell lock status` (packaging/shims/omarchy-shell) on mutated monitor lists.
-                  Contract (fail closed): "secure" only when the answer is a non-empty list of objects whose
-                  solitaryBlockedBy is an array holding "LOCK". Needs jq.
+                  Contract (fail closed): "secure" only when the answer, as jq reads it, is exactly one non-empty list of
+                  objects whose solitaryBlockedBy is an array holding "LOCK". Needs jq.
   sleep-lock-gate packaging/systemd/sleep-lock-gate with WAYLAND_DISPLAY and HYPRLAND_INSTANCE_SIGNATURE mutated, a stub
                   systemctl answering "failed". Contract: it skips Omarchy's sleep lock (exit 1) only when the session's
                   socket or its instance directory is certainly absent (an absolute, well-formed path whose parent is
@@ -225,7 +225,7 @@ def session_end():
     ]
     corpus = [json.dumps(clients).encode(), b"[]", json.dumps(clients[:1]).encode()]
     state = {"stdout": "", "calls": []}
-    dispatch = re.compile(r'^hl\.dsp\.window\.close\(\{ window = "address:0x[0-9a-fA-F]+" \}\)$')
+    dispatch = re.compile(r'^hl\.dsp\.window\.close\(\{ window = "address:0x[0-9a-fA-F]{1,16}" \}\)\Z')
 
     def fake_run(argv, **kw):
         state["calls"].append(list(argv))
@@ -351,30 +351,21 @@ def lock_status():
     corpus = [json.dumps(locked).encode(), json.dumps(locked[:1]).encode(), b"[]", json.dumps([{"name": "DP-1", "solitaryBlockedBy": []}]).encode(),
               json.dumps([{"name": "DP-1", "solitaryBlockedBy": "UNLOCKED"}]).encode(), json.dumps({"a": locked[0]}).encode()]
 
-    def depth(value, d=0):
-        if isinstance(value, list):
-            return max([depth(x, d + 1) for x in value] + [d + 1])
-        if isinstance(value, dict):
-            return max([depth(x, d + 1) for x in value.values()] + [d + 1])
-        return d
-
     def oracle(raw):
-        """True: must be secure; False: must not be; None: either (a locked shape jq may refuse to read: fail closed is
-        right, and so is secure). jq reads bytes that are not UTF-8 with replacement characters, as the oracle does here: a
-        garbled key name is not a monitor without LOCK (the structure decides, never the bytes of a name). One JSON value
-        only (a second one raises here as jq -s counts it). jq and Python differ on a lone surrogate escape such as backslash-u-d800
-        (jq 1.7 and 1.8 refuse it, Python reads it: a false finding at 10 000 iterations, the integrator's review of
-        265e6c7, minor 3), on nesting (jq stops at 256 levels, Python near 1000) and on a leading byte order mark (jq skips
-        it)."""
-        text = raw.decode("utf-8", "replace")
-        if text.startswith("\ufeff"):
-            text = text[1:]
+        """True: must be secure; False: must not be. The shape is judged on jq's own reading of the bytes (`jq -c .`, the
+        parser the filter runs on): a lone surrogate escape, nesting past 256 levels, nan, inf, +1, 01, .5, 5., a byte
+        order mark and bytes that are not UTF-8 are then decided as jq decides them, where Python's json would differ (a
+        false finding on a lone surrogate at 10 000 iterations, the integrator's review of 265e6c7, minor 3; the number
+        tokens, its merge review of #62). What is under test is the filter, not a second JSON parser: a garbled key name
+        is not a monitor without LOCK (the structure decides, never the bytes of a name). Several values (one line each
+        from jq), or none, are not one list."""
+        r = subprocess.run(["jq", "-c", "."], input=raw, capture_output=True, timeout=20)
+        if r.returncode != 0:
+            return False
         try:
-            doc = json.loads(text)
+            doc = json.loads(r.stdout.decode("utf-8", "replace"))
         except ValueError:
             return False
-        except RecursionError:
-            return None
         if not isinstance(doc, list) or not doc:
             return False
         for mon in doc:
@@ -383,11 +374,7 @@ def lock_status():
             sb = mon.get("solitaryBlockedBy")
             if not isinstance(sb, list) or "LOCK" not in sb:
                 return False
-        try:
-            json.dumps(doc, ensure_ascii=False).encode("utf-8")
-        except UnicodeEncodeError:
-            return None
-        return None if depth(doc) > 200 else True
+        return True
 
     for raw in corpus:
         r = subprocess.run(jq, input=raw, capture_output=True, timeout=20)
@@ -395,18 +382,23 @@ def lock_status():
             sc.finding("the corpus itself is read against the contract", raw)
     for raw in (b'[{"solitaryBlockedBy":["WINDOWED"]}] [{"solitaryBlockedBy":["LOCK"]}]', b'4294967296[{"solitaryBlockedBy":["LOCK"]}]',
                 b'[{"solitaryBlockedBy":["LOCK"]}] 1', b"", b" \n"):
-        if subprocess.run(jq, input=raw, capture_output=True, timeout=20).returncode == 0 or oracle(raw) is not False:
+        if subprocess.run(jq, input=raw, capture_output=True, timeout=20).returncode == 0 or oracle(raw):
             sc.finding("several JSON values, or none, read as secure", raw)
+    # jq reads these number tokens where Python's json does not: the oracle must follow jq (a locked list stays secure).
+    for raw in (b'[{"solitaryBlockedBy":["LOCK"],"x":nan}]', b'[{"solitaryBlockedBy":["LOCK"],"x":inf}]', b'[{"solitaryBlockedBy":["LOCK"],"x":+1}]',
+                b'[{"solitaryBlockedBy":["LOCK"],"x":01}]', b'[{"solitaryBlockedBy":["LOCK"],"x":.5}]', b'[{"solitaryBlockedBy":["LOCK"],"x":5.}]',
+                b'\xef\xbb\xbf[{"solitaryBlockedBy":["LOCK"]}]'):
+        if (subprocess.run(jq, input=raw, capture_output=True, timeout=20).returncode == 0) != oracle(raw):
+            sc.finding("the oracle and jq disagree on a token jq reads", raw)
 
     def body(i):
         mut = sc.mutator
         raw = mut.mutate(mut.rng.pick(corpus), corpus, 65536)
         r = subprocess.run(jq, input=raw, capture_output=True, timeout=20)
         secure = r.returncode == 0
-        verdict = oracle(raw)
-        if secure and verdict is False:
+        if secure and not oracle(raw):
             sc.finding("secure without exactly one list of objects each listing LOCK", raw)
-        if not secure and verdict is True:
+        if not secure and oracle(raw):
             sc.finding("not secure although every monitor lists LOCK", raw)
         return secure
 

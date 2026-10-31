@@ -95,8 +95,8 @@ done
 # The Secret Service handover (ADR-0035 D-12): its first phase (a leftover ksecretd lets go of org.freedesktop.secrets) ends
 # before the shell starts, so no app opened from the Dock reaches KWallet there; the shell never waits more than 10 s for it.
 u=$pk/systemd/grassfield-secrets-handover.service
-desc="grassfield-secrets-handover.service and grassfield-portal-settings.service (not waited for): started before the shell in the same chain, after the menu bridge"
-check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
+desc="grassfield-secrets-handover.service, grassfield-portal-settings.service and grassfield-security.service (the last two not waited for): started before the shell in the same chain, after the menu bridge"
+check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
 desc="grassfield-secrets-handover.service: started by the session, skips itself outside it, NoNewPrivileges, seccomp, installed by the PKGBUILD"
 check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -q "for unit in .*secrets-handover" "$2"' _ "$u" "$pk/arch/PKGBUILD"
 desc="grassfield-secrets-handover.service: no core file, no swap, no Qt D-Bus message dump (secret values pass through it)"
