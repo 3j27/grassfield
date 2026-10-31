@@ -327,6 +327,30 @@ down, how sleep behaves) is written in the table at the end of this step.
   (596); `git diff --check` clean. NOT VERIFIED: `grassfield-security-status` from a TTY on a machine with the session.
 - Review: opus security (the unit's guards and the status helper are in the lock's future path; the allow-list is the
   test that keeps S1's root empty).
+- Review round 1 (2026-10-31, the integrator's opus security review of eecf953: FAIL, one major):
+  1. Major: the allow-list matched line by line, and Qt accepts what slipped past it: a `FloatingWindow` with its brace
+     on the next line or a comment before it, an indented `import Quickshell.Wayland` with a `WlSessionLock`, a
+     tab-indented `import qs.security.lock` with `Lock.locked` (a singleton needs no brace); qmllint 6.11.2 accepts them
+     all and an offscreen `qml` probe ran them. Now `tests/security/root_check.py` reads the root as the engine does:
+     comments (`//`, `/* */`) stripped and string literals blanked by a scanner, the file joined on whitespace, imports
+     taken wherever they stand (`^\s*import`) and held to QtQuick, Quickshell and Quickshell.Io, every `Name {` held to
+     ShellRoot and IpcHandler, and no `/` or backtick outside comments and strings (a regex literal's `//` would read as
+     a comment and hide what follows it; a template string likewise), so the scanner's comment detection is sound. Its
+     selftest plants twenty mutants (the review's five, and a regex literal, a template string, a dynamic `import()`, a
+     file import, a versioned import hiding another, two windows on one line, a `Component`, `eval`, …) and each must
+     be refused while the root passes.
+  2. Minor: `Quickshell.execDetached`, `Qt.openUrlExternally`, `Qt.callLater` and `Process {` passed the "no process"
+     claim: refused by name, with `createComponent`, `createQmlObject`, `eval`, `Function`, `include`, `XMLHttpRequest`,
+     any `Qt.` or `qs.` name, a window, a popup, a socket and the security modules' names (`Lock`, `Idle`,
+     `SleepInhibitor`, `AuthAgent`, `Pam…`, `Polkit…`, `Wl…`). At S2 the modules move in through their own files and the
+     allow-lists grow with them, each under the same reading.
+  3. Nit: the test's header no longer says "provisional".
+  4. Notes for S2 (the integrator's, not blocking): above `MemoryHigh` the throttling could delay drawing the lock past
+     the sleep delay; repeated kills at `MemoryMax` could use up the start limit (5 in 300 s), after which Hyprland keeps
+     the lock with no client (`allow_session_lock_restore = true`: fail locked, the user shut out). Before S2: measure
+     again with the lock's surfaces, and decide the start-limit behaviour (R5's rows for the security unit).
+  Evidence: `tests/security/security_unit.sh` 39 PASS (the root check, its twenty-one selftest lines); `python3 -I
+  tests/ci/inventory.py` ok (596); `git diff --check` clean.
 
 ### Step 2: no untested toolkit reaches the session, on any path (U-1, I-1, M-7) — **opus security review** (2a's helper verbs; nothing else runs as root)
 Goal: what Update Now refuses today, every path refuses or at least detects; the user is told what to do in the words
