@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QRegularExpression>
 #include <QUrl>
 
@@ -90,7 +91,143 @@ QString formatMm(double mm)
     return QString::number(rounded, 'f', rounded == std::floor(rounded) ? 0 : 1);
 }
 
+// The printer's own options the sheet shows, with their section (macOS's print panel groups them so).
+struct KnownOption {
+    const char *name;
+    const char *section;
+};
+const KnownOption kKnownOptions[] = {
+    {"media-source", "quality"}, {"media-type", "quality"}, {"print-quality", "quality"}, {"output-bin", "printer"}, {"finishings", "printer"},
+};
+
+bool validDuplex(const QString &duplex)
+{
+    return duplex == QLatin1String("simplex") || duplex == QLatin1String("horizontal") || duplex == QLatin1String("vertical");
+}
+
+// The options of a map as the sheet keeps them: the names it shows, with values that read; the rest dropped.
+QMap<QString, QString> readOptions(const QVariantMap &map)
+{
+    QMap<QString, QString> out;
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        if (it.value().metaType() != QMetaType::fromType<QString>())
+            continue;
+        const QString value = it.value().toString();
+        if (!optionSection(it.key()).isEmpty() && validOptionValue(value))
+            out.insert(it.key(), value);
+    }
+    return out;
+}
+
 } // namespace
+
+bool PrinterOption::lists(const QString &value) const
+{
+    return std::any_of(values.cbegin(), values.cend(), [&value](const OptionValue &v) { return v.value == value; });
+}
+
+const PrinterOption *Capabilities::option(const QString &name) const
+{
+    for (const PrinterOption &o : options) {
+        if (o.name == name)
+            return &o;
+    }
+    return nullptr;
+}
+
+const QStringList &printerOptionNames()
+{
+    static const QStringList names = [] {
+        QStringList out;
+        for (const KnownOption &k : kKnownOptions)
+            out << QString::fromLatin1(k.name);
+        return out;
+    }();
+    return names;
+}
+
+QString optionSection(const QString &name)
+{
+    for (const KnownOption &k : kKnownOptions) {
+        if (name == QLatin1String(k.name))
+            return QString::fromLatin1(k.section);
+    }
+    return {};
+}
+
+bool validOptionValue(const QString &value)
+{
+    static const QRegularExpression keyword(QRegularExpression::anchoredPattern(QStringLiteral("[a-z0-9][a-z0-9._-]{0,62}")));
+    return keyword.match(value).hasMatch();
+}
+
+QString keywordLabel(const QString &keyword)
+{
+    QStringList words = QString(keyword).replace(QLatin1Char('_'), QLatin1Char('-')).split(QLatin1Char('-'), Qt::SkipEmptyParts);
+    for (QString &w : words)
+        w[0] = w.at(0).toUpper();
+    return oneLine(words.join(QLatin1Char(' ')));
+}
+
+QMap<QString, QString> optionChoices(const Capabilities &caps, const QMap<QString, QString> &wanted)
+{
+    QMap<QString, QString> out;
+    for (const PrinterOption &o : caps.options) {
+        if (optionSection(o.name).isEmpty() || o.values.isEmpty())
+            continue;
+        const QString asked = wanted.value(o.name);
+        out.insert(o.name, o.lists(asked) ? asked : o.lists(o.defaultValue) ? o.defaultValue : o.values.first().value);
+    }
+    return out;
+}
+
+Preset presetOf(const Choices &c)
+{
+    Preset p;
+    p.collate = c.collate;
+    p.duplex = validDuplex(c.duplex) ? c.duplex : QStringLiteral("simplex");
+    p.color = c.color;
+    p.options = c.options;
+    return p;
+}
+
+Choices withPreset(Choices c, const Preset &preset, const Capabilities &caps)
+{
+    c.collate = preset.collate;
+    if (caps.known && !caps.twoSided)
+        c.duplex = QStringLiteral("simplex");
+    else if (validDuplex(preset.duplex))
+        c.duplex = preset.duplex;
+    c.color = caps.known && !caps.color ? false : preset.color;
+    for (auto it = preset.options.cbegin(); it != preset.options.cend(); ++it) {
+        const PrinterOption *o = caps.option(it.key());
+        if (o && o->lists(it.value()) && validOptionValue(it.value()))
+            c.options.insert(it.key(), it.value());
+    }
+    return c;
+}
+
+QJsonObject toJson(const Preset &p)
+{
+    QJsonObject options;
+    for (auto it = p.options.cbegin(); it != p.options.cend(); ++it)
+        options.insert(it.key(), it.value());
+    return {{QLatin1String("collate"), p.collate}, {QLatin1String("duplex"), p.duplex}, {QLatin1String("color"), p.color},
+            {QLatin1String("options"), options}};
+}
+
+std::optional<Preset> presetFromJson(const QJsonObject &o)
+{
+    if (o.isEmpty() || !o.value(QLatin1String("collate")).isBool() || !o.value(QLatin1String("color")).isBool()
+        || !validDuplex(o.value(QLatin1String("duplex")).toString()))
+        return std::nullopt;
+    Preset p;
+    p.collate = o.value(QLatin1String("collate")).toBool();
+    p.color = o.value(QLatin1String("color")).toBool();
+    p.duplex = o.value(QLatin1String("duplex")).toString();
+    p.options = readOptions(o.value(QLatin1String("options")).toObject().toVariantMap());
+    return p;
+}
 
 bool parseRanges(const QString &input, QList<PageRange> *out)
 {
@@ -278,6 +415,8 @@ Choices initialChoices(const QString &printer, const Capabilities &caps, const Q
     c.color = flag(settings, QStringLiteral("use-color"), caps.known ? caps.color : true);
     if (caps.known && !caps.color)
         c.color = false;
+    // The printer's own options: its defaults (GTK's settings name none of them).
+    c.options = optionChoices(caps, {});
     return c;
 }
 
@@ -288,7 +427,8 @@ bool toGtk(const Choices &c, QVariantMap *settings, QVariantMap *pageSetup)
         return false;
     if (c.media.name.isEmpty() || !(c.media.widthMm > 0) || !(c.media.heightMm > 0))
         return false;
-    const bool toFile = !c.outputUri.isEmpty();
+    // Save as PDF and Open in Preview: a PDF file, which the backend writes where it belongs.
+    const bool toFile = !c.outputUri.isEmpty() || c.preview;
     QVariantMap s;
     if (!toFile && !c.printer.isEmpty())
         s.insert(QStringLiteral("printer"), c.printer);
@@ -333,7 +473,7 @@ bool toGtk(const Choices &c, QVariantMap *settings, QVariantMap *pageSetup)
 QList<QPair<QString, QString>> cupsOptions(const Choices &c, const Capabilities &caps)
 {
     QList<QPair<QString, QString>> out;
-    if (!c.outputUri.isEmpty())
+    if (!c.outputUri.isEmpty() || c.preview)
         return out;
     const int copies = std::clamp(c.copies, 1, std::clamp(caps.maxCopies, 1, kMaxCopies));
     if (copies > 1) {
@@ -352,6 +492,26 @@ QList<QPair<QString, QString>> cupsOptions(const Choices &c, const Capabilities 
     }
     if (caps.color)
         out.append({QStringLiteral("print-color-mode"), c.color ? QStringLiteral("color") : QStringLiteral("monochrome")});
+    // The printer's own options, each only with a value it listed, as it listed it.
+    for (const PrinterOption &o : caps.options) {
+        const QString value = c.options.value(o.name);
+        if (!optionSection(o.name).isEmpty() && o.lists(value) && validOptionValue(value))
+            out.append({o.name, value});
+    }
+    return out;
+}
+
+QList<QPair<QString, QString>> documentOptions(const Choices &c, const Capabilities &caps)
+{
+    QList<QPair<QString, QString>> out = cupsOptions(c, caps);
+    QList<PageRange> ranges;
+    if (c.outputUri.isEmpty() && !c.preview && c.pages == QLatin1String("ranges") && parseRanges(c.ranges, &ranges)) {
+        // 1-based, each as a range ("5-5" for one page): IPP's rangeOfInteger, read by CUPS as several values at the commas.
+        QStringList parts;
+        for (const PageRange &r : std::as_const(ranges))
+            parts << QStringLiteral("%1-%2").arg(r.first + 1).arg(r.last + 1);
+        out.append({QStringLiteral("page-ranges"), parts.join(QLatin1Char(','))});
+    }
     return out;
 }
 
@@ -383,6 +543,14 @@ QVariantMap toQml(const Choices &c)
         {QStringLiteral("duplex"), c.duplex},
         {QStringLiteral("color"), c.color},
         {QStringLiteral("outputUri"), c.outputUri},
+        {QStringLiteral("preview"), c.preview},
+        {QStringLiteral("options"), [&c] {
+             QVariantMap options;
+             for (auto it = c.options.cbegin(); it != c.options.cend(); ++it)
+                 options.insert(it.key(), it.value());
+             return options;
+         }()},
+        {QStringLiteral("preset"), c.preset},
     };
 }
 
@@ -431,6 +599,15 @@ Choices fromQml(const QVariantMap &map, const Choices &base)
         const QString path = localPdfPath(map.value(QStringLiteral("outputUri")).toString());
         c.outputUri = path.isEmpty() ? QString() : QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded);
     }
+    if (map.contains(QStringLiteral("preview")))
+        c.preview = map.value(QStringLiteral("preview")).toBool();
+    if (map.contains(QStringLiteral("options")))
+        c.options = readOptions(map.value(QStringLiteral("options")).toMap());
+    if (map.contains(QStringLiteral("preset"))) {
+        const QString p = map.value(QStringLiteral("preset")).toString();
+        if (p == QLatin1String("default") || p == QLatin1String("last"))
+            c.preset = p;
+    }
     return c;
 }
 
@@ -446,6 +623,19 @@ QVariantMap toQml(const Capabilities &caps)
         {QStringLiteral("twoSided"), caps.twoSided},
         {QStringLiteral("color"), caps.color},
         {QStringLiteral("maxCopies"), std::clamp(caps.maxCopies, 1, kMaxCopies)},
+        {QStringLiteral("options"), [&caps] {
+             QVariantList options;
+             for (const PrinterOption &o : caps.options) {
+                 QVariantList values;
+                 for (const OptionValue &v : o.values)
+                     values.append(QVariantMap{{QStringLiteral("value"), v.value}, {QStringLiteral("label"), v.label}});
+                 options.append(QVariantMap{{QStringLiteral("name"), o.name},
+                                            {QStringLiteral("section"), optionSection(o.name)},
+                                            {QStringLiteral("defaultValue"), o.defaultValue},
+                                            {QStringLiteral("values"), values}});
+             }
+             return options;
+         }()},
     };
 }
 

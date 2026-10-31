@@ -987,8 +987,9 @@ TEST(WritePdf, OnlyAWholePdfIsWrittenAndNeverThroughALink)
 
 // The libcups side against a real scheduler (A-PR1): tests/integration/print_cups.sh runs this with a scratch cupsd whose default
 // queue GF_TEST_CUPS_PRINTER writes its jobs to a file, its PPD offering A4, US Letter and A5, two sides and colour; skipped
-// elsewhere. The printers listed (the default flagged, its name and place), what it supports read off the GUI thread, a job sent
-// with its options (the scheduler keeps them on the job), and a printer CUPS does not know refused.
+// elsewhere. The printers listed (the default flagged, its name and place), what it supports read off the GUI thread (its own
+// options too, step 6b), a job sent with its options (the scheduler keeps them on the job), and a printer CUPS does not know
+// refused.
 TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
 {
     const QString queue = qEnvironmentVariable("GF_TEST_CUPS_PRINTER");
@@ -1041,6 +1042,37 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
     EXPECT_TRUE(caps.twoSided);
     EXPECT_TRUE(caps.color);
     EXPECT_GT(caps.maxCopies, 1);
+    // Step 6b: the queue's own options as CUPS reports them (its PPD's InputSlot, MediaType, cupsPrintQuality, OutputBin and
+    // finishings), in the sheet's order, with their names (CUPS's, from the PPD; an enum CUPS does not name by its keyword) and
+    // defaults (media-col-default's paper source and type, the others' -default).
+    QStringList optionNames;
+    for (const print::PrinterOption &o : caps.options)
+        optionNames << o.name;
+    EXPECT_EQ(optionNames, (QStringList{QStringLiteral("media-source"), QStringLiteral("media-type"), QStringLiteral("print-quality"),
+                                        QStringLiteral("output-bin"), QStringLiteral("finishings")}));
+    const auto values = [&caps](const QString &name) {
+        QStringList out;
+        if (const print::PrinterOption *o = caps.option(name)) {
+            for (const print::OptionValue &v : o->values)
+                out << v.value + QLatin1Char('=') + v.label;
+        }
+        return out;
+    };
+    EXPECT_EQ(values(QStringLiteral("media-source")),
+              (QStringList{QStringLiteral("auto=Automatic"), QStringLiteral("tray-1=Tray 1"), QStringLiteral("manual=Manual Feed")}));
+    EXPECT_EQ(values(QStringLiteral("media-type")), (QStringList{QStringLiteral("stationery=Plain Paper"), QStringLiteral("photo=Photo Paper")}));
+    EXPECT_EQ(values(QStringLiteral("output-bin")), (QStringList{QStringLiteral("upper=Upper Bin"), QStringLiteral("lower=Lower Bin")}));
+    EXPECT_EQ(values(QStringLiteral("finishings")), (QStringList{QStringLiteral("3=None"), QStringLiteral("20=Staple Top Left")}));
+    QStringList qualities;
+    for (const QString &v : values(QStringLiteral("print-quality")))
+        qualities << v.section(QLatin1Char('='), 0, 0);
+    EXPECT_EQ(qualities, (QStringList{QStringLiteral("3"), QStringLiteral("4"), QStringLiteral("5")}));
+    const auto defaultOf = [&caps](const QString &name) { return caps.option(name) ? caps.option(name)->defaultValue : QString(); };
+    EXPECT_EQ(defaultOf(QStringLiteral("media-source")), QStringLiteral("auto"));
+    EXPECT_EQ(defaultOf(QStringLiteral("media-type")), QStringLiteral("stationery"));
+    EXPECT_EQ(defaultOf(QStringLiteral("print-quality")), QStringLiteral("4"));
+    EXPECT_EQ(defaultOf(QStringLiteral("output-bin")), QStringLiteral("upper"));
+    EXPECT_EQ(defaultOf(QStringLiteral("finishings")), QStringLiteral("3"));
 
     QTemporaryDir dir;
     ASSERT_TRUE(dir.isValid());
@@ -1056,7 +1088,12 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
                                        {QStringLiteral("multiple-document-handling"), QStringLiteral("separate-documents-collated-copies")},
                                        {QStringLiteral("media"), QStringLiteral("iso_a5_148x210mm")},
                                        {QStringLiteral("sides"), QStringLiteral("two-sided-long-edge")},
-                                       {QStringLiteral("print-color-mode"), QStringLiteral("monochrome")}};
+                                       {QStringLiteral("print-color-mode"), QStringLiteral("monochrome")},
+                                       {QStringLiteral("media-source"), QStringLiteral("tray-1")},
+                                       {QStringLiteral("media-type"), QStringLiteral("photo")},
+                                       {QStringLiteral("print-quality"), QStringLiteral("5")},
+                                       {QStringLiteral("output-bin"), QStringLiteral("lower")},
+                                       {QStringLiteral("finishings"), QStringLiteral("20")}};
     system.submit(queue, QStringLiteral("Grassfield test page"), options, fd, &context, [&](const QString &why) {
         error = why;
         sent = true;
@@ -1094,6 +1131,14 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
     EXPECT_EQ(keyword("sides"), QStringLiteral("two-sided-long-edge"));
     EXPECT_EQ(keyword("print-color-mode"), QStringLiteral("monochrome"));
     EXPECT_EQ(keyword("media"), QStringLiteral("iso_a5_148x210mm"));
+    // Step 6b: the printer's own options, kept on the job as they were sent.
+    EXPECT_EQ(keyword("media-source"), QStringLiteral("tray-1"));
+    EXPECT_EQ(keyword("media-type"), QStringLiteral("photo"));
+    EXPECT_EQ(keyword("output-bin"), QStringLiteral("lower"));
+    ipp_attribute_t *quality = ippFindAttribute(response, "print-quality", IPP_TAG_ENUM);
+    EXPECT_EQ(quality ? ippGetInteger(quality, 0) : 0, 5);
+    ipp_attribute_t *finishings = ippFindAttribute(response, "finishings", IPP_TAG_ENUM);
+    EXPECT_EQ(finishings ? ippGetInteger(finishings, 0) : 0, 20);
     ippDelete(response);
 
     // Only a PDF or PostScript is sent: a printer language (PJL here) is refused before any job is made.

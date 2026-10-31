@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # grassfield-portal's printers and jobs through a real CUPS scheduler (ADR-0035 D-7, step 6a; docs/specs/system-dialogs.md
 # section 7, A-PR1): a scratch cupsd run as the user (its own configuration, spool and port; never the system's scheduler), one
-# queue writing to a file through a test PPD (tests/fixtures/print/office.ppd: A4, US Letter and A5, two sides, colour, PDF
-# passed as it is), then portal-unit-tests' CupsPrintSystem.* against it: the printers listed (the default, its name and place),
-# what the queue supports read off the GUI thread, a job sent with its options (kept on the job by the scheduler), a printer
+# queue writing to a file through a test PPD (tests/fixtures/print/office.ppd: A4, US Letter and A5, two sides, colour, its own
+# paper source, media type, quality, output bin and finishing, PDF passed as it is), then portal-unit-tests' CupsPrintSystem.*
+# against it: the printers listed (the default, its name and place), what the queue supports read off the GUI thread (its own
+# options with their names and defaults, step 6b), a job sent with its options (kept on the job by the scheduler), a printer
 # CUPS does not know refused; and the document the scheduler got is the one sent.
 # Needs a cupsd the user can run (GF_TEST_CUPSD; Arch's /usr/sbin/cupsd is root's only, mode 0700: a copy, in a container),
 # lpadmin, python3 and the built portal tests (apps/portal/build-direct.sh --tests); SKIPs without them.
