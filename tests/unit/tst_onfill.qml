@@ -108,7 +108,7 @@ TestCase {
                 const f = sliderFill();
                 verify(f !== null, "the slider's fill");
                 compare(f.color, fill, "a slider's fill, " + what);
-                compare(defaultButton.background.color, fill, "a default button, " + what);
+                compare((defaultButton.background as Rectangle).color, fill, "a default button, " + what);
                 verify(rects(box, Tokens.controlCheckBoxSize, Tokens.controlCheckBoxSize).some(r => Qt.colorEqual(r.color, fill)), "a checked box, " + what);
             }
         }
