@@ -933,9 +933,13 @@ here, numbered after 6a's).
   output and error, and only a header and raw pixels read back (no image decoder runs on its answer). **Choice: (c).** Rule
   applied: an application's document is data; a flaw in the PDF reader must not reach the bus or the user's files from the
   process that answers the panels; (b) alone would leave the bus open to it. Memory is limited as data in use (`RLIMIT_DATA`,
-  1 GiB), not as address space: Qt PDF's pdfium reserves tens of GiB it never uses (the child stopped under a 32 GiB
+  512 MiB since 6-21), not as address space: Qt PDF's pdfium reserves tens of GiB it never uses (the child stopped under a 32 GiB
   `RLIMIT_AS`); CPU 10 s, a deadline of 8 s, killed with its parent. Cost: a child per page shown (tens of milliseconds); on an
   architecture the filter does not know (neither x86_64 nor aarch64) the sheet says "No Preview" and the document still prints.
+  **Amended by the security review of step 6b (FAIL: BLOCKER 1, MAJOR 2), see 6-20:** the first filter was a deny-list that
+  blocked writes only; under it the child could re-limit, re-prioritise or re-schedule another process (grassfield-portal
+  among them), make a user namespace or a process that outlived it, push a byte into a terminal (TIOCSTI), read every file of
+  the user's (another process's environment in `/proc` included) and lock files (a covert channel). 6-20 replaces it.
 - **6-11. Where the document is kept while the sheet is up.** Question: the document is read before the sheet can show it, print
   it, save it or open it; where does it wait? Options: (a) in memory; (b) an unlinked file of
   grassfield-portal's (`O_TMPFILE`, 0600) in the temporary folder; (c) a named file in the runtime folder. **Choice: (b)**: no
@@ -943,12 +947,18 @@ here, numbered after 6a's).
   (`g_file_open_tmp`); at most 2 GiB, a PDF only (6-4). Rule applied: the smallest exposure (no name, no memory held for a
   large document), as upstream keeps it. The application's descriptor is read where it is (`pread`), its
   position untouched, so the call can still go on to x-d-p-gtk as it came (6-12). Each reader (the job, Save as PDF, Open in
-  Preview, a page drawn) opens the file anew (`/proc/self/fd`), with a position of its own.
+  Preview, a page drawn) opens the file anew (`/proc/self/fd`), with a position of its own. **Amended by the security review of
+  step 6b (MAJOR 3), see 6-21:** the temporary folder is a tmpfs on Arch, whose pages count against grassfield-portal's
+  MemoryMax (1 GiB), and 16 requests could each keep 2 GiB: a sandboxed application could have the portal OOM-killed. The file
+  is now on disk, in the user's cache folder, within one budget for all the requests; and it is read from where the
+  application's descriptor stands (what x-d-p-gtk would read), no longer from its start (the review's NIT).
 - **6-12. A document sent first that is not a PDF.** Question: what happens to PostScript or a printer language sent with no
   token? Options: (a) refuse it (response 2); (b) send the call to x-d-p-gtk as it
   came, as every Print with no token went before 6b; (c) print it. **Choice: (b)** when the document is a file (read in place,
   untouched), (a) when it came on a pipe that is read already. Rule applied: nothing that printed before 6b stops printing; only a
-  PDF reaches a printer through Grassfield (6-4); x-d-p-gtk's path stays upstream's own (6-4's accepted risk).
+  PDF reaches a printer through Grassfield (6-4); x-d-p-gtk's path stays upstream's own (6-4's accepted risk). **Amended by the
+  security review of step 6b (MINOR 6), see 6-24:** a call whose sheet does not show in time went to x-d-p-gtk even when part of
+  a pipe was read, and x-d-p-gtk got the document truncated.
 - **6-13. What the sheet offers for a document sent first.** Question: which of the sheet's settings still apply to a document
   that is already made? Options: (a) the same sheet as PreparePrint's; (b) without
   Orientation and Scale, Pages as All Pages or a range (no current page or selection: no application to ask), the printer
@@ -980,7 +990,10 @@ here, numbered after 6a's).
   never a path the application chose or can see (a Flatpak does not see the runtime folder), nothing left in the user's
   folders (macOS opens a temporary copy too). Rule applied: the same symlink-safe write as Save as PDF, to a place only the user
   can reach, and the Dock's own way of starting an application. The application gets `file:///dev/null`, as for Save as PDF (6-3); the request
-  ends with 0 once Preview is started, 2 when the copy or the start fails.
+  ends with 0 once Preview is started, 2 when the copy or the start fails. **Amended by the security review of step 6b (MINOR 4),
+  see 6-22:** the runtime folder is a tmpfs whose pages count against grassfield-portal's MemoryMax and the copies stayed there
+  until logout; `systemd-run` expanded `${NAME}` in the copy's path; a long title in a script of three bytes a character passed
+  the file system's 255 bytes and failed the copy.
 - **6-18. Presets.** Question: what do Default Settings and Last Used Settings hold, for which printers, and where are they
   kept? Options for Last Used Settings' scope: (a) per application; (b) per printer; (c) one for every printer,
   macOS's. **Choice: (c)**, with Default Settings and Last Used Settings only (named presets, "Save Current Settings as
@@ -1002,8 +1015,78 @@ here, numbered after 6a's).
   `media-col-default` for the source and type), else the first. The job carries the value shown as CUPS takes it (a keyword or
   an enum's number), only a value the printer listed and that reads as one value (`[a-z0-9][a-z0-9._-]*`: never a comma or a
   brace, which libcups would read as several values or a collection); the scratch scheduler keeps them on the job
-  (`print_cups.sh`). Not in 6b (a follow-up): a PPD's vendor options with no IPP name, Layout (pages per sheet, border) and
+  (`print_cups.sh`). **Amended by the security review of step 6b (MINOR 5), see 6-23:** only a value that differs from the
+  default goes (a default sent, the paper source of `media-col-default` among them, overrode the queue's own settings). Not in 6b (a follow-up): a PPD's vendor options with no IPP name, Layout (pages per sheet, border) and
   Paper Handling (page order, odd or even pages).
+
+**Fixes of the security review of step 6b** (opus, FAIL: BLOCKER 1, MAJORs 2 and 3, MINORs 4 to 6, NITs; each decision
+delegated by the owner on 2026-10-27, numbered after 6-19; the review's probes are now tests: `tst_print.cpp`
+`PrintPreview.TheChildThatDrawsIsConfined` and `TheChildGetsOnlyTheLocale`).
+- **6-20. The child that draws a page, confined by Landlock and an allow-list (BLOCKER 1, MAJOR 2).** Question: how is the
+  child kept from acting on other processes and from reading the user's data? Options: (a) a longer deny-list; (b) a seccomp
+  allow-list, measured; (c) (b) and Landlock for the files. **Choice: (c)**, in this order before a byte is read:
+  - Landlock (the kernel's own sandbox, no dependency): reading files and folders under `/usr` only (pdfium's fonts:
+    `/usr/share/fonts`, `/usr/share/X11/fonts`, `/usr/local/share/fonts`; measured: it opens nothing else), no write, link,
+    rename or truncation anywhere, no device ioctl, no TCP (ABI 4), signals and abstract sockets scoped to itself (ABI 6); the
+    rights the kernel's ABI knows are all handled, so none is left open by omission. The document is read from descriptor 0,
+    never through `/dev/stdin` (which Landlock now refuses).
+  - A seccomp allow-list measured with a ptrace recorder (`--print-preview` on three documents: shapes, embedded fonts and the
+    standard fonts pdfium substitutes from `/usr/share/fonts`; 800 and 2048 pixels; and the AddressSanitizer build the tests
+    run): memory, the descriptors it has, time, futexes, `getdents64`, stat, `openat` read-only, `eventfd2`, `pipe2`,
+    `sigaltstack`; `clone` only with `CLONE_THREAD` and no `CLONE_NEW*` (`clone3` answers ENOSYS, so glibc falls back to
+    `clone`; a thread of its own still starts); `fcntl` for descriptor flags only (no lock, lease or notification); `prctl` for a
+    thread's or a mapping's name only; `kill`, `tgkill`, `rt_tgsigqueueinfo` for itself only; `prlimit64` and
+    `sched_getaffinity` for itself only. Anything else answers EPERM: `fork`, `vfork`, `execve`, sockets, `ioctl` (TIOCSTI and
+    TIOCLINUX among them), `flock`, `inotify`, `setpriority`, `sched_set*`, `ioprio_set`, `migrate_pages`, `move_pages`,
+    `process_madvise`, `kcmp`, `pidfd_open`, `ptrace`, mounts and namespaces. Installed for every thread (TSYNC); a TSYNC that
+    fails, or a kernel without `seccomp()`, is no filter (no fallback to the calling thread alone: the review's NIT).
+  - The process: `setsid` (no terminal, not grassfield-portal's process group), an environment that holds the locale's
+    variables only (`LANG`, `LC_ALL`, `LC_CTYPE`), `RLIMIT_DATA` 512 MiB (a page of 2048 pixels needs less than 192 MiB), CPU
+    10 s, `oom_score_adj` 1000 (the OOM killer's first choice in the unit), one child at a time for the whole process.
+
+  Fail closed: when Landlock (a kernel before 5.13, or Landlock not enabled) or the filter cannot be installed, the child draws
+  nothing; the sheet says "No Preview" and the document still prints, saves and opens in Preview. Rule applied: an
+  application's document is data, and the least the reader needs, nothing more; macOS's sheet would rather show no preview than
+  a reader with the user's rights. **Residual risk, for the owner:** a flaw in pdfium that runs code in the child can still
+  read what is under `/usr` (public files), draw anything into the sheet's preview (only the user sees it), use its 10 s of CPU
+  and 512 MiB, and signal itself; with Landlock ABI 1 to 5 (kernels 5.13 to 6.11) the scoping of signals and abstract sockets
+  is the filter's alone (it refuses both anyway). The allow-list is measured on x86_64; on aarch64 it is built from the same
+  names untested, and a call it lacks there means "No Preview", never a wider child.
+- **6-21. Where the documents wait, and how much (MAJOR 3).** Question: how is a sandboxed application kept from filling the
+  portal's memory, or the disk, with documents it never lets the user print? Options: (a) keep the temporary folder and lower the
+  limit per document; (b) on disk in the user's cache folder (`$XDG_CACHE_HOME/grassfield/print`, 0700, `O_TMPFILE`) with one
+  budget for every document waiting at once. **Choice: (b)**, the budget 2 GiB (the largest single document, 6-4): a document
+  that would go over what the others waiting left is not kept (its print ends with 2), and a request that ends gives its share
+  back. The limits line up: on disk the pages are page cache the kernel reclaims, never unreclaimable tmpfs in the unit's
+  MemoryMax (1 GiB); in memory the unit holds grassfield-portal (tens of MiB) and one child at a time (at most 512 MiB of data,
+  6-20, the OOM killer's first choice), so neither the documents nor a child can have the portal itself killed; on disk at most
+  2 GiB wait at once. Rule applied: what an application sends cannot take more than one document's room, whatever the number
+  of requests.
+- **6-22. Open in Preview's copies (MINOR 4).** Question: where do the copies go, how long do they stay, and how does their
+  name reach Preview intact? Options: (a) the runtime folder, as 6-17 had it; (b) the user's cache folder
+  (`$XDG_CACHE_HOME/grassfield/preview`, 0700, a folder `print-XXXXXX` of its own per copy), the old ones removed. **Choice:
+  (b)**: on disk, so a copy of up to 2 GiB never counts against the unit's MemoryMax; at each new copy, the ones older than a day
+  and all but the newest 15 go (16 with the new one), with what they hold, never through a link (a link named like a copy's
+  folder is left alone). The name is at most 255 bytes in UTF-8, cut on a character's boundary (a long title in Japanese no
+  longer fails the copy; Save as PDF's suggested name too). `systemd-run --expand-environment=no` (systemd 254 and later; the
+  flag is looked for in `systemd-run --help` once), else no dollar sign in the copy's name. Accepted: an application whose
+  sandbox lets it read the user's cache folder (`--filesystem=home` or `xdg-cache`) can read the copies there, as it can read
+  the user's documents. Rule applied: nothing an application sends may count against the portal's memory, nor stay forever.
+- **6-23. A printer's own options only when changed (MINOR 5).** Question: does the job carry every option the sheet shows?
+  Options: (a) every value shown; (b) only a value that differs from the default the sheet showed (the user's lpoptions, else
+  the printer's). **Choice: (b)**: a default sent overrode the queue's own settings (a paper source taken from
+  `media-col-default` forced a tray); not sending it leaves the queue to apply its own default, as GTK and `lp` do. Rule applied:
+  the job carries what the user chose, nothing the printer would do anyway.
+- **6-24. A document on a pipe never goes on truncated (MINOR 6).** Question: what happens when a sheet does not show in time
+  (RequestHost's deadline) while its document comes on a pipe? Options: (a) go to x-d-p-gtk as before; (b) go to x-d-p-gtk only
+  while no byte of the pipe was read, else end with response 2. **Choice: (b)**: the reader and the forward agree once
+  (`compare_exchange` on the request's source: untouched, being read, or gone to x-d-p-gtk), so the pipe is read only while the
+  call has not gone and the call goes only while the pipe is unread (`RequestHost::forwardable`). A file read in place still
+  goes on as it came. Rule applied: never hand on half a document.
+- **The review's NITs**: the filter's TSYNC result is checked as such (6-20); the standard finishings (staple, punch, fold,
+  bind, saddle stitch, the corners, two staples or holes) are named in the UI language by their IPP keyword, another keyword
+  keeps CUPS's name or the keyword in words; a page being drawn shows "Preparing Preview…" instead of the page before under the
+  new number; the private file is read from where the application's descriptor stands (6-21).
 
 ### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
 Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland from the portal

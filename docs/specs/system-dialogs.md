@@ -690,26 +690,32 @@ last print's settings back (ADR-0035 6-18).
   job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
 - `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
 
-### Built in step 6b (ADR-0035 6-10 to 6-19)
+### Built in step 6b (ADR-0035 6-10 to 6-24)
 - PR2 without a token done: Print with no sheet before it (libportal's callers) opens the sheet with the document's preview on
   the left, one page at a time with "‹ 1 of N ›" and Page Up / Page Down (6-14); Orientation and Scale are not offered (the
   document is laid out), Pages is All Pages or a range, which the printer applies (`page-ranges`), and the paper of the
-  document's first page is chosen where the printer has it (6-13). The document is kept in an unlinked private file (6-11) and
-  its pages are drawn by a confined child of grassfield-portal (Qt PDF; a seccomp filter: no socket, no program, no signal but
-  to itself, no change to any file; raw pixels read back) (6-10). Print sends the job at once from that file and the sheet goes (6-15); a document that
-  is not a PDF goes to x-d-p-gtk as it came, or fails when it came on a pipe (6-12).
+  document's first page is chosen where the printer has it (6-13). The document is kept in an unlinked private file on disk
+  (the user's cache folder), within one 2 GiB budget for every document waiting (6-11, 6-21), and its pages are drawn by a
+  confined child of grassfield-portal (Qt PDF; Landlock: reading under /usr only; a measured seccomp allow-list: no socket,
+  program, process, lock, ioctl, nor any act on another process; setsid, the locale's variables only, 512 MiB, one child at a
+  time; raw pixels read back; no preview when the confinement cannot be installed) (6-10, 6-20). Print sends the job at once
+  from that file and the sheet goes (6-15); a document that is not a PDF goes to x-d-p-gtk as it came, or fails when it came on
+  a pipe, as does one whose sheet does not show in time once part of a pipe was read (6-12, 6-24).
 - PR3 done with macOS's "PDF" pull-down (6-16): Save as PDF… (6-3's Save panel and writer) and Open in Preview: a private copy
-  in `$XDG_RUNTIME_DIR/grassfield-print`, written as Save as PDF writes, opened in Preview started as the Dock starts an
-  application (6-17). In both flows.
+  in `$XDG_CACHE_HOME/grassfield/preview` (a name within 255 bytes; the copies older than a day, or beyond 16, removed), written
+  as Save as PDF writes, opened in Preview started as the Dock starts an application (`systemd-run --expand-environment=no`)
+  (6-17, 6-22). In both flows.
 - PR1 done with the Presets (6-18): Default Settings and Last Used Settings (one for every printer, kept in grassfield-portal's
   state when Print sends a job: two sides, colour, collation and the printer's own options, never the copies, pages, paper,
   orientation or scale), the sheet opening on Last Used Settings when there are some; and with a printer's own options (6-19):
   Feed From, Media Type and Quality in "Media & Quality", Output Bin and Finishing in "Printer Options", disclosure sections
-  closed at first, only what the printer reports with two values or more, its defaults first, each value sent as CUPS takes it
-  and only one the printer listed.
-- A-PR1 extended: `tst_printlogic.cpp` (options, page ranges, Open in Preview, presets and their JSON), `tst_print.cpp` (the
-  filter, the private file, the pages drawn by the child, a document sent first through the D-Bus interface, one that is not a
-  PDF, Open in Preview, Last Used Settings, a printer's options), `print_cups.sh` (the scratch scheduler reports the queue's
+  closed at first, only what the printer reports with two values or more, its defaults first, each value sent as CUPS takes it,
+  only one the printer listed and only when it is not the default (6-23); the standard finishings named in the UI language.
+- A-PR1 extended: `tst_printlogic.cpp` (options, page ranges, Open in Preview, presets and their JSON, file names within 255
+  bytes), `tst_print.cpp` (the confinement against the security review's probes, the child's environment and session, the
+  private file and its budget, the pages drawn by the child, a document sent first through the D-Bus interface, one that is not
+  a PDF, one on a pipe never sent on truncated, Open in Preview and its copies' bounds, Last Used Settings, a printer's
+  options), `print_cups.sh` (the scratch scheduler reports the queue's
   own options with their names and defaults, and keeps them on the job), `tst_printsheet.qml` (the Presets, the sections, the
   PDF pull-down, the preview and its pages). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9b (Print with
   no token through the real frontend: the sheet, the backend's child counting the pages, the job in the scratch scheduler with
@@ -720,8 +726,11 @@ Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, 
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
 Settings. Step 6b: no named presets (Save Current Settings as Preset…), no Layout (pages per sheet) or Paper Handling (page
 order, odd or even pages) sections, and a PPD's vendor options with no IPP name are not shown (the printer's defaults apply);
-a document sent first that is not a PDF gets x-d-p-gtk's dialog; on an architecture other than x86_64 and aarch64 the preview
-says "No Preview" (the filter is written for those two); Open in Preview's copies stay in the runtime folder until logout. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
+a document sent first that is not a PDF gets x-d-p-gtk's dialog; the preview needs Landlock (a kernel from 5.13 with Landlock
+enabled, as Arch's is) and x86_64 or aarch64 (the allow-list is measured on x86_64 only), else it says "No Preview" and the
+document still prints; Open in Preview's copies stay in the user's cache folder for up to a day (16 at most), where an
+application allowed to read that folder can read them; a finishing that is neither standard nor named by CUPS is shown as its
+keyword in English words. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
 a GTK 3 application asking for n copies gets n × n (GTK renders the n copies its answer names and x-d-p-gtk's job asks for n
 again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes to the folder the Save panel's answer named as
 it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that
