@@ -430,6 +430,45 @@ of the session, never in a terminal.
   in `tests/integration/update_helper.sh`; `tests/shell/session_services.sh` for the checker's reader;
   `tst_softwareupdate.qml` for the pane's sentences and the greyed "Hold again"; a `tests/ci` check that `BUILD-DEPS`, the hold's `depends` and the s3.4 table name the same
   packages; `tests/shell/compositor_rebuild.sh` for the notice's action.
+
+### Step 2b as built, first slice (2026-10-31, the branch of the stability lane; the comparison and the log out)
+- `grassfield-update-check` compares, before every other step and in every state it answers (repair, not-set-up, failed,
+  up-to-date, available, blocking), the installed version of each tracked package (`qt6-base`, `quickshell`, `hyprland`,
+  `aquamarine`, `kcoreaddons`, the helper's `GU_TRACKED`) with `/usr/share/grassfield/BUILD-DEPS` by U27's rule (the
+  helper's `compare_key`: Quickshell whole, the others epoch:major.minor, never the pkgrel) and dates each move with
+  pacman's own install time of the package (`/var/lib/pacman/local/<name>-<version>/desc`, `%INSTALLDATE%`, readable by
+  every user; a name or version outside pacman's grammar is never looked up, a time outside a Unix time's range reads
+  as unknown). The answer gains `toolkitMoved` (`[{"name","built","installed","installedAt"}]`, `[]` when all match,
+  `null` without a record); a record line outside `pacman -Q`'s grammar is skipped as the helper skips it, and a package
+  the record does not name, or pacman does not list, is no move. `docs/specs/updates.md` U31 and the output contract.
+- The shell (`SoftwareUpdateLogic.toolkitLogout`, pure): a move installed at or after the session started, or at a time
+  the checker could not read (the safe side), means a library the running session loaded was replaced under it: the
+  service sets `toolkitLogout` (due until the session ends) and writes U14's `logoutPending` to `software-update.json`
+  for it, `news()` announces the set once ("toolkit qt6-base 6.12.0", the `announced` list), and `shell.qml` posts "Log
+  out to finish updating" with "The system libraries Grassfield runs on were updated (qt6-base 6.12.0). Log out and
+  back in to use them." opening Software Update. The pane's U14 row shows as for GF-083's own update, with the subtitle
+  "Grassfield and the system libraries it runs on start fresh when you log in again." when the file's list is not
+  empty. A move installed before the session started asks for nothing: the session already runs on it.
+- Which checks see a move: the scheduled ones (U7), the check `omarchy update` asks for at its end (U9) and Update Now's
+  own; a `pacman -Syu` typed in a terminal is seen by the next scheduled check or at the next login. Not in this slice:
+  the watch of `/var/lib/pacman/local` (the shell has no directory watcher: a user `.path` unit on it, `PathModified=`,
+  asking the shell for a check, is the second slice), the bounded wait of `SessionConfig.qml` and `Displays.qml` while
+  `db.lck` exists (I-2's residual), and the compositor rebuild's opt-in reading the same comparison at login.
+- Tests: `tests/shell/update_check.sh` (no record, all matching, pkgrel and patch levels alone, Qt and Quickshell moved
+  with the record's and the installed versions and the install time or null, an epoch, times outside the range, a
+  garbled record line, a package pacman does not list, the field in a repair and in a failed answer);
+  `tests/fuzz/fuzz_helpers.py` update-check gains a round over the record, the local database entry and pacman's
+  answers (contract: a move names a tracked package once, in the record's order, with versions in pacman's grammar
+  whose compare keys differ, and a time or None); `tests/unit/tst_softwareupdate.qml`
+  `test_aMovedToolkitAsksForALogOutOnce` (installed after, before, an unreadable time, no list, junk; announced once;
+  the file keeps the list).
+- Evidence (this container; no Qt, no Quickshell): `tests/shell/update_check.sh` 68 PASS, exit 0 (the lock and waiter
+  cases skipped as root); the update-check fuzz round at 5000 iterations, no finding; `python3 -I tests/ci/inventory.py`
+  ok; `git diff --check` clean; qmllint 6.4 parses the five QML files, the JS parses. NOT VERIFIED here:
+  `tst_softwareupdate.qml` (QtTest), `tests/shell/software_update_service.sh` (offscreen; the service now writes the
+  file once more when a toolkit log out becomes due), the notice and the pane's row (nested), the comparison on a real
+  system (`grassfield-update-check | jq .toolkitMoved` after a toolkit update, then after the log out).
+- Review: the checker reads two more world-readable files and runs `pacman -Q` five times more; nothing runs as root.
 - Integrator, nested: the notice on a fake `/var/lib/pacman/local`; the reload guard with a fake `db.lck` during a display
   trial; "Update Extension" from the notice.
 - Owner, real session: the next Omarchy toolkit move: Update Now says "needs a newer version of Grassfield" (today's
