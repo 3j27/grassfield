@@ -483,6 +483,10 @@ preview tint); `window.inactiveLight*`; `folderIcon.plateBackdrop*`; `menu.swatc
 `store.accountCircleFill`. Kept: the black and white inks drawn at an alpha (hover, separators, shadows, fills, borders),
 the opaque white knob, the Graphite accent and its selection, Files' Gray tag and the drawing of the computer
 (`settings.device*`).
+Follow-up (the integrator's decision on #73, the owner's « Faire le suivi GTK » of 2026-10-31): the GTK themes but `-hc`
+lay the warm grounds (window `groupFill`, views, lists, menus and popovers `windowBackground`, header bars the plugin's
+title bar colour, text `text`; ADR-0035 D-8), and the session's Hyprland ground is `#1E1C18` (`#1C1C1E` warmed) until step
+3 makes it the default artwork's ground (ID-2).
 Re-pinned: the light glass's worst-case alpha 0.78 to 0.79 (`test_contrast_tokens.py`, `tst_glasstint.qml`), the GTK
 themes' thin marks under high contrast (yellow 1.97:1, green 2.46:1), and the tests that named the old greys.
 

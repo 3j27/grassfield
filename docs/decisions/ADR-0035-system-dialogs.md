@@ -909,7 +909,10 @@ for it (`--no-block`), then the shell. `ui/tools/gen-gtk-themes.py` generates th
   `control.focusOutlineOpacity` (decision 2b-15), hover, pressed and border shades as the shell's overlays
   (`material.hoverOpacity`, `control.pressedOpacity`, `material.borderOpacity`), the selected tab's indicator at GTK's own
   width (`gtk.tabIndicatorWidth`, 4 px in both versions), visited links blue; no CSS colour function (GTK 3 and the owner's
-  GTK 4.22 read them alike).
+  GTK 4.22 read them alike). Since the owner's warm neutrals of 2026-10-30 (ADR-0040; the integrator's decision on #73)
+  every theme but `-hc` also lays the warm grounds: the window the appearance's `groupFill`, views, lists, menus and
+  popovers its `windowBackground`, header bars the plugin's title bar colour (`titlebar.background*`), text its `text`;
+  the `-hc` themes keep GTK's high-contrast grounds. Libadwaita apps do not read `gtk-theme` and keep their own.
 - **Tests.** Unit (`tests/unit/portal-settings`, 12 tests, plain and ASan/UBSan): values, the `auto` schedule, the accents
   from the tokens, the 36 theme names, the namespace filter, file changes signalled key by key, a malformed file keeping the
   last good settings, a FIFO (at start and later), a device symlink, a directory, a file over 1 MiB and an unreadable file
