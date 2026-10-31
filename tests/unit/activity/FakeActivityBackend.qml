@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 
 // A stand-in for ActivityApp (apps/activity/src/activityapp.h) for tst_activitymain.qml: the properties the window binds,
