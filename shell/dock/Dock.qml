@@ -1159,9 +1159,11 @@ Scope {
             readonly property bool isDockScreen: screenName !== "" && screenName === root.dockScreen
             // A Dock that moved here comes out of its edge strip: until it has slid in, the machine runs even with auto-hide off.
             property bool revealPending: false
-            // Auto-hide as the machine sees it: the setting, any output that does not have the Dock (it stays away), or an output
-            // that shows a Split View Desktop (docs/specs/tiling.md TL33: the Dock shows when the pointer reaches its edge).
-            readonly property bool autohide: Settings.dockAutohide || !isDockScreen || revealPending || Compositor.splitShown(screenName)
+            // A full-screen window or a Split View Desktop is shown on this output (docs/specs/tiling.md TL33, ADR-0036 D66).
+            readonly property bool fullscreen: Compositor.fullscreenOn(screenName, Compositor.topologyRevision)
+            // Auto-hide as the machine sees it (DockModel.hides): the setting, any output that does not have the Dock (it stays
+            // away), a Dock that just moved here, or full screen there (the Dock shows when the pointer reaches its edge).
+            readonly property bool autohide: DockModel.hides(Settings.dockAutohide, isDockScreen, revealPending, fullscreen)
             // Layout from the unmagnified geometry (stable under the pointer), then scaled.
             readonly property var widths: root.items.map(it => it.kind === "separator" ? separatorWidth : iconSize)
             readonly property real baseTotal: Magnify.totalWidth(widths, Tokens.dockSpacing)
@@ -1349,7 +1351,7 @@ Scope {
             exclusiveZone: reveal && isDockScreen ? DockModel.reservedHeight(dockMetrics, Settings.dockAutohide) : 0
             color: "transparent"
             focusable: true
-            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.layer: DockModel.overlayLayer(win.fullscreen) ? WlrLayer.Overlay : WlrLayer.Top
             WlrLayershell.keyboardFocus: root.keyboardMode && win.screen && win.screen.name === root.keyboardScreen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-dock"
             // Only the dock itself (or the reveal strip while hidden) takes input.

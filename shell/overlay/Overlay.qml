@@ -6,6 +6,7 @@ import Grassfield.Ui
 import qs.menubar
 import qs.platform
 import qs.services
+import "../platform/WindowTiling.js" as WindowTiling
 import "../services/PopupKinds.js" as PopupKinds
 
 // Host of every popup (menus, status menus, Control Center, dialogs): one transparent
@@ -33,6 +34,34 @@ Variants {
         // item, the surface mapped while that item was created and resized the window under the popup's x and y bindings (a
         // binding loop, integrator nested pass of 12e3dd3).
         readonly property bool hasPopup: open && holder.item !== null
+
+        // A left press on the tiling popover's green light is the light's (ADR-0036 D64): released over it, the light's action
+        // runs; released elsewhere, the popover closes. The click-outside area and the menu bar strip share it (in a Split View
+        // a member's titlebar starts at the output's top, under the strip: integrator review of 7096305, MAJOR 1).
+        property bool pressedOnGreen: false
+
+        function greenPress(x: real, y: real, button: int): bool {
+            const popover = holder.item as TilingPopover;
+            win.pressedOnGreen = win.hasPopup && popover !== null && button === Qt.LeftButton && popover.onLight(x, y);
+            return win.pressedOnGreen;
+        }
+
+        function greenRelease(x: real, y: real, alt: bool): void {
+            if (!win.pressedOnGreen)
+                return;
+            win.pressedOnGreen = false;
+            const popover = holder.item as TilingPopover;
+            if (popover && popover.onLight(x, y))
+                popover.greenClick(alt);
+            else
+                Popups.close();
+        }
+
+        function greenCancel(): void {
+            if (win.pressedOnGreen)
+                Popups.close();
+            win.pressedOnGreen = false;
+        }
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
@@ -180,26 +209,38 @@ Variants {
             }
         }
 
-        // Click outside closes. Right and middle buttons too.
+        // Click outside closes. Right and middle buttons too. A left click on the tiling popover's green light is the light's
+        // (greenPress).
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: Popups.close()
+            onPressed: mouse => {
+                if (!win.greenPress(mouse.x, mouse.y, mouse.button))
+                    Popups.close();
+            }
+            onReleased: mouse => win.greenRelease(mouse.x, mouse.y, (mouse.modifiers & Qt.AltModifier) !== 0)
+            onCanceled: win.greenCancel()
         }
 
         // The menu bar strip while a popup is open: Hyprland sends the pointer to this Exclusive layer, not to the bar under
-        // it (a press at the Window title landed here), so the strip goes to that output's bar (Popups.bars): moving onto
-        // another title or status item switches menus, a click on the open title closes it, a click on another opens it.
+        // it (a press at the Window title landed here), so the strip goes to that output's bar (Popups.bars) while the bar is
+        // in view: moving onto another title or status item switches menus, a click on the open title closes it, a click on
+        // another opens it. With the bar away (full screen, a Split View Desktop) the strip is any click outside, the tiling
+        // popover's green light included (WindowTiling.stripPress).
         Item {
+            id: strip
+
+            readonly property var bar: Popups.bars[(win.modelData ? win.modelData.name : "")] ?? null
+            readonly property bool barInView: bar !== null && bar.away !== true
+
             width: win.width
             height: Tokens.menubarHeight
             visible: win.hasPopup
 
             HoverHandler {
                 onPointChanged: {
-                    const bar = Popups.bars[(win.modelData ? win.modelData.name : "")];
-                    if (hovered && bar)
-                        bar.trackAt(point.position.x);
+                    if (hovered && strip.barInView)
+                        strip.bar.trackAt(point.position.x);
                 }
             }
 
@@ -207,21 +248,31 @@ Variants {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
                 onPressed: mouse => {
-                    const bar = Popups.bars[(win.modelData ? win.modelData.name : "")];
-                    if (bar)
-                        bar.pressAt(mouse.x, mouse.button === Qt.RightButton ? "right" : mouse.button === Qt.MiddleButton ? "middle" : "left");
-                    else
+                    const popover = holder.item as TilingPopover;
+                    const onLight = mouse.button === Qt.LeftButton && popover !== null && popover.onLight(mouse.x, mouse.y);
+                    switch (WindowTiling.stripPress(strip.barInView, onLight)) {
+                    case "bar":
+                        strip.bar.pressAt(mouse.x, mouse.button === Qt.RightButton ? "right" : mouse.button === Qt.MiddleButton ? "middle" : "left");
+                        break;
+                    case "green":
+                        win.greenPress(mouse.x, mouse.y, mouse.button);
+                        break;
+                    default:
                         Popups.close();
+                    }
                 }
                 // Held, the pointer stays with this strip when it moves down onto the menu: relay it (press, drag, release).
                 onPositionChanged: mouse => {
-                    if (pressed && mouse.buttons === Qt.LeftButton)
+                    if (pressed && mouse.buttons === Qt.LeftButton && !win.pressedOnGreen)
                         Popups.trackPointer((win.modelData ? win.modelData.name : ""), mouse.x, mouse.y);
                 }
                 onReleased: mouse => {
-                    if (mouse.button === Qt.LeftButton)
+                    if (win.pressedOnGreen)
+                        win.greenRelease(mouse.x, mouse.y, (mouse.modifiers & Qt.AltModifier) !== 0);
+                    else if (mouse.button === Qt.LeftButton)
                         Popups.releasePointer((win.modelData ? win.modelData.name : ""), mouse.x, mouse.y);
                 }
+                onCanceled: win.greenCancel()
             }
         }
 
