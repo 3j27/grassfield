@@ -206,6 +206,15 @@ std::vector<TableRow> ProcessTable::shownRows() const
     return rows;
 }
 
+const TableRow *ProcessTable::processRow(int pid, quint64 start) const
+{
+    for (const TableRow &r : m_all) {
+        if (!r.kernel && r.process.pid == pid && (start == 0 || r.process.start == start))
+            return &r;
+    }
+    return nullptr;
+}
+
 std::vector<TableRow> ProcessTable::selectedRows() const
 {
     std::vector<TableRow> rows;

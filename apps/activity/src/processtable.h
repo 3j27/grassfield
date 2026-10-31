@@ -127,6 +127,10 @@ public:
     std::vector<TableRow> shownRows() const;
     // The selected processes as the table shows them, once each (a process under two GPUs), in the table's order (AM50).
     std::vector<TableRow> selectedRows() const;
+    // A shown row's process (nullptr for a header or past the end), and a process of the last sample whatever the view:
+    // by its pid and start time, or by its pid alone when `start` is 0 (AM57's names).
+    const TableRow *rowAt(int row) const { return processAt(row); }
+    const TableRow *processRow(int pid, quint64 start) const;
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;

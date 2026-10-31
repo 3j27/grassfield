@@ -134,6 +134,83 @@ QtObject {
         }
     }
 
+    // Inspect (apps/activity/src/activityapp.h, inspection.h): the window opens one Inspect window per inspection.
+    property bool canInspect: false
+    property var focusWindow: null
+    signal inspectRequested(var inspection)
+    function inspectSelection(): void {
+        backend.record("inspectSelection");
+    }
+    function inspectRow(row: int): void {
+        backend.record("inspectRow:" + row);
+    }
+    function closeInspection(inspection: var): void {
+        backend.record("closeInspection:" + inspection.key);
+    }
+    // A stand-in for an Inspection: its texts, its tab and its own actions; `calls` as the backend's.
+    readonly property Component inspectionComponent: Component {
+        QtObject {
+            id: inspection
+            property string title: "foot (2001)"
+            property string key: "2001:500"
+            property int pid: 2001
+            property bool ready: true
+            property bool own: true
+            property string parentText: "fish (1990)"
+            property bool canInspectParent: true
+            property string groupText: "foot (2001)"
+            property string userText: "alice (1000)"
+            property string cpuText: "0.4"
+            property string hangsText: "—"
+            // The models are arrays here: a delegate reads a row as `modelData` either way.
+            property var memoryModel: [{label: "Real Memory Size:", value: "51.2 MB"}, {label: "Proportional Memory Size:", value: "30.1 MB"}]
+            property var statisticsModel: [{label: "Threads:", value: "4"}, {label: "Command:", value: "foot --server"}]
+            property var filesModel: [{fd: 0, text: "/dev/null"}, {fd: 3, text: "TCP 127.0.0.1:8080 (listening)"}]
+            readonly property var rowLabels: (inspection.tab === "statistics" ? inspection.statisticsModel : inspection.memoryModel).map(r => r.label)
+            property string filesNote: ""
+            property string tab: "memory"
+            property bool shownNow: false
+            property var watched: null
+            signal ended
+            signal changed
+            function watch(window: var): void {
+                inspection.watched = window;
+                backend.record("watch:" + inspection.key);
+            }
+            function setShown(shown: bool): void {
+                inspection.shownNow = shown;
+            }
+            function inspectParent(): void {
+                backend.record("inspectParent:" + inspection.key);
+            }
+            readonly property QtObject actions: QtObject {
+                property bool canQuit: true
+                property bool canSignal: true
+                property string refusal: ""
+                property var sheet: ({ok: true, count: 1, name: "foot", pid: 2001, session: "", self: false, signals: backend.signalList})
+                signal closeWindowRequested
+                function prepare(action: string): var {
+                    backend.record("inspect-prepare:" + action);
+                    return this.sheet;
+                }
+                function quit(): var {
+                    backend.record("inspect-quit");
+                    return {done: true};
+                }
+                function forceQuit(): var {
+                    backend.record("inspect-forceQuit");
+                    return {done: true};
+                }
+                function send(signal: int): var {
+                    return {done: true};
+                }
+                function release(): void {
+                    backend.record("inspect-release");
+                }
+            }
+        }
+    }
+
     function row(name: string, cpu: string, pid: string): var {
         return {name: name, icon: "", selected: false, accessibleText: name + ", % CPU " + cpu, cells: [name, cpu, pid, "alice"],
                 depth: 0, expandable: false, expanded: true, group: false};

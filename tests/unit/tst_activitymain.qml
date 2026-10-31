@@ -3,11 +3,11 @@ import QtTest
 import Grassfield.Ui
 import "activity"
 
-// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 steps 2a to 2c) with a fake backend: the title with
+// The activity monitor's window (apps/activity/qml/Main.qml, ADR-0038 steps 2a to 2d) with a fake backend: the title with
 // the view as its subtitle, the five tabs, the live search, the table's headers (sort, the columns menu) and rows, the
 // keyboard and the accessible names, the summary's figures and graphs, the Disk pop-up and the Network tab's line, the
-// Stop button, the action and context menus and the sheets of Quit, Force Quit and Send Signal. The backend's own logic
-// has its gtest cases (tests/unit/activity/window).
+// Stop button, the action and context menus and the sheets of Quit, Force Quit and Send Signal; the Info button and the
+// Inspect windows. The backend's own logic has its gtest cases (tests/unit/activity/window).
 TestCase {
     id: testCase
     name: "ActivityMain"
@@ -351,8 +351,10 @@ TestCase {
         t.backend.table.selectedCount = 1;
         mouseClick(t.win.moreButton);
         verify(t.win.actionMenu.opened);
-        compare(t.win.actionMenu.items.filter(i => !i.separator).map(i => i.text), ["Quit Process", "Send Signal to Process…", "Copy"]);
+        compare(t.win.actionMenu.items.filter(i => !i.separator).map(i => i.text),
+                ["Quit Process", "Inspect Process", "Send Signal to Process…", "Copy"]);
         compare(t.win.actionMenu.items[0].shortcut, "Ctrl+Alt+Q");
+        compare(t.win.actionMenu.items[1].shortcut, "Ctrl+I");
         t.win.actionMenu.chosen("signal");
         t.win.actionMenu.close();
         const sheet = t.win.sheets.signalSheet;
@@ -385,7 +387,7 @@ TestCase {
         mouseClick(rows[2], 40, 5, Qt.RightButton);
         compare(t.backend.table.clicks[0], "2:0");
         verify(t.win.actionMenu.opened);
-        compare(t.win.actionMenu.items.length, 4);
+        compare(t.win.actionMenu.items.map(i => i.text || "-"), ["Quit Process", "Inspect Process", "Send Signal to Process…", "-", "Copy"]);
         t.win.actionMenu.close();
     }
 
@@ -395,5 +397,100 @@ TestCase {
         verify(t.win.visible);
         t.backend.actions.closeWindowRequested();
         verify(!t.win.visible);
+    }
+
+    // AM3, AM57: the Info button between Stop and the action menu, enabled with one row; it, Ctrl+I, the action menu and a
+    // double-click ask the backend for the selected (or clicked) row's Inspect window.
+    function test_infoButtonAndInspectRequests() {
+        const t = make();
+        verify(!t.win.infoButton.enabled);
+        compare(t.win.infoButton.Accessible.name, "Inspect Process");
+        verify(t.win.stopButton.x < t.win.infoButton.x && t.win.infoButton.x < t.win.moreButton.x, "Stop, Info, then …");
+        t.backend.canInspect = true;
+        verify(t.win.infoButton.enabled);
+        const tip = findAll(t.win.contentItem, i => i.objectName === "toolbarTip")[0];
+        mouseMove(t.win.infoButton, t.win.infoButton.width / 2, t.win.infoButton.height / 2);
+        tryCompare(tip, "text", "Inspect the selected process");
+        mouseClick(t.win.infoButton);
+        keyClick(Qt.Key_I, Qt.ControlModifier);
+        t.win.runAction("inspect");
+        const rows = findAll(t.win.contentItem, i => i.Accessible && i.Accessible.role === Accessible.Row).sort((a, b) => a.y - b.y);
+        mouseDoubleClickSequence(rows[1], 40, 5);
+        compare(calls(t), ["inspectSelection", "inspectSelection", "inspectSelection", "inspectRow:1"]);
+    }
+
+    // AM57, AM59: one Inspect window per inspection, raised by a second request; its header, tabs and rows; Quit through the
+    // sheets for this process alone; the window closes when its process ends (AD45), and with the main window (AD17).
+    function test_inspectWindow() {
+        const t = make();
+        const one = t.backend.inspectionComponent.createObject(t.backend);
+        t.backend.inspectRequested(one);
+        compare(t.win.ownWindows.length, 1);
+        const w = t.win.ownWindows[0];
+        compare(w.title, "foot (2001)");
+        compare(w.inspection, one);
+        compare(one.watched, w);
+        tryVerify(() => w.visible);
+        t.backend.inspectRequested(one); // a second request: the same window
+        compare(t.win.ownWindows.length, 1);
+        const shown = texts(w.contentItem);
+        for (const text of ["Parent Process:", "fish (1990)", "Process Group:", "User:", "alice (1000)", "% CPU:", "0.4",
+                            "Recent hangs:", "Real Memory Size:", "51.2 MB"])
+            verify(shown.indexOf(text) >= 0, text + " is shown");
+        compare(w.tabs.model.map(m => m.text), ["Memory", "Statistics", "Open Files and Ports"]);
+        w.tabs.picked("statistics");
+        compare(one.tab, "statistics");
+        tryVerify(() => texts(w.contentItem).indexOf("foot --server") >= 0, 2000, "the Statistics rows");
+        w.tabs.picked("files");
+        tryVerify(() => texts(w.contentItem).indexOf("TCP 127.0.0.1:8080 (listening)") >= 0, 2000, "the descriptors");
+        // A click on the parent inspects it.
+        w.parentLink.activated();
+        verify(calls(t).indexOf("inspectParent:2001:500") >= 0);
+        // Quit: AM50's sheet, this process alone.
+        verify(w.quitButton.enabled);
+        mouseClick(w.quitButton);
+        verify(w.sheets.quitSheet.shown);
+        compare(w.sheets.quitSheet.message, "“foot” (PID 2001)");
+        mouseClick(buttonNamed(w.sheets.quitSheet, "Quit"));
+        verify(!w.sheets.quitSheet.shown);
+        compare(calls(t).filter(c => c.startsWith("inspect-")), ["inspect-prepare:quit", "inspect-quit", "inspect-release"]);
+        // Another owner's: Quit off, its tooltip says why.
+        one.actions.canQuit = false;
+        one.actions.refusal = "You can only quit your own processes.";
+        verify(!w.quitButton.enabled);
+        w.requestActivate();
+        tryVerify(() => w.active, 2000);
+        const tip = findAll(w.contentItem, i => i.objectName === "inspectTip")[0];
+        verify(tip);
+        mouseMove(w.quitButton, w.quitButton.width / 2, w.quitButton.height / 2);
+        tryVerify(() => tip.visibleNow, 3000, "the disabled Quit's tooltip");
+        compare(tip.text, "You can only quit your own processes.");
+        // AD45: the process ended; the window closes and tells the backend.
+        one.ended();
+        tryVerify(() => t.win.ownWindows.length === 0);
+        tryVerify(() => calls(t).indexOf("closeInspection:2001:500") >= 0, 2000, "the window, once destroyed, lets its inspection go");
+        // A new window, closed with the main window (AD17).
+        const two = t.backend.inspectionComponent.createObject(t.backend, {key: "2002:600", title: "fish (2002)"});
+        t.backend.inspectRequested(two);
+        compare(t.win.ownWindows.length, 1);
+        t.win.close();
+        tryVerify(() => t.win.ownWindows.length === 0);
+        tryVerify(() => calls(t).indexOf("closeInspection:2002:600") >= 0, 2000);
+    }
+
+    // A key belongs to the key window alone: while an Inspect window has the keyboard, the main window's keys wait.
+    function test_inspectWindowKeepsItsKeys() {
+        const t = make();
+        t.backend.canInspect = true;
+        t.backend.inspectRequested(t.backend.inspectionComponent.createObject(t.backend));
+        const w = t.win.ownWindows[0];
+        verify(!t.win.childIsKey);
+        t.backend.focusWindow = w;
+        verify(t.win.childIsKey);
+        keyClick(Qt.Key_I, Qt.ControlModifier);
+        compare(calls(t).filter(c => c === "inspectSelection").length, 0);
+        t.backend.focusWindow = t.win;
+        verify(!t.win.childIsKey);
+        w.close();
     }
 }

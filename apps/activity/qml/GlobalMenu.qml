@@ -12,6 +12,9 @@ Platform.MenuBar {
     // Main.qml.
     required property var win
     readonly property var backend: bar.win.backend
+    // Not while one of the window's Inspect windows has the keyboard: Qt matches these keys there too
+    // (Main.qml childIsKey), and Ctrl+W typed in an Inspect window closed the main window.
+    readonly property bool keysHere: bar.win.childIsKey !== true
 
     Platform.Menu {
         title: qsTr("File")
@@ -19,6 +22,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Close Window")
             shortcut: "Ctrl+W"
+            enabled: bar.keysHere
             onTriggered: bar.win.close()
         }
     }
@@ -29,18 +33,20 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: qsTr("Copy")
             shortcut: StandardKey.Copy
-            enabled: bar.backend.table.selectedCount > 0
+            enabled: bar.keysHere && bar.backend.table.selectedCount > 0
             onTriggered: bar.win.copy()
         }
         Platform.MenuItem {
             text: qsTr("Select All")
             shortcut: StandardKey.SelectAll
+            enabled: bar.keysHere
             onTriggered: bar.win.selectAll()
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Find…")
             shortcut: "Ctrl+F"
+            enabled: bar.keysHere
             onTriggered: bar.win.focusSearch()
         }
     }
@@ -114,12 +120,18 @@ Platform.MenuBar {
 
         Platform.MenuSeparator {}
 
-        // AM50, AM55 (step 2c): the sheets of the window.
+        // AM50, AM55 (step 2c): the sheets of the window; AM57 (step 2d): the selected process's Inspect window.
         Platform.MenuItem {
             text: qsTr("Quit Process")
             shortcut: "Ctrl+Alt+Q"
-            enabled: bar.backend.actions.canQuit
+            enabled: bar.keysHere && bar.backend.actions.canQuit
             onTriggered: bar.win.sheets.openQuit()
+        }
+        Platform.MenuItem {
+            text: qsTr("Inspect Process")
+            shortcut: "Ctrl+I"
+            enabled: bar.keysHere && bar.backend.canInspect
+            onTriggered: bar.backend.inspectSelection()
         }
         Platform.MenuItem {
             text: qsTr("Send Signal to Process…")

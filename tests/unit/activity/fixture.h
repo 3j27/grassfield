@@ -104,6 +104,44 @@ public:
         write(dir + "/cgroup", "0::" + cgroup + "\n");
     }
 
+    // A process with every file Inspect reads (AM57, AM58): stat, status, two threads' status, io, cgroup, cmdline,
+    // smaps_rollup, the exe and cwd links, seven descriptors (a file, a pipe, a listening TCP socket, an IPv6 TCP
+    // connection, a local socket, an eventfd, a socket of no table) and its network namespace's tables.
+    void inspectable(int pid, unsigned long long start, unsigned uid, unsigned long utime, int ppid = 1) const
+    {
+        const std::string dir = "proc/" + std::to_string(pid);
+        write(dir + "/stat", statLine(pid, "worker", 'S', ppid, 0, utime, 20, 2, start, -5));
+        write(dir + "/status", statusText("worker", uid, 3000, 512, 0));
+        write(dir + "/task/" + std::to_string(pid) + "/status", statusText("worker", uid, 3000, 512, 40));
+        write(dir + "/task/" + std::to_string(pid + 1) + "/status", statusText("worker:1", uid, 3000, 512, 2));
+        write(dir + "/io", "rchar: 1\nwchar: 2\nsyscr: 31\nsyscw: 17\nread_bytes: 5\nwrite_bytes: 6\ncancelled_write_bytes: 0\n");
+        write(dir + "/cgroup", "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-Hyprland-foot@1a2b3c4d.service\n");
+        write(dir + "/cmdline", std::string("/usr/bin/worker\0--quiet\0", 24));
+        write(dir + "/smaps_rollup", "55d0-7ffc ---p 00000000 00:00 0 [rollup]\nRss:  4000 kB\nPss:  2500 kB\nPss_Anon:  2000 kB\n");
+        link("/usr/bin/worker", dir + "/exe");
+        link("/home/alice/projects", dir + "/cwd");
+        link("/home/alice/notes.txt", dir + "/fd/0");
+        link("pipe:[5001]", dir + "/fd/1");
+        link("socket:[7001]", dir + "/fd/3");
+        link("socket:[7002]", dir + "/fd/4");
+        link("socket:[7003]", dir + "/fd/5");
+        link("anon_inode:[eventfd]", dir + "/fd/10");
+        link("socket:[7999]", dir + "/fd/11");
+        // Addresses as a little-endian kernel prints them (each 32-bit word as it lies in memory).
+        write(dir + "/net/tcp",
+              "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+              "   0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 7001 1 0 100 0 0 10 0\n");
+        write(dir + "/net/tcp6",
+              "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when "
+              "retrnsmt   uid  timeout inode\n"
+              "   0: 00000000000000000000000001000000:D431 0000000000000000FFFF00000A00000A:01BB 01 00000000:00000000 "
+              "00:00000000 00000000  1000        0 7002 1 0 20 4 30 10 -1\n");
+        write(dir + "/net/udp", "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n");
+        write(dir + "/net/udp6", "  sl  local_address rem_address   st\n");
+        write(dir + "/net/unix", "Num       RefCount Protocol Flags    Type St Inode Path\n"
+                                 "0000000000000000: 00000002 00000000 00010000 0001 01 7003 /run/user/1000/bus\n");
+    }
+
 private:
     std::string root_;
 };

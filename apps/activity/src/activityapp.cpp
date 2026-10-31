@@ -15,6 +15,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QTime>
+#include <QWindow>
 
 #include <pwd.h>
 
@@ -58,6 +59,7 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
     , m_statePath(std::move(statePath))
     , m_state(readState(m_statePath))
     , m_actions(m_options.procRoot)
+    , m_inspectors(m_options.procRoot, m_options.uid, m_options.clockTicks)
     , m_apps(DesktopApps::fromEnvironment())
 {
     qRegisterMetaType<SnapshotPtr>();
@@ -68,6 +70,19 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
     connect(m_worker, &SamplerWorker::sampled, this, &ActivityApp::takeSnapshot, Qt::QueuedConnection);
     m_thread.setObjectName(QStringLiteral("activity-sampler"));
     m_thread.start(QThread::LowPriority);
+
+    // AM57: Inspect's reads run on the sampler's thread too (AD35), between its samples.
+    m_inspectors.setWorker(m_worker);
+    m_inspectors.setInterval(m_state.interval);
+    m_inspectors.setNames(
+        [this](int pid, quint64 start) {
+            const TableRow *row = m_table.processRow(pid, start);
+            return row ? row->name : QString();
+        },
+        [this](uint32_t uid) { return userName(uid); });
+    connect(&m_inspectors, &Inspectors::opened, this, &ActivityApp::inspectRequested);
+    if (qGuiApp)
+        connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, &ActivityApp::focusWindowChanged);
 
     m_timer.setInterval(m_state.interval * 1000);
     connect(&m_timer, &QTimer::timeout, this, [this] {
@@ -215,6 +230,7 @@ void ActivityApp::setInterval(int seconds)
     m_state.interval = seconds;
     if (!m_quick)
         m_timer.setInterval(seconds * 1000);
+    m_inspectors.setInterval(seconds);
     emit intervalChanged();
     scheduleSave();
 }
@@ -329,10 +345,45 @@ void ActivityApp::copySelection()
 // AM50: the actions follow the selection, and the rows' owners as the last sample gave them.
 void ActivityApp::updateActionTargets()
 {
+    const std::vector<TableRow> rows = m_table.selectedRows();
     std::vector<ProcessActions::Target> targets;
-    for (const TableRow &r : m_table.selectedRows())
+    for (const TableRow &r : rows)
         targets.push_back({r.process.pid, r.process.start, r.name, r.process.own, r.kernel});
     m_actions.setSelection(std::move(targets));
+    const bool inspectable = rows.size() == 1 && !rows.front().kernel; // AM3: the Info button, one row
+    if (inspectable != m_inspectable) {
+        m_inspectable = inspectable;
+        emit inspectChanged();
+    }
+}
+
+bool ActivityApp::canInspect() const
+{
+    return m_inspectable;
+}
+
+QObject *ActivityApp::focusWindow() const
+{
+    return QGuiApplication::focusWindow();
+}
+
+void ActivityApp::inspectSelection()
+{
+    const std::vector<TableRow> rows = m_table.selectedRows();
+    if (rows.size() == 1 && !rows.front().kernel)
+        m_inspectors.open(rows.front().process.pid, rows.front().process.start, rows.front().name);
+}
+
+void ActivityApp::inspectRow(int row)
+{
+    const TableRow *r = m_table.rowAt(row);
+    if (r && !r->kernel)
+        m_inspectors.open(r->process.pid, r->process.start, r->name);
+}
+
+void ActivityApp::closeInspection(QObject *inspection)
+{
+    m_inspectors.close(qobject_cast<Inspection *>(inspection));
 }
 
 void ActivityApp::saveSize(int width, int height)
@@ -404,6 +455,7 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
     if ((reads & ReadSystemMemory) && snapshot->system.memory.ok && m_swapped != !snapshot->system.memory.swapIsZramOnly) {
         m_swapped = !snapshot->system.memory.swapIsZramOnly; // AM34: Compressed or Swapped Memory
         m_table.setSwappedMemory(m_swapped);
+        m_inspectors.setSwappedMemory(m_swapped);
         emit columnsChanged();
     }
     m_summary.addSample(*snapshot);
@@ -423,6 +475,7 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
         m_table.setGpuNames(m_gpuNames);
     m_table.setRows(tableRows(*snapshot));
     updateActionTargets();
+    m_inspectors.namesChanged(); // a parent's or a group leader's name may have come
     m_ready = true;
     emit sampled();
     if (m_again) {
@@ -521,6 +574,7 @@ void ActivityApp::readAppearance()
         m_formats = locale;
         m_table.setLocale(locale);
         m_summary.setLocale(locale);
+        m_inspectors.setLocale(locale);
     }
     const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();

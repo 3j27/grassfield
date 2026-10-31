@@ -17,14 +17,14 @@ if [[ " $* " == *" --asan "* ]]; then
   cxxflags+=(-g -fsanitize=address,undefined -fno-omit-frame-pointer)
   suffix="-asan"
 fi
-# The sampler and the signal path: plain C++17 and POSIX, no Qt (steps 1 and 2c).
-sampler=("$here"/src/netdiag.cpp "$here"/src/procparse.cpp "$here"/src/sampler.cpp "$here"/src/signals.cpp "$here"/src/textclean.cpp
-  "$here"/src/units.cpp)
+# The sampler, the signal path and Inspect's reader: plain C++17 and POSIX, no Qt (steps 1, 2c and 2d).
+sampler=("$here"/src/inspect.cpp "$here"/src/netdiag.cpp "$here"/src/procparse.cpp "$here"/src/sampler.cpp "$here"/src/signals.cpp
+  "$here"/src/textclean.cpp "$here"/src/units.cpp)
 # The window's backend (step 2): Qt Core, Gui and DBus. GCC 16 warns inside Qt headers (-Wsfinae-incomplete).
 window=("$here"/src/actions.cpp "$here"/src/activityapp.cpp "$here"/src/activitystate.cpp "$here"/src/battery.cpp "$here"/src/columns.cpp
-  "$here"/src/desktopapps.cpp "$here"/src/format.cpp "$here"/src/inhibitors.cpp "$here"/src/processtable.cpp
-  "$here"/src/samplerworker.cpp "$here"/src/summary.cpp)
-mocked=(actions activityapp battery inhibitors processtable samplerworker summary)
+  "$here"/src/desktopapps.cpp "$here"/src/format.cpp "$here"/src/inhibitors.cpp "$here"/src/inspection.cpp
+  "$here"/src/processtable.cpp "$here"/src/samplerworker.cpp "$here"/src/summary.cpp)
+mocked=(actions activityapp battery inhibitors inspection processtable samplerworker summary)
 qtflags=(-Wno-sfinae-incomplete "-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <"$root/VERSION")\"" -I"$here/src" -I"$here/.." -I"$root/ui/i18n")
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)

@@ -4960,6 +4960,10 @@
         <translation>Quitter le processus</translation>
     </message>
     <message>
+        <source>Inspect Process</source>
+        <translation>Inspecter le processus</translation>
+    </message>
+    <message>
         <source>Send Signal to Process…</source>
         <translation>Envoyer un signal au processus…</translation>
     </message>
@@ -5667,6 +5671,53 @@
     <message>
         <source>Remove the selected input source</source>
         <translation>Supprimer la méthode de saisie sélectionnée</translation>
+    </message>
+</context>
+<context>
+    <name>InspectWindow</name>
+    <message>
+        <source>Parent Process:</source>
+        <translation>Processus parent&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Process Group:</source>
+        <translation>Groupe de processus&#xa0;:</translation>
+    </message>
+    <message>
+        <source>User:</source>
+        <translation>Utilisateur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>% CPU:</source>
+        <translation>% processeur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Recent hangs:</source>
+        <translation>Blocages récents&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Memory</source>
+        <translation>Mémoire</translation>
+    </message>
+    <message>
+        <source>Statistics</source>
+        <translation>Statistiques</translation>
+    </message>
+    <message>
+        <source>Open Files and Ports</source>
+        <translation>Fichiers et ports ouverts</translation>
+    </message>
+    <message>
+        <source>Details</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>Quit</source>
+        <translation>Quitter</translation>
+    </message>
+    <message>
+        <source>Quit this process</source>
+        <translation>Quitter ce processus</translation>
     </message>
 </context>
 <context>
@@ -6883,6 +6934,10 @@
         <translation>Quitter le processus</translation>
     </message>
     <message>
+        <source>Inspect Process</source>
+        <translation>Inspecter le processus</translation>
+    </message>
+    <message>
         <source>Send Signal to Process…</source>
         <translation>Envoyer un signal au processus…</translation>
     </message>
@@ -6921,6 +6976,10 @@
     <message>
         <source>Quit the selected processes</source>
         <translation>Quitter les processus sélectionnés</translation>
+    </message>
+    <message>
+        <source>Inspect the selected process</source>
+        <translation>Inspecter le processus sélectionné</translation>
     </message>
     <message>
         <source>Act on the selected processes</source>
@@ -12911,6 +12970,173 @@
     <message>
         <source>Fills the screen below the menu bar, or restores the window. Alt-click for full screen</source>
         <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Alt-clic pour le plein écran</translation>
+    </message>
+</context>
+<context>
+    <name>activity::Inspection</name>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Real-time, first in first out</source>
+        <translation>Temps réel, premier entré premier sorti</translation>
+    </message>
+    <message>
+        <source>Real-time, round robin</source>
+        <translation>Temps réel, tourniquet</translation>
+    </message>
+    <message>
+        <source>Batch</source>
+        <translation>Par lots</translation>
+    </message>
+    <message>
+        <source>Idle</source>
+        <translation>Au repos</translation>
+    </message>
+    <message>
+        <source>Deadline</source>
+        <translation>Échéance</translation>
+    </message>
+    <message>
+        <source>Real Memory Size:</source>
+        <translation>Taille de la mémoire réelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Virtual Memory Size:</source>
+        <translation>Taille de la mémoire virtuelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Shared Memory Size:</source>
+        <translation>Taille de la mémoire partagée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Private Memory Size:</source>
+        <translation>Taille de la mémoire privée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Proportional Memory Size:</source>
+        <translation>Taille de la mémoire proportionnelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Swapped Memory:</source>
+        <translation>Mémoire en swap&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Compressed Memory:</source>
+        <translation>Mémoire compressée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Peak Memory:</source>
+        <translation>Mémoire maximale&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Threads:</source>
+        <translation>Fils d’exécution&#xa0;:</translation>
+    </message>
+    <message>
+        <source>User CPU Time:</source>
+        <translation>Temps processeur utilisateur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>System CPU Time:</source>
+        <translation>Temps processeur système&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Voluntary Context Switches:</source>
+        <translation>Changements de contexte volontaires&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Involuntary Context Switches:</source>
+        <translation>Changements de contexte involontaires&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Minor Faults:</source>
+        <translation>Défauts de page mineurs&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Major Faults:</source>
+        <translation>Défauts de page majeurs&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Read Calls:</source>
+        <translation>Appels de lecture&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Write Calls:</source>
+        <translation>Appels d’écriture&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Started:</source>
+        <translation>Démarré&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Nice:</source>
+        <translation>Nice&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Scheduler Policy:</source>
+        <translation>Politique d’ordonnancement&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Unit:</source>
+        <translation>Unité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Command:</source>
+        <translation>Commande&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Executable:</source>
+        <translation>Exécutable&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Working Folder:</source>
+        <translation>Dossier de travail&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Pipe</source>
+        <translation>Tube</translation>
+    </message>
+    <message>
+        <source>TCP %1 (listening)</source>
+        <translation>TCP %1 (en écoute)</translation>
+    </message>
+    <message>
+        <source>TCP %1</source>
+        <translation>TCP %1</translation>
+    </message>
+    <message>
+        <source>TCP %1 to %2</source>
+        <translation>TCP %1 vers %2</translation>
+    </message>
+    <message>
+        <source>UDP %1</source>
+        <translation>UDP %1</translation>
+    </message>
+    <message>
+        <source>UDP %1 to %2</source>
+        <translation>UDP %1 vers %2</translation>
+    </message>
+    <message>
+        <source>Local socket</source>
+        <translation>Socket local</translation>
+    </message>
+    <message>
+        <source>Local socket %1</source>
+        <translation>Socket local %1</translation>
+    </message>
+    <message>
+        <source>The open files of another user&apos;s process can&apos;t be read.</source>
+        <translation>Les fichiers ouverts du processus d’un autre utilisateur ne peuvent pas être lus.</translation>
+    </message>
+    <message>
+        <source>The open files of this process can&apos;t be read.</source>
+        <translation>Les fichiers ouverts de ce processus ne peuvent pas être lus.</translation>
+    </message>
+    <message>
+        <source>%1 more descriptors aren&apos;t listed.</source>
+        <translation>%1 autres descripteurs ne sont pas listés.</translation>
     </message>
 </context>
 <context>

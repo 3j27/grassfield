@@ -22,6 +22,8 @@ FocusScope {
 
     // A row's context menu (AM50): the window opens its action menu at (x, y) in this item, the row selected first.
     signal contextMenuRequested(real x, real y)
+    // AM57: a row double-clicked (a process, not a group's header), by its index in the table.
+    signal rowActivated(int row)
 
     function baseWidth(column: var): real {
         if (root.liveWidths[column.key] !== undefined)
@@ -385,6 +387,10 @@ FocusScope {
                         return;
                     }
                     root.table.click(row.index, mouse.modifiers);
+                }
+                onDoubleClicked: mouse => {
+                    if (mouse.button === Qt.LeftButton && !row.group)
+                        root.rowActivated(row.index);
                 }
             }
         }

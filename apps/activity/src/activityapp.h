@@ -9,6 +9,7 @@
 #include "battery.h"
 #include "desktopapps.h"
 #include "inhibitors.h"
+#include "inspection.h"
 #include "processtable.h"
 #include "samplerworker.h"
 #include "summary.h"
@@ -54,6 +55,11 @@ class ActivityApp : public QObject
     Q_PROPERTY(QObject *summary READ summary CONSTANT)
     // Quit, Force Quit and Send Signal on the selection (step 2c, AM50 to AM56).
     Q_PROPERTY(QObject *actions READ actions CONSTANT)
+    // Inspect (step 2d, AM57): one process selected, not the Kernel row.
+    Q_PROPERTY(bool canInspect READ canInspect NOTIFY inspectChanged)
+    // The key window (QGuiApplication::focusWindow), null while no window of the app has the keyboard: a key belongs to the
+    // key window alone (as Files: Qt reports a window active while one of its Inspect windows has the keyboard).
+    Q_PROPERTY(QObject *focusWindow READ focusWindow NOTIFY focusWindowChanged)
     // Every column of the tab, in the table's order ({key, title, shown, optional, numeric, width}): View > Columns and the
     // header's menu (AM15). `shownColumns` is the shown ones alone, in order; a width of 0 is the token width.
     Q_PROPERTY(QVariantList columns READ columns NOTIFY columnsChanged)
@@ -101,6 +107,9 @@ public:
     QObject *summary() { return &m_summary; }
     QObject *actions() { return &m_actions; }
     ProcessActions &processActions() { return m_actions; }
+    bool canInspect() const;
+    QObject *focusWindow() const;
+    Inspectors &inspectors() { return m_inspectors; }
     Summary &summaryModel() { return m_summary; }
     QVariantList columns() const;
     QVariantList shownColumns() const;
@@ -125,6 +134,13 @@ public:
     Q_INVOKABLE void saveSize(int width, int height);
     // AM42, AM44: the pop-up above the Disk graph ("io" or "data") or the Network graph ("packets" or "data"), remembered.
     Q_INVOKABLE void setGraphMode(const QString &graph, const QString &mode);
+    // AM57: the selected process's Inspect window (the Info button, View > Inspect Process, Ctrl+I), or a row's (a
+    // double-click): made, or brought forward when it is open (inspectRequested). Nothing for the Kernel row, a group's
+    // header, or a process that ended.
+    Q_INVOKABLE void inspectSelection();
+    Q_INVOKABLE void inspectRow(int row);
+    // Its window closed.
+    Q_INVOKABLE void closeInspection(QObject *inspection);
 
     // The rows of a snapshot as the table shows them (the tests feed snapshots through it).
     std::vector<TableRow> tableRows(const Snapshot &snapshot);
@@ -140,6 +156,10 @@ signals:
     void sampled();
     // Asked by the worker's thread; queued.
     void sampleRequested(unsigned reads, double interval, bool forget);
+    // An Inspect window to make, or to bring forward when one shows this inspection (AM57).
+    void inspectRequested(QObject *inspection);
+    void inspectChanged();
+    void focusWindowChanged();
 
 private:
     const TabState &tabState() const;
@@ -157,12 +177,14 @@ private:
     ProcessTable m_table;
     Summary m_summary;
     ProcessActions m_actions;
+    Inspectors m_inspectors;
     BatteryWatch m_battery;
     QThread m_thread;
     SamplerWorker *m_worker = nullptr; // lives on m_thread
     QTimer m_timer, m_saveTimer, m_autoTimer;
     bool m_shown = false, m_busy = false, m_again = false, m_forget = false, m_quick = false, m_sampledOnce = false;
     bool m_ready = false;
+    bool m_inspectable = false;
     int m_processSamples = 0;
     QString m_search;
     bool m_swapped = false;

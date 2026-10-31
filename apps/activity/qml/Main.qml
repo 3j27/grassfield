@@ -5,7 +5,7 @@ import Grassfield.Ui
 // Activity Monitor (ADR-0038 steps 2a and 2b; spec AM1 to AM19, AM5): the toolbar (the title with the view as its subtitle,
 // the five tabs, the search field) over the table of the tab's processes, and the tab's summary under it. App windows are
 // opaque (master-prompt 5.5). Step 2c: the Stop button and the action menu, Quit, Force Quit and Send Signal (AM50 to
-// AM56); 2d adds Inspect.
+// AM56). Step 2d: the Info button and Inspect's windows (AM57 to AM59).
 Window {
     id: root
 
@@ -22,6 +22,7 @@ Window {
     readonly property alias summary: summary
     readonly property alias networkNote: networkNote
     readonly property alias stopButton: stopButton
+    readonly property alias infoButton: infoButton
     readonly property alias moreButton: moreButton
     readonly property alias actionMenu: actionMenu
     readonly property alias sheets: sheets
@@ -34,8 +35,52 @@ Window {
     visible: true
     color: Appearance.colors.windowBackground
 
-    // AM2: the window opens at its last size.
-    onClosing: root.backend.saveSize(root.width, root.height)
+    // AM2: the window opens at its last size. AD17: closing it quits the app, its Inspect windows with it.
+    onClosing: {
+        root.backend.saveSize(root.width, root.height);
+        for (const w of root.ownWindows.slice())
+            w.close();
+    }
+
+    // AM57: the Inspect windows this window opened and that are still open, its transient children (as Files' Get Info).
+    property var ownWindows: []
+    // One of them is the key window (backend.focusWindow; never `active`: Qt reports a window and its transient children
+    // active together): this window's keys and its global menu's wait meanwhile, so Ctrl+W typed there closes that window
+    // alone (Files' BrowserWindow.childIsKey).
+    readonly property bool childIsKey: root.backend.focusWindow !== null && root.backend.focusWindow !== undefined
+        && root.ownWindows.indexOf(root.backend.focusWindow) >= 0
+
+    // AM57: an inspection's window, made or brought forward (a second request raises it).
+    function showInspection(inspection: var): void {
+        for (const w of root.ownWindows) {
+            if (w.inspection === inspection) {
+                w.show();
+                w.raise();
+                w.requestActivate();
+                return;
+            }
+        }
+        const w = inspectComponent.createObject(root, {transientParent: root, app: root.backend, inspection: inspection, mainWindow: root});
+        if (w) {
+            root.ownWindows = root.ownWindows.concat([w]);
+            w.closing.connect(() => {
+                root.ownWindows = root.ownWindows.filter(o => o !== w);
+                Qt.callLater(w.destroy);
+            });
+        }
+    }
+
+    Component {
+        id: inspectComponent
+        InspectWindow {}
+    }
+
+    Connections {
+        target: root.backend
+        function onInspectRequested(inspection: var): void {
+            root.showInspection(inspection);
+        }
+    }
 
     function focusSearch(): void {
         search.forceActiveFocus();
@@ -55,6 +100,7 @@ Window {
         const actions = root.backend.actions;
         return [
             {id: "quit", text: qsTr("Quit Process"), shortcut: "Ctrl+Alt+Q", enabled: actions.canQuit},
+            {id: "inspect", text: qsTr("Inspect Process"), shortcut: "Ctrl+I", enabled: root.backend.canInspect},
             {id: "signal", text: qsTr("Send Signal to Process…"), enabled: actions.canSignal},
             {separator: true},
             {id: "copy", text: qsTr("Copy"), enabled: root.backend.table.selectedCount > 0}
@@ -64,6 +110,8 @@ Window {
     function runAction(id: string): void {
         if (id === "quit")
             sheets.openQuit();
+        else if (id === "inspect")
+            root.backend.inspectSelection();
         else if (id === "signal")
             sheets.openSignal();
         else if (id === "copy")
@@ -85,7 +133,8 @@ Window {
         doubleClickAction: root.backend.titlebarDoubleClick
 
         trailing: [
-            // AM3: Stop (Quit Process) and the action menu, one glass capsule with a hairline between them (macOS 27).
+            // AM3: Stop (Quit Process), Info (Inspect) and the action menu, one glass capsule with a hairline between each two
+            // (macOS 27).
             RimmedCapsule {
                 id: actionGroup
                 width: actionRow.width + Tokens.spacingXs
@@ -95,11 +144,17 @@ Window {
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Process actions")
 
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.hairline
-                    height: Tokens.settingsToolbarDividerHeight
-                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                Repeater {
+                    model: 2
+
+                    Rectangle {
+                        required property int index
+                        x: actionRow.x + stopButton.width + (index === 1 ? infoButton.width : 0) - width / 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: actionGroup.hairline
+                        height: Tokens.settingsToolbarDividerHeight
+                        color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                    }
                 }
 
                 Row {
@@ -118,6 +173,21 @@ Window {
 
                         HoverHandler {
                             id: stopHover
+                        }
+                    }
+
+                    ToolButton {
+                        id: infoButton
+                        objectName: "infoButton"
+                        capsule: true
+                        buttonSize: Tokens.filesToolbarGroupButton
+                        iconName: "info"
+                        enabled: root.backend.canInspect
+                        accessibleName: qsTr("Inspect Process")
+                        onClicked: root.backend.inspectSelection()
+
+                        HoverHandler {
+                            id: infoHover
                         }
                     }
 
@@ -208,6 +278,8 @@ Window {
         anchors.right: parent.right
         anchors.bottom: networkNote.visible ? networkNote.top : summary.top
         focus: true
+        // AM57: a double-click inspects the row.
+        onRowActivated: row => root.backend.inspectRow(row)
         onContextMenuRequested: (x, y) => {
             const p = processList.mapToItem(root.contentItem, x, y);
             root.openActionMenu(p.x, p.y);
@@ -249,11 +321,12 @@ Window {
         id: toolbarTip
         objectName: "toolbarTip"
         readonly property Item over: tabsHover.hovered ? tabs : searchHover.hovered ? search : stopHover.hovered ? stopButton
-            : moreHover.hovered ? moreButton : null
+            : infoHover.hovered ? infoButton : moreHover.hovered ? moreButton : null
         readonly property point place: over ? over.mapToItem(root.contentItem, 0, over.height) : Qt.point(0, 0)
         // AM50: with another owner's process or the Kernel row selected, the Stop button says why it is off.
         text: over === tabs ? qsTr("Choose the resource the table shows") : over === search ? qsTr("Search processes by name, user, command or PID")
             : over === stopButton ? (root.backend.actions.refusal !== "" ? root.backend.actions.refusal : qsTr("Quit the selected processes"))
+            : over === infoButton ? qsTr("Inspect the selected process")
             : over === moreButton ? qsTr("Act on the selected processes") : ""
         shown: over !== null
         x: Math.round(Math.max(Tokens.spacingXs, Math.min(root.width - width - Tokens.spacingXs, place.x + ((over ? over.width : 0) - width) / 2)))
@@ -352,8 +425,11 @@ Window {
         onItemChanged: console.info("grassfield: global menu " + (item ? "created" : "destroyed"))
     }
 
+    // None acts while one of this window's Inspect windows is the key window (childIsKey) but Ctrl+Q, which quits the app
+    // from any of them.
     component Key: Shortcut {
         property var run: null
+        enabled: !root.childIsKey
         onActivated: run()
         onActivatedAmbiguously: run()
     }
@@ -375,11 +451,16 @@ Window {
         run: () => sheets.openQuit()
     }
     Key {
+        sequence: "Ctrl+I"
+        run: () => root.backend.inspectSelection()
+    }
+    Key {
         sequence: "Ctrl+W"
         run: () => root.close()
     }
     Key {
         sequence: "Ctrl+Q"
+        enabled: true
         run: () => root.close()
     }
 }

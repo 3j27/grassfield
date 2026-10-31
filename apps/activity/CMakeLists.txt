@@ -7,10 +7,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-# Activity Monitor (ADR-0038). Step 1: the sampler (plain C++17 and POSIX, no Qt; step 2c's signal path with it), its unit
-# tests and its bench (tests/apps/activity_cost.sh). Step 2: the window's backend (Qt Core, Gui and DBus) and the app with
-# its QML, its desktop entry and its icon, packaged in grassfield-desktop (AD2).
+# Activity Monitor (ADR-0038). Step 1: the sampler (plain C++17 and POSIX, no Qt; step 2c's signal path and step 2d's
+# Inspect reader with it), its unit tests and its bench (tests/apps/activity_cost.sh). Step 2: the window's backend (Qt
+# Core, Gui and DBus) and the app with its QML, its desktop entry and its icon, packaged in grassfield-desktop (AD2).
 add_library(grassfield-activity-sampler STATIC
+    src/inspect.cpp src/inspect.h
     src/netdiag.cpp src/netdiag.h
     src/procparse.cpp src/procparse.h
     src/sampler.cpp src/sampler.h
@@ -36,6 +37,7 @@ add_library(grassfield-activity-window STATIC
     src/desktopapps.cpp src/desktopapps.h
     src/format.cpp src/format.h
     src/inhibitors.cpp src/inhibitors.h
+    src/inspection.cpp src/inspection.h src/shownwatch.h
     src/processtable.cpp src/processtable.h
     src/samplerworker.cpp src/samplerworker.h
     src/summary.cpp src/summary.h)
@@ -62,6 +64,7 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(activity-unit-tests
+        ../../tests/unit/activity/tst_inspect.cpp
         ../../tests/unit/activity/tst_memory.cpp
         ../../tests/unit/activity/tst_netdiag.cpp
         ../../tests/unit/activity/tst_procparse.cpp
@@ -78,6 +81,7 @@ if(GTest_FOUND)
         ../../tests/unit/activity/window/tst_actions.cpp
         ../../tests/unit/activity/window/tst_activityapp.cpp
         ../../tests/unit/activity/window/tst_format.cpp
+        ../../tests/unit/activity/window/tst_inspection.cpp
         ../../tests/unit/activity/window/tst_main.cpp
         ../../tests/unit/activity/window/tst_processtable.cpp
         ../../tests/unit/activity/window/tst_summary.cpp)

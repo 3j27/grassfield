@@ -3,9 +3,12 @@
 // text, no sample while the window is hidden, suspended by the compositor or minimized (AM8, AD35), and the size it keeps
 // (AM2). A-W2 (step 2c, AM50 to AM56; tests/apps/activity_actions.sh): the window on the real /proc and real children:
 // Stop and its sheet's Quit send SIGTERM, Force Quit SIGKILL, a process that ends meanwhile is silent, a session process
-// gets the warning first and no Stop, and the dev guard refuses a process outside its roots.
+// gets the warning first and no Stop, and the dev guard refuses a process outside its roots. A-W3 (step 2d, AM57 to
+// AM59): the Info button's Inspect window on the real /proc, its reads, its Quit, another owner's process, and the windows
+// closed with their process and with the main window.
 #include "../fixture.h"
 #include "activityapp.h"
+#include "format.h"
 #include "iconprovider.h"
 #include "shownwatch.h"
 
@@ -677,4 +680,112 @@ TEST(ActivityActions, TheDevGuardRefusesAProcessOutsideItsRoots)
     EXPECT_EQ(ending(c, 0), -1);
     QTest::keyClick(w.win, Qt::Key_Escape);
     EXPECT_FALSE(sheet->isVisible());
+}
+
+// ---- A-W3 (step 2d) ------------------------------------------------------------------------------------------------------
+namespace {
+
+QList<QQuickWindow *> inspectWindows(Window &w)
+{
+    QList<QQuickWindow *> out;
+    for (const QVariant &v : w.win->property("ownWindows").toList()) {
+        if (auto *iw = qobject_cast<QQuickWindow *>(v.value<QObject *>()))
+            out << iw;
+    }
+    return out;
+}
+
+Inspection *inspectionOf(QQuickWindow *iw)
+{
+    return qobject_cast<Inspection *>(iw->property("inspection").value<QObject *>());
+}
+
+QString rowValue(const QVariantList &rows, const QString &label)
+{
+    for (const QVariant &r : rows) {
+        if (r.toMap().value(QStringLiteral("label")).toString() == label)
+            return r.toMap().value(QStringLiteral("value")).toString();
+    }
+    return QString();
+}
+
+} // namespace
+
+// AM57 to AM59, AD45: the Info button opens the selected child's Inspect window; its header and tabs fill from the reads
+// on the sampler's thread; a second request (Ctrl+I) brings the same window back; its Quit sends SIGTERM through AM51's
+// path, and the window closes once the process has ended.
+TEST(ActivityInspect, TheInfoButtonOpensAWindowThatReadsAndQuits)
+{
+    DevRoots dev(true);
+    Window w(true);
+    Children kids;
+    const pid_t a = kids.add();
+    ASSERT_TRUE(open(w, kPlainUnit, {a}));
+    QQuickItem *info = named(w.win, "infoButton");
+    ASSERT_NE(info, nullptr);
+    select(w, a);
+    ASSERT_TRUE(becomes([&] { return info->isEnabled(); }, true));
+    settledClick(w.win, [&] { return centre(info); });
+    ASSERT_TRUE(becomes([&] { return inspectWindows(w).size() == 1; }, true));
+    QQuickWindow *iw = inspectWindows(w).constFirst();
+    Inspection *ins = inspectionOf(iw);
+    ASSERT_NE(ins, nullptr);
+    EXPECT_TRUE(iw->title().endsWith(QStringLiteral(" (%1)").arg(a))) << iw->title().toStdString();
+    ASSERT_TRUE(QTest::qWaitForWindowExposed(iw));
+    ASSERT_TRUE(becomes([&] { return ins->ready(); }, true));
+    EXPECT_TRUE(ins->parentText().endsWith(QStringLiteral(" (%1)").arg(getpid()))) << ins->parentText().toStdString();
+    EXPECT_NE(rowValue(ins->memoryRows(), QStringLiteral("Real Memory Size:")), dash());
+    EXPECT_NE(rowValue(ins->memoryRows(), QStringLiteral("Proportional Memory Size:")), dash()); // its own: smaps_rollup
+    ins->setTab(QStringLiteral("statistics"));
+    ASSERT_TRUE(becomes([&] { return rowValue(ins->statisticsRows(), QStringLiteral("Executable:")) != dash(); }, true));
+    ins->setTab(QStringLiteral("files"));
+    ASSERT_TRUE(becomes([&] { return !ins->files().isEmpty(); }, true));
+
+    // A second request: the same window, no other.
+    w.win->requestActivate();
+    QTest::keyClick(w.win, Qt::Key_I, Qt::ControlModifier);
+    QTest::qWait(200);
+    EXPECT_EQ(inspectWindows(w).size(), 1);
+
+    QQuickItem *quit = named(iw, "inspectQuit");
+    QQuickItem *sheet = named(iw, "quitSheet");
+    ASSERT_TRUE(quit && sheet);
+    EXPECT_TRUE(quit->isEnabled());
+    settledClick(iw, [&] { return centre(quit); });
+    ASSERT_TRUE(becomes([&] { return sheet->isVisible(); }, true));
+    QTest::keyClick(iw, Qt::Key_Return);
+    EXPECT_EQ(ending(a), SIGTERM);
+    ASSERT_TRUE(becomes([&] { return inspectWindows(w).isEmpty(); }, true)); // AD45
+    EXPECT_TRUE(becomes([&] { return w.backend->inspectors().count(); }, 0)); // let go once its window is destroyed
+}
+
+// AM57: another owner's process (pid 1, root's): what stat and status give, "—" elsewhere, Open Files and Ports says why,
+// and Quit is off. Every Inspect window closes with the main window (AD17).
+TEST(ActivityInspect, AnotherOwnersProcessAndTheMainWindowsClose)
+{
+    if (geteuid() == 0)
+        GTEST_SKIP() << "run as the app's user: root's own processes are its own";
+    Window w(true);
+    ASSERT_TRUE(open(w, kPlainUnit, {}));
+    ProcessTable &t = w.backend->processTable();
+    ASSERT_TRUE(becomes([&] { return rowOf(t, 1) >= 0; }, true));
+    w.backend->inspectRow(rowOf(t, 1)); // a double-click
+    ASSERT_TRUE(becomes([&] { return inspectWindows(w).size() == 1; }, true));
+    QQuickWindow *iw = inspectWindows(w).constFirst();
+    Inspection *ins = inspectionOf(iw);
+    ASSERT_TRUE(QTest::qWaitForWindowExposed(iw));
+    ASSERT_TRUE(becomes([&] { return ins->ready(); }, true));
+    EXPECT_FALSE(ins->own());
+    EXPECT_NE(rowValue(ins->memoryRows(), QStringLiteral("Real Memory Size:")), dash());
+    EXPECT_EQ(rowValue(ins->memoryRows(), QStringLiteral("Proportional Memory Size:")), dash());
+    ins->setTab(QStringLiteral("statistics"));
+    ASSERT_TRUE(becomes([&] { return rowValue(ins->statisticsRows(), QStringLiteral("Threads:")) != dash(); }, true));
+    EXPECT_EQ(rowValue(ins->statisticsRows(), QStringLiteral("Command:")), dash());
+    EXPECT_EQ(rowValue(ins->statisticsRows(), QStringLiteral("Working Folder:")), dash());
+    ins->setTab(QStringLiteral("files"));
+    EXPECT_EQ(ins->filesNote(), QStringLiteral("The open files of another user's process can't be read."));
+    EXPECT_FALSE(named(iw, "inspectQuit")->isEnabled());
+
+    w.win->close();
+    ASSERT_TRUE(becomes([&] { return inspectWindows(w).isEmpty(); }, true));
 }

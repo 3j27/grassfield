@@ -3425,4 +3425,16 @@ QtObject {
     readonly property int activitySwatchSize: 8
     // own value: the samples a graph shows, two minutes at Very Often and ten at Normally (AM29) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityHistorySamples: 120
+    // estimate: an Inspect window, the widest Statistics row ("Involuntary Context Switches:" and its count) with room for a path (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectWidth: 480
+    // estimate: an Inspect window, its header, the tabs and the sixteen Statistics rows without scrolling when no value wraps (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectHeight: 640
+    // estimate: an Inspect window's header and its three tabs on one line (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectMinWidth: 380
+    // estimate: an Inspect window's header, the tabs, a few rows and the Quit button (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectMinHeight: 360
+    // own value: the labels' column of an Inspect window's rows at least; it widens to its longest label (French ones run longer), right-aligned against the values as macOS's inspectors [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectLabelWidth: 120
+    // own value: the room an Inspect window's labels always leave to the values (a path or a command wraps in it) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectValueMinWidth: 140
 }
