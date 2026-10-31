@@ -47,6 +47,16 @@ function greenAction(fullscreen, inSplit, altHeld) {
     return altHeld ? "enterFullscreen" : "toggleZoom";
 }
 
+// Where a press on the overlay's menu bar strip goes while a popup is open (ADR-0036 D64; integrator review of 7096305,
+// MAJOR 1): to the output's bar while it is in view ("bar"); with the bar away (full screen, a Split View Desktop, where a
+// member's titlebar starts at the output's top, under the strip) the strip is any click outside: the tiling popover's
+// green light ("green", `onLight`: a left press on it) or a close ("close").
+function stripPress(barInView, onLight) {
+    if (barInView)
+        return "bar";
+    return onLight ? "green" : "close";
+}
+
 // Whether (x, y) is on the light `light` ({x, y, w, h}, the same coordinates; null: no light): its right and bottom edges excluded.
 function inLight(light, x, y) {
     return !!light && x >= light.x && x < light.x + light.w && y >= light.y && y < light.y + light.h;

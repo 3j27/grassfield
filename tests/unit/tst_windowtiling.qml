@@ -153,6 +153,14 @@ TestCase {
         compare(WindowTiling.greenAction(false, true, true), "unsplit");
     }
 
+    // Integrator review of 7096305, MAJOR 1: a Split View member's light lies under the menu bar's strip.
+    function test_stripPressGoesToTheBarOnlyInView() {
+        compare(WindowTiling.stripPress(true, false), "bar");
+        compare(WindowTiling.stripPress(true, true), "bar", "a bar in view covers the light under it");
+        compare(WindowTiling.stripPress(false, true), "green", "the bar away: the light under the strip is the light's");
+        compare(WindowTiling.stripPress(false, false), "close", "the bar away: any click outside");
+    }
+
     function test_inLightExcludesTheFarEdges() {
         const l = {x: 10, y: 20, w: 14, h: 14};
         verify(WindowTiling.inLight(l, 10, 20), "top left corner");
