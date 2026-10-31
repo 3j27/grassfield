@@ -16,6 +16,19 @@ function allReady(expected) {
     return expected !== null && typeof expected === "object" && Object.keys(expected).length > 0 && pending(expected).length === 0;
 }
 
+// A wallpaper key is still waited for: the entrance never comes before the wallpaper (P-3), even on its timeout; the
+// wallpaper's first frame has its own bound (wallpaper.firstShowTimeoutMs), after which it shows the artwork.
+function wallpaperPending(expected) {
+    return pending(expected).some(k => k.indexOf("wallpaper:") === 0);
+}
+
+// `expected` without `key` (a surface that went before the entrance, e.g. an output removed). A new object.
+function without(expected, key) {
+    const out = Object.assign({}, expected || {});
+    delete out[key];
+    return out;
+}
+
 // `expected` with `key` waited for (false) unless it is already there. A new object.
 function withExpected(expected, key) {
     const out = Object.assign({}, expected || {});

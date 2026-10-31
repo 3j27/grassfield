@@ -433,6 +433,8 @@ Scope {
             Component.onDestruction: {
                 if (win.firstReady)
                     Journal.hidden("wallpaper", win.modelData ? win.modelData.name : "");
+                else
+                    Entrance.forget("wallpaper:" + (win.modelData ? win.modelData.name : ""));
             }
 
             // The output's height: the window's own is not known before it maps (the first frame's tone is reported before).

@@ -445,7 +445,9 @@ Scope {
             // shown otherwise): a machine that began shown would slide out in front of the user.
             windows.instances.forEach(w => w.resetHide());
             settled = true;
-            Entrance.ready("dock");
+            // No window shows the Dock (no output has it): nothing to wait for.
+            if (!windows.instances.some(w => w.isDockScreen))
+                Entrance.ready("dock");
         }
     }
 
@@ -1340,6 +1342,17 @@ Scope {
                 interval: Tokens.dockSettleTimeout
                 running: root.settled && !win.reveal && !win.placedGivenUp
                 onTriggered: win.placedGivenUp = true
+            }
+            // The Dock's own window says the Dock is ready once it is settled AND placed (review of 3a5e1b80), so the entrance
+            // never fades the menu bar and the icons in before it.
+            readonly property bool entranceReady: root.settled && (placed || placedGivenUp)
+            onEntranceReadyChanged: {
+                if (entranceReady && isDockScreen)
+                    Entrance.ready("dock");
+            }
+            onIsDockScreenChanged: {
+                if (entranceReady && isDockScreen)
+                    Entrance.ready("dock");
             }
             anchors {
                 bottom: true

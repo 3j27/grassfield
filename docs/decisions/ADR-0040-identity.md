@@ -464,8 +464,15 @@ the bar's `UsableProbe` is armed only once it is shown, and the Dock's probe fol
 entrance (ready|timeout[; waited for <keys>])`, and `shown`/`hidden` lines for `menubar` and `dock`. Tests:
 `tests/unit/tst_entrance.qml` (the latch, the tokens, the wiring of the four surfaces), `tests/shell/startup_settle_wiring.sh`
 (unchanged, passes), and the nested `tests/visual/appear-once.sh` (section 7: first wallpaper kind equals the final one, no
-surface shown twice, the bars after the wallpaper, the entrance ready rather than timed out, one bar tone in the first 3 s;
-at a start and at a restart). NOT VERIFIED: `appear-once.sh` was not run (no nested session in this container), nor P5 on
+surface shown twice, the menu bar and the Dock after their output's wallpaper, the entrance logged (a timeout reported,
+not failed), one bar tone in the first 3 s; at a start and at a restart). Review of 3a5e1b80 (FAIL: MAJOR the bar's blur
+before the entrance; MINOR the auto-hide state set before the settings or the full-screen state were final, the bound equal
+to the wallpaper's, the Dock ready before it was placed, input on the invisible bar and icons, the script ending on a
+missing line under `set -e`; NITs) → fixed: the blur and the bar's input wait for the entrance; the auto-hide machine is
+set again until and at the entrance; on its bound the latch still waits for every wallpaper's first frame (which has its
+own); the Dock's own window says it is ready once placed; the icons take no pointer input before it and are ready when
+hidden; a surface that goes first is forgotten (`Entrance.forget`); the script's reads tolerate a missing line and the Dock
+is compared with its own output's wallpaper. `shown menubar` and `shown dock` mean their entrance, auto-hidden or not. NOT VERIFIED: `appear-once.sh` was not run (no nested session in this container), nor P5 on
 the owner's logins.
 
 Step 7 as built (ID-21, ID-10). Log Out, Restart and Shut Down, from the System menu and from Search, confirm with the

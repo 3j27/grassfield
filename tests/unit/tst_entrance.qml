@@ -35,6 +35,13 @@ TestCase {
         verify(Logic.allReady(Logic.withExpected(Logic.withReady({}, "x"), "x")));
         compare(Logic.pending(null), []);
         verify(!Logic.allReady(null));
+        // On its bound the latch still waits for the wallpapers (review of 3a5e1b80), not for the bars.
+        let w = Logic.withExpected(Logic.withExpected({}, "wallpaper:A"), "dock");
+        verify(Logic.wallpaperPending(w));
+        w = Logic.withReady(w, "wallpaper:A");
+        verify(!Logic.wallpaperPending(w), "only the Dock is late: the timeout reveals");
+        // A surface that went first is no longer waited for.
+        verify(Logic.allReady(Logic.without(w, "dock")));
     }
 
     function test_theTokens() {
@@ -47,7 +54,7 @@ TestCase {
 
     function test_theSurfacesWaitAndFadeTogether() {
         const e = source("shell/services/Entrance.qml");
-        verify(/interval: Tokens\.sessionRevealTimeoutMs\s*onTriggered: root\.reveal\("timeout"\)/.test(e));
+        verify(/interval: Tokens\.sessionRevealTimeoutMs\s*onTriggered: \{\s*root\.timedOut = true;\s*root\.check\(\);/.test(e));
         verify(/readonly property bool settingsFinal: Settings\.loaded \|\| root\.settingsWaited/.test(e));
         const w = source("shell/desktop/Wallpaper.qml");
         verify(/Entrance\.expect\("wallpaper:"/.test(w) && /Entrance\.ready\("wallpaper:"/.test(w) && /Entrance\.begin\(\);/.test(w));
@@ -58,10 +65,20 @@ TestCase {
         compare((bar.match(/opacity: win\.dimOpacity \* win\.entrance/g) || []).length, 2, "the band and the content fade in");
         verify(/armed: win\.entered/.test(bar), "P5 counts the entrance");
         const dock = source("shell/dock/Dock.qml");
-        verify(/Entrance\.expect\("dock"\);/.test(dock) && /settled = true;\s*Entrance\.ready\("dock"\);/.test(dock));
+        verify(/Entrance\.expect\("dock"\);/.test(dock));
+        // The Dock is ready once settled and placed, from its own window (review of 3a5e1b80).
+        verify(/readonly property bool entranceReady: root\.settled && \(placed \|\| placedGivenUp\)/.test(dock));
         verify(/readonly property bool revealWanted: root\.settled && \(placed \|\| placedGivenUp\) && Entrance\.revealed/.test(dock));
+        verify(/if \(entranceReady && isDockScreen\)\s*Entrance\.ready\("dock"\);/.test(dock));
+        // The bar's blur and input wait for the entrance; its auto-hide is set again until and at it.
+        verify(/BackgroundEffect\.blurRegion: win\.entered && /.test(bar));
+        verify(/height: win\.entered \? BarHide\.inputHeight\(/.test(bar));
+        verify(/onAutoHidesChanged: \{\s*if \(!win\.entered && win\.barFinal\)\s*win\.hideMachine = AutoHide\.initial\(win\.autoHides\);/.test(bar));
+        // On its bound the latch waits for the wallpapers' own bound.
+        verify(/else if \(root\.timedOut && !Logic\.wallpaperPending\(root\.expected\)\)/.test(e));
         const icons = source("shell/desktop/IconsView.qml");
         verify(/opacity: entrance/.test(icons) && /Entrance\.expect\(root\.entranceKey\);/.test(icons) && /Entrance\.ready\(root\.entranceKey\);/.test(icons));
+        verify(/enabled: !Entrance\.revealed/.test(icons), "no pointer input on the invisible icons");
         // One fade length for the three, capped by Reduce Motion.
         for (const t of [bar, dock, icons])
             verify(/duration: Appearance\.duration\(Tokens\.sessionRevealMs\)/.test(t));

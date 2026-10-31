@@ -4,8 +4,9 @@
 #   - the first wallpaper kind logged ("grassfield-shell: wallpaper first <kind>") is the final one (wallpaper.json `shown`);
 #   - no surface is shown twice on an output without being hidden in between ("grassfield-shell: shown|hidden <surface>
 #     <output> <ms>", shell/services/Journal.qml);
-#   - the menu bar, the Dock and the desktop icons come after the wallpaper, and the entrance ended because everything was
-#     ready, not on its timeout ("grassfield-shell: entrance (ready"; a timeout is reported, not failed: a slow machine);
+#   - the menu bar and the Dock come after the wallpaper of their output, and the entrance happened ("grassfield-shell:
+#     entrance (ready", or "(timeout" on a slow machine, which is reported, not failed; the timeout still waits for every
+#     wallpaper's first frame);
 #   - the menu bar's tone does not change in the first 3 s (`bartone status` sampled every 100 ms from the start).
 # The lock and unlock part of section 7 comes with step 4b. Pictures are generated under .dev, never committed.
 # Usage (bare command): tests/visual/appear-once.sh
@@ -29,38 +30,39 @@ out=$VS_OUTPUT
 # The journal checks of one start (the shell log of that start).
 journal_checks() {
   local label=$1 first final order
-  first=$(grep -m1 -o "grassfield-shell: wallpaper first [a-z]* .*output=$out" "$log" | awk '{print $4}')
+  first=$(grep -m1 -o "grassfield-shell: wallpaper first [a-z]* .*output=$out" "$log" | awk '{print $4}' || true)
   local state
-  state=$(find "$VS_DEV/state" -name wallpaper.json 2>/dev/null | head -1)
-  final=$([[ -n $state ]] && jq -r --arg o "$out" '.shown[$o].kind // ""' "$state" 2>/dev/null)
+  state=$(find "$VS_DEV/state" -name wallpaper.json 2>/dev/null | head -1 || true)
+  final=$([[ -n $state ]] && jq -r --arg o "$out" '.shown[$o].kind // ""' "$state" 2>/dev/null || true)
   check "$label: the first wallpaper is the final one (first $first, final $final)" test -n "$first" -a "$first" = "$final"
   # shown/hidden pairs per surface and output: a second `shown` needs a `hidden` before it.
   local twice
   twice=$(grep -o "grassfield-shell: \(shown\|hidden\) [a-z]* [^ ]* [0-9]*" "$log" | awk '
-    { key = $3 " " $4; if ($2 == "shown") { if (up[key]) print key; up[key] = 1 } else up[key] = 0 }')
+    { key = $3 " " $4; if ($2 == "shown") { if (up[key]) print key; up[key] = 1 } else up[key] = 0 }' || true)
   check "$label: no surface shown twice without being hidden (${twice:-none})" test -z "$twice"
   # The bars after the wallpaper.
-  local wp bar
-  wp=$(grep -m1 -o "grassfield-shell: shown wallpaper $out [0-9]*" "$log" | awk '{print $5}')
+  local wp bar on
   for s in menubar dock; do
-    # The Dock is on one output (the focused one at the start), not necessarily this one.
+    # The Dock is on one output (the focused one at the start), not necessarily this one: compare with that output's wallpaper.
     if [[ $s == dock ]]; then
-      bar=$(grep -m1 -o "grassfield-shell: shown dock [^ ]* [0-9]*" "$log" | awk '{print $5}')
+      on=$(grep -m1 -o "grassfield-shell: shown dock [^ ]* [0-9]*" "$log" | awk '{print $4}' || true)
     else
-      bar=$(grep -m1 -o "grassfield-shell: shown $s $out [0-9]*" "$log" | awk '{print $5}')
+      on=$out
     fi
-    check "$label: $s after the wallpaper (wallpaper ${wp:-?} ms, $s ${bar:-?} ms)" test -n "$wp" -a -n "$bar" -a "${bar:-0}" -ge "${wp:-1}"
+    wp=$(grep -m1 -o "grassfield-shell: shown wallpaper ${on:-$out} [0-9]*" "$log" | awk '{print $5}' || true)
+    bar=$(grep -m1 -o "grassfield-shell: shown $s ${on:-$out} [0-9]*" "$log" | awk '{print $5}' || true)
+    check "$label: $s after the wallpaper of ${on:-?} (wallpaper ${wp:-?} ms, $s ${bar:-?} ms)" test -n "$wp" -a -n "$bar" -a "${bar:-0}" -ge "${wp:-1}"
   done
-  order=$(grep -m1 -o "grassfield-shell: entrance ([a-z]*" "$log" | awk '{print $3}')
+  order=$(grep -m1 -o "grassfield-shell: entrance ([a-z]*" "$log" | awk '{print $3}' || true)
   check "$label: the entrance happened (${order#(})" test -n "$order"
-  [[ $order == "(ready" ]] || echo "info: $label: the entrance ended on its timeout ($(grep -m1 "grassfield-shell: entrance" "$log"))"
+  [[ $order == "(ready" ]] || echo "info: $label: the entrance ended on its timeout ($(grep -m1 "grassfield-shell: entrance" "$log" || true))"
 }
 
 # Tones of the output sampled every 100 ms for 3 s from now; prints the distinct ones.
 sample_tones() {
   local i t seen=""
   for i in $(seq 1 30); do
-    t=$(vs_ipc bartone status 2>/dev/null | jq -r --arg o "$out" '.[$o].tone // empty' 2>/dev/null)
+    t=$(vs_ipc bartone status 2>/dev/null | jq -r --arg o "$out" '.[$o].tone // empty' 2>/dev/null || true)
     [[ -n $t && " $seen " != *" $t "* ]] && seen="$seen $t"
     sleep 0.1
   done

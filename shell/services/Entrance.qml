@@ -10,12 +10,16 @@ import "EntranceLogic.js" as Logic
 // is (`ready`); `revealed` latches once all are, or after session.revealTimeoutMs, whichever comes first, and never goes
 // back: a surface created later (a hotplugged output) is simply shown. The settings come first (ID-5): `settingsFinal` once
 // they are read, or session.settingsWaitMs after the start (the defaults then). begin() is called as the desktop is created
-// (the clocks start there). Journal: `grassfield-shell: entrance (<why>; waited for <keys>)`.
+// (the clocks start there). The bound never lets the bars come before the wallpaper: on it, the entrance still waits for any
+// wallpaper's first frame, which has its own bound (wallpaper.firstShowTimeoutMs). Journal: `grassfield-shell: entrance
+// (<why>; waited for <keys>)`.
 Singleton {
     id: root
 
     property var expected: ({})
     property bool revealed: false
+    // The bound ran out while a wallpaper still drew its first frame: the entrance follows that frame (review of 3a5e1b80).
+    property bool timedOut: false
     property bool settingsWaited: false
     readonly property bool settingsFinal: Settings.loaded || root.settingsWaited
 
@@ -40,9 +44,21 @@ Singleton {
         Qt.callLater(root.check);
     }
 
+    // A surface that goes before the entrance (its output was removed) is no longer waited for.
+    function forget(key: string): void {
+        if (root.revealed)
+            return;
+        root.expected = Logic.without(root.expected, key);
+        Qt.callLater(root.check);
+    }
+
     function check(): void {
-        if (!root.revealed && Logic.allReady(root.expected))
+        if (root.revealed)
+            return;
+        if (Logic.allReady(root.expected))
             root.reveal("ready");
+        else if (root.timedOut && !Logic.wallpaperPending(root.expected))
+            root.reveal("timeout");
     }
 
     function reveal(why: string): void {
@@ -57,7 +73,10 @@ Singleton {
     Timer {
         id: revealTimer
         interval: Tokens.sessionRevealTimeoutMs
-        onTriggered: root.reveal("timeout")
+        onTriggered: {
+            root.timedOut = true;
+            root.check();
+        }
     }
 
     Timer {

@@ -127,8 +127,23 @@ FocusScope {
     }
     Component.onCompleted: {
         Entrance.expect(root.entranceKey);
-        if (ready)
+        // Icons turned off in Settings: nothing to wait for.
+        if (ready || !Settings.desktopShowIcons)
             Entrance.ready(root.entranceKey);
+    }
+    Component.onDestruction: {
+        if (!Entrance.revealed)
+            Entrance.forget(root.entranceKey);
+    }
+
+    // No pointer input before the entrance: the icons are not visible yet (opacity does not stop clicks or drags).
+    MouseArea {
+        anchors.fill: parent
+        z: 1000
+        enabled: !Entrance.revealed
+        acceptedButtons: Qt.AllButtons
+        hoverEnabled: true
+        onWheel: wheel => wheel.accepted = true
     }
 
     // Persist the slots handed out to icons that had none (new files, a smaller grid).

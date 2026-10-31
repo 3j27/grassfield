@@ -635,6 +635,8 @@ Scope {
                 Popups.unregisterBar(win.screen.name, win);
                 if (win.entered)
                     Journal.hidden("menubar", win.screen ? win.screen.name : "");
+                else
+                    Entrance.forget("menubar:" + (win.screen ? win.screen.name : ""));
             }
 
             // ---- the entrance (ADR-0040 step 6, ID-20, ID-5, ID-6) ----
@@ -652,8 +654,16 @@ Scope {
             }
             readonly property bool entered: Entrance.revealed
             onEnteredChanged: {
-                if (entered)
-                    Journal.shown("menubar", win.screen.name);
+                if (!entered)
+                    return;
+                // What it rests in now: the settings or the full-screen state may have changed since settleBar (review of
+                // 3a5e1b80: slow settings, a restart over a full-screen window).
+                win.hideMachine = AutoHide.initial(win.autoHides);
+                Journal.shown("menubar", win.screen.name);
+            }
+            onAutoHidesChanged: {
+                if (!win.entered && win.barFinal)
+                    win.hideMachine = AutoHide.initial(win.autoHides);
             }
             property real entrance: Entrance.revealed ? 1 : 0
             Behavior on entrance {
@@ -775,7 +785,8 @@ Scope {
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
-            BackgroundEffect.blurRegion: win.showBackground && material.blurActive && win.hideMachine.visible > 0 ? blurRegion : null
+            // Not before the entrance: a blurred strip under an invisible band would show the bar in two steps (review of 3a5e1b80).
+            BackgroundEffect.blurRegion: win.entered && win.showBackground && material.blurActive && win.hideMachine.visible > 0 ? blurRegion : null
             // The bar, or only the top edge strip while it is away.
             mask: Region {
                 item: hitItem
@@ -791,7 +802,8 @@ Scope {
             Item {
                 id: hitItem
                 width: win.width
-                height: BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away)
+                // No input before the entrance: nothing of the bar is visible yet.
+                height: win.entered ? BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away) : 0
             }
 
             // The menu bar window is mapped for the whole session: it hosts the idle reads of the icon shapes (the first output's
