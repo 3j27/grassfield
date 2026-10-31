@@ -52,7 +52,9 @@ FocusScope {
         }
     }
 
+    // Near-opaque glass (ADR-0024 section 2: the widgets' class, 0.92; ADR-0039 step 22).
     Material {
+        glassClass: "widgets"
         anchors.fill: parent
         visible: !root.flat
         radius: Tokens.widgetRadius

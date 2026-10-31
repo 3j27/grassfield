@@ -543,7 +543,9 @@ Window {
         Accessible.role: Accessible.Pane
         Accessible.name: qsTr("Info")
 
+        // A popover: the menus' class (ADR-0039 step 22).
         Material {
+            glassClass: "menu"
             anchors.fill: parent
             radius: Tokens.radiusMenu
         }

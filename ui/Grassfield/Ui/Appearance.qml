@@ -169,7 +169,7 @@ QtObject {
     // GlassTint.gridRange) narrows the range to what lies under one surface. On any other output the backdrop is unknown and a
     // class takes the worst case.
     property var backdrops: ({})
-    readonly property var glassTargets: ({menu: Tokens.glassMenu, notification: Tokens.glassNotification, controls: Tokens.glassControls, apps: Tokens.glassApps})
+    readonly property var glassTargets: ({menu: Tokens.glassMenu, notification: Tokens.glassNotification, controls: Tokens.glassControls, apps: Tokens.glassApps, gallery: Tokens.glassGallery, widgets: Tokens.glassWidgets})
 
     // Tint alpha of a glass class at transparency t on an output (GlassTint.alpha): the class target at the default slider,
     // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop, or over the part of it
@@ -178,6 +178,17 @@ QtObject {
         const known = backdrops[screenName] ?? null;
         const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
         return glassAlphaOver(glassClass, t, under ?? known);
+    }
+
+    // Increase Contrast frosts every glass surface (ADR-0024 G-8): a tint alpha raised to glass.contrastFrost.
+    function frosted(a: real): real {
+        return increaseContrast ? Math.max(Tokens.glassContrastFrost, a) : a;
+    }
+
+    // The tint alpha of a small glass piece with no blur under it (a close capsule over a card's corner): its own alpha,
+    // opaque when the glass is (Reduce Transparency, or the slider at opaque), frosted by Increase Contrast (ADR-0039 step 22).
+    function fixedGlassAlpha(a: real): real {
+        return effectiveTransparency <= 0 ? 1 : frosted(a);
     }
 
     // The same over a backdrop range the host knows ({lumMin, lumMax}; null = the worst case, black to white).

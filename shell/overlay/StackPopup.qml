@@ -593,7 +593,7 @@ FocusScope {
 
             ShapePath {
                 strokeWidth: 0
-                fillColor: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.tintAlpha(Appearance.effectiveTransparency))
+                fillColor: panel.fillColor // the panel's own glass (ADR-0039 step 22)
                 startX: 0
                 startY: 0
                 PathLine {

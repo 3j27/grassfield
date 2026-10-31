@@ -268,6 +268,9 @@ FocusScope {
         }
     }
 
+    // The menu's glass as drawn, for a piece of it outside the shape (the Dock menu's tail, ADR-0039 step 22).
+    readonly property color glassFill: material.fillColor
+
     Material {
         id: material
         glassClass: "menu"

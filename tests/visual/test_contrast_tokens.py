@@ -708,7 +708,7 @@ class ContrastTokens(unittest.TestCase):
             self.assertGreaterEqual(wcag(text, fill), 4.85 if light_text == (255, 255, 255) else 4.5, accent)
             self.assertEqual(text == (255, 255, 255), light_text == (255, 255, 255), accent)
 
-    GLASS_CLASSES = ("menu", "notification", "controls", "apps")
+    GLASS_CLASSES = ("menu", "notification", "controls", "apps", "gallery", "widgets")
 
     def test_glass_classes_hold_a2_over_any_backdrop(self):
         # ADR-0024 G-1 to G-3: a glass class whose backdrop the shell does not know takes the worst case; its text and secondary

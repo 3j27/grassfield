@@ -109,7 +109,7 @@ ListView {
             anchors.fill: parent
             radius: height / 2
             // Same backing as the x of a card (A2: the label must stay legible on any wallpaper).
-            color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
+            color: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.fixedGlassAlpha(Tokens.notificationCloseTintOpacity))
             border.width: 1
             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
         }
@@ -895,7 +895,7 @@ ListView {
                 Rectangle {
                     anchors.fill: parent
                     radius: width / 2
-                    color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
+                    color: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.fixedGlassAlpha(Tokens.notificationCloseTintOpacity))
                     border.width: 1
                     border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
                 }

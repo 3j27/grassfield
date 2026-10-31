@@ -289,8 +289,8 @@ QtObject {
     readonly property real materialHoverActiveFactor: 1.5
     // estimate: the inner specular rim of the material in the light appearance (one device pixel, stronger along the top edge); the dark appearance keeps material.highlightOpacity (macOS 27 dark menu: the inner rim about 0.2 white over the panel) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
     readonly property real materialHighlightOpacityLight: 0.45
-    // the material's outer edge in the dark appearance: one device pixel of near black outside the light inner rim (macOS 27 dark menu: outer pixel 4 against a 62 panel) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
-    readonly property real materialEdgeOpacityDark: 0.6
+    // the material's outer edge in the dark appearance: one device pixel of near black outside the light inner rim (macOS 27 dark menu: outer pixel 4 against a 62 panel); Increase Contrast raises it as much as it raises the light appearance's edge (material.borderOpacity 0.14 to 0.5, 0.36 more: 0.96), ADR-0039 step 22 [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024; docs/audits/design-polish-2026-10-29.md § 3.7.2 Increase Contrast]
+    readonly property real materialEdgeOpacityDark: Appearance.increaseContrast ? 0.96 : 0.6
     // control fill (push button, field, segmented track, unchecked box) in the light appearance: macOS 26/27 light controls about 6 percent black, not a dark well (docs/audits/visual-tahoe-2026-10-25.md section 2; macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024); the A2 worst case keeps material.fillOpacity
     readonly property real materialFillOpacityLight: 0.06
     // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
@@ -925,6 +925,10 @@ QtObject {
     readonly property real glassControls: 0.15
     // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value (macOS 26 measured the Apps panel 0.35-0.70); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py)
     readonly property real glassApps: 0.55
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value, the Overview's Desktops band and the widget gallery (macOS 26 measured 0-0.15: thumbnails, labels on a plate); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py); ADR-0039 step 22 [ref: docs/audits/design-polish-2026-10-29.md § 3.1 Materials]
+    readonly property real glassGallery: 0.15
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value, the desktop's and the Notification Center's widgets (macOS 26 measured near-opaque, light 244-255); ADR-0039 step 22 [ref: docs/audits/design-polish-2026-10-29.md § 3.1 Materials]
+    readonly property real glassWidgets: 0.92
     // added to 4.5:1 over a measured backdrop (a picture's 5th to 95th percentile, the blur's own lift and the grey approximation of a coloured backdrop); the unknown backdrop is the exact black-to-white worst case [ref: ADR-0024; tests/visual/test_contrast_tokens.py]
     readonly property real glassContrastMargin: 0.2
     // ADR-0024 G-3 per surface: the output's luminance grid is this many cells across (a QS module or a notification card covers 2 to 4) [ref: ADR-0024]

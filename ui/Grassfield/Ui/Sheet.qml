@@ -167,7 +167,9 @@ Item {
             padding: Tokens.panelSheetPadding
             implicitHeight: content.implicitHeight + topPadding + bottomPadding
 
+            // A text surface: the menus' class, as the shell's sheets (ADR-0039 step 22; the apps draw it opaque).
             background: Material {
+                glassClass: "menu"
                 radius: Tokens.radiusSheet
             }
 

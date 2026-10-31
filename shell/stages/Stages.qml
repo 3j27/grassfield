@@ -287,6 +287,8 @@ Scope {
                     // App icon badge at the bottom-left corner (frosted: the layer rule of the namespace blurs it).
                     Material {
                         id: badge
+                        // A glyph on a disk: the controls' class (ADR-0039 step 22).
+                        glassClass: "controls"
                         x: Tokens.stagesBadgeInset
                         y: parent.height - height - Tokens.stagesBadgeInset
                         width: Tokens.stagesBadgeSize
@@ -337,6 +339,7 @@ Scope {
 
             // The dragged tile's badge follows the pointer inside the surface (the thumbnail stays where the plugin draws it).
             Material {
+                glassClass: "controls"
                 visible: win.dragSlot >= 0
                 x: win.dragPoint.x - width / 2
                 y: win.dragPoint.y - height / 2

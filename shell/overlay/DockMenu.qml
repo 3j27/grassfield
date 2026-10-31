@@ -205,7 +205,7 @@ PopupMenu {
 
         ShapePath {
             strokeWidth: 0
-            fillColor: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.tintAlpha(Appearance.effectiveTransparency))
+            fillColor: root.glassFill // the menu's own glass (ADR-0039 step 22)
             startX: 0
             startY: 0
             PathLine {
@@ -240,7 +240,7 @@ PopupMenu {
 
         ShapePath {
             strokeWidth: 0
-            fillColor: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.tintAlpha(Appearance.effectiveTransparency))
+            fillColor: root.glassFill // the menu's own glass (ADR-0039 step 22)
             startX: sideTail.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
             startY: 0
             PathLine {

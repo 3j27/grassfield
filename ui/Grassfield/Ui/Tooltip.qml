@@ -56,7 +56,10 @@ Item {
         width: label.implicitWidth + 2 * Tokens.controlTooltipPaddingX
         height: label.implicitHeight + 2 * Tokens.controlTooltipPaddingY
 
+        // A text surface: the menus' class (ADR-0039 step 22).
         Material {
+            id: glass
+            glassClass: "menu"
             anchors.fill: parent
             radius: height / 2
             highlightEnabled: false
@@ -87,7 +90,7 @@ Item {
 
         ShapePath {
             strokeWidth: 0
-            fillColor: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.tintAlpha(Appearance.effectiveTransparency))
+            fillColor: glass.fillColor // the capsule's own glass (ADR-0039 step 22)
             startX: 0
             startY: 0
             PathLine {
@@ -116,7 +119,7 @@ Item {
 
         ShapePath {
             strokeWidth: 0
-            fillColor: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.tintAlpha(Appearance.effectiveTransparency))
+            fillColor: glass.fillColor // the capsule's own glass (ADR-0039 step 22)
             startX: root.tailSide === "left" ? Tokens.controlTooltipTailHeight + 1 : 0
             startY: 0
             PathLine {

@@ -161,7 +161,9 @@ Variants {
                 acceptedButtons: Qt.AllButtons
             }
 
+            // The app's name under the selection: a text surface, the menus' class (ADR-0039 step 22).
             Material {
+                glassClass: "menu"
                 anchors.fill: parent
                 radius: Tokens.switcherPanelRadius
             }

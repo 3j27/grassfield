@@ -561,8 +561,10 @@ Variants {
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Desktops")
 
+                // Thumbnails on clear glass (ADR-0024 section 2: the band's class, 0.15; ADR-0039 step 22).
                 Material {
                     id: band
+                    glassClass: "gallery"
                     anchors.fill: parent
                     radius: 0
                     shadowEnabled: false
@@ -1024,8 +1026,10 @@ Variants {
             }
 
             // App icon and name under the selected (hovered) window.
+            // The window's name on a plate: a text surface, the menus' class (ADR-0039 step 22).
             Material {
                 id: label
+                glassClass: "menu"
 
                 readonly property var info: win.marked !== "" && win.spaceFocus < 0 ? win.byKey[win.marked] : undefined
                 readonly property var rect: win.marked !== "" ? win.placedMap[win.marked] : undefined
