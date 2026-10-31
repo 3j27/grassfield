@@ -48,7 +48,9 @@ first.
   field is cleared at once and on `loginFailed`; it is never logged, bound to anything else or stored.
 - Layout: the lock screen's (ADR-0040 section 4): the default Grassfield artwork (`GrassfieldArtwork` from
   `Grassfield.Ui`, the system-wide module of `grassfield-desktop`: the greeter has no access to the user's wallpaper), the
-  banded scrim, the date and clock at the top, the user's picture (SDDM's `userModel` icon, else the initials) and name,
+  banded scrim, the date and clock at the top, the user's picture (SDDM's `userModel` icon, only from a folder root
+  writes: AccountsService's icons or SDDM's faces, `Strings.pictureUrl`; never `~/.face.icon`, which the user controls and
+  which, as a FIFO, would block the greeter for every user: opus review of c5b02369; else the initials) and name,
   the password field, the error line; the user choice when there is more than one user; Restart and Shut Down (SDDM's
   `canReboot`/`canPowerOff`) at the bottom; the session pop-up, which selects "Grassfield (uwsm)" first, as Omarchy's theme
   does (its logic: the first session whose name contains "uwsm"), else SDDM's last session.
@@ -63,7 +65,9 @@ first.
   settings and PNG images. The disk-password prompt, its bullets and its keyboard handling are the module's; the theme
   supplies only the background colour (the default artwork's ground, `session.ground` `#2F6D5F`), the mark (white, the
   symbolic mark `grassfield-logo-full.svg` tinted as the shell tints it, the drawing unchanged), the entry box, the bullet,
-  the lock glyph and a small throbber, all drawn here.
+  the lock glyph, the prompt's box (transparent) and a small throbber, all drawn here. `lock.png`, `box.png`, `entry.png`
+  and `bullet.png` are what two-step needs to draw at all (without one, plymouthd shows its text view: safe for the
+  prompt, but the theme is dead; VERIFY with `plymouthd --debug`).
 - Fallback (the condition): Plymouth itself falls back to its text splash when a theme fails to load (a missing module,
   an unreadable image), and Esc switches to the text view at any time; the disk password is also asked on the console
   when Plymouth is not running. The owner's guide makes the first boot with the theme a test of exactly that: press Esc
@@ -96,7 +100,12 @@ first.
 - An offscreen render of `Main.qml` with a stand-in `sddm`, `userModel` and `sessionModel` (the layout, the session picked,
   the password cleared after a failed login).
 - `tests/ci/qml_literals.py` scans the theme (tokens only); `grassfield-login-check` knows it (the session it selects first)
-  and `tests/shell/login_session.sh` checks that.
+  and `tests/shell/login_session.sh` checks that; `tests/unit/tst_loginstrings.qml` checks `Strings.js` (the picture only
+  from the two root-written folders, the session selected first, the initials, the words).
+- After the opus review of c5b02369 (PASS, three MINORs, two NITs, all fixed): `box.png`; the static test also refuses
+  every other way to the typed text (`getText`, `displayText`, a computed member, an alias of the field or of `sddm`, an
+  assigned `echoMode` or `source`, key handlers) and any picture URL but `Strings.pictureUrl`'s (53 mutants); the guide
+  reads `/etc/sddm.conf` last and gives a recovery that needs no theme (`plymouth.enable=0` from Limine's editor).
 - NOT VERIFIED here (owner, real machine): the SDDM theme in `sddm-greeter-qt6` (a log out, a wrong password, Restart and
   Shut Down), its fallback; the Plymouth theme at boot with the disk password, Esc to the text prompt, the revert.
 

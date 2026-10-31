@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Renders Grassfield's Plymouth theme (ADR-0042) into DIR: grassfield.plymouth and the PNG images Plymouth's two-step module
-# reads (watermark.png: the Grassfield mark, white; entry.png, bullet.png, lock.png: the password prompt; throbber-NNNN.png: a
-# ring of dots). Every image is drawn here as SVG and rendered by rsvg-convert (librsvg, a makedepend). The mark is the
+# reads (watermark.png: the Grassfield mark, white; entry.png, bullet.png, lock.png, box.png: the password prompt;
+# throbber-NNNN.png: a ring of dots). lock.png, box.png, entry.png and bullet.png are the ones two-step needs to draw at all
+# (without them plymouthd shows its text view: safe for the prompt, but the theme would be dead). Every image is drawn here as SVG and rendered by rsvg-convert (librsvg, a makedepend). The mark is the
 # owner's (all rights reserved, branding/LICENSES.md): branding/icons/symbolic/grassfield-logo-full.svg rendered as is, its
 # black fill drawn white as the shell tints the symbolic mark; the drawing is not changed.
 #   packaging/plymouth/build.sh --out DIR
@@ -35,6 +36,12 @@ cat > "$work/entry.svg" <<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg" width="260" height="36" viewBox="0 0 260 36"><rect x="0.75" y="0.75" width="258.5" height="34.5" rx="17.25" fill="#000" fill-opacity="0.45" stroke="#FFF" stroke-opacity="0.7" stroke-width="1.5"/></svg>
 SVG
 render 260 36 "$work/entry.svg" "$out/entry.png"
+
+# The prompt's box behind the lock and the entry: transparent (the prompt has no backdrop of its own), 340 x 72.
+cat > "$work/box.svg" <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="72" viewBox="0 0 340 72"><rect width="340" height="72" fill="#000" fill-opacity="0"/></svg>
+SVG
+render 340 72 "$work/box.svg" "$out/box.png"
 
 # A bullet of the typed password, white, 10 px.
 cat > "$work/bullet.svg" <<'SVG'

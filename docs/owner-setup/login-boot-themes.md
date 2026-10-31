@@ -32,14 +32,18 @@ theme only after a log out. The boot theme is what you see at every start, aroun
    sddm-greeter-qt6 --test-mode --theme /usr/share/sddm/themes/grassfield
    ```
    Check: the artwork and the clock, your picture or initials, the session button reads "Grassfield (uwsm)", the field shows
-   dots. Do not click Restart or Shut Down there (VERIFY what test mode does with them). Close the window.
+   dots. The picture is the one your account settings stored with AccountsService (`/var/lib/AccountsService/icons/`) or
+   one an administrator put in `/usr/share/sddm/faces/<login>.face.icon`; a `~/.face.icon` in your home is never read by
+   the login screen (a file there that is not a picture could freeze it for every user), so without one of those you see
+   your initials. Do not click Restart or Shut Down there (VERIFY what test mode does with them). Close the window.
 2. See which file sets the current theme today:
    ```bash
    grep -rn '^Current=' /usr/lib/sddm/sddm.conf.d/ /etc/sddm.conf.d/ /etc/sddm.conf 2>/dev/null
    ```
-   The last file in name order wins; `zz-grassfield-theme.conf` below sorts after all of them (Omarchy's
-   `99-omarchy-login.conf`, Grassfield's `grassfield.conf`). If a line comes from `/etc/sddm.conf` itself, that file is read
-   before the drop-ins; check SDDM's manual (`man sddm.conf`) on this version if in doubt.
+   Among the drop-ins the last file in name order wins; `zz-grassfield-theme.conf` below sorts after all of them (Omarchy's
+   `99-omarchy-login.conf`, Grassfield's `grassfield.conf`). `/etc/sddm.conf` itself is read after every drop-in and wins
+   over them (as `grassfield-login-check` reads it): if the `Current=` line comes from that file, the drop-in below has no
+   effect until you change or remove that line (VERIFY with `man sddm.conf` on this version).
 3. Make it the current theme (one file, written by you):
    ```bash
    printf '[Theme]\nCurrent=grassfield\n' | sudo tee /etc/sddm.conf.d/zz-grassfield-theme.conf
@@ -80,7 +84,11 @@ built-in theme when this one cannot load (VERIFY on this machine: ADR-0042 secti
      works with this theme installed;
    - restart again and type the password in the graphical field this time.
    If at any boot the screen shows no field: press Esc; if nothing appears, wait (the disk password is also asked on the
-   console when Plymouth is not running); if still nothing, choose an Omarchy snapshot in Limine's menu and revert below.
+   console when Plymouth is not running). If still nothing, start without Plymouth, which does not depend on any theme:
+   in Limine's menu, select the entry, open its editor (VERIFY the key on this Limine version, usually `E`), add
+   `plymouth.enable=0` to the kernel command line (or remove `splash`), and boot it (usually F10): the disk password is
+   asked on the console. Once in, revert below. A Limine snapshot entry may use the same boot image and so the same theme
+   (VERIFY), so prefer the command-line edit.
 4. The prompt's text may draw in another font than Inter: the boot image carries only the fonts Plymouth's hook copies
    (VERIFY; the look of the words only).
 

@@ -441,8 +441,11 @@ and IQ-B3 here changes the palette only, not which controls read it.
   (the gauge) and `org.grassfield.Apps.svg` (the fanned cards, new; `grassfield-desktop` installs it in hicolor, so every
   icon theme finds it); the `org.grassfield.Apps` alias to the pack's app grid is gone from
   `packaging/arch/icons-aliases.txt` (the Store and Activity Monitor never had one); Files, Settings and Preview keep the
-  pack. `branding/LICENSES.md` rows; `docs/specs/dock.md` item 19; ADR-0017's note. NOT VERIFIED: the icons in the Dock,
-  the Apps panel and the Store in a session, in the Dark, Clear and Tinted modes (nested).
+  pack. `branding/LICENSES.md` rows; `docs/specs/dock.md` item 19; ADR-0017's note; `scripts/dev/devenv.sh` puts the Apps
+  tile's icon in the dev hicolor (review of ee7fe429: PASS, its MINOR and NITs taken but the versioned dependency on
+  `grassfield-icons`, which would make every desktop update download the 60 MiB pack for a cosmetic case). NOT VERIFIED:
+  the icons in the Dock, the Apps panel and the Store in a session, in the Dark, Clear and Tinted modes (nested);
+  `makepkg`.
 - **Boot and login (IQ-L1, owner: C, an SDDM theme and a Plymouth theme).** Grassfield's look from power-on: a
   login theme in the lock screen's layout for SDDM's own greeter, and a boot theme with the mark for the disk password.
   The integrator's conditions (2026-10-29):
@@ -463,7 +466,8 @@ and IQ-B3 here changes the palette only, not which controls read it.
   `/usr/share/plymouth/themes/grassfield` (Plymouth's `two-step` module, the ground `#2F6D5F`, the mark white, an entry box,
   bullets, a padlock and a throbber drawn in `packaging/plymouth/build.sh`), and activates nothing: the owner's commands, the
   first-boot Esc test and the reverts are in `docs/owner-setup/login-boot-themes.md`. `grassfield-login-check` knows the
-  theme. Tests: `tests/ci/login_themes.py` (logic layer, 36 mutants), `tests/shell/login_session.sh` (+1),
+  theme. Tests: `tests/ci/login_themes.py` (logic layer, 53 mutants after the opus review), `tests/unit/tst_loginstrings.qml`
+  (the picture only from root-written folders), `tests/shell/login_session.sh` (+1),
   `tests/ci/qml_literals.py` (scans the theme). Legal: E41 (the login layout; the mark's boot place and its white build-time
   render, confirmed by the owner on 2026-10-31: « Oui, marque blanche »). NOT VERIFIED (owner, real machine): the theme in `sddm-greeter-qt6`, SDDM's fallback, the
   boot screen with the disk password, Esc to the text prompt, the reverts.
@@ -943,7 +947,8 @@ this ADR follows it, and any later pull request of either lane that meets one of
 - The proposed artworks inherit E32's flag (`distinct`, side-by-side check before release); names included (ID-18).
 - The lock and About layouts stay `close` (E2, E12). The proposed Activity Monitor and Apps tile drawings are flagged
   for the owner's legal call: they were redrawn away from macOS's icons for those apps, and no claim is made that they
-  are far enough; the owner chose IQ-B5 C, and the drawings go to the owner's legal call before step 8 ships them. No
+  are far enough; the owner chose IQ-B5 C, and the drawings go to the owner's legal call before step 8 ships them
+  (decided 2026-10-31: both shipped, « Livrer les deux »). No
   lockup (IQ-B2 A). B-5: the owner checked the name "Grassfield" on 2026-10-18, not the logo; the dossier says so (E33,
   Q7, section 7). Photographs (IQ-W2 C): a licence and provenance entry each, and the owner's legal call on the list
   before any ships.

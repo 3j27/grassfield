@@ -28,6 +28,8 @@ Rectangle {
     readonly property var user: userList.count > 0 && root.userIndex < userList.count ? userList.itemAt(root.userIndex) : null
     readonly property string userName: root.user ? root.user.userName : ""
     readonly property string shownName: root.user ? (root.user.realName !== "" ? root.user.realName : root.user.userName) : ""
+    // Only a picture from a folder root writes (Strings.pictureUrl), else the initials.
+    readonly property string avatarUrl: root.user ? Strings.pictureUrl(root.user.iconPath) : ""
     property int sessionIndex: -1
     readonly property string sessionName: sessionIndex >= 0 && sessionIndex < sessionList.count ? sessionList.itemAt(sessionIndex).sessionName : ""
 
@@ -178,7 +180,7 @@ Rectangle {
         }
         spacing: Tokens.spacingSm
 
-        // The account's picture (SDDM's icon of the user), else the initials on a disc.
+        // The account's picture (SDDM's icon of the user, from a folder root writes), else the initials on a disc.
         Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: Tokens.lockAvatarSize
@@ -204,7 +206,7 @@ Rectangle {
             Image {
                 id: picture
                 anchors.fill: parent
-                source: root.user && root.user.iconPath !== "" ? "file://" + root.user.iconPath : ""
+                source: root.avatarUrl
                 sourceSize: Qt.size(width * 2, height * 2)
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
@@ -224,6 +226,7 @@ Rectangle {
                     source: picture.source
                     sourceSize: picture.sourceSize
                     fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
                 }
             }
         }

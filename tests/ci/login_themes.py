@@ -9,15 +9,21 @@ The SDDM theme (packaging/sddm/theme, run by sddm-greeter as the `sddm` user):
   - imports QtQuick, Grassfield.Ui and its own Strings.js only; Strings.js imports nothing;
   - no process, file, network, URL, dynamic code or log call (Process, FileView, XMLHttpRequest, Qt.openUrlExternally, Loader,
     Qt.createComponent/createQmlObject/include, LocalStorage, Qt.labs, console.*, print(), an http(s) or absolute URL);
-  - of SDDM's object it calls login, reboot and powerOff and reads canReboot and canPowerOff, nothing else;
-  - one text input, a TextInput in Password echo mode, and only its length is read anywhere but in the one function that
-    calls sddm.login: there the text is copied to a local once, the field is emptied before sddm.login, and that local is
-    sddm.login's password, its only other use; the failure handler empties the field too.
+  - of SDDM's object it calls login, reboot and powerOff and reads canReboot and canPowerOff, nothing else, and names it
+    only as `sddm.<member>` or `target: sddm` (no alias);
+  - one text input, a TextInput whose one echoMode is a Password binding (never assigned), named only as `<id>.text`,
+    `.forceActiveFocus`, `.activeFocus` or `.font`; only its length is read anywhere but in the one function that calls
+    sddm.login: there the text is copied to a local once, the field is emptied before sddm.login, and that local is
+    sddm.login's password, its only other use; the failure handler empties the field too; no other way to the typed text
+    (getText, displayText, preeditText, selectedText, copy, cut, Keys handlers, event.text);
+  - a picture only through Strings.pictureUrl, the one "file://" of the theme, which accepts only AccountsService's
+    icons and SDDM's faces folder (root-written; a user's ~/.face.icon could be a FIFO that blocks the greeter); every
+    Image source is that URL (root.avatarUrl) or the other Image's (picture.source), never assigned.
 The Plymouth theme (packaging/plymouth):
   - grassfield.plymouth names Plymouth's own two-step module (no script module, no ScriptFile), its images under
     /usr/share/plymouth/themes/grassfield, and the default artwork's ground (tokens.json session.ground) as both background
     colours;
-  - build.sh renders every image two-step loads (lock.png, entry.png, bullet.png; watermark.png and the throbber), and the
+  - build.sh renders every image two-step loads (lock.png, box.png, entry.png, bullet.png; watermark.png and the throbber), and the
     mark only from branding/icons/symbolic/grassfield-logo-full.svg with its black fill drawn white (the drawing unchanged);
   - with rsvg-convert installed, build.sh is run into a temporary folder and every image is a PNG (else that part is skipped).
 The package (packaging/arch/PKGBUILD, grassfield-login-themes): installs the theme files and the rendered folder, and nothing
@@ -54,8 +60,16 @@ FORBIDDEN = [
     (r"(?<![\w.])print\s*\(", "a log call"),
     (r"\bQuickshell\b", "Quickshell"),
     (r"[\"'`](?:https?|ftp)://", "a network URL"),
+    (r"\bgetText\s*\(", "a read of the typed text"),
+    (r"\b(?:displayText|preeditText)\b", "a read of the typed text"),
+    (r"\bselectedText\b(?!Color)", "a read of the typed text"),
+    (r"\.\s*(?:copy|cut)\s*\(\s*\)", "a copy of the typed text"),
+    (r"\bKeys\s*\.", "a key handler (the typed keys)"),
+    (r"\bevent\s*\.\s*text\b", "a read of a typed key"),
+    (r"\b(?:source|echoMode)\s*=(?!=)", "an assigned source or echo mode"),
 ]
-TWO_STEP_IMAGES = ("lock.png", "entry.png", "bullet.png", "watermark.png")
+FIELD_MEMBERS = {"text", "forceActiveFocus", "activeFocus", "font"}
+TWO_STEP_IMAGES = ("lock.png", "box.png", "entry.png", "bullet.png", "watermark.png")
 ACTIVATES = ("/etc", "install=", "hook", "plymouth-set-default-theme", "mkinitcpio", "systemctl", "pam.d")
 
 
@@ -170,8 +184,33 @@ def check_sddm(files):
     used = set(re.findall(r"\bsddm\s*\.\s*(\w+)", qml))
     if used - SDDM_MEMBERS:
         problems.append("Main.qml uses sddm.%s (only %s)" % (", sddm.".join(sorted(used - SDDM_MEMBERS)), ", ".join(sorted(SDDM_MEMBERS))))
-    if re.search(r"\bsddm\s*\[", qml):
-        problems.append("Main.qml reaches SDDM's object by a computed name")
+    for m in re.finditer(r"\bsddm\b", qml):
+        member = re.match(r"\s*\.\s*\w", qml[m.end():])
+        target = re.search(r"\btarget\s*:\s*$", qml[:m.start()])
+        if not member and not target:
+            problems.append("Main.qml names SDDM's object other than as sddm.<member> or target: sddm")
+            break
+
+    # The picture: one "file://" in the theme, in Strings.pictureUrl, which accepts root-written folders only.
+    urls = len(re.findall(r"file://", qml)) + len(re.findall(r"file://", js))
+    picture = re.search(r"\bfunction\s+pictureUrl\s*\([^)]*\)\s*\{", js)
+    body = block_at(js, picture.end() - 1) if picture else ""
+    if urls != 1 or "file://" not in body:
+        problems.append("the theme has %d file:// URL(s), expected one, in Strings.pictureUrl" % urls)
+    # Its shape: two anchored patterns, each a plain file name (no "/", no leading ".") directly in one of the two folders,
+    # and a return that uses only them (tests/unit/tst_loginstrings.qml checks what they accept).
+    literals = re.findall(r"=\s*/(.*?)/\s*;", body)
+    allowed = (r"^\/var\/lib\/AccountsService\/icons\/[A-Za-z0-9_]", r"^\/usr\/share\/sddm\/faces\/[A-Za-z0-9_]")
+    if sorted(l[:len(a)] for l, a in zip(sorted(literals), sorted(allowed))) != sorted(allowed) or len(literals) != 2 \
+            or any(not l.endswith("$") or "\\/" in l[len(a):] or ".*" in l for l, a in zip(sorted(literals), sorted(allowed))):
+        problems.append("Strings.pictureUrl's patterns are %s, expected a plain name in AccountsService's icons or SDDM's faces" % literals)
+    if not re.search(r"return\s+\w+\.test\(p\)\s*\|\|\s*\w+\.test\(p\)\s*\?\s*\"file://\"\s*\+\s*p\s*:\s*\"\"\s*;", body):
+        problems.append("Strings.pictureUrl returns a URL other than through its two patterns")
+    for m in re.finditer(r"\bsource\s*:\s*([^\n;]+)", qml):
+        if m.group(1).strip() not in ("root.avatarUrl", "picture.source"):
+            problems.append("an Image source is %r (only root.avatarUrl or picture.source)" % m.group(1).strip())
+    if not re.search(r"\bavatarUrl\s*:\s*root\.user\s*\?\s*Strings\.pictureUrl\(", qml):
+        problems.append("root.avatarUrl does not come from Strings.pictureUrl")
 
     # The password field.
     if re.search(r"\b(?:TextField|TextEdit|TextArea)\s*\{", qml):
@@ -188,6 +227,14 @@ def check_sddm(files):
         problems.append("the TextInput has no id")
         return problems
     fid = fid.group(1)
+    if len(re.findall(r"\bechoMode\b", qml)) != 1:
+        problems.append("echoMode appears more than once (only the field's Password binding)")
+    for m in re.finditer(r"\b%s\b" % re.escape(fid), qml):
+        if re.search(r"\bid\s*:\s*$", qml[:m.start()]):
+            continue
+        member = re.match(r"\s*\.\s*(\w+)", qml[m.end():])
+        if not member or member.group(1) not in FIELD_MEMBERS:
+            problems.append("the field is named as %r (only %s)" % (qml[m.start():m.end() + 12].split("\n")[0], ", ".join(sorted(FIELD_MEMBERS))))
     # Inside the field, its own text is only measured (`text: ...` of a child is an assignment, not a read).
     own = body
     for child in re.finditer(r"\b[A-Z]\w*\s*\{", body):
@@ -383,11 +430,26 @@ def selftest():
         "an echoed field": qml.replace("echoMode: TextInput.Password", "echoMode: TextInput.Normal"),
         "a second input": qml.replace("    // ---- what is drawn ----", "    TextField { }\n    // ---- what is drawn ----"),
         "another sddm call": qml.replace("onClicked: sddm.reboot()", "onClicked: sddm.suspend()"),
-        "a network URL": qml.replace('"file://" + root.user.iconPath', '"https://example.org/" + root.user.userName'),
+        "a network URL": qml.replace("source: root.avatarUrl", 'source: "https://example.org/" + root.user.userName'),
         "a Loader": qml.replace("    // ---- what is drawn ----", "    Loader { source: \"/tmp/x.qml\" }\n    // ---- what is drawn ----"),
         "an import": qml.replace("import QtQuick\n", "import QtQuick\nimport Quickshell.Io\n"),
         "dynamic code": qml.replace(copy_line, copy_line + "        Qt.createQmlObject(\"import QtQuick; Item {}\", root);\n"),
         "the field's own text read": qml.replace("if (text.length > 0)", "if (text !== \"\")"),
+        # The opus review of c5b02369: seven leaks the first version of this test let through.
+        "getText": qml.replace('root.message = root.t("incorrect");', 'root.message = field.getText(0, 999);'),
+        "a computed member": qml.replace('root.message = root.t("incorrect");', 'root.message = field["te" + "xt"];'),
+        "the password in a URL": qml.replace("    // ---- what is drawn ----",
+            "    Image { source: \"file:///x/\" + field.text.length }\n    // ---- what is drawn ----"),
+        "echo mode switched": qml.replace(copy_line, copy_line + "        field.echoMode = TextInput.Normal;\n"),
+        "an alias of sddm": qml.replace("    property string message: \"\"",
+            "    property var s: sddm\n    property string message: \"\"").replace("onClicked: sddm.reboot()", "onClicked: root.s.reboot()"),
+        "a key handler": qml.replace("onAccepted: root.submit()", "onAccepted: root.submit()\n                    Keys.onPressed: event => root.message += event.text"),
+        "displayText": qml.replace('root.message = root.t("incorrect");', 'root.message = field.displayText;'),
+        "an alias of the field": qml.replace("    property string message: \"\"",
+            "    property var f: field\n    property string message: \"\""),
+        "the picture from the home": qml.replace("source: root.avatarUrl", 'source: "file://" + root.user.iconPath'),
+        "a picture source assigned": qml.replace(copy_line, copy_line + "        picture.source = root.avatarUrl;\n"),
+        "avatarUrl not filtered": qml.replace("Strings.pictureUrl(root.user.iconPath)", "root.user.iconPath"),
     }
     for label, text in mutants.items():
         if text == qml:
@@ -397,6 +459,19 @@ def selftest():
     expect("SDDM mutant: an extra file", check_sddm(dict(theme, **{"run.sh": "id"})), True)
     expect("SDDM mutant: Qt 5 metadata", check_sddm(dict(theme, **{"metadata.desktop": theme["metadata.desktop"].replace("QtVersion=6", "QtVersion=5")})), True)
     expect("SDDM mutant: a log in Strings.js", check_sddm(dict(theme, **{"Strings.js": theme["Strings.js"] + "\nconsole.warn('x');\n"})), True)
+    js = theme["Strings.js"]
+    js_mutants = {
+        "a picture from any folder": js.replace("return account.test(p) || face.test(p) ?", "return p !== \"\" ?"),
+        "a third pattern": js.replace("return account.test(p) || face.test(p) ?", "return account.test(p) || face.test(p) || /.*/.test(p) ?"),
+        "subfolders accepted": js.replace("icons\\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/", "icons\\/[A-Za-z0-9_][A-Za-z0-9_.\\/-]{0,63}$/"),
+        "the home's faces": js.replace("\\/usr\\/share\\/sddm\\/faces\\/", "\\/home\\/"),
+        "an unanchored pattern": js.replace("{0,63}\\.face\\.icon$/", "{0,63}\\.face\\.icon/"),
+    }
+    for label, text in js_mutants.items():
+        if text == js:
+            failures.append("mutant %r did not apply" % label)
+            continue
+        expect("SDDM mutant: " + label, check_sddm(dict(theme, **{"Strings.js": text})), True)
 
     plymouth_mutants = {
         "the script module": (conf.replace("ModuleName=two-step", "ModuleName=script"), build),
@@ -404,6 +479,7 @@ def selftest():
         "another image folder": (conf.replace("ImageDir=/usr/share/plymouth/themes/grassfield", "ImageDir=/tmp"), build),
         "another ground": (conf.replace("BackgroundStartColor=0x2f6d5f", "BackgroundStartColor=0x000000"), build),
         "no lock image": (conf, build.replace('"$out/lock.png"', '"$out/padlock.png"')),
+        "no box image": (conf, build.replace('"$out/box.png"', '"$out/backdrop.png"')),
         "no throbber": (conf, build.replace("throbber-%04d.png", "spinner-%04d.png")),
         "the mark recoloured otherwise": (conf, build.replace('s/fill="#000"/fill="#FFFFFF"/', 's/fill="#000"/fill="#FFFFFF" stroke="#F00"/')),
         "the mark transformed": (conf, build.replace("> \"$work/mark.svg\"", "| sed 's/<path/<path transform=\"rotate(10)\"/' > \"$work/mark.svg\"")),
@@ -434,7 +510,8 @@ def selftest():
         print("FAIL: %s" % f)
     if failures:
         return 1
-    print("login_themes selftest: %d mutants caught, the real files pass" % (len(mutants) + 3 + len(plymouth_mutants) + len(package_mutants)))
+    print("login_themes selftest: %d mutants caught, the real files pass"
+          % (len(mutants) + 3 + len(js_mutants) + len(plymouth_mutants) + len(package_mutants)))
     return 0
 
 

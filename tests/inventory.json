@@ -127,6 +127,7 @@
  {"path": "tests/shell/audit_dark_nested.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/shell/show_desktop_record.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/unit/tst_localeformat.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_loginstrings.qml", "layer": "headless"},
  {"path": "tests/unit/tst_icontile.qml", "layer": "headless"},
  {"path": "tests/unit/tst_magnify.qml", "layer": "headless"},
  {"path": "tests/unit/tst_menubridge.qml", "layer": "headless"},
