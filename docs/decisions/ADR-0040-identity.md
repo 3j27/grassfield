@@ -486,6 +486,39 @@ the opaque white knob, the Graphite accent and its selection, Files' Gray tag an
 Re-pinned: the light glass's worst-case alpha 0.78 to 0.79 (`test_contrast_tokens.py`, `tst_glasstint.qml`), the GTK
 themes' thin marks under high contrast (yellow 1.97:1, green 2.46:1), and the tests that named the old greys.
 
+**The photographs (step 2c, 2026-10-31).** Shown the list (a review page: each photograph's thumbnail cropped to 16:10
+under the menu bar and the Dock, its Commons page, licence, author, size, the closest well-known OS wallpaper and what to
+know), the owner kept all sixteen and answered the three licence questions: « domaine public (04, 16) : acceptées »
+(a deliberate exception to the integrator's "CC0 or CC BY": 04 was released into the public domain by its author, 16 is
+a work of the U.S. federal government whose status does not cover the agency's name or logo, neither shown);
+« Unsplash (01, 15) : CC0 de Commons accepté » (published on Unsplash before 2017-06-05, when it was CC0, and uploaded to
+Commons in 2017 from archived pages; Commons marks them CC0); « FIND/47 (08, 12) : acceptées » (the source library
+states CC BY 4.0 for all its photos, checked on its page; Commons has no licence review on these two files). The
+resemblance notes shown with them: 08 is the closest of the list to Windows XP's "Bliss" and 12 recalls macOS Big Sur's
+coast at dusk; the side-by-side check of E32 before release covers them. Found on Wikimedia Commons (the licence read
+from each file page); 55 other files were rejected (CC BY-SA, a look-alike of an OS wallpaper, a person, a vehicle, a
+watermark, flat light). The originals weigh 235.4 MB together; the files, their `docs/legal` entries (source, author,
+licence, date, changes made), the install path and the package weight come with step 2c's pull request.
+
+| No. | Commons file | Author | Licence | Original |
+|---|---|---|---|---|
+| 01 | `Matt Palmer 2016 (Unsplash).jpg` | Matt Palmer (Unsplash) | CC0 | 5760 × 3840, 14.3 MB |
+| 02 | `Łąki nad Wisłą pod Brzeźnicą po wschodzie słońca, 20241116 0725 2676.jpg` | Jakub Hałun | CC BY 4.0 | 4807 × 3198, 9.1 MB |
+| 03 | `Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322.jpg` | Jakub Hałun | CC BY 4.0 | 5340 × 3566, 12.5 MB |
+| 04 | `Desna river Vinn meadow 2016 G2.jpg` | George Chernilevsky | public domain (PD-self) | 6000 × 4000, 8.9 MB |
+| 05 | `Чуйский хребет и Курайская степь.jpg` | Aleksandr Rudny | CC BY 4.0 | 4857 × 2732, 8.1 MB |
+| 06 | `Tatry - panorama z Polskiego Spiszu.jpg` | Qvidemus | CC BY 3.0 | 8364 × 4850, 28.8 MB |
+| 07 | `Ingushetia, Закатный золотой свет на склонах долины Армхи, горы Ингушетии, Кавказ.jpg` | Vyacheslav Argenberg | CC BY 4.0 | 6000 × 4000, 19.4 MB |
+| 08 | `Hyogo-Rice terraces in Ueyama.(early autumn.)-xl.jpg` | rikky_photography (FIND/47) | CC BY 4.0 | 6000 × 4000, 30.2 MB |
+| 09 | `Dew on grass (21677746153).jpg` | Andrey Nagaycev | CC BY 2.0 | 5616 × 3744, 10.3 MB |
+| 10 | `Grass (14448015527).jpg` | Yuri Samoilov | CC BY 2.0 | 5760 × 3840, 4.0 MB |
+| 11 | `Grass at Sunrise (36993588030).jpg` | Mikhail Lazarev | CC BY 2.0 | 6000 × 4000, 6.1 MB |
+| 12 | `Kyoto-Evening view of Sodeshi rice terraces.-xl.jpg` | rikky_photography (FIND/47) | CC BY 4.0 | 6000 × 4000, 25.0 MB |
+| 13 | `Wschód słońca nad łąkami pod Tyńcem w Krakowie, 20260301 0636 4894.jpg` | Jakub Hałun | CC BY 4.0 | 4686 × 3118, 13.6 MB |
+| 14 | `Dew on grass (22309335571).jpg` | Andrey Nagaycev | CC BY 2.0 | 5616 × 3744, 10.9 MB |
+| 15 | `Waving grass under mountains (Unsplash).jpg` | Thomas Rohlfs (Unsplash) | CC0 | 4608 × 2592, 9.2 MB |
+| 16 | `Milky Way over Cronan Ranch (52321033535).jpg` | Bureau of Land Management California | public domain (PD-USGov-BLM) | 6965 × 4752, 25.0 MB |
+
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
 - **W1 C, the time of day** (section 2, "The time-of-day rule"): the times from the time zone with no location and no
