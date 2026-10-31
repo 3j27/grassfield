@@ -17,9 +17,10 @@
 namespace activity_test
 {
 
-// A test's child takes the default action of every signal, unblocked: a disposition the test inherited (a background job
-// or a container started without a terminal ignores SIGHUP and SIGQUIT) must not keep a child alive that a case signals and
-// then waits for. Call it first in the child.
+// Every signal takes its default action, unblocked: a disposition the tests inherited (a background job or a container
+// started without a terminal ignores SIGHUP and SIGQUIT) must not keep alive a child that a case signals and then waits for.
+// The test process does it as it loads, before any case forks (a child that did it itself could get the signal first and
+// drop it); a child calls it again first thing.
 inline void defaultSignals()
 {
     for (int sig = 1; sig < NSIG; ++sig) {
@@ -30,6 +31,7 @@ inline void defaultSignals()
     sigemptyset(&none);
     sigprocmask(SIG_SETMASK, &none, nullptr);
 }
+inline const bool kSignalsReset = (defaultSignals(), true);
 
 class Fixture
 {
