@@ -1,9 +1,11 @@
 # Maintainer: Grassfield project
 # Local package build from this repository. grassfield-desktop and grassfield-compositor need no download;
-# grassfield-icons fetches TWO pinned upstream commits (MacTahoe and Pebble icon themes, GPL-3.0, ADR-0017):
+# grassfield-icons fetches TWO pinned upstream commits (MacTahoe and Pebble icon themes, GPL-3.0, ADR-0017);
+# grassfield-wallpapers fetches sixteen photographs from upload.wikimedia.org, each checked by its SHA-1 (ADR-0040 step 2c):
 #   cd packaging/arch && makepkg -si        (owner runs it; installs with sudo through pacman)
-# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons   (all three: the icon theme is
-#   installed with the others; naming only the first two leaves the 60 MiB icon theme behind, GF-046)
+# Remove: sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons grassfield-wallpapers   (all of them:
+#   the icon theme and the photographs are installed with the others; naming only the first two leaves the 60 MiB icon
+#   theme and the photographs behind, GF-046)
 # Never constrain the hyprland version here (ADR-0009, master-prompt §5.6).
 #
 # Provenance (GF-044): the package is built from a `git archive` snapshot of HEAD, unpacked into $srcdir/snapshot by
@@ -20,7 +22,7 @@
 _here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 _ver=$(tr -d '[:space:]' <"$_here/../../VERSION")
 pkgbase=grassfield
-pkgname=(grassfield-desktop grassfield-compositor grassfield-icons grassfield-store)
+pkgname=(grassfield-desktop grassfield-compositor grassfield-icons grassfield-store grassfield-wallpapers)
 pkgver=${_ver//-/}
 if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; then
   echo "PKGBUILD: GRASSFIELD_PKGREL must be a positive integer, not '$GRASSFIELD_PKGREL'" >&2
@@ -55,8 +57,51 @@ _mactahoe_commit=$MT_PIN
 _pebble_commit=$PB_PIN
 source=("mactahoe-icon-theme::git+${MT_REPO}.git#commit=${_mactahoe_commit}"
         "pebble-icon-theme::git+${PB_REPO}.git#commit=${_pebble_commit}")
+# grassfield-wallpapers (ADR-0040 step 2c, the owner's call of 2026-10-31): the sixteen photographs as uploaded to Wikimedia
+# Commons. Their ids and addresses live in wallpaper-pins.sh (the list with names, authors and licences is
+# wallpaper-photos.json); each is checked by the SHA-1 Commons publishes for it (sha1sums below, in the pins' order; no
+# SHA-256 is published, updpkgsums can add them). build() shrinks them, package_grassfield-wallpapers() installs them.
+source "$_here/wallpaper-pins.sh"
+for _i in "${!GF_PHOTO_IDS[@]}"; do
+  source+=("photo-${GF_PHOTO_IDS[_i]}.jpg::${GF_PHOTO_URLS[_i]}")
+done
+unset _i
 sha256sums=('4d91771b305c25b6a81e8a24e7c3d4ae49cce9754db199437191fa30cb9c60b0'
-            '7bd4b12ca3914542857a159aed149d44e5d2b82a787c9d56f830da80fa0b9840')
+            '7bd4b12ca3914542857a159aed149d44e5d2b82a787c9d56f830da80fa0b9840'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
+sha1sums=('SKIP'
+          'SKIP'
+          'a5eeee96a4b9eaaa9edfc29978a51350ae1681f1'
+          'd0b41e3e969f335acd11780e2f113650998abdd7'
+          '0204c6b1c12e800674ffd3423f3c0b903af020f1'
+          '196669deb715c8b405f4287cd1fd81d50f98c2c0'
+          'c575bc76d11b0bf6812a36e809b8554f9564e442'
+          'd4115b6f9b916be76e481c10136152a2aed63c07'
+          'bd234713779074883e9a1224dfa47ad1b74a7e99'
+          '0cfb04ba13187bf1dd97e877d887971cf3a7f7b7'
+          '2e957c1b62c108c1fde0d40bd0ca7d9ddef9a016'
+          'e62fb94310d784ed8a1269cd7d913f269d0bc591'
+          '6a0b778018cb0a7852ed511044465b71640d3610'
+          '0010fd3f3ace11c370043ba827c65e4647127aca'
+          '25e8e34e0bccfe8682af9271e8e36e473c7e053d'
+          'c30b00aa5b61b314e673b65169406697332f5762'
+          'd2206e38f449f9943eec4f86d2e0140fa0961b05'
+          '32f20961a05ee28acf6f28055b699b28be79430f')
 
 # The source tree every step reads: the snapshot of HEAD made by prepare(), never the live working tree.
 _root() { echo "$srcdir/snapshot"; }
@@ -113,6 +158,14 @@ build() {
   cmake -S "$(_root)/apps/wallpaper-tool" -B "$srcdir/wallpaper-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/wallpaper-build"
+  # The wallpaper photographs (ADR-0040 step 2c): each no wider than 5120 px, JPEG quality 90, no metadata, by the build-only
+  # tool just built (it writes atomically and stops the build on a picture it cannot read or write).
+  mkdir -p "$srcdir/photos"
+  local id
+  for id in "${GF_PHOTO_IDS[@]}"; do
+    LC_ALL=C.UTF-8 "$srcdir/wallpaper-build/grassfield-wallpaper-shrink" --width 5120 --quality 90 \
+      --out "$srcdir/photos/$id.jpg" -- "$srcdir/photo-$id.jpg" >/dev/null
+  done
   # grassfield-stack-helper (ADR-0025): lists, orders and watches one Dock stack folder.
   cmake -S "$(_root)/apps/stack-helper" -B "$srcdir/stack-helper-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
@@ -195,7 +248,7 @@ package_grassfield-desktop() {
   # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons grassfield-wallpapers networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
@@ -501,4 +554,20 @@ package_grassfield-icons() {
     "content of the pattern it references, and a fill or stroke that points to a missing or contentless paint server is replaced" \
     "by none, so that Qt's SVG renderer can read the file. The drawings are otherwise unchanged. Date of this change: 2026-10-25." \
     >"$lic/NOTICE"
+}
+
+package_grassfield-wallpapers() {
+  pkgdesc="Grassfield wallpaper photographs: sixteen photographs from Wikimedia Commons (CC0, CC BY, public domain)"
+  arch=(any)
+  # Each photograph keeps its own licence (THIRD_PARTY.md, "Wallpaper photographs"; the owner accepted the two public-domain
+  # ones on 2026-10-31, ADR-0040). The credits, sources, licences and changes are in THIRD_PARTY.md and photos.json.
+  license=(CC0-1.0 CC-BY-2.0 CC-BY-3.0 CC-BY-4.0 LicenseRef-public-domain)
+  depends=()
+  local id dir="$pkgdir/usr/share/grassfield/wallpapers/photos"
+  for id in "${GF_PHOTO_IDS[@]}"; do
+    install -Dm644 "$srcdir/photos/$id.jpg" "$dir/$id.jpg"
+  done
+  # Settings > Wallpaper reads the list beside the pictures (WallpaperConfig.parsePhotos).
+  install -Dm644 "$(_root)/packaging/arch/wallpaper-photos.json" "$dir/photos.json"
+  install -Dm644 "$(_root)/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/grassfield-wallpapers/THIRD_PARTY.md"
 }

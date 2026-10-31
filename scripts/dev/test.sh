@@ -342,6 +342,12 @@ if want logic; then
   python3 -I tests/ci/mark_places.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/mark_places.py "$rc" PASS
+  # The shipped wallpaper photographs (ADR-0040 step 2c): their one list, the pins, the PKGBUILD and the legal texts agree.
+  rc=0
+  python3 -I tests/ci/wallpaper_photos.py --selftest || rc=1
+  python3 -I tests/ci/wallpaper_photos.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/wallpaper_photos.py "$rc" PASS
   # Token source pointers (GF-095): the lint on samples, then every token of tokens.json.
   rc=0
   python3 -I tests/ci/token_sources.py || rc=1
