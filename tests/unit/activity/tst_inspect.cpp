@@ -326,6 +326,7 @@ TEST(InspectKernel, AChildReadThroughItsDescriptorUntilItEnds)
 
     const pid_t child = fork();
     if (child == 0) {
+        activity_test::defaultSignals();
         for (;;)
             pause();
     }

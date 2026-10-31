@@ -450,6 +450,7 @@ pid_t idleChild()
 {
     const pid_t pid = fork();
     if (pid == 0) {
+        activity_test::defaultSignals();
         for (;;)
             pause();
     }

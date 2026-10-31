@@ -39,6 +39,7 @@ pid_t idleChild()
 {
     const pid_t pid = fork();
     if (pid == 0) {
+        activity_test::defaultSignals();
         setsid();
         for (;;)
             pause();
@@ -59,6 +60,7 @@ pid_t terminalChild(int &master)
         return -1;
     const pid_t pid = fork();
     if (pid == 0) {
+        activity_test::defaultSignals();
         setsid();
         const int fd = open(slave.c_str(), O_RDWR); // a session leader's first terminal becomes its controlling one
         (void)!write(ready[1], fd >= 0 ? "1" : "0", 1);

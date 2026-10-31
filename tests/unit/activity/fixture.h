@@ -10,11 +10,26 @@
 #include <stdexcept>
 #include <string>
 
+#include <csignal>
 #include <stdlib.h>
 #include <unistd.h>
 
 namespace activity_test
 {
+
+// A test's child takes the default action of every signal, unblocked: a disposition the test inherited (a background job
+// or a container started without a terminal ignores SIGHUP and SIGQUIT) must not keep a child alive that a case signals and
+// then waits for. Call it first in the child.
+inline void defaultSignals()
+{
+    for (int sig = 1; sig < NSIG; ++sig) {
+        if (sig != SIGKILL && sig != SIGSTOP)
+            std::signal(sig, SIG_DFL);
+    }
+    sigset_t none;
+    sigemptyset(&none);
+    sigprocmask(SIG_SETMASK, &none, nullptr);
+}
 
 class Fixture
 {
