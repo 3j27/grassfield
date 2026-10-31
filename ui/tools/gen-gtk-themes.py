@@ -20,6 +20,9 @@ Colours (the same rules as the shell, Accent.js):
   focus       the accent where it holds control.focusRingMinContrast against the window, else the text colour (focusRing),
               drawn at control.focusOutlineOpacity (opaque, as the shell's ring)
   link        blue in every accent, as macOS draws links (accentLight.blue / accentDark.blue)
+  grounds     the warm neutrals of the owner's choice of 2026-10-30 (ADR-0040), not in the -hc themes (GTK's high-contrast
+              grounds stay): the window ground is the appearance's groupFill, views, lists, menus and popovers its
+              windowBackground, header bars the plugin's own title bar colour (titlebar.background*), text its text colour
 Borders, pressed and hovered fills are the shell's overlays made opaque here (material.borderOpacity, material.hoverOpacity,
 control.pressedOpacity over the appearance's materialBorder and hover colours), so the CSS needs no colour function of either GTK
 version. The selected tab's indicator keeps GTK's own width (gtk.tabIndicatorWidth); visited links stay blue.
@@ -107,7 +110,9 @@ def palette(tokens, name, dark):
     link = value(color["accentDark" if dark else "accentLight"]["blue"])
     # The shell's overlays: hover and pressed lay the appearance's hover colour on a fill, a border its material border colour.
     overlay, border = value(appearance["hover"]), value(appearance["materialBorder"])
-    return {"accent": accent, "selection": selection, "selectionText": selection_text, "highlight": accent,
+    grounds = {"groundWindow": value(appearance["groupFill"]), "groundView": window, "ink": text,
+               "groundTitlebar": value(tokens["titlebar"]["backgroundDark" if dark else "backgroundLight"])}
+    return {**grounds, "accent": accent, "selection": selection, "selectionText": selection_text, "highlight": accent,
             "highlightText": accent_text, "focus": focus,
             "focusRing": with_alpha(focus, value(tokens["control"]["focusOutlineOpacity"])), "link": link,
             "selectionBorder": mix(selection, border, value(tokens["material"]["borderOpacity"])),
@@ -126,11 +131,34 @@ def header(name, dark, hc, gtk):
             f"   selection colours where that stylesheet draws its own accent. */\n")
 
 
+def gtk3_grounds(p):
+    """The warm grounds of GTK 3's Adwaita (not in the -hc themes): window, views and lists, menus and popovers, header bars."""
+    gw, gv, gt, ink = p["groundWindow"], p["groundView"], p["groundTitlebar"], p["ink"]
+    return f"""
+/* Grounds: the warm neutrals (ADR-0040, the owner's choice of 2026-10-30) */
+@define-color theme_bg_color {gw};
+@define-color theme_base_color {gv};
+@define-color theme_fg_color {ink};
+@define-color theme_text_color {ink};
+.background, window.background {{ color: {ink}; background-color: {gw}; }}
+.background:backdrop, window.background:backdrop {{ background-color: {gw}; }}
+.view, iconview, .view text, iconview text, textview text, treeview.view, list {{ color: {ink}; background-color: {gv}; }}
+.view:backdrop, iconview:backdrop, .view text:backdrop, iconview text:backdrop, textview text:backdrop, treeview.view:backdrop,
+list:backdrop {{ background-color: {gv}; }}
+popover.background, menu, .menu, .context-menu {{ background-color: {gv}; }}
+popover.background:backdrop, menu:backdrop, .menu:backdrop, .context-menu:backdrop {{ background-color: {gv}; }}
+headerbar, .titlebar:not(headerbar), headerbar:backdrop, .titlebar:not(headerbar):backdrop {{
+  background-color: {gt};
+  background-image: none;
+}}
+"""
+
+
 def gtk3_css(name, dark, hc, p):
     a, s, st, f, link = p["accent"], p["selection"], p["selectionText"], p["focus"], p["link"]
     hl, hlt, sb, w = p["highlight"], p["highlightText"], p["selectionBorder"], p["tabIndicator"]
     return header(name, dark, hc, 3) + f"""@import url("{GTK3_IMPORT[dark, hc]}");
-
+{"" if hc else gtk3_grounds(p)}
 @define-color theme_selected_bg_color {s};
 @define-color theme_selected_fg_color {st};
 @define-color theme_unfocused_selected_bg_color {s};
@@ -218,11 +246,29 @@ button:active:link, button:link > label:active, *:link:backdrop, button:backdrop
 """
 
 
+def gtk4_grounds(p):
+    """The warm grounds of GTK 4's Default (not in the -hc themes): window, views and lists, popovers, header bars."""
+    gw, gv, gt, ink = p["groundWindow"], p["groundView"], p["groundTitlebar"], p["ink"]
+    return f"""
+/* Grounds: the warm neutrals (ADR-0040, the owner's choice of 2026-10-30) */
+@define-color window_bg_color {gw};
+@define-color window_fg_color {ink};
+@define-color view_bg_color {gv};
+@define-color view_fg_color {ink};
+@define-color headerbar_bg_color {gt};
+@define-color popover_bg_color {gv};
+window.background, .background {{ color: {ink}; background-color: {gw}; }}
+.view, textview > text, iconview, listview, columnview, gridview, list, treeview.view {{ color: {ink}; background-color: {gv}; }}
+popover > contents, popover > arrow, popover.menu > contents {{ background-color: {gv}; }}
+headerbar, headerbar:backdrop {{ background-color: {gt}; background-image: none; }}
+"""
+
+
 def gtk4_css(name, dark, hc, p):
     a, s, st, link = p["accent"], p["selection"], p["selectionText"], p["link"]
     hl, hlt, sb, ring, w = p["highlight"], p["highlightText"], p["selectionBorder"], p["focusRing"], p["tabIndicator"]
     return header(name, dark, hc, 4) + f"""@import url("{GTK4_IMPORT[dark, hc]}");
-
+{"" if hc else gtk4_grounds(p)}
 @define-color theme_selected_bg_color {s};
 @define-color theme_selected_fg_color {st};
 @define-color theme_unfocused_selected_bg_color {s};
