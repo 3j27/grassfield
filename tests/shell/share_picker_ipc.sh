@@ -38,7 +38,7 @@ sig=gf-share-picker
 runtime=$(mktemp -d /tmp/gfspi.XXXXXX)
 mkdir -p "$runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg" "$tmp/bin" "$tmp/fake" "$tmp/stock"
 chmod 700 "$runtime" "$tmp/cache"
-((${#runtime} + 54 <= 107)) || { echo "FAIL: share_picker_ipc: the runtime directory $runtime is too long for a socket"; exit 1; }
+((${#runtime} + 56 <= 107)) || { echo "FAIL: share_picker_ipc: the runtime directory $runtime is too long for a socket"; exit 1; }
 for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
 done
@@ -77,7 +77,7 @@ env "${base_env[@]}" QT_QPA_PLATFORM="offscreen:configfile=$tmp/screens.json" QM
   timeout 300 qs -p "$tmp/cfg" --no-color >"$tmp/shell.log" 2>&1 &
 shell=$!
 for _ in $(seq 150); do grep -q 'picker-probe: ready' "$tmp/shell.log" && break; sleep 0.1; done
-ready=$(grep -o 'picker-probe: ready .*' "$tmp/shell.log" | head -1)
+ready=$(grep -o 'picker-probe: ready .*' "$tmp/shell.log" | head -1 || true)
 display=$(python3 -I -c 'import json, sys; o = json.loads(sys.argv[1].split(" ")[2]); print(o[-1] if o else "")' "$ready" 2>/dev/null || true)
 if [[ $ready != 'picker-probe: ready ["DP-1","HDMI-A-1"] idle' ]]; then
   echo "FAIL: share_picker_ipc: the probe shell did not come up idle with a display [$ready]"

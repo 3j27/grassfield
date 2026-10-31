@@ -376,7 +376,10 @@ check(out == "[SELECTION]/screen:DP-1\n", "the count of suspends unreadable: the
 reset()
 one_locked = json.dumps([{"name": "DP-1", "solitaryBlockedBy": ["LOCK"]}, {"name": "DP-2", "width": 2560, "height": 1440, "scale": 2}])
 out, _, _ = shell_answers("/screen:DP-2", FAKE_MONITORS=one_locked)
-check(out == "[SELECTION]/screen:DP-2\n", "the lock on one display of two is not the session's lock [%r]" % out)
+check(out == "" and read("qs") == [], "the lock on one display of two is the session's: locked, as the shell reads it [%r]" % out)
+blocked_otherwise = json.dumps([{"name": "DP-1", "width": 1920, "height": 1080, "scale": 1, "solitaryBlockedBy": ["FULLSCREEN"]}])
+out, _, _ = shell_answers("/screen:DP-1", FAKE_MONITORS=blocked_otherwise)
+check(out == "[SELECTION]/screen:DP-1\n", "a display blocked by something else than the lock: the picker is asked [%r]" % out)
 
 # SP9: no shell, unlocked: the stock picker with the same arguments and window list, by the name xdph used.
 for how in ("fail", "silent", "garbage"):

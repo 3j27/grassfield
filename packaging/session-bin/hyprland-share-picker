@@ -114,14 +114,15 @@ def sleeps_now():
 
 def locked():
     # Owner decision Q15: while the session is locked nothing shows. Every doubt counts as locked (ADR-0035 D-6): hyprctl
-    # failing, silent or unreadable, no display, every display blocked by the lock; a marker that cannot be read, or that is
+    # failing, silent or unreadable, no display, a display blocked by the lock (the lock is the session's: the shell settles
+    # on any display, LockMachine.compositorLockStateLazy); a marker that cannot be read, or that is
     # not "unlocked" in the shell's own grammar (LockMachine.markerSaysLocked: "unlocked" or "unlocked sleeps=<n>"), or one
     # whose sleep count is not the machine's now (LockMachine.sleptSince: a sleep that no shell locked for, the shell locks).
     shown = monitors()
     if shown is None:
         return True
     blocked = [m.get("solitaryBlockedBy", []) for m in shown]
-    if all(type(b) is list and "LOCK" in b for b in blocked):
+    if any(type(b) is list and "LOCK" in b for b in blocked):
         return True
     try:
         with open(marker_path(), "rb") as f:
