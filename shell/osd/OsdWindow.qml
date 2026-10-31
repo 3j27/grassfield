@@ -119,7 +119,9 @@ Variants {
                     radius: parent.radius
                     color: Appearance.colors.text
 
+                    // Under Reduce Motion the level jumps; the OSD itself still fades in and out (ADR-0039 step 5).
                     Behavior on width {
+                        enabled: !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionFast)
                         }

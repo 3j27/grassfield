@@ -408,10 +408,11 @@ TEST(Theme, ColorsAreGrassfieldValues) {
     EXPECT_FLOAT_EQ(kCloseColor.b, 0x4B / 255.F);
     EXPECT_FLOAT_EQ(kMinimizeColor.r, 0xD9 / 255.F);
     EXPECT_FLOAT_EQ(kZoomColor.g, 0xA6 / 255.F);
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.r, 40 / 255.F);
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.b, 44 / 255.F);
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.r, 236 / 255.F);
-    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.b, 238 / 255.F);
+    // The warm neutrals of 2026-10-30 (ADR-0040): #2A2824 and #EFECE7 (red above blue), the cool #28282C and #ECECEE warmed.
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.r, 42 / 255.F);
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.b, 36 / 255.F);
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.r, 239 / 255.F);
+    EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.b, 231 / 255.F);
     EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Light).background.a, 1.F);
 }
 
