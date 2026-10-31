@@ -184,8 +184,10 @@ Singleton {
         openCentered("confirm", {title: title, message: message, confirmLabel: confirmLabel, action: action, args: args, destructive: destructive}, screen);
     }
 
-    function notice(title: string, message: string): void {
-        openCentered("notice", {title: title, message: message});
+    // `symbol`: the glyph of the notice's subject (power, moon, document, ...): a shell dialog shows its subject's symbol, never
+    // the Grassfield mark (ADR-0040 IQ-B1 B, tests/ci/mark_places.py).
+    function notice(title: string, message: string, symbol: string): void {
+        openCentered("notice", {title: title, message: message, symbol: symbol});
     }
 
     function close(): void {

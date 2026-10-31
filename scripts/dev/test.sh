@@ -335,6 +335,13 @@ if want logic; then
   python3 -I tests/ci/icon_strokes.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/icon_strokes.py "$rc" PASS
+  # The Grassfield mark's places (ADR-0040 IQ-B1 B): the scanner on samples, then the tree (no dialog draws it; every notice
+  # names its subject's symbol).
+  rc=0
+  python3 -I tests/ci/mark_places.py --selftest || rc=1
+  python3 -I tests/ci/mark_places.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/mark_places.py "$rc" PASS
   # Token source pointers (GF-095): the lint on samples, then every token of tokens.json.
   rc=0
   python3 -I tests/ci/token_sources.py || rc=1
