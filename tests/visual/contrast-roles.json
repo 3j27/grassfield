@@ -94,6 +94,7 @@
    "sites": [
     {"file": "shell/launchpad/AppsWindow.qml", "class": "opacity-dynamic", "count": 4},
     {"file": "shell/desktop/IconsView.qml", "class": "opacity-dynamic", "count": 2},
+    {"file": "shell/security/lock/LockView.qml", "class": "opacity-dynamic", "count": 8},
     {"file": "shell/notifications/Banner.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/notifications/NotificationList.qml", "class": "opacity-dynamic", "count": 2},
     {"file": "shell/osd/OsdWindow.qml", "class": "opacity-dynamic", "count": 1},

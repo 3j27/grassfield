@@ -31,6 +31,8 @@ Item {
     id: root
 
     property bool authenticating: false
+    // ADR-0040 step 4b (IQ-T2 A): the fade after a PAM success; the session is still locked until it ends (LockController).
+    property bool releasing: false
     property bool inputEnabled: true
     property string message: ""
     // Persistent warning under the error line (e.g. crash recovery unavailable); never replaced.
@@ -77,6 +79,18 @@ Item {
         field.forceActiveFocus();
     }
 
+    // The content (the scrim, the date and clock, the account column) fades in once the surface shows and out while
+    // releasing (lock.fadeInMs, lock.fadeOutMs; Reduce Motion caps them). The wallpaper does not fade (P-4). Display only:
+    // the field takes input from the first frame whatever this opacity is (opacity stops no input), and nothing waits for
+    // the animation (the release is the controller's timer).
+    property bool shown: false
+    property real contentOpacity: root.shown && !root.releasing ? 1 : 0
+    Behavior on contentOpacity {
+        NumberAnimation {
+            duration: Appearance.duration(root.releasing ? Tokens.lockFadeOutMs : Tokens.lockFadeInMs)
+        }
+    }
+
     function adopt(b: var): void {
         if (root.backdrop === null && b !== null && b !== undefined)
             root.backdrop = b;
@@ -91,6 +105,7 @@ Item {
         root.frozenName = root.userName;
         root.frozenAvatar = root.avatarSource;
         root.adopt(root.offeredBackdrop);
+        root.shown = true;
     }
 
     // Nothing decided in time (a still that is still being checked, an output that showed no wallpaper yet): the artwork.
@@ -166,6 +181,7 @@ Item {
     Rectangle {
         id: scrim
         anchors.fill: parent
+        opacity: root.contentOpacity
         readonly property color dim: Appearance.withAlpha(root.colors.shadow, Tokens.lockDimOpacity)
         readonly property color clear: Appearance.withAlpha(root.colors.shadow, Tokens.lockScrimClearOpacity)
         readonly property real upperEdge: (dateClock.y + dateClock.height) / Math.max(1, height)
@@ -210,6 +226,7 @@ Item {
         id: dateClock
         anchors.horizontalCenter: parent.horizontalCenter
         y: Tokens.lockTopMargin
+        opacity: root.contentOpacity
         layer.enabled: true
         layer.effect: TextShadow {}
 
@@ -245,6 +262,7 @@ Item {
             bottom: parent.bottom
             bottomMargin: Tokens.lockBottomMargin
         }
+        opacity: root.contentOpacity
         spacing: Tokens.spacingSm
 
         // The user's message (Settings > Lock Screen > Show message when locked): plain text, at most two lines.

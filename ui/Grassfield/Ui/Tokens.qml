@@ -1022,6 +1022,10 @@ QtObject {
     readonly property int lockSubmitSize: 22
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockBottomMargin: 112
+    // ADR-0040 section 4 (IQ-T2 A): the lock's scrim and text fade in over this long once its surface shows (the wallpaper does not fade; the lock is engaged at once and the field takes input from the first frame); Reduce Motion caps it (Appearance.duration)
+    readonly property int lockFadeInMs: 200
+    // ADR-0040 section 4 (IQ-T2 A): after a PAM success the lock's scrim and text fade out over this long while the session is still locked (state releasing), then the lock is released; Reduce Motion caps it
+    readonly property int lockFadeOutMs: 200
     // A2: was 0.28 (clock 1.8:1 over a white wallpaper); shadow-colour scrim under the two text bands over the wallpaper (sharp since ADR-0040 step 4a; blurred before), white text 5.3:1 or more over any wallpaper (white is the worst case), tested in tests/visual/test_contrast_tokens.py
     readonly property real lockDimOpacity: 0.6
     // ADR-0040 section 4 (IQ-W4 A, sharp backdrop, banded scrim): the shadow-colour scrim between the date and clock band and the account band, where no text lies; the text bands stay at lock.dimOpacity (gate A2 per band, tests/visual/test_contrast_tokens.py)

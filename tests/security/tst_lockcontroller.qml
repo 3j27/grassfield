@@ -82,6 +82,69 @@ TestCase {
         compare(failedSpy.count, 0);
     }
 
+    // ADR-0040 step 4b (IQ-T2 A): with a release fade, a PAM success leads to "releasing" (still locked, the field
+    // cleared, nothing unlocked), and only the end of the fade unlocks.
+    function test_successReleasesAfterTheFade() {
+        ctl.releaseMs = 80;
+        ctl.submit("hunter2");
+        prompt();
+        ctl.pamCompleted("success");
+        compare(ctl.lockState, "releasing");
+        verify(ctl.locked && ctl.releasing && !ctl.canSubmit);
+        compare(unlockSpy.count, 0);
+        verify(!ctl.holdsSecret);
+        // Nothing can be submitted during the fade.
+        verify(!ctl.submit("again"));
+        compare(pam.starts, 1);
+        tryCompare(ctl, "lockState", "unlocked", 1000);
+        compare(unlockSpy.count, 1);
+    }
+
+    // Anything during the fade brings the lock back; the PAM success is spent (review invariant of ADR-0040 section 4).
+    function test_aLockRequestDuringTheFadeKeepsTheLock() {
+        ctl.releaseMs = 80;
+        ctl.submit("pw");
+        prompt();
+        ctl.pamCompleted("success");
+        compare(ctl.lockState, "releasing");
+        verify(ctl.interruptRelease());
+        compare(ctl.lockState, "locked");
+        wait(200);
+        compare(ctl.lockState, "locked", "the timer of the spent release unlocks nothing");
+        compare(unlockSpy.count, 0);
+        // A new PAM success is needed.
+        verify(ctl.submit("pw2"));
+        prompt();
+        ctl.pamCompleted("success");
+        tryCompare(ctl, "lockState", "unlocked", 1000);
+        compare(unlockSpy.count, 1);
+    }
+
+    function test_aLostLockDuringTheFadeReacquires() {
+        ctl.releaseMs = 80;
+        ctl.submit("pw");
+        prompt();
+        ctl.pamCompleted("success");
+        ctl.lockLost();
+        compare(ctl.lockState, "locking");
+        wait(200);
+        compare(ctl.lockState, "locking");
+        compare(unlockSpy.count, 0);
+        // A late "released" is ignored outside the fade.
+        ctl.released();
+        compare(ctl.lockState, "locking");
+        verify(!ctl.interruptRelease(), "nothing to interrupt");
+    }
+
+    function test_fingerprintReleasesAfterTheFade() {
+        ctl.releaseMs = 80;
+        ctl.fingerprintSucceeded();
+        compare(ctl.lockState, "releasing");
+        compare(unlockSpy.count, 0);
+        tryCompare(ctl, "lockState", "unlocked", 1000);
+        compare(unlockSpy.count, 1);
+    }
+
     function test_wrongPasswordStaysLocked() {
         const clears = clearSpy.count;
         ctl.submit("wrong");

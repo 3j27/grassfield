@@ -57,12 +57,13 @@ import "../../lib/RunMode.js" as RunMode
 Singleton {
     id: root
 
-    // "unlocked" | "locking" | "locked" | "authenticating"
+    // "unlocked" | "locking" | "locked" | "authenticating" | "releasing" (ADR-0040 step 4b: the fade after a PAM success, still
+    // locked)
     readonly property string lockState: controller.lockState
     readonly property bool locked: controller.locked
     // This shell holds a lock the compositor confirmed (its `locked` event: every output shows a
     // lock surface). On Hyprland the lock may since have been taken over: see `secure`.
-    readonly property bool holding: (controller.lockState === Machine.LOCKED || controller.lockState === Machine.AUTHENTICATING) && sessionLock.secure
+    readonly property bool holding: Machine.isHolding(controller.lockState) && sessionLock.secure
     // Holding, and Hyprland reported the session locked since the last verify() (or the lock was
     // just acquired). SleepInhibitor releases the sleep delay only on this.
     readonly property bool secure: holding && verified
@@ -185,6 +186,9 @@ Singleton {
     // releases the lock object first, and releasing the lock the compositor still uses unlocks the
     // session until the new lock arrives (R12 review #3: keys reached a window in forced runs).
     function lock(reason: string): string {
+        // A lock request during the release fade (ADR-0040 step 4b) brings the lock back: the PAM success is spent.
+        if (controller.interruptRelease())
+            console.info("grassfield-lock: lock requested (" + reason + ") during the release fade: the lock stays; a new password is needed");
         if (currentlyLocked()) {
             console.info("grassfield-lock: lock requested (" + reason + ") while " + controller.lockState + "; verifying the session lock");
             engage();
@@ -454,6 +458,8 @@ Singleton {
     LockController {
         id: controller
         pam: passwordPam
+        // ADR-0040 step 4b (IQ-T2 A): the content fades out before the release; Reduce Motion caps it.
+        releaseMs: Appearance.duration(Tokens.lockFadeOutMs)
         onUnlockRequested: root.release()
         onLockStateChanged: {
             // Carried over a soft reload; cleared only by release() (PAM success).
@@ -558,7 +564,8 @@ Singleton {
                 showUser: Settings.lockShowUser
                 lockMessage: Settings.lockShowMessage ? Settings.lockMessage : ""
                 authenticating: controller.authenticating
-                inputEnabled: controller.pamAvailable
+                releasing: controller.releasing
+                inputEnabled: controller.pamAvailable && !controller.releasing
                 message: controller.pamAvailable ? controller.message : qsTr("Authentication service unavailable. The session stays locked.")
                 // In dev, a visible hint that password checks are off (PAM suppressed), so a GRASSFIELD_DEV value that
                 // leaked into a real session is obvious; the lock still fails closed.

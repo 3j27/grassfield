@@ -116,6 +116,30 @@ TestCase {
         verify(/strandedProbe\.start\(\);\s*\}\s*\/\/[^\n]*\n\s*prepareStills\(\);\s*\}/.test(source("shell/security/lock/Lock.qml").replace(/\r/g, "")) || /prepareStills\(\);\s*\}\s*$/m.test(lock), "last in Component.onCompleted");
     }
 
+    // ADR-0040 step 4b (IQ-T2 A): the content fades in and out; the release follows the controller's timer (the machine's
+    // "releasing", tst_lockmachine and tst_lockcontroller), never the view's animation; a lock request during it keeps the
+    // lock; no input while releasing; the wallpaper does not fade.
+    function test_theReleaseWaitsForTheFade() {
+        const lock = source("shell/security/lock/Lock.qml");
+        verify(/releaseMs: Appearance\.duration\(Tokens\.lockFadeOutMs\)/.test(lock));
+        verify(/inputEnabled: controller\.pamAvailable && !controller\.releasing/.test(lock));
+        verify(/function lock\(reason: string\): string \{\s*(\/\/[^\n]*\n\s*)*if \(controller\.interruptRelease\(\)\)/.test(lock), "a lock request interrupts a release first");
+        verify(/readonly property bool holding: Machine\.isHolding\(controller\.lockState\) && sessionLock\.secure/.test(lock));
+        // The lock is released only from the controller's unlockRequested (after the fade), as before.
+        compare((lock.match(/root\.release\(\)/g) || []).length, 1);
+        verify(/onUnlockRequested: root\.release\(\)/.test(lock));
+        const v = source("shell/security/lock/LockView.qml");
+        compare((v.match(/opacity: root\.contentOpacity/g) || []).length, 3, "the scrim, the date and clock, the account column");
+        const at = v.indexOf("visible: root.backdrop !== null\n");
+        verify(at > 0);
+        const backdrop = block(v.substring(v.lastIndexOf("Item {", at)), "Item {");
+        verify(/id: still/.test(backdrop) && /WallpaperArt \{/.test(backdrop), "the backdrop's block");
+        verify(!/contentOpacity/.test(backdrop), "the wallpaper does not fade");
+        verify(/duration: Appearance\.duration\(root\.releasing \? Tokens\.lockFadeOutMs : Tokens\.lockFadeInMs\)/.test(v));
+        // The view knows nothing of the release: no signal, no call back into the lock.
+        verify(!/signal\s+released|unlockRequested|controller\./.test(v));
+    }
+
     function test_engagingTheLockReadsNoneOfIt() {
         const lock = source("shell/security/lock/Lock.qml");
         for (const fn of ["function lock(reason: string): string {", "function engage(): void {", "function release(): void {", "function restore(intent: bool, when: string): void {"]) {

@@ -341,6 +341,20 @@ and IQ-B3 here changes the palette only, not which controls read it.
     FINAL properties of `Item` in Qt 6, which would have kept `LockView` from loading. NOT VERIFIED (nested): the still in
     the lock's first frame (the pixmap cache hit with `asynchronous: true`), a hotplugged output while locked, the clock
     after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`), L1 to L5.
+- **Step 4b as built** (2026-10-31; `shell/security`, under the opus security review): the machine gains `releasing`
+  (`LockMachine.js`): a PAM success (`success` while authenticating, `fingerprint` while locked or authenticating) enters
+  it, `released` leaves it for `unlocked` and is the only way there; `request`, `error`, `timeout`, `abort` bring it back
+  to `locked`, `lost` to `locking`; it counts as holding. `LockController` arms a Timer of `releaseMs`
+  (`Appearance.duration(lock.fadeOutMs)`, 200) at the PAM success and emits `unlockRequested` only when it ends;
+  `interruptRelease()` (called first by every `Lock.lock`, so an idle, sleep, lid or IPC request during the fade keeps the
+  lock) stops it and the success is spent. `LockView` fades the scrim, the date and clock and the account column in over
+  `lock.fadeInMs` (200) once the surface shows and out while releasing; the wallpaper does not fade; the field takes input
+  from the first frame and none while releasing. Tests: `tst_lockmachine.qml` (+1, the exhaustive check now covers
+  `releasing` and every two-event path), `tst_lockcontroller.qml` (+4: the release after the fade, a lock request during
+  it, a lost lock during it, the fingerprint), `tst_lockbackdrop.qml` (+1: the wiring); planted mutants (success straight
+  to unlocked, an always synchronous release, an error during the fade not relocking) each fail them. The fade-in from
+  the idle dim's level (ID-8) is step 5. NOT VERIFIED (nested, required before the merge): L1 to L5 with the fades,
+  `reload_locked.sh` (a soft reload during `releasing` must keep the lock: `persist.intent` stays true until `release()`).
 - **Lock still.** ADR-0016 §6 (W8) as already specified, plus the preloaded still of ID-7 (section 4).
 - **Legibility (A2).** Every variant goes through `tests/visual/contrast.sh` (menu bar strip, desktop labels, lock);
   the artworks' tones come from their palettes.

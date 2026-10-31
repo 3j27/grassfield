@@ -1070,10 +1070,18 @@ message, failedAttempts, pamSuppressed} (never the text or its length), `idle de
 (before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`,
 `idle status` → JSON, `polkit status` → `registered|unregistered`.
 
-States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> unlocked`;
-`failure|error|timeout|abort` → `locked`; a lock dropped by the compositor, or a session found unlocked under a lock
-still reported secure (foreign takeover + release) → `locking` (fresh lock, re-requested every 500 ms);
-fingerprint success unlocks from `locked`. Unknown states/events never unlock (exhaustive test).
+States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> releasing
+-released-> unlocked`; `failure|error|timeout|abort` → `locked`; a lock dropped by the compositor, or a session found
+unlocked under a lock still reported secure (foreign takeover + release) → `locking` (fresh lock, re-requested every
+500 ms); fingerprint success enters `releasing` from `locked`. `releasing` (ADR-0040 step 4b, IQ-T2 A): the lock's scrim
+and text fade out over `lock.fadeOutMs` while the session is still locked (it counts as holding: the ownership check,
+`secure` and the sleep delay work as in `locked`); `released`, sent only by the controller's own Timer armed by the PAM
+success (never by the view's animation), unlocks; a lock request (any reason, `Lock.lock` → `interruptRelease`), an abort
+or an error during it → `locked`, a lost lock → `locking`, and the PAM success is spent: unlocking needs a new one. No
+input during `releasing` (the field is disabled, `canSubmit` false). The content fades in over `lock.fadeInMs` once a
+surface shows; the field takes input from the first frame (opacity stops no input). Reduce Motion caps both
+(`Appearance.duration`). Unknown states/events never unlock (exhaustive test, and every two-event path from `locking`
+or `locked`).
 
 Decisions:
 - Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`,
