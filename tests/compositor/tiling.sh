@@ -2291,7 +2291,9 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       fs_reveal
       pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep "$fs_rest"
       check "full screen 6c: resting on the revealed zoom light opens the tiling popover" test "$(open_kind)" = "tiling@$out"
-      pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep 150 click sleep 800
+      # The pointer leaves the light at once: resting on the restored window's light, the hover opened the popover again before
+      # the checks (integrator re-review of 29db357, MINOR 2).
+      pointer abs "$GF_TB_ZOOM_X" "$fs_bar_y" sleep 150 click sleep 100 abs 20 $((mh / 2)) sleep 700
       check "full screen 6c: a click on the zoom light under its open popover leaves full screen (D64)" test "$(fs_of "$addr")" = 0
       check "full screen 6c: the popover closed" test -z "$(open_kind)"
       check "full screen 6c: no overlay left mapped" overlay_gone
