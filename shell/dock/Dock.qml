@@ -18,6 +18,7 @@ import "Attention.js" as Attention
 import "Magnify.js" as Magnify
 import "Geometry.js" as Geometry
 import "Stacks.js" as Stacks
+import "TileGraph.js" as TileGraph
 
 // Bottom dock, one per screen: pinned apps (Settings) and running apps (foreign-toplevel app ids
 // mapped to desktop entries), a separator and the Trash. Click launches, focuses the most recent
@@ -2152,7 +2153,7 @@ Scope {
 
                                 // Activity Monitor's live graph over its tile (ADR-0038 AM62), moving with the icon's hops.
                                 TileGraphView {
-                                    graph: tile.isApp && tile.running && String(tile.modelData.key).toLowerCase() === "org.grassfield.activity" ? ActivityLink.tileGraph : null
+                                    graph: tile.isApp && tile.running && String(tile.modelData.key).toLowerCase() === "org.grassfield.activity" ? TileGraph.parse(ActivityLink.tileText, ActivityLink.tilePids) : null
                                     width: tile.iconPx
                                     height: tile.iconPx
                                     x: tile.iconPos.x

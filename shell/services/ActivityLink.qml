@@ -1,11 +1,9 @@
 pragma Singleton
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
 import qs.platform
 import "ActivityLinkLogic.js" as Logic
-import "../dock/TileGraph.js" as TileGraph
 
 // Activity Monitor's links with the shell (ADR-0038 f, AD29; docs/specs/activity.md AM60, AM61). While a window of the app is
 // open on this display, the shell writes the projection `windows.json` in the display's runtime folder: the windows' client
@@ -50,7 +48,7 @@ Singleton {
         } else if (root.folder !== "") {
             coalesce.stop();
             root.written = "";
-            root.tileGraph = null;
+            root.tileText = "";
             remover.command = ["sh", Quickshell.shellPath("services/activity-projection.sh"), root.folder, "--remove"];
             remover.running = true;
         }
@@ -83,12 +81,14 @@ Singleton {
         id: remover
     }
 
-    // AM62: the graph the app gives its Dock tile ({kind, samples}), or null: read while the app's window is open, from this
-    // display's folder only (a nested session's file never reaches the real Dock), checked before the Dock draws it.
-    property var tileGraph: null
+    // AM62: the text of the graph the app gives its Dock tile, "" when none: read while the app's window is open, from this
+    // display's folder only (a nested session's file never reaches the real Dock). The Dock checks it before it draws it
+    // (shell/dock/TileGraph.js parse, against `tilePids`: the pids of the app's windows now).
+    property string tileText: ""
+    readonly property var tilePids: root.appOpen ? Compositor.toplevelsFor(Logic.APP_ID).map(t => Compositor.pidOf(t)) : []
 
     function readTile(): void {
-        root.tileGraph = root.appOpen ? TileGraph.parse(tileFile.text(), Compositor.toplevelsFor(Logic.APP_ID).map(t => Compositor.pidOf(t))) : null;
+        root.tileText = root.appOpen ? tileFile.text() : "";
     }
 
     FileView {
@@ -98,7 +98,7 @@ Singleton {
         printErrors: false
         onFileChanged: tileFile.reload()
         onLoaded: root.readTile()
-        onLoadFailed: root.tileGraph = null
+        onLoadFailed: root.tileText = ""
     }
 
     // The app replaces the file through a temporary name at each sample: read again at the slowest update frequency too,
@@ -110,13 +110,14 @@ Singleton {
         onTriggered: tileFile.reload()
     }
 
-    // A window opened or closed: Hyprland's list is read again (pid and class come with it), then written.
+    // A window opened or closed (the platform layer relays Hyprland's events): its list is read again (pid and class come
+    // with it), then written.
     Connections {
-        target: Hyprland
+        target: Compositor
         enabled: root.appOpen
 
-        function onRawEvent(event: HyprlandEvent): void {
-            if (event.name === "openwindow" || event.name === "closewindow") {
+        function onInterrupted(event: string): void {
+            if (event === "openwindow" || event === "closewindow") {
                 Compositor.refreshToplevels();
                 root.schedule();
             }
