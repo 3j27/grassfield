@@ -7,7 +7,8 @@ integrator's request of 2026-10-28, on PR #10: the owner's French session showed
   python3 -I tests/ci/desktop_names.py --selftest the check on fixed samples
 
 Whether a French name may be used at all (no banned name) is tests/ci/ui_names.py's. A [Desktop Action] group is not
-required to be localized: the shell shows only the entry's own name.
+required to be localized: the shell shows only the entry's own name. An SDDM theme's metadata.desktop (a [SddmGreeterTheme]
+group and no [Desktop Entry], ADR-0042) is not a desktop entry: nothing shows its name.
 """
 import subprocess
 import sys
@@ -19,6 +20,7 @@ LOCALIZED = ("Name", "GenericName", "Comment", "Keywords")
 def missing(text):
     """The keys of [Desktop Entry] that lack a non-empty French value: [] when the entry speaks French."""
     group = None
+    entry = sddm_theme = False
     plain, french = set(), {}
     for raw in text.splitlines():
         line = raw.strip()
@@ -26,6 +28,8 @@ def missing(text):
             continue
         if line.startswith("[") and line.endswith("]"):
             group = line
+            entry = entry or group == "[Desktop Entry]"
+            sddm_theme = sddm_theme or group == "[SddmGreeterTheme]"
             continue
         if group != "[Desktop Entry]" or "=" not in line:
             continue
@@ -34,6 +38,8 @@ def missing(text):
             plain.add(key)
         elif key.endswith("[fr]") and key[:-4] in LOCALIZED:
             french[key[:-4]] = value
+    if not entry and sddm_theme:
+        return []
     need = [k for k in LOCALIZED if k == "Name" or k in plain]
     return [k for k in need if not french.get(k)]
 
@@ -72,6 +78,9 @@ def selftest():
         ("[Desktop Entry]\nName=Files\nName[fr_CA]=Fichiers\n", ["Name"]),
         ("# Name[fr]=Fichiers\n[Desktop Entry]\nName=Files\n", ["Name"]),
         ("[Desktop Entry]\nName=Files\nName[fr]=Fichiers\n[Desktop Action x]\nName=New Window\n", []),
+        ("[SddmGreeterTheme]\nName=Grassfield\nType=sddm-theme\n", []),
+        ("[SddmGreeterTheme]\nName=Grassfield\n[Desktop Entry]\nName=Files\n", ["Name"]),
+        ("[Other]\nName=Files\n", ["Name"]),
     ]
     bad = [(text, want, missing(text)) for text, want in cases if missing(text) != want]
     for text, want, got in bad:
