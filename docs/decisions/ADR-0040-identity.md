@@ -1,8 +1,8 @@
 # ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
 Status: Accepted (the owner answered the twelve questions and B-5 on 2026-10-29: "Owner decisions (2026-10-29)", with the
 integrator's conditions for the four non-recommended choices, W1 C, W2 C, W3 A and L1 C). Step 0 merged (pull request
-#46, e16fa8c), step 1a merged (pull request #52, a5488a6) and step 1b merged (pull request #55, 12bcda9); step 1c under
-way (the owner chose its Green on 2026-10-30). Every other choice follows the owner's rule of 2026-10-28 ("the closest to
+#46, e16fa8c), steps 1a, 1b and 1c merged (pull requests #52 a5488a6, #55 12bcda9, #69 837dd2b); the owner's brand green
+and warm neutrals of 2026-10-30 under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to
 macOS 27, no technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
 owner can revisit. Revised after the integrator's opus review of
 b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
@@ -185,14 +185,15 @@ and IQ-B3 here changes the palette only, not which controls read it.
   (IQ-B2, owner: A, "no logotype"); the mark alone is the symbol.
 - **The accent (IQ-B3, owner: A, "Grassfield").** The default is named "Grassfield" (a green swatch first in the row, in place
   of the Multicolour wheel), the pickable Green moves to a value clearly apart from the brand green with its own 4.5:1
-  text, and the brand green is the existing default-accent tokens (`color.light.accent` `#26763F`, `color.dark.accent`
-  `#4FB36B`; no new brand token). Settings > About's tile uses it (ID-11). The pickable Green also colours Settings
+  text, and the brand green is the existing default-accent tokens (`color.light.accent`, `#26763F` until the owner's
+  choice of 2026-10-30 made it the deeper `#195E3F`, white text 7.7:1; `color.dark.accent` `#4FB36B`; no new brand
+  token). Settings > About's tile uses it (ID-11). The pickable Green also colours Settings
   tiles (the sidebar's Battery and Motion, `apps/settings/qml/Main.qml:27, 32`; rows of Accessibility, Menu Bar, Software
   Update and Storage): moving it moves them (review of b44d17e). Mockup: `mockups/b2-accent.svg`.
   Step 1c as built: Settings > Appearance's first swatch is "Grassfield", one disc of the brand green (the colour wheel is
   gone); the stored value stays `multicolor` (no grassfield.json to migrate). The pickable Green is `#6DB53C` with dark
   text `#10240A` (6.5:1) in the light appearance, the owner's choice B of 2026-10-30 (below): OKLab distance 0.21 from the
-  brand green, where `#3A7512` was 0.04; the dark appearance keeps `#8BD34E` (0.12 already). Like yellow it holds dark
+  brand green `#26763F` and 0.29 from the deeper `#195E3F` of 2026-10-30, where `#3A7512` was 0.04; the dark appearance keeps `#8BD34E` (0.12 already). Like yellow it holds dark
   text, so its dark-appearance selection pair is its light pair (`color.selectionDark.green`, the rule that a selection
   is never darker than the light accent), its focus ring falls back to the text colour on light grounds
   (`Accent.focusRing`), its thin marks in the GTK themes are pinned at 2.32:1 and 2.48:1 (`tests/ci/gtk_themes.py`), and
@@ -447,6 +448,14 @@ Asked by the integrator from this ADR's options, with the recommendations shown;
 appearances): « B : vert clair, comme macOS » (`#6DB53C`, dark text; not the recommended A, a dark green `#2D5A04` with
 white text). The costs named in the question and taken: the white glyphs of the green Settings tiles at 2.5:1, and green
 joins yellow among the light accents with dark marks (its selection pair; ADR-0039 step 11's knob on the "on" fill).
+
+**The brand green and the neutrals (2026-10-30).** Shown a comparison board (the current brand green and a deeper,
+calmer one, each with today's cool neutrals and with warm ones, in both appearances, on the default artwork with a
+Settings window): « B en clair seulement, et neutres chauds ». The brand green of the light appearance becomes `#195E3F`
+(white text 7.7:1, where `#26763F` gave 5.6:1); the dark appearance keeps `#4FB36B` (its deeper candidate `#4F9F77`
+was 4.5:1 on the window, 5.2:1 under its dark text). The neutrals turn warm in both appearances, an explicit choice over
+the "closest to macOS 27" rule; they come in their own pull request (they cross ADR-0039's neutrals and glass and the
+plugin's title bar), measured first in a scratch copy: every A2 role holds, three pinned values move.
 
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
