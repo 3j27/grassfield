@@ -50,7 +50,7 @@ QtObject {
     readonly property var colorLight: ({
         text: "#1B1B1F",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)
         textSecondary: "#3A3A42",  // A2: was #55555D; 4.5:1 or more on every material backdrop up to transparency 0.6 over a black wallpaper (tint alpha floor 0.82), tested in tests/visual/test_contrast_tokens.py
-        accent: "#26763F",  // own Grassfield green, not copied [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+        accent: "#195E3F",  // own Grassfield green, not copied: the brand green of the light appearance, deeper and calmer since the owner's choice of 2026-10-30 ("B en clair seulement", after a comparison board; it was #26763F): white text 7.7:1 [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         indicator: "#000000",  // Dock fidelity fix: running dot, pure black in light mode like macOS; the per-appearance shelf tint (dock.tintAlphaLight) keeps it at 3:1 or more over any backdrop [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         hover: "#000000",  // estimate; drawn at hoverOpacity [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
         materialTint: "#F3F4F6",  // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Neutral colours)

@@ -99,7 +99,7 @@ TEST(PortalValues, TheAccentOfEachAppearanceFromTheTokens)
     const Values dark = values(readInput(json(R"({"appearance": "dark", "accent": {"color": "blue"}})")), kNoon);
     EXPECT_EQ(dark.accentRgb, 0x5AA2FFu);
     // multicolor is the Grassfield green of each appearance; an unknown name reads as multicolor.
-    EXPECT_EQ(values(readInput(json(R"({"appearance": "light"})")), kNoon).accentRgb, 0x26763Fu);
+    EXPECT_EQ(values(readInput(json(R"({"appearance": "light"})")), kNoon).accentRgb, 0x195E3Fu);
     EXPECT_EQ(values(readInput(json(R"({"appearance": "dark"})")), kNoon).accentRgb, 0x4FB36Bu);
     const Values unknown = values(readInput(json(R"({"accent": {"color": "teal"}})")), kNoon);
     EXPECT_EQ(unknown.accentName, QStringLiteral("multicolor"));

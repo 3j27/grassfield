@@ -14,7 +14,7 @@ struct Accent {
 };
 
 inline constexpr Accent kAccents[] = {
-    {"multicolor", 0x26763F, 0x4FB36B},  // own Grassfield green, not copied [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
+    {"multicolor", 0x195E3F, 0x4FB36B},  // own Grassfield green, not copied: the brand green of the light appearance, deeper and calmer since the owner's choice of 2026-10-30 ("B en clair seulement", after a comparison board; it was #26763F): white text 7.7:1 [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
     {"blue", 0x1F5FCC, 0x5AA2FF},  // own light-appearance value of the blue accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
     {"purple", 0x7A3FC4, 0xB48CF2},  // own light-appearance value of the purple accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
     {"pink", 0xC2306F, 0xF07AB0},  // own light-appearance value of the pink accent (appearance.accent), not copied; fills, selections and focus rings [ref: docs/testing/f1-reference-gaps.md § Neutral colours; docs/specs/ui.md]
