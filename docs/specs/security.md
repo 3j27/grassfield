@@ -973,8 +973,11 @@ same directory and the modules move without moving a file), one step at a time u
   (`state`: what it hosts, `starting` at S1; `heartbeat`: the state and a sequence number), which
   `packaging/bin/grassfield-security-status` reads. The unit clears the same environment as the UI's (GF-115),
   `Restart=always`, `RestartSec=1`, a start limit of 5 starts in 300 s, `PartOf=`/`Requisite=graphical-session.target`,
-  session-only, no `NoNewPrivileges` (the helpers of S2 and S3), provisional resource guards until the S1 measurement
-  (the process's RSS at idle and its start time to the "grassfield-security: ready" line, against gates P2 and P5).
+  session-only, no `NoNewPrivileges` (the helpers of S2 and S3), memory guards from the nested measurement (157 MB of
+  RSS at idle, the integrator's pass of #72: `MemoryHigh=320M`, `MemoryMax=640M`; S2 measures again with the lock's
+  surfaces) and `CPUQuota=150%` as the UI unit's (a quota below a whole core would throttle the lock's rendering); the
+  start time to the "grassfield-security: ready" line against gate P5 is still to be measured. The status helper takes
+  `--any-display` when `WAYLAND_DISPLAY` is not set, so it answers from a TTY too.
   `autostart.lua` starts it just before the shell without waiting for it. Every security module stays in the UI: nothing
   about the lock, the polkit agent, idle or sleep changes at S1. Tests: `tests/security/security_unit.sh` (static),
   `ipc_inventory.sh` (the target and its caller), `unit_restart_limits.sh`, `session_services.sh`.
