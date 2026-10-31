@@ -16,6 +16,11 @@ target_link_libraries(grassfield-wallpaper PRIVATE Qt6::Core Qt6::Gui)
 # Run by the shell and the Settings app, never by the user: /usr/lib/grassfield, not bin.
 install(TARGETS grassfield-wallpaper RUNTIME DESTINATION lib/grassfield)
 
+# Build only (ADR-0040 step 2c): shrinks the downloaded wallpaper photographs for the package (packaging/arch/PKGBUILD). No
+# install rule: it writes wherever it is told, which the installed helper never does.
+add_executable(grassfield-wallpaper-shrink src/shrink.cpp src/wallpaperlogic.cpp src/wallpaperlogic.h)
+target_link_libraries(grassfield-wallpaper-shrink PRIVATE Qt6::Core Qt6::Gui)
+
 find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
