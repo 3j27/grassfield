@@ -421,6 +421,29 @@ Singleton {
     property bool blurRejected: false
     property int blurPushes: 0
 
+    // The window edge follows the appearance (ADR-0039 step 6, C-4): macOS 27's contact edge is dark in the light appearance and
+    // the light rim in the dark one. Hyprland holds one border colour pair for every window, so the shell sends the pair of
+    // the current appearance as it sends the blur: at start, on a change of appearance and after a config reload, which
+    // restores the config's own (the dark appearance's, config/hypr/grassfield/looknfeel.lua).
+    readonly property string edgeCall: Appearance.dark
+        ? Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark)
+        : Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight)
+    onEdgeCallChanged: {
+        root.edgeRejected = false;
+        edgeDebounce.restart();
+    }
+    property bool edgeRejected: false
+    property int edgePushes: 0
+
+    function pushEdge(): void {
+        const path = Hyprland.requestSocketPath || "";
+        if (root.edgeRejected || root.edgeCall === "" || path === "")
+            return;
+        root.edgePushes++;
+        console.info("grassfield-shell: push window edge (" + (Appearance.dark ? "dark" : "light") + ")");
+        requestSocket.createObject(root, {"path": path, "line": "dispatch " + root.edgeCall, "what": "edge"});
+    }
+
     function pushBlur(): void {
         const call = Minimized.blurCall(root.blurSize, root.blurPasses);
         const path = Hyprland.requestSocketPath || "";
@@ -428,18 +451,20 @@ Singleton {
             return;
         root.blurPushes++;
         console.info("grassfield-shell: push blur size " + root.blurSize + " passes " + root.blurPasses);
-        blurSocket.createObject(root, {"path": path, "line": "dispatch " + call});
+        requestSocket.createObject(root, {"path": path, "line": "dispatch " + call, "what": "blur"});
     }
 
     // One connection per push: it sends the dispatch and collects the whole answer (it may arrive in pieces) until Hyprland
     // closes the connection; then it is judged once and the socket is destroyed (later: a Socket cannot be destroyed from its
     // own error signal, that signal can fire inside createObject).
     Component {
-        id: blurSocket
+        id: requestSocket
 
         Socket {
             id: sock
             property string line: ""
+            // What the request sets ("blur", "edge"): a refusal stops the pushes of that one only.
+            property string what: "blur"
             property string reply: ""
             property bool judged: false
 
@@ -448,9 +473,14 @@ Singleton {
                     return;
                 sock.judged = true;
                 sock.answerTimeout.stop();
-                if (Minimized.blurAnswer(sock.reply) === "rejected" && !root.blurRejected) {
-                    root.blurRejected = true;
-                    console.info("grassfield-shell: Hyprland rejected the blur request (" + sock.reply.trim() + "); the blur stays as configured until the next change");
+                if (Minimized.blurAnswer(sock.reply) === "rejected") {
+                    if (sock.what === "edge" && !root.edgeRejected) {
+                        root.edgeRejected = true;
+                        console.info("grassfield-shell: Hyprland rejected the window edge request (" + sock.reply.trim() + "); the edge stays as configured until the next change");
+                    } else if (sock.what === "blur" && !root.blurRejected) {
+                        root.blurRejected = true;
+                        console.info("grassfield-shell: Hyprland rejected the blur request (" + sock.reply.trim() + "); the blur stays as configured until the next change");
+                    }
                 }
                 sock.connected = false;
                 Qt.callLater(() => sock.destroy());
@@ -493,6 +523,12 @@ Singleton {
         onTriggered: root.pushBlur()
     }
 
+    Timer {
+        id: edgeDebounce
+        interval: Tokens.motionFast
+        onTriggered: root.pushEdge()
+    }
+
     Connections {
         target: Hyprland
 
@@ -501,9 +537,10 @@ Singleton {
                 return;
             if (root.reduceMotion)
                 root.pushMotion();
-            // A reload restores the config's blur. Neither push emits an event (captured on Hyprland 0.56.2), so a reload is
-            // always a real one: no echo, no loop (tests/compositor/blur_events.sh).
+            // A reload restores the config's blur and window edge. Neither push emits an event (captured on Hyprland 0.56.2 for
+            // the blur), so a reload is always a real one: no echo, no loop (tests/compositor/blur_events.sh).
             root.pushBlur();
+            root.pushEdge();
         }
     }
 
@@ -881,8 +918,9 @@ Singleton {
         // Always, whatever the value: Hyprland outlives the shell, so a restarted shell (or one that finds the setting off
         // after a config reset) must not leave the compositor on the reduced animations of the previous run.
         pushMotion();
-        // The same for the blur: the compositor keeps the values of the previous run.
+        // The same for the blur and the window edge: the compositor keeps the values of the previous run.
         pushBlur();
+        pushEdge();
     }
 
     function isMinimized(toplevel: var): bool {

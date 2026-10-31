@@ -9,7 +9,9 @@ hl.config({
     float_gaps = 0,
     border_size = 1,
     col = {
-      -- Hairline window outline, like the macOS window edge.
+      -- Hairline window outline, like the macOS window edge: the dark appearance's (tokens window.edgeDark and
+      -- window.edge*OpacityDark). The shell pushes the current appearance's pair at start, on a change and after a reload
+      -- (dark in the light appearance, ADR-0039 step 6, C-4; shell/platform/Compositor.qml pushEdge).
       active_border = "rgba(ffffff26)",
       inactive_border = "rgba(ffffff14)",
     },
