@@ -427,6 +427,20 @@ function splitPicker(splits, suggestion, declined) {
     return (splits || []).some(d => d.waiting && d.windows.length === 1 && d.windows[0] === a) ? suggestion : null;
 }
 
+// The reply's suggestion is the one the shell awaits (TL28): of the generation of the notice it waits for (`wantedGen`, -1:
+// none), for the window it asked about (`asked`: Compositor.suggestionAsked {address, until}, or null).
+function answersAsked(wantedGen, asked, suggestion) {
+    return wantedGen >= 0 && !!asked && !!suggestion && suggestion.gen === wantedGen && hexAddress(suggestion.address) === hexAddress(asked.address);
+}
+
+// The Split View picker a reply shows by itself (D48): splitPicker, unless the reply is the answer the shell awaits for its
+// own ask (answersAsked). A notice names no window: within the deadline of an earlier ask (D68: 6 s) a new Split View's
+// `placed` notice is taken as that ask's answer, and its picker must still show (integrator re-review of 29db357, MAJOR 1:
+// a Split View made a few seconds after an earlier picker filled alone).
+function replyPicker(wantedGen, asked, splits, suggestion, declined) {
+    return answersAsked(wantedGen, asked, suggestion) ? null : splitPicker(splits, suggestion, declined);
+}
+
 // The Desktops `spaces` ([{id, ...}] in id order) as the shell lists them (TL33, ADR-0036 D41): each Split View Desktop of
 // `splits` right after the Desktop it came from (in id order when there are several); one whose home is not among `spaces`
 // stays where its id puts it. Every Desktop is listed once, whatever the reply says (a chain or a loop of homes, which the

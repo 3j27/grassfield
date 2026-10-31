@@ -446,6 +446,36 @@ TestCase {
         compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "b2", gen: 3}), sg("a1", 3), "another window was dismissed");
     }
 
+    // Integrator re-review of 29db357, MAJOR 1: a notice names no window; within an earlier ask's deadline (6 s, D68) a new
+    // Split View's notice was taken as that ask's answer and its picker never showed.
+    function test_answersAskedIsTheAwaitedSuggestionOnly() {
+        const sg = (address, gen) => ({gen: gen, address: address, layout: "left-right"});
+        verify(WindowTiling.answersAsked(20, {address: "b2", until: 0}, sg("b2", 20)));
+        verify(WindowTiling.answersAsked(20, {address: "0xB2", until: 0}, sg("b2", 20)), "the address in any case");
+        verify(!WindowTiling.answersAsked(20, {address: "a1", until: 0}, sg("b2", 20)), "another window's suggestion");
+        verify(!WindowTiling.answersAsked(20, {address: "b2", until: 0}, sg("b2", 21)), "another generation");
+        verify(!WindowTiling.answersAsked(-1, {address: "b2", until: 0}, sg("b2", 20)), "no notice awaited");
+        verify(!WindowTiling.answersAsked(-1, {address: "b2", until: 0}, sg("b2", -1)), "no notice awaited, whatever generation the reply states");
+        verify(!WindowTiling.answersAsked(20, null, sg("b2", 20)), "nothing asked");
+        verify(!WindowTiling.answersAsked(20, {address: "b2", until: 0}, null), "no suggestion");
+        compare(WindowTiling.answersAsked(20, null, null), false, "a boolean");
+    }
+
+    function test_replyPickerShowsASecondSplitViewWhileAnEarlierAskIsOpen() {
+        const split = (workspace, windows, waiting) => ({workspace: workspace, output: "DP-1", home: 1, windows: windows, waiting: waiting});
+        const sg = (address, gen) => ({gen: gen, address: address, layout: "left-right", output: "DP-1", zones: [{zone: 1, x: 0, y: 0, w: 9, h: 9}], windows: ["c3"]});
+        // a1's picker was adopted a second ago (asked: a1 for 6 s, its Split View now full); a key makes b2's Split View; its
+        // `placed` notice (gen 20) was taken as a1's answer (wantedGen 20); the reply's suggestion is b2's.
+        const asked = {address: "a1", until: Date.now() + 5000};
+        const splits = [split(4, ["a1", "c3"], false), split(5, ["b2"], true)];
+        compare(WindowTiling.replyPicker(20, asked, splits, sg("b2", 20), null), sg("b2", 20), "the second Split View's picker shows");
+        compare(WindowTiling.replyPicker(20, {address: "b2", until: 0}, splits, sg("b2", 20), null), null, "the shell's own ask: shown as asked, not adopted");
+        compare(WindowTiling.replyPicker(-1, null, splits, sg("b2", 20), null), sg("b2", 20), "nothing asked: adopted as before (D48)");
+        compare(WindowTiling.replyPicker(20, asked, splits, sg("b2", 20), {address: "b2", gen: 20}), null, "dismissed: not shown again");
+        compare(WindowTiling.replyPicker(20, asked, [split(5, ["b2"], false)], sg("b2", 20), null), null, "not waiting: the plugin fills it");
+        compare(WindowTiling.replyPicker(20, asked, splits, null, null), null, "no suggestion");
+    }
+
     // D57 (integrator PASS on 8316ed2, for later): the windows that do not fit half of their output, for the Window menu.
     function test_parseUnfitReadsTheWindowsThatDoNotFit() {
         compare(JSON.stringify(WindowTiling.parseUnfit('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"unfit":["A1","0xbeef","xyz",7],"suggestion":null}')),
