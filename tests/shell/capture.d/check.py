@@ -33,6 +33,10 @@ source = open(helper).read()
 # The same helper, waiting 2 s instead of WAIT_SECONDS for a click on its notice.
 short = os.path.join(tmp, "grassfield-capture-short")
 write(short, re.sub(r"^WAIT_SECONDS = [0-9]+$", "WAIT_SECONDS = 2", source, flags=re.M))
+# The same helper, leaving 3 s instead of BANNER_GONE_SECONDS for the last notice to go: what waits for it, and what does
+# not, shows above any delay of a busy machine.
+slow = os.path.join(tmp, "grassfield-capture-slow")
+write(slow, re.sub(r"^BANNER_GONE_SECONDS = [0-9.]+$", "BANNER_GONE_SECONDS = 3", source, flags=re.M))
 
 # The colours are the tokens' (capture.*), as slurp takes them.
 tokens = json.load(open(os.path.join(root, "ui/tokens/tokens.json")))["capture"]
@@ -55,7 +59,7 @@ name = os.path.basename(sys.argv[0])
 data = sys.stdin.buffer.read().decode("utf-8", "replace") if name in ("slurp", "wl-copy") else ""
 def record(**extra):
     with open(os.path.join(os.environ["FAKE_LOG"], "calls"), "a") as f:
-        f.write(json.dumps(dict({"name": name, "argv": sys.argv[1:], "stdin": data[:200]}, **extra)) + "\n")
+        f.write(json.dumps(dict({"name": name, "argv": sys.argv[1:], "stdin": data[:200], "t": time.monotonic()}, **extra)) + "\n")
 record()
 env = os.environ
 if name == "grim":
@@ -124,24 +128,36 @@ MONITORS = json.dumps([
      "activeWorkspace": {"id": 2}, "specialWorkspace": {"id": 0}},
     {"name": "DP-2", "x": 0, "y": 0, "width": 1920, "height": 1080, "scale": 1.0, "transform": 0, "disabled": True,
      "activeWorkspace": {"id": 3}, "specialWorkspace": {"id": 0}}])
+def client(ws, at, size, fullscreen=0, focus=0, pinned=False, over=True, hidden=False):
+    # A window as `hyprctl -j clients` lists it (Hyprland 0.56.2 HyprCtl.cpp): every field the helper reads. The list goes
+    # from the bottom of the stack up; Grassfield floats every window; allowedOverFullscreen is Hyprland's default true,
+    # cleared for the other windows of a workspace when one goes fullscreen (FullscreenHandler.cpp).
+    return {"mapped": True, "hidden": hidden, "visible": not hidden, "workspace": {"id": ws}, "at": at, "size": size,
+            "floating": True, "pinned": pinned, "fullscreen": fullscreen, "allowedOverFullscreen": over, "focusHistoryID": focus}
+
+
 CLIENTS = json.dumps([
-    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 50], "size": [800, 600], "fullscreen": 0, "focusHistoryID": 1},
-    {"mapped": True, "hidden": True, "workspace": {"id": 1}, "at": [0, 0], "size": [500, 500], "fullscreen": 0, "focusHistoryID": 2},
-    {"mapped": True, "hidden": False, "workspace": {"id": 9}, "at": [0, 0], "size": [400, 400], "fullscreen": 0, "focusHistoryID": 3},
-    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2000, 100], "size": [600, 400], "fullscreen": 0, "focusHistoryID": 0}])
-# Workspace 2: a fullscreen window over a window behind it, and a pinned one over it; workspace 1: a zoomed (maximized) window
-# over another.
+    client(1, [100, 50], [800, 600], focus=1),
+    client(1, [0, 0], [500, 500], focus=2, hidden=True),
+    client(9, [0, 0], [400, 400], focus=3),
+    client(2, [2000, 100], [600, 400], focus=0)])
+# Workspace 1: a zoomed (maximized) window, a window behind it. Workspace 2, from the bottom up: a window behind a fullscreen
+# one, the fullscreen one (focused), a window opened over it, and a pinned one (first in the list, drawn above all).
 FULL = json.dumps([
-    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [0, 0], "size": [1920, 1080], "fullscreen": 1, "focusHistoryID": 1},
-    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 50], "size": [800, 600], "fullscreen": 0, "focusHistoryID": 4},
-    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2000, 100], "size": [600, 400], "fullscreen": 0, "focusHistoryID": 2},
-    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [1920, 0], "size": [1920, 1080], "fullscreen": 2, "focusHistoryID": 0},
-    {"mapped": True, "hidden": False, "workspace": {"id": 2}, "at": [2500, 500], "size": [300, 200], "fullscreen": 0, "focusHistoryID": 3,
-     "pinned": True}])
-# Workspace 1: a large window in front (focused last) of a smaller one behind it; Grassfield floats every window.
+    client(2, [2500, 500], [300, 200], focus=4, pinned=True),
+    client(1, [100, 50], [800, 600], focus=5, over=False),
+    client(1, [0, 0], [1920, 1080], fullscreen=1, focus=1),
+    client(2, [2000, 100], [600, 400], focus=3, over=False),
+    client(2, [1920, 0], [1920, 1080], fullscreen=2, focus=0),
+    client(2, [3000, 700], [400, 300], focus=2)])
+# Workspace 1, from the bottom up: a small window (the focused one) behind a larger one opened over it without the focus.
 STACK = json.dumps([
-    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [0, 0], "size": [1000, 800], "fullscreen": 0, "focusHistoryID": 0},
-    {"mapped": True, "hidden": False, "workspace": {"id": 1}, "at": [100, 100], "size": [200, 200], "fullscreen": 0, "focusHistoryID": 1}])
+    client(1, [100, 100], [200, 200], focus=0),
+    client(1, [0, 0], [1000, 800], focus=-1)])
+# A Picture-in-Picture window pinned over the browser that has the focus (the pinned one first in the list).
+PIP = json.dumps([
+    client(1, [600, 400], [320, 180], focus=1, pinned=True),
+    client(1, [0, 0], [1600, 900], focus=0)])
 
 
 def calls(name=None):
@@ -236,25 +252,38 @@ check(grim and grim[0]["argv"][:2] == ["-g", "1920,0 1920x1080"], "a click outsi
       "rotated [%r]" % (grim[0]["argv"] if grim else None))
 r, _ = capture("selection", FAKE_SLURP="click:5000,5000")
 check(calls("grim") == [], "a click outside every display: nothing")
-# A click on a window behind a larger one in front: slurp answers the smaller box; the helper takes the window on top under
-# the pointer (the last focused, as Grassfield raises a window when it takes focus).
-r, _ = capture("selection", FAKE_SLURP="click:150,150", FAKE_CLIENTS=STACK, FAKE_CURSOR='{"x": 150, "y": 150}')
-grim = calls("grim")
-check(grim and grim[0]["argv"][:2] == ["-g", "0,0 1000x800"], "a click where a window in front covers a smaller one: the "
-      "one in front [%r]" % (grim[0]["argv"] if grim else None))
-r, _ = capture("selection", FAKE_SLURP="click:150,150", FAKE_CLIENTS=STACK)
-grim = calls("grim")
-check(grim and grim[0]["argv"][:2] == ["-g", "100,100 200x200"], "the pointer unread: slurp's answer [%r]" % (grim[0]["argv"] if grim else None))
-r, _ = capture("selection", FAKE_SLURP="click:2100,200", FAKE_CLIENTS=FULL, FAKE_CURSOR='{"x": 2100, "y": 200}')
+# A click on a window behind a larger one in front: slurp answers the smaller box; the helper takes the window drawn on top
+# under the pointer, as Hyprland stacks them (pinned first, then the later in its list), never by the focus.
+def clicked(fixture, point, cursor=None, answer=None):
+    extra = {"FAKE_SLURP": answer or "click:%d,%d" % point, "FAKE_CLIENTS": fixture}
+    if cursor is not False:
+        extra["FAKE_CURSOR"] = json.dumps({"x": (cursor or point)[0], "y": (cursor or point)[1]})
+    capture("selection", **extra)
+    grim = calls("grim")
+    return grim[0]["argv"][1] if grim else None
+
+
+got = clicked(STACK, (150, 150))
+check(got == "0,0 1000x800", "a click where a window in front (opened without the focus) covers a smaller focused one: the "
+      "one in front [%r]" % got)
+got = clicked(STACK, (150, 150), cursor=False)
+check(got == "100,100 200x200", "the pointer unread: slurp's answer [%r]" % got)
+got = clicked(STACK, (150, 150), cursor=(900, 700))
+check(got == "100,100 200x200", "the pointer gone from slurp's box after the click: slurp's answer [%r]" % got)
+got = clicked(STACK, (150, 150), answer="150,150 2x1")
+check(got == "0,0 1000x800", "a click whose hand moved a pixel (slurp answers 2x1): the window on top there [%r]" % got)
+got = clicked(PIP, (700, 450))
+check(got == "600,400 320x180", "a click on a pinned window over the focused one (Picture in Picture): the pinned one [%r]" % got)
+capture("selection", FAKE_SLURP="click:2100,200", FAKE_CLIENTS=FULL, FAKE_CURSOR='{"x": 2100, "y": 200}')
 slurp, grim = calls("slurp"), calls("grim")
-check(slurp and slurp[0]["stdin"].split("\n")[:3] == ["0,0 1920x1080", "1920,0 1920x1080", "2500,500 300x200"]
-      and grim and grim[0]["argv"][:2] == ["-g", "1920,0 1920x1080"],
-      "a fullscreen or zoomed window and the pinned one over it are their workspace's boxes, never the windows behind [%r %r]"
+check(slurp and slurp[0]["stdin"].split("\n")[:4] == ["2500,500 300x200", "0,0 1920x1080", "1920,0 1920x1080", "3000,700 400x300"]
+      and grim and grim[0]["argv"][1] == "1920,0 1920x1080",
+      "a fullscreen or zoomed window and the windows over it are their workspace's boxes, never the windows behind [%r %r]"
       % (slurp[0]["stdin"] if slurp else None, grim[0]["argv"] if grim else None))
-r, _ = capture("selection", FAKE_SLURP="click:2600,550", FAKE_CLIENTS=FULL, FAKE_CURSOR='{"x": 2600, "y": 550}')
-grim = calls("grim")
-check(grim and grim[0]["argv"][:2] == ["-g", "2500,500 300x200"], "a click on a pinned window over a fullscreen one: the pinned "
-      "one [%r]" % (grim[0]["argv"] if grim else None))
+got = clicked(FULL, (2600, 550))
+check(got == "2500,500 300x200", "a click on a pinned window over a fullscreen one: the pinned one [%r]" % got)
+got = clicked(FULL, (3100, 800))
+check(got == "3000,700 400x300", "a click on a window opened over a fullscreen one that has the focus: that window [%r]" % got)
 count = len(files(desktop))
 r, _ = capture("selection", FAKE_SLURP="")
 check(r.returncode == 0 and calls("grim") == [] and calls("notify-send") == [] and len(files(desktop)) == count,
@@ -302,6 +331,35 @@ check(second.returncode == 0 and first.returncode == 0 and "notify-send:INT" in 
       % order)
 check(oct(os.stat(os.path.join(runtime, "grassfield")).st_mode & 0o777) == "0o700",
       "the notice's pid is kept in $XDG_RUNTIME_DIR/grassfield (0700)")
+# Shift-Cmd-4 after a capture: the crosshair shows at once; only the picture waits for the last notice to be gone.
+first = subprocess.Popen([helper, "screen"], env=dict(env, FAKE_ANSWER="hang"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+for _ in range(100):
+    if len([c for c in calls("notify-send") if not c.get("signal")]) >= 3:
+        break
+    time.sleep(0.05)
+time.sleep(0.2)
+began = len(calls())
+subprocess.run([slow, "selection"], env=dict(env, FAKE_ANSWER="", FAKE_SLURP="10,20 300x200"), capture_output=True, timeout=60)
+first.wait(timeout=10)
+after = calls()[began:]
+stamp = {c["name"] + (":INT" if c.get("signal") else ""): c["t"] for c in reversed(after)}
+check({"notify-send:INT", "slurp", "grim"} <= set(stamp) and stamp["slurp"] - stamp["notify-send:INT"] < 1.5
+      and stamp["grim"] - stamp["notify-send:INT"] >= 2.9,
+      "the crosshair shows at once after the last notice is closed; only the picture waits for it to be gone [%s]"
+      % {k: round(v - stamp.get("notify-send:INT", 0), 2) for k, v in stamp.items()})
+# The helper told to end (SIGTERM) while it waits on its notice: notify-send closes the notice and ends with it.
+waiting = subprocess.Popen([helper, "screen"], env=dict(env, FAKE_ANSWER="hang"), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+for _ in range(100):
+    if len([c for c in calls("notify-send") if not c.get("signal")]) >= 5:
+        break
+    time.sleep(0.05)
+time.sleep(0.2)
+began = len(calls())
+waiting.terminate()
+waiting.wait(timeout=10)
+time.sleep(0.3)
+check(waiting.returncode == 143 and any(c.get("signal") == "INT" for c in calls()[began:]),
+      "SIGTERM while the notice waits: notify-send closes it, the helper ends (%r)" % waiting.returncode)
 # No click: no Preview.
 r, _ = capture("screen", FAKE_ANSWER="")
 check(calls("systemd-run") == [], "the notice closed without a click: Preview does not open")
