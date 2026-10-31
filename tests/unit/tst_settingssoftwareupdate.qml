@@ -629,6 +629,11 @@ restart kernel
         // A pid reused by another process (another start time) is not the runner.
         const reused = Object.assign({}, gone, {"/proc/4242/stat": testCase.runnerStat.replace(" 777 ", " 999 ")});
         verify(!make(available(), {runner: true, files: reused}).updates.running);
+        // Restart… and Log Out… wait for the run's end (the system changes until then).
+        const marked = Object.assign({}, running, {"/home/u/.local/state/omarchy/reboot-required": ""});
+        const m = make(available(), {runner: true, files: marked});
+        verify(row(m.page, "Restart to finish updating"));
+        verify(!button(m.page, "Restart…").enabled, "no restart while the run goes on");
         // A new session (the log out took the runner's folder): the helper `last` names, while it runs.
         const session = {"/run/grassfield-update/last": testCase.runOp + "\n"};
         session[helperFile("started")] = "5151 888\n";

@@ -19,6 +19,8 @@ import qs.overlay
 //   h  a checker that hangs: stopped at the deadline, failed ("took too long")
 //   i  busy: the file is not changed
 //   w  a waiter whose own answer is update-running again: the next one waits for waitRetryMs (no loop)
+//   r  Update Now's runs (U31): a run found already ended is not announced; one seen going on is, once, by its outcome; a
+//      cancelled one is not
 //   j  GF-083's pending logout written to the file
 //   k  IPC (the script calls `qs ipc ... update check bogus|user` once "ipc-ready" is printed): bogus refused, user ran
 // Prints "software-update-service: PASS" or FAIL <why>.
@@ -31,6 +33,7 @@ ShellRoot {
     property var lastAnnounce: []
     property int step: 0
     property int callsAtIpc: 0
+    property var runEnds: []
 
     function check(cond: bool, what: string): void {
         if (!cond && failure === "")
@@ -77,6 +80,24 @@ ShellRoot {
             root.announced++;
             root.lastAnnounce = [kind, version, installed];
         }
+
+        function onRunEnded(kind: string): void {
+            root.runEnds = root.runEnds.concat([kind]);
+        }
+    }
+
+    // The runner's state, as grassfield-update-run writes it (by rename), in the folder the service made.
+    FileView {
+        id: runWriter
+        path: SoftwareUpdate.runPath
+        printErrors: false
+        atomicWrites: true
+        blockWrites: true
+    }
+
+    function run(op: string, phase: string, result: string, restart: string): void {
+        runWriter.setText(JSON.stringify({version: 1, op: op, pid: 1, startTime: "1", phase: phase, result: result, restart: restart,
+            snapshot: "made", synced: true, deferred: [], startedAt: Date.now(), finishedAt: phase === "done" ? Date.now() : 0}));
     }
 
     FileView {
@@ -298,10 +319,43 @@ ShellRoot {
                 root.check(root.waiterRuns() === before + 1, "w: the waiter's own update-running starts no other at once (" + (root.waiterRuns() - before) + " runs)");
                 root.check(SoftwareUpdate.file.state === "update-running", "w: the state stays update-running");
                 put("answer-waiter", JSON.stringify({version: 1, state: "up-to-date", channel: "stable", checkedAt: new Date().toISOString(), grassfield: {installed: "1.0.3-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}, others: 0, otherPackages: []}));
-                stepJ();
+                stepR();
             };
             pause.restart();
         });
+    }
+
+    function stepR(): void {
+        const a = "a".repeat(32), b = "b".repeat(32), c = "c".repeat(32), d = "d".repeat(32);
+        root.check(SoftwareUpdate.runPath !== "", "r: the runner's state is watched in the runtime folder");
+        root.run(a, "done", "done", "restart");
+        pause.next = () => {
+            root.check(root.runEnds.length === 0, "r: a run found already ended is not announced (" + root.runEnds + ")");
+            root.run(b, "authorizing", "", "");
+            when(() => SoftwareUpdate.runningOp === b, () => {
+                root.check(SoftwareUpdate.runningOp === b, "r: a run going on is seen");
+                root.run(b, "done", "done", "restart");
+                when(() => root.runEnds.length > 0, () => {
+                    root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart"]), "r: its end is announced once, as a restart (" + root.runEnds + ")");
+                    root.run(b, "done", "done", "restart");
+                    root.run(c, "configuring", "", "");
+                    when(() => SoftwareUpdate.runningOp === c, () => {
+                        root.run(c, "done", "cancelled", "");
+                        when(() => SoftwareUpdate.runningOp === "", () => {
+                            root.run(d, "authorizing", "", "");
+                            when(() => SoftwareUpdate.runningOp === d, () => {
+                                root.run(d, "done", "incompatible", "");
+                                when(() => root.runEnds.length > 1, () => {
+                                    root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart", "incompatible"]), "r: the same end again and a cancelled run say nothing; an incompatible one is announced (" + root.runEnds + ")");
+                                    stepJ();
+                                });
+                            });
+                        });
+                    });
+                });
+            });
+        };
+        pause.restart();
     }
 
     Timer {

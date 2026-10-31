@@ -309,6 +309,28 @@ TestCase {
         compare(Logic.percentOf("configuring", 0, 0), 97);
     }
 
+    // The notice the end of a run deserves (U31), by its outcome.
+    function test_runNotice() {
+        const done = (result, extra) => Logic.parseRun(JSON.stringify(Object.assign({version: 1, op: "0123456789abcdef0123456789abcdef", pid: 1,
+            startTime: "1", phase: "done", result: result, restart: "", deferred: [], startedAt: 1, finishedAt: 2}, extra || {})));
+        compare(Logic.runNotice(done("done", {restart: "restart"})), "restart");
+        compare(Logic.runNotice(done("done", {restart: "logout"})), "logout");
+        compare(Logic.runNotice(done("done", {deferred: ["migrations", "aur"]})), "migrations");
+        compare(Logic.runNotice(done("done", {deferred: ["aur"]})), "installed");
+        compare(Logic.runNotice(done("bootimage", {restart: "restart"})), "bootimage", "never a restart after a failed startup image");
+        compare(Logic.runNotice(done("incompatible")), "incompatible");
+        compare(Logic.runNotice(done("terminal")), "terminal");
+        compare(Logic.runNotice(done("stalelock")), "terminal");
+        compare(Logic.runNotice(done("failed-partial")), "stopped");
+        for (const r of ["failed", "space", "power", "busy"])
+            compare(Logic.runNotice(done(r)), "failed", r);
+        for (const r of ["up-to-date", "cancelled", "denied"])
+            compare(Logic.runNotice(done(r)), "", r);
+        compare(Logic.runNotice(null), "");
+        compare(Logic.runNotice(Logic.parseRun(JSON.stringify({version: 1, op: "0123456789abcdef0123456789abcdef", pid: 1, startTime: "1",
+            phase: "configuring", result: "", restart: "", deferred: [], startedAt: 1, finishedAt: 0}))), "", "a run going on");
+    }
+
     // What the pane shows of a run.
     function test_runView() {
         const run = phase => Logic.parseRun(JSON.stringify({version: 1, op: "0123456789abcdef0123456789abcdef", pid: 42, startTime: "777",

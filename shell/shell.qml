@@ -363,6 +363,27 @@ ShellRoot {
             else if (kind === "omarchy")
                 Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
         }
+
+        // The end of an Update Now run (U31): one notice whose click opens the pane, unless Settings is in front (its pane or
+        // its end sheet says it). "logout" has GF-083's notice above already (Grassfield's own files changed).
+        function onRunEnded(kind: string): void {
+            if (Compositor.frontAppId === "org.grassfield.Settings")
+                return;
+            const open = () => SettingsApp.openSection("software-update");
+            const notices = {
+                "restart": [qsTr("Restart to finish updating"), qsTr("The updates are installed. Restart when you're ready.")],
+                "migrations": [qsTr("Some of Omarchy's last steps need its terminal"), qsTr("The updates are installed. Open Software Update to finish them.")],
+                "installed": [qsTr("Updates installed"), qsTr("This computer is up to date.")],
+                "bootimage": [qsTr("Don't restart this computer yet"), qsTr("The update could not prepare the computer's startup files. Open Software Update for details.")],
+                "incompatible": [qsTr("This update needs a newer version of Grassfield"), qsTr("Software Update checks again later and tells you when it's ready.")],
+                "terminal": [qsTr("This update needs Omarchy's terminal"), qsTr("Open Software Update to continue it there.")],
+                "stopped": [qsTr("The update stopped before it finished"), qsTr("Open Software Update to try again.")],
+                "failed": [qsTr("The update could not be installed"), qsTr("Open Software Update to see why.")]
+            };
+            const notice = notices[kind];
+            if (notice)
+                Notifications.postInternalAction(notice[0], notice[1], open);
+        }
     }
 
     // ADR-0035 D-2: Hyprland's config errors, as one notice per new set (its red bar stays: on 0.56.2 the source is empty,

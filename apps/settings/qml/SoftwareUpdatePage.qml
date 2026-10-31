@@ -231,6 +231,8 @@ SettingsPage {
 
             Button {
                 visible: !root.updates.restartBlocked
+                // Not while Update Now's run goes on: the system changes until it ends (its helper also blocks a shutdown).
+                enabled: !root.running
                 push: true
                 text: root.updates.restartNeeded ? qsTr("Restart…") : qsTr("Log Out…")
                 onClicked: root.endSessionRequested(root.updates.restartNeeded ? "restart" : "logout")

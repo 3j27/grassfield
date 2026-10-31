@@ -18,6 +18,10 @@ import Grassfield.Ui
 //     offline or on a metered connection (U7); a retry the checker asks for (retryAt, U3) comes earlier.
 //   - Each newly found Grassfield or Omarchy version, and each `blocking` episode, is announced once (`announce`; shell.qml
 //     posts the notification), never for a check the user started (U20, U22).
+//   - Update Now's runs (ADR-0033 "Step 4", U31): the runner's state ($XDG_RUNTIME_DIR/grassfield/software-update-run.json,
+//     replaced by rename) is watched; the end of a run this shell saw going on is announced once (`runEnded`; shell.qml posts
+//     the notice unless Settings is in front, where the pane says it). A run found already ended (the shell started after it)
+//     is never announced. The folder is made first (0700, as the runner makes it): a FileView sees no file in a missing folder.
 //   - A dev session runs the checker read-only with its cache under the dev state, or answers from GRASSFIELD_UPDATE_FIXTURE
 //     (ADR-0019). The update actions are Settings'; nothing here starts one.
 Singleton {
@@ -39,6 +43,29 @@ Singleton {
 
     // A newly found release ("grassfield" or "omarchy", its version and the installed one) or a `blocking` episode.
     signal announce(string kind, string version, string installed)
+    // The end of an Update Now run this shell saw going on: SoftwareUpdateLogic.runNotice's kind (never "").
+    signal runEnded(string kind)
+
+    // Update Now's runner state (U31), "" without a runtime folder; the operation this shell saw going on, "" when none.
+    readonly property string runFolder: Quickshell.env("XDG_RUNTIME_DIR") ? Quickshell.env("XDG_RUNTIME_DIR") + "/grassfield" : ""
+    readonly property string runPath: runFolder !== "" ? runFolder + "/software-update-run.json" : ""
+    property string runningOp: ""
+
+    function readRun(text: string): void {
+        const run = SoftwareUpdateLogic.parseRun(text);
+        if (run === null)
+            return;
+        if (run.phase !== "done") {
+            root.runningOp = run.op;
+            return;
+        }
+        if (run.op !== root.runningOp)
+            return;
+        root.runningOp = "";
+        const kind = SoftwareUpdateLogic.runNotice(run);
+        if (kind !== "")
+            root.runEnded(kind);
+    }
 
     readonly property string statePath: Mode.stateDir + "/software-update.json"
     // The checker (GRASSFIELD_UPDATE_CHECK_CMD in a dev session; a test seam too).
@@ -410,6 +437,24 @@ Singleton {
             if (!running)
                 stateFile.path = root.statePath;
         }
+    }
+
+    Process {
+        id: prepareRun
+        running: root.runFolder !== ""
+        command: ["sh", "-c", "umask 077; mkdir -p -m 700 \"$1\"", "sh", root.runFolder]
+        onRunningChanged: {
+            if (!running)
+                runFile.path = root.runPath;
+        }
+    }
+
+    FileView {
+        id: runFile
+        printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: root.readRun(runFile.text())
     }
 
     FileView {

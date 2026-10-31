@@ -369,6 +369,34 @@ function runView(run, alive, progress, helperAlive) {
         synced: false, deferred: [] };
 }
 
+// The notice the end of an Update Now run deserves when the shell saw it going on (docs/specs/updates.md U31, ADR-0033
+// "Step 4"): "restart", "logout", "migrations", "installed", "bootimage", "incompatible", "terminal", "stopped", "failed",
+// or "" for none (nothing installed and nothing to do: up to date; cancelled or refused in the dialog the person saw).
+function runNotice(run) {
+    if (run === null || run.phase !== "done")
+        return "";
+    switch (run.result) {
+    case "done":
+        if (run.restart === "restart" || run.restart === "logout")
+            return run.restart;
+        return run.deferred.indexOf("migrations") >= 0 ? "migrations" : "installed";
+    case "bootimage":
+    case "incompatible":
+        return run.result;
+    case "terminal":
+    case "stalelock":
+        return "terminal";
+    case "failed-partial":
+        return "stopped";
+    case "failed":
+    case "space":
+    case "power":
+    case "busy":
+        return "failed";
+    }
+    return "";
+}
+
 // The run the helper's `last` names, when no runner's state is left (a log out ended the runner and its runtime folder, a new
 // session opened Settings): {op, phase: "authorizing"} for runView with the runner not alive, or null for a text that is not
 // an operation id.
