@@ -82,9 +82,12 @@ a11y_stop() {
   return 0
 }
 
-# a11y_find PID ROLE-REGEX NAME-REGEX [--state S]... [--press] [--wait SECONDS]: one JSON line, exit 0 when found.
+# a11y_find PID ROLE-REGEX NAME-REGEX [--state S]... [--press] [--wait SECONDS]: one JSON line, exit 0 when found. libatspi
+# reads AT_SPI_BUS_ADDRESS first and DISPLAY's X root property after: the private bus's accessibility bus is given, DISPLAY
+# dropped (a11y-find.py checks both again).
 a11y_find() {
   local pid=$1 role=$2 name=$3
   shift 3
-  env DBUS_SESSION_BUS_ADDRESS="$(a11y_bus)" python3 -I "$VS_HERE/a11y-find.py" --pid "$pid" --role "$role" --name "$name" "$@"
+  env -u DISPLAY DBUS_SESSION_BUS_ADDRESS="$(a11y_bus)" AT_SPI_BUS_ADDRESS="$(a11y_address)" \
+    python3 -I "$VS_HERE/a11y-find.py" --pid "$pid" --role "$role" --name "$name" "$@"
 }

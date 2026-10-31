@@ -5,7 +5,9 @@ of the Online tile landed on "Add Video..." once the Videos grid came in above i
 
 The app must expose its accessibility tree: start it with QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1 on the nested session's PRIVATE
 bus (vs_spawn); this script reads that bus from DBUS_SESSION_BUS_ADDRESS and refuses any other (the owner's session bus
-would show the owner's applications).
+would show the owner's applications). libatspi reads AT_SPI_BUS_ADDRESS first, and falls back on DISPLAY's X root property:
+the script asks the private bus for its accessibility bus (org.a11y.Bus GetAddress, tests/visual/a11y-lib.sh's own, under
+/tmp/gf-a11y-*), refuses an AT_SPI_BUS_ADDRESS that names another, sets it to that answer and drops DISPLAY.
 
   a11y-find.py --pid PID --role ROLE-REGEX --name REGEX [--state STATE]... [--press] [--wait SECONDS]
 
@@ -25,12 +27,48 @@ import time
 import warnings
 
 
-def private_bus_or_exit():
-    bus = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
-    runtime = os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid())
+def bus_problem(bus, runtime):
+    """Why `bus` (a DBUS_SESSION_BUS_ADDRESS) is refused, or "": only the nested session's private bus."""
     if not bus.startswith("unix:path=/tmp/dbus-") or bus.startswith("unix:path=%s/bus" % runtime):
-        print("a11y-find: refusing bus %r: only the nested session's private bus (unix:path=/tmp/dbus-*)" % bus, file=sys.stderr)
+        return "refusing bus %r: only the nested session's private bus (unix:path=/tmp/dbus-*)" % bus
+    return ""
+
+
+def accessibility_problem(answer, given):
+    """Why the accessibility bus is refused, or "": `answer` is the private bus's GetAddress, `given` AT_SPI_BUS_ADDRESS."""
+    if not answer.startswith("unix:path=/tmp/gf-a11y-"):
+        return "refusing accessibility bus %r: not a11y-lib.sh's own (/tmp/gf-a11y-*)" % answer
+    if given and given != answer:
+        return "refusing AT_SPI_BUS_ADDRESS %r: the private bus's accessibility bus is %r" % (given, answer)
+    return ""
+
+
+def private_bus_or_exit():
+    problem = bus_problem(os.environ.get("DBUS_SESSION_BUS_ADDRESS", ""), os.environ.get("XDG_RUNTIME_DIR", "/run/user/%d" % os.getuid()))
+    if problem:
+        print("a11y-find: " + problem, file=sys.stderr)
         sys.exit(2)
+
+
+def accessibility_bus_or_exit():
+    """AT_SPI_BUS_ADDRESS: the private bus's own accessibility bus, and nothing else (review of fac5bff3)."""
+    from gi.repository import Gio, GLib
+    try:
+        conn = Gio.DBusConnection.new_for_address_sync(
+            os.environ["DBUS_SESSION_BUS_ADDRESS"],
+            Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION, None, None)
+        reply = conn.call_sync("org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress", None,
+                               GLib.VariantType("(s)"), Gio.DBusCallFlags.NO_AUTO_START, 3000, None)
+        address = reply.unpack()[0]
+    except Exception as e:
+        print("a11y-find: the private bus has no accessibility bus (start it with a11y-lib.sh's a11y_start): %s" % e, file=sys.stderr)
+        sys.exit(2)
+    problem = accessibility_problem(address, os.environ.get("AT_SPI_BUS_ADDRESS", ""))
+    if problem:
+        print("a11y-find: " + problem, file=sys.stderr)
+        sys.exit(2)
+    os.environ["AT_SPI_BUS_ADDRESS"] = address
+    os.environ.pop("DISPLAY", None)
 
 
 def walk(node, depth=0):
@@ -83,6 +121,7 @@ def main():
     private_bus_or_exit()
     import gi
     gi.require_version("Atspi", "2.0")
+    accessibility_bus_or_exit()
     from gi.repository import Atspi
     pattern = re.compile(args.name)
     role = re.compile(args.role)
