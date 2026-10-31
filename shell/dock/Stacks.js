@@ -313,3 +313,22 @@ function pileSheets(newest, max) {
         out.push({path: list[i].path, isDir: list[i].isDir === true, rank: i});
     return out;
 }
+
+// The visible label of a Grid cell (macOS stack labels): the name wraps at word boundaries onto two lines at most, and what does
+// not fit is cut in the MIDDLE of the second line, so the end of the name (its extension) stays. A name whose first word is
+// wider than the cell is one line cut in the middle. `fits(text)`: the text is no wider than the cell; `elide(text)`: the text
+// cut in the middle to the cell's width (the font metrics' elidedText). Returns the lines joined by "\n".
+function labelLines(name, fits, elide) {
+    const text = String(name === undefined || name === null ? "" : name).replace(/\s+/g, " ").trim();
+    if (text === "" || fits(text))
+        return text;
+    const words = text.split(" ");
+    if (!fits(words[0]))
+        return elide(text);
+    let used = 1;
+    while (used < words.length && fits(words.slice(0, used + 1).join(" ")))
+        used++;
+    const first = words.slice(0, used).join(" ");
+    const rest = words.slice(used).join(" ");
+    return rest === "" ? first : first + "\n" + (fits(rest) ? rest : elide(rest));
+}

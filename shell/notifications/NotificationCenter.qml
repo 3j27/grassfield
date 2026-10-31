@@ -668,13 +668,29 @@ Variants {
                 }
             }
 
-            // Widget gallery: a glass panel at the bottom left (macOS), over the desktop; its own blur region.
+            // Widget gallery: a glass panel at the bottom left (macOS), over the desktop and clear of the Dock; its own blur region.
             Loader {
                 id: gallery
-                x: Tokens.widgetGalleryInsetLeft
-                y: host.height - height - Tokens.notificationCenterInset
-                width: Tokens.widgetGalleryWidth
-                height: Math.min(Tokens.widgetGalleryMaxHeight, (host.height - Tokens.menubarHeight) * Tokens.widgetGalleryHeightFraction)
+
+                readonly property string screenName: win.modelData ? win.modelData.name : ""
+                readonly property var dock: Compositor.dockScreenName === "" || Compositor.dockScreenName === screenName ? Settings.dockFootprint : ({
+                        left: 0,
+                        right: 0,
+                        bottom: 0
+                    })
+                readonly property var rect: CenterLogic.galleryRect(host.width, host.height, {
+                    menubar: Tokens.menubarHeight,
+                    inset: Tokens.notificationCenterInset,
+                    insetLeft: Tokens.widgetGalleryInsetLeft,
+                    width: Tokens.widgetGalleryWidth,
+                    maxHeight: Tokens.widgetGalleryMaxHeight,
+                    fraction: Tokens.widgetGalleryHeightFraction
+                }, dock)
+
+                x: rect.x
+                y: rect.y
+                width: rect.width
+                height: rect.height
                 active: panel.galleryOpen
                 sourceComponent: WidgetGallery {
                     screenName: (win.modelData ? win.modelData.name : "")

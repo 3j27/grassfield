@@ -29,6 +29,16 @@ The clipboard history (⌘4, the Clipboard view) has its own spec: `docs/specs/c
 | S1/S2 | timestamped log scenario in nested | L1 |
 | S5 | `localsearch` provider latency test on the owner's index | L2† |
 
+## Calculator and conversions in the session's language
+`Calc.js` and `Units.js` take the session's `Qt.locale()` (`Numbers.js` holds the shared reading and writing): a decimal comma
+and grouping spaces are read ("2,5 km en m", "1 000 + 5"; in English a comma between groups of three is grouping), the answer is
+written with the language's decimal point and grouping ("19 560", "15,5343 mi"), conversions round like Spotlight (4 decimals
+from 1 up, the integer part never rounded, 4 significant digits below 1; exponent form beyond 1e15 and under 1e-6), the
+connectors are in, to, as, -> everywhere and also en, vers in French, and French unit names (kilomètres, pouces, pieds, livres,
+onces, grammes, octets, Ko, Mo, Go, Kio…) are understood. A command and a Settings page of the same title are one row (the
+command); in French the Settings page reads "Écran verrouillé" and the command "Verrouiller l’écran". Tests: `tst_searchunits`,
+`tst_searchcalc`, `tests/shell/search_locale`.
+
 ## Known limitations
 - File results depend on localsearch indexing settings of the user.
 

@@ -108,4 +108,32 @@ TestCase {
         CenterLogic.hoverStep(frozen, "mail", true);
         compare(frozen.mail, 1);
     }
+
+    // The widget gallery keeps clear of the Dock on every edge (capture defect 1: it covered the left of a bottom Dock).
+    readonly property var galleryTokens: ({menubar: 24, inset: 16, insetLeft: 41, width: 360, maxHeight: 720, fraction: 0.62})
+
+    function test_galleryClearsABottomDock() {
+        const r = CenterLogic.galleryRect(1920, 1080, galleryTokens, {left: 0, right: 0, bottom: 80});
+        compare(r.x, 41);
+        compare(r.width, 360);
+        verify(r.y + r.height + 80 <= 1080, "the panel ends above the Dock");
+        compare(r.y + r.height, 1080 - 16 - 80);
+        verify(r.y >= 24, "and stays under the menu bar");
+    }
+
+    function test_galleryClearsASideDockAndIgnoresAnAbsentOne() {
+        const left = CenterLogic.galleryRect(1920, 1080, galleryTokens, {left: 80, right: 0, bottom: 0});
+        compare(left.x, 41 + 80);
+        compare(left.y + left.height, 1080 - 16);
+        const none = CenterLogic.galleryRect(1920, 1080, galleryTokens, {left: 0, right: 0, bottom: 0});
+        compare(none.x, 41);
+        compare(none.height, Math.min(720, (1080 - 24) * 0.62));
+        const right = CenterLogic.galleryRect(1920, 1080, galleryTokens, {left: 0, right: 80, bottom: 0});
+        compare(right.x, 41);
+    }
+
+    function test_galleryNeverGoesNegativeOnATinyOutput() {
+        const r = CenterLogic.galleryRect(300, 90, galleryTokens, {left: 0, right: 0, bottom: 80});
+        compare(r.height, 0);
+    }
 }

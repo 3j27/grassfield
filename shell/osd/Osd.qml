@@ -26,6 +26,10 @@ Singleton {
     // Changes before this are start-up noise (initial volume read), not user actions.
     property bool armed: false
     property bool kbdSeen: false
+    // The machine's real backlights (the sysfs files) drive the OSD only in a real session. A development or nested session, and
+    // the visual fixtures, run on the owner's machine: its backlight changing there is not what the session under test did, and
+    // must not draw a pill in a capture or a test. The IPC hooks and the brightness keys still show the OSD (brightnessStep).
+    readonly property bool hardwareDrives: !Brightness.devSession && !VisualFixtures.active
 
     function showValue(osdKind: string, osdLevel: real, osdMuted: bool): void {
         // NaN or infinite levels (bad IPC input, sensor glitch) are ignored; the rest is clamped.
@@ -152,7 +156,7 @@ Singleton {
         target: Brightness
 
         function onValueChanged(): void {
-            if (Brightness.loaded && root.armed)
+            if (Brightness.loaded && root.armed && root.hardwareDrives)
                 root.showBrightness();
         }
     }
@@ -164,7 +168,7 @@ Singleton {
         function onKbdValueChanged(): void {
             if (!root.kbdSeen)
                 root.kbdSeen = true;
-            else if (root.armed && Brightness.kbdAvailable)
+            else if (root.armed && root.hardwareDrives && Brightness.kbdAvailable)
                 root.showKeyboard();
         }
     }
