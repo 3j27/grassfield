@@ -163,9 +163,15 @@ SettingsPage {
                 }
             }
 
+            // After a key only (ADR-0039 step 7).
+            KeyFocus {
+                id: listFocus
+                target: list
+            }
+
             FocusRing {
                 shapeRadius: Tokens.radiusMenu
-                visible: list.activeFocus
+                visible: listFocus.active
             }
         }
 

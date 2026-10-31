@@ -172,6 +172,11 @@ FocusScope {
     property real progress: 0
     readonly property real spread: Appearance.reduceMotion ? 1 : progress
 
+    // The popup's keyboard focus, for the current cell's ring (a press on the popup hands it to the pointer).
+    KeyFocus {
+        id: gridFocus
+    }
+
     NumberAnimation {
         id: reveal
         target: root
@@ -397,8 +402,11 @@ FocusScope {
                     radius: Tokens.radiusControl
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
                     visible: cell.current
-                    border.width: Tokens.controlFocusOutline
-                    border.color: root.activeFocus ? Appearance.focusRingColor : "transparent"
+
+                    // The current cell carries the shared ring while the keys move it (ADR-0039 step 7).
+                    FocusRing {
+                        visible: gridFocus.active
+                    }
                 }
 
                 StackIcon {

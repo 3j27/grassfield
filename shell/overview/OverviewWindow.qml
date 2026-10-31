@@ -631,7 +631,8 @@ Variants {
                                 color: "transparent"
                                 visible: tile.modelData.active || tile.focused || tile.dropTarget
                                 border.width: Tokens.overviewSelectionWidth
-                                border.color: Appearance.colors.accent
+                                // The focus ring colour, as every ring (ADR-0039 step 7).
+                                border.color: Appearance.focusRingColor
                             }
 
                             // A real miniature of the desktop: its windows at their place, captured (macOS), not a grey tile with icons.
@@ -838,7 +839,7 @@ Variants {
                         radius: Tokens.overviewThumbRadius + Tokens.overviewSelectionWidth
                         color: "transparent"
                         border.width: Tokens.overviewSelectionWidth
-                        border.color: Appearance.colors.accent
+                        border.color: Appearance.focusRingColor
                         visible: thumb.isSelected
                     }
 
@@ -949,7 +950,7 @@ Variants {
                         radius: Tokens.overviewThumbRadius
                         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (miniMouse.containsMouse ? 3 : 2))
                         border.width: mini.focused || miniMouse.containsMouse ? Tokens.overviewSelectionWidth : 1
-                        border.color: mini.focused || miniMouse.containsMouse ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+                        border.color: mini.focused || miniMouse.containsMouse ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
                         ScreencopyView {
                             // Fit inside the plate keeping the aspect ratio; live only in the full profile (a still icon otherwise).

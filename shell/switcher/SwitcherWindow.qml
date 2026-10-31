@@ -190,8 +190,11 @@ Variants {
                         radius: Tokens.switcherSelectionRadius
                         visible: tile.current
                         color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHighlightOpacity)
-                        border.width: Tokens.controlFocusOutline
-                        border.color: Appearance.focusRingColor
+
+                        // The shared ring outside the selection (ADR-0039 step 7).
+                        FocusRing {
+                            shapeRadius: Tokens.switcherSelectionRadius
+                        }
                     }
 
                     TintedIcon {

@@ -63,15 +63,15 @@ Item {
         }
     }
 
-    // Keyboard focus ring (an assistive technology moved the focus here): outside the disc, accent.
-    Rectangle {
-        anchors.fill: parent
-        anchors.margins: -Tokens.controlFocusOutline
-        radius: width / 2
-        color: "transparent"
-        border.width: Tokens.controlFocusOutline
-        border.color: Appearance.focusRingColor
-        visible: root.activeFocus
+    // Keyboard focus ring (an assistive technology moved the focus here): the shared ring outside the disc, never after a
+    // click (KeyFocus; ADR-0039 step 7).
+    KeyFocus {
+        id: keyFocus
+    }
+
+    FocusRing {
+        shapeRadius: width / 2
+        visible: keyFocus.active
     }
 
     WindowGlyph {

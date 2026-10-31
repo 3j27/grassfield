@@ -161,12 +161,14 @@ Variants {
                 font.weight: Tokens.typographyMenuWeight
             }
 
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: "transparent"
-                border.width: pill.activeFocus ? Tokens.controlFocusOutline : 0
-                border.color: Appearance.focusRingColor
+            // The shared ring outside the pill, after a key only (ADR-0039 step 7).
+            KeyFocus {
+                id: pillFocus
+            }
+
+            FocusRing {
+                shapeRadius: height / 2
+                visible: pillFocus.active
             }
 
             MouseArea {
@@ -484,16 +486,37 @@ Variants {
                         Accessible.name: text
                     }
 
+                    // Clear All, on the keyboard too: the Tab stop before the cards (NotificationList.headTarget; ADR-0039 step 7).
                     Item {
                         id: clearAllButton
                         x: parent.width - width
                         y: titleText.y + (titleText.height - height) / 2
                         width: Tokens.notificationTitleCloseSize
                         height: width
+                        activeFocusOnTab: true
                         Accessible.role: Accessible.Button
                         Accessible.name: qsTr("Clear All")
+                        Accessible.focusable: true
                         Accessible.onPressAction: if (titleRow.shown)
                             Notifications.clearAll()
+                        Keys.onPressed: event => {
+                            if (ActivationKeys.activation(event.key)) {
+                                if (titleRow.shown)
+                                    Notifications.clearAll();
+                                event.accepted = true;
+                            }
+                        }
+
+                        FocusGuard {}
+
+                        KeyFocus {
+                            id: clearAllFocus
+                        }
+
+                        FocusRing {
+                            shapeRadius: width / 2
+                            visible: clearAllFocus.active
+                        }
 
                         Rectangle {
                             anchors.fill: parent
@@ -526,6 +549,7 @@ Variants {
                     panel: panel
                     editTarget: editPill
                     closeTarget: closeDisk
+                    headTarget: clearAllButton
                     // As tall as its content (the area below the last card is outside the list, so a click there closes);
                     // the footer sits one spacing.lg below it, or at the bottom of the column when the list fills it.
                     bottomReserve: footer.height + Tokens.spacingLg
@@ -638,12 +662,14 @@ Variants {
                             name: "close-glyph"
                         }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: width / 2
-                            color: "transparent"
-                            border.width: closeDisk.activeFocus ? Tokens.controlFocusOutline : 0
-                            border.color: Appearance.focusRingColor
+                        // The shared ring outside the disc, after a key only (ADR-0039 step 7).
+                        KeyFocus {
+                            id: closeDiskFocus
+                        }
+
+                        FocusRing {
+                            shapeRadius: width / 2
+                            visible: closeDiskFocus.active
                         }
 
                         MouseArea {
