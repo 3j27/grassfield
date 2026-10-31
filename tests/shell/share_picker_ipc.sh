@@ -15,6 +15,7 @@
 # Step 7b:
 #   9 Selection: an area past its display's logical size is not answered; one inside is `[SELECTION]/region:<display>@x,y,w,h`;
 #  10 a window that hides itself from capture (Hyprland's getprop, faked) is greyed and never answered, another window is;
+#  12 a request shown while the last one's getprop query still runs: its own query runs when that one ends;
 #  11 the indicator: with a private PipeWire, a stream made as xdph makes it (share_picker_ipc.d/fake-xdph-stream.c, built
 #     as a program of xdph's name) makes the shell count a share, labelled by the one choice it answered just before (older
 #     ones expired after 10 s); another program's video node and an audio node of xdph's name are not; the stream ended, the
@@ -86,6 +87,8 @@ fi
 mkdir -p "$tmp/fake"
 cat >"$tmp/fake/hyprctl" <<'SH'
 #!/bin/sh
+# Case 12: a slow Hyprland (under the 1 s each answer is given), while the file `slow` is there.
+[ -e "$(dirname "$0")/slow" ] && [ "$2" = getprop ] && sleep 0.8
 case "$1 $2 $3 $4" in
 "-j monitors  ") cat "$(dirname "$0")/monitors.json" ;;
 "-j getprop address:0x2000 no_screen_share") echo '{"no_screen_share": true}' ;;
@@ -237,6 +240,23 @@ check bash -c 'kill -0 "$1" && [[ ! -s $2/standin.out ]]' _ "$standin" "$tmp"
 check test "$(ipc picker choose window 123456 no)" == ok
 ended_within "$standin" 3 || true
 check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
+
+# 12.
+desc="12 a request shown while the last one's query still runs (a slow Hyprland): its own query runs after, and marks its windows"
+touch "$tmp/fake/slow"
+share
+shown_within || true
+ipc picker choose screen DP-1 no >/dev/null
+ended_within "$standin" 3 || true
+share
+shown_within || true
+check test "$(state '%(blocked)s')" == None
+known_within && known_within
+check test "$(state '%(blocked)s')" == "['777']"
+check test "$(ipc picker choose window 123456 no)" == ok
+ended_within "$standin" 3 || true
+check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
+rm -f "$tmp/fake/slow"
 
 # 11.
 # The stream as xdph makes it, from a program of xdph's name (share_picker_ipc.d/fake-xdph-stream.c): PipeWire gives its node
