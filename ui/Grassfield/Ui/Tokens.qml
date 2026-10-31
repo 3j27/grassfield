@@ -704,6 +704,18 @@ QtObject {
     readonly property real controlSpinnerTailOpacity: 0.2
     // moved from settings.spinnerStepMs, the spinner shared by every app (ADR-0039 D4, step 23): the spinner's step: one spoke, 8 a second [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property int controlSpinnerStepMs: 125
+    // moved from store.ringSize, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingSize: 26
+    // moved from store.ringStroke, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real controlProgressRingStroke: 2.5
+    // moved from store.ringSweep, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: the arc that turns while an operation waits or has no count yet (degrees) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingSweep: 100
+    // moved from store.ringTurnMs, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: one turn of that arc (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingTurnMs: 1100
+    // moved from store.ringStopSize, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]: the square inside it, removing a waiting operation from the queue
+    readonly property int controlProgressRingStopSize: 8
+    // moved from store.ringStopRadius, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: that square's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingStopRadius: 2
 
     // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelControlCenterWidth: 291
@@ -3222,20 +3234,6 @@ QtObject {
     readonly property int storeButtonLargeMinWidth: 80
     // estimate: the product page's button label [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeButtonLargeTextSize: Math.round(14 * Appearance.textScale)
-    // estimate: the label of a button not offered yet (step 2: installing comes with step 3) [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property real storeButtonDisabledOpacity: 0.45
-    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingSize: 26
-    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property real storeRingStroke: 2.5
-    // estimate: the arc that turns while an operation waits or has no count yet (degrees) [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingSweep: 100
-    // estimate: one turn of that arc (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingTurnMs: 1100
-    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]: the square inside it, removing a waiting operation from the queue
-    readonly property int storeRingStopSize: 8
-    // estimate: that square's corner [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingStopRadius: 2
     // estimate: the package rows an install or uninstall sheet shows before it scrolls [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSheetListMaxRows: 8
     // estimate: one package row of that list [ref: docs/audits/store-2026-10-27/parity.md]

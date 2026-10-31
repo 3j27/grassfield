@@ -2934,6 +2934,14 @@
         <source>All</source>
         <translation>Toutes</translation>
     </message>
+    <message>
+        <source>No apps in this category.</source>
+        <translation>Aucune app dans cette catégorie.</translation>
+    </message>
+    <message>
+        <source>No apps from this source in this category.</source>
+        <translation>Aucune app de cette source dans cette catégorie.</translation>
+    </message>
 </context>
 <context>
     <name>CityField</name>
@@ -10136,10 +10144,6 @@
     <message>
         <source>Search apps</source>
         <translation>Rechercher des apps</translation>
-    </message>
-    <message>
-        <source>Search</source>
-        <translation>Rechercher</translation>
     </message>
     <message>
         <source>%1: Installed apps</source>

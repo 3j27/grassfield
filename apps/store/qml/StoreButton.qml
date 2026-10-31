@@ -47,6 +47,7 @@ Item {
         implicitWidth: Math.max(root.large ? Tokens.storeButtonLargeMinWidth : Tokens.storeButtonMinWidth,
                                 Math.ceil(label.implicitWidth + 2 * Tokens.storeButtonPadding))
         focusPolicy: Qt.StrongFocus
+        hoverEnabled: true
         Accessible.role: Accessible.Button
         Accessible.name: root.state_ === "open" ? qsTr("Open %1").arg(root.appName)
                        : root.state_ === "installed" ? qsTr("%1 is installed").arg(root.appName) : qsTr("Get %1").arg(root.appName)
@@ -59,9 +60,20 @@ Item {
                 root.host.launchApp(root.app);
         }
 
+        // The shared push button's states (ADR-0039 step 24): the hover ink over the grey while hovered, denser while pressed;
+        // the control outline under Increase Contrast.
         background: Rectangle {
             radius: height / 2
             color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+            border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                color: Appearance.withAlpha(Appearance.colors.hover, button.down ? Tokens.controlPressedOpacity : Tokens.materialHoverOpacity)
+                visible: button.enabled && (button.hovered || button.down)
+            }
         }
 
         contentItem: Text {
@@ -70,8 +82,8 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: button.text
-            // Dimmed while disabled (the label only: the capsule keeps its grey).
-            color: Appearance.withAlpha(Appearance.colors.accentInk, button.enabled ? 1 : Tokens.storeButtonDisabledOpacity)
+            // Dimmed while disabled, at the shared controls' opacity (the label only: the capsule keeps its grey).
+            color: Appearance.withAlpha(Appearance.colors.accentInk, button.enabled ? 1 : Tokens.materialDisabledOpacity)
             readonly property int size: root.large ? Tokens.storeButtonLargeTextSize : Tokens.storeButtonTextSize
             font.family: Appearance.fontFamily
             font.pixelSize: size
@@ -126,9 +138,14 @@ Item {
             onTapped: ring.remove()
         }
 
+        // The ring for keyboard focus only (ADR-0039 step 24, G7).
         FocusRing {
             shapeRadius: ring.width / 2
-            visible: ring.activeFocus
+            visible: ringFocus.active
+        }
+
+        KeyFocus {
+            id: ringFocus
         }
     }
 

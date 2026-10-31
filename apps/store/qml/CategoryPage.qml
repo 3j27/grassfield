@@ -29,8 +29,26 @@ ScrollPage {
     }
 
     AppGrid {
+        visible: root.shown.length > 0
         width: root.contentWidth
         apps: root.shown
         onOpened: id => root.opened(id)
+    }
+
+    // An empty category says so, as the Installed page does (ADR-0039 step 24): no apps of its own, or none from the chosen
+    // source.
+    Text {
+        visible: root.shown.length === 0
+        width: root.contentWidth
+        topPadding: Tokens.storeEmptyTop
+        horizontalAlignment: Text.AlignHCenter
+        textFormat: Text.PlainText
+        text: root.apps.length === 0 ? qsTr("No apps in this category.") : qsTr("No apps from this source in this category.")
+        wrapMode: Text.Wrap
+        color: Appearance.windowSecondary
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.storeBodySize
+        Accessible.role: Accessible.StaticText
+        Accessible.name: text
     }
 }

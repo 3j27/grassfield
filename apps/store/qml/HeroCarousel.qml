@@ -64,8 +64,13 @@ FocusScope {
 
         FocusRing {
             shapeRadius: Tokens.storeHeroRadius
-            visible: root.activeFocus
+            visible: heroFocus.active
         }
+    }
+
+    // The keyboard's ring only, never after a click (ADR-0039 step 24, G7).
+    KeyFocus {
+        id: heroFocus
     }
 
     HoverHandler {

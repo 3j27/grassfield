@@ -152,6 +152,8 @@ Every Grassfield control is built on `QtQuick.Templates` (keyboard, focus, hover
 | `SegmentedControl` | Control + AbstractButton | model `[{id,text}]`, `value` owned by the host, `picked(id)`, arrows step; the selected segment is a raised pill (white in the light appearance) with ordinary text, 2 px inside the track with a concentric radius (macOS 27, ADR-0024) |
 | `ComboBox` | ComboBox | pop-up button, list = `PopupMenu` in a Popup inside a Flickable; `value`, `picked(id)` (the former settings Picker); the list stays inside the window (right-aligned with the button, above it when it does not fit) and scrolls when taller than the window, the keyboard cursor kept in view; a keyboard pick returns the focus with the ring |
 | `ProgressBar` | ProgressBar | determinate, indeterminate sweep (still with Reduce Motion) |
+| `ProgressRing` | (none: a plain Item) | the determinate ring of macOS 27 (the Store's operations; `control.progressRing*`, ADR-0039 D4, step 24): the track and the accent arc of `value`, a turning short arc while indeterminate, a stop square |
+| `MenuPopup` | Popup | an app window's pull-down or context menu: `PopupMenu` in a Popup, `items`, `openAt(x, y)`, `chosen(id)`, the focus back to `focusBack` (the Store's and Settings' (…) button's one host, ADR-0039 step 24) |
 | `Spinner` | (none: a plain Item) | the indeterminate spokes of macOS 27 (Settings' section titles, Files' loading view; `control.spinner*`, ADR-0039 D4, step 23); it stands still under Reduce Motion |
 | `ScrollBar` | ScrollBar | attached (`ScrollBar.vertical`) or standalone (`flickable: view`) |
 | `Sheet` | Pane (panel) | modal over its window, Return confirms, Esc cancels, field optional (`fieldPassword` hides what is typed) |

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Templates as T
 import Grassfield.Ui
 
 // The (…) button at the end of a list row (macOS 27 Wi-Fi networks): a ringed ellipsis in the secondary colour that opens a
@@ -31,8 +30,7 @@ Item {
 
     function openMenu(byClick: bool): void {
         root.clickOpened = byClick;
-        if (root.items.length > 0)
-            popup.open();
+        popup.openAt(0, root.height + Tokens.spacingXs);
     }
 
     Keys.onPressed: event => {
@@ -73,44 +71,13 @@ Item {
         }
     }
 
-    T.Popup {
+    // The apps' one menu host (ADR-0039 step 24); the focus comes back the way the menu was opened.
+    MenuPopup {
         id: popup
-
-        x: 0
-        y: root.height + Tokens.spacingXs
-        width: menu.width
-        height: menu.height
-        padding: 0
-        closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
-        background: Item {}
-
-        onAboutToShow: {
-            menu.model = root.items;
-            menu.measure();
-            menu.currentIndex = 0;
-        }
-        onOpened: menu.forceActiveFocus()
-        onClosed: {
-            if (root.visible) {
-                root.clickFocused = root.clickOpened;
-                root.forceActiveFocus();
-            }
-        }
-
-        // A Popup resizes its content item, which would replace the menu's own size bindings: the menu sits in a plain Item.
-        contentItem: Item {
-            implicitWidth: menu.width
-            implicitHeight: menu.height
-
-            PopupMenu {
-                id: menu
-                accessibleName: root.accessibleName
-                onActivated: item => {
-                    popup.close();
-                    root.chosen(item.id);
-                }
-                onCloseRequested: popup.close()
-            }
-        }
+        items: root.items
+        accessibleName: root.accessibleName
+        focusBack: root
+        onAboutToHide: root.clickFocused = root.clickOpened
+        onChosen: id => root.chosen(id)
     }
 }

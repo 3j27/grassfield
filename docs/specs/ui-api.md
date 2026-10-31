@@ -76,4 +76,6 @@ add DevicePicture
 add KeyFocus
 add MenuHeader
 add Spinner
+add ProgressRing
+add MenuPopup
 ```
