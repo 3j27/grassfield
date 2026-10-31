@@ -695,6 +695,8 @@ QtObject {
     readonly property real panelSharePickerThumbAspect: 1.6
     // an app's icon in a thumbnail's place when the window has no capture source: the size of an alert's symbol (panel.alertIconGlyph), unchanged (ADR-0035 D-6, step 7a)
     readonly property int panelSharePickerIconSize: 48
+    // the smallest area Selection shares, in the display's logical pixels either way: a click or a slip of the pointer is no area (ADR-0035 D-6, step 7b)
+    readonly property int panelSharePickerMinArea: 16
     // rows of tiles shown before the grid scrolls, so that the sheet stays smaller than a laptop's display (ADR-0035 D-6, step 7a)
     readonly property int panelSharePickerRows: 2
     // the glyphs of a Control Center appearance choice: the menu icon size plus 4, unchanged value, was a literal offset in AppearanceSection.qml (ADR-0039 step 3, the literals guard)

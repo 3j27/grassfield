@@ -306,6 +306,9 @@ Scope {
             readonly property var battery: UPower.displayDevice
             // Now Playing (macOS: "Show When Active"): while a player has a session (playing, or paused with a track).
             readonly property bool showNowPlaying: Logic.nowPlayingShown(Settings.menubarShowNowPlaying, Media.available, Media.playing, Media.title)
+            // Screen sharing (ADR-0035 D-6, step 7b): while an app shares the screen through the portal (xdph's streams). Never
+            // optional: a privacy indicator does not give way when the status area is crowded.
+            readonly property bool showScreenShare: SharePicker.sharing
             // Crowding (macOS: status items that would collide with the menus are hidden): the status area gets the width
             // between the application menus and the right inset; optional items (third-party, Now Playing, Search) give way
             // leftmost first, never the system items, Quick Settings or the clock (StatusLogic.hiddenItems). Implicit widths
@@ -354,6 +357,8 @@ Scope {
                     list.push({key: "tray" + i, width: statusIconWidth, optional: true});
                 if (showNowPlaying)
                     list.push({key: "nowplaying", width: statusIconWidth, optional: true});
+                if (showScreenShare)
+                    list.push({key: "screenshare", width: statusIconWidth, optional: false});
                 list.push({key: "system", width: (showFocus ? dndButton.implicitWidth : 0) + (Settings.menubarShowWifi ? networkButton.implicitWidth : 0) + (Settings.menubarShowSound ? volumeButton.implicitWidth : 0) + (showBattery ? batteryButton.implicitWidth : 0), optional: false});
                 if (Settings.menubarShowSearch)
                     list.push({key: "search", width: statusIconWidth, optional: true});
@@ -457,13 +462,19 @@ Scope {
                     Qt.callLater(Popups.close);
             }
 
+            // The last share ended: its open menu would list nothing.
+            onShowScreenShareChanged: {
+                if (!showScreenShare && isOpen("screenshare"))
+                    Qt.callLater(Popups.close);
+            }
+
             function isOpen(kind: string): bool {
                 return Popups.kind === kind && Popups.screenName === (win.screen ? win.screen.name : "");
             }
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
-            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying"]
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying", "screenshare"]
             readonly property bool tracking: Popups.active && Popups.screenName === (win.screen ? win.screen.name : "") && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
@@ -567,7 +578,7 @@ Scope {
             function openFirstStatus(): void {
                 const all = win.navEntries();
                 for (let i = 0; i < all.length; i++) {
-                    if (["network", "volume", "battery", "controlcenter", "nowplaying", "tray"].indexOf(all[i].kind) >= 0) {
+                    if (["network", "volume", "battery", "controlcenter", "nowplaying", "screenshare", "tray"].indexOf(all[i].kind) >= 0) {
                         win.openEntry(all[i]);
                         return;
                     }
@@ -712,6 +723,10 @@ Scope {
                 case "nowplaying":
                     if (win.showNowPlaying)
                         openFor("nowplaying", nowPlayingButton, "right", {});
+                    break;
+                case "screenshare":
+                    if (win.showScreenShare)
+                        openFor("screenshare", screenShareButton, "right", {});
                     break;
                 }
             }
@@ -1028,6 +1043,30 @@ Scope {
                                 tint: win.barTint
                                 shadowed: !win.showBackground
                                 shadowColor: win.barShadow
+                            }
+                        }
+
+                        // Screen sharing: while an app shares the screen; its menu says what is shared.
+                        BarButton {
+                            id: screenShareButton
+                            menuKind: "screenshare"
+                            objectName: "menubar-screenshare"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: win.showScreenShare
+                            accessibleName: qsTr("Screen Sharing")
+                            active: win.isOpen("screenshare")
+                            onActivated: win.popup("screenshare")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("screenshare")
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                heavy: true
+                                color: win.barText
+                                name: "screen-share"
                             }
                         }
 

@@ -382,6 +382,8 @@ Variants {
                     return networkMenu;
                 case "battery":
                     return batteryMenu;
+                case "screenshare":
+                    return screenShareMenu;
                 case "controlcenter":
                     return controlCenter;
                 case "dock":
@@ -456,6 +458,11 @@ Variants {
         Component {
             id: batteryMenu
             BatteryMenu {}
+        }
+
+        Component {
+            id: screenShareMenu
+            ScreenShareMenu {}
         }
 
         Component {

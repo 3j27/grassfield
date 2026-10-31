@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Pipewire
 import qs.lib
 import qs.platform
 import "SharePicker.js" as Logic
@@ -24,18 +25,54 @@ Singleton {
     property var windows: []
     // The panel was shown for the current request.
     property bool shown: false
+    // The handles of the listed windows that hide themselves from capture (no_screen_share; step 7b): greyed, never chosen.
+    property var blocked: []
     readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") ?? ""
 
-    // The displays the panel offers: Hyprland's names, as xdph reads them.
+    // The recording indicator (step 7b): xdph's screen-sharing streams, and what each shares when the picker chose it.
+    readonly property var streams: Logic.sharingStreams(Pipewire.nodes ? Pipewire.nodes.values : [])
+    readonly property bool sharing: root.streams.length > 0
+    // Stream id -> {kind, value, title} or null; the choices answered that no stream has taken yet ({at, what}). An app starts
+    // its stream as soon as the portal answers it: a choice older than 10 s names no stream (it may never have started one).
+    property var labels: ({})
+    property var pending: []
+
+    onStreamsChanged: {
+        const next = Logic.streamLabels(root.labels, root.streams, root.pending, Date.now(), 10000);
+        root.labels = next.labels;
+        root.pending = next.pending;
+    }
+
+    // The displays the panel offers: Hyprland's names, as xdph reads them, and their logical sizes.
     function outputs(): var {
         return Quickshell.screens.map(s => s.name);
     }
 
-    // The user's choice: a display's name or a window's handle; `remember` for Remember this choice.
+    function sizes(): var {
+        const out = {};
+        for (const s of Quickshell.screens)
+            out[s.name] = {
+                width: s.width,
+                height: s.height
+            };
+        return out;
+    }
+
+    // The user's choice: a display's name, a window's handle or an area (`<display>@x,y,w,h`); `remember` for Remember this
+    // choice.
     function share(kind: string, value: string, remember: bool): void {
-        const line = Logic.selection(kind, value, remember, root.outputs(), root.windows);
+        const line = Logic.selection(kind, value, remember, root.outputs(), root.windows, root.sizes(), root.blocked);
         if (line === "" || root.current === null)
             return;
+        const w = kind === "window" ? root.windows.find(x => x.handle === value) : null;
+        root.pending = root.pending.concat([{
+                at: Date.now(),
+                what: {
+                    kind: kind,
+                    value: kind === "region" ? Logic.parseRegion(value).output : value,
+                    title: w ? w.title : ""
+                }
+            }]);
         root.finish(root.current.id + " " + line);
     }
 
@@ -53,6 +90,7 @@ Singleton {
         }
         root.current = null;
         root.windows = [];
+        root.blocked = [];
         root.shown = false;
         connectDeadline.stop();
         channel.connected = false;
@@ -69,6 +107,12 @@ Singleton {
         root.windows = listed;
         root.shown = true;
         connectDeadline.stop();
+        // Which of them hide themselves from capture: Hyprland's rule, one getprop per window with an address, 1 s each.
+        const addresses = listed.filter(w => w.address !== "").map(w => w.address);
+        if (addresses.length > 0) {
+            blockedQuery.command = ["sh", "-c", "for a; do timeout 1 hyprctl -j getprop \"address:0x$a\" no_screen_share 2>/dev/null | tr -d '\\n'; echo; done", "sh"].concat(addresses);
+            blockedQuery.running = true;
+        }
         Popups.openCentered("sharePicker", {}, "");
         if (Popups.kind !== "sharePicker")
             root.cancel();
@@ -78,6 +122,16 @@ Singleton {
     function lost(): void {
         if (root.current !== null && !channel.connected)
             root.finish("");
+    }
+
+    Process {
+        id: blockedQuery
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (root.shown)
+                    root.blocked = Logic.blockedHandles(root.windows, text);
+            }
+        }
     }
 
     Socket {
@@ -163,6 +217,9 @@ Singleton {
                 popup: Popups.kind,
                 outputs: root.outputs(),
                 windows: root.windows,
+                blocked: root.blocked,
+                streams: root.streams.length,
+                labels: root.labels,
                 // The windows whose live thumbnail has a source (a toplevel Hyprland knows at that address).
                 sources: root.windows.filter(w => w.address !== "" && Compositor.toplevelByAddress(w.address) !== null).length
             });

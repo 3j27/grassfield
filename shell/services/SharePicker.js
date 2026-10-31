@@ -66,15 +66,100 @@ function ordered(windows, nameFor) {
     });
 }
 
-// The answer line for xdph's grammar: `<flags>/screen:<output>` or `<flags>/window:<handle>`, flag "r" when the user ticked
-// Remember this choice (owner decision Q14: unticked at every opening). "" for anything that is not a listed choice.
-function selection(kind, value, remember, outputs, windows) {
+// The answer line for xdph's grammar: `<flags>/screen:<output>`, `<flags>/window:<handle>` or
+// `<flags>/region:<output>@x,y,w,h`, flag "r" when the user ticked Remember this choice (owner decision Q14: unticked at every
+// opening). "" for anything that is not a listed choice: a display that is not there, a window xdph did not list or that
+// hides itself from capture (`blocked`, step 7b), an area that is not inside its display's logical size (`sizes`: name ->
+// {width, height}).
+function selection(kind, value, remember, outputs, windows, sizes, blocked) {
     const flags = remember === true ? "r" : "";
     if (kind === "screen" && typeof value === "string" && OUTPUT.test(value) && outputs.indexOf(value) >= 0)
         return flags + "/screen:" + value;
-    if (kind === "window" && typeof value === "string" && windows.some(w => w.handle === value))
+    if (kind === "window" && typeof value === "string" && windows.some(w => w.handle === value) && !(blocked || []).includes(value))
         return flags + "/window:" + value;
+    if (kind === "region") {
+        const r = parseRegion(value);
+        const size = r && sizes ? sizes[r.output] : undefined;
+        if (r && outputs.indexOf(r.output) >= 0 && size && r.x + r.w <= size.width && r.y + r.h <= size.height)
+            return flags + "/region:" + value;
+    }
     return "";
+}
+
+// An area as the panel keeps it and xdph reads it: `<output>@x,y,w,h`, logical pixels relative to that display.
+function regionKey(output, r) {
+    return output + "@" + r.x + "," + r.y + "," + r.w + "," + r.h;
+}
+
+// {output, x, y, w, h} from `<output>@x,y,w,h`, or null: a display's name, whole numbers, a width and height of at least 1.
+function parseRegion(value) {
+    const m = /^([A-Za-z0-9._-]{1,64})@([0-9]{1,5}),([0-9]{1,5}),([0-9]{1,5}),([0-9]{1,5})$/.exec(String(value));
+    if (!m)
+        return null;
+    const r = {output: m[1], x: Number(m[2]), y: Number(m[3]), w: Number(m[4]), h: Number(m[5])};
+    return r.w >= 1 && r.h >= 1 ? r : null;
+}
+
+// The area dragged on a display's preview (`drag`: a start and an end point in the preview's pixels, in any direction), in
+// that display's logical pixels: kept inside the preview, scaled to the display, whole numbers. null when it is smaller than
+// `minSize` logical pixels either way (a click, not an area).
+function regionFor(drag, preview, logical, minSize) {
+    if (!drag || preview.width <= 0 || preview.height <= 0 || logical.width <= 0 || logical.height <= 0)
+        return null;
+    const clamp = (v, hi) => Math.max(0, Math.min(hi, v));
+    const x0 = clamp(Math.min(drag.x1, drag.x2), preview.width), x1 = clamp(Math.max(drag.x1, drag.x2), preview.width);
+    const y0 = clamp(Math.min(drag.y1, drag.y2), preview.height), y1 = clamp(Math.max(drag.y1, drag.y2), preview.height);
+    const sx = logical.width / preview.width, sy = logical.height / preview.height;
+    const x = Math.round(x0 * sx), y = Math.round(y0 * sy);
+    const w = Math.min(Math.round(x1 * sx), logical.width) - x, h = Math.min(Math.round(y1 * sy), logical.height) - y;
+    return w >= minSize && h >= minSize ? {x: x, y: y, w: w, h: h} : null;
+}
+
+// The windows that hide themselves from capture (step 7b): `answers` holds one line per window that has an address, in the
+// order of `windows`, each `hyprctl -j getprop address:0x<address> no_screen_share` ({"no_screen_share": true}). A line that
+// does not read (the window is gone, an older Hyprland) counts as not hidden: Hyprland still leaves such a window out of every
+// capture, so the greying only tells the user beforehand.
+function blockedHandles(windows, answers) {
+    const lines = String(answers).split("\n");
+    const asked = windows.filter(w => w.address !== "");
+    const out = [];
+    for (let i = 0; i < asked.length && i < lines.length; i++) {
+        let v = null;
+        try {
+            v = JSON.parse(lines[i]);
+        } catch (e) {
+            v = null;
+        }
+        if (v && typeof v === "object" && v.no_screen_share === true)
+            out.push(asked[i].handle);
+    }
+    return out;
+}
+
+// xdph's screen-sharing streams among PipeWire's nodes (step 7b, the recording indicator): xdph names each one
+// "xdph-streaming-<random>" (xdph 1.4.1 src/portals/Screencopy.cpp:1015). Hyprland's own `screencast` event cannot say this:
+// every capture, the shell's own thumbnails too, raises it (Hyprland 0.56.2 ScreenshareFrame.cpp:170). Their ids.
+function sharingStreams(nodes) {
+    const out = [];
+    for (const n of nodes || []) {
+        if (n && typeof n.name === "string" && n.name.startsWith("xdph-streaming-"))
+            out.push(n.id);
+    }
+    return out;
+}
+
+// What each stream shares, for the indicator's menu: a stream that appears takes the oldest choice the picker answered within
+// `maxAgeMs` (SharePicker: 10 s; a share the app restored with a token had no picker: none). `labels`: stream id -> {kind, value, title}.
+function streamLabels(labels, streams, pending, now, maxAgeMs) {
+    const kept = {};
+    const left = pending.filter(g => now - g.at <= maxAgeMs);
+    for (const id of streams) {
+        if (labels[id] !== undefined)
+            kept[id] = labels[id];
+        else
+            kept[id] = left.length > 0 ? left.shift().what : null;
+    }
+    return {labels: kept, pending: left};
 }
 
 // What a tile stands for, kept as the selection so that it never moves to another tile when the list changes under it (a
@@ -82,7 +167,7 @@ function selection(kind, value, remember, outputs, windows) {
 function keyOf(tab, tile) {
     if (!tile)
         return "";
-    return tab === "screen" ? String(tile.name) : String(tile.handle);
+    return tab === "window" ? String(tile.handle) : String(tile.name);
 }
 
 // The tile of `key` in `tiles`, or -1 when it is gone (the selection then clears: Share is dimmed again).
