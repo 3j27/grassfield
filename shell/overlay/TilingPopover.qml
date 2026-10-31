@@ -185,6 +185,10 @@ FocusScope {
     // popover closes. `alt`: Alt held at the click (the popover also follows Alt from its keys).
     function greenClick(alt: bool): void {
         const window = root.toplevel;
+        if (!window) {
+            Popups.close(); // the window went away (a null handle could match another window with no wayland handle)
+            return;
+        }
         switch (WindowTiling.greenAction(root.fullscreen, root.inSplit, root.altHeld || alt)) {
         case "unsplit":
             Compositor.unsplit(window);
