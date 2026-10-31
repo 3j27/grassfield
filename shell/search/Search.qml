@@ -124,7 +124,8 @@ Scope {
     property var recentList: []
 
     readonly property string home: Quickshell.env("HOME")
-    // Dev/test knobs: file results are limited to this root (default $HOME) and plocate can use
+    // Dev/test knobs: file results are limited to this root ($HOME; in a dev session GRASSFIELD_SEARCH_ROOT or the dev apps-home's
+    // files folder, Apps.searchRoot) and plocate can use
     // another database, so tests do not depend on the owner's index.
     readonly property string filesRoot: Apps.searchRoot
     readonly property string plocateDb: Mode.devValue("SEARCH_PLOCATE_DB")
