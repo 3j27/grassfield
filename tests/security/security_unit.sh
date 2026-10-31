@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # ADR-0041 step 1, S1 (the owner's SQ-1 B): the security process runs beside the UI and hosts nothing moved yet. Static
 # (data layer): the root shell/security.qml (a root of its own next to shell.qml, imports only QtQuick, Quickshell and
-# Quickshell.Io, never reloads on a file change, one IpcHandler `security` with `state` and `heartbeat`, instantiates
-# ShellRoot and IpcHandler only and names no loader, process, URL opener or security module: tests/security/root_check.py
-# reads it as the engine does, comments stripped and the file joined, with a selftest of planted mutants),
+# Quickshell.Io, never reloads on a file change, one IpcHandler `security` with `state` and `heartbeat`; the reviewed file
+# is pinned by its SHA-256, comments included, so any change needs the opus security review and then the new hash here
+# (the integrator's decision on #75: a static check cannot model all of QML); tests/security/root_check.py stays as the
+# readable second check, an allow-list of identifiers, imports and types read as the engine reads them, with a selftest of
+# planted mutants),
 # grassfield-security.service (loads that root by path from the system tree, the same cleared environment as the UI's
 # unit, Restart=always with a start limit a loop reaches, session-only, no NoNewPrivileges for the helpers of S2/S3, memory
 # guards from the measurement and the UI unit's CPU quota), the autostart (started just before
@@ -21,9 +23,14 @@ helper=packaging/bin/grassfield-security-status
 
 desc="root: a root of its own next to shell.qml"
 check bash -c '[[ -f "$1" && -f shell/shell.qml ]]' _ "$qml"
-desc="root: read as the engine reads it (comments stripped, the file joined, imports wherever they stand): imports QtQuick, Quickshell and Quickshell.Io only, instantiates ShellRoot and IpcHandler only, names no loader, process, URL opener, Qt. or qs. name, regex literal, template string or security module"
+# The reviewed root, pinned. A change to shell/security.qml, comments included, fails here until the opus security review
+# of that change has passed and the hash below is updated in the same pull request (the integrator's decision on #75).
+pinned=00762fd65e6269da891dc98a56e17a9940a8759377a79f11cc2c163260f14eef
+desc="root: the reviewed file is pinned by its SHA-256 (any change: security review required, then update the pinned hash)"
+check bash -c '[[ "$(sha256sum "$1" | cut -d" " -f1)" == "$2" ]] || { echo "shell/security.qml changed: security review required, then update the pinned hash" >&2; exit 1; }' _ "$qml" "$pinned"
+desc="root: the readable second check (tests/security/root_check.py): ASCII only, no backslash, no regex literal, template string or bracket outside strings; every identifier one the root uses today; imports QtQuick, Quickshell and Quickshell.Io only, wherever they stand; ShellRoot and IpcHandler the only types; one IpcHandler, target security, the functions state and heartbeat only"
 check python3 -I tests/security/root_check.py "$qml"
-desc="root check selftest: the root passes and each planted mutant (a next-line brace, a comment before the brace, an indented or tab import, a singleton's property, execDetached, openUrlExternally, Process, callLater, a Loader, a file import, a regex literal, a template string, a dynamic import, a Component, eval) is refused"
+desc="root check selftest: the root passes (with LF and with CRLF) and each of the 32 planted mutants (next-line braces, comments before braces, indented imports, a singleton's property, names as strings or through Reflect, a U+2028 ending a comment, Unicode escapes, a second IpcHandler, an animation, Quickshell.reload, a third function, a renamed target, ...) is refused"
 check python3 -I tests/security/root_check.py --selftest "$qml"
 desc="root: never reloads on a file change (settings.watchFiles: false)"
 check grep -qE '^\s*settings\.watchFiles: false' "$qml"
