@@ -8,8 +8,11 @@
 The places (the optical version, grassfield-logo; the full mark has none today): the menu bar's system button (monochrome,
 the bar's text colour), About This Computer and Settings > General > About (the brand green), Software Update's
 Grassfield release row (the brand green, as About's) and the Search result for About. Shell dialogs show their subject's
-symbol instead: every Popups.notice(title, message, symbol) names one (a third argument), and neither NoticeDialog nor
-ConfirmDialog falls back to the mark. Comments are not read.
+symbol instead: every Popups.notice(title, message, symbol) names one (a third argument, not undefined, null or empty;
+a literal one is a file of ui/Grassfield/Ui/icons), and neither NoticeDialog nor ConfirmDialog falls back to the mark. The
+mark is found in any string literal that names it, a file path included ("…/grassfield-logo.svg",
+Qt.resolvedUrl("icons/grassfield-logo-full.svg")); a notice through Popups.notice or Popups["notice"]. Comments are not
+read; an alias of Popups (const p = Popups; p.notice(…)) is not followed.
 """
 import re
 import sys
@@ -24,8 +27,10 @@ PLACES = {
     "apps/settings/qml/AboutPage.qml": "Settings > General > About's Grassfield row (the brand green)",
     "apps/settings/qml/SoftwareUpdatePage.qml": "Software Update's Grassfield release row (the brand green)",
 }
-MARK = re.compile(r"""["']grassfield-logo(?:-full)?["']""")
-NOTICE = re.compile(r"\bPopups\.notice\s*\(")
+ICONS = ROOT / "ui" / "Grassfield" / "Ui" / "icons"
+STRING = re.compile(r""""(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`[^`]*`""")
+NOTICE = re.compile(r"""\bPopups\s*(?:\.\s*notice|\[\s*["']notice["']\s*\])\s*\(""")
+NO_SYMBOL = {"undefined", "null", '""', "''", "``"}
 
 
 def strip_comments(src):
@@ -52,39 +57,54 @@ def strip_comments(src):
 
 
 def call_args(code, start):
-    """The number of top-level arguments of the call whose "(" is at `start`."""
-    depth, args, i, seen = 0, 0, start, False
+    """The top-level arguments (their source text, stripped) of the call whose "(" is at `start`; a trailing comma adds none."""
+    depth, args, cur, i = 0, [], [], start
     while i < len(code):
         c = code[i]
-        if c in "\"'`":
+        if c in "\"'`" and depth >= 1:
             j = i + 1
             while j < len(code) and code[j] != c:
                 j += 2 if code[j] == "\\" else 1
+            cur.append(code[i:j + 1])
             i = j + 1
-            seen = True
             continue
         if c in "([{":
             depth += 1
             if depth > 1:
-                seen = True
+                cur.append(c)
         elif c in ")]}":
             depth -= 1
             if depth == 0:
-                return args + (1 if seen else 0)
+                last = "".join(cur).strip()
+                return args + ([last] if last else [])
+            cur.append(c)
         elif c == "," and depth == 1:
-            args += 1
-        elif not c.isspace() and depth >= 1:
-            seen = True
+            args.append("".join(cur).strip())
+            cur = []
+        elif depth >= 1:
+            cur.append(c)
         i += 1
     return args
 
 
+def symbol_problem(args):
+    """Why a notice's arguments name no usable symbol, or None."""
+    if len(args) < 3 or args[2] in NO_SYMBOL:
+        return "names no subject symbol (its third argument)"
+    lit = re.fullmatch(r"""["'](.*)["']""", args[2])
+    if lit and not (ICONS / (lit.group(1) + ".svg")).is_file():
+        return "names the symbol \"%s\", which ui/Grassfield/Ui/icons does not hold" % lit.group(1)
+    if lit and "grassfield-logo" in lit.group(1):
+        return "names the mark as its symbol"
+    return None
+
+
 def scan(rel, src):
-    """(marks, notices without a symbol) of one file."""
+    """(marks, the problems of its notices) of one file."""
     code = strip_comments(src)
-    marks = len(MARK.findall(code))
-    bare = [m.start() for m in NOTICE.finditer(code) if call_args(code, m.end() - 1) < 3]
-    return marks, bare
+    marks = sum(1 for m in STRING.finditer(code) if "grassfield-logo" in m.group(0))
+    bad = [p for p in (symbol_problem(call_args(code, m.end() - 1)) for m in NOTICE.finditer(code)) if p]
+    return marks, bad
 
 
 def problems(files):
@@ -96,8 +116,8 @@ def problems(files):
             found[rel] = marks
         if marks and rel not in PLACES:
             out.append("%s: draws the mark, which is not one of its places (ADR-0040 IQ-B1 B)" % rel)
-        for _ in bare:
-            out.append("%s: a Popups.notice names no subject symbol (its third argument)" % rel)
+        for why in bare:
+            out.append("%s: a Popups.notice %s" % (rel, why))
     for rel, what in PLACES.items():
         if rel in files and rel not in found:
             out.append("%s: %s no longer draws the mark (update PLACES and ADR-0040)" % (rel, what))
@@ -118,6 +138,15 @@ SAMPLES = {
     "the full mark anywhere": ({"shell/overlay/Other.qml": "Icon { name: 'grassfield-logo-full' }\n"}, 1),
     "a notice without a symbol": ({"shell/services/Power.qml": 'Item { function f() { Popups.notice(qsTr("A"), qsTr("b, c")); } }\n'}, 1),
     "a notice with a symbol": ({"shell/services/Power.qml": 'Item { function f() { Popups.notice(qsTr("A"), qsTr("b").arg(x(1, 2)), "power"); } }\n'}, 0),
+    "the mark as a file path": ({"shell/overlay/A.qml": 'Image { source: "../../ui/Grassfield/Ui/icons/grassfield-logo.svg" }\n'}, 1),
+    "the full mark through resolvedUrl": ({"apps/x/B.qml": 'Image { source: Qt.resolvedUrl("icons/grassfield-logo-full.svg") }\n'}, 1),
+    "a notice through brackets": ({"shell/services/C.qml": 'Item { function f() { Popups["notice"]("A", "b"); } }\n'}, 1),
+    "a trailing comma": ({"shell/services/D.qml": 'Item { function f() { Popups.notice("A", "b",); } }\n'}, 1),
+    "an explicit undefined": ({"shell/services/E.qml": 'Item { function f() { Popups.notice("A", "b", undefined); } }\n'}, 1),
+    "a symbol without a file": ({"shell/services/F.qml": 'Item { function f() { Popups.notice("A", "b", "moonn"); } }\n'}, 1),
+    "the mark as the symbol": ({"shell/services/G.qml": 'Item { function f() { Popups.notice("A", "b", "grassfield-logo"); } }\n'}, 2),
+    "a computed symbol": ({"shell/services/H.qml": 'Item { function f() { Popups.notice("A", "b", root.glyph); } }\n'}, 0),
+    "another object's notice": ({"shell/shell.qml": 'Item { function f() { ExtensionStatus.notice(status); } }\n'}, 0),
     "a mark in a comment": ({"shell/overlay/X.qml": '// icon: "grassfield-logo"\n/* "grassfield-logo" */\nItem {}\n'}, 0),
     "a place keeps it": ({"shell/menubar/MenuBar.qml": 'Icon { name: "grassfield-logo" }\n'}, 0),
     "a place that lost it": ({"shell/menubar/MenuBar.qml": 'Icon { name: "apple" }\n'}, 1),
