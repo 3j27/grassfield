@@ -321,8 +321,14 @@ shell_popup_open() {
 close_shell_popup() { # case name
   shell_popup_open || return 0
   say "  $1: a shell popup was open on $out (the overlay is mapped): closed with Esc before the case"
-  "$root/scripts/dev/keys.sh" -k Escape >>"$log" 2>&1
-  wait_popup_closed || say "  $1: the popup is still open after Esc"
+  # An Esc sent while the popup is still opening reaches no popup (the overlay maps, then takes the keyboard; measured under load
+  # 35: an Esc 20 ms after the open was lost and the popover, opened by tile_popover, stayed 16 s): sent again until it closes.
+  local try
+  for try in 1 2 3 4; do
+    "$root/scripts/dev/keys.sh" -k Escape >>"$log" 2>&1
+    wait_popup_closed 30 && return 0
+  done
+  say "  $1: the popup is still open after Esc"
   return 0
 }
 # The nested shell answers its IPC (tests/visual/ipc.sh): its popups open and close asynchronously. Asked once.
@@ -337,17 +343,22 @@ shell_up() {
 # Waits (up to 5 s) until no shell popup shows on GF-REF: no grassfield-overlay layer mapped and, when the shell answers, its
 # open popup kind empty. A fixed wait after Esc raced the overlay's unmap under load: the next click reached the closing popup
 # (integrator nested pass of 12e3dd3).
+# An IPC call that fails or times out (the shell busy under load) says nothing: it is not "no popup" (PR #70 review: openKind ''
+# was such a timeout while the overlay showed a real popover). Argument: how many polls (default 50; 100 ms apart, longer when the
+# IPC times out).
 wait_popup_closed() {
-  local k=""
-  for _ in $(seq 1 50); do
+  local k="" n=${1:-50} rc t0=$SECONDS
+  for _ in $(seq 1 "$n"); do
     if ! shell_popup_open; then
       shell_up || return 0
-      k=$(timeout 3 "$root/tests/visual/ipc.sh" menubar openKind 2>/dev/null || true)
-      [[ -z $k ]] && return 0
+      k=$(timeout 3 "$root/tests/visual/ipc.sh" menubar openKind 2>/dev/null)
+      rc=$?
+      [[ $rc == 0 && -z $k ]] && return 0
+      [[ $rc != 0 ]] && k="(no answer)"
     fi
     sleep 0.1
   done
-  say "  a shell popup still showed after 5 s (openKind '${k}')"
+  say "  a shell popup still showed after $((SECONDS - t0)) s (openKind '${k}')"
   return 1
 }
 # Waits (up to 3 s, with the shell running) until a popup shows on GF-REF (the popover a tile_popover asked for).
