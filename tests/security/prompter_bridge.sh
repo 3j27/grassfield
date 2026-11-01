@@ -506,7 +506,7 @@ lines-not-wiped#Protocol.cpp#            explicit_bzero(buffer + start, end - st
 rest-not-wiped#Protocol.cpp#            explicit_bzero(buffer + (length - start), start);#            ;
 answered-without-a-shell#Bridge.cpp#            return;\n        if (m_client < 0 || !m_ready) {\n            log(#            return;\n        if (false) {\n            log(
 pidfd-not-rechecked#Identity.cpp#        facts.alive = pidfdAlive(pidfd);#        facts.alive = true;
-every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n#
+every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n            // KIO's worker runs a plugin from any path#            // KIO's worker runs a plugin from any path
 disk-not-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))#            if (!facts.sameNamespaces)
 EOF_MUTANTS
 fi
