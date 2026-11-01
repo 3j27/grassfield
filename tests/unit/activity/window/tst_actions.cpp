@@ -527,6 +527,8 @@ TEST(ProcessActions, QuitWaitsForTheShellsOutcome)
     ASSERT_TRUE(finished.wait(2000));
     EXPECT_TRUE(finished.at(0).at(0).toMap().value(QStringLiteral("done")).toBool());
     EXPECT_EQ(ending(a, false), -1); // nothing sent
+    kill(a, SIGKILL);
+    ending(a);
 
     // It quit (after its save prompt, say): the process is gone.
     const pid_t b = idleChild();
