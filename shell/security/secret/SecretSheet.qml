@@ -59,7 +59,8 @@ FocusScope {
             field.forceActiveFocus();
     }
 
-    // OK: the typed password (both fields, read in one step, for a new password) or the confirmation.
+    // OK (the button: a click, or Space or Return once Tab reached it): the typed password (both fields, read in one step,
+    // for a new password) or the confirmation. Only here may a new password be empty (decision 9-24).
     function accept(): void {
         if (!root.model.asksPassword) {
             root.model.submit(null, null);
@@ -73,34 +74,31 @@ FocusScope {
         newField.submit();
         verifyField.submit();
         priv.collecting = false;
-        root.submitNew();
+        root.submitNew(true);
     }
 
-    // A new password's two fields hand over their text in one step (PasswordField.submit empties each); Return in either
-    // takes the other one too. Nothing is kept past this call.
-    function collected(which: string, password: string): void {
-        if (which === "new")
-            priv.first = password;
-        else
-            priv.second = password;
-        if (priv.collecting)
-            return;
+    // Return in Verify (Return in New only moves the focus to Verify): Verify has handed over its text, New's is taken in the
+    // same step (PasswordField.submit empties each). Nothing is kept past this call.
+    function verifyReturned(password: string): void {
+        priv.second = password;
         priv.collecting = true;
-        if (which === "new")
-            verifyField.submit();
-        else
-            newField.submit();
+        newField.submit();
         priv.collecting = false;
-        root.submitNew();
+        root.submitNew(false);
     }
 
-    function submitNew(): void {
+    // `fromButton`: OK, not Return. An empty new password is sent only from OK: a stray Return never answers with one
+    // (opus review of step 9b, MINOR-1).
+    function submitNew(fromButton: bool): void {
         const first = priv.first;
         const second = priv.second;
         priv.first = null;
         priv.second = null;
-        if (first !== null && second !== null)
-            root.model.submit(first, second);
+        if (first === null || second === null)
+            return;
+        if (!fromButton && first === "" && second === "")
+            return;
+        root.model.submit(first, second);
     }
 
     QtObject {
@@ -302,11 +300,17 @@ FocusScope {
             visible: root.model.passwordNew
             enabled: root.inputEnabled && root.model.canSubmit
             allowEmpty: true
+            // Return moves on to Verify and hands nothing over (OK takes both fields).
+            submitOnReturn: false
             width: parent.width
             height: visible ? Tokens.polkitFieldHeight : 0
             placeholder: qsTr("New password")
             accessibleName: qsTr("New password")
-            onSubmitted: password => root.collected("new", password)
+            onReturnPressed: verifyField.forceActiveFocus()
+            onSubmitted: password => {
+                if (priv.collecting)
+                    priv.first = password;
+            }
         }
 
         PasswordField {
@@ -319,7 +323,12 @@ FocusScope {
             height: visible ? Tokens.polkitFieldHeight : 0
             placeholder: qsTr("Verify")
             accessibleName: qsTr("Verify the new password")
-            onSubmitted: password => root.collected("verify", password)
+            onSubmitted: password => {
+                if (priv.collecting)
+                    priv.second = password;
+                else
+                    root.verifyReturned(password);
+            }
         }
 
         // The new password's strength, from its length only (SecretSheetModel.strengthOf).

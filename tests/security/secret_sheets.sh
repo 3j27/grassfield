@@ -9,7 +9,8 @@
 # keyboard while a gcr request arrives and the reverse; nothing over the lock; held after an unlock and under the screen
 # saver; no "ok" for a request that is not on screen with the keyboard; a polkit request never refused by the bound of
 # 8; a lost connection; a new password; a confirmation
-# with a check box; the caller's text plain. Then static checks of what offscreen cannot run (the layer namespace, the
+# with a check box; the caller's text plain; a confirmation never answered by a key before a click past the guard and an
+# empty new password never sent by Return (opus review of step 9b, MAJOR-1 and MINOR-1); a restarted bridge's reused id. Then static checks of what offscreen cannot run (the layer namespace, the
 # keyboard binding, no lock or shield glyph and no "Authentication required" in the sheets, the same delays as the
 # polkit sheet's). No compositor, no bridge, no polkit, no PAM.
 #
@@ -188,6 +189,9 @@ empty-unlock-password-sent#SecretSheetModel.qml#            if (typeof password 
 new-passwords-not-compared#SecretSheetModel.qml#            if (passwordNew && password !== verify) {#            if (false) {
 caller-title-as-the-sheet-title#SecretSheetModel.qml#    readonly property string title: titleOf(role, requesterName, kind, passwordNew)#    readonly property string title: request ? request.texts.title : ""
 caller-labels-on-the-buttons#SecretSheet.qml#            text: qsTr("OK")#            text: root.model.request && root.model.request.texts.continueLabel !== "" ? root.model.request.texts.continueLabel : qsTr("OK")
+confirm-not-held (MAJOR-1 of the opus review)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || sheetModel.arrivesHeld(
+empty-new-password-by-return (MINOR-1)#SecretSheet.qml#        if (!fromButton && first === "" && second === "")\n            return;#        if (false)\n            return;
+return-in-new-submits (MINOR-1)#SecretSheet.qml#            submitOnReturn: false#            submitOnReturn: true
 answer-kept-across-requests (a restarted bridge's p1)#SecretAgent.qml#        root.answeredId = "";#        ;
 rich-caller-text#SecretSheet.qml#                        objectName: "secretCaller_" + modelData.key\n                        width: callerColumn.width\n                        visible: text !== ""\n                        textFormat: Text.PlainText#                        objectName: "secretCaller_" + modelData.key\n                        width: callerColumn.width\n                        visible: text !== ""\n                        textFormat: Text.RichText
 EOF_MUTANTS

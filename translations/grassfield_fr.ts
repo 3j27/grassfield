@@ -9881,6 +9881,10 @@
         <translation>Cette demande est arrivée à %1, juste après une autre. Cliquez sur l’alerte pour y répondre.</translation>
     </message>
     <message>
+        <source>This request arrived at %1. Click the alert to answer it: no key answers a confirmation before that.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour y répondre&#xa0;: aucune touche ne répond à une confirmation avant cela.</translation>
+    </message>
+    <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.</source>
         <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur l’alerte pour y répondre.</translation>
     </message>

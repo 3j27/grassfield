@@ -361,8 +361,8 @@ Item {
             compare(shownIds, ["p1"]);
         }
 
-        // A new password: typed twice alike (Return in either field takes both); different, nothing is sent, both fields
-        // are emptied and the sheet says why; the strength meter follows the length.
+        // A new password: typed twice alike (Return in New moves on to Verify, Return in Verify takes both); different,
+        // nothing is sent, both fields are emptied and the sheet says why; the strength meter follows the length.
         function test_13_newPassword() {
             client.prompt("p1", {passwordNew: true, strength: true});
             shown("p1");
@@ -378,16 +378,17 @@ Item {
             verify(named("secretNewField").empty && named("secretVerifyField").empty);
             named("secretNewField").forceActiveFocus();
             typeText("same");
-            named("secretVerifyField").forceActiveFocus();
+            keyClick(Qt.Key_Return);
+            verify(named("secretVerifyField").activeFocus, "Return in New moves on to Verify");
+            compare(named("secretNewField").length, 4, "and keeps what New holds");
             typeText("same");
-            named("secretNewField").forceActiveFocus();
             keyClick(Qt.Key_Return);
             compare(client.answers.length, 1);
             compare(client.answers[0].password, "same");
         }
 
-        // A confirmation (no field: OK is the default button) with the caller's check box; an unidentified program shows
-        // its path under the title.
+        // A confirmation (no field) with the caller's check box; an unidentified program shows its path under the title. A
+        // confirmation is always held (decision 9-23): a click past the guard gives it the keyboard, then OK answers.
         function test_14_confirmUnidentified() {
             client.prompt("p1", {kind: "confirm", choice: {label: "Remember", chosen: false},
                                  requester: {role: "unidentified", name: "", desktopId: "", icon: "", path: "/home/u/.local/bin/tool", identified: false, onBehalf: false}});
@@ -396,13 +397,17 @@ Item {
             compare(named("secretPath").text, "/home/u/.local/bin/tool");
             compare(named("secretGlyph").name, "exclamationmark-triangle");
             compare(named("secretField").visible, false);
-            tryVerify(() => named("secretOk").activeFocus);
+            compare(rig.secret.heldByLock, true, "a confirmation is held");
+            compare(rig.secret.heldWhy, "confirm");
+            compare(rig.secret.sheet.takesKeys, false);
             const box = named("secretChoice");
             // The alert lays out at the next polish (a Column), and the check box moves down once it has: click it there.
             waitForItemPolished(box.parent);
             waitForRendering(rig.secret.sheet);
+            wait(600);
             mouseClick(box);
             compare(rig.secret.model.choice, true);
+            compare(rig.secret.sheet.takesKeys, true, "the click past the guard gives it the keyboard");
             named("secretOk").forceActiveFocus();
             keyClick(Qt.Key_Return);
             compare(client.answers.length, 1);
@@ -466,6 +471,51 @@ Item {
             tryVerify(() => !rig.secret.model.active);
             compare(rig.secret.lingering, true, "the rest of the password goes to the sink");
             compare(rig.secret.lingerWhy, "cancelled");
+        }
+
+        // Opus review of step 9b, MAJOR-1: a confirmation with no other reason to be held is held all the same; Space, Return
+        // and Enter, whatever has the focus in it, answer nothing; a click within the guard gives nothing; past it, a key may.
+        function test_19_confirmNeverByAKey() {
+            client.prompt("p1", {kind: "confirm"});
+            shown("p1");
+            compare(rig.secret.heldByLock, true);
+            compare(rig.secret.heldWhy, "confirm");
+            verify(named("secretHeldNotice").text.indexOf("no key answers a confirmation") >= 0);
+            compare(rig.secret.sheet.takesKeys, false, "the window does not ask for the keyboard");
+            named("secretOk").forceActiveFocus();
+            keyClick(Qt.Key_Space);
+            keyClick(Qt.Key_Return);
+            keyClick(Qt.Key_Enter);
+            compare(client.answers.length, 0, "no key answers it, even with OK focused");
+            mouseClick(rig.secret.sheet, 5, 5);
+            compare(rig.secret.userFocused, false, "a click within the guard gives nothing");
+            keyClick(Qt.Key_Space);
+            compare(client.answers.length, 0);
+            wait(600);
+            mouseClick(rig.secret.sheet, 5, 5);
+            compare(rig.secret.sheet.takesKeys, true);
+            tryVerify(() => named("secretOk").activeFocus);
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1, "a deliberate click, then OK");
+            compare(client.answers[0].ok, true);
+        }
+
+        // Opus review of step 9b, MINOR-1: an empty new password is never sent by a stray Return. Return in New moves on to
+        // Verify; Return in Verify with both fields empty sends nothing; OK (a click) may send an empty new password.
+        function test_20_emptyNewPasswordNotByReturn() {
+            client.prompt("p1", {passwordNew: true, strength: true});
+            shown("p1");
+            compare(rig.secret.heldByLock, false);
+            tryVerify(() => named("secretNewField").activeFocus);
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0, "Return in New sends nothing");
+            verify(named("secretVerifyField").activeFocus);
+            keyClick(Qt.Key_Return);
+            keyClick(Qt.Key_Enter);
+            compare(client.answers.length, 0, "Return in Verify with both fields empty sends nothing");
+            mouseClick(named("secretOk"));
+            compare(client.answers.length, 1, "OK, clicked, may");
+            compare(client.answers[0].password, "");
         }
 
         // The caller's text is plain: markup is shown as typed, never rendered.

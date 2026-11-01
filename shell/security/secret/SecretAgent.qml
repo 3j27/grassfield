@@ -192,12 +192,17 @@ Scope {
         const answered = root.shownId !== "" && root.answeredId === root.shownId;
         const typing = root.sinkingKeys || (!sheetModel.active && win.takesKeys && !(answered && root.answeredKeysBack));
         const waited = sheetModel.active && sheetModel.request.waited === true;
+        // A confirmation is always held (opus review of step 9b, MAJOR-1; decision 9-23): with the keyboard, one stray Space,
+        // Return or Enter would activate OK and grant it (a key use asked for at a moment of another program's choosing).
+        // Only a click on the alert past the guard gives it the keyboard; until then the keys stay with the window the user
+        // was typing in.
+        const confirm = sheetModel.active && sheetModel.request.kind === "confirm";
         const queued = typing || (sheetModel.active && sheetModel.followsAnother());
         root.sinkingKeys = typing;
         if (!sheetModel.active)
             root.requestOpen = false;
-        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : waited ? "waited" : queued ? "queued" : "unlock";
-        root.heldByLock = sheetModel.active && (typing || waited || sheetModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
+        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : waited ? "waited" : queued ? "queued" : confirm && !sheetModel.arrivesHeld(false) ? "confirm" : "unlock";
+        root.heldByLock = sheetModel.active && (typing || waited || confirm || sheetModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
         root.userFocused = false;
         if (sheetModel.active)
             root.requestOpen = true;

@@ -113,7 +113,8 @@ QtObject {
     }
 
     // What the held sheet says, with the time the request arrived. `why`: "locked", "saver", "waited" (another sheet was on
-    // screen when it arrived), "queued" (right after another one) or "unlock".
+    // screen when it arrived), "queued" (right after another one), "confirm" (a confirmation: always held, decision 9-23) or
+    // "unlock".
     function heldNotice(arrivedAt: var, why: string): string {
         const at = Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat));
         if (why === "locked")
@@ -124,6 +125,8 @@ QtObject {
             return qsTr("This request arrived at %1, while another one was open. Click the alert to answer it.").arg(at);
         if (why === "queued")
             return qsTr("This request arrived at %1, right after another one. Click the alert to answer it.").arg(at);
+        if (why === "confirm")
+            return qsTr("This request arrived at %1. Click the alert to answer it: no key answers a confirmation before that.").arg(at);
         return qsTr("This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.").arg(at);
     }
 

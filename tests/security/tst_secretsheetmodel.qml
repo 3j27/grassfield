@@ -183,5 +183,6 @@ TestCase {
         const m = createTemporaryObject(modelC, test);
         verify(m.heldNotice(new Date(), "waited").indexOf("while another one was open") >= 0);
         verify(m.heldNotice(new Date(), "locked").indexOf("locked") >= 0);
+        verify(m.heldNotice(new Date(), "confirm").indexOf("no key answers a confirmation") >= 0);
     }
 }
