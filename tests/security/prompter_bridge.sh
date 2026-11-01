@@ -501,12 +501,12 @@ PY
     fi
     rm -rf "$m"
   done <<'EOF_MUTANTS'
-name-before-hello#Bridge.cpp#            send(helloMessage(bridgeKinds(m_nm != nullptr)));#            send(helloMessage(bridgeKinds(m_nm != nullptr)));\n            wantName(true);
+name-before-hello#Bridge.cpp#            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));#            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));\n            wantName(true);
 lines-not-wiped#Protocol.cpp#            explicit_bzero(buffer + start, end - start + 1);#            ;
 rest-not-wiped#Protocol.cpp#            explicit_bzero(buffer + (length - start), start);#            ;
 answered-without-a-shell#Bridge.cpp#            return;\n        if (m_client < 0 || !m_ready) {\n            log(#            return;\n        if (false) {\n            log(
 pidfd-not-rechecked#Identity.cpp#        facts.alive = pidfdAlive(pidfd);#        facts.alive = true;
-every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n            r.role       = role;#            r.role       = role;
+every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n#
 disk-not-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))#            if (!facts.sameNamespaces)
 EOF_MUTANTS
 fi
