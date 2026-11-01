@@ -23,6 +23,10 @@ import qs.security
 // asked under it, the realm framed as the server's unverified words, the name field (read-only when the caller fixed the
 // name, absent when it asks for none), the password field (no Show password), Remember this password and the line about a
 // keyring without a password, Cancel and Connect (only with a password, and a name when one is asked).
+// A Bluetooth pairing step (step 10) is macOS's connection request: the device's glyph, "Connection Request from “Name”",
+// the device's address under it, Grassfield's sentence for the step, then the code (to compare, or to type on the device with
+// how many digits were typed there), or a field for a PIN or a passkey; Cancel and Connect, Decline and Connect for an
+// incoming pairing or service, Cancel alone for a code shown.
 // Esc cancels. Every string from the caller is plain text (Text.PlainText), one line from the bridge, capped here in lines.
 FocusScope {
     id: root
@@ -60,7 +64,15 @@ FocusScope {
         const request = root.model.request;
         if (!root.inputEnabled || !request)
             return;
-        if (request.kind === "kio") {
+        if (request.kind === "bluetooth") {
+            const mode = request.pairing.mode;
+            if (mode === "pin" || mode === "passkey")
+                field.forceActiveFocus();
+            else if (mode === "display-pin" || mode === "display-passkey")
+                cancelButton.forceActiveFocus();
+            else
+                okButton.forceActiveFocus();
+        } else if (request.kind === "kio") {
             if (request.login.nameMode === "edit" && nameField.text === "")
                 nameField.forceActiveFocus();
             else
@@ -78,6 +90,16 @@ FocusScope {
     // OK (the button: a click, or Space or Return once Tab reached it): the typed password (both fields, read in one step,
     // for a new password) or the confirmation. Only here may a new password be empty (decision 9-24).
     function accept(): void {
+        if (root.model.pairing) {
+            // A code shown has no OK; a PIN or a passkey goes only at its length (its form is checked when sent).
+            if (root.model.asksCode) {
+                if (root.model.pairingReady(field.length))
+                    field.submit();
+            } else if (!root.model.displaysCode) {
+                root.model.submit(null, null);
+            }
+            return;
+        }
         if (root.model.server) {
             // Connect only with a password, and a name when one is asked: the fields keep what was typed otherwise.
             if (root.model.serverReady(field.length, nameField.text.length))
@@ -240,6 +262,69 @@ FocusScope {
             Accessible.name: text
         }
 
+        // A pairing step: what is asked, in Grassfield's words (the device's name is only in the title).
+        Text {
+            objectName: "secretPairingMessage"
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.model.pairingMessage
+            visible: text !== ""
+            color: Appearance.colors.text
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyBodySize
+            wrapMode: Text.Wrap
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
+        // The code to compare, or to type on the device: large, its digits apart.
+        Text {
+            objectName: "secretPairingCode"
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.model.pairingCode
+            visible: text !== ""
+            horizontalAlignment: Text.AlignHCenter
+            color: Appearance.colors.text
+            font.family: Tokens.typographyMonoFamily
+            font.pixelSize: Tokens.typographyTitleSize
+            font.weight: Tokens.typographyMenuBoldWeight
+            font.letterSpacing: Tokens.spacingXs
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text.split("").join(" ")
+        }
+
+        // How many digits were typed on the device (a passkey shown; updated without touching the keyboard).
+        Text {
+            objectName: "secretPairingProgress"
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.model.pairingProgress
+            visible: text !== ""
+            horizontalAlignment: Text.AlignHCenter
+            color: Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            wrapMode: Text.Wrap
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
+        // A service the sheet cannot name: its UUID, as bluetoothd gave it.
+        Text {
+            objectName: "secretPairingUuid"
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.model.serviceUuid
+            visible: text !== ""
+            color: Appearance.colors.textSecondary
+            font.family: Tokens.typographyMonoFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            wrapMode: Text.WrapAnywhere
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
         // The caller's text, framed and introduced as the caller's (spec SC3, SC3b): nothing in the sheet vouches for it.
         Rectangle {
             objectName: "secretCallerBlock"
@@ -368,16 +453,16 @@ FocusScope {
             enabled: root.inputEnabled && root.model.canSubmit
             width: parent.width
             height: visible ? Tokens.polkitFieldHeight : 0
-            placeholder: qsTr("Password")
-            accessibleName: qsTr("Password")
+            placeholder: root.model.pairingMode === "pin" ? qsTr("PIN") : root.model.pairingMode === "passkey" ? qsTr("Code") : qsTr("Password")
+            accessibleName: root.model.pairingMode === "pin" ? qsTr("PIN") : root.model.pairingMode === "passkey" ? qsTr("Code") : qsTr("Password")
             // Show password (a network's only): the characters as typed, never anywhere else than in this field.
             reveal: root.model.network && root.model.showPassword
             // Shown, it is never selectable or copyable (opus review of step 9c, MINOR): not to the clipboard, not to the
             // primary selection. A server's field is never shown (no Show password), so the guard only waits there.
             copyable: false
-            // A network's Return goes through Join's rule, a server's through Connect's (accept): a password too short, or a
-            // missing name, keeps what was typed.
-            submitOnReturn: !root.model.network && !root.model.server
+            // A network's Return goes through Join's rule, a server's and a pairing code's through Connect's (accept): a password
+            // too short, a missing name, or a code of the wrong length keeps what was typed.
+            submitOnReturn: !root.model.network && !root.model.server && !root.model.asksCode
             onReturnPressed: root.accept()
             onSubmitted: password => root.model.submit(password, null)
         }
@@ -513,14 +598,15 @@ FocusScope {
         y: root.pad + column.implicitHeight + Tokens.spacingLg
         spacing: Tokens.controlAlertButtonGap
 
-        readonly property real buttonWidth: Math.max(cancelButton.implicitWidth, okButton.implicitWidth, (root.width - 2 * root.pad - spacing) / 2)
+        // One button (a code shown: Cancel alone) fills the row.
+        readonly property real buttonWidth: okButton.visible ? Math.max(cancelButton.implicitWidth, okButton.implicitWidth, (root.width - 2 * root.pad - spacing) / 2) : root.width - 2 * root.pad
 
         Button {
             id: cancelButton
             objectName: "secretCancel"
             capsule: true
             width: buttonRow.buttonWidth
-            text: qsTr("Cancel")
+            text: root.model.authorizes ? qsTr("Decline") : qsTr("Cancel")
             onClicked: root.model.cancel()
         }
 
@@ -530,8 +616,10 @@ FocusScope {
             capsule: true
             primary: true
             width: buttonRow.buttonWidth
-            text: root.model.network ? qsTr("Join") : root.model.server ? qsTr("Connect") : qsTr("OK")
-            enabled: root.model.canSubmit && (root.model.network ? root.model.networkReady(field.length) : !root.model.server || root.model.serverReady(field.length, nameField.text.length))
+            text: root.model.network ? qsTr("Join") : root.model.server || root.model.pairing ? qsTr("Connect") : qsTr("OK")
+            // A code shown has no OK: only Cancel (decision 10-6).
+            visible: !root.model.displaysCode
+            enabled: root.model.canSubmit && (root.model.network ? root.model.networkReady(field.length) : !root.model.server || root.model.serverReady(field.length, nameField.text.length)) && (!root.model.asksCode || root.model.pairingReady(field.length))
             onClicked: root.accept()
         }
     }

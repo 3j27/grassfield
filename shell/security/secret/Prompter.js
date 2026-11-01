@@ -11,8 +11,9 @@
 
 var PROTOCOL = "prompter/1";
 // The kinds this shell draws, its hello's "kinds" (the bridge never sends another): gcr's password and confirm,
-// NetworkManager's secrets (nm, step 9c) and KIO's network passwords (kio, step 9e); bluetooth comes with step 10.
-var KINDS = ["password", "confirm", "nm", "kio"];
+// NetworkManager's secrets (nm, step 9c), KIO's network passwords (kio, step 9e) and BlueZ's pairing steps (bluetooth,
+// step 10).
+var KINDS = ["password", "confirm", "nm", "kio", "bluetooth"];
 // Secret requests the shell holds at once, shown or waiting (ADR-0035 D-9: the ninth is answered "cancelled").
 var MAX_REQUESTS = 8;
 // A bridge line longer than this (UTF-16 code units, the newline excluded) closes the connection. The longest prompt the
@@ -43,7 +44,8 @@ var CAPS = {
     ssid: 64,
     identity: 256,
     server: 262,
-    realm: 256
+    realm: 256,
+    device: 64
 };
 // "disk": grassfield-askpass, udiskie's password command (step 9c); "kio": KIO's worker executable (step 9e).
 var ROLES = ["app", "keyring", "gnupg", "ssh", "disk", "kio", "unidentified"];
@@ -57,6 +59,18 @@ var KEYRING_STATES = ["protected", "unprotected", "unknown"];
 // The server of a kio request: a host name (lower-case letters, digits, '-', '_', dots) or an IPv6 address in brackets, then
 // an optional port: never free text (the bridge's KioAuth.h serverLabel; decision 9-42).
 var SERVER_PATTERN = /^(?:[a-z0-9_-]{1,63}(?:\.[a-z0-9_-]{1,63})*\.?|\[[0-9a-f:.]{2,45}\])(?::[0-9]{1,5})?$/;
+// A bluetooth request's fields (step 10; bridges/prompter/src/BtPairing.h): its modes, the device's icon keys (each the name
+// of a Grassfield glyph), the services AuthorizeService names, an address, a UUID, the codes. A code shown (display-pin,
+// display-passkey) is answered "cancel" only; a PIN is 1 to 16 ASCII letters and digits, a passkey exactly 6 digits.
+var PAIRING_MODES = ["pin", "passkey", "display-pin", "display-passkey", "confirm", "authorize", "authorize-service"];
+var DEVICE_ICONS = ["", "keyboard", "mouse", "gamecontroller", "headphones", "speaker", "phone", "laptop", "display", "printer", "camera"];
+var SERVICES = ["audio", "remote-control", "headset", "hands-free", "file-transfer", "object-push", "network", "input", "phonebook", "messages", "serial", "dial-up", "other"];
+var ADDRESS_PATTERN = /^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/;
+var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+var PIN_PATTERN = /^[0-9A-Za-z]{1,16}$/;
+var PASSKEY_PATTERN = /^[0-9]{6}$/;
+// The digits of a passkey, and the most a code shown says were typed on the device.
+var PASSKEY_DIGITS = 6;
 var NAME_STATES = ["released", "queued", "owned"];
 // Waits before the next connection attempt: 1 s, doubling, at most 30 s (a bridge that is restarting, or not there).
 var RETRY_FIRST_MS = 1000;
@@ -222,6 +236,8 @@ function parseBridgeLine(line, helloSeen) {
         return parsePrompt(m);
     if (m.type === "cancel")
         return parseCancel(m);
+    if (m.type === "progress")
+        return parseProgress(m);
     return failure("an unknown message type");
 }
 
@@ -248,6 +264,18 @@ function parseCancel(m) {
     return {ok: true, message: {type: "cancel", id: m.id}};
 }
 
+// The digits typed on a device for a code the shell shows (step 10): the client checks that the id is a display-passkey
+// request it holds.
+function parseProgress(m) {
+    if (!exactKeys(m, ["type", "id", "entered"]) || !validId(m.id) || !isCount(m.entered))
+        return failure("progress: wrong shape");
+    return {ok: true, message: {type: "progress", id: m.id, entered: m.entered}};
+}
+
+function isCount(v) {
+    return typeof v === "number" && v === Math.floor(v) && v >= 0 && v <= PASSKEY_DIGITS;
+}
+
 function parseError(m) {
     if (!exactKeys(m, ["type", "code", "message"]) || !isString(m.code, 64) || typeof m.message !== "string")
         return failure("error: wrong shape");
@@ -262,6 +290,8 @@ function parsePrompt(m) {
         return parseNetworkPrompt(m);
     if (m.kind === "kio")
         return parseServerPrompt(m);
+    if (m.kind === "bluetooth")
+        return parsePairingPrompt(m);
     if (!exactKeys(m, ["type", "id", "kind", "requester", "texts", "choice", "passwordNew", "strength"]))
         return failure("prompt: unexpected keys");
     if (!validId(m.id))
@@ -420,6 +450,67 @@ function parseNetworkPrompt(m) {
     };
 }
 
+// A BlueZ pairing step (kind bluetooth, step 10; Protocol.cpp btPromptMessage): exactly its keys; the device's name (plain,
+// within its cap, not empty: shown only as a quoted field of Grassfield's sentence), its address, an icon key; a known mode
+// with exactly the fields that mode has: a passkey's 6 digits for display-passkey and confirm, a PIN to type on the device
+// for display-pin, how many digits were typed for display-passkey, the service and its UUID for authorize-service. The bridge
+// sends this kind only for a call from the current owner of org.bluez: the requester row is the shell's own (role
+// "bluetooth"), never from anything the request carries; no caller text, no check box.
+function parsePairingPrompt(m) {
+    if (!exactKeys(m, ["type", "id", "kind", "device", "pairing"]))
+        return failure("bluetooth prompt: unexpected keys");
+    if (!validId(m.id))
+        return failure("bluetooth prompt: invalid id");
+    const dv = m.device;
+    if (!isObject(dv) || !exactKeys(dv, ["name", "address", "icon"]))
+        return failure("bluetooth prompt: device has unexpected keys");
+    if (!isString(dv.name, CAPS.device) || typeof dv.address !== "string" || !ADDRESS_PATTERN.test(dv.address) || DEVICE_ICONS.indexOf(dv.icon) < 0)
+        return failure("bluetooth prompt: device has wrong types");
+    const name = flatten(dv.name, CAPS.device);
+    if (name === "")
+        return failure("bluetooth prompt: a device name that shows nothing");
+    const p = m.pairing;
+    if (!isObject(p) || !exactKeys(p, ["mode", "code", "entered", "service", "uuid"]))
+        return failure("bluetooth prompt: pairing has unexpected keys");
+    if (PAIRING_MODES.indexOf(p.mode) < 0 || typeof p.code !== "string" || !isCount(p.entered) || typeof p.service !== "string" || typeof p.uuid !== "string")
+        return failure("bluetooth prompt: pairing has wrong types");
+    const shows = p.mode === "display-passkey" || p.mode === "confirm";
+    if (shows ? !PASSKEY_PATTERN.test(p.code) : p.mode === "display-pin" ? !PIN_PATTERN.test(p.code) : p.code !== "")
+        return failure("bluetooth prompt: a code that does not fit its mode");
+    if (p.mode !== "display-passkey" && p.entered !== 0)
+        return failure("bluetooth prompt: digits typed for a mode that shows no passkey");
+    if (p.mode === "authorize-service" ? SERVICES.indexOf(p.service) < 0 || !UUID_PATTERN.test(p.uuid) : p.service !== "" || p.uuid !== "")
+        return failure("bluetooth prompt: a service that does not fit its mode");
+    return {
+        ok: true,
+        message: {
+            type: "prompt",
+            id: m.id,
+            kind: "bluetooth",
+            requester: {role: "bluetooth", name: "", desktopId: "", icon: "", path: "", identified: true, onBehalf: false},
+            texts: {title: "", message: "", description: "", warning: "", continueLabel: "", cancelLabel: ""},
+            choice: null,
+            passwordNew: false,
+            strength: false,
+            device: {name: name, address: dv.address, icon: dv.icon},
+            pairing: {mode: p.mode, code: p.code, entered: p.entered, service: p.service, uuid: p.uuid}
+        }
+    };
+}
+
+// The code typed for a pairing step may be sent: a PIN of 1 to 16 ASCII letters and digits, a passkey of exactly 6 digits
+// (read from the text when it is sent, never on every key).
+function pairingCodeOk(mode, code) {
+    if (typeof code !== "string")
+        return false;
+    return mode === "pin" ? PIN_PATTERN.test(code) : mode === "passkey" ? PASSKEY_PATTERN.test(code) : false;
+}
+
+// Connect may be pressed, from the field's length only: a PIN of 1 to 16 characters, a passkey of 6.
+function pairingLengthOk(mode, length) {
+    return mode === "pin" ? length >= 1 && length <= 16 : mode === "passkey" ? length === PASSKEY_DIGITS : false;
+}
+
 // A Wi-Fi password the sheet may send, from its length in UTF-16 code units (never the text): WPA/WPA2 Personal takes
 // 8 to 63 characters or 64 hexadecimal digits (NetworkManager checks the rest); the other securities any non-empty one.
 function networkLengthOk(security, length) {
@@ -436,17 +527,35 @@ function helloLine(version) {
 }
 
 // The one answer to `request` (a parsed prompt, or what the client kept of it: id, kind, passwordNew, choice, security,
-// nameMode, remember):
+// nameMode, remember, mode):
 // "ok" with the password for a password request (a string, "" only for a new password) and the check box's state when
 // the prompt had one; for an nm request the password only (not empty: NetworkManager keeps nothing else of a reply, opus
 // review of step 9c); "cancel" carries no password. `identity` is sent only for a kio request whose sheet asks a name
-// (step 9e), never for nm.
+// (step 9e), never for nm. A bluetooth request (step 10): the code typed for a PIN or a passkey (its form checked), nothing
+// for a confirmation or an authorization, and never "ok" for a code shown.
 // Returns the line, or "" when it would be wrong (no password for an ok password answer, one over MAX_PASSWORD_BYTES, a
 // line over MAX_SHELL_LINE): nothing is sent then.
 function answerLine(request, ok, password, choice, identity) {
     if (!isObject(request) || !validId(request.id) || KINDS.indexOf(request.kind) < 0)
         return "";
     const m = {type: "answer", id: request.id, result: ok === true ? "ok" : "cancel"};
+    if (request.kind === "bluetooth") {
+        // "ok" with the code for a PIN or a passkey (its form checked), with nothing for a confirmation or an authorization,
+        // never for a code shown (only cancelled); "cancel" carries nothing (step 10).
+        const mode = isObject(request.pairing) ? request.pairing.mode : request.mode;
+        if (PAIRING_MODES.indexOf(mode) < 0)
+            return "";
+        if (ok === true) {
+            if (mode === "display-pin" || mode === "display-passkey")
+                return "";
+            if (mode === "pin" || mode === "passkey") {
+                if (!pairingCodeOk(mode, password))
+                    return "";
+                m.password = password;
+            }
+        }
+        return JSON.stringify(m);
+    }
     if (request.kind === "kio") {
         // "ok": the password (not empty) and, when the sheet asked for one, the name (not empty); the check box when it was
         // offered. "cancel" carries nothing (the bridge cancels a cancellation that carries anything).

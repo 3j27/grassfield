@@ -21,8 +21,9 @@ import "Prompter.js" as Prompter
 // keys while a held request has them and lingers a moment after a request ended under the user's typing, so the rest of a
 // password reaches neither another sheet nor the window underneath. Two differences: a request never replaces the one on
 // screen (the queue holds it until that one is gone), and a password sent keeps the keys on the sink a moment too (gcr's
-// caller asks again at once after a wrong password, as a new request). A confirmation, a NetworkManager request and a KIO
-// request are always held (decisions 9-23, 9-28 and 9-38).
+// caller asks again at once after a wrong password, as a new request). A confirmation, a NetworkManager request, a KIO
+// request and a Bluetooth pairing step are always held (decisions 9-23, 9-28, 9-38 and 10-7); a Bluetooth code shown on the
+// screen follows the digits typed on the device without touching the keyboard (10-8).
 Scope {
     id: root
 
@@ -53,6 +54,8 @@ Scope {
     // The last serial number given to a request.
     property int serial: 0
     property bool answeredKeysBack: false
+    // That answer sent a Bluetooth code (a PIN or a passkey), not a password: the linger says so.
+    property bool answeredCode: false
 
     PrompterClient {
         id: client
@@ -60,6 +63,7 @@ Scope {
         shellVersion: root.shellVersion
         onPrompted: request => root.enqueue(request)
         onWithdrawn: id => root.withdraw(id)
+        onProgressed: (id, entered) => root.progress(id, entered)
         onLost: root.dropAll()
     }
 
@@ -93,6 +97,19 @@ Scope {
             sheetModel.request = null;
         else if (id !== root.shownId && root.queue !== null)
             root.queue.removeSecret(id);
+    }
+
+    // The digits typed on a device for a Bluetooth code the shell shows (decision 10-8): the request's count, and the sheet's
+    // when it is on screen. Nothing else: no arrival, no hold, no focus, no field touched.
+    function progress(id: string, entered: int): void {
+        if (!Object.prototype.hasOwnProperty.call(root.requests, id))
+            return;
+        const request = root.requests[id];
+        if (request.kind !== "bluetooth" || request.pairing.mode !== "display-passkey")
+            return;
+        request.pairing.entered = entered;
+        if (sheetModel.active && sheetModel.id === id)
+            sheetModel.entered = entered;
     }
 
     // The connection ended: every request is gone (the bridge answered them "cancelled").
@@ -148,6 +165,7 @@ Scope {
             return;
         root.answeredId = id;
         root.answeredKeysBack = !ok || !sheetModel.asksPassword;
+        root.answeredCode = ok && sheetModel.asksCode;
         sheetModel.noteAnswered();
         root.forget(id);
         Qt.callLater(root.finish, id);
@@ -205,12 +223,16 @@ Scope {
         // A KIO request too (decision 9-38): a KIO worker asks when it decides (a job any program of the user can start, with
         // a server of its own), and what reaches its fields goes to that worker.
         const server = sheetModel.active && sheetModel.request.kind === "kio";
+        // A Bluetooth pairing step too (decision 10-7): bluetoothd asks when a device decides (an incoming pairing, a
+        // service it wants), an authorization is a security decision no key may answer, a code typed goes to the device, and
+        // a code shown needs no keyboard at all.
+        const pairing = sheetModel.active && sheetModel.request.kind === "bluetooth";
         const queued = typing || (sheetModel.active && sheetModel.followsAnother());
         root.sinkingKeys = typing;
         if (!sheetModel.active)
             root.requestOpen = false;
-        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : waited ? "waited" : queued ? "queued" : network && !sheetModel.arrivesHeld(false) ? "network" : server && !sheetModel.arrivesHeld(false) ? "server" : confirm && !sheetModel.arrivesHeld(false) ? "confirm" : "unlock";
-        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || sheetModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
+        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : waited ? "waited" : queued ? "queued" : network && !sheetModel.arrivesHeld(false) ? "network" : server && !sheetModel.arrivesHeld(false) ? "server" : pairing && !sheetModel.arrivesHeld(false) ? sheetModel.pairingHeldWhyOf(sheetModel.request.pairing.mode) : confirm && !sheetModel.arrivesHeld(false) ? "confirm" : "unlock";
+        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || pairing || sheetModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
         root.userFocused = false;
         if (sheetModel.active)
             root.requestOpen = true;
@@ -219,7 +241,7 @@ Scope {
             sheetModel.noteEnded();
         // The linger starts: from the base state, never `lingering`.
         if (typing && !sheetModel.active && !SessionState.locked) {
-            root.lingerWhy = answered ? "sent" : "cancelled";
+            root.lingerWhy = answered ? (root.answeredCode ? "code" : "sent") : "cancelled";
             sinkIdle.restart();
             sinkCap.restart();
         }
@@ -245,7 +267,8 @@ Scope {
     // notice where the sheet was, until no key came for heldAfterUnlockMs, at most sinkLingerMaxMs, or a click, the lock or
     // the screen saver ends it. Its place in the queue is kept meanwhile: no other sheet shows during a linger.
     readonly property bool lingering: root.sinkingKeys && !sheetModel.active && !SessionState.locked
-    // Why the window lingers: "cancelled" (the request ended unanswered) or "sent" (a password was sent).
+    // Why the window lingers: "cancelled" (the request ended unanswered), "sent" (a password was sent) or "code" (a Bluetooth
+    // code was sent).
     property string lingerWhy: "cancelled"
     property bool userFocused: false
     property var requestStartedAt: null
@@ -414,7 +437,7 @@ Scope {
                 Text {
                     width: parent.width
                     textFormat: Text.PlainText
-                    text: root.lingerWhy === "sent" ? qsTr("Password sent") : qsTr("Request cancelled")
+                    text: root.lingerWhy === "sent" ? qsTr("Password sent") : root.lingerWhy === "code" ? qsTr("Code sent") : qsTr("Request cancelled")
                     horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily

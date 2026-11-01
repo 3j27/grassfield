@@ -26,6 +26,12 @@ import "Prompter.js" as Prompter
 // Remember this password (Grassfield's label) and, when the keyring that would keep it has no password, a line saying so
 // (decision 9-45); Cancel and Connect. A retry after a failed login says so in Grassfield's words (the worker's message is
 // never sent to the shell, decision 9-40).
+//
+// A BlueZ pairing step (kind "bluetooth", step 10) is macOS's "Connection Request from “Name”": the device's glyph, the title
+// with the device's name as a quoted field (a remote device chooses its own name: never more than that field), its address
+// under it, then Grassfield's sentence for the step: a field for a PIN or a passkey (Cancel / Connect), the code to compare
+// (Cancel / Connect), the code to type on the device and how many digits were typed there (Cancel only), an incoming pairing
+// or service to allow (Decline / Connect, the service named by its profile). No caller text.
 QtObject {
     id: root
 
@@ -40,7 +46,14 @@ QtObject {
     readonly property bool network: kind === "nm"
     // KIO's network passwords (step 9e).
     readonly property bool server: kind === "kio"
-    readonly property bool asksPassword: kind === "password" || network || server
+    // A BlueZ pairing step (step 10): its mode; a field for a PIN or a passkey (`asksCode`), a code shown on the screen to type
+    // on the device (`displaysCode`: Cancel only), an incoming pairing or service to allow (`authorizes`: Decline / Connect).
+    readonly property bool pairing: kind === "bluetooth"
+    readonly property string pairingMode: pairing ? request.pairing.mode : ""
+    readonly property bool asksCode: pairingMode === "pin" || pairingMode === "passkey"
+    readonly property bool displaysCode: pairingMode === "display-pin" || pairingMode === "display-passkey"
+    readonly property bool authorizes: pairingMode === "authorize" || pairingMode === "authorize-service"
+    readonly property bool asksPassword: kind === "password" || network || server || asksCode
     readonly property bool passwordNew: asksPassword && request.passwordNew === true
     readonly property bool showsStrength: passwordNew && request.strength === true
     readonly property string role: request ? request.requester.role : ""
@@ -53,10 +66,10 @@ QtObject {
     // The app's theme icon name (a plain name only, the notification icons' rule), "" otherwise: the sheet then draws the
     // role's glyph.
     readonly property string appIcon: role === "app" && request ? NotificationPrefs.safeIconName(request.requester.icon) : ""
-    readonly property string glyph: role === "app" ? "apps" : role === "unidentified" ? "exclamationmark-triangle" : role === "network" ? "wifi-3" : role === "disk" ? "drive" : role === "kio" ? "globe" : "key"
+    readonly property string glyph: role === "app" ? "apps" : role === "unidentified" ? "exclamationmark-triangle" : role === "network" ? "wifi-3" : role === "disk" ? "drive" : role === "kio" ? "globe" : role === "bluetooth" ? deviceGlyphOf(request.device.icon) : "key"
     // Who asked, under a NetworkManager request's title (the program the bridge checked the call came from) and a KIO
     // request's (the bridge's requester); "" otherwise.
-    readonly property string requesterDetail: network ? qsTr("Requested by NetworkManager") : server ? serverRequesterOf(role, requesterName) : ""
+    readonly property string requesterDetail: network ? qsTr("Requested by NetworkManager") : server ? serverRequesterOf(role, requesterName) : pairing ? qsTr("Bluetooth device %1").arg(deviceAddress) : ""
 
     // A KIO request's server (a host name and its port: a field of the title's sentence), its login: the name field's mode
     // ("edit", "fixed": shown only, "none": no name field), Remember this password ("none": not offered), the keyring's
@@ -79,8 +92,19 @@ QtObject {
     readonly property string identity: showsIdentity ? Prompter.flatten(request.network.identity, Prompter.CAPS.identity) : ""
     property bool showPassword: false
 
+    // The device of a pairing step: its name (plain, a field of the title's sentence), its address (the bridge's, from the
+    // object path bluetoothd gave), the code to compare or to type on it, how many digits were typed there (a code shown:
+    // SecretAgent.progress updates it), the service an incoming connection wants and its UUID when it has no name here.
+    readonly property string deviceName: pairing ? Prompter.flatten(request.device.name, Prompter.CAPS.device) : ""
+    readonly property string deviceAddress: pairing ? request.device.address : ""
+    readonly property string pairingCode: pairingMode === "confirm" || displaysCode ? request.pairing.code : ""
+    property int entered: 0
+    readonly property string pairingMessage: pairing ? pairingMessageOf(pairingMode, request.pairing.service) : ""
+    readonly property string pairingProgress: pairingMode === "display-passkey" ? qsTr("Digits typed on the device: %1 of %2").arg(root.entered).arg(Prompter.PASSKEY_DIGITS) : ""
+    readonly property string serviceUuid: pairingMode === "authorize-service" && request.pairing.service === "other" ? request.pairing.uuid : ""
+
     // The sheet's own title, Grassfield's words: who asks, and for what.
-    readonly property string title: server ? serverTitleOf(nameMode, serverName) : network ? networkTitleOf(networkSecurity, networkSsid) : titleOf(role, requesterName, kind, passwordNew)
+    readonly property string title: server ? serverTitleOf(nameMode, serverName) : network ? networkTitleOf(networkSecurity, networkSsid) : pairing ? qsTr("Connection Request from “%1”").arg(deviceName) : titleOf(role, requesterName, kind, passwordNew)
     // The line that introduces the caller's text (spec SC3b): whose text it is.
     readonly property string callerIntro: server ? qsTr("The server describes this login as follows. It is not verified:") : callerIntroOf(role, requesterName)
     // The caller's own text: its title, message and description (plain lines, capped by the bridge and again here); for a
@@ -173,6 +197,13 @@ QtObject {
             return qsTr("This request arrived at %1. Click the alert to type the password: nothing typed elsewhere goes into it.").arg(at);
         if (why === "server")
             return qsTr("This request arrived at %1. Click the alert to type your name and password: nothing typed elsewhere goes into it.").arg(at);
+        if (why === "pairing-code")
+            return qsTr("This request arrived at %1. Click the alert to type the code: nothing typed elsewhere goes into it.").arg(at);
+        if (why === "pairing-answer")
+            return qsTr("This request arrived at %1. Click the alert to answer it: no key answers it before that.").arg(at);
+        // A code shown has nothing to type in and no key to answer: no notice.
+        if (why === "pairing-display")
+            return "";
         return qsTr("This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.").arg(at);
     }
 
@@ -194,7 +225,75 @@ QtObject {
             return qsTr("Wi-Fi");
         if (role === "kio")
             return qsTr("KIO");
+        if (role === "bluetooth")
+            return qsTr("Bluetooth");
         return role === "" ? "" : qsTr("Unidentified program");
+    }
+
+    // Why a pairing step is held when nothing else holds it (decision 10-7): a code to type, a decision to make, or a code
+    // shown (no notice: nothing to type in, nothing to answer but Cancel).
+    function pairingHeldWhyOf(mode: string): string {
+        if (mode === "pin" || mode === "passkey")
+            return "pairing-code";
+        if (mode === "display-pin" || mode === "display-passkey")
+            return "pairing-display";
+        return "pairing-answer";
+    }
+
+    // The device's glyph from the bridge's icon key (each key is a Grassfield glyph's name), else Bluetooth's.
+    function deviceGlyphOf(icon: string): string {
+        return Prompter.DEVICE_ICONS.indexOf(icon) > 0 ? icon : "bluetooth";
+    }
+
+    // Grassfield's sentence for a pairing step, under the title that names the device.
+    function pairingMessageOf(mode: string, service: string): string {
+        if (mode === "pin")
+            return qsTr("Enter the device's PIN code.");
+        if (mode === "passkey")
+            return qsTr("Enter the code shown on the device.");
+        if (mode === "display-pin" || mode === "display-passkey")
+            return qsTr("Type this code on the device, then press Return on it.");
+        if (mode === "confirm")
+            return qsTr("Connect only if the device shows the same code.");
+        if (mode === "authorize")
+            return qsTr("The device wants to pair with this computer.");
+        if (mode === "authorize-service")
+            return qsTr("The device wants to use %1 on this computer.").arg(serviceLabelOf(service));
+        return "";
+    }
+
+    // The profile an incoming connection wants, in Grassfield's words (the bridge's fixed keys, BtPairing.h serviceKey).
+    function serviceLabelOf(key: string): string {
+        if (key === "audio")
+            return qsTr("audio streaming");
+        if (key === "remote-control")
+            return qsTr("media remote control");
+        if (key === "headset")
+            return qsTr("headset audio");
+        if (key === "hands-free")
+            return qsTr("hands-free calling");
+        if (key === "file-transfer")
+            return qsTr("file transfer");
+        if (key === "object-push")
+            return qsTr("sending files");
+        if (key === "network")
+            return qsTr("network sharing");
+        if (key === "input")
+            return qsTr("keyboard or mouse input");
+        if (key === "phonebook")
+            return qsTr("phonebook access");
+        if (key === "messages")
+            return qsTr("message access");
+        if (key === "serial")
+            return qsTr("a serial port");
+        if (key === "dial-up")
+            return qsTr("dial-up networking");
+        return qsTr("a Bluetooth service");
+    }
+
+    // Connect may be pressed for a PIN or a passkey: read as a length, never as text (the form is checked when it is sent).
+    function pairingReady(codeLength: int): bool {
+        return asksCode && canSubmit && Prompter.pairingLengthOk(pairingMode, codeLength);
     }
 
     // The server sheet's sentence (macOS's): the server is a field inside Grassfield's words.
@@ -246,8 +345,8 @@ QtObject {
     }
 
     function callerIntroOf(role: string, name: string): string {
-        // A network request carries no caller text at all.
-        if (role === "" || role === "network")
+        // A network request and a pairing step carry no caller text at all.
+        if (role === "" || role === "network" || role === "bluetooth")
             return "";
         if (role === "keyring" || role === "gnupg" || role === "ssh" || role === "disk" || role === "kio")
             return qsTr("Another program sent this message through %1. It is not verified:").arg(name);
@@ -289,6 +388,18 @@ QtObject {
         if (!canSubmit) {
             clearRequested();
             return false;
+        }
+        if (pairing) {
+            // A code shown is only ever cancelled (decision 10-6).
+            if (displaysCode) {
+                clearRequested();
+                return false;
+            }
+            if (asksCode && !Prompter.pairingCodeOk(pairingMode, password)) {
+                priv.error = pairingMode === "pin" ? qsTr("A PIN has 1 to 16 letters or digits.") : qsTr("Type the 6 digits of the code.");
+                clearRequested();
+                return false;
+            }
         }
         if (server) {
             if (typeof password !== "string" || password.length === 0) {
@@ -366,6 +477,7 @@ QtObject {
         if (request)
             root.choice = request.kind === "kio" ? request.login.remember === "on" : request.choice !== null && request.choice.chosen === true;
         root.loginName = request && request.kind === "kio" ? request.login.name : "";
+        root.entered = request && request.kind === "bluetooth" ? request.pairing.entered : 0;
         clearRequested();
     }
 }
