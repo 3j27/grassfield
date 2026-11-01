@@ -17,6 +17,8 @@
                                    meanwhile
   noiface N                        N rounds of BeginPrompting with the prompter's interface and StopPrompting without it,
                                    with callback objects; prints "begin ok: <n>", "begin refused: <n>", "stop <answer>: <n>", then stays on the bus
+  vanish N WHICH MARKER            one connection opens N prompts by hand (callback objects served, the exchange done),
+                                   performs prompt WHICH, waits for the file MARKER, then leaves the bus at once
   longlived DIR N                  one connection for the whole run (as gnome-keyring-daemon); for i in 0..N-1: waits for
                                    DIR/go-<i>, opens a prompt "Long-lived <i>", asks a password, prints "<i> password=..."
                                    or "<i> cancelled" or "<i> open error <name>"
@@ -220,6 +222,37 @@ def noiface(n):
     GLib.MainLoop().run()  # stays on the bus with every prompt gcr kept, until killed
 
 
+def vanish(n, which, marker):
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    exchanges, ready = {}, set()
+    node = Gio.DBusNodeInfo.new_for_xml(CALLBACK_XML)
+
+    def callback(conn, sender, path, iface, method, params, invocation):
+        invocation.return_value(None)
+        if method == "PromptReady":
+            exchanges[path].receive(params.unpack()[2])
+            ready.add(path)
+
+    for i in range(n):
+        path = "/org/gnome/keyring/Prompt/vanish%d" % i
+        exchanges[path] = Gcr.SecretExchange.new(None)
+        bus.register_object(path, node.interfaces[0], callback, None, None)
+        prompter_sync(bus, "BeginPrompting", GLib.Variant("(o)", (path,)))
+    ctx = GLib.MainContext.default()
+    while len(ready) < n:
+        ctx.iteration(True)
+    path = "/org/gnome/keyring/Prompt/vanish%d" % which
+    props = {"title": GLib.Variant("s", "Vanishing with %d open" % n)}
+    bus.call(NAME, "/org/gnome/keyring/Prompter", "org.gnome.keyring.internal.Prompter", "PerformPrompt",
+             GLib.Variant("(osa{sv}s)", (path, "password", props, exchanges[path].send(None, 0))), None,
+             Gio.DBusCallFlags.NONE, 5000, None, None)
+    while not os.path.exists(marker):
+        ctx.iteration(False)
+        time.sleep(0.01)
+    print("vanishing", flush=True)
+    os._exit(0)
+
+
 def longlived(directory, n):
     keep = Gio.bus_get_sync(Gio.BusType.SESSION, None)  # held for the whole run
     print("unique " + keep.get_unique_name(), flush=True)
@@ -282,9 +315,10 @@ def holder(log_path, flags):
 def main():
     private_bus_only()
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["password", "confirm", "many", "forge", "begins", "noiface", "longlived", "badperform", "holder"])
+    ap.add_argument("mode", choices=["password", "confirm", "many", "forge", "begins", "noiface", "vanish", "longlived", "badperform", "holder"])
     ap.add_argument("count", nargs="?", default="0")
     ap.add_argument("count2", nargs="?", type=int, default=0)
+    ap.add_argument("marker", nargs="?")
     ap.add_argument("--objects", action="store_true")
     ap.add_argument("--pause", type=float, default=0)
     ap.add_argument("--title")
@@ -308,6 +342,8 @@ def main():
         begins(int(args.count), args.objects, args.pause)
     elif args.mode == "noiface":
         noiface(int(args.count))
+    elif args.mode == "vanish":
+        vanish(int(args.count), args.count2, args.marker)
     elif args.mode == "longlived":
         longlived(args.count, args.count2)
     elif args.mode == "badperform":

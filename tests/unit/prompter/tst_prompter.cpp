@@ -1192,6 +1192,37 @@ TEST(PrompterFilter, BeginPromptingOverTheShareIsRefusedUntilGcrEndsAPrompt) {
     EXPECT_EQ(state.book.open(":1.9"), 1);
 }
 
+TEST(PrompterFilter, UnansweredPromptReadyCallsGoWithTheirPrompt) {
+    // An entry of a PromptReady that is never answered (gcr cancels it itself when it ends the prompt) goes with gcr's
+    // PromptDone for the same callback, with a newer PromptReady for it, or with its caller (opus final check of step 9a,
+    // NIT): a caller cycling prompts it never answers cannot fill the table and push out other callers' entries.
+    FilterState state;
+    auto        out = [&state](GDBusMessage* m) {
+        filterOutgoing(state, m);
+        g_object_unref(m);
+    };
+    out(toCallback("PromptReady", ":1.7", "/org/gnome/keyring/Prompt/p1", 201));
+    out(toCallback("PromptReady", ":1.7", "/org/gnome/keyring/Prompt/p2", 202));
+    out(toCallback("PromptReady", ":1.8", "/org/gnome/keyring/Prompt/p1", 203));
+    EXPECT_EQ(state.readyCalls.size(), 3);
+    out(toCallback("PromptDone", ":1.7", "/org/gnome/keyring/Prompt/p1", 204));
+    EXPECT_FALSE(state.readyCalls.contains(201));
+    out(toCallback("PromptReady", ":1.7", "/org/gnome/keyring/Prompt/p2", 205));
+    EXPECT_FALSE(state.readyCalls.contains(202));
+    EXPECT_TRUE(state.readyCalls.contains(205));
+    GDBusMessage* reply = nullptr;
+    GDBusMessage* left  = ownerChanged(":1.7", ":1.7", "");
+    EXPECT_EQ(filterIncoming(state, ":1.1", left, &reply), left);
+    g_object_unref(left);
+    EXPECT_EQ(state.readyCalls.keys(), QList<quint32>{203});
+    for (quint32 i = 0; i < 5000; ++i) {
+        out(toCallback("PromptReady", ":1.9", "/org/gnome/keyring/Prompt/cycle", 1000 + 2 * i));
+        out(toCallback("PromptDone", ":1.9", "/org/gnome/keyring/Prompt/cycle", 1001 + 2 * i));
+    }
+    EXPECT_EQ(state.readyCalls.keys(), QList<quint32>{203}); // never filled, never cleared
+    EXPECT_EQ(state.readyBySlot.size(), 1);
+}
+
 TEST(PrompterFilter, ThePrompterNameLeavingTheBridgeClearsEveryCount) {
     // gcr's clients forget their prompts without stopping them when the prompter's name goes (counter-review MINOR-A).
     FilterState state;

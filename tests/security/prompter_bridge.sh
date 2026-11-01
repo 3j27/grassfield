@@ -34,6 +34,9 @@
 #    others (counter-review MINOR-B); a PerformPrompt of the wrong shape gets InvalidArgs from the bridge at once
 # 11c a long-lived client (one connection, as gnome-keyring-daemon) whose prompt is in flight each time the shell goes,
 #    eight times, is served again after (counter-review MINOR-A: gcr's clients forget such prompts without stopping them)
+# 11d the shell's write side fails (EPIPE, its reading side shut down, no end ever read) while gcr ends the prompts of a
+#    caller that left the bus with eight open, one of them performed: the bridge stays up and the departure closes no
+#    prompt from inside gcr's own clean-up (opus final check of step 9a, MAJOR: a use-after-free in gcr before the fix)
 # 12 queued behind a holder that owns the name first (the stock gcr-prompter for 10 s after its last prompt): "queued",
 #    then "owned" once the holder exits
 # 13 no test password in the bridge's journal output
@@ -395,6 +398,24 @@ desc="...because at each departure gcr ended its open prompts (none left to fill
 check bash -c '[[ $(grep -c "open gcr prompt(s) closed: their callers saw the name go (0 still open)$" "$1") -ge 8 ]] && ! grep -q "still open)$" <(grep -v "(0 still open)$" "$1")' _ "$d/main.log"
 say "ll$n_shell" close
 wait_until 5 unowned
+
+# --- 11d a write error inside gcr's clean-up --------------------------------------------------------------------------
+for which in 0 7; do
+  shell_up half$which "$sock"
+  say half$which hello
+  wait_until 5 owned_by "$main_pid"
+  client vanish$which vanish 8 "$which" "$d/half$which.go"
+  wait_until 10 has_line half$which "Vanishing with 8 open"
+  say half$which halfclose
+  errors_before=$(grep -c "shell gone: write error" "$d/main.log")
+  closed_before=$(grep -c " (0 still open)$" "$d/main.log")
+  wait_until 5 grep -q "^#halfclosed" "$d/half$which.shell" && touch "$d/half$which.go"
+  desc="a caller with eight prompts open (prompt $which performed) leaves while the half-closed shell's writes fail: the bridge stays up"
+  check wait_until 10 bash -c 'grep -qx vanishing "$1" && [[ $(grep -c "shell gone: write error" "$2") -gt $4 ]] && sleep 1 && kill -0 "$3"' _ "$d/vanish$which.out" "$d/main.log" "$main_pid" "$errors_before"
+  desc="...and the departure's prompts are ended after gcr's own clean-up, none left open"
+  check wait_until 10 bash -c '[[ $(grep -c " (0 still open)$" "$1") -gt $2 ]]' _ "$d/main.log" "$closed_before"
+  wait_until 5 unowned
+done
 
 # --- 12 queued behind a holder ---------------------------------------------------------------------------------------------
 client stock holder --log "$d/stock.calls"
