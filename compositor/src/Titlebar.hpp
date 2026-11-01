@@ -39,11 +39,16 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     PHLWINDOW                  window() const;
 
     // Floating, not full screen, decorations allowed by window rules, and not a window that draws its own chrome (the
-    // Hyprland tag grassfield-client-chrome, ADR-0015 P1: re-evaluated on window.updateRules, never decorate = false).
+    // Hyprland tag grassfield-client-chrome, ADR-0015 P1: re-evaluated on window.updateRules, never decorate = false). Not a
+    // Split View member either (tiling.md TL33, step 6e, ADR-0036 D73): its bar is away, revealed at the top edge (P6).
     bool shouldShow() const;
 
     // Re-evaluates visibility (floating / full screen / rule changes) and requests new extents if needed.
     void refresh();
+
+    // refresh() of `w`'s titlebar, if it has one: the tiler calls it when `w` joins or leaves a Split View Desktop (its bar
+    // goes away or comes back, D73).
+    static void refreshWindow(const PHLWINDOW& w);
 
     // Window title changed: the cached title texture is rebuilt on the next draw.
     void onTitleChanged();
@@ -88,6 +93,9 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // pointer at the top edge of the window's monitor, below the shell's menu bar, over the window's content. Hyprland draws
     // no decoration on a full-screen window and its decoration input sits above the window, outside the monitor: the
     // revealed bar is drawn from the render stage and takes its presses from the bus.
+    // A Split View member's bar alike (tiling.md TL33, step 6e, ADR-0036 D74): the pointer at the top edge over its half
+    // reveals it, over that half alone; while it is there, the pointer moving across within the bar's band brings the other
+    // half's instead.
     // Pointer motion (and a change of the window) re-evaluates it.
     static void updateReveal();
     // RENDER_POST_WINDOWS (after the windows, before the overlay layers: the menu bar stays above it): the revealed
@@ -100,10 +108,13 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // A pointer button, before Hyprland handles it: true when it is a press on a revealed titlebar or the release of such
     // a press, which the caller cancels on the bus (core gf::chrome::CRevealPresses: Hyprland's held-button state is not
     // touched by a cancelled press and its cancelled release). The zoom light leaves full screen, close closes; minimize
-    // is unavailable in full screen.
+    // is unavailable in full screen. On a Split View member's revealed bar (step 6e, ADR-0036 D75) the zoom light leaves the
+    // Split View, minimize is unavailable (D56), and a left press away from the lights starts the member's drag (D59): the
+    // window follows the pointer with its bar; released over the other half the two swap halves, anywhere else, or ended
+    // by another press, it goes back in its half.
     static bool onRevealedBarButton(const IPointer::SButtonEvent& e);
 
-    // The titlebar of this full-screen window is revealed.
+    // The titlebar of this full-screen window (or Split View member) is revealed.
     bool revealed() const;
 
     // TL22, TL24 (docs/specs/tiling.md): the zoom light of `w` in global layout coordinates: its titlebar's while the bar is
@@ -118,12 +129,13 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
 
   private:
     CBox layoutBox() const; // titlebar box in global logical (layout) coordinates
-    CBox revealBox() const; // the revealed bar of a full-screen window, global logical coordinates (P6)
+    CBox revealBox() const; // the revealed bar of a full-screen window or member, global logical coordinates (P6, D74)
     CBox barBox() const;    // revealBox() while revealed, layoutBox() otherwise
     bool barShown() const;  // revealed, or shouldShow()
     // Mapped, not hidden, decorations allowed, not an X11 window without borders, not a client-chrome window.
     bool titlebarAllowed() const;
-    // The window is in full screen on a visible workspace, drawn in place, and may have a titlebar.
+    // The window is in full screen or a Split View member (D74), on a visible workspace, drawn in place, and may have a
+    // titlebar.
     bool revealable() const;
     void damageRevealed();
     // Background, lights, glyphs and title on `bar` (monitor-local logical coordinates); `fullscreen`: a revealed bar.

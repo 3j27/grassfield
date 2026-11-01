@@ -677,6 +677,13 @@ namespace gf::tiling {
     // one left.
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on);
 
+    // Step 6e (ADR-0036 D73): every member of the Split View Desktops `splits`, sorted, each once (their titlebars are away).
+    std::vector<uint64_t> splitMembers(std::span<const SplitDesk> splits);
+
+    // The windows that joined or left a Split View Desktop: in one of `before` and `now` (both from splitMembers) and not in
+    // the other, sorted. Their titlebars are refreshed (one goes, one comes back above its window).
+    std::vector<uint64_t> membersChanged(std::span<const uint64_t> before, std::span<const uint64_t> now);
+
     // What a Split View Desktop does after a change (TL33, ADR-0036 D43): with two members it stays; with one it fills it
     // alone, unless that window is still choosing its second one (`picking`: the suggestion of its Split View pending); with
     // none it ends.

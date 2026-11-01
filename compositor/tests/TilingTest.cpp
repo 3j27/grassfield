@@ -1462,6 +1462,25 @@ TEST(TilingSplit, ReplaceOffersEveryWindowButTheOneReplaced) {
     EXPECT_EQ(offerWindows(many, 0).back(), kMaxSuggested) << "the first ones, in their order";
 }
 
+// Step 6e (ADR-0036 D73): a member's titlebar is away; the windows that joined or left a Split View have theirs refreshed.
+TEST(TilingSplit, TheWindowsThatJoinedOrLeftASplitView) {
+    const std::vector<SplitDesk> splits{{.workspace = 9, .output = "GF-REF", .home = 2, .members = {0xd4, 0xb2}},
+                                        {.workspace = 11, .output = "WAYLAND-1", .home = 4, .members = {0xa1}},
+                                        {.workspace = 12, .output = "WAYLAND-1", .home = 4, .members = {}}};
+    EXPECT_EQ(splitMembers(splits), (std::vector<uint64_t>{0xa1, 0xb2, 0xd4})) << "every member of every Split View, sorted";
+    EXPECT_TRUE(splitMembers({}).empty());
+    const std::vector<SplitDesk> twice{{.workspace = 9, .members = {0xb2, 0xb2}}, {.workspace = 11, .members = {0xb2}}};
+    EXPECT_EQ(splitMembers(twice), (std::vector<uint64_t>{0xb2})) << "each once";
+
+    const std::vector<uint64_t> before{0xa1, 0xb2, 0xd4};
+    EXPECT_TRUE(membersChanged(before, before).empty()) << "nothing joined or left: no titlebar is refreshed";
+    EXPECT_EQ(membersChanged(before, std::vector<uint64_t>{0xa1, 0xd4}), (std::vector<uint64_t>{0xb2})) << "one left: its bar comes back";
+    EXPECT_EQ(membersChanged(std::vector<uint64_t>{0xa1}, std::vector<uint64_t>{0xa1, 0xc3}), (std::vector<uint64_t>{0xc3})) << "one joined: its bar goes";
+    EXPECT_EQ(membersChanged(std::vector<uint64_t>{0xa1, 0xb2}, std::vector<uint64_t>{0xb2, 0xc3}), (std::vector<uint64_t>{0xa1, 0xc3})) << "both at once";
+    EXPECT_EQ(membersChanged(before, {}), before) << "every Split View ended";
+    EXPECT_EQ(membersChanged({}, before), before) << "a first Split View";
+}
+
 TEST(TilingSplit, SidesAndDesktops) {
     EXPECT_EQ(splitZone("left"), 0);
     EXPECT_EQ(splitZone("right"), 1);

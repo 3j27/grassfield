@@ -167,6 +167,7 @@ namespace gf::gfc {
         if (windowTiling && tilingArrange && split) {
             out.push_back(kFeatureTilingSplit);
             out.push_back(kFeatureTilingSplitRows);
+            out.push_back(kFeatureTilingSplitTitles);
         }
         return out;
     }

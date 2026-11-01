@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <utility>
@@ -1411,6 +1412,22 @@ namespace gf::tiling {
 
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on) {
         return std::erase_if(d.members, [on](uint64_t id) { return std::ranges::find(on, id) == on.end(); }) > 0;
+    }
+
+    std::vector<uint64_t> splitMembers(std::span<const SplitDesk> splits) {
+        std::vector<uint64_t> out;
+        for (const auto& d : splits)
+            out.insert(out.end(), d.members.begin(), d.members.end());
+        std::ranges::sort(out);
+        const auto [first, last] = std::ranges::unique(out);
+        out.erase(first, last);
+        return out;
+    }
+
+    std::vector<uint64_t> membersChanged(std::span<const uint64_t> before, std::span<const uint64_t> now) {
+        std::vector<uint64_t> out;
+        std::ranges::set_symmetric_difference(before, now, std::back_inserter(out));
+        return out;
     }
 
     SplitStep splitStep(size_t members, bool picking) {

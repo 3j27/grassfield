@@ -131,13 +131,17 @@ namespace gf::gfc {
     // ADR-0036 step 6d (tiling.md TL33, D71): unsplit's second argument (Make Window Full Screen, Replace Tiled Window). Always
     // right after tiling-split: a plugin before 6d ignores the argument, so the shell offers the rows only with this.
     inline constexpr std::string_view kFeatureTilingSplitRows = "tiling-split-rows";
+    // ADR-0036 step 6e (tiling.md TL33, D73): a Split View member's titlebar is away (revealed at the top edge of its half) and
+    // no band is kept above it. Always right after tiling-split-rows: the shell's Overview lays a member out without a strip.
+    inline constexpr std::string_view kFeatureTilingSplitTitles = "tiling-split-titles";
     inline constexpr std::string_view kFeatures[]         = {kFeatureDecorations}; // always on
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
     // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
     // tiling-arrange with tiling-layouts, tile-hover (each only together with window-tiling), tiling-groups,
-    // tiling-shared-edge and tiling-split (each only together with tiling-arrange).
+    // tiling-shared-edge and tiling-split (each only together with tiling-arrange; tiling-split with tiling-split-rows and
+    // tiling-split-titles).
     std::vector<std::string_view> features(bool minimize, bool config, bool appmenu, bool overview = false, bool desktopFocus = false, bool stagesAvailable = false,
                                            bool stagesEnabled = false, bool cursorRefresh = false, bool overviewFocus = false, bool minimizeEffect = false,
                                            bool windowTiling = false, bool layerPointer = false, bool appearance = false, bool clientChrome = false,

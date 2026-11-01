@@ -22,7 +22,8 @@ namespace gf::chrome {
     // P1: the window carries the client-chrome tag. False for a null window or one without rules.
     bool isClientChrome(const PHLWINDOW& w);
 
-    // P3: the band the plugin reserves above `w`'s surface (core band(isClientChrome(w))).
+    // P3: the band the plugin reserves above `w`'s surface (core band(isClientChrome(w), inSplit(w))): none above a Split
+    // View member either, whose titlebar is away (tiling.md TL33, step 6e, ADR-0036 D73).
     double bandOf(const PHLWINDOW& w);
 
     // Listeners on every mapped xdg window and on window open / close. False if any failed (then client-chrome is not
