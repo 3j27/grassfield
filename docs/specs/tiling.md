@@ -566,12 +566,17 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (`WindowTiling.splitTitleAway`). The pointer at the top edge over a half reveals that half's bar alone, below the menu bar
   and over the window's content (the full-screen path, ADR-0015 P6; core `nextRevealed` with `inSpan`); the menu bar comes
   with it (`titlebar-reveal`); while it is there the pointer moving across within the bar's band brings the other half's
-  (`handOver`); while a press on a revealed bar lasts no other bar comes. Its lights act as a full-screen window's (green
+  (`handOver`), the bar revealed owning the gap between the halves until the pointer is over the other half
+  (`overOther`, D74 amended); a member covered by its other member (zoomed or in full screen) shows none; while a press
+  on a revealed bar lasts no other bar comes. Its lights act as a full-screen window's (green
   leaves the Split View, minimize grey and inert); a left press away from them starts the member's drag (core
-  `revealedPress`): the window follows the pointer with its bar, never above its half's top and without the top clamp;
+  `revealedPress`): once it moves, the window hangs below its bar, which follows the pointer from where it was pressed,
+  never higher, without the top clamp (D75 amended);
   released over the other half the two swap (D59), anywhere else, on another press, a pointer device gone or the session
   locked it goes back in its half. The press and its release are cancelled on the bus (Hyprland's held buttons
-  untouched).
+  untouched). A window that leaves a Split View any way (a key, the unload) gets its frame with its titlebar band below
+  the menu bar (`TopClamp belowMenuBar`; a hidden one when it shows, not while locked; D73 amended); the unload puts a
+  member dragged by its revealed bar back in its half first.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover

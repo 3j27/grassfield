@@ -489,7 +489,8 @@ shell no longer relies on that alone:
   by the full-screen path (P6): never while the session is locked (`revealable()`), never under a layer popup or an Overlay
   layer, never a press of a button another device holds; its press and release are cancelled together. A member's drag by
   its revealed bar ends the moment the lock engages (the member back in its half; its release, still owed, stays
-  cancelled and swaps nothing), and on another press or a pointer device gone. The development hook `overview dropProbe`
+  cancelled and swaps nothing), and on another press or a pointer device gone. A window that leaves a Split View is placed
+  below the menu bar only once the session is unlocked (D73 amended, review of #99). The development hook `overview dropProbe`
   (D76, the table above) answers "refused" outside development and only ever refuses or performs the Overview's own drop.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
