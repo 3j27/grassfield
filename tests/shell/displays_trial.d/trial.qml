@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Grassfield.Ui
 import qs.lib
 import qs.platform
 
@@ -11,8 +12,10 @@ import qs.platform
 // (a trial whose reload Hyprland refuses stays `applying`); Keep empties the file without a reload; the deadline, Revert and a trial already past its deadline take
 // it back (the file emptied, then one reload); Keep or Revert of a trial the shell does not run changes nothing. The trial file is
 // written atomically (a rename), as Settings writes it. Then the input files (ADR-0031 amendment): three quick writes of a
-// keyboard.lua that did not exist give one reload once they settle, a change of mouse-trackpad.lua one more. Prints
-// "displays-trial: PASS" or the failing step.
+// keyboard.lua that did not exist give one reload once they settle, a change of mouse-trackpad.lua one more. Then pacman's
+// lock (ADR-0041 step 2b, I-2's residual): a reload asked while the lock file exists (SessionConfig.pacmanLockPath, a file
+// of the test's own here) waits with its ticket out, goes once the file is gone, and Hyprland's answer reaches answered().
+// Prints "displays-trial: PASS" or the failing step.
 ShellRoot {
     id: root
 
@@ -25,6 +28,30 @@ ShellRoot {
     property var failures: []
     // Every state the shell gave a trial, in order ("t1 applying", "t1 applied", ...).
     property var seen: []
+    // The lock-wait step: the fake lock file, the reload's ticket, the answers SessionConfig gave ("<ticket> <ok>").
+    readonly property string lockPath: Mode.stateDir + "/fake-db.lck"
+    property int lockTicket: 0
+    property var lockAnswers: []
+
+    Connections {
+        target: SessionConfig
+
+        function onAnswered(ticket: int, ok: bool): void {
+            root.lockAnswers.push(ticket + " " + ok);
+        }
+    }
+
+    FileView {
+        id: lockFile
+        path: root.lockPath
+        blockWrites: true
+        printErrors: false
+    }
+
+    Process {
+        id: rmLock
+        command: ["rm", "-f", root.lockPath]
+    }
 
     Connections {
         target: Displays
@@ -187,6 +214,22 @@ ShellRoot {
                 break;
             case 20:
                 root.check("a change of mouse-trackpad.lua: one more", SessionConfig.reloads === 9);
+                // pacman's lock: the file exists (any readable or unreadable file counts; pacman's is unreadable).
+                SessionConfig.pacmanLockPath = root.lockPath;
+                lockFile.setText("locked\n");
+                root.lockTicket = SessionConfig.reload("lock test", Tokens.settingsDisplayTrialAnswerMs);
+                break;
+            case 21:
+                root.check("a reload asked while pacman holds its lock waits, its ticket out", root.lockTicket === 10 && SessionConfig.reloads === 10
+                    && SessionConfig.waiting.length === 1 && root.lockAnswers.length === 0);
+                rmLock.running = true;
+                break;
+            case 22:
+            case 23:
+                break;
+            case 24:
+                root.check("...goes once the lock is gone, and Hyprland's answer reaches answered()", SessionConfig.waiting.length === 0
+                    && JSON.stringify(root.lockAnswers) === '["10 true"]');
                 console.log(root.failures.length === 0 ? "displays-trial: PASS (" + SessionConfig.reloads + " reloads)" : "displays-trial: FAIL " + root.failures.join("; "));
                 Qt.quit();
                 break;

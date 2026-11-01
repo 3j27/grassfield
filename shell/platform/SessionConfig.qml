@@ -26,6 +26,23 @@ Singleton {
     readonly property string mouseTrackpadPath: Mode.configDir + "/mouse-trackpad.lua"
     readonly property string keyboardPath: Mode.configDir + "/keyboard.lua"
 
+    // ADR-0041 step 2b (I-2's residual): a reload asked while pacman holds its database lock (/var/lib/pacman/db.lck: a
+    // transaction may be rewriting the Lua tree Hyprland would read) waits for the lock to go, polled every
+    // Tokens.sessionConfigLockPollMs, at most Tokens.sessionConfigLockWaitMs, then goes ahead anyway (a display trial's
+    // countdown must not be what ends the wait). pacman creates the file root's and unreadable (mode 0): it exists whenever
+    // the read fails for any reason but "no such file". The path is a test seam (tests/shell/displays_trial.d); "" waits never.
+    property string pacmanLockPath: "/var/lib/pacman/db.lck"
+    // The reloads waiting for the lock to go, in order: [{path, ticket, why, answerMs}]; their tickets are already out.
+    property var waiting: []
+    property int waited: 0
+
+    function pacmanLocked(): bool {
+        if (root.pacmanLockPath === "")
+            return false;
+        lockFile.reload();
+        return lockFile.loadError !== FileViewError.FileNotFound;
+    }
+
     // The request's ticket (answered() names it), or 0 when there is no Hyprland to ask. `answerMs`: how long its answer may
     // take (a display trial's reload gets longer than the input files': Tokens.settingsDisplayTrialAnswerMs).
     function reload(why: string, answerMs: int): int {
@@ -35,9 +52,52 @@ Singleton {
             return 0;
         }
         root.reloads++;
-        console.info("grassfield-shell: session config read again (" + why + ")");
-        reloadSocket.createObject(root, {"path": path, "ticket": root.reloads, "answerMs": answerMs > 0 ? answerMs : Tokens.materialBlurAnswerMs});
-        return root.reloads;
+        const request = {"path": path, "ticket": root.reloads, "why": why, "answerMs": answerMs > 0 ? answerMs : Tokens.materialBlurAnswerMs};
+        if (root.waiting.length > 0 || root.pacmanLocked()) {
+            if (root.waiting.length === 0) {
+                root.waited = 0;
+                lockPoll.restart();
+            }
+            root.waiting = root.waiting.concat([request]);
+            console.info("grassfield-shell: session config: pacman holds its database lock, read again once it is released (" + why + ")");
+            return request.ticket;
+        }
+        root.send(request);
+        return request.ticket;
+    }
+
+    function send(request: var): void {
+        console.info("grassfield-shell: session config read again (" + request.why + ")");
+        reloadSocket.createObject(root, {"path": request.path, "ticket": request.ticket, "answerMs": request.answerMs});
+    }
+
+    Timer {
+        id: lockPoll
+        interval: Tokens.sessionConfigLockPollMs
+        repeat: true
+        onTriggered: {
+            root.waited += interval;
+            if (root.waited < Tokens.sessionConfigLockWaitMs && root.pacmanLocked())
+                return;
+            stop();
+            if (root.waited >= Tokens.sessionConfigLockWaitMs)
+                console.warn("grassfield-shell: session config: pacman still holds its database lock after " + Math.round(root.waited / 1000) + " s: read again anyway");
+            const queue = root.waiting;
+            root.waiting = [];
+            for (const request of queue)
+                root.send(request);
+        }
+    }
+
+    FileView {
+        id: lockFile
+        path: root.pacmanLockPath
+        printErrors: false
+        blockLoading: true
+        // The result of the last read (FileViewError): a missing lock file is the only "not locked".
+        property int loadError: FileViewError.Success
+        onLoaded: loadError = FileViewError.Success
+        onLoadFailed: error => loadError = error
     }
 
     // Settings writes a file on every step of a slider: one reload once the writes settle.

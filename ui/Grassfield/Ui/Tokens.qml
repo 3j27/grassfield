@@ -1822,6 +1822,11 @@ QtObject {
     readonly property int settingsDisplayAppliedMs: 4000
     // estimate: ms the shell waits for Hyprland's answer to the reload that applies a display trial (reading the Lua configuration may take longer than a blur push's second; past it the trial stays applying and its deadline takes it back; ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayTrialAnswerMs: 3000
+    // ADR-0041 step 2b (I-2's residual): how long a reload of the session configuration waits for pacman's database lock to
+    // go (polled every sessionConfigLockPollMs) before it goes ahead anyway: under a display trial's 15 s, so the trial's
+    // countdown is not what ends the wait.
+    readonly property int sessionConfigLockWaitMs: 10000
+    readonly property int sessionConfigLockPollMs: 500
     // macOS 27: the Appearance row (thumbnails and their names) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsAppearanceRowHeight: 86
     // macOS 27: an appearance thumbnail's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]

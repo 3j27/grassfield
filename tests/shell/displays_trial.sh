@@ -3,7 +3,8 @@
 # offscreen, against a fake Hyprland: a request
 # socket that records every request and answers it ("[]" for the JSON queries; "ok" to a reload a moment later, as Hyprland
 # answers once it has read its configuration: the second, t1's, after 1.4 s, longer than a blur push waits but within a
-# display trial's settings.displayTrialAnswerMs; the fifth it refuses), and a silent event socket. Runs
+# display trial's settings.displayTrialAnswerMs; the fifth it refuses), and a silent event socket; then the lock wait (ADR-0041
+# step 2b: the tenth reload is asked while a fake pacman lock file exists and reaches the fake once it is gone). Runs
 # tests/shell/displays_trial.d/trial.qml as a dev session (the trial and state files under GRASSFIELD_STATE_HOME), then checks
 # that the fake saw exactly the reloads the QML counted. Nothing here can reach a real Hyprland: HYPRLAND_INSTANCE_SIGNATURE
 # and XDG_RUNTIME_DIR point at the test's own directory.
@@ -78,7 +79,7 @@ res=$(grep -o 'displays-trial: .*' <<<"$out" || true)
 echo "${res:-FAIL: displays-trial: no result}"
 grep -q 'displays-trial: PASS' <<<"$res" || { fail=1; echo "$out" | tail -20; }
 reloads=$(grep -cx 'reload' "$tmp/requests.log" 2>/dev/null || true)
-if [[ $reloads == 9 ]]; then echo "PASS: displays_trial the fake Hyprland received the 9 reloads"; else echo "FAIL: displays_trial the fake Hyprland received ${reloads:-0} reloads, not 9"; fail=1; fi
+if [[ $reloads == 10 ]]; then echo "PASS: displays_trial the fake Hyprland received the 10 reloads"; else echo "FAIL: displays_trial the fake Hyprland received ${reloads:-0} reloads, not 10"; fail=1; fi
 if grep -qvE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log"; then
   echo "FAIL: displays_trial a request other than reload or a JSON query: $(grep -vE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log" | head -3)"; fail=1
 else
