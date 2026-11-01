@@ -70,6 +70,9 @@ class FilesApp : public QObject
     Q_PROPERTY(int clipboardCount READ clipboardCount NOTIFY clipboardChanged)
     Q_PROPERTY(QString activity READ activity NOTIFY activityChanged)
     Q_PROPERTY(int activityPercent READ activityPercent NOTIFY activityChanged)
+    // The progress window (FP-68, Finder-Copy): [{id, title, detail, percent}] of the running copies, moves and deletions,
+    // the newest last; cancelJob(id) stops one (KIO undoes nothing of what is done).
+    Q_PROPERTY(QVariantList jobs READ jobs NOTIFY jobsChanged)
     // Persisted preferences (QSettings "Grassfield/Files").
     Q_PROPERTY(QString viewMode READ viewMode WRITE setViewMode NOTIFY prefsChanged)
     Q_PROPERTY(int sortKey READ sortKey WRITE setSortKey NOTIFY prefsChanged)
@@ -139,6 +142,12 @@ public:
     int clipboardCount() const;
     QString activity() const { return m_activity; }
     int activityPercent() const { return m_activityPercent; }
+    QVariantList jobs() const { return m_jobList; }
+    Q_INVOKABLE void cancelJob(int id);
+    // Open With > Change All… (FP-65): `storageId` becomes the default application of the item's type (mimeapps.list).
+    Q_INVOKABLE QString mimeTypeOf(const QUrl &url) const;
+    Q_INVOKABLE QString defaultApplication(const QString &mimeType) const;
+    Q_INVOKABLE bool setDefaultApplication(const QString &mimeType, const QString &storageId);
 
     QString viewMode() const;
     void setViewMode(const QString &mode);
@@ -241,9 +250,11 @@ public:
     // Operations. `folder` (a FolderModel, may be null) selects the created items when they appear.
     Q_INVOKABLE void copyToClipboard(const QList<QUrl> &urls, bool cut);
     Q_INVOKABLE void paste(const QUrl &destination, QObject *folder);
+    // Move Item Here (⌥⌘V, decision F-6): the copied items moved into `destination` (undoable); Files has no Cut.
+    Q_INVOKABLE void moveHere(const QUrl &destination, QObject *folder);
     Q_INVOKABLE void trash(const QList<QUrl> &urls);
     Q_INVOKABLE void restore(const QList<QUrl> &urls);
-    // Only for items inside trash:/ (the UI confirms first).
+    // Delete Immediately: any item (the UI confirms first).
     Q_INVOKABLE void deletePermanently(const QList<QUrl> &urls);
     // The UI confirms first. Never called by automated tests.
     Q_INVOKABLE void emptyTrash();
@@ -440,6 +451,7 @@ signals:
     void recentFoldersChanged();
     void serversChanged();
     void permissionsChanged(const QUrl &url);
+    void jobsChanged();
 
 protected:
     // Remembers the last drag move over each window (refreshDrag).
@@ -447,6 +459,23 @@ protected:
 
 private:
     void track(KJob *job, const QString &activity);
+    // The progress window's rows (FP-68): what each tracked job did so far.
+    struct JobProgress {
+        quint64 id = 0;
+        QString activity;
+        // KIO's own words for what it does now ("Copying", "Moving", "Deleting": its translation) and on what.
+        QString verb;
+        QString item;
+        QString destination;
+        qulonglong processed = 0;
+        qulonglong total = 0;
+        qulonglong speed = 0;
+        int percent = -1;
+    };
+    QHash<KJob *, JobProgress> m_progress;
+    quint64 m_nextJobId = 1;
+    QTimer m_progressTimer;
+    void publishJobs();
     void readAppearance();
     QString configFile() const;
     // Adds `tag` to, or removes it from, each item (TagLogic::applyTag keeps every other entry as stored); reports
@@ -497,6 +526,7 @@ private:
     int m_activityPercent = -1;
     QList<QPointer<KJob>> m_jobs;
     QList<QPointer<ArchiveJob>> m_archiveJobs;
+    QVariantList m_jobList;
     void startArchiveJob(ArchiveJob *job, const QString &activity, QObject *folder);
     void archiveActivityEnded();
     QStringList m_knownTags;

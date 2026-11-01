@@ -201,6 +201,11 @@ Platform.MenuBar {
             onTriggered: bar.tab.getInfo()
         }
         Platform.MenuItem {
+            text: qsTr("Tags…")
+            enabled: bar.keysHere && bar.count > 0 && !bar.inTrash && bar.folder !== null && !bar.folder.isApplications
+            onTriggered: bar.win.editTags(bar.tab.selection())
+        }
+        Platform.MenuItem {
             text: qsTr("Customize Folder…")
             enabled: bar.tab !== null && bar.customizeEnabled
             onTriggered: bar.tab.customizeSelection()
@@ -270,17 +275,20 @@ Platform.MenuBar {
             enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable)
             onTriggered: bar.tab.trashSelection()
         }
+        // Delete Immediately (⌥⌘⌫, FP-52): any item, confirmed.
         Platform.MenuItem {
             text: qsTr("Delete Immediately…")
-            visible: bar.inTrash
-            enabled: bar.count > 0
+            shortcut: "Ctrl+Alt+Backspace"
+            enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable)
             onTriggered: bar.tab.deleteImmediately()
         }
-        // A dev session never empties a trash (ADR-0011), like the folder menu.
+        // Empty Trash (⇧⌘⌫) from anywhere, the Finder's app-menu item exported here (decision F-10). A dev session never
+        // empties a trash (ADR-0011), like the folder menu.
         Platform.MenuItem {
             text: qsTr("Empty Trash…")
-            visible: bar.inTrash && !bar.app.devSession
-            enabled: !bar.app.places.trashEmpty
+            shortcut: "Ctrl+Shift+Backspace"
+            visible: !bar.app.devSession
+            enabled: bar.keysHere && !bar.app.places.trashEmpty
             onTriggered: bar.tab.emptyTrash()
         }
         Platform.MenuSeparator {}
@@ -309,12 +317,6 @@ Platform.MenuBar {
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
-            text: qsTr("Cut")
-            shortcut: "Ctrl+X"
-            enabled: bar.keysHere && bar.count > 0 && bar.editable
-            onTriggered: bar.tab.copySelection(true)
-        }
-        Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Copy %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Copy “%1”").arg(bar.firstName) : qsTr("Copy")
             shortcut: "Ctrl+C"
             enabled: bar.keysHere && bar.count > 0
@@ -332,6 +334,13 @@ Platform.MenuBar {
             shortcut: "Ctrl+V"
             enabled: bar.keysHere && bar.app.canPaste && bar.writable
             onTriggered: bar.tab.paste()
+        }
+        // Decision F-6: no Cut for files; the copied items move here instead (the Finder shows it while ⌥ is held).
+        Platform.MenuItem {
+            text: bar.app.clipboardCount > 1 ? qsTr("Move %1 Items Here").arg(bar.app.clipboardCount) : qsTr("Move Item Here")
+            shortcut: "Ctrl+Alt+V"
+            enabled: bar.keysHere && bar.app.canPaste && bar.writable
+            onTriggered: bar.tab.moveHere()
         }
         Platform.MenuItem {
             text: qsTr("Select All")

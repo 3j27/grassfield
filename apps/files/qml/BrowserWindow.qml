@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TagColors.js" as TagColors
 import "TabsLogic.js" as TabsLogic
 
 // A Files window: sidebar, toolbar (back/forward, title, view switcher, Action menu, search), tab bar
@@ -34,7 +35,7 @@ Window {
     readonly property bool compactViews: {
         if (searchCapsule.expanded)
             return true;
-        const trailing = viewSwitcher.fullWidth + Tokens.filesGroupButtonWidth + actionButton.width + searchCapsule.width + 3 * Tokens.spacingSm;
+        const trailing = viewSwitcher.fullWidth + Tokens.filesGroupButtonWidth + tagsButton.width + actionButton.width + searchCapsule.width + 4 * Tokens.spacingSm;
         const room = toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - trailing - Tokens.windowItemsInset;
         return room < Math.min(titleMetrics.advanceWidth, Tokens.filesToolbarTitleMinWidth);
     }
@@ -438,10 +439,24 @@ Window {
         onActivated: win.tab.copySelection(false)
         onActivatedAmbiguously: activated()
     }
+    // Decision F-6: Cmd+X does nothing to files (as in the Finder); Move Item Here moves the copied items.
     Shortcut {
-        sequence: "Ctrl+X"
+        sequence: "Ctrl+Alt+V"
         enabled: !win.childIsKey
-        onActivated: win.tab.copySelection(true)
+        onActivated: win.tab.moveHere()
+        onActivatedAmbiguously: activated()
+    }
+    // Empty Trash from anywhere (Shift+Cmd+Backspace) and Delete Immediately (Alt+Cmd+Backspace), both confirmed.
+    Shortcut {
+        sequence: "Ctrl+Shift+Backspace"
+        enabled: !win.childIsKey && !win.app.devSession && !win.app.places.trashEmpty
+        onActivated: win.tab.emptyTrash()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+Backspace"
+        enabled: !win.childIsKey && win.folder !== null && win.folder.selectedCount > 0
+        onActivated: win.tab.deleteImmediately()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -815,6 +830,31 @@ Window {
                     }
                 }
 
+                // Tags (Finder-Home): the colour tags of the selection, and Tags… for named ones (FP-21, FP-63).
+                ToolButton {
+                    id: tagsButton
+                    accessibleName: qsTr("Tags")
+                    anchors.verticalCenter: parent.verticalCenter
+                    enabled: win.tab !== null && win.folder !== null && win.folder.selectedCount > 0 && !win.folder.isTrash && !win.folder.isApplications
+                    onClicked: {
+                        const p = tagsButton.mapToItem(null, 0, tagsButton.height + Tokens.spacingXs);
+                        const items = [win.tab.tagRow(win.folder), {separator: true}, {id: "tagsEditor", text: qsTr("Tags…")}];
+                        win.menuLayer.open(items, p.x, p.y, id => {
+                            if (id === "tagsEditor")
+                                win.editTags(win.tab.selection());
+                            else
+                                win.tab.runAction(id, win.folder);
+                        }, win.tab.view, false);
+                    }
+
+                    ViewGlyph {
+                        anchors.centerIn: parent
+                        kind: "tag"
+                        size: Tokens.filesTagGlyphSize
+                        color: tagsButton.foreground
+                    }
+                }
+
                 ToolButton {
                     id: actionButton
                     accessibleName: qsTr("Action")
@@ -839,7 +879,7 @@ Window {
                     expandedWidth: {
                         if (!win.tab || !win.tab.fileSearch)
                             return Tokens.filesSearchWidth;
-                        const others = Tokens.filesViewPopupWidth + Tokens.filesGroupButtonWidth + actionButton.width + 3 * Tokens.spacingSm;
+                        const others = Tokens.filesViewPopupWidth + Tokens.filesGroupButtonWidth + tagsButton.width + actionButton.width + 4 * Tokens.spacingSm;
                         const title = Math.min(titleMetrics.advanceWidth, Math.max(Tokens.filesToolbarTitleMinWidth, toolbar.width / 3));
                         const room = toolbar.width - toolbar.titleStart - title - Tokens.windowItemsGap - others - Tokens.windowItemsInset;
                         return Math.max(Tokens.filesSearchWidth, Math.floor(room));
@@ -956,7 +996,8 @@ Window {
         Item {
             id: statusBar
             anchors.bottom: parent.bottom
-            visible: win.app.statusBarShown || win.notice !== "" || win.app.activity !== ""
+            // The copy window takes KIO's jobs (FP-68, decision F-11); Compress and Expand still report here.
+            visible: win.app.statusBarShown || win.notice !== "" || (win.app.activity !== "" && win.app.jobs.length === 0)
             width: parent.width
             height: visible ? Tokens.filesStatusBarHeight : 0
             Accessible.role: Accessible.StatusBar
@@ -1014,6 +1055,120 @@ Window {
     Sheet {
         id: confirmSheet
         destructive: true
+    }
+
+    // Tags… (FP-63): the named tags of the selection, each removable, and a field that adds one (a colour's name gives
+    // the colour tag, FilesApp.addTypedTag); the colour dots stay in the menus.
+    property var tagUrls: []
+    function editTags(urls: var): void {
+        if (urls.length === 0)
+            return;
+        win.tagUrls = urls;
+        tagField.text = "";
+        tagsSheet.open();
+        tagField.forceActiveFocus();
+    }
+
+    Sheet {
+        id: tagsSheet
+        title: win.tagUrls.length === 1 ? qsTr("Tags of “%1”").arg(DisplayName.text(String(win.tagUrls[0]).substring(String(win.tagUrls[0]).lastIndexOf("/") + 1))) : qsTr("Tags of %1 Items").arg(win.tagUrls.length)
+        message: win.tagUrls.length > 0 ? win.app.tagsUnavailable(win.tagUrls) : ""
+        confirmText: qsTr("Done")
+        showCancel: false
+        focusBack: win.tab ? win.tab.view : null
+        confirmHandler: () => {
+            if (tagField.text.trim() !== "")
+                win.app.addTypedTag(win.tagUrls, tagField.text);
+            return "";
+        }
+
+        Column {
+            spacing: Tokens.spacingSm
+
+            TextField {
+                id: tagField
+                width: Tokens.filesGoPanelWidth - 2 * Tokens.spacingLg
+                placeholderText: qsTr("Add Tags…")
+                accessibleName: qsTr("Add Tags")
+                enabled: win.tagUrls.length > 0 && win.app.tagsUnavailable(win.tagUrls) === ""
+                onAccepted: {
+                    if (tagField.text.trim() === "")
+                        return;
+                    win.app.addTypedTag(win.tagUrls, tagField.text);
+                    tagField.text = "";
+                }
+            }
+
+            // The tags the items carry (every item's, once each): a click on × removes one from all of them.
+            Flow {
+                width: tagField.width
+                spacing: Tokens.spacingXs
+
+                Repeater {
+                    model: {
+                        win.app.tagRevision;
+                        const all = [];
+                        for (let i = 0; i < win.tagUrls.length; i++) {
+                            const names = win.app.tagNamesOf(win.tagUrls[i]);
+                            for (let j = 0; j < names.length; j++) {
+                                if (all.indexOf(names[j]) < 0)
+                                    all.push(names[j]);
+                            }
+                        }
+                        return all;
+                    }
+
+                    delegate: Rectangle {
+                        id: chip
+                        required property string modelData
+                        width: chipRow.implicitWidth + 2 * Tokens.spacingSm
+                        height: Tokens.controlButtonHeight
+                        radius: height / 2
+                        color: Appearance.buttonFill
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Remove the tag %1").arg(chip.modelData)
+                        Accessible.onPressAction: win.app.removeTag(win.tagUrls, chip.modelData)
+
+                        Row {
+                            id: chipRow
+                            anchors.centerIn: parent
+                            spacing: Tokens.spacingXs
+
+                            Rectangle {
+                                visible: win.app.tagColor(chip.modelData) >= 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Tokens.filesTagDotSize
+                                height: width
+                                radius: width / 2
+                                color: visible ? TagColors.at(Tokens, win.app.tagColor(chip.modelData)) : "transparent"
+                            }
+
+                            Text {
+                                textFormat: Text.PlainText
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: win.app.tagName(chip.modelData)
+                                color: Appearance.colors.text
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyCaptionSize
+                            }
+
+                            Icon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: "close-glyph"
+                                size: Tokens.menuIconSize - Tokens.spacingXs
+                                color: Appearance.colors.textSecondary
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -Tokens.spacingXs
+                                    onClicked: win.app.removeTag(win.tagUrls, chip.modelData)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Rename N Items… (FP-57, the Finder's sheet): Replace Text, Add Text or Format, with the first new name as example.
@@ -1190,7 +1345,7 @@ Window {
     // confirmation or a menu is open, and comes after.
     KioSheets {
         prompts: win.app.prompts ?? null
-        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !renameSheet.shown && !menuLayer.visible
+        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !renameSheet.shown && !tagsSheet.shown && !menuLayer.visible
         focusBack: win.tab ? win.tab.view : null
     }
 

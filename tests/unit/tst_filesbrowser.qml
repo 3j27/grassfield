@@ -147,6 +147,15 @@ TestCase {
         property bool canRedo: false
         property bool canPaste: false
         property int clipboardCount: 0
+        // Move Item Here and Empty Trash (decision F-6, FP-51): what was asked.
+        property var movedHere: []
+        property int emptied: 0
+        function moveHere(destination: url, folder: var): void {
+            fakeApp.movedHere = fakeApp.movedHere.concat([String(destination)]);
+        }
+        function emptyTrash(): void {
+            fakeApp.emptied++;
+        }
         property bool devSession: true
         property int tagRevision: 0
         property int folderStyleRevision: 0
@@ -251,6 +260,16 @@ TestCase {
         signal permissionsChanged(url url)
         function permissionsOf(target: url): var {
             return {valid: false};
+        }
+        property var jobs: []
+        function mimeTypeOf(target: url): string {
+            return "text/plain";
+        }
+        function defaultApplication(mimeType: string): string {
+            return "";
+        }
+        function setDefaultApplication(mimeType: string, storageId: string): bool {
+            return true;
         }
         function directorySize(target: url, done: var): void {
         }
@@ -448,6 +467,35 @@ TestCase {
         verify(!tab.fileSearch);
         compare(tab.history.length, depth, "the search left the history");
         compare(tab.searchText, "");
+    }
+
+    // Decision F-6: no Cut for files; Move Item Here moves the copied items into the shown folder. Empty Trash is never
+    // offered in a dev session (ADR-0011), whatever asks for it.
+    function test_moveItemHereAndNoCut() {
+        const files = test.openFiles(false);
+        const tab = files.windows[0].tab;
+        const folder = tab.folder;
+        folder.selected = [0];
+        const items = tab.itemMenu(folder);
+        verify(!items.some(i => i.id === "cut"), "no Cut for files");
+        verify(items.some(i => i.id === "copyPath"), "Copy as Pathname");
+        fakeApp.canPaste = true;
+        fakeApp.clipboardCount = 2;
+        const background = tab.backgroundMenu(folder);
+        const move = background.find(i => i.id === "moveHere");
+        verify(move !== undefined, "Move Item Here in the folder's menu");
+        compare(move.text, "Move 2 Items Here");
+        fakeApp.movedHere = [];
+        tab.runAction("moveHere", folder);
+        compare(fakeApp.movedHere, [String(folder.url)]);
+        fakeApp.canPaste = false;
+        fakeApp.clipboardCount = 0;
+        folder.selected = [];
+
+        verify(fakeApp.devSession);
+        fakeApp.emptied = 0;
+        tab.emptyTrash();
+        compare(fakeApp.emptied, 0, "a dev session never empties a trash");
     }
 
     function test_applicationsLaunchAndFilesOpen() {

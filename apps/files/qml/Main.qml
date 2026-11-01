@@ -322,6 +322,34 @@ QtObject {
         InfoWindow {}
     }
 
+    // The copy window (FP-68): shown once a copy, move or deletion has run for Tokens.filesProgressShowDelay (a quick
+    // one shows none), hidden when none is left; the status bar keeps its line meanwhile.
+    property var progressWindow: null
+    readonly property bool jobsRunning: root.app.jobs.length > 0
+    onJobsRunningChanged: {
+        if (root.jobsRunning) {
+            root.progressDelay.restart();
+        } else {
+            root.progressDelay.stop();
+            if (root.progressWindow)
+                root.progressWindow.hide();
+        }
+    }
+    property Timer progressDelay: Timer {
+        interval: Tokens.filesProgressShowDelay
+        onTriggered: {
+            if (!root.jobsRunning)
+                return;
+            if (!root.progressWindow)
+                root.progressWindow = progressComponent.createObject(root, {app: root.app});
+            if (root.progressWindow)
+                root.progressWindow.show();
+        }
+    }
+    property Component progressComponent: Component {
+        ProgressWindow {}
+    }
+
     // The Get Info window of one location, with the info of its row in the parent folder's listing (the same object a
     // browser window shows); a location its parent does not list (a root) shows the folder's own info.
     property Component infoRequest: Component {

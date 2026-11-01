@@ -44,6 +44,19 @@ TestCase {
         function permissionsOf(target: url): var {
             return {valid: false};
         }
+        property var jobs: []
+        function applicationsFor(urls: var): var {
+            return [];
+        }
+        function mimeTypeOf(target: url): string {
+            return "text/plain";
+        }
+        function defaultApplication(mimeType: string): string {
+            return "";
+        }
+        function setDefaultApplication(mimeType: string, storageId: string): bool {
+            return true;
+        }
         function directorySize(url: url, done: var): void {
         }
         function formatSize(bytes: real): string {

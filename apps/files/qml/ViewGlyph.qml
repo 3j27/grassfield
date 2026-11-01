@@ -1,10 +1,12 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Shapes
 import Grassfield.Ui
 
 // Small glyphs drawn from rectangles (Grassfield's own, no icon assets): the view glyphs "icons" (2x2 grid), "list" (rows),
 // "columns" (three panes) and "gallery" (a frame over a strip), at the sizes measured on Finder-Home; "more" (three dots), "plus",
-// "group" (two groups: a rule over three small squares each; the Group By button, measured on Finder-Home).
+// "group" (two groups: a rule over three small squares each; the Group By button, measured on Finder-Home), "tag" (a tag
+// outline turned 45 degrees with its hole; the Tags button, measured on Finder-Search: 18 pt).
 Item {
     id: root
 
@@ -184,6 +186,43 @@ Item {
             anchors.centerIn: parent
             width: root.stroke * 1.5
             height: root.size * 0.75
+            radius: width / 2
+            color: root.color
+        }
+    }
+
+    // tag: a tag lying along the diagonal, its chamfered head up and to the right, the hole near the head.
+    Shape {
+        visible: root.kind === "tag"
+        anchors.centerIn: parent
+        width: root.size
+        height: root.size
+        rotation: -45
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+            strokeColor: root.color
+            strokeWidth: Tokens.filesViewGlyphStroke
+            fillColor: "transparent"
+            joinStyle: ShapePath.RoundJoin
+            capStyle: ShapePath.RoundCap
+            startX: 0.16 * root.size
+            startY: 0.29 * root.size
+            PathLine { x: 0.70 * root.size; y: 0.29 * root.size }
+            PathLine { x: 0.94 * root.size; y: 0.43 * root.size }
+            PathLine { x: 0.94 * root.size; y: 0.57 * root.size }
+            PathLine { x: 0.70 * root.size; y: 0.71 * root.size }
+            PathLine { x: 0.16 * root.size; y: 0.71 * root.size }
+            PathArc { x: 0.06 * root.size; y: 0.61 * root.size; radiusX: 0.1 * root.size; radiusY: 0.1 * root.size }
+            PathLine { x: 0.06 * root.size; y: 0.39 * root.size }
+            PathArc { x: 0.16 * root.size; y: 0.29 * root.size; radiusX: 0.1 * root.size; radiusY: 0.1 * root.size }
+        }
+
+        Rectangle {
+            x: 0.74 * root.size - width / 2
+            y: 0.5 * root.size - height / 2
+            width: Tokens.filesViewGlyphStroke * 1.5
+            height: width
             radius: width / 2
             color: root.color
         }

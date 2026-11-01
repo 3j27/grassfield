@@ -549,6 +549,8 @@ FocusScope {
     }
 
     function emptyTrash(): void {
+        if (root.app.devSession)
+            return;
         root.win.confirm(qsTr("Are you sure you want to permanently erase the items in the Trash?"), qsTr("You can’t undo this action."), qsTr("Empty Trash"), () => root.app.emptyTrash());
     }
 
@@ -573,6 +575,12 @@ FocusScope {
     function paste(): void {
         if (root.activeFolder.writable && root.app.canPaste)
             root.app.paste(root.activeFolder.url, root.activeFolder);
+    }
+
+    // Edit > Move Item Here (⌥⌘V, decision F-6): the copied items moved into the shown folder.
+    function moveHere(): void {
+        if (root.chooser === null && root.activeFolder.writable && root.app.canPaste)
+            root.app.moveHere(root.activeFolder.url, root.activeFolder);
     }
 
     function newFolder(): void {
@@ -996,7 +1004,6 @@ FocusScope {
         items.push({separator: true});
         items.push({id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")});
         items.push({id: "copyPath", text: count === 1 ? qsTr("Copy “%1” as Pathname").arg(name) : qsTr("Copy %1 Items as Pathnames").arg(count), shortcut: qsTr("Ctrl+Alt+C")});
-        items.push({id: "cut", text: qsTr("Cut"), shortcut: qsTr("Ctrl+X"), enabled: editable});
         // Colour tags (macOS: a row of colour dots under the edit items).
         items.push({separator: true});
         items.push(root.tagRow(model));
@@ -1028,6 +1035,7 @@ FocusScope {
         items.push({separator: true});
         const n = root.app.clipboardCount;
         items.push({id: "paste", text: n > 1 ? qsTr("Paste %1 Items").arg(n) : qsTr("Paste"), shortcut: qsTr("Ctrl+V"), enabled: root.app.canPaste && model.writable});
+        items.push({id: "moveHere", text: n > 1 ? qsTr("Move %1 Items Here").arg(n) : qsTr("Move Item Here"), shortcut: qsTr("Ctrl+Alt+V"), enabled: root.app.canPaste && model.writable});
         items.push({separator: true});
         items.push(root.viewSubmenu());
         items.push({id: "useGroups", text: qsTr("Use Groups"), shortcut: qsTr("Ctrl+Super+0"), checked: root.groupBy > 0});
@@ -1184,11 +1192,11 @@ FocusScope {
         case "copy":
             root.copySelection(false);
             break;
-        case "cut":
-            root.copySelection(true);
-            break;
         case "paste":
             root.paste();
+            break;
+        case "moveHere":
+            root.moveHere();
             break;
         case "newFolder":
             if (root.chooser)

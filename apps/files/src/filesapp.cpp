@@ -61,6 +61,7 @@
 #include <KIO/FileUndoManager>
 #include <KIO/JobUiDelegateFactory>
 #include <KIO/MkdirJob>
+#include <KIO/DesktopExecParser>
 #include <KIO/OpenUrlJob>
 #include <KIO/Paste>
 #include <KIO/PasteJob>
@@ -181,6 +182,10 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     m_savedSearches = new SavedSearches(QString(), this);
     connect(m_savedSearches, &SavedSearches::changed, this, &FilesApp::publishSavedSearches);
     publishSavedSearches();
+    // The progress window's rows are published at most four times a second (KIO reports every few kilobytes).
+    m_progressTimer.setSingleShot(true);
+    m_progressTimer.setInterval(250);
+    connect(&m_progressTimer, &QTimer::timeout, this, &FilesApp::publishJobs);
     qApp->installEventFilter(this);
 
     // Appearance follows grassfield.json like every Grassfield surface (read only).
@@ -903,6 +908,28 @@ void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
         emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
         return;
     }
+    // A terminal application (Terminal=true: nvim, htop…) runs in the session's terminal (decision F-7, FP-80):
+    // KIO would look for KDE's terminal setting (konsole, absent on Omarchy). Its command line is KIO's own (the field
+    // codes filled with the items), behind xdg-terminal-exec, in the application scope the Apps grid uses.
+    if (service->terminal()) {
+        KService::Ptr plain(new KService(*service));
+        plain->setTerminal(false);
+        KIO::DesktopExecParser parser(*plain, urls);
+        const QStringList command = parser.resultingArguments();
+        if (command.isEmpty()) {
+            emit operationFailed(tr("“%1” could not be started.").arg(FileLogic::displayName(service->name())));
+            return;
+        }
+        const QStringList argv = grassfield::apps::scopedCommand(QStringLiteral("xdg-terminal-exec"), command, grassfield::apps::scopedLaunch());
+        QProcess process;
+        process.setProgram(argv.first());
+        process.setArguments(argv.mid(1));
+        if (!urls.isEmpty() && urls.first().isLocalFile())
+            process.setWorkingDirectory(QFileInfo(urls.first().toLocalFile()).absolutePath());
+        if (!process.startDetached())
+            emit operationFailed(tr("“%1” could not be started.").arg(FileLogic::displayName(service->name())));
+        return;
+    }
     auto *job = new KIO::ApplicationLauncherJob(service, this);
     job->setUrls(urls);
     attachDelegate(job);
@@ -1180,16 +1207,12 @@ void FilesApp::deletePermanently(const QList<QUrl> &urls)
 {
     if (refuseApplicationItems(urls))
         return;
-    QList<QUrl> trashed;
-    for (const QUrl &u : urls) {
-        if (u.scheme() == QLatin1String("trash"))
-            trashed << u;
-    }
-    if (trashed.isEmpty())
+    // Delete Immediately (⌥⌘⌫, FP-52): any item, in the Trash or not (the window confirmed first); never undoable.
+    if (urls.isEmpty())
         return;
-    KIO::DeleteJob *job = KIO::del(trashed, KIO::HideProgressInfo);
+    KIO::DeleteJob *job = KIO::del(urls, KIO::HideProgressInfo);
     attachDelegate(job);
-    track(job, countText(tr("Deleting 1 item…"), tr("Deleting %1 items…"), trashed.size()));
+    track(job, countText(tr("Deleting 1 item…"), tr("Deleting %1 items…"), urls.size()));
 }
 
 void FilesApp::emptyTrash()
@@ -1632,6 +1655,85 @@ void FilesApp::applyToEnclosed(const QUrl &url)
         }
     });
     process->start();
+}
+
+void FilesApp::publishJobs()
+{
+    QVariantList list;
+    QList<JobProgress> rows = m_progress.values();
+    std::sort(rows.begin(), rows.end(), [](const JobProgress &a, const JobProgress &b) { return a.id < b.id; });
+    for (const JobProgress &p : std::as_const(rows)) {
+        // Finder-Copy: "Copying “name” to “Desktop”", then "41.9 MB of 111.6 MB – About 10 seconds".
+        QString title = p.activity;
+        if (!p.verb.isEmpty() && !p.item.isEmpty())
+            title = p.destination.isEmpty() ? tr("%1 “%2”").arg(p.verb, FileLogic::displayName(p.item))
+                                            : tr("%1 “%2” to “%3”").arg(p.verb, FileLogic::displayName(p.item), FileLogic::displayName(p.destination));
+        QString detail;
+        if (p.total > 0) {
+            detail = tr("%1 of %2").arg(formatSize(qint64(p.processed)), formatSize(qint64(p.total)));
+            if (p.speed > 0 && p.total > p.processed) {
+                const qulonglong seconds = (p.total - p.processed) / p.speed;
+                detail += QStringLiteral(" – ")
+                          + (seconds < 60 ? tr("About %n seconds", nullptr, int(std::max<qulonglong>(seconds, 1))) : tr("About %n minutes", nullptr, int(seconds / 60 + 1)));
+            }
+        }
+        const int percent = p.total > 0 ? int(qMin<qulonglong>(100, p.processed * 100 / p.total)) : p.percent;
+        list.append(QVariantMap{{QStringLiteral("id"), int(p.id)}, {QStringLiteral("title"), title}, {QStringLiteral("detail"), detail}, {QStringLiteral("percent"), percent}});
+    }
+    if (list == m_jobList)
+        return;
+    m_jobList = list;
+    emit jobsChanged();
+}
+
+void FilesApp::cancelJob(int id)
+{
+    for (auto it = m_progress.cbegin(); it != m_progress.cend(); ++it) {
+        if (int(it->id) == id) {
+            // A stopped job reports ERR_USER_CANCELED, which track() never shows as an error.
+            it.key()->kill(KJob::EmitResult);
+            return;
+        }
+    }
+}
+
+void FilesApp::moveHere(const QUrl &destination, QObject *folder)
+{
+    if (refuseApplicationItems({destination}))
+        return;
+    const QList<QUrl> urls = KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData());
+    if (urls.isEmpty() || refuseApplicationItems(urls) || refuseTwin(this, destination, urls))
+        return;
+    KIO::CopyJob *job = KIO::move(urls, destination, KIO::HideProgressInfo);
+    attachDelegate(job);
+    KIO::FileUndoManager::self()->recordCopyJob(job);
+    track(job, countText(tr("Moving 1 item…"), tr("Moving %1 items…"), urls.size()));
+    QPointer<QObject> target = folder;
+    connect(job, &KIO::CopyJob::copyingDone, this, [target](KIO::Job *, const QUrl &, const QUrl &to, const QDateTime &, bool, bool) {
+        if (auto *f = asFolder(target))
+            f->expect(to, false);
+    });
+}
+
+QString FilesApp::mimeTypeOf(const QUrl &url) const
+{
+    return QMimeDatabase().mimeTypeForUrl(url).name();
+}
+
+QString FilesApp::defaultApplication(const QString &mimeType) const
+{
+    const KService::Ptr service = KApplicationTrader::preferredService(mimeType);
+    return service ? service->storageId() : QString();
+}
+
+bool FilesApp::setDefaultApplication(const QString &mimeType, const QString &storageId)
+{
+    const KService::Ptr service = KService::serviceByStorageId(storageId);
+    if (!service || mimeType.isEmpty() || !QMimeDatabase().mimeTypeForName(mimeType).isValid())
+        return false;
+    // The user's mimeapps.list (XDG): the Finder's Change All… for every document of this type.
+    KApplicationTrader::setPreferredService(mimeType, service);
+    return true;
 }
 
 void FilesApp::makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback)
@@ -2712,6 +2814,52 @@ void FilesApp::track(KJob *job, const QString &activity)
     m_activity = activity;
     m_activityPercent = -1;
     emit activityChanged();
+    JobProgress progress;
+    progress.id = m_nextJobId++;
+    progress.activity = activity;
+    m_progress.insert(job, progress);
+    m_progressTimer.start();
+    connect(job, &KJob::description, this, [this, job](KJob *, const QString &title, const QPair<QString, QString> &source, const QPair<QString, QString> &destination) {
+        auto it = m_progress.find(job);
+        if (it == m_progress.end())
+            return;
+        it->verb = title;
+        it->item = QUrl(source.second).fileName();
+        const QUrl to(destination.second);
+        it->destination = to.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).fileName();
+        if (!m_progressTimer.isActive())
+            m_progressTimer.start();
+    });
+    connect(job, &KJob::processedAmountChanged, this, [this, job](KJob *, KJob::Unit unit, qulonglong amount) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end() && unit == KJob::Bytes) {
+            it->processed = amount;
+            if (!m_progressTimer.isActive())
+                m_progressTimer.start();
+        }
+    });
+    connect(job, &KJob::totalAmountChanged, this, [this, job](KJob *, KJob::Unit unit, qulonglong amount) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end() && unit == KJob::Bytes)
+            it->total = amount;
+    });
+    connect(job, &KJob::speed, this, [this, job](KJob *, unsigned long speed) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end())
+            it->speed = speed;
+    });
+    connect(job, &KJob::percentChanged, this, [this, job](KJob *, unsigned long percent) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end()) {
+            it->percent = int(percent);
+            if (!m_progressTimer.isActive())
+                m_progressTimer.start();
+        }
+    });
+    connect(job, &QObject::destroyed, this, [this, job] {
+        m_progress.remove(job);
+        publishJobs();
+    });
     connect(job, &KJob::percentChanged, this, [this, job](KJob *, unsigned long percent) {
         if (!m_jobs.isEmpty() && m_jobs.last() == job) {
             m_activityPercent = int(percent);
@@ -2726,5 +2874,7 @@ void FilesApp::track(KJob *job, const QString &activity)
         m_activity = m_jobs.isEmpty() && m_archiveJobs.isEmpty() ? QString() : m_activity;
         m_activityPercent = -1;
         emit activityChanged();
+        m_progress.remove(job);
+        publishJobs();
     });
 }

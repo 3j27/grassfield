@@ -2539,6 +2539,34 @@ QtObject {
     readonly property int filesConnectListRows: 4
     // macOS 27 Finder-Connect-to-Server: the history pop-up button inside the field, 48 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
     readonly property int filesConnectHistoryWidth: 24
+    // macOS 27 Finder-Search: the Tags button's glyph, 37 x 36 px at 2x [ref: docs/specs/files.md § Toolbar, sidebar and chrome]
+    readonly property int filesTagGlyphSize: 18
+    // macOS 27 Finder-Copy: the copy window, 808 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressWindowWidth: 404
+    // macOS 27 Finder-Copy: below the title bar, 112 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressRowHeight: 56
+    // macOS 27 Finder-Copy: the document icon, 64 px box at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressIconSize: 32
+    // macOS 27 Finder-Copy: the icon 46 px inside the window at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressIconInset: 23
+    // macOS 27 Finder-Copy: the title, bar and detail 124 px inside the window at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressTextInset: 62
+    // macOS 27 Finder-Copy: the title centred 19 px below the title bar at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressTitleCenter: 9.5
+    // macOS 27 Finder-Copy: the bar centred 47.5 px below the title bar at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressBarCenter: 23.75
+    // macOS 27 Finder-Copy: the detail centred 79.5 px below the title bar at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressDetailCenter: 39.75
+    // macOS 27 Finder-Copy: the bar, 16 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressBarHeight: 8
+    // macOS 27 Finder-Copy: the bar ends 67 px before the window edge at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressBarEnd: 33.5
+    // macOS 27 Finder-Copy: the stop button, 22 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressStopSize: 11
+    // macOS 27 Finder-Copy: the stop button 27 px inside the window edge at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressStopInset: 13.5
+    // estimate: ms a copy runs before its window shows (a quick copy shows none) [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressShowDelay: 700
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

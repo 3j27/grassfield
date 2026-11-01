@@ -107,6 +107,14 @@ Window {
         {label: qsTr("You can:"), value: root.info.writable ? qsTr("Read & Write") : root.info.readable ? qsTr("Read only") : qsTr("No Access")}
     ]
 
+    // Open with (FP-65): the applications of the item's type, the default first chosen; Change All… makes the chosen one
+    // the default for every document of the type (mimeapps.list). Files only, not folders or applications.
+    readonly property bool openWithShown: !root.isApplication && !root.info.isDir && root.openWithApps.length > 0
+    readonly property string mimeType: root.isApplication || root.info.isDir ? "" : root.app.mimeTypeOf(root.info.url)
+    readonly property var openWithApps: root.mimeType !== "" ? root.app.applicationsFor([root.info.url]) : []
+    property string defaultApp: root.mimeType !== "" ? root.app.defaultApplication(root.mimeType) : ""
+    property string chosenApp: root.defaultApp
+
     // The item's owner, group and privileges, read again after each change (what the system reports).
     property var permissions: root.isApplication ? ({valid: false}) : root.app.permissionsOf(root.info.url)
     readonly property bool permissionsShown: !root.isApplication && root.permissions.valid === true
@@ -299,6 +307,47 @@ Window {
                 }
             }
 
+            Column {
+                visible: root.openWithShown
+                width: content.width
+                spacing: Tokens.spacingXs
+
+                Text {
+                    textFormat: Text.PlainText
+                    text: qsTr("Open with:")
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
+                    font.weight: Tokens.typographyMenuBoldWeight
+                    Accessible.role: Accessible.Heading
+                    Accessible.name: text
+                }
+
+                ComboBox {
+                    width: content.width
+                    accessibleName: qsTr("Open with")
+                    model: root.openWithApps.map(a => ({id: a.id, text: a.id === root.defaultApp ? qsTr("%1 (default)").arg(a.name) : a.name}))
+                    value: root.chosenApp
+                    onPicked: id => root.chosenApp = id
+                }
+
+                Text {
+                    textFormat: Text.PlainText
+                    width: content.width
+                    wrapMode: Text.Wrap
+                    text: qsTr("Use this application to open all documents like this one.")
+                    color: Appearance.colors.textSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
+                }
+
+                Button {
+                    text: qsTr("Change All…")
+                    enabled: root.chosenApp !== "" && root.chosenApp !== root.defaultApp
+                    onClicked: changeAllSheet.open()
+                }
+            }
+
             // Sharing & Permissions (Finder): Name and Privilege, one row each for the owner, the group and everyone.
             Column {
                 visible: root.permissionsShown
@@ -397,6 +446,26 @@ Window {
                     onClicked: applySheet.open()
                 }
             }
+        }
+    }
+
+    Sheet {
+        id: changeAllSheet
+        readonly property string appName: {
+            for (let i = 0; i < root.openWithApps.length; i++) {
+                if (root.openWithApps[i].id === root.chosenApp)
+                    return root.openWithApps[i].name;
+            }
+            return "";
+        }
+        title: qsTr("Change all similar documents to open with “%1”?").arg(changeAllSheet.appName)
+        message: qsTr("This change applies to all documents of this kind (%1).").arg(root.mimeType)
+        confirmText: qsTr("Continue")
+        confirmHandler: () => {
+            if (!root.app.setDefaultApplication(root.mimeType, root.chosenApp))
+                return qsTr("The default application couldn’t be changed.");
+            root.defaultApp = root.app.defaultApplication(root.mimeType);
+            return "";
         }
     }
 
