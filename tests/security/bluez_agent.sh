@@ -532,7 +532,7 @@ decline-as-canceled#Bridge.cpp#                m_bt->refuse(request, bt::kErrorR
 refusal-as-canceled#Bridge.cpp#            m_bt->refuse(request, bt::kErrorRejected, QStringLiteral("the shell could not take it"));#            m_bt->refuse(request, bt::kErrorCanceled, QStringLiteral("the shell could not take it"));
 registered-for-any-shell (the kinds gate)#Bridge.cpp#                m_bt->setWanted(m_kinds.contains(QStringLiteral("bluetooth")));#                m_bt->setWanted(true);
 passkey-not-zero-padded#BtPairing.cpp#        return QStringLiteral("%1").arg(passkey, kDigits, 10, QLatin1Char('0'));#        return QString::number(passkey);
-path-not-checked#BtPairing.cpp#        if (n < sizeof(head) - 1 || std::strncmp(path, head, sizeof(head) - 1) != 0)\n            return false;#        if (n < 5)\n            return true;
+path-not-checked#BtPairing.cpp#        if (!path)\n            return false;\n        constexpr char head[]#        if (path)\n            return true;\n        constexpr char head[]
 passkey-answer-length-not-checked#BtPairing.cpp#        if (!text || length != static_cast<std::size_t>(kDigits))#        if (!text || length < 1 || length > static_cast<std::size_t>(kDigits))
 pin-answer-not-checked#BtPairing.cpp#            if (!isAlnum(text[i]))\n                return false;#            ;
 bluez-cancel-ignored#BtAgent.cpp#            endAll(bt::kErrorCanceled, QStringLiteral("bluetoothd cancelled it"), true);#            ;
