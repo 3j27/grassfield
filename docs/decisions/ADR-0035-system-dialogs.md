@@ -1768,18 +1768,18 @@ only); no QtDBus, no KWallet API.
   failed login (9-40); `SecretAgent` holds every KIO request until a click past the guard (9-38). French catalog: 14
   strings.
 - **Tests.** `tests/unit/prompter/tst_prompter.cpp` (71 cases, plain and under ASan and UBSan: the AuthInfo read and written
-  as KIO marshals it and its bounds, the extra fields, a password that is not text never on the bus, secure copies, the cache
-  key and its quirks, the server shown, the keyring item's attributes, the keyring's protection from its file, the cache's
-  rules, its lifetimes and its bound, the kio prompt, the kio role); `tests/security/tst_prompter.qml` (91),
-  `tst_secretsheetmodel.qml` (35); `tests/security/kio_passwd.sh` (48 checks on a private session bus with KIO's REAL
-  client, `KPasswdServerClient` of the installed KF6 KIOCore, KIO's real ftp worker logging in to a local test server, the
-  real gnome-keyring, a fake Secret Service, kiod6's stand-in started by D-Bus activation, a second listener and a stranger;
-  `--mutants`: 13 of the server and 6 of the cache's rules against the unit tests, all caught); `tests/security/secret_sheets.sh`
-  (the server sheet in the real agent and queue: 69 results with the model's test, 17 static checks; `--mutants`: 41, all
-  caught); `tests/security/secret_bridge.sh` (the kio kind through the shell's real client against the fake bridge, a server
-  that is not a host name closing the connection, and a KIO query answered through that client against the real bridge;
-  `--mutants`: 3 more, 13 in all, all caught); `kio_passwd.sh`, `prompter_bridge.sh` and `nm_agent.sh` also pass with the
-  bridge built with ASan and UBSan (`build-direct.sh --asan`);
+  as KIO marshals it and its bounds, the extra fields, a password that is not text never on the bus, secure copies, the
+  cache key and its quirks, the server shown, the keyring item's attributes, the keyring's protection from its file, the
+  cache's rules, its lifetimes and its bound, the kio prompt, the kio role); `tests/security/tst_prompter.qml` (93 with step
+  9c's fixes merged), `tst_secretsheetmodel.qml` (35); `tests/security/kio_passwd.sh` (50 checks on a private session bus
+  with KIO's REAL client, `KPasswdServerClient` of the installed KF6 KIOCore, KIO's real ftp worker logging in to a local
+  test server, the real gnome-keyring, a fake Secret Service, kiod6's stand-in started by D-Bus activation, a second
+  listener and a stranger; `--mutants`: 14 of the server and 6 of the cache's rules against the unit tests, all caught);
+  `tests/security/secret_sheets.sh` (the server sheet in the real agent and queue: 71 results with the model's test, 17
+  static checks; `--mutants`: 44 with step 9c's, all caught); `tests/security/secret_bridge.sh` (the kio kind through the
+  shell's real client against the fake bridge, a server that is not a host name closing the connection, and a KIO query
+  answered through that client against the real bridge; `--mutants`: 3 more, 13 in all, all caught); `kio_passwd.sh`,
+  `prompter_bridge.sh` and `nm_agent.sh` also pass with the bridge built with ASan and UBSan (`build-direct.sh --asan`);
   `tests/shell/session_services.sh` (the PKGBUILD declares libsecret). Nested and visual: NOT VERIFIED; KIO's sftp and smb
   workers, a real gnome-keyring unlock prompt on screen, a real Files window: NOT VERIFIED (owner L2, spec A-SC7).
 - **What 9e changes for the user**: a network location that needs a password (Files, the D-4 panel, any KF6 app) asks in

@@ -727,15 +727,15 @@ Rules (fail closed: no answer is ever invented):
   once with the keyring locked, the keyring's unlock prompt in the shell after the server sheet while other calls are
   answered, the password stored once unlocked; "unprotected" for Omarchy's plain-text keyring, "protected" for a keyring
   with a password, "unknown" for a fake Secret Service; one caller's ninth request and the shell's ninth (seven gcr prompts
-  and a KIO sheet) answered "nothing" at once; wrong answers; a changed name and the old URL's next query; no name field;
-  `<NoAuthPrompt>`; the caller leaving; the shell leaving (the client answered, the name released, kiod6's stand-in
-  activated); no shell or a shell without kind `kio`: the name not held, kiod6's stand-in activated or keeping it; oversized
-  AuthInfo and the LEGACY method refused; no test password in the bridge's output; `--mutants`: 13 of the server, among
-  them a broadcast result, a requester trusted without its credentials, a synchronous store, Remember ignored and the kinds
-  gate, and 6 of the cache key and the cache against the unit tests, all caught), the server sheet
-  (`tests/security/secret_sheets.sh`: held, Connect's rule, Remember and the keyring's line, a fixed name, the realm
-  framed, retry, an unidentified requester, a free-text server refused; mutants) and the shell's real client end to end
-  (`tests/security/secret_bridge.sh`).
+  and a KIO sheet) answered "nothing" at once; wrong answers; the shell's refusal (no cancelled entry); a changed name and
+  the old URL's next query; no name field; `<NoAuthPrompt>`; the caller leaving; the shell leaving (the client answered, the
+  name released, kiod6's stand-in activated); no shell or a shell without kind `kio`: the name not held, kiod6's stand-in
+  activated or keeping it; oversized AuthInfo and the LEGACY method refused; no test password in the bridge's output;
+  `--mutants`: 14 of the server, among them a broadcast result, a requester trusted without its credentials, a synchronous
+  store, Remember ignored and the kinds gate, and 6 of the cache key and the cache against the unit tests, all caught), the
+  server sheet (`tests/security/secret_sheets.sh`: held, Connect's rule, Remember and the keyring's line, a fixed name, the
+  realm framed, retry, an unidentified requester, a free-text server refused; mutants) and the shell's real client end to
+  end (`tests/security/secret_bridge.sh`).
 - A-SC7 nested scenario for step 9e (owner approval: `just nested-up`, `just shot`): as for step 9b, with the bridge started
   on the nested session's private bus (`--socket .dev/run/prompter.sock`) and the dev shell restarted on it; once
   `tests/visual/ipc.sh secrets state` says `ready owned`, build KIO's client (the `g++` line of `tests/security/kio_passwd.sh`)
