@@ -42,7 +42,7 @@ license=(MIT)
 # the shell was built for (BUILD-DEPS, below), which Software Update's compatibility check reads (ADR-0033 s3.4).
 makedepends=(cmake ninja pkgconf hyprland hyprwayland-scanner gtest lua extra-cmake-modules qt6-declarative qt6-tools
              hyprcursor librsvg python dconf git wayland kio solid kcoreaddons kservice qt6-webengine qt6-multimedia
-             quickshell)
+             quickshell gcr-4)
 options=(!debug)
 # grassfield-icons (ADR-0017, owner decision 2026-10-23): ONE theme composed from two third-party themes by
 # packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
@@ -154,6 +154,11 @@ build() {
   cmake -S "$(_root)/bridges/menu-bridge" -B "$srcdir/menu-bridge-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DGRASSFIELD_BUILD_TESTS=ON
   cmake --build "$srcdir/menu-bridge-build"
+  # grassfield-prompter (ADR-0035 D-9): gcr's system prompter for the session, the shell draws the prompts, and its
+  # NetworkManager secret agent (step 9c); its user unit; grassfield-askpass, udiskie's password command (step 9c).
+  cmake -S "$(_root)/bridges/prompter" -B "$srcdir/prompter-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DGRASSFIELD_BUILD_TESTS=ON
+  cmake --build "$srcdir/prompter-build"
   # Grassfield cursors (ADR-0014): hyprcursor SVG theme + XCursor fallback from branding/cursors.
   "$(_root)/branding/cursors/build.sh" --out "$srcdir/icons"
   # grassfield-icons (ADR-0017): compose the theme into a scratch directory; the composer fails on pin drift (a listed
@@ -170,6 +175,8 @@ check() {
   "$srcdir/compositor-out/grassfield-compositor-tests"
   # The peer-to-peer D-Bus case skips itself where Unix sockets cannot be created (build sandboxes).
   "$srcdir/menu-bridge-build/menu-bridge-unit-tests"
+  # The prompter's logic and its GcrPrompt object (no bus; the socket-pair case skips itself without a cgroup of its own).
+  "$srcdir/prompter-build/prompter-unit-tests"
 }
 
 package_grassfield-desktop() {
@@ -183,7 +190,8 @@ package_grassfield-desktop() {
   # networkmanager and bluez-utils (which pulls bluez) are the D-Bus services the Settings Wi-Fi and Bluetooth pages talk to (GF-049:
   # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
   # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
-  # with Omarchy.
+  # with Omarchy. grim and slurp take Grassfield's screenshots (packaging/bin/grassfield-capture, ADR-0035 D-10, step 8): declared
+  # too, now that Grassfield runs them itself.
   # Software Update (ADR-0033): grassfield-keyring (O12: the keys pacman trusts for [grassfield], built and published beside
   # these packages by grassfieldhq/grassfield-packages, as omarchy depends on omarchy-keyring; added once that repository
   # built it, owner decision O21), pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync),
@@ -197,7 +205,9 @@ package_grassfield-desktop() {
   # not assumed to come with Omarchy.
   # libcups: grassfield-portal's print sheet asks CUPS for the printers and sends the jobs (ADR-0035 D-7, owner decision Q6);
   # already there with qt6-base and gtk3, declared since the backend links it.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups)
+  # gcr-4: libgcr-4, which grassfield-prompter links for gcr's system prompter protocol and its exchange (ADR-0035 D-9);
+  # already installed with gnome-keyring (probe P15), declared because Grassfield's own binary needs it.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grim slurp grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups gcr-4)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
@@ -212,7 +222,7 @@ package_grassfield-desktop() {
     'localsearch: file results in Search'
     'plocate: file names in Search when localsearch has no index (ADR-0027)'
     'kio-extras: network locations and image thumbnails in Files'
-    'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
+    'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery, a screenshot and its Open in Preview)'
     'udiskie: mounts removable media when they are connected'
     'hyprsunset: Night Light (grassfield-nightshift)'
     'kimageformats: HEIF, AVIF and JPEG XL pictures as wallpapers (the helper reads what Qt can read)'
@@ -315,6 +325,10 @@ package_grassfield-desktop() {
   # Menu bridge: /usr/bin/grassfield-menu-bridge, /usr/lib/systemd/user/grassfield-menu-bridge.service,
   # /usr/share/dbus-1/interfaces/org.grassfield.MenuBridge1.xml (started by the session's autostart.lua).
   DESTDIR="$pkgdir" cmake --install "$srcdir/menu-bridge-build"
+  # grassfield-prompter (ADR-0035 D-9): /usr/lib/grassfield/grassfield-prompter and its user unit
+  # /usr/lib/systemd/user/grassfield-prompter.service (started by the session's autostart.lua);
+  # /usr/lib/grassfield/grassfield-askpass (run by udiskie in grassfield-automount.service, step 9c).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/prompter-build"
 
   # Grassfield Settings app (M4).
   DESTDIR="$pkgdir" cmake --install "$srcdir/settings-build"

@@ -1,3 +1,4 @@
 module qs.security
 LockController 1.0 LockController.qml
 PasswordField 1.0 PasswordField.qml
+SheetQueue 1.0 SheetQueue.qml

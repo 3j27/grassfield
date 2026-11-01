@@ -121,20 +121,29 @@ int ProcessHandle::currentPpid() const
     return m_fd >= 0 && readStat(m_fd, "stat", st) && st.pid == m_pid ? st.ppid : m_ppid;
 }
 
-std::string cgroupOf(const std::string &procRoot, int pid)
-{
-    std::string text;
-    if (pid <= 0 || !readAt(AT_FDCWD, procRoot + '/' + std::to_string(pid) + "/cgroup", text))
-        return {};
-    return parseCgroupV2(text);
-}
-
 std::string ProcessHandle::cgroup() const
 {
     std::string text;
     if (m_fd < 0 || !readAt(m_fd, "cgroup", text))
         return {};
     return parseCgroupV2(text);
+}
+
+std::string ProcessHandle::parentCgroup(const std::string &procRoot) const
+{
+    // The parent now, through the descriptor; nothing once the process has ended (currentPpid would fall back to ppid()).
+    StatFields self;
+    if (m_fd < 0 || !readStat(m_fd, "stat", self) || self.pid != m_pid || self.ppid <= 0)
+        return {};
+    const int parent = self.ppid;
+    const int fd = ::open((procRoot + '/' + std::to_string(parent)).c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0)
+        return {};
+    StatFields st;
+    std::string text;
+    const bool ok = readStat(fd, "stat", st) && st.pid == parent && st.starttime <= m_start && readAt(fd, "cgroup", text);
+    close(fd);
+    return ok ? parseCgroupV2(text) : std::string();
 }
 
 int ProcessHandle::signal(int sig) const

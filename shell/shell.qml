@@ -6,6 +6,7 @@ import Grassfield.I18n
 import Grassfield.Ui
 import qs.desktop
 import qs.dock
+import qs.lib
 import qs.launchpad
 import qs.menubar
 import qs.notifications
@@ -15,9 +16,11 @@ import qs.overlay
 import qs.platform
 import qs.saver
 import qs.search
+import qs.security
 import qs.security.idle
 import qs.security.lock
 import qs.security.polkit
+import qs.security.secret
 import qs.services
 import qs.stages
 import qs.switcher
@@ -74,11 +77,12 @@ ShellRoot {
         value: dock.keyboardMode
     }
 
-    // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11).
+    // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11): the
+    // polkit sheet or a secret sheet is open (ADR-0035 D-9).
     Binding {
         target: SessionState
         property: "authorizing"
-        value: authAgent.requestActive
+        value: authAgent.requestActive || secretAgent.requestActive
     }
 
     Connections {
@@ -481,8 +485,23 @@ ShellRoot {
     Search {
         id: searchSurface
     }
+    // The one queue of the polkit sheet and the secret sheets (ADR-0035 D-9, master-prompt R12): one sheet on screen at a
+    // time, in arrival order; no sheet takes the keyboard from another.
+    SheetQueue {
+        id: sheetQueue
+        polkitPresent: authAgent.queuePresent
+    }
     AuthAgent {
         id: authAgent
+        queue: sheetQueue
+    }
+    // Password prompts of gcr's callers (gnome-keyring, GnuPG's pinentry, gcr-ssh-agent) through grassfield-prompter
+    // (ADR-0035 D-9, step 9b). In a dev session it connects only to the test socket GRASSFIELD_PROMPTER_SOCKET names.
+    SecretAgent {
+        id: secretAgent
+        queue: sheetQueue
+        devSocket: Mode.devValue("PROMPTER_SOCKET")
+        shellVersion: SystemInfo.grassfieldVersion
     }
     Idle {
         id: idle
@@ -528,6 +547,7 @@ ShellRoot {
     // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing TilingHover makes it listen
     // to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22); referencing TilingSuggest makes it
     // listen to the suggestions that follow a layout or an arrangement (TL28); referencing SoftwareUpdate starts its automatic
-    // checks and registers its IPC target "update" (ADR-0033 d.7).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count)
+    // checks and registers its IPC target "update" (ADR-0033 d.7); referencing ActivityLink registers its IPC target "activity"
+    // and writes Activity Monitor's projection while the app's window is open (ADR-0038 AM60, AM61).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder")
 }

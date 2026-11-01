@@ -11,6 +11,10 @@
 #              built-in matches are added anyway, so a 1password.lua that stops before its rule still protects 1Password
 #   builtin    no Omarchy rule readable: the built-in password-manager matches apply
 #   wiring     core.lua (loaded by session.lua and dev.lua) requires grassfield.privacy
+#   layers     the shell's password sheets and authorization sheet (ADR-0035 D-9, step 9b): one layer rule each, with
+#              no_screen_share, whose namespace regex matches exactly the namespace the shell gives that sheet
+#              (shell/security/secret/SecretAgent.qml grassfield-secret, shell/security/polkit/AuthAgent.qml
+#              grassfield-polkit), applied whatever Omarchy holds; a copy without one rule fails the check
 # The nested proof (a window with app_id Bitwarden is black in a capture) is tests/security/lock_privacy.sh `screenshare`.
 # Plain shell test: prints PASS/FAIL, exits non-zero on failure.
 set -euo pipefail
@@ -26,12 +30,19 @@ fi
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/screenshare.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
-# Prints "source <omarchy|builtin>", then one line per applied rule: "<name>|<no_screen_share>|<sorted match>".
+# Prints "source <omarchy|builtin>", one line per applied window rule: "<name>|<no_screen_share>|<sorted match>", and one per
+# layer rule: "layer <name>|<no_screen_share>|<namespace>|<number of match keys>".
 cat >"$tmp/run.lua" <<'LUA'
 local applied = {}
-hl = { window_rule = function(rule) applied[#applied + 1] = rule end }
+local layers = {}
+hl = { window_rule = function(rule) applied[#applied + 1] = rule end, layer_rule = function(rule) layers[#layers + 1] = rule end }
 local M = dofile(arg[1])
 print("source " .. M.source)
+for _, rule in ipairs(layers) do
+  local n = 0
+  for _ in pairs(rule.match) do n = n + 1 end
+  print("layer " .. tostring(rule.name) .. "|" .. tostring(rule.no_screen_share) .. "|" .. tostring(rule.match.namespace) .. "|" .. n)
+end
 for _, rule in ipairs(applied) do
   local keys = {}
   for k in pairs(rule.match) do keys[#keys + 1] = k end
@@ -118,6 +129,30 @@ out=$(run "$tmp/none")
 for m in 'class=^(1[p|P]assword)$' 'class=^(Bitwarden)$' 'class=chrome-nngceckbapebfimnlniiiahkandclblb-Default'; do
   grep -qF "|true|$m" <<<"$out" && pass "builtin: protected $m" || bad "builtin: $m missing"
 done
+
+# --- layers: the shell's sheets (ADR-0035 D-9, step 9b) ---
+cat >"$tmp/layers.py" <<'PY'
+import re, sys
+out, root = sys.stdin.read(), sys.argv[1]
+rules = [l[len("layer "):].split("|") for l in out.split("\n") if l.startswith("layer ")]
+def namespace_of(path):
+    m = re.search(r'WlrLayershell\.namespace:\s*"([^"]+)"', open(f"{root}/{path}", encoding="utf-8").read())
+    return m.group(1) if m else None
+want = [namespace_of("shell/security/secret/SecretAgent.qml"), namespace_of("shell/security/polkit/AuthAgent.qml")]
+ok = want == ["grassfield-secret", "grassfield-polkit"] and len(rules) == 2
+for ns in want:
+    hits = [r for r in rules if r[1] == "true" and r[3] == "1" and re.fullmatch(r[2], ns or "")
+            and not re.fullmatch(r[2], (ns or "") + "x") and not re.fullmatch(r[2], "x" + (ns or ""))]
+    ok = ok and len(hits) == 1
+print("ok" if ok else "bad " + repr(rules) + " " + repr(want))
+PY
+for om in /usr/share/omarchy "$tmp/om" "$tmp/none"; do
+  r=$(run "$om" | python3 -I "$tmp/layers.py" "$root")
+  [[ $r == ok ]] && pass "layers ($om): the secret and polkit sheets' layers are hidden from screen sharing" || bad "layers ($om): $r"
+done
+sed 's/^hl\.layer_rule({ name = "gf-no-screen-share-secret".*$//' "$root/config/hypr/grassfield/privacy.lua" >"$tmp/privacy-mutant.lua"
+r=$(cd "$tmp" && env OMARCHY_PATH="$tmp/none" lua "$tmp/run.lua" "$tmp/privacy-mutant.lua" | python3 -I "$tmp/layers.py" "$root")
+[[ $r != ok ]] && pass "layers: mutation: a copy without the secret sheet's rule fails the check" || bad "layers: mutation not caught"
 
 # --- wiring: both sessions load it ---
 grep -qx 'require("grassfield.privacy")' config/hypr/grassfield/core.lua && pass "wiring: core.lua requires grassfield.privacy" || bad "wiring: core.lua"

@@ -15,7 +15,12 @@ StartLimitBurst=5
 [Service]
 Type=simple
 Slice=session.slice
-ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray
+# An encrypted disk's password (ADR-0035 D-9, step 9c): udiskie runs grassfield-askpass, a gcr client, instead of its own GTK
+# dialog; the shell's secret sheet draws the prompt (or the stock gcr-prompter while the shell is not connected) and the
+# helper hands the passphrase back on its standard output. udiskie formats {device_presentation} (the device file) into its
+# own argument after splitting the line, so a disk's name never becomes another argument; a cancellation or any failure
+# leaves the disk locked.
+ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray --password-prompt "/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}"
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=5
@@ -28,7 +33,8 @@ ProtectSystem=strict
 # alternative, a '+' ExecStartPre that runs mkdir outside the sandbox, would run a command with no hardening at all. The directory
 # is shared with the shell and every GSettings client of the session: Preserve=yes keeps it when this unit stops (the default
 # removes it under the other clients), and 0700 is what dconf itself creates. udiskie's dialogs keep the user's
-# real GSettings (theme, text scaling), which a memory backend would drop.
+# real GSettings (theme, text scaling), which a memory backend would drop. (Its password dialog is no longer one of them since
+# step 9c: grassfield-askpass asks; the options below also hold that helper, which needs no write access anywhere.)
 RuntimeDirectory=dconf
 RuntimeDirectoryPreserve=yes
 RuntimeDirectoryMode=0700

@@ -15,6 +15,11 @@
 //   activity-sampler-bench measure ... --poke PGID
 //       sends SIGUSR1 to that group after each sample and lets it run 5 ms, outside the sample's measured time.
 //   activity-sampler-bench tcp K          K loopback TCP connections in one process (waits)
+//   activity-sampler-bench inspect PID [--reads N]
+//       the cost of one Inspect read of process PID (AM57, AM58; step 2d) on each tab, as its window reads it: N reads (21
+//       by default) of the header alone, of each tab, and of Memory with smaps_rollup at every read (its 5 s moved on): the
+//       median and maximum CPU time of one read on this thread, what it found.
+#include "inspect.h"
 #include "sampler.h"
 
 #include <algorithm>
@@ -210,6 +215,52 @@ void printDump(const Snapshot &s)
     std::printf("kernel\t-\t0\tsystem\t0\tKernel\t%.2f\t%d\n", s.kernel.cpuPercent, s.kernel.threads);
 }
 
+int inspect(int pid, int reads)
+{
+    const Options opt = defaultOptions();
+    StatFields st;
+    std::string text;
+    if (FILE *f = std::fopen(("/proc/" + std::to_string(pid) + "/stat").c_str(), "r")) {
+        char buf[4096];
+        text.assign(buf, std::fread(buf, 1, sizeof buf, f));
+        std::fclose(f);
+    }
+    if (!parseStat(text, st, false)) {
+        std::fprintf(stderr, "activity-sampler-bench: no process %d\n", pid);
+        return 1;
+    }
+    const struct {
+        const char *name;
+        unsigned what;
+        double step; // seconds between two reads: kPssSeconds reads smaps_rollup at every read
+    } cases[] = {{"header", 0, 1}, {"memory", InspectMemory, 1}, {"memory+pss", InspectMemory, kPssSeconds},
+                 {"statistics", InspectStatistics, 1}, {"files", InspectFiles, 1}};
+    for (const auto &c : cases) {
+        ProcessInspector in(opt.procRoot, opt.uid, opt.clockTicks);
+        if (!in.open(pid, st.starttime)) {
+            std::fprintf(stderr, "activity-sampler-bench: process %d ended\n", pid);
+            return 1;
+        }
+        std::vector<double> ms;
+        ProcessDetails d;
+        double now = 0;
+        for (int i = 0; i < reads; ++i, now += c.step) {
+            d = in.read(c.what, now);
+            if (!d.alive) {
+                std::fprintf(stderr, "activity-sampler-bench: process %d ended\n", pid);
+                return 1;
+            }
+            if (i > 0) // the first opens nothing more, but its pages are cold
+                ms.push_back(d.cpuMs);
+        }
+        std::sort(ms.begin(), ms.end());
+        std::printf("inspect %-10s pid %d: median %.3f ms, max %.3f ms (own %d, threads %d, real %.1f MB, descriptors %zu)\n",
+                    c.name, pid, ms.empty() ? 0 : ms[ms.size() / 2], ms.empty() ? 0 : ms.back(), d.own ? 1 : 0, d.threads,
+                    static_cast<double>(d.realMemory) / 1e6, d.files.size() + d.moreFiles);
+    }
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -219,9 +270,11 @@ int main(int argc, char **argv)
                      argc >= 7 ? argv[6] : nullptr);
     if (argc >= 3 && std::strcmp(argv[1], "tcp") == 0)
         return tcp(std::atoi(argv[2]));
+    if (argc >= 3 && std::strcmp(argv[1], "inspect") == 0)
+        return inspect(std::atoi(argv[2]), argc >= 5 && std::strcmp(argv[3], "--reads") == 0 ? std::max(2, std::atoi(argv[4])) : 21);
     if (argc < 2 || (std::strcmp(argv[1], "measure") != 0 && std::strcmp(argv[1], "dump") != 0)) {
         std::fprintf(stderr, "usage: activity-sampler-bench measure|dump [--tab T] [--samples N] [--interval-ms MS] [--poke PGID] [--proc-root DIR] [--sys-root DIR]\n"
-                             "       activity-sampler-bench spawn N T F [C FILE] | tcp K\n");
+                             "       activity-sampler-bench spawn N T F [C FILE] | tcp K | inspect PID [--reads N]\n");
         return 2;
     }
     const bool dump = std::strcmp(argv[1], "dump") == 0;

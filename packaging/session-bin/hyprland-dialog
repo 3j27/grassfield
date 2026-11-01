@@ -10,8 +10,9 @@
 # client pid), reports it to the shell (`anr report`), which marks the app in Force Quit and in its Dock menu, and then
 # waits silently with the same pid: Hyprland kills it when the app answers again or closes, and the shell clears the mark
 # when it ends. Every other call (Safe Mode, a permission prompt, another language, an unknown button set), and every case
-# where the window cannot be told apart or the shell does not acknowledge within 1 s, runs the stock dialog by absolute
-# path with the same arguments and the same pid. No window title or class is ever printed or logged.
+# where the window cannot be told apart, no shell runs, the shell refuses or it does not acknowledge within 10 s (a shell
+# that hangs), runs the stock dialog by absolute path with the same arguments and the same pid. No window title or class is
+# ever printed or logged.
 stock=/usr/bin/hyprland-dialog
 shell_dir=/usr/share/grassfield/shell
 # Dev plumbing (ADR-0019): the nested dev session runs the shell from the repository. GRASSFIELD_SHELL_DIR is honoured only
@@ -101,9 +102,13 @@ case "$untitled" in
 esac
 [ -n "$class" ] && [ "${window:-$unknown} - $class" = "$body" ] || stock "$@"
 
-# The shell acknowledges within 1 s ("ok"), or the stock dialog runs. The strings carry a prefix: qs ipc takes an argument
-# that starts with "-" for an option. The compositor's instance lets the shell refuse a nested session's call.
-answer=$(timeout -k 0.2 1 qs ipc -p "$shell_dir" call anr report "$$" "$pid" "c:$class" "t:$window" \
+# The shell acknowledges ("ok"), or the stock dialog runs. The strings carry a prefix: qs ipc takes an argument that starts
+# with "-" for an option. The compositor's instance lets the shell refuse a nested session's call.
+# The wait (ADR-0035 decision 3-16): qs ends at once on its own when no shell runs or the shell refuses, so the stock dialog
+# shows as soon as it can; a live shell may need seconds under load, qs's own start included (capture defect of 2026-10-30:
+# the 1-s deadline showed the stock English dialog in a French session), so it gets 10 s, twice the shell watchdog's 5-s
+# liveness probe (ADR-0041 SQ-5); only a shell that hangs past that leaves the user the stock dialog, the one way out then.
+answer=$(timeout -k 1 10 qs ipc -p "$shell_dir" call anr report "$$" "$pid" "c:$class" "t:$window" \
   "i:${HYPRLAND_INSTANCE_SIGNATURE:-}" 2>/dev/null)
 [ "$answer" = ok ] || stock "$@"
 

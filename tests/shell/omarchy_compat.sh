@@ -37,11 +37,11 @@ if [[ -d /usr/share/omarchy/default/hypr ]]; then
   check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: Lua module default/hypr/input.lua" <<<"$1"' _ "$out" "$status"
   cp -L /usr/share/omarchy/default/hypr/input.lua "$copy/default/hypr/input.lua"
 
-  rm "$copy/bin/omarchy-capture-screenshot"
+  rm "$copy/bin/omarchy-hook"
   status=0; out=$(run_copy) || status=$?
-  desc="a missing command (omarchy-capture-screenshot) fails the check by name"
-  check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: command omarchy-capture-screenshot" <<<"$1"' _ "$out" "$status"
-  cp -L /usr/share/omarchy/bin/omarchy-capture-screenshot "$copy/bin/"
+  desc="a missing command (omarchy-hook) fails the check by name"
+  check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: command omarchy-hook" <<<"$1"' _ "$out" "$status"
+  cp -L /usr/share/omarchy/bin/omarchy-hook "$copy/bin/"
 
   sed -i 's/omarchy-restart-shell/omarchy-renamed-shell/' "$copy/bin/omarchy-update-restart"
   status=0; out=$(run_copy) || status=$?

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <ctime>
 
 #include <dirent.h>
@@ -361,6 +362,11 @@ void Sampler::readCgroup(int pid, Proc &p, Counters &c)
     p.eligible = efficiencyEligible(p.cgroup);
     const std::optional<AppUnit> unit = parseAppUnit(unitOf(p.cgroup));
     p.appId = unit ? unit->name : std::string();
+    p.unitKey = 0;
+    if (unit) {
+        const uint64_t h = std::hash<std::string_view>{}(unitOf(p.cgroup));
+        p.unitKey = h != 0 ? h : 1;
+    }
 }
 
 void Sampler::forgetRates()
@@ -515,8 +521,10 @@ void Sampler::readGpu(int pid, Proc &p, double now, Counters &c, std::map<std::s
         GpuDevice &dev = devices[client.pdev];
         dev.pdev = client.pdev;
         dev.driver = client.driver;
-        for (const auto &[region, bytes] : client.memoryBytes)
+        for (const auto &[region, bytes] : client.memoryBytes) {
             dev.memoryBytes += bytes;
+            dev.memoryRegions[region] += bytes;
+        }
         for (const auto &[engine, ns] : client.engineNs) {
             const std::string k = key + '|' + engine;
             nowNs[k] = ns;
@@ -790,6 +798,7 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
             if (own) {
                 row.command = p.command;
                 row.appId = p.appId;
+                row.unitKey = p.unitKey;
                 const bool ownsWindow = !windowOwners_.empty() && windowOwners_.count(pid) != 0;
                 row.kind = ownsWindow ? p.kindWithWindow : p.kindAlone;
                 row.session = p.sessionUnit;
@@ -886,6 +895,8 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
                         row.kind = !windowOwners_.empty() && windowOwners_.count(pid) ? p.kindWithWindow : p.kindAlone;
                         row.session = p.sessionUnit;
                         row.efficiencyEligible = p.eligible;
+                        row.appId = p.appId;
+                        row.unitKey = p.unitKey;
                     }
                 }
                 row.openFiles = p.openFiles;
@@ -909,6 +920,28 @@ const Snapshot &Sampler::sample(unsigned reads, double now)
         }
         s.rows.resize(used);
         s.kernel.cpuPercent = kernelKnown ? kernelPercent : -1;
+
+        // AM68: an app unit runs in Efficiency Mode while its cgroup is idle (CPUWeight=idle) or its weight is 1, whoever set
+        // it; each unit read once.
+        if (reads & ReadEfficiency) {
+            efficientUnits_.clear();
+            for (ProcessRow &row : s.rows) {
+                if (!row.own || !row.efficiencyEligible || row.unitKey == 0)
+                    continue;
+                auto [unit, first] = efficientUnits_.try_emplace(row.unitKey, false);
+                if (first) {
+                    const std::string dir = opt_.sysRoot + "/fs/cgroup" + procs_.find(row.pid)->second.cgroup + '/';
+                    ++c.weightReads;
+                    if (readFile(dir + "cpu.idle", buf_, true) && buf_.compare(0, 1, "1") == 0) {
+                        unit->second = true;
+                    } else {
+                        ++c.weightReads;
+                        unit->second = readFile(dir + "cpu.weight", buf_, true) && (buf_ == "1" || buf_ == "1\n");
+                    }
+                }
+                row.efficient = unit->second;
+            }
+        }
 
         // Processes that ended: their kept descriptors close. Swept only when some did: the sweep touches every process's
         // entry again (2b, the Disk tab's cost).
@@ -1108,11 +1141,16 @@ void Sampler::readSystem(unsigned reads, double now, SystemSnapshot &out, Counte
                 out.systemShare = std::max(0.0, busy - out.userShare);
             }
             out.perCpuBusy.assign(per.size(), -1);
+            out.perCpuUser.assign(per.size(), -1);
             if (haveCpu_ && per.size() == lastPerCpu_.size()) {
                 for (size_t i = 0; i < per.size(); ++i) {
                     const uint64_t t = per[i].total(), t0 = lastPerCpu_[i].total();
-                    if (t > t0)
-                        out.perCpuBusy[i] = static_cast<double>(per[i].busy() - std::min(per[i].busy(), lastPerCpu_[i].busy())) / static_cast<double>(t - t0);
+                    if (t <= t0)
+                        continue;
+                    const double dt = static_cast<double>(t - t0);
+                    out.perCpuBusy[i] = static_cast<double>(per[i].busy() - std::min(per[i].busy(), lastPerCpu_[i].busy())) / dt;
+                    const uint64_t user = per[i].user + per[i].nice, user0 = lastPerCpu_[i].user + lastPerCpu_[i].nice;
+                    out.perCpuUser[i] = std::min(out.perCpuBusy[i], static_cast<double>(user - std::min(user, user0)) / dt);
                 }
             }
             lastCpu_ = total;

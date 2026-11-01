@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate translations/grassfield_fr.ts from shell/, ui/ and apps/ (QML, JS, C++ tr()).
+# Regenerate translations/grassfield_fr.ts from shell/, ui/, apps/ and bridges/ (QML, JS, C++ tr(); bridges/: grassfield-askpass's
+# message, ADR-0035 step 9c).
 # Stable options: -no-obsolete (dropped strings vanish), -locations none (no line numbers: unrelated code edits never stale the catalog).
 # English is the source language: no catalog is needed for it. Existing translations are kept.
 # Usage: scripts/dev/i18n-update.sh [--check]
@@ -12,7 +13,7 @@ ts=translations/grassfield_fr.ts
 
 run() {
   "$lupdate" -no-obsolete -locations none -source-language en -target-language fr \
-    shell ui apps -ts "$ts" >/dev/null
+    shell ui apps bridges -ts "$ts" >/dev/null
 }
 
 if [[ ${1:-} == "--check" ]]; then

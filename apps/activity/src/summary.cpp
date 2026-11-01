@@ -136,7 +136,19 @@ void Summary::addSample(const Snapshot &snapshot, const QDateTime &now)
     m_netPacketsOut.add(s.netTotal.packetsOutPerSec);
     m_netBytesIn.add(s.netTotal.bytesInPerSec);
     m_netBytesOut.add(s.netTotal.bytesOutPerSec);
-    rebuild();
+    if (m_live)
+        rebuild();
+    else
+        m_stale = true;
+}
+
+void Summary::setLive(bool live)
+{
+    m_live = live;
+    if (live && m_stale) {
+        m_stale = false;
+        rebuild();
+    }
 }
 
 void Summary::setBattery(const BatteryState &battery, const QDateTime &now)
@@ -144,6 +156,39 @@ void Summary::setBattery(const BatteryState &battery, const QDateTime &now)
     m_battery = battery;
     m_now = now;
     rebuild();
+}
+
+QVariantList Summary::dockTileSamples(const QString &kind, int count) const
+{
+    const auto tail = [count](const History &h) {
+        const std::deque<double> &v = h.values();
+        const size_t n = std::min(v.size(), static_cast<size_t>(std::max(0, count)));
+        return std::vector<double>(v.end() - static_cast<std::ptrdiff_t>(n), v.end());
+    };
+    const auto clamp = [](double x) { return x > 0 ? std::min(x, 1.0) : 0.0; };
+    QVariantList out;
+    if (kind == QLatin1String("cpu-usage")) {
+        const std::vector<double> sys = tail(m_cpuSystem), user = tail(m_cpuUser);
+        if (!sys.empty())
+            out << clamp(std::max(0.0, sys.back()) + std::max(0.0, user.back()));
+        return out;
+    }
+    const bool cpu = kind == QLatin1String("cpu-history");
+    const History *first = cpu ? &m_cpuSystem : kind == QLatin1String("disk") ? &m_diskReadBytes : &m_netBytesIn;
+    const History *second = cpu ? &m_cpuUser : kind == QLatin1String("disk") ? &m_diskWriteBytes : &m_netBytesOut;
+    if (!cpu && kind != QLatin1String("disk") && kind != QLatin1String("network"))
+        return out;
+    const std::vector<double> a = tail(*first), b = tail(*second);
+    double max = 1;
+    if (!cpu) {
+        for (double x : a)
+            max = std::max(max, x);
+        for (double x : b)
+            max = std::max(max, x);
+    }
+    for (size_t k = 0; k < std::min(a.size(), b.size()); ++k)
+        out << QVariant(QVariantList{clamp(a[k] / max), clamp(b[k] / max)});
+    return out;
 }
 
 QString Summary::durationText(qint64 seconds)
