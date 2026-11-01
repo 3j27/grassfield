@@ -116,12 +116,32 @@ u=$pk/systemd/grassfield-pacman-watch.service
 h=$pk/bin/grassfield-pacman-watch
 desc="grassfield-pacman-watch.path: watches /var/lib/pacman/local (PathChanged), starts its service, session-only, part of the session target, a trigger limit set, started by autostart and installed by the PKGBUILD"
 check bash -c 'grep -qx "PathChanged=/var/lib/pacman/local" "$1" && grep -qx "Unit=grassfield-pacman-watch.service" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qE "^TriggerLimitIntervalSec=[0-9]+$" "$1" && grep -qE "^TriggerLimitBurst=[0-9]+$" "$1" && grep -q "grassfield-pacman-watch.path" "$2" && grep -q "grassfield-pacman-watch.path\" \"\$pkgdir/usr/lib/systemd/user/grassfield-pacman-watch.path\"" "$3"' _ "$p" "$auto" "$pk/arch/PKGBUILD"
-desc="grassfield-pacman-watch.service: oneshot, runs the helper, session-only, hardened, Quickshell's option variables and the helper's knobs cleared, a start limit, installed by the PKGBUILD"
-check bash -c 'grep -qx "Type=oneshot" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-pacman-watch" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "ProtectSystem=strict" "$1" && grep -qx "PrivateTmp=yes" "$1" && grep -qx "UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_PACMAN_WATCH_SETTLE GRASSFIELD_PACMAN_WATCH_IPC" "$1" && grep -qE "^StartLimitIntervalSec=[0-9]+$" "$1" && grep -qE "^StartLimitBurst=[0-9]+$" "$1" && grep -q "for unit in .*pacman-watch" "$2"' _ "$u" "$pk/arch/PKGBUILD"
-desc="grassfield-pacman-watch: executable, clears Quickshell's option variables, asks the shell by its path (update check system) and nothing else (no systemctl, pacman or privilege)"
-check bash -c '[[ -x "$1" ]] && grep -q "unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST" "$1" && grep -q "qs ipc -p /usr/share/grassfield/shell" "$1" && grep -q "call update check system" "$1" && ! grep -v "^#" "$1" | grep -qE "systemctl|sudo|pkexec|pacman |hyprctl"' _ "$h"
-desc="grassfield-pacman-watch: a dev session outside the real one may shorten the settle and replace the call (the knobs); in the real session the knobs are ignored"
-check bash -c 'out=$(GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_IPC="echo IPC" "$1") && [[ $out == "IPC call update check system" ]] && out2=$(GRASSFIELD_DEV=1 GRASSFIELD_SESSION=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_IPC="echo IPC" timeout 20 "$1" 2>/dev/null; echo "rc=$?") && [[ $out2 == "rc=0" ]]' _ "$h"
+desc="grassfield-pacman-watch.service: oneshot, runs the helper, session-only, hardened, Quickshell's option variables and the helper's knobs cleared, a start limit, a start timeout past the lock wait, installed by the PKGBUILD"
+check bash -c 'grep -qx "Type=oneshot" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-pacman-watch" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "ProtectSystem=strict" "$1" && grep -qx "PrivateTmp=yes" "$1" && grep -qx "UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_PACMAN_WATCH_LOCK GRASSFIELD_PACMAN_WATCH_LOCK_WAIT GRASSFIELD_PACMAN_WATCH_SETTLE GRASSFIELD_PACMAN_WATCH_IPC" "$1" && grep -qE "^StartLimitIntervalSec=[0-9]+$" "$1" && grep -qE "^StartLimitBurst=[0-9]+$" "$1" && t=$(sed -nE "s/^TimeoutStartSec=([0-9]+)$/\1/p" "$1") && [[ -n $t ]] && ((t > 1800)) && grep -q "for unit in .*pacman-watch" "$2"' _ "$u" "$pk/arch/PKGBUILD"
+desc="grassfield-pacman-watch: executable, clears Quickshell's option variables, waits for pacman's lock, asks the shell by its path (update check system) and nothing else (no systemctl, pacman or privilege)"
+check bash -c '[[ -x "$1" ]] && grep -q "unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST" "$1" && grep -q "lock=/var/lib/pacman/db.lck" "$1" && grep -q "qs ipc -p /usr/share/grassfield/shell call update check system" "$1" && ! grep -v "^#" "$1" | grep -qE "systemctl|sudo|pkexec|pacman |hyprctl"' _ "$h"
+# The helper under test never reaches a live shell: GRASSFIELD_SESSION is unset for the dev-session cases, and the
+# real-session case (the knobs ignored) runs against a fake `qs` on a private PATH that only logs its arguments (the
+# integrator's review of 69757ef, major 5).
+watch_dir=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/pacman-watch.XXXXXX")
+mkdir -p "$watch_dir/bin"
+printf '#!/bin/sh\necho "qs $*" >>"$FAKE_QS_LOG"\necho "No running instances"\nexit 1\n' >"$watch_dir/bin/qs"
+printf '#!/bin/sh\necho "asked $*" >>"$FAKE_IPC_LOG"\necho "ok"\n' >"$watch_dir/ipc.sh"
+chmod +x "$watch_dir/bin/qs" "$watch_dir/ipc.sh"
+desc="grassfield-pacman-watch: a dev session outside the real one may replace the call and shorten the waits (the knobs); the real session ignores them and asks the shell by its path (a fake qs here, never the live shell)"
+check bash -c ': >"$2/ipc.log"; : >"$2/qs.log"
+  out=$(env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/none" GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" "$1") && [[ $out == ok ]] && [[ $(cat "$2/ipc.log") == "asked call update check system" ]] || exit 1
+  out2=$(env GRASSFIELD_DEV=1 GRASSFIELD_SESSION=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/none" GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" FAKE_QS_LOG="$2/qs.log" PATH="$2/bin:$PATH" XDG_RUNTIME_DIR="$2" timeout 30 "$1"; echo "rc=$?")
+  [[ $out2 == *"rc=0" ]] && [[ $(cat "$2/ipc.log") == "asked call update check system" ]] && [[ $(cat "$2/qs.log") == "qs ipc -p /usr/share/grassfield/shell call update check system" ]]' _ "$h" "$watch_dir"
+desc="grassfield-pacman-watch: waits while pacman's lock file exists (the transaction runs) and asks once it is gone; the wait is bounded"
+check bash -c ': >"$2/db.lck"; : >"$2/ipc.log"
+  env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/db.lck" GRASSFIELD_PACMAN_WATCH_LOCK_WAIT=60 GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" "$1" >/dev/null & pid=$!
+  sleep 2.5; [[ ! -s "$2/ipc.log" ]] || { kill "$pid" 2>/dev/null; echo "asked while locked"; exit 1; }
+  rm -f "$2/db.lck"; wait "$pid"; [[ $(cat "$2/ipc.log") == "asked call update check system" ]] || { echo "not asked after the lock went"; exit 1; }
+  : >"$2/db.lck"; : >"$2/ipc.log"
+  env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/db.lck" GRASSFIELD_PACMAN_WATCH_LOCK_WAIT=2 GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" timeout 30 "$1" >/dev/null
+  [[ $(cat "$2/ipc.log") == "asked call update check system" ]] || { echo "not asked after the bound"; exit 1; }' _ "$h" "$watch_dir"
+rm -rf "$watch_dir"
 for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
   desc="drop-in keeps Omarchy's $unit.service out of the Grassfield session only"
   d=$pk/systemd/$unit.service.d/10-grassfield.conf

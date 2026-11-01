@@ -1822,11 +1822,6 @@ QtObject {
     readonly property int settingsDisplayAppliedMs: 4000
     // estimate: ms the shell waits for Hyprland's answer to the reload that applies a display trial (reading the Lua configuration may take longer than a blur push's second; past it the trial stays applying and its deadline takes it back; ADR-0031) [ref: docs/audits/settings-parity-2026-10-26.md § Displays]
     readonly property int settingsDisplayTrialAnswerMs: 3000
-    // ADR-0041 step 2b (I-2's residual): how long a reload of the session configuration waits for pacman's database lock to
-    // go (polled every sessionConfigLockPollMs) before it goes ahead anyway: under a display trial's 15 s, so the trial's
-    // countdown is not what ends the wait.
-    readonly property int sessionConfigLockWaitMs: 10000
-    readonly property int sessionConfigLockPollMs: 500
     // macOS 27: the Appearance row (thumbnails and their names) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property int settingsAppearanceRowHeight: 86
     // macOS 27: an appearance thumbnail's width [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
@@ -2077,6 +2072,11 @@ QtObject {
     readonly property int settingsPrinterStatusBaseline: 38
     // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsPushRowHeight: 44
+
+    // estimate: how long a reload of the session configuration waits for pacman's database lock to go before it goes ahead anyway, under a display trial's 15 s so the trial's countdown is not what ends the wait (ADR-0041 step 2b, I-2's residual) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
+    readonly property int sessionConfigLockWaitMs: 10000
+    // estimate: how often that wait looks at the lock file again (ADR-0041 step 2b) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
+    readonly property int sessionConfigLockPollMs: 500
 
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164
