@@ -700,7 +700,8 @@ last print's settings back (ADR-0035 6-18).
   program, process, lock, ioctl, nor any act on another process; setsid, the locale's variables only, 512 MiB, one child at a
   time, one thread when it confines itself; an unlisted call answers ENOSYS; raw pixels read back; no preview when the
   confinement cannot be installed) (6-10, 6-20, 6-25 to 6-27). The sheet may print as soon as the document is kept, its preview
-  coming apart (6-28). Print sends the job at once from that file and the sheet goes (6-15); a document that is not a PDF goes to
+  coming apart, and the document's own paper chosen with the first printer's options, or suggested when its size comes after
+  them (6-13, 6-28). Print sends the job at once from that file and the sheet goes (6-15); a document that is not a PDF goes to
   x-d-p-gtk as it came, or fails when it came on a pipe, as does one whose sheet does not show in time once part of a pipe was
   read (6-12, 6-24); one the full budget refuses goes to x-d-p-gtk as it came when it is a file (6-28).
 - PR3 done with macOS's "PDF" pull-down (6-16): Save as PDF… (6-3's Save panel and writer) and Open in Preview: a private copy

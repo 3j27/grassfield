@@ -1125,7 +1125,10 @@ delegated by the owner on 2026-10-27, numbered after 6-19; the review's probes a
   `documentPaper`, taken unless the user chose a paper); and a document refused for the budget goes to x-d-p-gtk as it came when
   it is a file read in place (its position untouched: 6-24's rule), ending with 2 only when it came on a pipe that was read.
   **Choice: (b)**. Rule applied: the preview is a help, never a gate; nothing that printed before step 6b stops printing because
-  another application holds the room.
+  another application holds the room. Found while testing it: the first printer's options carried the sheet's first paper by
+  its name (A4, the default before any printer is known), which won over the document's own size, so 6-13's paper held only for
+  A4 documents; the first printer's options now take the document's paper where the printer lists it (once), and a size known
+  only later is suggested (`documentPaper`).
 - **6-29. Open in Preview's name and `$` (NIT).** The dollar sign is replaced (by the fullwidth ＄) in every name the copy may take,
   before the 255-byte cap, so the name never grows past it after the cap; the replacement holds whatever starts Preview
   (`systemd-run` with or without `--expand-environment=no`, and uwsm's own `systemd-run` when it starts applications as
