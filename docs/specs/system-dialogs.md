@@ -994,7 +994,7 @@ Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, 
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
 Settings.
 
-## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9; built in step 10, decisions 10-1 to 10-14)
+## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9; built in step 10, decisions 10-1 to 10-16)
 A security module (the secret sheets fed by grassfield-prompter, "BlueZ pairing" in the amended rule, owner decision Q12): R12
 applies (opus PASS, fail closed, nothing logged). From step 10 a pairing step that needs the user (a code to type, show or
 compare, an incoming pairing or service) is drawn by the shell's secret sheet, in the one queue (section 5, SC2).
@@ -1010,7 +1010,9 @@ nothing is accepted silently.
   (`RegisterAgent`, `RequestDefaultAgent`) while a shell whose hello lists `bluetooth` is connected, unregisters when it goes,
   registers again when `org.bluez` gets a new owner; the system bus as in SC8 (the fixed socket in the session). Omarchy's
   `bt-agent` does not run in the Grassfield session: `packaging/systemd/bt-agent.service.d/10-grassfield.conf`
-  (`ConditionEnvironment=!GRASSFIELD_SESSION=1`), installed to `/usr/lib/systemd/user/bt-agent.service.d/`. BlueZ's check
+  (`ConditionEnvironment=!GRASSFIELD_SESSION=1`, and `PartOf=graphical-session.target` so that one an Omarchy session started
+  stops with it even when the user manager stays), installed to `/usr/lib/systemd/user/bt-agent.service.d/`, and
+  `grassfield-prompter.service` stops one still running before it starts (opus review of step 10, MAJOR). BlueZ's check
   (10-1): with no agent at all (the shell not connected) bluetoothd makes the adapter non-bondable and refuses every step that
   needs an agent; nothing is accepted silently, so `bt-agent` is not kept as a fallback (it would accept incoming pairings
   without asking exactly then).
@@ -1021,8 +1023,8 @@ nothing is accepted silently.
   - `DisplayPinCode`, `DisplayPasskey`: "Type this code on the device, then press Return on it.", the code large, for a
     passkey "Digits typed on the device: N of 6" updated on each `DisplayPasskey` of the same code without touching the
     keyboard (10-8); Cancel alone, which asks bluetoothd to `CancelPairing` the device; bluetoothd gets its reply at once
-    (it hands a PIN to the controller only then) and the sheet goes when bluetoothd cancels or leaves, when the device is
-    reported paired, for another code, or after 55 s (10-6);
+    (it hands a PIN to the controller only then) and the sheet goes when bluetoothd leaves, when the device is reported
+    paired, disconnects or is removed, when another code is shown (one at a time), or after 55 s (10-6, 10-16);
   - `RequestConfirmation`: "Connect only if the device shows the same code.", the passkey as 6 digits, Cancel / Connect;
   - `RequestAuthorization`: "The device wants to pair with this computer.", Decline / Connect;
   - `AuthorizeService`: "The device wants to use <profile> on this computer." (audio streaming, media remote control, headset
@@ -1032,7 +1034,8 @@ nothing is accepted silently.
   typed elsewhere reaches a code field. bluetoothd gets the code or an empty reply on Connect, `org.bluez.Error.Canceled` on
   the user's Cancel of a code or a comparison, `org.bluez.Error.Rejected` on Decline and on every other end (the shell gone or
   refusing, a wrong answer, the bound of 8, bluetoothd's departure, no answer within 55 s, under bluetoothd's own 60 s);
-  `Cancel` from bluetoothd withdraws its requests (shown or queued); `Release` is answered. A code sent lingers as "Code
+  `Cancel` from bluetoothd withdraws its call still waiting for a reply (shown or queued), never a code shown (10-4);
+  `Release` (bluetoothd stopping) is answered. A code sent lingers as "Code
   sent" (10-13).
 - BT3 (10-9) the device is named by its `Alias` from `org.bluez.Device1` (else its `Name`, else its address), read
   asynchronously from the same owner of `org.bluez` (2 s at most), plain text flattened and capped at 64 UTF-16 code units,
@@ -1080,15 +1083,17 @@ Agent precedence with another agent that also asks to be the default is BlueZ's 
 an application with an agent of its own gets its own pairings (BlueZ's design). Legacy devices with fixed PINs need the user
 to know the PIN. While the shell is not connected bluetoothd has no agent in the Grassfield session: a pairing started then
 from Settings works only for a device without keys or a screen and is not kept as a bond, and an incoming one is refused
-(10-1); with `AlwaysPairable = true` in `/etc/bluetooth/main.conf` (not BlueZ's default; whether Omarchy or the owner sets
-it is UNVERIFIED) the adapter stays bondable without an agent, with the NoInputNoOutput capability, and the kernel itself
-would then accept an incoming Just Works pairing while the shell is not connected (`hci_event.c:5393-5394`). A `bt-agent`
-already running when the Grassfield session starts (a user manager kept from an Omarchy session) runs until it stops: the
-drop-in's condition is read when a unit starts (UNVERIFIED whether Omarchy's unit stops with `graphical-session.target`); the
-bridge still asks to be the default after it. bluetoothd hands the PIN of `DisplayPinCode` to the controller whatever the
+(10-1); with `AlwaysPairable = true` in `/etc/bluetooth/main.conf` (not BlueZ's default; Omarchy 4.0.4 does not set it; on
+the owner's machine UNVERIFIED) the adapter stays bondable without an agent, with the NoInputNoOutput capability, and the
+kernel itself would then accept an incoming Just Works pairing while the shell is not connected (`hci_event.c:5393-5394`):
+`grassfield-login-check` (after every install and upgrade) warns then, and Grassfield never changes the file (10-15).
+Omarchy's `bt-agent.service` does not stop with its session by itself (no `PartOf=`): Grassfield's drop-in adds it, and the
+bridge's unit stops a bt-agent still running before it starts (10-1 amended; checked under a systemd 262 user manager in a
+container, not on the owner's machine). bluetoothd hands the PIN of `DisplayPinCode` to the controller whatever the
 agent answers (`src/device.c:7609-7618`): the sheet cannot refuse such a pairing, only not show the code (the device then
 times out). The user's Cancel of a code shown stops a pairing Settings started (`CancelPairing`); one the device started ends
-at its own time limit. A device in range names itself (look-alike names: the address under the title tells them apart); a
+at its own time limit. One code is shown at a time: a newer one (another device) withdraws it (10-16). A device in range
+names itself (look-alike names: the address under the title tells them apart); a
 service bluetoothd does not name is shown by its UUID. A code sheet left open is withdrawn after 55 s (bluetoothd stops
 waiting at 60 s). GDBus marshals a copy of a PIN into the reply it writes and frees it unwiped (10-14). Real devices, the
 nested scenario and the sheets' look are not verified (A-BT2, A-BT3).
