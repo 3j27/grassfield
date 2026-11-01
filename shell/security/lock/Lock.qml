@@ -103,6 +103,25 @@ Singleton {
     function backdropOf(output: string): var {
         return root.stills ? root.stills.backdropOf(output) : null;
     }
+    // The moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f): its clouds move on
+    // the lock only, from where the desktop's still picture left them, and the desktop takes where they came to rest. Display
+    // data through the stills like the backdrops (without them: off, from 0, nothing given back); a surface takes the first
+    // two once (LockView).
+    readonly property bool moving: root.stills ? root.stills.moving : false
+    // Set by Idle (its displayOff): the displays are off, the clouds hold where they are. Display only; nothing on the lock
+    // path reads it.
+    property bool displaysOff: false
+    function motionOf(output: string): real {
+        return root.stills ? root.stills.motionOf(output) : 0;
+    }
+    function restMotion(output: string, at: real): void {
+        try {
+            if (root.stills && output !== "" && at >= 0)
+                root.stills.restMotion(output, at);
+        } catch (e) {
+            console.warn("grassfield-lock: the desktop's clouds were not updated (" + e + ")");
+        }
+    }
     function prepareStills(): void {
         try {
             const c = Qt.createComponent(Qt.resolvedUrl("LockStills.qml"));
@@ -593,6 +612,10 @@ Singleton {
                 userName: root.userName
                 avatarSource: root.avatarReady
                 offeredBackdrop: root.backdrops >= 0 ? root.backdropOf(surface.screen ? surface.screen.name : "") : null
+                moving: root.moving
+                displaysOff: root.displaysOff
+                motionStart: root.motionOf(surface.screen ? surface.screen.name : "")
+                onMotionRestChanged: root.restMotion(surface.screen ? surface.screen.name : "", view.motionRest)
                 resumes: root.resumes
                 showUser: Settings.lockShowUser
                 lockMessage: Settings.lockShowMessage ? Settings.lockMessage : ""

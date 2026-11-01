@@ -1136,6 +1136,35 @@ function lockStillStatOk(text, maxBytes) {
     return (parseInt(m[1], 16) & 0xF000) === 0x8000 && size > 0 && size <= maxBytes;
 }
 
+// ---- the moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f) ----
+// Its clouds move on the lock screen only, as macOS's moving wallpapers do; the desktop draws them still. The position is in
+// milliseconds of motion (Artwork.cloudX, Artwork.lightAt), one per output: 0 until a lock moved them.
+
+// Where the clouds rest on `output` in a map {<output>: ms} (WallpaperState.motion): 0 for anything that is not a finite
+// number of at least 0.
+function motionIn(map, output) {
+    const v = isPlainObject(map) && typeof output === "string" ? map[output] : 0;
+    return typeof v === "number" && isFinite(v) && v >= 0 ? v : 0;
+}
+
+// The map with `output` resting at `at` (a new object; the map itself unchanged when either is not valid).
+function withMotion(map, output, at) {
+    const base = isPlainObject(map) ? map : {};
+    if (typeof output !== "string" || output === "" || typeof at !== "number" || !isFinite(at) || at < 0)
+        return base;
+    const out = Object.assign({}, base);
+    out[output] = at;
+    return out;
+}
+
+// Where the lock's clouds come to rest when its release fade starts (`at`: where they are). Moving, they slow down linearly to
+// a stop within the fade (`fadeMs`; Easing.OutQuad, whose starting speed is the running one, one ms of motion per ms): they
+// rest half the fade further on. Not moving, or no fade (Reduce Motion): where they are.
+function lockMotionRest(at, moving, fadeMs) {
+    const a = typeof at === "number" && isFinite(at) && at >= 0 ? at : 0;
+    return moving === true && typeof fadeMs === "number" && isFinite(fadeMs) && fadeMs > 0 ? a + fadeMs / 2 : a;
+}
+
 // What a wallpaper window shows as its first frame, before it maps (ADR-0040 ID-3): "feed" (the feed's first result, final:
 // it carries the phase and the appearance too), "still" (the output's last picture from wallpaper.json, until that result),
 // or "wait" (nothing yet: the window stays unmapped, at most wallpaper.firstShowTimeoutMs, then the artwork). A phase or an
@@ -1193,4 +1222,3 @@ function groundOf(desc, artGround, fallback) {
         return artGround.toUpperCase();
     return fallback;
 }
-

@@ -966,6 +966,63 @@ TestCase {
         verify(/photosDir: dev \? repoRoot \+ "\/\.dev\/photos" : "\/usr\/share\/grassfield\/wallpapers\/photos"/.test(state), "the folders of scripts/dev/photos.sh and of the package");
     }
 
+    // ADR-0040 step 9, as the integrator decided in the review of e067f26f: the clouds move on the lock screen only; the desktop
+    // draws them still where the last lock left them.
+    function test_lockMotion() {
+        // Where they rest per output: 0 for anything not a finite number of at least 0.
+        compare(WallpaperConfig.motionIn({"DP-1": 1500}, "DP-1"), 1500);
+        compare(WallpaperConfig.motionIn({"DP-1": 1500}, "HDMI-A-1"), 0);
+        for (const bad of [-1, NaN, Infinity, "1500", null, undefined, {}])
+            compare(WallpaperConfig.motionIn({"DP-1": bad}, "DP-1"), 0, String(bad));
+        for (const map of [null, undefined, [], "x", 3])
+            compare(WallpaperConfig.motionIn(map, "DP-1"), 0);
+        for (const inherited of ["__proto__", "constructor", "toString"])
+            compare(WallpaperConfig.motionIn({}, inherited), 0, inherited);
+        // A new map; the old one unchanged; nothing taken that is not valid.
+        const a = {"DP-1": 10};
+        const b = WallpaperConfig.withMotion(a, "HDMI-A-1", 250);
+        compare(JSON.stringify(b), JSON.stringify({"DP-1": 10, "HDMI-A-1": 250}));
+        compare(JSON.stringify(a), JSON.stringify({"DP-1": 10}));
+        for (const [o, at] of [["", 5], ["DP-1", -5], ["DP-1", NaN], ["DP-1", Infinity], [null, 5], ["DP-1", "5"]])
+            compare(WallpaperConfig.withMotion(a, o, at), a, String(o) + " " + String(at));
+        compare(JSON.stringify(WallpaperConfig.withMotion(null, "DP-1", 0)), JSON.stringify({"DP-1": 0}));
+        // The rest: half the fade further on while moving (linear slow-down from the running speed); else where they are.
+        compare(WallpaperConfig.lockMotionRest(1000, true, 200), 1100);
+        compare(WallpaperConfig.lockMotionRest(1000, false, 200), 1000);
+        compare(WallpaperConfig.lockMotionRest(1000, true, 0), 1000, "Reduce Motion: no fade, no motion");
+        compare(WallpaperConfig.lockMotionRest(-3, true, 200), 100);
+        compare(WallpaperConfig.lockMotionRest(NaN, false, 200), 0);
+        compare(WallpaperConfig.lockMotionRest(1000, "yes", 200), 1000);
+        compare(WallpaperConfig.lockMotionRest(1000, true, NaN), 1000);
+    }
+
+    // The desktop never runs the motion: no Timer plays it (the slot sets no `playing`), the idle monitor is a video's only, and
+    // the clouds are drawn where WallpaperState says the last lock left them.
+    function test_theDesktopDrawsTheCloudsStill() {
+        function read(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("../../" + rel), false);
+            xhr.send();
+            verify(xhr.responseText.length > 0, rel);
+            return xhr.responseText.replace(/\/\/.*$/gm, "");
+        }
+        const slot = read("shell/desktop/WallpaperSlot.qml");
+        verify(!/playing:/.test(slot), "the slot never plays the artwork");
+        verify(/WallpaperArt \{[^}]*moving: root\.moving\s*motionMs: root\.motionMs/.test(slot));
+        const wall = read("shell/desktop/Wallpaper.qml");
+        verify(!/movingWanted/.test(wall));
+        verify(/IdleMonitor \{\s*id: idleMonitor\s*enabled: win\.videoWanted\n/.test(wall), "the idle monitor for a video only");
+        compare((wall.match(/motionMs: WallpaperState\.motionOf\(win\.modelData \? win\.modelData\.name : ""\)/g) || []).length, 2, "both slots");
+        const state = read("shell/services/WallpaperState.qml");
+        verify(/readonly property bool moving: WallpaperConfig\.normalize\(Settings\.wallpaper\)\.moving/.test(state));
+        verify(/function motionOf\(output: string\): real \{\s*return WallpaperConfig\.motionIn\(root\.motion, output\);/.test(state));
+        verify(/root\.motion = WallpaperConfig\.withMotion\(root\.motion, output, at\);/.test(state));
+        // The artwork's Timer is the only thing that advances it, and only while playing.
+        const art = read("ui/Grassfield/Ui/GrassfieldArtwork.qml");
+        verify(/running: root\.movingOn && root\.playing/.test(art));
+        compare((art.match(/root\.motionMs \+=/g) || []).length, 1);
+    }
+
     // The list the package installs: every photograph reads, sixteen of them (the owner's call of 2026-10-31).
     function test_photosShippedList() {
         const xhr = new XMLHttpRequest();

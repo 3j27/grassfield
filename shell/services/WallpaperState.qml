@@ -238,6 +238,20 @@ Singleton {
         writeTimer.restart();
     }
 
+    // ---- the moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f) ----
+    // wallpaper.moving, and where its clouds rest on each output (ms of motion; WallpaperConfig.motionIn). The desktop draws
+    // them still there; only the lock screen moves them, from there, and gives back where they came to rest
+    // (shell/security/lock, through LockStills: display data only). Kept for the session, not stored: a new one starts at 0.
+    readonly property bool moving: WallpaperConfig.normalize(Settings.wallpaper).moving
+    property var motion: ({})
+    function motionOf(output: string): real {
+        return WallpaperConfig.motionIn(root.motion, output);
+    }
+    function setMotion(output: string, at: real): void {
+        if (WallpaperConfig.motionIn(root.motion, output) !== at)
+            root.motion = WallpaperConfig.withMotion(root.motion, output, at);
+    }
+
     Timer {
         id: statusTimer
         interval: Tokens.wallpaperStateWriteMs

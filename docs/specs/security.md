@@ -988,10 +988,23 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   pixmap cache gives it already decoded. The account's full name and picture are taken at creation too: the picture only
   when `Lock.qml`'s `avatarPreload` (the shell's PNG copy of at most 256 x 256, same options) has decoded it, else the
   initials. Once the lock shows nothing on it changes but the clock, which `SleepInhibitor.afterResume` refreshes
-  (`Lock.resumed`, T-14).
+  (`Lock.resumed`, T-14), and the moving artwork's clouds (below).
+- **The moving artwork** (ADR-0040 step 9, as the integrator decided in the review of e067f26f, after P1 measured 3.70 %
+  with the clouds moving on the desktop): with `wallpaper.moving`, the Grassfield artwork's clouds move on the lock screen
+  only, as macOS's moving wallpapers do; the desktop draws them still. `LockView` takes the setting and where the desktop's
+  clouds rest (`WallpaperState.motionOf`, through `LockStills` and `Lock.qml`'s `moving` and `motionOf`: display data, without
+  the stills off and from 0) once, at creation; they move by the artwork's own `wallpaper.movingFrameMs` Timer while the
+  backdrop is the artwork, not while releasing and not under Reduce Motion. When the release fade starts they slow down
+  linearly to a stop within it (`Easing.OutQuad` over `Appearance.duration(lock.fadeOutMs)`, the controller's `releaseMs`,
+  from the running speed: `WallpaperConfig.lockMotionRest`, half the fade further on), and the view sets `motionRest`, which
+  `Lock.qml` hands to the desktop at once (`restMotion`, in a `try`; `WallpaperState.setMotion`), so the desktop under the
+  lock is the frame the lock comes to rest on. Nothing waits for it: the release stays the controller's timer, the view
+  emits no new signal and calls nothing; a lock request during the fade stops the slow-down and lets them move on from
+  there. Not on the lock path (`tst_lockbackdrop.qml`: `lock()`, `engage()`, `release()`, `restore()` read none of it).
 - **Scrim** (IQ-W4 A): see "Lock screen contrast" above; A2 holds per band by the same argument as before: every text line
   lies on `lock.dimOpacity`.
-- Tests: `tst_wallpaper.qml` (`lockBackdropOf`, `withShown`), `test_contrast_tokens.py` (the model matches the scrim's lines,
+- Tests: `tst_wallpaper.qml` (`lockBackdropOf`, `withShown`; `motionIn`, `withMotion`, `lockMotionRest`), `tst_lockbackdrop.qml`
+  (`test_theCloudsMoveOnTheLockOnly`), `test_contrast_tokens.py` (the model matches the scrim's lines,
   the clear band below the text bands), `lock_surfaces.sh` (the clock's one refresh), `tst_wallpaper.qml`
   (`lockStillReal`, `lockStillStatOk`). The pixmap cache hit was checked offscreen on Qt 6.10 by the reviewer. NOT VERIFIED
   (no Quickshell or nested session here; required before the merge): the real `Lock.qml` loading

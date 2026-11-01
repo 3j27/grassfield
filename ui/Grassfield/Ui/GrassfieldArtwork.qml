@@ -25,9 +25,9 @@ Item {
     readonly property var art: ArtworkLogic.flat(root.artPalette)
 
     // ---- the moving variant (ADR-0040 IQ-W3 A, step 9; the Grassfield artwork only) ----
-    // `moving`: clouds drift across the sky and the sun's light changes slowly. It advances only while `playing` (the caller's
-    // pause policy: the desktop's is a video's, WallpaperConfig.playbackState), by wallpaper.movingFrameMs steps of a Timer,
-    // never every frame; paused, it holds where it is. Nothing of it enters the strip under the menu bar (the clouds stay
+    // `moving`: clouds drift across the sky and the sun's light changes slowly, drawn at `motionMs`. It advances only while
+    // `playing` (the lock screen and the screen saver; the desktop draws it still, ADR-0040 step 9 as the integrator decided in
+    // the review of e067f26f), by wallpaper.movingFrameMs steps of a Timer, never every frame; paused, it holds where it is. Nothing of it enters the strip under the menu bar (the clouds stay
     // between 0.1 and 0.34 of the height and above the hills), so the bar's tone and gate A2 stay those of the still picture.
     property bool moving: false
     property bool playing: false

@@ -12763,8 +12763,8 @@
         <translation>Nuages en mouvement</translation>
     </message>
     <message>
-        <source>Clouds drift and the light changes slowly. Pauses on battery power, when the screen is locked or covered, and with Reduce Motion.</source>
-        <translation>Les nuages dérivent et la lumière change lentement. Se met en pause sur batterie, quand l’écran est verrouillé ou couvert, et avec Réduire les animations.</translation>
+        <source>On the lock screen, clouds drift and the light changes slowly, coming to rest as you unlock; the desktop shows them still. Still with Reduce Motion.</source>
+        <translation>Sur l’écran verrouillé, les nuages dérivent et la lumière change lentement, puis s’arrêtent quand vous déverrouillez ; le bureau les montre immobiles. Immobiles avec Réduire les animations.</translation>
     </message>
     <message>
         <source>Use the All Displays Wallpaper</source>

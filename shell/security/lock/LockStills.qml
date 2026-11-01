@@ -25,6 +25,17 @@ Item {
         return null;
     }
 
+    // The moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f): wallpaper.moving
+    // and where its clouds rest on an output's desktop (WallpaperState); the lock moves them from there and gives back where
+    // they came to rest. Display data like the rest of this file.
+    readonly property bool moving: WallpaperState.moving
+    function motionOf(output: string): real {
+        return WallpaperState.motionOf(output);
+    }
+    function restMotion(output: string, at: real): void {
+        WallpaperState.setMotion(output, at);
+    }
+
     Variants {
         id: stills
         model: Quickshell.screens

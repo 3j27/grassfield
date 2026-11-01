@@ -14,9 +14,11 @@ Item {
     // The artwork and its variant (ADR-0040 step 2; GrassfieldArtwork.qml): set with the kind "art".
     property string artwork: "grassfield"
     property string variant: "evening.dark"
-    // The moving variant of the Grassfield artwork (wallpaper.moving, ADR-0040 step 9): it advances only while the slot is on
-    // screen and the pause policy (`playPolicy`, the video's) says "play".
+    // The moving variant of the Grassfield artwork (wallpaper.moving, ADR-0040 step 9, as the integrator decided in the review
+    // of e067f26f): the desktop draws its clouds still, where the last lock left them (`motionMs`, WallpaperState.motionOf);
+    // only the lock screen moves them. Nothing here runs a Timer for it.
     property bool moving: false
+    property real motionMs: 0
     property color color: "#000000"
     // file: URL of the prepared picture ("" releases it).
     property string url: ""
@@ -54,7 +56,7 @@ Item {
         artwork: root.artwork
         variant: root.variant
         moving: root.moving
-        playing: root.kind === "art" && root.onScreen && root.playPolicy === "play"
+        motionMs: root.motionMs
     }
 
     Rectangle {

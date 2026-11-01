@@ -503,8 +503,6 @@ Scope {
             // wallpaper never creates one, so the idle lock still fires while a video plays); it ignores inhibitors because it
             // asks whether the user is away, not whether the session may sleep.
             readonly property bool videoWanted: shownDesc.video !== undefined && shownDesc.video !== ""
-            // The moving Grassfield artwork (ADR-0040 step 9) follows the same pause policy as a video (and needs the idle input).
-            readonly property bool movingWanted: feed.cfg.moving === true && shownDesc.kind === "art" && (shownDesc.artwork || "grassfield") === "grassfield"
             readonly property bool fullscreen: win.modelData ? Compositor.fullscreenOn(win.modelData.name, Compositor.topologyRevision) : false
             readonly property var effective: feed.cfg
             readonly property bool idle: root.devIdle !== "" ? root.devIdle === "1" : idleMonitor.isIdle
@@ -513,7 +511,7 @@ Scope {
 
             IdleMonitor {
                 id: idleMonitor
-                enabled: win.videoWanted || win.movingWanted
+                enabled: win.videoWanted
                 timeout: Tokens.wallpaperVideoIdleSeconds
                 respectInhibitors: false
             }
@@ -525,6 +523,8 @@ Scope {
                 z: 1
                 opacity: 1
                 moving: feed.cfg.moving === true
+                // Still on the desktop: its clouds where the last lock left them (ADR-0040 step 9; WallpaperSlot.qml).
+                motionMs: WallpaperState.motionOf(win.modelData ? win.modelData.name : "")
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
                 onScreen: win.shown === slotA
                 playPolicy: win.videoPolicy
@@ -538,6 +538,8 @@ Scope {
                 id: slotB
                 z: 1
                 moving: feed.cfg.moving === true
+                // Still on the desktop: its clouds where the last lock left them (ADR-0040 step 9; WallpaperSlot.qml).
+                motionMs: WallpaperState.motionOf(win.modelData ? win.modelData.name : "")
                 pictureSize: Qt.size(feed.pixelWidth, feed.pixelHeight)
                 onScreen: win.shown === slotB
                 playPolicy: win.videoPolicy

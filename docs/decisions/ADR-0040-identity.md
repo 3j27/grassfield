@@ -248,6 +248,24 @@ and IQ-B3 here changes the palette only, not which controls read it.
   met in this container:** P1 and P3 with the moving variant on are NOT MEASURED (no nested session, no reference
   machine), so the merge waits for that measurement, and a cost over budget blocks the variant (it stays off by default
   meanwhile).
+- **Step 9 as revised** (2026-11-01, the integrator's review of e067f26f): P1 measured over budget with the clouds moving
+  on the desktop (nested proxy, session unlocked, 300 s each: 3.70 % of one core with them, 0.64 % without, budget
+  0.77 %). The integrator's decision, closest to macOS's moving wallpapers: **the motion plays on the lock screen and
+  slows to a still as the desktop appears; the desktop picture is still.** As built:
+  - Desktop: no `WallpaperSlot` plays the artwork any more and the idle monitor is a video's only; each slot draws the
+    clouds where the last lock left them (`WallpaperState.motionOf`, per output, kept for the session, 0 at start).
+  - Lock screen (`shell/security`, display only; opus security review): `LockView` takes `wallpaper.moving` and that
+    position once at creation (through `LockStills` and `Lock.qml`); the artwork's own Timer moves them while the backdrop
+    is the artwork, not while releasing, not under Reduce Motion, and not while Idle has the displays off (`Lock.displaysOff`,
+    set from Idle's `displayOff`). When the release fade starts they slow down linearly to a stop within it
+    (`Easing.OutQuad` over the controller's `releaseMs`; `WallpaperConfig.lockMotionRest`), and `Lock.qml` gives that frame
+    to the desktop at once (`restMotion`, in a `try`), so the desktop under the lock is the frame the lock rests on. The
+    release never waits for it, and the lock path (`lock`, `engage`, `release`, `restore`) reads none of it.
+  - Settings > Wallpaper's footnote says so. Tests: `tst_wallpaper.qml` (`motionIn`, `withMotion`, `lockMotionRest`, the
+    desktop draws them still), `tst_lockbackdrop.qml` (`test_theCloudsMoveOnTheLockOnly`), each guard checked by a mutant.
+  - **NOT MEASURED here** (no nested session): P1 with `wallpaper.moving` on (the desktop now renders nothing for it) and
+    P3, for the integrator's re-measure. On the lock screen the clouds cost what they cost on the desktop before, while the
+    lock shows with the displays on.
 - **First frame (ID-3).** The wallpaper window shows the **last applied wallpaper's prepared still** from the cache as
   its first frame, with the bar tone from its stored statistics, and maps only then (bounded by
   `wallpaper.firstShowTimeoutMs`, after which the artwork). When the feed's result is the same file, nothing fades.
@@ -907,7 +925,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
 | 7 | Exit: the countdown (ID-21), the exit cover (ID-10) | — | reviewer |
 | 2c | Photographs (IQ-W2 C): first the list (thumbnail, source, licence) to the owner for the legal call; then the files, their `docs/legal` entries, the helper path, the package weight in the pull request | the owner's legal call on the list | reviewer; legal rows |
 | 8 | App icons (IQ-B5 C): own icons for Store, Activity Monitor and the Apps tile on one grammar; the two new drawings to the owner's legal call first | `apps/store`, `apps/activity` merged | reviewer; legal row |
-| 9 | The moving variant (IQ-W3 A, in 1.0): off by default, the video pause rules, also a screen saver kind in `shell/saver`; nothing in `shell/security` (review of 6c310a8); P1 and P3 measured with it on before the merge request, over budget blocks it | step 2 | reviewer; P1, P3 |
+| 9 | The moving variant (IQ-W3 A, in 1.0): off by default, also a screen saver kind in `shell/saver`; P1 and P3 measured with it on before the merge request, over budget blocks it. Revised by the integrator (review of e067f26f, P1 over budget): it moves on the lock screen only and comes to rest as the desktop appears, still on the desktop; this puts display code in `shell/security/lock` (the review of 6c310a8 had kept it out) | step 2 | reviewer; **opus security review** (the lock); P1, P3 |
 | 10 | Login and boot themes (IQ-L1 C): their own ADR first; SDDM theme in the lock's layout; Plymouth theme with the mark only with the owner's explicit go-ahead inside that ADR (outside master-prompt §4's allowance; plymouthd runs as root in the boot image); a tested fallback to the text disk-password prompt; every root step an owner command | steps 4a, 4b and 5 (the last identity step) | **opus security review**; owner runs |
 
 ## Not verified, assumptions, unknowns

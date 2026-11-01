@@ -742,11 +742,12 @@ SettingsPage {
                     }
                 }
 
-                // The moving Grassfield artwork (ADR-0040 IQ-W3 A, step 9): off by default; it pauses like a video wallpaper.
+                // The moving Grassfield artwork (ADR-0040 IQ-W3 A, step 9): off by default; it moves on the lock screen only (the
+                // integrator's decision in the review of e067f26f).
                 SettingsRow {
                     visible: root.source === "builtin" && root.artwork === "grassfield"
                     title: qsTr("Moving clouds")
-                    subtitle: qsTr("Clouds drift and the light changes slowly. Pauses on battery power, when the screen is locked or covered, and with Reduce Motion.")
+                    subtitle: qsTr("On the lock screen, clouds drift and the light changes slowly, coming to rest as you unlock; the desktop shows them still. Still with Reduce Motion.")
 
                     Toggle {
                         accessibleName: qsTr("Moving clouds")

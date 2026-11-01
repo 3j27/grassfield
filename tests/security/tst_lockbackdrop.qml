@@ -174,11 +174,54 @@ TestCase {
         verify(Number(m[1]) >= 3000 && Number(m[1]) <= 10000, m[1]);
     }
 
+    // ADR-0040 step 9, as the integrator decided in the review of e067f26f: the moving artwork's clouds move on the lock only.
+    // Display only: taken at creation like the name, never on the lock path, played by the artwork's own Timer while the
+    // backdrop is the artwork (not while releasing, not under Reduce Motion), slowed to a stop within the release fade without
+    // anything waiting for it; where they rest goes back to the desktop through the stills, any failure caught.
+    function test_theCloudsMoveOnTheLockOnly() {
+        const v = source("shell/security/lock/LockView.qml");
+        verify(/Component\.onCompleted: \{\s*focusField\(\);/.test(v), "focus still first");
+        verify(/root\.frozenMoving = root\.moving;\s*lockArt\.motionMs = root\.motionStart;/.test(v), "taken at creation");
+        compare((v.match(/root\.frozenMoving = /g) || []).length, 1);
+        compare((v.match(/lockArt\.motionMs = /g) || []).length, 1);
+        verify(/readonly property bool motionPlays: root\.frozenMoving && root\.backdrop !== null && root\.backdrop\.kind === "art" && !root\.releasing && !Appearance\.reduceMotion && !root\.displaysOff/.test(v));
+        const art = block(v, "WallpaperArt {");
+        verify(/id: lockArt/.test(art) && /moving: root\.frozenMoving/.test(art) && /playing: root\.motionPlays/.test(art), art);
+        // The slow-down: within the fade, from where they are, and stopped when a lock request interrupts the release.
+        const onRelease = block(v, "onReleasingChanged: {");
+        verify(/^onReleasingChanged: \{\s*motionStop\.stop\(\);\s*if \(!root\.releasing \|\| !root\.frozenMoving\)\s*return;/.test(onRelease), onRelease);
+        verify(/const fade = Appearance\.duration\(Tokens\.lockFadeOutMs\);/.test(onRelease), "the same fade as the controller's releaseMs");
+        verify(/WallpaperConfig\.lockMotionRest\(lockArt\.motionMs, lockArt\.movingOn && root\.backdrop !== null && root\.backdrop\.kind === "art" && !Appearance\.reduceMotion, fade\)/.test(onRelease));
+        verify(/motionStop\.duration = fade;/.test(onRelease));
+        compare((v.match(/root\.motionRest = /g) || []).length, 1, "written only when the fade starts");
+        const anim = block(v, "NumberAnimation {\n        id: motionStop");
+        verify(/target: lockArt/.test(anim) && /property: "motionMs"/.test(anim) && /easing\.type: Easing\.OutQuad/.test(anim), anim);
+        // The view still only offers data: no signal but the two it had.
+        compare((v.match(/^\s*signal\s/gm) || []).length, 2);
+        verify(/signal submitted\(string password\)/.test(v) && /signal edited/.test(v));
+        // Lock.qml: through the stills only, frozen by the view; the rest handed back in a try.
+        const lock = source("shell/security/lock/Lock.qml");
+        verify(/readonly property bool moving: root\.stills \? root\.stills\.moving : false/.test(lock));
+        verify(/function motionOf\(output: string\): real \{\s*return root\.stills \? root\.stills\.motionOf\(output\) : 0;\s*\}/.test(lock));
+        verify(/function restMotion\(output: string, at: real\): void \{\s*try \{\s*if \(root\.stills && output !== "" && at >= 0\)\s*root\.stills\.restMotion\(output, at\);\s*\} catch \(e\) \{/.test(lock));
+        verify(/moving: root\.moving\s*displaysOff: root\.displaysOff\s*motionStart: root\.motionOf\(surface\.screen \? surface\.screen\.name : ""\)\s*onMotionRestChanged: root\.restMotion\(surface\.screen \? surface\.screen\.name : "", view\.motionRest\)/.test(lock));
+        verify(!/WallpaperState/.test(lock), "Lock.qml itself reads no wallpaper state");
+        verify(/property bool displaysOff: false/.test(lock));
+        // Idle tells it the displays are off, outside its own display logic (setDisplays unchanged).
+        const idle = source("shell/security/idle/Idle.qml");
+        verify(/onDisplayOffChanged: Lock\.displaysOff = root\.displayOff/.test(idle));
+        compare((idle.match(/Lock\.displaysOff/g) || []).length, 1);
+        verify(!/displaysOff/.test(block(idle, "function setDisplays(on: bool): void {")));
+        const stills = source("shell/security/lock/LockStills.qml");
+        verify(/readonly property bool moving: WallpaperState\.moving/.test(stills));
+        verify(/function restMotion\(output: string, at: real\): void \{\s*WallpaperState\.setMotion\(output, at\);\s*\}/.test(stills));
+    }
+
     function test_engagingTheLockReadsNoneOfIt() {
         const lock = source("shell/security/lock/Lock.qml");
         for (const fn of ["function lock(reason: string): string {", "function engage(): void {", "function release(): void {", "function restore(intent: bool, when: string): void {"]) {
             const b = block(lock, fn);
-            verify(!/backdrop|stills|Stills|avatarPreload|avatarReady|resumes/.test(b), fn);
+            verify(!/backdrop|stills|Stills|avatarPreload|avatarReady|resumes|motion|moving/i.test(b), fn);
         }
         // The backdrops only feed the view.
         compare((lock.match(/root\.backdropOf\(/g) || []).length, 1);

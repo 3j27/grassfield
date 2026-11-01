@@ -35,6 +35,8 @@ Scope {
     property int displayOffSeconds: devHooks ? 0 : IdleModel.DISPLAY_OFF_SECONDS
     // This module switched the displays off (and must switch them on again).
     property bool displayOff: false
+    // The lock's moving clouds hold while the displays are off (ADR-0040 step 9; display only, like Lock.fromDim).
+    onDisplayOffChanged: Lock.displaysOff = root.displayOff
     // Seconds without input before the displays go off while unlocked, for the power source in use; 0 = never. Always off in
     // the nested dev session (a dark nested output would spoil every capture; no test needs it there).
     readonly property int inactiveOffSeconds: devHooks ? 0 : IdleModel.inactiveDisplayOffSeconds(Settings.lockDisplayOffBattery, Settings.lockDisplayOffPower, Battery.onBattery)

@@ -15,8 +15,9 @@ import "../LockMachine.js" as Machine
 // Ready before it is needed (ADR-0040 step 4a, ID-7): the backdrop (LockStill.qml: the wallpaper's prepared still, decoded
 // while the session was unlocked, else the colour or the artwork the output shows), the account's name and picture are
 // taken once, when the surface is created (the backdrop when it is first decided, at most wallpaper.firstShowTimeoutMs
-// later: the ground shows until then); once the lock shows, nothing on it changes but the clock. The clock is refreshed on
-// resume from sleep (`resumes`). Engaging the lock waits for none of it.
+// later: the ground shows until then); once the lock shows, nothing on it changes but the clock (and, with
+// wallpaper.moving, the artwork's clouds: see "the moving Grassfield artwork" below). The clock is refreshed on resume from
+// sleep (`resumes`). Engaging the lock waits for none of it.
 //
 // Contrast (gate A2, both appearances, any wallpaper): as on macOS, white text with a soft shadow over the wallpaper
 // darkened by a shadow-colour scrim (lock.dimOpacity) under the two text bands (the date and clock, the account column),
@@ -103,6 +104,44 @@ Item {
     onOfferedBackdropChanged: root.adopt(root.offeredBackdrop)
     onResumesChanged: clock.refresh()
 
+    // ---- the moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f) ----
+    // Display only, like the rest of this view. With wallpaper.moving (`moving`, taken at creation like the name), the
+    // artwork's clouds move here and nowhere else, as macOS's moving wallpapers do: from where the desktop's still picture left
+    // them (`motionStart`, taken at creation), while the backdrop is the artwork, not under Reduce Motion and not while the
+    // displays are off (`displaysOff`, from Idle: they hold there), by the artwork's own Timer (wallpaper.movingFrameMs
+    // steps). When the release fade starts they slow down linearly to a stop within it (Easing.OutQuad from the running speed,
+    // WallpaperConfig.lockMotionRest) at `motionRest`, which Lock.qml gives the desktop at once as its still picture: the
+    // desktop under the lock is the frame the lock comes to rest on. Nothing waits for it (the release is the controller's
+    // timer), and a lock request during the fade lets them move on from there.
+    property bool moving: false
+    property real motionStart: 0
+    property bool displaysOff: false
+    property bool frozenMoving: false
+    // -1 until a release fade starts.
+    property real motionRest: -1
+    readonly property bool motionPlays: root.frozenMoving && root.backdrop !== null && root.backdrop.kind === "art" && !root.releasing && !Appearance.reduceMotion && !root.displaysOff
+
+    onReleasingChanged: {
+        motionStop.stop();
+        if (!root.releasing || !root.frozenMoving)
+            return;
+        const fade = Appearance.duration(Tokens.lockFadeOutMs);
+        const rest = WallpaperConfig.lockMotionRest(lockArt.motionMs, lockArt.movingOn && root.backdrop !== null && root.backdrop.kind === "art" && !Appearance.reduceMotion, fade);
+        root.motionRest = rest;
+        if (rest > lockArt.motionMs) {
+            motionStop.to = rest;
+            motionStop.duration = fade;
+            motionStop.start();
+        }
+    }
+
+    NumberAnimation {
+        id: motionStop
+        target: lockArt
+        property: "motionMs"
+        easing.type: Easing.OutQuad
+    }
+
     Component.onCompleted: {
         // Focus first, then the content's fade-in: no display statement ever comes before them (opus review of f66cf08e).
         focusField();
@@ -110,6 +149,8 @@ Item {
         root.frozenDim = root.startDim;
         root.frozenName = root.userName;
         root.frozenAvatar = root.avatarSource;
+        root.frozenMoving = root.moving;
+        lockArt.motionMs = root.motionStart;
         root.adopt(root.offeredBackdrop);
     }
 
@@ -148,10 +189,13 @@ Item {
 
         // The artwork the output shows, and the picture's fallback (drawn until the still is Ready, and if it fails).
         WallpaperArt {
+            id: lockArt
             anchors.fill: parent
             visible: root.backdrop !== null && root.backdrop.kind !== "color" && still.status !== Image.Ready
             artwork: root.backdrop !== null ? root.backdrop.artwork : ""
             variant: root.backdrop !== null ? root.backdrop.variant : ""
+            moving: root.frozenMoving
+            playing: root.motionPlays
         }
 
         // The wallpaper's still: the url LockStill checked and decoded, so the pixmap cache gives it at once. Same options as

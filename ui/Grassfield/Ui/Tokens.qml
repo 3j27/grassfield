@@ -2856,7 +2856,7 @@ QtObject {
     readonly property int wallpaperVideoToolTimeoutMs: 2400000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
-    // ADR-0040 IQ-W3 A (step 9): the moving Grassfield artwork advances on a timer of this period while it plays, never every frame (a cloud crossing a 1920 px sky in wallpaper.movingCloudMs moves under 1 px per step); P1 and P3 are measured with it on before the merge (the integrator's condition)
+    // ADR-0040 IQ-W3 A (step 9): the moving Grassfield artwork advances on a timer of this period while it plays (the lock screen and the screen saver; the desktop draws it still, the integrator's review of e067f26f), never every frame (a cloud crossing a 1920 px sky in wallpaper.movingCloudMs moves under 1 px per step)
     readonly property int wallpaperMovingFrameMs: 100
     // ADR-0040 IQ-W3 A (step 9): the time a cloud of speed 1 takes to cross the sky of the moving Grassfield artwork (slow, as clouds; estimate)
     readonly property int wallpaperMovingCloudMs: 240000
