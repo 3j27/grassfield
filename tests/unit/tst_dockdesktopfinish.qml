@@ -69,6 +69,15 @@ TestCase {
         verify(bar.indexOf("visible: barFocus.active") > 0 && bar.indexOf("KeyFocus {") > 0, "for the keyboard only");
     }
 
+    // The menu bar's band under Reduce Transparency and Increase Contrast (ADR-0039 step 25, after #83): shown under both, and
+    // never made see-through under Reduce Transparency on a display that is not the active one.
+    function test_theMenuBarBandUnderTheSettings() {
+        const bar = source("shell/menubar/MenuBar.qml");
+        verify(/readonly property bool showBackground: [^\n]*\n\s*\|\| Appearance\.reduceTransparency \|\| Appearance\.increaseContrast/.test(bar),
+               "both settings show the band");
+        verify(bar.indexOf("opacity: Appearance.reduceTransparency ? 1 : win.dimOpacity") > 0, "the opaque band stays opaque when dimmed");
+    }
+
     function test_widgetsDoNotGrowUnderReduceMotion() {
         verify(source("shell/desktop/DesktopWidgets.qml").indexOf("scale: win.dragging && !Appearance.reduceMotion ? Tokens.widgetLiftScale : 1") > 0);
     }
