@@ -2555,6 +2555,12 @@ QString FilesApp::completedText(const QString &text, const QUrl &base, const QSt
     return NavLogic::completedText(NavLogic::completionTarget(text, base.isLocalFile() ? base.toLocalFile() : QString(), QDir::homePath()), match);
 }
 
+QVariantMap FilesApp::goToTarget(const QString &text, const QUrl &base) const
+{
+    const NavLogic::GoToTarget target = NavLogic::goToTarget(locationUrl(text, base));
+    return {{QStringLiteral("folder"), target.folder}, {QStringLiteral("select"), target.select}};
+}
+
 QStringList FilesApp::storedUrls(const QString &key, int max) const
 {
     QStringList out;

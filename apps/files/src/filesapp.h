@@ -385,6 +385,9 @@ public:
     Q_INVOKABLE void completeFolder(const QString &text, const QUrl &base);
     // The text once `match` completes it ("~/D" + "Downloads" -> "~/Downloads/").
     Q_INVOKABLE QString completedText(const QString &text, const QUrl &base, const QString &match) const;
+    // Go to Folder's destination for the typed text (NavLogic::goToTarget): {folder, select}; a file opens its folder
+    // with the file selected; an empty folder when nothing is there.
+    Q_INVOKABLE QVariantMap goToTarget(const QString &text, const QUrl &base) const;
     // Go > Recent Folders and Go to Folder's list while its field is empty: the folders shown last, newest first
     // ([{url}], at most kMaxRecentFolders; local folders and servers, never a search, the Trash or Recents).
     static constexpr int kMaxRecentFolders = 10;

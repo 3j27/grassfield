@@ -42,4 +42,13 @@ QStringList pushRecent(QStringList list, const QString &item, int max);
 // `path` a local folder's path, `xdg` the user's Desktop, Documents and Downloads folders in that order.
 QString placeShortcut(const QString &kind, const QString &path, const QString &home, const QStringList &xdg);
 
+// Go to Folder on a location already resolved (FilesApp::locationUrl): a folder opens; a file (or a link that leads
+// nowhere) opens its folder with the item selected, as the Finder does; anything missing gives an empty folder. A remote
+// URL is left to KIO as it is (it is listed, never looked at here).
+struct GoToTarget {
+    QUrl folder;
+    QUrl select;
+};
+GoToTarget goToTarget(const QUrl &location);
+
 } // namespace NavLogic

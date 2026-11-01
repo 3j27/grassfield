@@ -1,9 +1,35 @@
 // The Go menu's logic (NavLogic): Go to Folder's completion, Connect to Server's addresses, recent lists, shortcuts.
 #include "navlogic.h"
 
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
+
+#include <memory>
+
 #include <gtest/gtest.h>
 
 using namespace NavLogic;
+
+namespace
+{
+// Real files for goToTarget, under GRASSFIELD_TEST_TMP (a directory inside .dev/).
+std::unique_ptr<QTemporaryDir> sandbox(QString *why)
+{
+    const QString base = qEnvironmentVariable("GRASSFIELD_TEST_TMP");
+    if (base.isEmpty() || !QDir::cleanPath(base).contains(QLatin1String("/.dev/"))) {
+        *why = QStringLiteral("GRASSFIELD_TEST_TMP (a directory under .dev/) is not set");
+        return nullptr;
+    }
+    QDir().mkpath(base);
+    auto dir = std::make_unique<QTemporaryDir>(base + QStringLiteral("/navlogic-XXXXXX"));
+    if (!dir->isValid()) {
+        *why = QStringLiteral("cannot create a directory in ") + base;
+        return nullptr;
+    }
+    return dir;
+}
+} // namespace
 
 TEST(GoToFolder, TargetsOfWhatIsTyped)
 {
@@ -90,4 +116,39 @@ TEST(GoMenu, RecentListsAndShortcuts)
     // No Desktop folder: xdg-user-dirs gives the home folder, which keeps its own shortcut only.
     const QStringList noDesktop = {home, QStringLiteral("/home/u/Documents"), QStringLiteral("/home/u/Downloads")};
     EXPECT_EQ(placeShortcut(QStringLiteral("folder"), home, home, noDesktop), QStringLiteral("Ctrl+Shift+H"));
+}
+
+TEST(GoToFolder, AFileOpensItsFolderWithTheFileSelected)
+{
+    QString why;
+    auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << why.toStdString();
+    const QString root = dir->path();
+    QDir().mkpath(root + QStringLiteral("/Folder"));
+    {
+        QFile f(root + QStringLiteral("/Folder/notes.txt"));
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write("x");
+    }
+    ASSERT_TRUE(QFile::link(root + QStringLiteral("/gone"), root + QStringLiteral("/Folder/broken")));
+
+    GoToTarget t = goToTarget(QUrl::fromLocalFile(root + QStringLiteral("/Folder")));
+    EXPECT_EQ(t.folder, QUrl::fromLocalFile(root + QStringLiteral("/Folder"))) << "a folder opens";
+    EXPECT_TRUE(t.select.isEmpty());
+
+    t = goToTarget(QUrl::fromLocalFile(root + QStringLiteral("/Folder/notes.txt")));
+    EXPECT_EQ(t.folder, QUrl::fromLocalFile(root + QStringLiteral("/Folder"))) << "a file opens its folder";
+    EXPECT_EQ(t.select, QUrl::fromLocalFile(root + QStringLiteral("/Folder/notes.txt"))) << "with the file selected";
+
+    t = goToTarget(QUrl::fromLocalFile(root + QStringLiteral("/Folder/broken")));
+    EXPECT_EQ(t.select, QUrl::fromLocalFile(root + QStringLiteral("/Folder/broken"))) << "a link leading nowhere is still shown";
+
+    t = goToTarget(QUrl::fromLocalFile(root + QStringLiteral("/missing")));
+    EXPECT_TRUE(t.folder.isEmpty()) << "nothing there";
+
+    t = goToTarget(QUrl(QStringLiteral("smb://nas/share")));
+    EXPECT_EQ(t.folder, QUrl(QStringLiteral("smb://nas/share"))) << "a remote location is left to KIO";
+    EXPECT_TRUE(t.select.isEmpty());
+    EXPECT_TRUE(goToTarget(QUrl()).folder.isEmpty());
 }

@@ -1,6 +1,7 @@
 #include "navlogic.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -127,6 +128,21 @@ QString placeShortcut(const QString &kind, const QString &path, const QString &h
         if (!xdg.at(i).isEmpty() && QDir::cleanPath(xdg.at(i)) != QDir::cleanPath(home) && clean == QDir::cleanPath(xdg.at(i)))
             return QString::fromLatin1(kShortcuts[i]);
     }
+    return {};
+}
+
+GoToTarget goToTarget(const QUrl &location)
+{
+    if (!location.isValid() || location.isEmpty())
+        return {};
+    if (!location.isLocalFile())
+        return {location, {}};
+    const QFileInfo info(QDir::cleanPath(location.toLocalFile()));
+    if (info.isDir())
+        return {QUrl::fromLocalFile(info.absoluteFilePath()), {}};
+    // A file, or a link whose target is gone (it is shown, so it can be selected).
+    if (info.exists() || info.isSymLink())
+        return {QUrl::fromLocalFile(info.absolutePath()), QUrl::fromLocalFile(info.absoluteFilePath())};
     return {};
 }
 

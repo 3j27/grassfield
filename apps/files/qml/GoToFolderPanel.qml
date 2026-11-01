@@ -5,7 +5,8 @@ import Grassfield.Ui
 // Go to Folder (⇧⌘G, macOS 27 Finder-Go-To-Folder, FP-76): a panel over the window with the path field, the rest of the
 // first matching folder's name inline (Tab or → takes it), and a "Go to:" list of the matching folders (FilesApp
 // completeFolder, listed off the GUI thread); the recent folders while the field is empty. Return goes to the chosen
-// row, or to the typed location (a URL: trash:/, smb://…) when nothing matches; Esc or a click outside closes it.
+// row, or to the typed location when nothing matches (a URL: trash:/, smb://…; a file: its folder, the file selected);
+// Esc or a click outside closes it.
 // Declare it as a child of the window's content; it fills it.
 Item {
     id: root
@@ -74,12 +75,15 @@ Item {
         const text = field.text.trim();
         if (text === "")
             return;
-        const url = root.app.resolveLocation(text, root.tab.url);
-        if (String(url) === "") {
+        // A file opens its folder with the file selected (the Finder); a folder or a URL opens as it is.
+        const target = root.app.goToTarget(text, root.tab.url);
+        if (String(target.folder) === "") {
             root.errorText = qsTr("The folder “%1” can’t be found.").arg(text);
             return;
         }
-        root.go(url);
+        root.go(target.folder);
+        if (String(target.select) !== "")
+            root.tab.folder.expect(target.select, false);
     }
 
     function go(url: url): void {
