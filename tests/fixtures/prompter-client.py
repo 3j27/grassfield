@@ -10,8 +10,16 @@
   forge --caller NAME              speaks gcr's protocol by hand (BeginPrompting, then PerformPrompt with the exchange) and
                                    puts "grassfield-caller": NAME among its own properties, as a caller that tries to pass
                                    for another one; prints "reply=<the prompter's answer>"
-  begins N                         BeginPrompting N times on N callback paths from one connection, without performing;
-                                   prints "begin <i> ok" or "begin <i> error <D-Bus error name>"
+  begins N [--objects] [--pause S] BeginPrompting N times on N callback paths from one connection, without performing;
+                                   prints "begin <i> ok" or "begin <i> error <D-Bus error name>". --objects: serve a
+                                   callback object at each path, so gcr keeps every prompt (without, gcr drops each one
+                                   when its PromptReady fails); --pause: seconds between two calls, the main loop running
+                                   meanwhile
+  noiface N                        N rounds of BeginPrompting with the prompter's interface and StopPrompting without it,
+                                   with callback objects; prints "begin ok: <n>", "begin refused: <n>", "stop <answer>: <n>", then stays on the bus
+  longlived DIR N                  one connection for the whole run (as gnome-keyring-daemon); for i in 0..N-1: waits for
+                                   DIR/go-<i>, opens a prompt "Long-lived <i>", asks a password, prints "<i> password=..."
+                                   or "<i> cancelled" or "<i> open error <name>"
   badperform                       a PerformPrompt of the wrong shape; prints "error <D-Bus error name>: <message>"
   holder --log FILE [--flags N]    requests org.gnome.keyring.SystemPrompter (flags N, default 0: queued behind an owner),
                                    prints "reply=<RequestName's answer>", serves the prompter object and writes every call
@@ -22,6 +30,7 @@ Refuses any bus that is not under GF_TEST_BUS_DIR (the rule of the tests' fakes)
 import argparse
 import os
 import sys
+import time
 
 import gi
 
@@ -160,14 +169,86 @@ def prompter_sync(bus, method, params):
                          Gio.DBusCallFlags.NONE, 5000, None)
 
 
-def begins(n):
+def serve_callbacks(bus, path):
+    node = Gio.DBusNodeInfo.new_for_xml(CALLBACK_XML)
+    bus.register_object(path, node.interfaces[0], lambda c, s, p, i, m, params, inv: inv.return_value(None), None, None)
+
+
+def spin(seconds):
+    ctx = GLib.MainContext.default()
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        ctx.iteration(False)
+        time.sleep(0.01)
+
+
+def begins(n, objects, pause):
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     for i in range(n):
+        path = "/org/gnome/keyring/Prompt/held%d" % i
+        if objects:
+            serve_callbacks(bus, path)
         try:
-            prompter_sync(bus, "BeginPrompting", GLib.Variant("(o)", ("/org/gnome/keyring/Prompt/held%d" % i,)))
+            prompter_sync(bus, "BeginPrompting", GLib.Variant("(o)", (path,)))
             print("begin %d ok" % i, flush=True)
         except GLib.Error as e:
             print("begin %d error %s" % (i, Gio.DBusError.get_remote_error(e)), flush=True)
+        spin(pause if pause else 0.05)
+
+
+def noiface(n):
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    counts = {}
+
+    def send(iface, method, path):
+        msg = Gio.DBusMessage.new_method_call(NAME, "/org/gnome/keyring/Prompter", iface, method)
+        msg.set_body(GLib.Variant("(o)", (path,)))
+        reply, _ = bus.send_message_with_reply_sync(msg, Gio.DBusSendMessageFlags.NONE, 3000, None)
+        return reply.get_error_name() if reply.get_message_type() == Gio.DBusMessageType.ERROR else "ok"
+
+    for i in range(n):
+        path = "/org/gnome/keyring/Prompt/noiface%d" % i
+        serve_callbacks(bus, path)
+        begin = send("org.gnome.keyring.internal.Prompter", "BeginPrompting", path)
+        spin(0.02)
+        stop = send(None, "StopPrompting", path)
+        key = "begin ok" if begin == "ok" else "begin refused" if begin.endswith("LimitsExceeded") else "begin " + begin
+        counts[key] = counts.get(key, 0) + 1
+        counts["stop " + stop] = counts.get("stop " + stop, 0) + 1
+    for key in sorted(counts):
+        print("%s: %d" % (key, counts[key]), flush=True)
+    GLib.MainLoop().run()  # stays on the bus with every prompt gcr kept, until killed
+
+
+def longlived(directory, n):
+    keep = Gio.bus_get_sync(Gio.BusType.SESSION, None)  # held for the whole run
+    print("unique " + keep.get_unique_name(), flush=True)
+    for i in range(n):
+        while not os.path.exists("%s/go-%d" % (directory, i)):
+            time.sleep(0.05)
+        try:
+            prompt = Gcr.SystemPrompt.open_for_prompter(NAME, 5, None)
+        except GLib.Error as e:
+            print("%d open error %s" % (i, Gio.DBusError.get_remote_error(e) or e.message), flush=True)
+            continue
+        prompt.set_title("Long-lived %d" % i)
+        loop = GLib.MainLoop()
+
+        def done(source, result):
+            try:
+                pw = source.password_finish(result)
+                print("%d %s" % (i, "cancelled" if pw is None else "password=" + pw), flush=True)
+            except GLib.Error:
+                print("%d cancelled" % i, flush=True)
+            loop.quit()
+
+        prompt.password_async(None, done)
+        loop.run()
+        try:
+            Gcr.SystemPrompt.close(prompt, None)
+        except GLib.Error:
+            pass  # the prompter went away: gcr's client then forgets the prompt without stopping it
+        spin(0.2)
 
 
 def badperform():
@@ -201,8 +282,11 @@ def holder(log_path, flags):
 def main():
     private_bus_only()
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["password", "confirm", "many", "forge", "begins", "badperform", "holder"])
-    ap.add_argument("count", nargs="?", type=int, default=0)
+    ap.add_argument("mode", choices=["password", "confirm", "many", "forge", "begins", "noiface", "longlived", "badperform", "holder"])
+    ap.add_argument("count", nargs="?", default="0")
+    ap.add_argument("count2", nargs="?", type=int, default=0)
+    ap.add_argument("--objects", action="store_true")
+    ap.add_argument("--pause", type=float, default=0)
     ap.add_argument("--title")
     ap.add_argument("--message")
     ap.add_argument("--description")
@@ -217,11 +301,15 @@ def main():
     if args.mode in ("password", "confirm"):
         ask(args, args.mode)
     elif args.mode == "many":
-        many(args.count)
+        many(int(args.count))
     elif args.mode == "forge":
         forge(args.caller)
     elif args.mode == "begins":
-        begins(args.count)
+        begins(int(args.count), args.objects, args.pause)
+    elif args.mode == "noiface":
+        noiface(int(args.count))
+    elif args.mode == "longlived":
+        longlived(args.count, args.count2)
     elif args.mode == "badperform":
         badperform()
     else:

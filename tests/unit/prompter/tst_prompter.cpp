@@ -22,9 +22,13 @@
 #include <fcntl.h>
 #include <string>
 #include <sys/socket.h>
+#include <sched.h>
+#include <sys/mman.h>
+#include <sys/mount.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -425,6 +429,49 @@ TEST(PrompterPeer, OnlyAKernelWithoutPidfdsFallsBackToThePid) {
     ::close(pair[1]);
 }
 
+TEST(PrompterPeer, APeerThatExitedAndWasReapedIsRefused) {
+    // The review's probe: the connecting process exits and is reaped while a child keeps its socket open. Linux 6.5 to
+    // 6.15 answer SO_PEERPIDFD with EINVAL there, later kernels with a pidfd whose PID reads -1: refused either way.
+    const QString leaf = ownCgroupLeaf();
+    if (leaf.isEmpty())
+        GTEST_SKIP() << "this process sits at the root of its cgroup tree: no unit name to expect";
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QByteArray path = QFile::encodeName(dir.path() + QStringLiteral("/p.sock"));
+    ASSERT_LT(path.size(), 100);
+    const int listener = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    std::memcpy(address.sun_path, path.constData(), static_cast<std::size_t>(path.size()));
+    ASSERT_EQ(::bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof address), 0);
+    ASSERT_EQ(::listen(listener, 4), 0);
+    int keep[2];
+    ASSERT_EQ(::pipe(keep), 0);
+    const pid_t connector = ::fork();
+    if (connector == 0) {
+        const int s = ::socket(AF_UNIX, SOCK_STREAM, 0);
+        if (::connect(s, reinterpret_cast<sockaddr*>(&address), sizeof address) != 0)
+            ::_exit(1);
+        if (::fork() == 0) { // the grandchild keeps the socket open until the test is done
+            ::close(keep[1]);
+            char b;
+            (void)!::read(keep[0], &b, 1);
+            ::_exit(0);
+        }
+        ::_exit(0);
+    }
+    ASSERT_GT(connector, 0);
+    ::waitpid(connector, nullptr, 0); // reaped
+    const int fd = ::accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
+    ASSERT_GE(fd, 0);
+    const PeerCheck check = checkSocketPeer(fd, ::getuid(), leaf, false);
+    EXPECT_FALSE(check.accepted) << check.reason.toStdString();
+    ::close(fd);
+    ::close(keep[1]);
+    ::close(keep[0]);
+    ::close(listener);
+}
+
 TEST(PrompterPeer, RefusalsAreLoggedOncePerWindow) {
     LogThrottle throttle(10000);
     qint64      suppressed = -1;
@@ -508,9 +555,10 @@ class PrompterTrust : public ::testing::Test {
         f.file     = fileIdOf(path);
         f.alive     = true;
         f.sameUser  = true;
-        f.traced    = false;
-        f.codeKnown = true;
-        f.codeFiles = {path};
+        f.traced         = false;
+        f.sameNamespaces = true;
+        f.codeKnown      = true;
+        f.code           = {fileMapping(path, selfMountDevices())};
         return f;
     }
 
@@ -616,19 +664,32 @@ TEST_F(PrompterTrust, KnownCallersAskOnSomeoneElsesBehalf) {
 TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
     entry(QStringLiteral("org.example.Editor.desktop"), "editor");
     writeFile(m_top + QStringLiteral("/usr/bin/libtrusted.so"), "\x7f" "ELF", 0644);
+    const CodeMapping trusted = fileMapping(m_top + QStringLiteral("/usr/bin/libtrusted.so"), selfMountDevices());
+    ASSERT_NE(trusted.inode, 0u);
     ExeFacts clean = facts(bin(QStringLiteral("editor")));
-    clean.codeFiles.append(m_top + QStringLiteral("/usr/bin/libtrusted.so"));
+    clean.code.append(trusted);
     EXPECT_EQ(requesterFor(clean, where()).role, QStringLiteral("app"));
     // LD_PRELOAD or LD_LIBRARY_PATH code from the user's files, a library replaced since it was loaded, memfd code:
     // the app's name is not lent (security review of step 9a, MINOR-2, decision 9-14).
     for (const QString& foreign : {QStringLiteral("/home/u/.local/lib/evil.so"), m_top + QStringLiteral("/usr/bin/libtrusted.so (deleted)"),
                                    QStringLiteral("/memfd:code (deleted)")}) {
         ExeFacts preloaded = clean;
-        preloaded.codeFiles.append(foreign);
+        preloaded.code.append(CodeMapping{foreign, trusted.major, trusted.minor, trusted.inode});
         const RequesterView r = requesterFor(preloaded, where());
         EXPECT_EQ(r.role, QStringLiteral("unidentified")) << foreign.toStdString();
         EXPECT_EQ(r.path, bin(QStringLiteral("editor")));
     }
+    // A trusted path whose mapping names another file, by inode or by device (a file bind-mounted over the path in
+    // another mount namespace: counter-review of step 9a, MINOR-C), or a process in other namespaces.
+    ExeFacts otherInode = clean;
+    otherInode.code.last().inode += 1;
+    EXPECT_EQ(requesterFor(otherInode, where()).role, QStringLiteral("unidentified"));
+    ExeFacts otherDevice = clean;
+    otherDevice.code.last().minor += 1;
+    EXPECT_EQ(requesterFor(otherDevice, where()).role, QStringLiteral("unidentified"));
+    ExeFacts elsewhere       = clean;
+    elsewhere.sameNamespaces = false;
+    EXPECT_EQ(requesterFor(elsewhere, where()).role, QStringLiteral("unidentified"));
     ExeFacts unread = clean;
     unread.codeKnown = false;
     EXPECT_EQ(requesterFor(unread, where()).role, QStringLiteral("unidentified"));
@@ -642,24 +703,35 @@ TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
     // A known caller keeps its role with extra code: any program can make it ask anyway (the row names the program that
     // asks, never a guarantee about the text; decision 9-14).
     ExeFacts keyringPlugins = facts(bin(QStringLiteral("keyringd")));
-    keyringPlugins.codeFiles.append(QStringLiteral("/home/u/.local/lib/evil.so"));
+    keyringPlugins.code.append(CodeMapping{QStringLiteral("/home/u/.local/lib/evil.so"), 0, 1, 7});
     EXPECT_EQ(requesterFor(keyringPlugins, where()).role, QStringLiteral("keyring"));
 }
 
 TEST(PrompterIdentity, MapsAndStatusParsing) {
-    bool              ok   = false;
-    const QStringList code = executableFiles("55d4a0e00000-55d4a0e02000 r--p 00000000 00:1f 1234                       /usr/bin/sleep\n"
-                                             "55d4a0e02000-55d4a0e06000 r-xp 00002000 00:1f 1234                       /usr/bin/sleep\n"
-                                             "7f00a0000000-7f00a0028000 r-xp 00028000 00:1f 99                         /usr/lib/libc.so.6\n"
-                                             "7f00a1000000-7f00a1001000 r-xp 00000000 00:00 0 \n"
-                                             "7f00a2000000-7f00a2001000 r-xp 00000000 00:1f 7                          /home/u/my lib.so (deleted)\n"
-                                             "7f00a3000000-7f00a3001000 rw-p 00000000 00:1f 8                          /usr/lib/data.bin\n"
-                                             "7ffd0a000000-7ffd0a002000 r-xp 00000000 00:00 0                          [vdso]\n",
-                                             &ok);
+    bool                     ok   = false;
+    const QList<CodeMapping> code = executableMappings("55d4a0e00000-55d4a0e02000 r--p 00000000 00:1f 1234                       /usr/bin/sleep\n"
+                                                       "55d4a0e02000-55d4a0e06000 r-xp 00002000 00:1f 1234                       /usr/bin/sleep\n"
+                                                       "7f00a0000000-7f00a0028000 r-xp 00028000 fd:01 99                         /usr/lib/libc.so.6\n"
+                                                       "7f00a0100000-7f00a0128000 r-xp 00028000 00:2a 99                         /usr/lib/libc.so.6\n"
+                                                       "7f00a1000000-7f00a1001000 r-xp 00000000 00:00 0 \n"
+                                                       "7f00a2000000-7f00a2001000 r-xp 00000000 00:1f 7                          /home/u/my lib.so (deleted)\n"
+                                                       "7f00a3000000-7f00a3001000 rw-p 00000000 00:1f 8                          /usr/lib/data.bin\n"
+                                                       "7ffd0a000000-7ffd0a002000 r-xp 00000000 00:00 0                          [vdso]\n",
+                                                       &ok);
     EXPECT_TRUE(ok);
-    EXPECT_EQ(code, (QStringList{QStringLiteral("/usr/bin/sleep"), QStringLiteral("/usr/lib/libc.so.6"), QStringLiteral("/home/u/my lib.so (deleted)")}));
-    executableFiles("garbage\n", &ok);
+    ASSERT_EQ(code.size(), 4); // the same path under another device is another mapping
+    EXPECT_EQ(code.at(0), (CodeMapping{QStringLiteral("/usr/bin/sleep"), 0, 0x1f, 1234}));
+    EXPECT_EQ(code.at(1), (CodeMapping{QStringLiteral("/usr/lib/libc.so.6"), 0xfd, 1, 99}));
+    EXPECT_EQ(code.at(2), (CodeMapping{QStringLiteral("/usr/lib/libc.so.6"), 0, 0x2a, 99}));
+    EXPECT_EQ(code.at(3).path, QStringLiteral("/home/u/my lib.so (deleted)"));
+    executableMappings("garbage\n", &ok);
     EXPECT_FALSE(ok);
+    executableMappings("7f00a0000000-7f00a0028000 r-xp 00028000 zz:01 99 /usr/lib/libc.so.6\n", &ok);
+    EXPECT_FALSE(ok);
+    const auto devices = mountDevices("22 1 0:21 / /proc rw - proc proc rw\n91 61 254:1 / / rw - btrfs /dev/mapper/root rw,subvol=/@\nbad line\n");
+    EXPECT_EQ(devices.value(91), (QPair<quint32, quint32>{254, 1}));
+    EXPECT_EQ(devices.value(22), (QPair<quint32, quint32>{0, 21}));
+    EXPECT_EQ(devices.size(), 2);
     EXPECT_EQ(tracerPid("Name:\tsleep\nTracerPid:\t0\n"), 0);
     EXPECT_EQ(tracerPid("TracerPid:\t4242\n"), 4242);
     EXPECT_EQ(tracerPid("Name:\tsleep\n"), -1);
@@ -696,6 +768,107 @@ TEST_F(PrompterTrust, EveryFailureIsUnidentified) {
     EXPECT_EQ(requesterFor(weird, where()).path, QStringLiteral("/home/u/Login Keychain"));
 }
 
+TEST(PrompterIdentity, AMappingIsComparedWithItsFileAndEveryMappingIsRead) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString file = dir.path() + QStringLiteral("/code.bin");
+    writeFile(file, QByteArray(4096, 'x'), 0644);
+    const int fd = ::open(QFile::encodeName(file).constData(), O_RDONLY | O_CLOEXEC);
+    ASSERT_GE(fd, 0);
+    const long page = ::sysconf(_SC_PAGESIZE);
+    // Many separate read-only mappings of a system file (guard gaps keep them apart), then the file mapped executable.
+    const int sys = ::open("/usr/lib/libc.so.6", O_RDONLY | O_CLOEXEC);
+    char*     base = static_cast<char*>(::mmap(nullptr, page * 2 * 6000, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+    ASSERT_NE(base, MAP_FAILED);
+    if (sys >= 0) {
+        for (int i = 0; i < 6000; ++i)
+            ::mmap(base + i * 2 * page, page, PROT_READ, MAP_PRIVATE | MAP_FIXED, sys, 0);
+    }
+    void* code = ::mmap(nullptr, page, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, 0);
+    if (code == MAP_FAILED) {
+        ::munmap(base, page * 2 * 6000);
+        GTEST_SKIP() << "the temporary directory does not allow executable mappings";
+    }
+    const int self = pidfdOpen(::getpid());
+    ASSERT_GE(self, 0);
+    const ExeFacts facts = exeFactsOfPidfd(self);
+    ::close(self);
+    EXPECT_TRUE(facts.codeKnown);
+    EXPECT_TRUE(facts.sameNamespaces);
+    const CodeMapping expected = fileMapping(file, selfMountDevices());
+    ASSERT_NE(expected.inode, 0u);
+    EXPECT_TRUE(facts.code.contains(expected)); // maps' device and inode are the file's, read through statx and mountinfo
+    ::munmap(code, page);
+    ::munmap(base, page * 2 * 6000);
+    ::close(fd);
+    if (sys >= 0)
+        ::close(sys);
+}
+
+TEST(PrompterIdentity, AFileBindMountedOverATrustedPathInAnotherNamespaceIsSeen) {
+    // A child in a user and mount namespace of its own maps a file of its own under /usr/lib/libc.so.6's path (the
+    // counter-review's case, MINOR-C). The bridge sees other namespaces, and a mapping that is not the path's file.
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString fake = dir.path() + QStringLiteral("/fake.so");
+    writeFile(fake, QByteArray(4096, 'y'), 0644);
+    int ready[2];
+    ASSERT_EQ(::pipe(ready), 0);
+    const uid_t uid = ::getuid();
+    const gid_t gid = ::getgid();
+    const pid_t child = ::fork();
+    if (child == 0) {
+        ::close(ready[0]);
+        auto put = [](const char* path, const std::string& text) {
+            const int f = ::open(path, O_WRONLY);
+            const bool ok = f >= 0 && ::write(f, text.data(), text.size()) == static_cast<ssize_t>(text.size());
+            if (f >= 0)
+                ::close(f);
+            return ok;
+        };
+        if (::unshare(CLONE_NEWUSER | CLONE_NEWNS) != 0 || !put("/proc/self/setgroups", "deny")
+            || !put("/proc/self/uid_map", "0 " + std::to_string(uid) + " 1") || !put("/proc/self/gid_map", "0 " + std::to_string(gid) + " 1")
+            || ::mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) != 0
+            || ::mount(QFile::encodeName(fake).constData(), "/usr/lib/libc.so.6", nullptr, MS_BIND, nullptr) != 0)
+            ::_exit(3);
+        const int f = ::open("/usr/lib/libc.so.6", O_RDONLY);
+        if (f < 0 || ::mmap(nullptr, 4096, PROT_READ | PROT_EXEC, MAP_PRIVATE, f, 0) == MAP_FAILED)
+            ::_exit(4);
+        (void)!::write(ready[1], "r", 1);
+        ::pause();
+        ::_exit(0);
+    }
+    ASSERT_GT(child, 0);
+    ::close(ready[1]);
+    char       byte  = 0;
+    const bool up    = ::read(ready[0], &byte, 1) == 1;
+    ::close(ready[0]);
+    if (!up) {
+        int status = 0;
+        ::waitpid(child, &status, 0);
+        GTEST_SKIP() << "no user and mount namespace here (child exit " << WEXITSTATUS(status) << ")";
+    }
+    const int pidfd = pidfdOpen(child);
+    ASSERT_GE(pidfd, 0);
+    const ExeFacts facts = exeFactsOfPidfd(pidfd);
+    ::close(pidfd);
+    ::kill(child, SIGKILL);
+    ::waitpid(child, nullptr, 0);
+    EXPECT_TRUE(facts.alive);
+    EXPECT_FALSE(facts.sameNamespaces);
+    const auto     devices = selfMountDevices();
+    const auto     real    = fileMapping(QStringLiteral("/usr/lib/libc.so.6"), devices);
+    const auto     forged  = fileMapping(fake, devices);
+    bool           seen    = false;
+    for (const CodeMapping& m : facts.code) {
+        if (m.path == QLatin1String("/usr/lib/libc.so.6") && m.inode == forged.inode && m.major == forged.major && m.minor == forged.minor) {
+            seen = true;
+            EXPECT_FALSE(m == real); // the trusted path names another file than the one mapped
+        }
+    }
+    EXPECT_TRUE(seen) << "the bind-mounted file was not found among the child's mappings";
+}
+
 TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {
     // This process: its own executable, alive.
     const int self = pidfdOpen(::getpid());
@@ -727,8 +900,9 @@ TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {
     EXPECT_TRUE(running.alive);
     EXPECT_FALSE(running.traced);
     EXPECT_TRUE(running.codeKnown);
-    EXPECT_TRUE(running.codeFiles.contains(QStringLiteral("/usr/bin/sleep")));
-    EXPECT_GE(running.codeFiles.size(), 2); // the program and at least the C library
+    EXPECT_TRUE(running.sameNamespaces);
+    EXPECT_TRUE(running.code.contains(fileMapping(QStringLiteral("/usr/bin/sleep"), selfMountDevices())));
+    EXPECT_GE(running.code.size(), 2); // the program and at least the C library
     if (rootOwnsSystemFiles()) {
         running.sameUser = true;
         Where w;
@@ -743,7 +917,8 @@ TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {
     ::close(pidfd);
     EXPECT_FALSE(gone.alive);
     EXPECT_TRUE(gone.path.isEmpty());
-    EXPECT_TRUE(gone.codeFiles.isEmpty());
+    EXPECT_TRUE(gone.code.isEmpty());
+    EXPECT_FALSE(gone.sameNamespaces);
     EXPECT_EQ(requesterFor(gone).role, QStringLiteral("unidentified"));
     // A traced child: TracerPid names this process.
     const pid_t traced = ::fork();
@@ -862,11 +1037,11 @@ namespace {
 } // namespace
 
 TEST(PrompterFilter, MessagesThroughTheFilter) {
-    CallerBook    book(limits::kPromptsPerCaller);
+    FilterState   book;
     GDBusMessage* reply    = nullptr;
     GVariant*     body     = performBody({{"grassfield-caller", g_variant_new_string(":1.666")}});
     GDBusMessage* perform  = call(kPrompterPath, "PerformPrompt", body);
-    GDBusMessage* filtered = filterIncoming(book, perform, &reply);
+    GDBusMessage* filtered = filterIncoming(book, ":1.1", perform, &reply);
     ASSERT_NE(filtered, nullptr);
     EXPECT_EQ(reply, nullptr);
     EXPECT_NE(filtered, perform); // a sanitized copy
@@ -876,7 +1051,7 @@ TEST(PrompterFilter, MessagesThroughTheFilter) {
     g_object_unref(filtered);
     // Without an interface field the call is sanitized all the same (whatever GDBus then does with it).
     GDBusMessage* bare = call(kPrompterPath, "PerformPrompt", body, ":1.8", nullptr);
-    filtered           = filterIncoming(book, bare, &reply);
+    filtered           = filterIncoming(book, ":1.1", bare, &reply);
     ASSERT_NE(filtered, nullptr);
     EXPECT_NE(filtered, bare);
     caller = property(g_dbus_message_get_body(filtered), "grassfield-caller");
@@ -885,10 +1060,10 @@ TEST(PrompterFilter, MessagesThroughTheFilter) {
     g_object_unref(filtered);
     // Other calls and other interfaces pass untouched; outgoing messages are not even looked at by promptFilter.
     GDBusMessage* other = call(kPrompterPath, "Introspect", nullptr, ":1.7", "org.freedesktop.DBus.Introspectable");
-    EXPECT_EQ(filterIncoming(book, other, &reply), other);
+    EXPECT_EQ(filterIncoming(book, ":1.1", other, &reply), other);
     g_object_unref(other);
     GDBusMessage* elsewhere = call("/elsewhere", "PerformPrompt", body);
-    EXPECT_EQ(filterIncoming(book, elsewhere, &reply), elsewhere);
+    EXPECT_EQ(filterIncoming(book, ":1.1", elsewhere, &reply), elsewhere);
     g_object_unref(elsewhere);
     FilterState   state;
     GDBusMessage* outgoing = call(kPrompterPath, "PerformPrompt", body);
@@ -896,7 +1071,7 @@ TEST(PrompterFilter, MessagesThroughTheFilter) {
     g_object_unref(outgoing);
     // A PerformPrompt of another shape never reaches gcr: its caller gets InvalidArgs, as a reply to its own call.
     GDBusMessage* malformed = call(kPrompterPath, "PerformPrompt", g_variant_new("(s)", "x"));
-    EXPECT_EQ(filterIncoming(book, malformed, &reply), nullptr);
+    EXPECT_EQ(filterIncoming(book, ":1.1", malformed, &reply), nullptr);
     ASSERT_NE(reply, nullptr);
     EXPECT_EQ(errorName(reply), "org.freedesktop.DBus.Error.InvalidArgs");
     EXPECT_EQ(g_dbus_message_get_reply_serial(reply), 42u);
@@ -925,44 +1100,117 @@ TEST(PrompterFilter, EachCallerHoldsAtMostItsShareOfPrompts) {
     EXPECT_EQ(book.callers(), 0); // nothing kept for a caller with nothing open
 }
 
-TEST(PrompterFilter, BeginPromptingOverTheShareIsRefusedUntilStopOrDeparture) {
-    CallerBook    book(limits::kPromptsPerCaller);
-    GDBusMessage* reply = nullptr;
-    for (int i = 0; i < limits::kPromptsPerCaller; ++i) {
-        const std::string path = "/org/gnome/keyring/Prompt/p" + std::to_string(i);
-        GDBusMessage*     begin = call(kPrompterPath, "BeginPrompting", g_variant_new("(o)", path.c_str()));
-        EXPECT_EQ(filterIncoming(book, begin, &reply), begin);
-        EXPECT_EQ(reply, nullptr);
-        g_object_unref(begin);
+namespace {
+    // gcr's own outgoing call to a caller's callback object.
+    GDBusMessage* toCallback(const char* member, const char* destination, const char* path, guint32 serial) {
+        GDBusMessage* m = g_dbus_message_new_method_call(destination, path, "org.gnome.keyring.internal.Prompter.Callback", member);
+        g_dbus_message_set_serial(m, serial);
+        return m;
     }
+    GDBusMessage* answerTo(guint32 serial, const char* sender, bool error) {
+        GDBusMessage* call = g_dbus_message_new_method_call(":1.1", "/x", "x.y", "Z");
+        g_dbus_message_set_serial(call, serial);
+        g_dbus_message_set_sender(call, ":1.1");
+        GDBusMessage* m = error ? g_dbus_message_new_method_error_literal(call, "org.freedesktop.DBus.Error.UnknownMethod", "no object")
+                                : g_dbus_message_new_method_reply(call);
+        g_dbus_message_set_sender(m, sender);
+        g_object_unref(call);
+        return m;
+    }
+    void begin(FilterState& state, int n, const char* sender = ":1.7", const char* iface = kPrompterIface, GDBusMessage** last = nullptr) {
+        for (int i = 0; i < n; ++i) {
+            const std::string path = "/org/gnome/keyring/Prompt/p" + std::to_string(i);
+            GDBusMessage*     reply = nullptr;
+            GDBusMessage*     out   = filterIncoming(state, ":1.1", call(kPrompterPath, "BeginPrompting", g_variant_new("(o)", path.c_str()), sender, iface), &reply);
+            if (out)
+                g_object_unref(out);
+            if (last)
+                *last = reply;
+            else if (reply)
+                g_object_unref(reply);
+        }
+    }
+} // namespace
+
+TEST(PrompterFilter, BeginPromptingOverTheShareIsRefusedUntilGcrEndsAPrompt) {
+    FilterState   state;
+    GDBusMessage* reply = nullptr;
+    begin(state, limits::kPromptsPerCaller);
+    EXPECT_EQ(state.book.open(":1.7"), limits::kPromptsPerCaller);
     GDBusMessage* over = call(kPrompterPath, "BeginPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/over"));
-    EXPECT_EQ(filterIncoming(book, over, &reply), nullptr);
+    EXPECT_EQ(filterIncoming(state, ":1.1", over, &reply), nullptr);
     EXPECT_EQ(errorName(reply), "org.freedesktop.DBus.Error.LimitsExceeded");
     EXPECT_EQ(g_dbus_message_get_reply_serial(reply), 42u);
     g_object_unref(reply);
     // Another connection is not affected.
-    GDBusMessage* other = call(kPrompterPath, "BeginPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/p0"), ":1.9");
-    EXPECT_EQ(filterIncoming(book, other, &reply), other);
-    g_object_unref(other);
-    // StopPrompting frees a place.
-    GDBusMessage* stop = call(kPrompterPath, "StopPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/p0"));
-    EXPECT_EQ(filterIncoming(book, stop, &reply), stop);
-    g_object_unref(stop);
-    EXPECT_EQ(book.open(":1.7"), limits::kPromptsPerCaller - 1);
+    begin(state, 1, ":1.9");
+    EXPECT_EQ(state.book.open(":1.9"), 1);
+    // A StopPrompting frees nothing by itself, with or without the interface (counter-review MINOR-B): gcr's own
+    // PromptDone, sent when it ends the prompt, does.
+    for (const char* iface : {kPrompterIface, static_cast<const char*>(nullptr)}) {
+        GDBusMessage* stop = call(kPrompterPath, "StopPrompting", g_variant_new("(o)", "/org/gnome/keyring/Prompt/p0"), ":1.7", iface);
+        EXPECT_EQ(filterIncoming(state, ":1.1", stop, &reply), stop);
+        g_object_unref(stop);
+    }
+    EXPECT_EQ(state.book.open(":1.7"), limits::kPromptsPerCaller);
+    GDBusMessage* done = toCallback("PromptDone", ":1.7", "/org/gnome/keyring/Prompt/p0", 100);
+    filterOutgoing(state, done);
+    g_object_unref(done);
+    EXPECT_EQ(state.book.open(":1.7"), limits::kPromptsPerCaller - 1);
+    // A failed PromptReady (a caller without the callback object: gcr drops the prompt without PromptDone) frees it;
+    // a successful one, or an error from anyone else than the caller, does not.
+    GDBusMessage* ready1 = toCallback("PromptReady", ":1.7", "/org/gnome/keyring/Prompt/p1", 101);
+    GDBusMessage* ready2 = toCallback("PromptReady", ":1.7", "/org/gnome/keyring/Prompt/p2", 102);
+    GDBusMessage* ready3 = toCallback("PromptReady", ":1.7", "/org/gnome/keyring/Prompt/p3", 103);
+    filterOutgoing(state, ready1);
+    filterOutgoing(state, ready2);
+    filterOutgoing(state, ready3);
+    for (GDBusMessage* m : {ready1, ready2, ready3})
+        g_object_unref(m);
+    for (GDBusMessage* m : {answerTo(101, ":1.7", true), answerTo(102, ":1.7", false), answerTo(103, ":1.9", true)}) {
+        EXPECT_EQ(filterIncoming(state, ":1.1", m, &reply), m);
+        g_object_unref(m);
+    }
+    EXPECT_EQ(state.book.open(":1.7"), limits::kPromptsPerCaller - 2);
+    EXPECT_TRUE(state.readyCalls.isEmpty());
+    // An interface-less BeginPrompting passes untouched and counts nothing: GDBus refuses it itself (MINOR-B).
+    begin(state, 3, ":1.8", nullptr);
+    EXPECT_EQ(state.book.open(":1.8"), 0);
     // A NameOwnerChanged that does not come from the bus daemon changes nothing; the bus's own one forgets the caller.
     GDBusMessage* forged = ownerChanged(":1.7", ":1.7", "", ":1.9");
-    EXPECT_EQ(filterIncoming(book, forged, &reply), forged);
+    EXPECT_EQ(filterIncoming(state, ":1.1", forged, &reply), forged);
     g_object_unref(forged);
-    EXPECT_EQ(book.open(":1.7"), limits::kPromptsPerCaller - 1);
+    EXPECT_EQ(state.book.open(":1.7"), limits::kPromptsPerCaller - 2);
     GDBusMessage* acquired = ownerChanged("org.example.Name", "", ":1.7"); // a well-known name changing hands: ignored
-    EXPECT_EQ(filterIncoming(book, acquired, &reply), acquired);
+    EXPECT_EQ(filterIncoming(state, ":1.1", acquired, &reply), acquired);
     g_object_unref(acquired);
-    EXPECT_EQ(book.open(":1.7"), limits::kPromptsPerCaller - 1);
+    EXPECT_EQ(state.book.open(":1.7"), limits::kPromptsPerCaller - 2);
     GDBusMessage* left = ownerChanged(":1.7", ":1.7", "");
-    EXPECT_EQ(filterIncoming(book, left, &reply), left);
+    EXPECT_EQ(filterIncoming(state, ":1.1", left, &reply), left);
     g_object_unref(left);
-    EXPECT_EQ(book.open(":1.7"), 0);
-    EXPECT_EQ(book.open(":1.9"), 1);
+    EXPECT_EQ(state.book.open(":1.7"), 0);
+    EXPECT_EQ(state.book.open(":1.9"), 1);
+}
+
+TEST(PrompterFilter, ThePrompterNameLeavingTheBridgeClearsEveryCount) {
+    // gcr's clients forget their prompts without stopping them when the prompter's name goes (counter-review MINOR-A).
+    FilterState state;
+    begin(state, limits::kPromptsPerCaller, ":1.7");
+    begin(state, 2, ":1.9");
+    GDBusMessage* reply = nullptr;
+    // Another owner's change, or the name coming to the bridge, clears nothing.
+    for (GDBusMessage* m : {ownerChanged(kPrompterName, ":1.5", ""), ownerChanged(kPrompterName, "", ":1.1")}) {
+        EXPECT_EQ(filterIncoming(state, ":1.1", m, &reply), m);
+        g_object_unref(m);
+    }
+    EXPECT_EQ(state.book.open(":1.7"), limits::kPromptsPerCaller);
+    // The name leaving the bridge (released, or passed to the next in line) clears every count.
+    GDBusMessage* released = ownerChanged(kPrompterName, ":1.1", ":1.5");
+    EXPECT_EQ(filterIncoming(state, ":1.1", released, &reply), released);
+    g_object_unref(released);
+    EXPECT_EQ(state.book.callers(), 0);
+    begin(state, limits::kPromptsPerCaller, ":1.7", kPrompterIface, &reply);
+    EXPECT_EQ(reply, nullptr); // the long-lived caller is served again
 }
 
 // --- the GcrPrompt object ---------------------------------------------------------------------------------------------------
