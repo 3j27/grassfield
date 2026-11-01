@@ -210,7 +210,7 @@ plugin-build:
     cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
     cmake --build compositor/build
 
-# The local CI equivalent (D-6): a clean build of a `git archive` of HEAD with `just check` (incl. tidy), `just test`, coverage, gitleaks and the plugin build. Bare command. Flags: --rc-headers ROOT --keep --only steps
+# The local CI equivalent (D-6): a clean build of a `git archive` of HEAD with `just check` (incl. tidy), `just test`, coverage, gitleaks and the plugin build. Bare command. Flags: --rc-headers ROOT --rc --keep --only steps
 release-check *args:
     scripts/gates/release-check.sh {{args}}
 
@@ -237,6 +237,10 @@ gate-startup *args:
 # GF-013: About, pacman, the plugin (`hyprctl grassfield`) and the menu bridge report the VERSION file's version: `just gate-version --nested` or `--installed` (bare command).
 gate-version *args:
     scripts/gates/version-agreement.sh {{args}}
+
+# The rc-channel gate (ADR-0041 step 2c; T-5, T-10, C3): the tree's QML lint, offscreen suites and plugin build on Omarchy's rc toolkit in a throwaway container (bare; docker). Flags: --only lint,test,plugin --mirror URL --logs DIR
+gate-rc *args:
+    scripts/gates/rc-toolkit.sh {{args}}
 
 # Off-machine copy: a verified git bundle of the whole repository into DIR (an external disk; GF-034).
 backup dir:
