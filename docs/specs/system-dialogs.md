@@ -2,7 +2,8 @@
 
 Status: step 0 (docs only, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »); §6 is built
 (steps 2b and 2c), §4 (step 3), §9 (step 4a in Files, step 4b in the panels), §1 (step 4b) and §2's permission alerts (step
-5a; Open With is step 5b); §4b's notice is built but not active on Hyprland 0.56.2; the other sections are not built yet. Decisions and delivery order:
+5a; Open With is step 5b); §4b's notice is built but not active on Hyprland 0.56.2; §5's bridge (step 9a) and the shell's queue
+and secret sheets for gcr's prompts (step 9b) are built; the other sections are not built yet. Decisions and delivery order:
 `docs/decisions/ADR-0035-system-dialogs.md`. Inventory (every dialog of a Grassfield session, its provider and category):
 `docs/audits/dialogs-2026-10-27/inventory.md`. Row ids (P*, H*, S*, K*, O*, T*, G*) refer to that inventory; Q* are the
 owner's decisions recorded in the ADR.
@@ -395,8 +396,10 @@ that fails) and its other toasts stay Hyprland's too (ADR-0035 D-2).
 Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12): applied in step 9a (CLAUDE.md,
 master-prompt R12, ADR-0010 "Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step; R12 applies (opus
 PASS, fail closed where a secret is involved, nothing logged). Step 9a builds the bridge, its socket protocol (below) and
-its unit; the shell's queue and sheets come in step 9b, udiskie's helper in 9c, the NetworkManager agent in 9d, KIO's
-password server in 9e. Until 9b no shell connects, so the bridge never takes the name and nothing changes for the user.
+its unit; step 9b the shell's queue and secret sheets for gcr's `password` and `confirm` prompts (ADR-0035 "Delivered in
+step 9b", decisions 9-15 to 9-22); udiskie's helper comes in 9c, the NetworkManager agent in 9d, KIO's password server in 9e.
+From 9b the shell connects in the session: gcr's prompts (gnome-keyring, pinentry-gnome3, gcr-ssh-agent) are drawn by the
+shell.
 
 ### macOS reference behavior
 System-modal alert centred on the active display, above every window, never on the lock screen: the requesting app's icon,
@@ -412,7 +415,7 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   (requested without `ALLOW_REPLACEMENT`, so nobody can take it away; queued behind a stock gcr-prompter that still holds it,
   which frees it 10 s after its last prompt); libgcr runs `BeginPrompting`/`PerformPrompt`/`StopPrompting` and the `sx-aes-1`
   exchange.
-- SC2 one queue in the shell for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
+- SC2 (built in step 9b: `shell/security/SheetQueue.qml`, ADR-0035 9-15) one queue in the shell for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
   request never takes the keyboard from the sheet on screen (the polkit sheet's `WlrKeyboardFocus.Exclusive` stays where it is,
   `shell/security/polkit/AuthAgent.qml:241`) and is shown only after that sheet is answered or cancelled; a request withdrawn by
   its caller (`StopPrompting`, `CancelGetSecrets`, BlueZ `Cancel`, the KIO client gone) leaves the queue unseen; at most 8
@@ -423,15 +426,17 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
   entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers; anything
   else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
-  as plain text, flattened and capped, in the secondary style; `warning` in red under the field; a secure field (`password-new`:
-  New and Verify fields and a strength bar); `choice-label` as a check box; `continue-label` / `cancel-label` (else "OK" /
-  "Cancel"); a `confirm` prompt has no field.
+  as plain text, flattened and capped, in the secondary style, framed and introduced as the caller's; `warning` in red in that
+  frame (step 9b, decision 9-18: under the field it read as the sheet's own error); a secure field (`password-new`: New and
+  Verify fields and a strength bar from the length, decision 9-17); `choice-label` as a check box; the buttons are always
+  Grassfield's "Cancel" and "OK", never the caller's `continue-label` / `cancel-label` (step 9b, decision 9-16); a `confirm`
+  prompt has no field. Built in step 9b as a macOS alert (`shell/security/secret/SecretSheet.qml`, decision 9-18).
 - SC3b the row names the program whose process opened the bus connection, not proof of whose code is asking (opus review
   of step 9a, MINOR-2; ADR-0035 9-4, 9-14): "Keyring", "GnuPG" and "SSH" can be made to ask by any program of the user,
   with text of its own. Under such a row (`onBehalf`) the caller's text is shown as unverified text from another program
   (the secondary style, introduced as such, for example "Another app sent this message:"), never as the Keyring's,
   GnuPG's or SSH's own words, never in the title's place, and nothing in the sheet vouches for it.
-- SC4 security rules of the polkit sheet: nothing over the lock (a request that arrives while locked waits and is shown after
+- SC4 (built in step 9b: `shell/security/secret/SecretAgent.qml`, decisions 9-19, 9-22) security rules of the polkit sheet: nothing over the lock (a request that arrives while locked waits and is shown after
   the unlock without the keyboard until a click 500 ms after it appears); the field is cleared after each answer and on close;
   `ImhSensitiveData`, no input method; Esc and Cancel answer "no"; the shell never logs any field. The surface's layer namespace
   `grassfield-secret` is hidden from screen sharing by a session layer rule (`no_screen_share`, accepted for layers by Hyprland
@@ -534,6 +539,14 @@ Shell to bridge (at most 16 KiB per line):
   `password` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password); `choice`
   only when the prompt had a check box.
 
+The shell's reading (step 9b, decision 9-20; `shell/security/secret/Prompter.js`): exactly these messages with exactly
+these keys and types, texts within the caps above, a requester consistent with its role, only the kinds of its hello;
+anything else, a line over 16384 UTF-16 code units, a duplicate id or a prompt before the bridge's hello closes the
+connection; an `error` before the bridge's hello is its refusal (logged); a `cancel` for an id the shell does not hold is
+ignored. The shell answers each request once, only an id it holds, an "ok" only for the request on screen with the keyboard;
+an empty password only for a new one. It holds at most 8 secret requests (shown or waiting) and answers a ninth "cancelled"
+at once. After a lost connection it tries again after 1 s, doubling to 30 s, reset by the bridge's next hello.
+
 Rules (fail closed: no answer is ever invented):
 - At most 8 requests outstanding; a 9th caller is answered "cancelled" at once and the shell never sees it. At most 64
   gcr prompts open, at most 8 for one bus connection: a connection's ninth `BeginPrompting` is answered
@@ -584,6 +597,24 @@ Rules (fail closed: no answer is ever invented):
   `tests/security/prompter_bridge.sh`), the bound of 8 of A-SC2 and A-SC6's mutants of the bridge (the uid and cgroup check,
   the caller checks, the bound, the buffer wiping); the sheets, the queue's keyboard rule and the polkit sheet's place in
   the queue are step 9b's.
+- Step 9b covers A-SC2 (`tests/security/secret_sheets.sh`: the polkit sheet keeps the keyboard while a gcr request arrives,
+  which shows after, held, and the reverse; a withdrawn request never shows; the ninth cancelled), A-SC3 for the sheet (a
+  caller whose text says "Authentication required" gets the secret sheet's title with the bridge's requester, no lock or shield
+  glyph), A-SC3b's polkit request queued behind 8 secret requests, A-SC6's mutants of the shell (the queue's focus rule, the
+  lock refusal, the click guard, the hold after a wait, an "ok" without the keyboard, the bound, the caller's text or labels in
+  the sheet's places, the client's strictness and its single answer: `secret_sheets.sh --mutants`,
+  `secret_bridge.sh --mutants`), and A-SC1 through the shell (`tests/security/secret_bridge.sh`: the real bridge on a private
+  bus, the shell's real client in Quickshell, libgcr's client gets the password the shell answered).
+- A-SC7 nested scenario for step 9b (owner approval: `just nested-up`, `just shot`): with the nested session up, build the
+  bridge (`bridges/prompter/build-direct.sh`), start it as a development run on the nested session's private bus
+  (`env DBUS_SESSION_BUS_ADDRESS=$(cat .dev/bus.address) GF_TEST_BUS=1 GF_TEST_BUS_DIR=/tmp GRASSFIELD_DEV=1
+  .dev/build/grassfield-prompter --socket .dev/run/prompter.sock --peer-unit <the last component of the dev shell's cgroup>`),
+  restart the dev shell with `GRASSFIELD_PROMPTER_SOCKET=$PWD/.dev/run/prompter.sock scripts/dev/shell-run.sh`, check
+  that `tests/visual/ipc.sh secrets state` (the dev hook, nested environment) says `ready owned`, then ask with libgcr's test client on that
+  bus (`python3 -I tests/fixtures/prompter-client.py password --title "Unlock the login keyring" --choice "Remember"`, same
+  environment as the bridge): `just shot secret-sheet` (the alert, its requester row, the framed caller text), type a
+  password and Return (the client prints it), then `pkexec --help`-safe polkit with a gcr request arriving meanwhile (the
+  polkit sheet keeps the keyboard; the secret sheet shows after, held). Visual NOT verified in step 9b.
 - A-SC9 (L0) the handover against fakes on a private bus (`tests/integration/secrets_handover.sh`): the items move once and
   an item the keychain holds is kept; KWallet's own entries (stored as kwalletd 6.29 stores them) move too, and so does an
   older entry KWallet lists only once open; nothing is final from a locked listing that lists nothing; an empty value is
@@ -620,7 +651,16 @@ password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); t
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); a
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
-secrets are not asked (SC8); until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
+secrets are not asked (SC8); the shell's sheets (step 9b): copies of a typed password stay in the shell's heap until reused
+(the field's text, the JavaScript string handed to the model, the answer's JSON line and the socket's write buffer; none can
+be zeroed, SC5, as the polkit sheet's); Quickshell's line reader keeps a bridge line without a line feed in memory until one
+comes (the 16384 cap is checked per line; only the bridge's own socket is read); `JSON.parse` keeps the last of two equal
+keys (the bridge's Qt writer never repeats one; every value's type is still checked); a wrong password makes gcr's caller
+ask again as a new request, which appears after "Password sent", held, and needs a click (macOS shakes the same alert); a
+polkit request that waited behind a secret sheet says it arrived "right after another one" at the time it got its turn
+(decision 9-15), and a newer polkit request takes the place of a waiting one (Quickshell keeps one); a shared or captured
+output is black while a secret or authorization sheet is up (the layer covers the output, decision 9-22); the strength meter
+reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet's look are not verified; until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
 the Secret Service for a session when a KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's
 dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins. The handover (SC10, step 2c) moves what
 KWallet holds into the keychain, and makes a leftover ksecretd quit; what remains: a Chromium that made a new key before the
