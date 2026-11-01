@@ -125,7 +125,7 @@ check bash -c 'grep -q "RUNTIME DESTINATION lib/grassfield" "$1" && grep -q "pac
 # automount unit runs it, the disk's name one argument of udiskie's own formatting.
 desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
 check bash -c 'grep -qxF "ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray --password-prompt \"/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}\"" "$1" && grep -qF "install(TARGETS grassfield-prompter grassfield-askpass RUNTIME DESTINATION lib/grassfield)" "$2" && grep -qF "add_executable(grassfield-askpass src/askpass.cpp" "$2"' _ "$pk/systemd/grassfield-automount.service" "$root/bridges/prompter/CMakeLists.txt"
-for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
+for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify bt-agent; do
   desc="drop-in keeps Omarchy's $unit.service out of the Grassfield session only"
   d=$pk/systemd/$unit.service.d/10-grassfield.conf
   check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -q "$2" "$3"' _ "$d" "$unit" "$pk/arch/PKGBUILD"

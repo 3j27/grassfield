@@ -309,7 +309,9 @@ package_grassfield-desktop() {
   for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal shell-failed security; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
-  for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
+  # bt-agent (Omarchy's pairing agent that answers bluetoothd without asking): grassfield-prompter is the pairing agent of
+  # this session (ADR-0035 D-11, decision 10-1).
+  for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify bt-agent; do
     install -Dm644 "$root/packaging/systemd/$unit.service.d/10-grassfield.conf" \
       "$pkgdir/usr/lib/systemd/user/$unit.service.d/10-grassfield.conf"
   done
