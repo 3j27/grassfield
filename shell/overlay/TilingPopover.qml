@@ -39,6 +39,8 @@ FocusScope {
         outputClass: Compositor.outputClassOf(Popups.screenName),
         fullscreen: root.fullscreen,
         inSplit: root.inSplit,
+        canSplitRows: Compositor.canSplitRows,
+        splitPair: root.toplevel ? Compositor.splitPair(root.toplevel) : false,
         outputs: Compositor.otherOutputs(root.toplevel)
     })
     // The Layouts section in rows of this many layouts, as the glyph sections.
@@ -164,6 +166,12 @@ FocusScope {
             break;
         case "exitSplit":
             Compositor.unsplit(window);
+            break;
+        case "splitFullscreen":
+            Compositor.unsplit(window, "fullscreen");
+            break;
+        case "splitReplace":
+            Compositor.unsplit(window, "replace");
             break;
         case "moveToOutput":
             Compositor.moveToOutput(window, item.output);

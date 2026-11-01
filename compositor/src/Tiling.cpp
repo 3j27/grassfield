@@ -2136,13 +2136,16 @@ namespace gf::tiler {
         // D44: `w`, a member of `desk`, back on its home Desktop, shown: in its tile there from before the split when that
         // zone is still free (MINOR 8 of #48), else at its box from before tiling; the other member fills the Split View
         // Desktop alone, and one left without a member ends. An empty string, or why not.
-        std::string unsplitWindow(const PHLWINDOW& w) {
+        std::string unsplitWindow(const PHLWINDOW& w, tiling::Unsplit how) {
             auto&      s     = st();
             const auto split = tiling::splitOfWindow(s.splits, idOf(w));
             if (!split || !g_layoutManager || !State::workspaceState())
                 return "the window is no member of a Split View Desktop";
             if (!tiling::movable(factsOf(w)))
                 return "the window closed or unmapped (gate C1)";
+            const bool replace = how == tiling::Unsplit::Replace;
+            if (replace && split->members.size() != 2)
+                return "Replace Tiled Window needs the other member (D71)";
             const tiling::SplitDesk desk = *split;
             const auto              m    = splitMonitor(desk) ? splitMonitor(desk) : monitorOf(w);
             auto                    home = State::workspaceState()->query().id(desk.home).run();
@@ -2159,7 +2162,8 @@ namespace gf::tiler {
                 if (t.workspace == desk.home && s.book.zoneFree(tiling::frameOf(t.box, t.band), t.output, desk.home, idOf(w)))
                     homeTile = t;
             }
-            if (const auto moved = Config::Actions::moveToWorkspace(home, false, w); !moved || w->m_workspace != home)
+            // Replace Tiled Window keeps the Split View Desktop shown (its picker shows there); the other ways show the Desktop.
+            if (const auto moved = Config::Actions::moveToWorkspace(home, replace, w); !moved || w->m_workspace != home)
                 return moved ? std::string{"the window did not reach its Desktop"} : std::format("the move failed: {}", moved.error().message);
             // Back as an ordinary window: out of a zoom or a full screen of Hyprland's (re-review of e5bd9d2: a member zoomed by
             // a key went home still zoomed), once the move can no longer be refused (PASS on 1ee992e, NIT: a refusal changed it).
@@ -2177,25 +2181,48 @@ namespace gf::tiler {
                 s.book.placed(idOf(w), homeTile->before, homeTile->box, homeTile->band, homeTile->where, homeTile->output, desk.home, groupLives ? homeTile->group : 0);
             } else
                 applySurface(w, beforeBox(w, before));
-            if (const auto d = std::ranges::find(s.splits, desk.workspace, &tiling::SplitDesk::workspace); d != s.splits.end())
+            if (how == tiling::Unsplit::Fullscreen) {
+                // Make Window Full Screen (D71): in full screen on that Desktop, its box from before kept for the way back.
+                if (const auto& fs = Fullscreen::controller())
+                    fs->setFullscreenMode(w, Fullscreen::FSMODE_FULLSCREEN, Fullscreen::FSMODE_FULLSCREEN, false);
+            }
+            bool waits = false;
+            if (const auto d = std::ranges::find(s.splits, desk.workspace, &tiling::SplitDesk::workspace); d != s.splits.end()) {
                 std::erase(d->members, idOf(w));
-            logRequest(Log::DEBUG, "unsplit {:x}: back on Desktop {}{}", idOf(w), desk.home, homeTile ? ", in its tile" : "");
-            settleSplit(desk.workspace);
+                // Replace Tiled Window (D71): the other member keeps its half and waits for the window the picker offers, from
+                // the Desktop the Split View came from but the one replaced; nothing to offer: it fills alone (D43).
+                const auto m = replace && d->members.size() == 1 ? splitMonitor(*d) : nullptr;
+                if (m && m->m_activeWorkspace && m->m_activeWorkspace->m_id == d->workspace) {
+                    s.suggestion = tiling::withoutWindow(suggestionFor(d->members.front(), m), idOf(w));
+                    d->waiting   = s.suggestion.has_value();
+                    waits        = d->waiting;
+                }
+            }
+            logRequest(Log::DEBUG, "unsplit {:x}: back on Desktop {}{}{}", idOf(w), desk.home, homeTile ? ", in its tile" : "",
+                       how == tiling::Unsplit::Fullscreen ? ", in full screen" : waits ? ", its half waiting for another window" : "");
+            if (!waits)
+                settleSplit(desk.workspace);
             splitCheck();
             notify(homeTile ? tiling::Reason::Placed : tiling::Reason::Forgotten, true);
             return {};
         }
     } // namespace
 
-    void unsplitRequest(std::string_view addressText) {
+    void unsplitRequest(std::string_view addressText, std::string_view howText) {
         if (gf::deferredFocus::sessionLocked()) {
             logRequest(Log::INFO, "unsplit: refused: the session is locked");
             notify(tiling::Reason::Locked);
             return;
         }
+        const auto how = tiling::unsplitHow(howText);
+        if (!how) {
+            logRequest(Log::WARN, "unsplit: rejected: how is desktop, fullscreen or replace");
+            notify(tiling::Reason::Invalid);
+            return;
+        }
         const uint64_t address = minimize::parseAddress(addressText).value_or(0); // 0 is never a window
         const auto     w       = address != 0 ? windowById(address) : nullptr;
-        if (const auto why = w ? unsplitWindow(w) : std::string{"no such window"}; !why.empty()) {
+        if (const auto why = w ? unsplitWindow(w, *how) : std::string{"no such window"}; !why.empty()) {
             logRequest(Log::WARN, "unsplit: rejected: {}", why);
             notify(tiling::Reason::Invalid);
         }
@@ -2260,7 +2287,7 @@ namespace gf::tiler {
     bool leaveSplit(const PHLWINDOW& w) {
         if (!inSplit(w) || gf::deferredFocus::sessionLocked())
             return false;
-        if (const auto why = unsplitWindow(w); !why.empty())
+        if (const auto why = unsplitWindow(w, tiling::Unsplit::Desktop); !why.empty())
             logRequest(Log::WARN, "split: the green button of {:x}: {}", idOf(w), why);
         return true;
     }

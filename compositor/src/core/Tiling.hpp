@@ -694,6 +694,20 @@ namespace gf::tiling {
     // The zone of the "left-right" layout a side of the Full Screen tile takes: "left" 0, "right" 1; nullopt otherwise.
     std::optional<int> splitZone(std::string_view side);
 
+    // How a window leaves its Split View Desktop (unsplit's second argument, step 6d, ADR-0036 D71): Move Window to Desktop
+    // ("desktop", or nothing: D44), Make Window Full Screen ("fullscreen": then full screen on that Desktop), Replace Tiled
+    // Window ("replace": its half waits for another window, the picker offering the windows of that Desktop but it).
+    enum class Unsplit : uint8_t {
+        Desktop,
+        Fullscreen,
+        Replace,
+    };
+    std::optional<Unsplit> unsplitHow(std::string_view text);
+
+    // A Replace Tiled Window's suggestion: `sg` without the window it replaced (it went back to the Desktop the picker offers
+    // windows from); nullopt when no window is left to offer (the other member then fills alone, D43).
+    std::optional<Suggestion> withoutWindow(std::optional<Suggestion> sg, uint64_t window);
+
     // The Split View Desktop `workspace` is, or nullptr.
     const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace);
 

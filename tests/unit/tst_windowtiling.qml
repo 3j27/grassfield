@@ -446,6 +446,36 @@ TestCase {
         compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "b2", gen: 3}), sg("a1", 3), "another window was dismissed");
     }
 
+    // Step 6d (ADR-0036 D72): the Overview takes no window onto a Split View Desktop, and no member out of one.
+    function test_dropAllowedKeepsSplitViewsWhole() {
+        const splits = [{workspace: 4, output: "DP-1", home: 1, windows: ["a1", "b2"], waiting: false}];
+        verify(WindowTiling.dropAllowed(splits, "c3", 2), "an ordinary window onto an ordinary Desktop");
+        verify(!WindowTiling.dropAllowed(splits, "c3", 4), "onto a Split View Desktop");
+        verify(!WindowTiling.dropAllowed(splits, "0xA1", 2), "a member, the address in any case");
+        verify(!WindowTiling.dropAllowed(splits, "b2", 4));
+        verify(WindowTiling.dropAllowed([], "a1", 4), "no Split View Desktop");
+        verify(WindowTiling.dropAllowed(null, "a1", 4));
+    }
+
+    // Step 6d (ADR-0036 D71): Replace Tiled Window keeps the other window; the rows' unsplit needs tiling-split-rows.
+    function test_splitPairAndUnsplitAllowed() {
+        const split = (windows) => ({workspace: 4, output: "DP-1", home: 1, windows: windows, waiting: false});
+        verify(WindowTiling.splitPair([split(["a1", "b2"])], "0xA1"), "two windows, the address in any case");
+        verify(!WindowTiling.splitPair([split(["a1"])], "a1"), "one window");
+        verify(!WindowTiling.splitPair([split(["a1", "b2"])], "c3"), "no member");
+        verify(!WindowTiling.splitPair(null, "a1"));
+        compare(WindowTiling.splitPair([split(["a1", "b2"])], ""), false, "a boolean");
+        for (const how of [undefined, "", "desktop"])
+            verify(WindowTiling.unsplitAllowed(how, false), String(how) + ": Exit Full Screen always");
+        verify(WindowTiling.unsplitAllowed("fullscreen", true));
+        verify(WindowTiling.unsplitAllowed("replace", true));
+        verify(!WindowTiling.unsplitAllowed("fullscreen", false), "a plugin before 6d would send it home");
+        verify(!WindowTiling.unsplitAllowed("replace", false));
+        verify(!WindowTiling.unsplitAllowed("replace", 1), "the feature as a boolean");
+        for (const how of ["zoom", "Replace", null, 0])
+            verify(!WindowTiling.unsplitAllowed(how, true), String(how));
+    }
+
     // Integrator re-review of 29db357, MAJOR 1: a notice names no window; within an earlier ask's deadline (6 s, D68) a new
     // Split View's notice was taken as that ask's answer and its picker never showed.
     function test_answersAskedIsTheAwaitedSuggestionOnly() {

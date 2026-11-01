@@ -230,8 +230,9 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   aquamarine and KF6 by major.minor, Quickshell by its whole version. A missing record fails closed. Otherwise nothing changes
   and the pane says "This update needs a newer version of Grassfield, which isn't available yet." and "Software Update checks
   again later and tells you when it's ready.", with no technical step.
-- U28. What needs a person (ADR-0033 s3.6, the prompt table): a pending migration that names `sudo`, `pkexec`, `su`, `run0`,
-  `doas`, `gum` or `/dev/tty`, or an Omarchy command that does (the command files of `usr/bin/omarchy-*` and
+- U28. What needs a person (ADR-0033 s3.6, the prompt table): a pending migration that names `pkexec`, `su`, `run0`, `doas`,
+  `gum`, `/dev/tty` or a `sudo` by its path, or an Omarchy command that does; a pending migration that needs root (it names
+  `sudo`, or a command that does, or Omarchy's `requires-sudo` header) when U32's conditions do not hold (the command files of `usr/bin/omarchy-*` and
   `usr/share/omarchy/bin/`, Omarchy 4.x's layout); a pending migration the scan cannot read (not a regular file, no command
   file to read, a new package with no migration, a migration or file name outside the scan's forms, more than 64 pending,
   a name the helper refuses); Omarchy's key missing; a package conflict or files no
@@ -247,11 +248,42 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   "Restart" (or "Log out to finish updating Grassfield" with "Log Out Later" and "Log Out"); Later keeps the pane's row.
   Nothing restarts by itself. When the update could not prepare the startup files (Omarchy's initramfs check), the pane says
   "Don't restart this computer yet" and offers no restart.
+- U31. A toolkit replaced under the running session (ADR-0041 step 2b). Every check, in every state, lists the toolkit as
+  installed (`toolkit`): each package of U27's record (`qt6-base`, `quickshell`, `hyprland`, `aquamarine`, `kcoreaddons`)
+  pacman names, with its version, the time pacman installed it (`/var/lib/pacman/local/<name>-<version>/desc`,
+  `%INSTALLDATE%`), the version this Grassfield was built with (`/usr/share/grassfield/BUILD-DEPS`) and whether it moved
+  away from that record by U27's rule (`null` without a record, `true` when the record does not name it). A package
+  installed at or after the session started (Hyprland's start, read from `HYPRLAND_INSTANCE_SIGNATURE`, so the same after a
+  crash and restart of the shell; a time that cannot be read counts as this session), whatever the record says, means the
+  session runs on a file that was replaced under it: the shell posts "Log out to finish updating" once per session ("Some
+  updates finish when you log out. Log out and back in to use them.", opening Software Update; no package name in a
+  sentence, the journal names them) and writes U14's pending log out with its reason, so the pane shows "Log out to finish
+  updating Grassfield" with "Log Out…" and the subtitle "Some of the update is used only after you log in again."; the
+  log out stays due until the session ends, through a restart of the shell (re-read from the file). A package installed
+  before the session started is what the session already runs on, and asks for nothing. Where the check comes from: the
+  scheduled checks (U7), the check `omarchy update` asks for at its end (U9) and Update Now's own; a `pacman -Syu` typed in
+  a terminal is seen by the next scheduled check or at the next login (the path unit that watches pacman's database is
+  step 2b's second slice).
 - U30. A failure before any change says "The update could not be installed. Nothing was changed." (offline, a mirror, a
   download, a plan pacman refuses or that cannot be read); once the checked sync databases became the system's, it says "The
   update could not be installed." and "The updates were not installed…" instead (and the terminal answer of U28 the same);
   one during the transaction "The update stopped before it finished.", and names the snapshot only when one was taken.
   Update Now stays available to try again after every outcome.
+- U32. One password (owner decision SU-M2, ADR-0033 "Step 5"). When the migrations this update adds need root and nothing
+  that needs a person, the update goes on. After its transaction, the helper runs those migrations (by name, the loop of
+  `omarchy-migrate`) as the person, without a terminal and without a second password: each `sudo` command runs as root in its
+  own transient system unit. polkit grants that only to the migrations' unit, `grassfield-update-migrate.service`, which
+  runs under a group of its own (`grassfield-update`, no member) so that none of the person's other processes can reach
+  into it.
+  - Conditions: systemd; a person (uid 1000 or more) who is an administrator (`wheel`); no migration from before the update
+    pending; the unit's group without a member or a password; Omarchy's migrations and commands folders and the sudo root's
+    alone; and a
+    trial `sudo true` through the channel before any change. Otherwise U28's terminal, with nothing changed.
+  - The migrations' `sudo` accepts `-n`, `-H`, `-u root`, `-v`, `-k`, `-K`, `-l`, `--` and refuses every other option or
+    target, and any command that is not root's alone (it and its folders). The unit has no namespace of its own. A
+    migration
+    it refuses, or whose command fails, stays pending ("Some of Omarchy's last steps need its terminal.", Finish in
+    Terminal…).
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -304,6 +336,7 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 | A12 | real flows: the polkit dialog of Set Up…, Beta Updates and Turn Off… (cancel once, a wrong password once, then accept), Update in Terminal… in Omarchy's floating terminal | owner, real session | L2 |
 | A13 | the update helper as root: usage and privilege refusals, a hostile environment dropped, up to date without touching the sync databases, a `db.lck` held (busy) or left behind (stale) before anything is read, its own lock busy, Omarchy's key missing (after an incompatible update is said so), a plan line it cannot read, pacman's lock taken for the swap and gone after it, Omarchy's 4.x layout (commands in `usr/bin`, links in `usr/share/omarchy/bin`), a migration reading `/dev/tty`, no command file to scan, a migration that is a link, more than 64 pending (the runner), an update through Omarchy's real guard hook, the compatibility check (a toolkit change refused; joined by a matching Grassfield build; major.minor; Quickshell whole; a build without a record), Omarchy's migrations (a new one that calls a `sudo` command through another; a plain one; one named pending), conflicts inside the transaction, the 16 newest operations kept; through real polkitd and pkexec (a password each time, a wrong one, a user refused); the runner as a user (its state file, migrations run as the user without a terminal, a pending one that asks, Omarchy's lock held) | `tests/integration/update_helper.sh` (throwaway Arch container) | L0 (container) |
 | A14 | the pane's run: Update Now's one launch, each phase and count, the bar, the pane opened again mid-run, a runner gone with or without its helper, a reused process id, each outcome's sentence and action, the end's sheet, no restart after a failed startup image, the dev guard | `tests/unit/tst_softwareupdate.qml` (the run's logic), `tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`; the launch vectors in `tst_systemguard.cpp`, `tst_backend.cpp`; captures `software-update-run.png` | L0/L1 |
+| A16 | one password (U32): the migrations' sudo inside its unit (root, input, folder, status, arguments, temporary files, options, lookup; other names, verbs and operations refused) and refused everywhere else without a dialog; the person's other processes kept out of the unit's `/proc` entries; the real helper from a runner through pkexec: a non-administrator, a group with a member, an older migration pending, a rule that grants nothing or none, all to the terminal; an administrator's migration as the person with its sudo as root, `migrations ran`, its output root's; a failed sudo left pending; `gum` to the terminal; root without a person; the unit form outside the unit | `tests/integration/update_migrate.sh` (throwaway Arch container run by systemd) | L0 (container) |
 | A15 | real flow: Update Now with a published test channel (the dialog once, the snapshot, the progress, closing and reopening Settings mid-run, Restart Later then Restart); a toolkit update without a matching build refused; an Omarchy release with a `sudo` migration sent to the terminal | owner, real session (the integrator's L2) | L2 |
 
 ## Interfaces / contracts (versions)
@@ -311,7 +344,12 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 - `grassfield-update-check` output, version 1: `{"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":…,
   "error":…,"grassfield":{"installed":…,"available":…,"notes":[…]},"omarchy":{"installed":…,"available":…},"others":N}`.
   Step 2 adds `otherPackages` (the list behind `others`), cut first when the output would pass 256 KiB (ADR-0033 d.3).
-- `software-update.json`, version 1: the last output plus `announced` (versions already notified). State class, ADR-0020.
+  ADR-0041 step 2b adds `toolkit` (U31: `{"record":bool,"packages":[{"name","installed","installedAt","built","moved"}]}`,
+  one entry per tracked package pacman names), in every state that runs the checker (not in `busy` or `update-running`,
+  answered before it: the shell then keeps the file's).
+- `software-update.json`, version 1: the last output plus `announced` (versions already notified), `logoutPending` (U14) and
+  `toolkitLogout` (U31: the pending log out is for a toolkit replaced under the session).
+  State class, ADR-0020.
 - `grassfield.json`: `updates.automaticCheck` (boolean, default true), schema-generated (ADR-0020).
 - Step 3: `/usr/share/grassfield/BUILD-DEPS` (`<name> <version>` lines, U27); `/run/grassfield-update/<op>.progress`
   (`checking | snapshot | keyring | downloading <done> <total> | installing <done> <total> | finishing`), `<op>.exit` (the code,
@@ -378,8 +416,18 @@ owner decision O22). Omarchy's commands used:
 - No automatic download or install, no install at logout: pacman's cache and the install need root, and the owner wants no
   install without the user.
 - "Update Now" updates the whole system (Omarchy's update), not Grassfield alone.
-- An Omarchy release that ships a migration using `sudo` goes to Omarchy's terminal (U28): Omarchy 4.0.4 → 4.0.6 has three.
-  Grassfield gives no migration root and asks no `sudo` password (ADR-0033 s3.6).
+- One password (U32).
+  - What a migration reads from the person's own files can still steer it, as in Omarchy's terminal (ADR-0033 s5.3).
+  - A migration's own `pacman -Syu` is not checked by U27, as in Omarchy's terminal; its changes give the end its restart.
+  - Files a migration creates get the group `grassfield-update`.
+  - A process a migration leaves running ends with the migrations' unit.
+  - The channel needs systemd ≥ 254, polkit with `system_unit` and a bus that hands polkit a pidfd (dbus-broker); without
+    them, the trial fails and U28's terminal follows.
+  - Omarchy 4.0.4 → 4.0.6 still goes to the terminal: two of its migrations reach `gum` through Omarchy commands
+    (ADR-0033 s5.4).
+- An Omarchy release whose new migrations use `sudo` runs them without a terminal, with the password of Update Now (U32),
+  when nothing in them needs a person; otherwise it goes to Omarchy's terminal (U28, ADR-0033 s3.6, s5). Omarchy 4.0.4 →
+  4.0.6 still does: two of its migrations reach `gum`.
 - AUR apps are not updated by Update Now (U28).
 - The compatibility check covers five packages; another library Grassfield links can move unchecked.
 - A package conflict is found by pacman only inside the transaction (`--print` does not check them), after the checked

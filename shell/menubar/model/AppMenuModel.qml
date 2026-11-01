@@ -203,16 +203,33 @@ QtObject {
         return !zones || WindowTiling.zoneFits(fit, zones[0]);
     }
 
+    // The popover's rows in full screen (Exit Full Screen) or on a Split View Desktop: Exit Full Screen, or with the plugin's
+    // tiling-split-rows (step 6d, ADR-0036 D71) the macOS Split View rows: Move Window to Desktop (Exit Full Screen's effect,
+    // D44), Make Window Full Screen, and Replace Tiled Window while the other half holds a window (`splitPair`).
+    function exitRows(ctx: var): var {
+        const glyph = {zones: [], own: -1};
+        if (ctx.inSplit !== true)
+            return [{id: "fullscreen", text: qsTr("Exit Full Screen"), glyph: glyph, enabled: true}];
+        if (ctx.canSplitRows !== true)
+            return [{id: "exitSplit", text: qsTr("Exit Full Screen"), glyph: glyph, enabled: true}];
+        return [
+            {id: "exitSplit", text: qsTr("Move Window to Desktop"), glyph: glyph, enabled: true},
+            {id: "splitFullscreen", text: qsTr("Make Window Full Screen"), glyph: glyph, enabled: true},
+            {id: "splitReplace", text: qsTr("Replace Tiled Window"), glyph: glyph, enabled: ctx.splitPair === true}
+        ];
+    }
+
     // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, canLayouts, canSplit, splitBlocked, splittable,
     // outputClass, fullscreen, inSplit, outputs, fit} (`splittable` false: the window does not fit half of its output, TL8; `fit`
     // the places, arrangements and Layouts zones it does not fit, greyed: ADR-0036 D69).
     // {sections: [{title, items}], layouts, rows}: the glyph sections Move & Resize and Fill & Arrange (with
     // Alt: the quarters, Center, Right & Left and Right & Quarters), the Layouts section of the window's output class (with the
     // plugin's tiling-layouts, layoutsSection), then Full Screen (fullScreenRow) and one Move to <display> row per other output;
-    // in full screen or on a Split View Desktop only Exit Full Screen. The glyphs of a window that cannot be tiled now are greyed.
+    // in full screen or on a Split View Desktop only the ways out (exitRows). The glyphs of a window that cannot be tiled now
+    // are greyed. ctx also takes canSplitRows and splitPair (step 6d, D71).
     function tilingPopover(ctx: var): var {
         if (ctx.fullscreen || ctx.inSplit)
-            return {sections: [], layouts: [], rows: [{id: ctx.inSplit ? "exitSplit" : "fullscreen", text: qsTr("Exit Full Screen"), glyph: {zones: [], own: -1}, enabled: true}]};
+            return {sections: [], layouts: [], rows: root.exitRows(ctx)};
         const can = ctx.tileable === true;
         const arrange = can && ctx.canArrange === true;
         const places = ctx.alt ? ["top-left", "top-right", "bottom-left", "bottom-right"] : ["left", "right", "top", "bottom"];
@@ -367,7 +384,13 @@ QtObject {
         // the tiling items, while Stages shows its strip (D47) and for a window that does not fit half of its output (`splittable`
         // false, D57).
         const canSplit = canTile && ctx.splitBlocked !== true && ctx.splittable !== false;
-        const fullScreen = ctx.inSplit === true ? [{id: "exitSplit", text: qsTr("Exit Full Screen"), enabled: canAct}] : [
+        // On a Split View Desktop, with the plugin's tiling-split-rows, Make Window Full Screen and Replace Tiled Window follow
+        // (D71; Replace only while the other half holds a window).
+        const splitRows = ctx.canSplitRows === true ? [
+            {id: "splitFullscreen", text: qsTr("Make Window Full Screen"), enabled: canAct},
+            {id: "splitReplace", text: qsTr("Replace Tiled Window"), enabled: canAct && ctx.splitPair === true}
+        ] : [];
+        const fullScreen = ctx.inSplit === true ? [{id: "exitSplit", text: qsTr("Exit Full Screen"), enabled: canAct}].concat(splitRows) : [
             {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct && (ctx.fullscreen || !fixed)}
         ].concat(ctx.canSplit === true ? [{id: "fullScreenTile", text: qsTr("Full Screen Tile"), enabled: canSplit, submenu: [root.splitItem("left", canSplit), root.splitItem("right", canSplit)]}] : []);
 

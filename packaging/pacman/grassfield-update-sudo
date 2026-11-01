@@ -1,0 +1,131 @@
+#!/bin/bash -p
+# sudo, for Omarchy's migrations that Software Update runs (ADR-0033 "Step 5", owner decision SU-M2: one password for
+# Update Now and its migrations' sudo commands). OPUS SECURITY REVIEW REQUIRED: it hands commands to root.
+# Installed as /usr/lib/grassfield/update-sudo/sudo, first in the PATH of grassfield-update-migrate.service, the transient
+# system unit in which grassfield-update-helper runs `omarchy-migrate` as the person who chose Update Now. It runs as that
+# person, never as root, and is not the security boundary: it asks systemd for a transient root unit
+# (`systemd-run`), which polkit grants without a dialog only to a process of grassfield-update-migrate.service, and only
+# for a unit named grassfield-update-root-<32 hex>.service (/usr/share/polkit-1/rules.d/49-grassfield-update.rules).
+# Anywhere else systemd refuses, and no dialog is ever asked (--no-ask-password).
+#
+# What it takes of sudo's command line (Omarchy 4.0.6's uses; anything else is refused, the migration then fails and stays
+# pending, and Omarchy's terminal update runs it):
+#   -n, --non-interactive, -H, --set-home   accepted (nothing is asked; HOME is the target's)
+#   -u root, -u 0, -u #0 (any form)          accepted: root is the target anyway. Another target is refused: a process of
+#                                            the person's own identity outside the migrations' unit, joined to its /tmp,
+#                                            would let the person's other processes reach that /tmp (the step 5
+#                                            re-review's MINOR 1); Omarchy 4.0.6's migrations never use -u
+#   -v, -k, -K and their long forms          without a command: success (no credential to validate or forget)
+#   a cluster of these short letters (-nH)    each letter as above; any other letter refused
+#   -l, --list                                 exit 1: nothing is listed (a caller then takes its other path)
+#   --                                         the end of the options
+# The command: a name is looked up as sudo's secure_path does, in fixed root-owned folders (/usr/share/omarchy/bin,
+# /usr/local/sbin, /usr/local/bin, /usr/bin), never in the caller's PATH; a path with a slash is taken as given (made
+# absolute); either way the file, and every folder above it and above where it was found, must be root's and writable by
+# root alone. Its arguments reach it unchanged (no $VAR expansion by systemd). It runs as a transient system service: root's
+# identity and home, systemd's own environment for it plus SUDO_USER, SUDO_UID and SUDO_GID, the caller's
+# working folder, standard input, output and error passed through, and the unit's own /tmp (PrivateTmp, joined: the files a
+# migration makes there reach its root commands and no other process); its exit status is this program's.
+set -uo pipefail
+export LC_ALL=C
+
+refuse() {
+  echo "sudo (Grassfield Software Update): $*. Omarchy's terminal update runs this migration." >&2
+  exit 1
+}
+
+target=root list=0 only=0
+while (($#)); do
+  case $1 in
+    --) shift; break ;;
+    -n | --non-interactive | -H | --set-home) ;;
+    -v | --validate | -k | --reset-timestamp | -K | --remove-timestamp) only=1 ;;
+    -l | --list) list=1 ;;
+    -u | --user)
+      (($# >= 2)) || refuse "$1 needs a user"
+      target=$2
+      shift
+      ;;
+    --user=*) target=${1#--user=} ;;
+    -u?*) target=${1#-u} ;;
+    -[!-]?*)
+      # A cluster of short options: each letter one of the above, or refused (the integrator's review: -nHE, -nHs and
+      # -nHunobody were taken).
+      flags=${1#-}
+      while [[ -n $flags ]]; do
+        case ${flags:0:1} in
+          n | H) ;;
+          v | k | K) only=1 ;;
+          l) list=1 ;;
+          *) refuse "the option -${flags:0:1} (in $1) is not supported" ;;
+        esac
+        flags=${flags:1}
+      done
+      ;;
+    -*) refuse "the option $1 is not supported" ;;
+    *=*) refuse "a variable before the command is not supported" ;;
+    *) break ;;
+  esac
+  shift
+done
+
+((list)) && exit 1
+if (($# == 0)); then
+  ((only)) && exit 0
+  refuse "no command"
+fi
+
+[[ $target == root || $target == 0 || $target == '#0' ]] || refuse "a target user other than root ($target) is not supported"
+target=root
+
+# A path and every folder above it, links resolved, owned by root and writable by no one else: the file root runs cannot be
+# changed or swapped by anyone but root between this check and its run (the integrator's review, MINOR 2).
+root_alone() { # path: every folder on the path as written, each link on it root's; then, links resolved, the file and every
+  # folder above it (the integrator's follow-up 1: the folder that holds a link decides who can swap it)
+  local p=$1 owner mode
+  [[ $p == /* ]] || return 1
+  while [[ $p != / ]]; do
+    if [[ -L $p ]]; then
+      read -r owner < <(/usr/bin/stat -c %u -- "$p" 2>/dev/null) && [[ $owner == 0 ]] || return 1
+    fi
+    p=${p%/*}
+    [[ -n $p ]] || p=/
+    read -r owner mode < <(/usr/bin/stat -L -c '%u %a' -- "$p" 2>/dev/null) || return 1
+    [[ $owner == 0 && $mode =~ ^[0-7]{3,4}$ ]] && (((8#$mode & 8#022) == 0)) || return 1
+  done
+  p=$(/usr/bin/realpath -e -- "$1" 2>/dev/null) || return 1
+  while :; do
+    read -r owner mode < <(/usr/bin/stat -c '%u %a' -- "$p" 2>/dev/null) || return 1
+    [[ $owner == 0 && $mode =~ ^[0-7]{3,4}$ ]] && (((8#$mode & 8#022) == 0)) || return 1
+    [[ $p == / ]] && return 0
+    p=${p%/*}
+    [[ -n $p ]] || p=/
+  done
+}
+
+command=$1
+shift
+if [[ $command == */* ]]; then
+  [[ $command == /* ]] || command=$PWD/$command
+else
+  found=""
+  for dir in /usr/share/omarchy/bin /usr/local/sbin /usr/local/bin /usr/bin; do
+    if [[ -f $dir/$command && -x $dir/$command ]]; then
+      found=$dir/$command
+      break
+    fi
+  done
+  [[ -n $found ]] || { echo "sudo: $command: command not found" >&2; exit 1; }
+  command=$found
+fi
+[[ -f $command ]] && root_alone "$command" && root_alone "${command%/*}/" ||
+  refuse "$command is not root's alone (it, or a folder above it, is not owned by root or is writable by others)"
+
+read -r id </proc/sys/kernel/random/uuid || refuse "no unit name"
+id=${id//-/}
+[[ $id =~ ^[0-9a-f]{32}$ ]] || refuse "no unit name"
+exec /usr/bin/systemd-run --quiet --wait --pipe --collect --no-ask-password --service-type=exec --expand-environment=no \
+  --unit="grassfield-update-root-$id.service" --description="Grassfield Software Update: a migration's sudo command" \
+  --uid="$target" --same-dir -p PrivateTmp=yes -p JoinsNamespaceOf=grassfield-update-migrate.service \
+  --setenv=SUDO_USER="$(/usr/bin/id -un)" --setenv=SUDO_UID="$(/usr/bin/id -u)" --setenv=SUDO_GID="$(/usr/bin/id -g)" \
+  -- "$command" "$@"

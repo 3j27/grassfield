@@ -469,6 +469,28 @@ function splitOfWindow(splits, address) {
     return a === "" ? null : (splits || []).find(d => d.windows.indexOf(a) >= 0) || null;
 }
 
+// Step 6d (ADR-0036 D72): an Overview drop of window `address` on Desktop `spaceId`: refused onto a Split View Desktop (its
+// halves are its members': macOS takes no window dropped on a full-screen space) and for a member (its place is its half; Move
+// Window to Desktop is its way out).
+function dropAllowed(splits, address, spaceId) {
+    return splitOfWorkspace(splits, spaceId) === null && splitOfWindow(splits, address) === null;
+}
+
+// Step 6d (ADR-0036 D71): the Split View Desktop of window `address` holds two windows (Replace Tiled Window keeps the other).
+function splitPair(splits, address) {
+    const d = splitOfWindow(splits, address);
+    return d !== null && d.windows.length === 2;
+}
+
+// Step 6d (ADR-0036 D71): whether an unsplit `how` may be sent: Exit Full Screen / Move Window to Desktop (none, "" or
+// "desktop") always; Make Window Full Screen ("fullscreen") and Replace Tiled Window ("replace") only with the plugin's
+// tiling-split-rows (`rows`: a plugin before 6d ignores the argument and would send the window home instead).
+function unsplitAllowed(how, rows) {
+    if (how === undefined || how === "" || how === "desktop")
+        return true;
+    return rows === true && (how === "fullscreen" || how === "replace");
+}
+
 // TL33, ADR-0036 D43 (#48 review, MAJOR 3): the windows to fill their Split View Desktop alone: each the one member of a
 // Desktop of `splits` still waiting for its second window, unless its picker is pending (`pending`: the window the shell
 // waits a suggestion for or shows the suggestions of, "" for none). Its picker dismissed, refused (over the polkit sheet,

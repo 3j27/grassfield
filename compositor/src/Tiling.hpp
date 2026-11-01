@@ -141,7 +141,12 @@ namespace gf::tiler {
     // its home Desktop, shown: into its tile there from before the split when that zone is still free, else at its box from
     // before tiling; the other member fills the Split View Desktop alone, and one left without a member ends. Refused while
     // locked (reason "locked") and for a window that is no member of a Split View Desktop ("invalid").
-    void unsplitRequest(std::string_view address);
+    // Step 6d (ADR-0036 D71), `how` (core unsplitHow; empty is "desktop"): "fullscreen" (Make Window Full Screen) puts it in
+    // full screen on that Desktop once there; "replace" (Replace Tiled Window) moves it there without showing it: the Split
+    // View Desktop stays shown, its other member keeps its half and waits again, the suggestion offering the windows of that
+    // Desktop but the one replaced (none: the other fills alone, D43); refused ("invalid") without a second member. Any other
+    // `how`: "invalid".
+    void unsplitRequest(std::string_view address, std::string_view how = {});
 
     // `w` is a member of a Split View Desktop (one of its two windows, whatever its state; another window there is none, D52):
     // its titlebar drag does nothing (D46; step 6b swaps the two), nor do the tiling keys, Arrange or an edge double-click,

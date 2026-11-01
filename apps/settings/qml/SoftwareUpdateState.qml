@@ -48,10 +48,14 @@ QtObject {
     // stable, beta, custom, repair, off; "" until read or when it cannot be read.
     property string channel: ""
     readonly property bool buildReady: SoftwareUpdateLogic.buildReady(root.backend.readText(root.repositoryFile).text)
-    // A Grassfield update in this session waits for a log out (GF-083, written to the file by the shell).
+    // A Grassfield update in this session waits for a log out (GF-083, written to the file by the shell), or a toolkit
+    // package replaced under it (ADR-0041 step 2b, U31: the shell writes the same flag; the list says which).
     readonly property bool logoutPending: root.file.logoutPending === true
-    // ...or the last run says so (s3.7: Grassfield's packages changed, nothing that asks for a restart).
-    readonly property bool logoutNeeded: root.logoutPending || (root.run.result === "done" && root.run.restart === "logout")
+    readonly property bool toolkitLogout: root.file.toolkitLogout === true
+    // ...or the last run says so (s3.7: Grassfield's packages changed, nothing that asks for a restart). Grassfield's own
+    // log out words the row with its name; the toolkit's alone (U31) without it.
+    readonly property bool grassfieldLogout: root.logoutPending || (root.run.result === "done" && root.run.restart === "logout")
+    readonly property bool logoutNeeded: root.grassfieldLogout || root.toolkitLogout
     // Omarchy's marker or the kernel's modules (readRestart), or the last run's own answer (s3.7); never while the run says
     // its startup files may be broken.
     property bool markerRestart: false
