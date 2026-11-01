@@ -143,6 +143,16 @@ FocusScope {
                     }
                 }
 
+                // Whether the pointer gave the row its focus: such a row goes dark when the pointer leaves it, as a menu's row
+                // does (the review of #88); a row the keyboard chose stays lit.
+                property bool pointerFocus: false
+                onActiveFocusChanged: if (!deviceRow.activeFocus)
+                    deviceRow.pointerFocus = false
+
+                HoverHandler {
+                    id: rowHover
+                }
+
                 MenuItem {
                     anchors.fill: parent
                     text: Audio.describe(deviceRow.modelData)
@@ -151,10 +161,12 @@ FocusScope {
                     checkColumn: true
                     // One highlight: the pointer moving onto a row gives it the focus (a menu's hover and keys share one
                     // current row), so a focused row and a hovered one are never both lit.
-                    highlighted: deviceRow.activeFocus
+                    highlighted: deviceRow.activeFocus && (!deviceRow.pointerFocus || rowHover.hovered)
                     onClicked: Audio.select(deviceRow.modelData)
-                    onHovered: if (!deviceRow.activeFocus)
-                        deviceRow.forceActiveFocus(Qt.MouseFocusReason)
+                    onHovered: if (!deviceRow.activeFocus) {
+                        deviceRow.pointerFocus = true;
+                        deviceRow.forceActiveFocus(Qt.MouseFocusReason);
+                    }
                 }
             }
         }

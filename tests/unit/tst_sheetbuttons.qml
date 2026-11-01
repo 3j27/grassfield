@@ -130,6 +130,27 @@ TestCase {
         compare(Tokens.panelSheetPadding, 20);
     }
 
+    // The pair takes the wider label's width whichever button has it (the review of #88: with "Replace" wider than "Cancel",
+    // a pair sized to the default button alone passed).
+    function test_thePairTakesTheWiderLabelEitherWay() {
+        const was = sheet.confirmText;
+        try {
+            sheet.confirmText = "OK";
+            sheet.open();
+            tryCompare(sheet, "visible", true);
+            wait(50);
+            const buttons = buttonsIn(sheet);
+            const cancel = byText(buttons, "Cancel");
+            const confirm = byText(buttons, "OK");
+            verify(cancel.implicitWidth > confirm.implicitWidth, "Cancel is the wider label here");
+            compare(confirm.width, cancel.implicitWidth, "the default button takes Cancel's width");
+            compare(cancel.width, cancel.implicitWidth);
+        } finally {
+            sheet.close();
+            sheet.confirmText = was;
+        }
+    }
+
     function test_theShellsDialog_data() {
         return [
             {tag: "sheet", sheet: true, radius: Tokens.radiusSheet},

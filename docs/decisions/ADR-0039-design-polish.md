@@ -1,5 +1,7 @@
 # ADR-0039: Design polish: one grammar for materials, controls, windows and accessibility settings
-Status: Proposed (owner brief "Cohérence et finition", 2026-10-29, step 0: docs only, no code). The owner answered Q1 to Q8
+Status: Accepted, built (steps 0 to 5 merged; steps 6 to 28 in #88, the owner's one pull request of 2026-10-31; what waits
+on other pull requests is listed in their rows). Proposed in the owner brief "Cohérence et finition", 2026-10-29 (step 0: docs
+only, no code). The owner answered Q1 to Q8
 on 2026-10-29 (AskUserQuestion), recorded in "Owner decisions (2026-10-29)"; revised after the integrator's review of step 0
 (FAIL: one MAJOR, four MINORs; "Review history"); the steps start one pull request each ·
 Date: 2026-10-29 · Decider: owner (Q1 to Q8), integrator (the steps, the review, the nested pass) · Number: 0039 (free on

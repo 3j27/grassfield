@@ -601,6 +601,9 @@ ListView {
             return;
         const reason = forward ? Qt.TabFocusReason : Qt.BacktabFocusReason;
         let dest = null;
+        // The head's stops (Clear All, the close disc, the cards' ends) follow CenterLogic.headStep (unit-tested).
+        const stepTo = to => to === "head" ? list.headTarget : to === "close" ? list.closeTarget : to === "edit" ? list.editTarget
+                                                                                      : to === "firstCard" ? list.regionEntry(0, true) : null;
         const r = list.regionOf(f);
         if (r >= 0) {
             const nx = f.nextItemInFocusChain(forward);
@@ -610,14 +613,14 @@ ListView {
             }
             dest = list.regionEntry(r + (forward ? 1 : -1), forward);
             if (!dest)
-                dest = forward ? list.editTarget : (list.headReady ? list.headTarget : list.closeTarget);
+                dest = stepTo(CenterLogic.headStep(forward ? "cardsEnd" : "cardsStart", forward, list.headReady));
         } else if (f === panel || f === list || f === list.contentItem) {
             // Nothing focused yet: Tab starts at the head (or the top card), Shift+Tab at the last control.
-            dest = forward ? (list.headReady ? list.headTarget : list.regionEntry(0, true)) : list.closeTarget;
+            dest = stepTo(CenterLogic.headStep("panel", forward, list.headReady));
         } else if (f === list.closeTarget && forward) {
-            dest = list.headReady ? list.headTarget : list.regionEntry(0, true);
+            dest = stepTo(CenterLogic.headStep("close", forward, list.headReady));
         } else if (f === list.headTarget) {
-            dest = forward ? list.regionEntry(0, true) : list.closeTarget;
+            dest = stepTo(CenterLogic.headStep("head", forward, list.headReady));
             if (!dest)
                 dest = list.editTarget;
         } else if (f === list.editTarget && !forward) {

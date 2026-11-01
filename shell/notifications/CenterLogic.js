@@ -56,3 +56,24 @@ function galleryRect(w, h, t, dock) {
         height: height
     };
 }
+
+// Where Tab goes around the column's head, Clear All (ADR-0039 step 7: the Tab stop before the cards, when it shows and is
+// enabled: `headReady`). `at`: "panel" (nothing focused yet), "close" (the title row's close disc), "head" (Clear All),
+// "cardsStart" (leaving the first card's region backwards) or "cardsEnd" (leaving the last card's region forwards). Answers
+// "head", "firstCard" (the top card; with none, Qt's chain, or the edit button after the head), "close", "edit", or "" for
+// Qt's own focus chain.
+function headStep(at, forward, headReady) {
+    switch (at) {
+    case "panel":
+        return forward ? (headReady ? "head" : "firstCard") : "close";
+    case "close":
+        return forward ? (headReady ? "head" : "firstCard") : "";
+    case "head":
+        return forward ? "firstCard" : "close";
+    case "cardsStart":
+        return forward ? "" : (headReady ? "head" : "close");
+    case "cardsEnd":
+        return forward ? "edit" : "";
+    }
+    return "";
+}

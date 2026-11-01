@@ -30,9 +30,13 @@ desc="the sound menu's rows have no gap between them"
 check bash -c '! awk "/id: column/,/^        [A-Z]/" "$0" | grep -q "spacing:"' shell/overlay/VolumeMenu.qml
 
 desc="the sound menu lights one device row: the focused one, which the pointer moves"
-check bash -c 'grep -q "highlighted: deviceRow.activeFocus$" "$0" \
+check bash -c 'grep -q "highlighted: deviceRow.activeFocus && (!deviceRow.pointerFocus || rowHover.hovered)$" "$0" \
   && grep -q "deviceRow.forceActiveFocus(Qt.MouseFocusReason)" "$0" \
   && ! grep -q "hover.hovered" "$0"' shell/overlay/VolumeMenu.qml
+
+desc="a sound menu row the pointer lit goes dark when the pointer leaves it (review of #88)"
+check bash -c 'grep -q "deviceRow.pointerFocus = true;" "$0" \
+  && grep -q "deviceRow.pointerFocus = false" "$0" && grep -q "id: rowHover" "$0"' shell/overlay/VolumeMenu.qml
 
 desc="the tiling popover's section titles are MenuHeader (its glyph sections and Layouts), none hand-drawn"
 check bash -c 'test "$(grep -c "MenuHeader {" "$0")" -eq 2 && ! grep -q "typographyMenuBoldWeight" "$0"' shell/overlay/TilingPopover.qml
