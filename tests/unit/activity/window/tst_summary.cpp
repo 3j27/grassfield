@@ -69,6 +69,29 @@ Snapshot cpuSample(double system, double user, double idle)
 
 } // namespace
 
+// Review of steps 3 to 5: off screen the histories take the samples (the Dock's graph reads them) and the blocks are built
+// again only when the window shows.
+TEST(Summary, OffScreenTheBlocksWait)
+{
+    Summary s;
+    s.setCapacity(10);
+    Snapshot snap;
+    snap.system.cpuOk = true;
+    snap.system.userShare = 0.2;
+    snap.system.systemShare = 0.1;
+    s.addSample(snap);
+    QSignalSpy changed(&s, &Summary::changed);
+    s.setLive(false);
+    s.addSample(snap);
+    s.addSample(snap);
+    EXPECT_EQ(changed.count(), 0);
+    EXPECT_EQ(s.dockTileSamples(QStringLiteral("cpu-history"), 32).size(), 3);
+    s.setLive(true);
+    EXPECT_EQ(changed.count(), 1);
+    s.setLive(true); // nothing new: nothing built
+    EXPECT_EQ(changed.count(), 1);
+}
+
 TEST(Summary, AHistoryKeepsItsLastSamplesAndItsGaps)
 {
     History h;
@@ -366,4 +389,42 @@ TEST(ActivityState, TheGraphsChoiceIsRemembered)
     const ActivityState wrong = readState(path);
     EXPECT_EQ(wrong.diskGraph, QStringLiteral("io"));
     EXPECT_EQ(wrong.networkGraph, QStringLiteral("packets"));
+}
+
+// AM74 (steps 3 to 5): the Dock icon, Efficiency Mode's "Don't ask again", App History's period and the other windows'
+// sizes are remembered; a value of the wrong kind reads as the default.
+TEST(ActivityState, TheLaterChoicesAreRemembered)
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("activity.json"));
+    ActivityState s = defaultState();
+    EXPECT_TRUE(s.askEfficiency);
+    EXPECT_EQ(s.appHistoryPeriod, QStringLiteral("12h"));
+    s.dockIcon = QStringLiteral("cpu-history");
+    s.askEfficiency = false;
+    s.appHistoryPeriod = QStringLiteral("30d");
+    s.windows.insert(QStringLiteral("performance"), QSize(900, 640));
+    s.windows.insert(QStringLiteral("cpuUsage"), QSize(300, 200)); // not a kind whose size is kept
+    ASSERT_TRUE(writeState(path, s));
+    const ActivityState back = readState(path);
+    EXPECT_EQ(back.dockIcon, QStringLiteral("cpu-history"));
+    EXPECT_FALSE(back.askEfficiency);
+    EXPECT_EQ(back.appHistoryPeriod, QStringLiteral("30d"));
+    EXPECT_EQ(back.windows.value(QStringLiteral("performance")), QSize(900, 640));
+    EXPECT_FALSE(back.windows.contains(QStringLiteral("cpuUsage")));
+
+    QFile f(path);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write(QJsonDocument(QJsonObject{{QStringLiteral("version"), 1}, {QStringLiteral("dockIcon"), QStringLiteral("gpu")},
+                                      {QStringLiteral("askEfficiency"), QStringLiteral("no")},
+                                      {QStringLiteral("appHistoryPeriod"), QStringLiteral("1y")},
+                                      {QStringLiteral("windows"), QJsonObject{{QStringLiteral("appHistory"),
+                                                                               QJsonObject{{QStringLiteral("width"), 50}, {QStringLiteral("height"), 400}}}}}})
+                .toJson());
+    f.close();
+    const ActivityState wrong = readState(path);
+    EXPECT_EQ(wrong.dockIcon, QStringLiteral("icon"));
+    EXPECT_TRUE(wrong.askEfficiency);
+    EXPECT_EQ(wrong.appHistoryPeriod, QStringLiteral("12h"));
+    EXPECT_TRUE(wrong.windows.isEmpty()); // too narrow: the token size instead
 }

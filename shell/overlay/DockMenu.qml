@@ -149,13 +149,18 @@ PopupMenu {
                 items.push({id: "tileGroup", ref: ref, members: g.members, text: root.tileGroupText(g)});
         }
         // Option (Alt) variants, live while the menu is open (macOS): Hide becomes Hide Others, Quit becomes Force Quit.
-        // An app that does not respond offers Force Quit without Option.
-        if (altHeld) {
-            items.push({id: "hideOthers", text: qsTr("Hide Others"), enabled: Compositor.othersCount(appId(), Compositor.topologyRevision) > 0});
-            items.push({id: "forcequit", text: qsTr("Force Quit")});
-        } else {
-            items.push({id: "hide", text: qsTr("Hide")});
-            items.push(notResponding.length > 0 ? {id: "forcequitHung", text: qsTr("Force Quit")} : {id: "quit", text: qsTr("Quit")});
+        // An app that does not respond offers Force Quit without Option; End Task follows when Settings shows it (AM63).
+        for (const id of Launch.quitRows({alt: altHeld, hung: notResponding.length > 0, endTask: Settings.dockEndTask, fixed: info.fixed === true})) {
+            if (id === "hideOthers")
+                items.push({id: id, text: qsTr("Hide Others"), enabled: Compositor.othersCount(appId(), Compositor.topologyRevision) > 0});
+            else if (id === "hide")
+                items.push({id: id, text: qsTr("Hide")});
+            else if (id === "quit")
+                items.push({id: id, text: qsTr("Quit")});
+            else if (id === "endtask")
+                items.push({id: id, text: qsTr("End Task")});
+            else
+                items.push({id: id, text: qsTr("Force Quit")});
         }
         return items;
     }
@@ -295,9 +300,9 @@ PopupMenu {
             Popups.confirm(qsTr("Are you sure you want to permanently erase the items in the Trash?"), qsTr("You can’t undo this action."), qsTr("Empty Trash"), "emptytrash", {}, true);
             return;
         }
-        if (item.id === "forcequit" || item.id === "forcequitHung") {
+        if (item.id === "forcequit" || item.id === "forcequitHung" || item.id === "endtask") {
             // Without Option, an app that does not respond: only its processes that do not respond (ADR-0035 decision 3-5).
-            // With Option: every process of the app.
+            // With Option, and End Task (AM63: the same path, nothing new in the kill path): every process of the app.
             const pids = item.id === "forcequitHung" ? root.notResponding : Launch.forceQuitPids(data.windows.map(t => Compositor.pidOf(t)));
             if (pids.length === 0) {
                 console.warn("grassfield-shell: force quit refused, no process id for", appId);

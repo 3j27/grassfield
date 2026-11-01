@@ -83,6 +83,16 @@ TestCase {
         compare(Launch.activationPlan(null).length, 0);
     }
 
+    // A-D1 (ADR-0038 AQ5, AM63): End Task after Quit while the setting is on; absent with Option (Force Quit is there), on
+    // the Files tile and while the setting is off; after Force Quit for an app that does not respond.
+    function test_quitRowsEndTask() {
+        compare(Launch.quitRows({alt: false, hung: false, endTask: false, fixed: false}).join(","), "hide,quit");
+        compare(Launch.quitRows({alt: false, hung: false, endTask: true, fixed: false}).join(","), "hide,quit,endtask");
+        compare(Launch.quitRows({alt: false, hung: true, endTask: true, fixed: false}).join(","), "hide,forcequitHung,endtask");
+        compare(Launch.quitRows({alt: true, hung: false, endTask: true, fixed: false}).join(","), "hideOthers,forcequit");
+        compare(Launch.quitRows({alt: false, hung: false, endTask: true, fixed: true}).join(","), "hide,quit");
+    }
+
     function wi(ref, title, stamp, minimized) {
         return {ref: ref, title: title, stamp: stamp, minimized: minimized};
     }

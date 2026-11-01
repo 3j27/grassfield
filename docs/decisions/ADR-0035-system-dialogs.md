@@ -156,14 +156,15 @@ patching any upstream package (D1).
     that changes them makes the stand-in fall back, never guess. When the compositor plugin is present, a later step may
     replace the parsing by a `gfc/1` event (ADR-0007) from `CANRManager` carrying the pid itself; not required.
   - Every other call (Safe Mode, permission prompts if ever enabled, an unknown button set) and every case where the shell does
-    not answer within 1 s execs `/usr/bin/hyprland-dialog` with the same arguments, keeping Hyprland's PID-based special
-    treatment (uncloseable, priority focus).
+    not answer within 1 s (10 s since decision 3-16: a shell under load is waited for) execs `/usr/bin/hyprland-dialog` with
+    the same arguments, keeping Hyprland's PID-based special treatment (uncloseable, priority focus).
   - `misc.anr_missed_pings = 3` (about 4.5 s, Omarchy's value in its own looknfeel; macOS shows the wait cursor after a few
     seconds).
 - macOS's spinning cursor over the hung window: Hyprland already tints the hung window (`m_notRespondingTint = 0.2`); a wait
   cursor needs the compositor plugin and is left to a later step (known limitation).
 - Fallback: shell absent (safe mode, crash, restart): the stock dialog, which still works. Never blocks: Hyprland does not wait
-  on the dialog (async), and the stand-in's IPC call has a 1-s deadline.
+  on the dialog (async), and the stand-in's IPC call has a 1-s deadline (10 s since decision 3-16; no shell still ends it at
+  once).
 - Cost: one stand-in script, one IPC target `anr` (`report`, dev `status`), Force Quit and Dock changes, tests with a fake
   Hyprland caller (one pid, two pids sharing class and title, pid reuse between mark and confirm). Risk: a Hyprland release
   that changes the text or the buttons → the stand-in falls back to the stock dialog (a test pins the strings of the installed
@@ -176,7 +177,7 @@ patching any upstream package (D1).
   (`--title T --text X --buttons B`, nothing else), tries every " - " split of "{title} - {class}" against
   `hyprctl -j clients` (read with `python3 -I`), and with exactly one (split, client pid above 1) match asks
   `qs ipc -p /usr/share/grassfield/shell call anr report <its pid> <pid> c:<class> t:<title> i:<instance>` under
-  `timeout -k 0.2 1` (decision 3-11). On `ok` it `exec`s `sleep infinity` (same pid, silent, nothing forked) until
+  `timeout -k 0.2 1` (decision 3-11; `timeout -k 1 10` since decision 3-16). On `ok` it `exec`s `sleep infinity` (same pid, silent, nothing forked) until
   Hyprland kills it (decision 3-12); in every other case it `exec`s `/usr/bin/hyprland-dialog` with the same arguments.
 - `shell/services/NotResponding.qml` (singleton, IPC target `anr`: `report` action, `status` dev) and its pure decisions
   `NotResponding.js`: a report is refused for a pid of 1 or below, an empty class, another compositor's instance, and a
@@ -287,6 +288,16 @@ patching any upstream package (D1).
   parser of a format that is not an interface). **Choice: (b)**: the user must see what went wrong without a terminal, and
   Hyprland's bar does that today; the macOS look of that one surface waits for a source that works. Recorded for the owner:
   an upstream report (`eval` clearing the config errors) is theirs to decide.
+- **3-16. How long the stand-in waits for the shell** (capture defect of 2026-10-30: under heavy load the shell's "ok" came
+  after the 1-s deadline, and Hyprland's stock English `hyprland-dialog` showed in a French session, its name in the menu
+  bar). Options: (a) keep 1 s; (b) a longer bound on the same single call: `qs ipc` ends by itself at once when no shell runs
+  or the shell refuses (the stock dialog then shows at once), so the bound only matters for a live shell that is slow or hung;
+  (c) never fall back while the shell's process lives (a hung shell would leave no Force Quit and no dialog). **Choice: (b),
+  10 s** (`timeout -k 1 10`): twice the 5-s answer the shell watchdog takes as alive (ADR-0041 SQ-5), so a shell that is only
+  slow is waited for, and only a shell that hangs past it leaves the stock dialog, the one way out then (macOS shows only its
+  own cues: the stock alert is the last resort, never the answer to load). An app that answers during the wait gets the
+  stand-in killed by Hyprland; the orphaned `qs ipc` call ends within the bound, and a mark it still makes goes within 250 ms
+  (3-4: its stand-in is gone). Same pid and arguments as before for every fallback.
 
 ### D-4. Open and Save panels: a Grassfield portal backend (category A; P1–P3)
 - **Two processes, two bus names** (review of PR #13, MAJOR 4): the frontend chooses a backend from its `.portal` files when
@@ -761,32 +772,40 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
      stand-in's end closes (the stand-in timed out, or xdph ended).
   4. Connected, the shell writes `<id> wait` every 5 s while its panel is open, then one answer line, `<id> <selection>` or
      `<id> cancel`, and closes. The stand-in waits for the user with no overall deadline (the choice may take minutes, as with
-     the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without any line** (the
+     the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without a line of that request** (the
      shell hangs: `grassfield-shell.service` restarts a crashed shell, `Restart=always`, but has no watchdog for a hung one,
-     `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 3 s
-     after the request when the shell dies before connecting, and at most 15 s after the shell's last line when it hangs.
+     `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 4 s
+     after the request when the shell dies before connecting (1 s for the lock's `hyprctl`, 1 s for the shell's answer, 2 s
+     for the connection; review of step 7a, NIT), and at most 15 s after the shell's last line when it hangs.
   5. The stand-in checks the answer before printing it: the id; the grammar; a `window:` handle that is in
      `XDPH_WINDOW_SHARING_LIST`; a `screen:` or `region:` output that Hyprland lists (`hyprctl -j monitors`), with the region
      inside that output's logical size. Anything else prints nothing (cancelled), never a guess.
   6. No answer to step 2 (the shell is absent) and the session is not locked → the stand-in **removes the socket file first**
-     (a late `accepted` then finds nothing to connect to and shows no panel), then execs the stock binary named (absolute path,
-     same arguments and environment).
+     (a late `accepted` then finds nothing to connect to and shows no panel), checks the lock again (a restarting shell
+     restores it), then execs the stock binary named (absolute path, same arguments and environment, SIGPIPE at its default).
 - **While the session is locked** (owner decision Q15, 2026-10-27: cancel): the request is cancelled at once and no picker
   shows, neither the Grassfield one nor the stock one, so no key typed around an unlock can reach a picker. The stand-in checks
-  the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on every monitor, or grassfield-shell's
-  crash-recovery marker says "locked" (the test of `packaging/shims/omarchy-shell:64-74`). **Every error counts as locked**
+  the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on any monitor (the shell's own
+  reading, `LockMachine.compositorLockStateLazy`; counter-review of step 7a, MINOR 1: "every monitor", the omarchy-shell
+  shim's test of a secure lock, was the open way for this check), or grassfield-shell's
+  crash-recovery marker is not "unlocked" in the shell's own reading of it (`shell/security/LockMachine.js`: `unlocked` or
+  `unlocked sleeps=<n>`, and a count of suspends that is not the machine's now counts as a sleep no shell locked for,
+  `sleptSince`; the review of step 7a, BLOCKER 1: the stand-in first read `unlocked sleeps=<n>` as locked, which the shell
+  writes after every unlock on a machine that sleeps). **Every error counts as locked**
   (counter-review of PR #13, minor; the shim reports "not secure" when `hyprctl` fails): `hyprctl` failing or not answering
   within 1 s, output that is not the expected JSON, no monitor listed, a marker file that exists but cannot be read. The shell
   answers `locked` from `SessionState.refuses("picker")`. A cancelled request also frees xdph.
 - The shell's picker: a panel on the active display with "Entire Screen" (one live thumbnail per display, from the
   ScreencopyView already used by the Overview), "Window" (live thumbnails of the listed windows, by app, with their titles)
-  and "Selection" (a crosshair, D-10), "Remember this choice" **unticked every time, whatever `--allow-token` says** (owner
+  and "Selection" (a crosshair, D-10; step 7b draws the area on the display's live preview in the panel instead, decision
+  7-10), "Remember this choice" **unticked every time, whatever `--allow-token` says** (owner
   decision Q14, 2026-10-27; Omarchy's `xdph.conf` sets `allow_token_by_default = true`, which would tick it), Cancel / Share.
   Windows that hide themselves from capture (`no_screen_share`, `config/hypr/grassfield/privacy.lua`) are listed but greyed
   with "This window can't be shared".
 - The picker cannot name the app that asks: xdph receives the app id but passes the picker only `--allow-token` and the window
   list (`ScreencopyShared.cpp:42-62`). The panel says "An app wants to share your screen." (known limitation).
-- While a share runs, the menu bar shows the screen-recording indicator (Hyprland's `screencast` event,
+- While a share runs, the menu bar shows the screen-recording indicator (step 7b follows xdph's PipeWire streams instead of
+  this event, which every capture raises, the shell's own thumbnails too: decision 7-9) (Hyprland's `screencast` event,
   `src/managers/screenshare/ScreenshareSession.cpp:140-147`). The event names only the source (a display or a window), not
   the app (review of PR #13, minor), so the indicator's menu says what is shared, not by whom; stopping belongs to the app.
 - A user `xdph.conf` that names another picker (another name, an absolute path) is not intercepted (known limitation; the
@@ -796,6 +815,141 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   else (tests feed the stand-in's output to a copy of xdph's parser, with one and two displays for `region:` coordinates);
   every wait on the shell is bounded (tests: `accepted` and no connection, a late `accepted` after the fallback, a shell that
   stops writing, `hyprctl` failing).
+
+**Delivered in step 7a (the picker: Entire Screen and Window).**
+- **The stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` is a Python program run with `python3 -I`, standard library only. In order, it:
+    - checks the lock, where every doubt counts as locked;
+    - reads xdph's window list;
+    - makes the one-time socket;
+    - asks the shell under 1 s with `qs ipc -p /usr/share/grassfield/shell call picker request <id> <socket>`;
+    - after `accepted`, waits 2 s for the connection, then 15 s at most between the shell's lines;
+    - sends the window list first;
+    - checks the answer and prints xdph's line.
+  - Without the shell it removes the socket file and then `exec`s `/usr/bin/<name>` with the same arguments.
+  - `hyprland-preview-share-picker` (Omarchy's name, from its `xdph.conf`) runs the same program with `--stock-name`. That option takes only the two picker names.
+  - `env-grassfield` puts `/usr/lib/grassfield/session-bin` first in the systemd user manager's PATH, where xdph runs (decision 3-9).
+- **The shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, and the dev hooks `status` and `choose`), the Quickshell `Socket` client, the `wait` lines, and cancelling on lock, on another popup and when the stand-in's end closes.
+    - One `Socket` per request, made by `request` and destroyed when the request ends, whatever ends it (review of PR #83, MAJOR 2): on Quickshell 0.3.1 a `Socket` whose connection failed once never connects again, so the first build's one long-lived `Socket` refused every request after a stand-in that gave up. Its error is judged after Quickshell's own handler has returned (`tests/ci/socket_errors.py`).
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`, a `Dialog` sheet with Entire Screen and Window as a `SegmentedControl` and a grid of live `ScreencopyView` thumbnails.
+  - Tokens `panel.sharePicker*`.
+- **Tests:**
+  - `tests/shell/share_picker.sh`: the stand-in against a fake shell, a fake `hyprctl` and fake stock pickers, its output read by a copy of xdph 1.4.1's parser (A-SP1 to A-SP3).
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under the real Quickshell, offscreen.
+  - `tests/unit/tst_sharepicker.qml`: the decisions in `SharePicker.js`.
+  - `tests/shell/shell_unit.sh`: the stand-in's `qs ipc` line and its dev gate.
+  - `tests/shell/share_picker_nested.sh` (nested): it never reaches the live shell (review of PR #83, MINOR 3: an inherited `GRASSFIELD_SESSION=1` made the stand-in ask `/usr/share/grassfield/shell`, the owner's shell, and two stock pickers opened on the nested display). It drops every `GRASSFIELD_*` and `QS_*` variable, gives the stand-in only `GRASSFIELD_DEV=1` and this tree's `GRASSFIELD_SHELL_DIR`, refuses to run (exit 2) unless the one Quickshell instance of that directory is this tree's nested shell, and runs a copy of the stand-in whose stock picker only records that it ran.
+
+Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user):
+- **7-1. Two pull requests.**
+  - Question: deliver D-6 in one pull request, or split it?
+  - Options: (a) one; (b) **7a**, the stand-ins, the channel, the lock and the panel with Entire Screen and Window; then **7b**, Selection (a crosshair, which D-10's screenshots need too; 7-10 drew it on the panel's preview instead) and the menu bar's recording indicator. Both in pull request #83: the owner asked on 2026-10-31 for 7b in the same pull request while the integrator was away.
+  - **Choice: (b).**
+  - Rule applied: the channel, the part that touches security, is reviewed on its own in the smallest change. The system picker leads with the screen and the window. Selection waits for the crosshair that steps 7b and 8 share. Until 7b no region is offered, though the stand-in already checks a `region:` answer (SP3).
+- **7-2. How the window list reaches the shell.**
+  - Question: xdph gives the stand-in the window list in its environment; how does the list reach the shell?
+  - Options:
+    - (a) in the IPC call's arguments: any local user can read a process's command line in `/proc`, so the titles would leak;
+    - (b) in the environment: the shell does not get the stand-in's environment;
+    - (c) as the stand-in's first line on the one-time socket, which only this user can open.
+  - **Choice: (c).**
+  - Rule applied: no title leaves this user's processes. The shell keeps at most 256 windows, each with its handle, app id, title (capped at 256 characters) and Hyprland address (in hex, for the thumbnail).
+- **7-3. What is selected when the panel opens.**
+  - Options: (a) the first display, so that Return shares it at once; (b) nothing, with Share dimmed until a tile is chosen.
+  - **Choice: (b).**
+  - Rule applied: the system picker shares nothing until something is picked, and a stray Return must never share the screen. Arrows select from the first tile.
+- **7-4. Windows that hide themselves from capture** (`no_screen_share`, greyed with "This window can't be shared" in D-6).
+  - Options: (a) read `privacy.lua`'s rules in the shell, a second copy of them; (b) leave the greying to 7b, after checking what Hyprland 0.56 reports for a client with that rule.
+  - **Choice: (b).**
+  - Rule applied: no second copy of a privacy rule. Hyprland already leaves such a window out of every capture, xdph's stream included, so sharing it shows nothing of it. A known gap of 7a.
+- **7-5. Another popup in the panel's place.** The Overlay draws one popup at a time; a menu bar click or a click outside closes the open one.
+  - Options: (a) bring the panel back afterwards; (b) cancel.
+  - **Choice: (b).**
+  - Rule applied: one deterministic outcome, and the app can ask again. Nothing is shared without a pick.
+- **7-6. A channel that cannot be made** (no private `$XDG_RUNTIME_DIR/grassfield/picker`: one others can read, a link, or not ours).
+  - Options: (a) cancel; (b) the stock picker.
+  - **Choice: (b).**
+  - Rule applied: the share still works, and the shell was never asked, so two pickers never show.
+- **7-7. Who may answer on the socket.**
+  - Options: (a) check the connecting process with `SO_PEERCRED` and its executable (Quickshell's install path); (b) rely on the
+    channel's place: a 0600 socket in a 0700 directory of this user and a random name. The id and the socket's path are in
+    `qs ipc`'s command line, which other users can read, but they cannot reach the directory.
+  - **Choice: (b).**
+  - Rule applied: only this user's processes can reach the socket. Such a process can already drive the shell's IPC and xdph
+    itself, so a check by executable path would add a dependency on where Quickshell is installed and no boundary. A Flatpak
+    app sees neither the host's `/proc` nor `$XDG_RUNTIME_DIR/grassfield`.
+- **7-8. Keys and clicks as the panel appears** (counter-review of step 7a, MINOR 2: an arrow then Return typed for a
+  terminal as the panel appeared shared the first display, since an arrow selects the first tile).
+  - Options: (a) arrows select nothing until a click; (b) the access alert's rule (D-5, `AccessAlert.qml`): nothing answers
+    keys or clicks until `panel.alertArmMs` after the panel showed or after the last key pressed meanwhile.
+  - **Choice: (b).**
+  - Rule applied: one rule for every Grassfield surface that asks the user to grant something; keys typed on for another
+    window never arm it. Esc and Cancel always cancel (cancelling shares nothing).
+
+**Delivered in step 7b (Selection, windows that hide from capture, the indicator), in the same pull request as 7a.**
+- **Selection:** `SharePickerPanel.qml` gains a third tab, Selection (Cmd-3).
+  - It shows the chosen display's live preview, with a display chooser when there are several.
+  - A drag on the preview marks an area, at least `panel.sharePickerMinArea` either way.
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels (`SharePicker.js` `regionFor`, `regionKey`, `parseRegion`).
+  - The shell refuses an area past its display; the stand-in checks it again (SP3).
+- **Windows that hide from capture:**
+  - When the panel opens, the shell asks `hyprctl -j getprop address:0x<address> no_screen_share` for each listed window with an address, 16 at a time (Hyprland's socket keeps a backlog of 10), 1 s each at most, each answer on its own line after its address (`blockedHandles`, which matches answers by address, so one meant for another request marks none). A newer request's query waits for the last one to end; the last one's answers are never taken as its own.
+  - Such a window is greyed with "This window can't be shared" and is never answered: no window is answered at all until Hyprland's answers have come (review of step 7b, MINOR 1 and 3).
+- **The indicator:** a status item in the menu bar (`menubar-screenshare`, glyph `screen-share`, popup kind `screenshare`, `ScreenShareMenu.qml`).
+  - It shows while xdph has a stream (`sharingStreams`: video nodes whose `node.name` is xdph's program name, `xdg-desktop-portal-hyprland`) and never gives way when the status area is crowded.
+  - Its menu has one row per stream. A row is named by the choice the picker answered within the last 3 s only when that stream is the one new stream and that choice the one waiting (`streamLabels`, best effort: 7-12); otherwise "Screen or window" (a share restored with a token, or two at once: review of step 7b, MINOR 2). Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) it stays in view on its own piece of the band's glass at the bar's right end, in the bar's own window, and takes no click (7-14).
+- **Tests:**
+  - `tst_sharepicker.qml`: the area, the hidden windows, the streams and their labels.
+  - `share_picker_ipc.sh`, cases 9-12:
+    - an area answered and one past its display refused;
+    - a window that hides from capture never answered (a fake getprop);
+    - a request shown while the last one's query is held (gate files): no window answered while its own answers are not in, not even when the last one's arrive, then its own query runs and its windows are answered;
+    - with a private PipeWire, a node named as xdph names its streams counted and labelled, then gone.
+  - `share_picker_nested.sh`, check 5: an area of the nested display.
+  - `tst_barhide.qml`: the indicator's piece while the bar is away (7-14).
+
+Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no technical step for the user; 7-12 and 7-13 after its counter-review, 7-14 after the integrator's review of PR #83):
+- **7-9. What lights the screen-sharing indicator.**
+  - Question: D-6 named Hyprland's `screencast` event. Hyprland 0.56.2 raises it for every capture protocol (`ScreenshareFrame.cpp:170`, through `ImageCopyCapture`, `Screencopy` and `ToplevelExport`), so the shell's own thumbnails raise it too: the Overview, the Dock's previews, and this picker's own thumbnails.
+  - Options:
+    - (a) the event, minus the shell's own captures (every capturing surface would have to declare itself);
+    - (b) xdph's PipeWire streams, which exist only while an app shares through the portal. xdph 1.4.1 names each stream `xdph-streaming-<random>` (`src/portals/Screencopy.cpp:1015-1017`), but PipeWire keeps that name in `media.name`, which a node's registry entry does not carry, and gives the node xdph's program name, `xdg-desktop-portal-hyprland` (review of step 7b, BLOCKER 1: the first build looked for `xdph-streaming-` in the node's name and never lit; measured with a stream made as xdph makes it, `tests/shell/share_picker_ipc.d/fake-xdph-stream.c`). Quickshell's PipeWire service lists the nodes with their names and types;
+    - (c) a compositor plugin hook that reports the client.
+  - **Choice: (b).**
+  - Rule applied: the indicator must never light for the system's own previews, and it must light for every app that shares through the portal. A recorder that captures without the portal (wf-recorder, OBS's Wayland capture) is not shown: a known limitation, which (c) could close later. Any PipeWire client can name a video node after xdph and light the indicator with nothing shared (no exposure; a known limitation).
+- **7-10. Where the area is chosen.**
+  - Options: (a) a full-screen crosshair over the displays, as screenshots will have (D-10, step 8); (b) dragging on the chosen display's live preview inside the panel.
+  - **Choice: (b).**
+  - Rule applied:
+    - one surface and one keyboard grab, with no second exclusive layer over the panel;
+    - the area is relative to its display, as xdph wants it;
+    - the system picker shares a screen or a window, not an area, so this tab is Grassfield's extra and stays inside the panel.
+    - The cost is precision: a preview pixel is about 3 logical pixels of a 1920-pixel display.
+- **7-11. How a window that hides from capture is known.**
+  - Options: (a) read `config/hypr/grassfield/privacy.lua`'s rules in the shell (7-4's second copy); (b) ask Hyprland for each listed window's effective rule (`getprop … no_screen_share`, `HyprCtl.cpp:1621`).
+  - **Choice: (b).**
+  - Rule applied: Hyprland's own answer, whatever rule set it, with no second copy of a privacy rule. An answer that does not read (a window gone, an older Hyprland) leaves the window ungreyed: Hyprland still leaves it out of every capture.
+- **7-12. How sure the indicator's labels are** (counter-review of step 7b, MINOR A).
+  - Question: the portal does not tell the shell which app a stream belongs to. An app the picker answered "Window: Notes" may not have started its stream yet when another app restores an entire-screen share with its token (no picker): that stream is then the one new stream, with one choice waiting, and took "Window: Notes" within the first build's 10 s.
+  - Options: (a) labels only for screens (a window or an area named nowhere); (b) a short window, 3 s (an app starts its stream as soon as the portal answers it), and the label called best effort; (c) no labels, "Screen or window" for every row.
+  - **Choice: (b).**
+  - Rule applied: the macOS menu names what is shared; the wrong case needs two apps within 3 s, one of them restoring a share without asking. (c) would lose the name in every ordinary share to avoid that rare one. The spec and the code say best effort, not certain.
+- **7-13. A windows' query that cannot run** (counter-review of step 7b, NIT 3).
+  - Question: if `sh` cannot start, Quickshell only stops the query; the Window tab would never enable Share, with no hint.
+  - Options: (a) keep refusing every window; (b) treat it as an answer that does not read: no window greyed, a warning in the shell's log.
+  - **Choice: (b).**
+  - Rule applied: 7-11's rule for an unreadable answer; Hyprland still blacks out a window that hides from capture in every capture, so nothing it hides is shared.
+- **7-14. The indicator over a full-screen window** (integrator's review of PR #83, MINOR 2; delegated by the owner on 2026-10-27).
+  - Question: the indicator is a status item of the menu bar, and the bar slides away over a full-screen window (the default, "In Full Screen Only") and on the desktop with "Always" or "On Desktop Only": an app that shares the screen in full screen hid the indicator with the bar. macOS keeps its privacy indicator in view while the menu bar is hidden.
+  - Options:
+    - (a) keep the whole bar in view while a share runs (it covers the top of the full-screen window, which macOS never does);
+    - (b) the indicator alone stays: its glyph on its own capsule of the band's glass at the bar's right inset, in the bar's own window (mapped for the whole session, on the overlay layer over a full-screen window, its content slid away), coming as the bar leaves and going as it comes back with its status item (`BarHide.pinnedIndicatorOpacity`); its blur is the bar's `BackgroundEffect` region; no new surface, no compositor or `config/hypr` change;
+    - (c) leave it, a known limitation with a follow-up.
+  - **Choice: (b).**
+  - Rule applied: macOS first, a privacy indicator stays visible whatever hides the menu bar; within the shell's existing surfaces and Hyprland's rules. The capsule takes no click: the bar's edge strip still brings the bar, and the status item with its menu, back.
+  - Cost: it sits at the bar's right inset, not where the status item sits in the bar; it is drawn on the display, so a share of that display shows it (as it shows the menu bar on the desktop). Its look in nested is not yet verified.
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.
@@ -905,6 +1059,238 @@ queue through `tests/fixtures/print/office.ppd`: its printers, options and a job
   copies within its limit, and their collation), and pages being typed stay as typed. Print waits while the new printer's
   options are read (the button dimmed, Return held, the backend refusing an answer meanwhile). No memory of Grassfield's in 6a
   ("Last Used Settings" is 6b's).
+
+**Delivered in step 6b.** `apps/portal/src/printpreview.{h,cpp}`: the document of a Print with no token read into an unlinked
+private file (`spoolDocument`, `reopenSpool`), the child that draws a page (`--print-preview`, this binary: Qt PDF, the pdfium
+Preview uses) and its seccomp filter (`confineRenderer`), the parent's side (`renderPreview`: a header and raw pixels read back,
+no image decoder) and the pages drawn for the QML (`PreviewImages`, `image://printpreview/`). `print.{h,cpp}`: a Print with no
+token opens the sheet over the document (`showDocument`: `documentReady`, `renderPage`/`pageRendered`, `dismissed`); Open in
+Preview over both flows (`openInPreview`); the Presets (`choosePreset`, Last Used Settings in `portal-print.json`, grassfield-portal's
+state). `printlogic.{h,cpp}`: a printer's own options (`PrinterOption`, `optionChoices`, `validOptionValue`), a document's page
+ranges for the printer (`documentOptions`), the Presets (`Preset`, `presetOf`, `withPreset`, their JSON). `printsystem.cpp` reads
+the printer's own options (`printerOptions`). `PrintSheet.qml`: Presets, the options' disclosure sections, the "PDF" pull-down,
+the preview column. Qt PDF is linked by grassfield-portal (qt6-webengine, already a dependency for Preview). Tests:
+`tst_printlogic.cpp` (options, page ranges, Open in Preview, presets), `tst_print.cpp` (the filter, the private file, the pages
+drawn by the child, a document sent first, one that is not a PDF, Open in Preview, Last Used Settings, a printer's options; the
+scheduler's options in `print_cups.sh`), `tst_printsheet.qml`, and `portal_filechooser.sh` scenario 9b (Print with no token
+through the real frontend, the job in the scratch scheduler).
+
+**Decisions of step 6b** (delegated by the owner on 2026-10-27: macOS first, no technical step for the user; each recorded
+here, numbered after 6a's).
+- **6-10. Who draws the preview.** Question: the document of a Print with no token comes from the application (a sandboxed
+  one too), and grassfield-portal runs as the user without a sandbox and holds every Open and Save panel; how is it drawn?
+  Options: (a) Qt PDF in grassfield-portal's QML (`PdfDocument`, as Preview draws a file the user opened); (b) a child process
+  with limits on memory and CPU time and a deadline (as Files decodes an application's icon, `AppIcons::loadIsolated`); (c) (b)
+  with a seccomp filter the child installs before it reads a byte of the document (no socket, so no bus and no network; no
+  program; no signal but to itself, so never to grassfield-portal or its process group; no write, creation, truncation,
+  removal, renaming, link or mode change of any file; no io_uring, ptrace, namespace or mount), no bus address or display in its environment, no descriptor but its standard input (the private file, read-only),
+  output and error, and only a header and raw pixels read back (no image decoder runs on its answer). **Choice: (c).** Rule
+  applied: an application's document is data; a flaw in the PDF reader must not reach the bus or the user's files from the
+  process that answers the panels; (b) alone would leave the bus open to it. Memory is limited as data in use (`RLIMIT_DATA`,
+  512 MiB since 6-21), not as address space: Qt PDF's pdfium reserves tens of GiB it never uses (the child stopped under a 32 GiB
+  `RLIMIT_AS`); CPU 10 s, a deadline of 8 s, killed with its parent. Cost: a child per page shown (tens of milliseconds); on an
+  architecture the filter does not know (neither x86_64 nor aarch64) the sheet says "No Preview" and the document still prints.
+  **Amended by the security review of step 6b (FAIL: BLOCKER 1, MAJOR 2), see 6-20:** the first filter was a deny-list that
+  blocked writes only; under it the child could re-limit, re-prioritise or re-schedule another process (grassfield-portal
+  among them), make a user namespace or a process that outlived it, push a byte into a terminal (TIOCSTI), read every file of
+  the user's (another process's environment in `/proc` included) and lock files (a covert channel). 6-20 replaces it.
+- **6-11. Where the document is kept while the sheet is up.** Question: the document is read before the sheet can show it, print
+  it, save it or open it; where does it wait? Options: (a) in memory; (b) an unlinked file of
+  grassfield-portal's (`O_TMPFILE`, 0600) in the temporary folder; (c) a named file in the runtime folder. **Choice: (b)**: no
+  name another program could open or replace, gone with the process, in the place x-d-p-gtk keeps its own copy
+  (`g_file_open_tmp`); at most 2 GiB, a PDF only (6-4). Rule applied: the smallest exposure (no name, no memory held for a
+  large document), as upstream keeps it. The application's descriptor is read where it is (`pread`), its
+  position untouched, so the call can still go on to x-d-p-gtk as it came (6-12). Each reader (the job, Save as PDF, Open in
+  Preview, a page drawn) opens the file anew (`/proc/self/fd`), with a position of its own. **Amended by the security review of
+  step 6b (MAJOR 3), see 6-21:** the temporary folder is a tmpfs on Arch, whose pages count against grassfield-portal's
+  MemoryMax (1 GiB), and 16 requests could each keep 2 GiB: a sandboxed application could have the portal OOM-killed. The file
+  is now on disk, in the user's cache folder, within one budget for all the requests; and it is read from where the
+  application's descriptor stands (what x-d-p-gtk would read), no longer from its start (the review's NIT).
+- **6-12. A document sent first that is not a PDF.** Question: what happens to PostScript or a printer language sent with no
+  token? Options: (a) refuse it (response 2); (b) send the call to x-d-p-gtk as it
+  came, as every Print with no token went before 6b; (c) print it. **Choice: (b)** when the document is a file (read in place,
+  untouched), (a) when it came on a pipe that is read already. Rule applied: nothing that printed before 6b stops printing; only a
+  PDF reaches a printer through Grassfield (6-4); x-d-p-gtk's path stays upstream's own (6-4's accepted risk). **Amended by the
+  security review of step 6b (MINOR 6), see 6-24:** a call whose sheet does not show in time went to x-d-p-gtk even when part of
+  a pipe was read, and x-d-p-gtk got the document truncated.
+- **6-13. What the sheet offers for a document sent first.** Question: which of the sheet's settings still apply to a document
+  that is already made? Options: (a) the same sheet as PreparePrint's; (b) without
+  Orientation and Scale, Pages as All Pages or a range (no current page or selection: no application to ask), the printer
+  applying the range (`page-ranges`, IPP, 1-based), the paper of the document's first page chosen where the printer has it.
+  **Choice: (b)**: the document is laid out already; a printer applies a range the same way everywhere, while orientation and
+  scale on a finished PDF differ between cups-filters and a driverless printer. Rule applied: offer only what has the same
+  effect on every printer.
+- **6-14. The preview's form.** Question: how are the document's pages shown? Options: (a) one page at a time with "‹ 1 of N ›" under it (macOS's print panel), Page Up and
+  Page Down turning pages; (b) a strip of thumbnails. **Choice: (a)**, macOS's own. Each page is drawn when shown, at the page
+  area's pixels (at most 2048), the latest page asked winning while one is drawn; the last four kept, all dropped with the
+  request.
+- **6-15. Print for a document sent first.** Question: the job is sent from grassfield-portal, which takes a moment for a long
+  document; what does the sheet do meanwhile? Options: (a) the sheet stays until the job is sent; (b) it goes at once, the
+  application's request ending when the job is sent (0, or 2 when the printer refuses). **Choice: (b)**. Rule applied: macOS's
+  sheet goes when Print is clicked.
+- **6-16. The PDF control.** Question: how are Save as PDF and Open in Preview offered? Options: (a) the Save as PDF… button and another for Open in Preview; (b) macOS's "PDF" pull-down
+  (its label always "PDF") with Save as PDF… and Open in Preview. **Choice: (b)**, as 6-3 said it would come back once it has
+  more than one item. Shown only when the application can make a PDF (a document sent first is one). Rule applied: macOS's own
+  control.
+- **6-17. How the PDF reaches Preview.** Question: Preview needs a file; which one, and how is Preview started? Options: (a) a file in the user's Downloads or Documents; (b) a private copy: a folder of
+  its own (`mkdtemp`, 0700) inside `$XDG_RUNTIME_DIR/grassfield-print` (made 0700; refused when it is not a folder of this user's
+  that no one else may enter), written as Save as PDF writes (6-3: only a PDF, the folder opened from "/" without following a
+  link, a temporary file renamed over the name), named after the document (the application's file name, else its title, else
+  "Document", ".pdf" added), gone at logout; Preview started as the Dock starts an application, from a transient unit of the
+  user manager (`systemd-run --user --collect -- uwsm-app -- grassfield-preview -- <copy>`, as grassfield-crash-watch's
+  Reopen), so that it inherits neither grassfield-portal's sandbox nor its unit and outlives its idle quit (in a dev session,
+  whose user manager shows on the owner's own display, Preview is a child of grassfield-portal instead, on the nested
+  display). **Choice: (b)**:
+  never a path the application chose or can see (a Flatpak does not see the runtime folder), nothing left in the user's
+  folders (macOS opens a temporary copy too). Rule applied: the same symlink-safe write as Save as PDF, to a place only the user
+  can reach, and the Dock's own way of starting an application. The application gets `file:///dev/null`, as for Save as PDF (6-3); the request
+  ends with 0 once Preview is started, 2 when the copy or the start fails. **Amended by the security review of step 6b (MINOR 4),
+  see 6-22:** the runtime folder is a tmpfs whose pages count against grassfield-portal's MemoryMax and the copies stayed there
+  until logout; `systemd-run` expanded `${NAME}` in the copy's path; a long title in a script of three bytes a character passed
+  the file system's 255 bytes and failed the copy.
+- **6-18. Presets.** Question: what do Default Settings and Last Used Settings hold, for which printers, and where are they
+  kept? Options for Last Used Settings' scope: (a) per application; (b) per printer; (c) one for every printer,
+  macOS's. **Choice: (c)**, with Default Settings and Last Used Settings only (named presets, "Save Current Settings as
+  Preset…", are a follow-up). It keeps how a print was printed (two sides, colour, collation, the printer's own options), never
+  what belongs to the document (copies, pages, paper, orientation, scale); it is kept when Print sends a job (not for Save as
+  PDF or Open in Preview), in `$XDG_STATE_HOME/grassfield/portal-print.json` (grassfield-portal's state, next to the panels'
+  memory; a file that does not read is no Last Used Settings); it applies where the printer takes it (two sides only on a
+  printer that has them, colour only on a colour printer, an option only with a value the printer lists). The sheet opens on
+  Last Used Settings when there are some (macOS), else on Default Settings: the application's settings and the printer's
+  defaults (6a's first state). Rule applied: never carry a choice that would waste paper or that belongs to another document.
+- **6-19. A printer's own options.** Question: which of the options CUPS reports beyond paper, two sides and colour does the
+  sheet show, how, and how do they reach the job? Options: (a) every attribute CUPS reports; (b) the ones macOS shows in its print panel's
+  sections, each only when the printer lists two values or more: Media & Quality (Feed From `media-source`, Media Type
+  `media-type`, Quality `print-quality`) and Printer Options (Output Bin `output-bin`, Finishing `finishings`), in disclosure
+  sections closed at first (macOS 13 and later). **Choice: (b)**. Rule applied: macOS's sections, and only what the printer
+  reports (a section with nothing in it is not shown). The values' names are CUPS's (the PPD's or the printer's,
+  localized by CUPS); the quality and finishing enums CUPS leaves as numbers are named by Grassfield (Draft, Normal, Best; None)
+  or by their IPP keyword in words. The default is the user's own (lpoptions), else the printer's (`<name>-default`,
+  `media-col-default` for the source and type), else the first. The job carries the value shown as CUPS takes it (a keyword or
+  an enum's number), only a value the printer listed and that reads as one value (`[a-z0-9][a-z0-9._-]*`: never a comma or a
+  brace, which libcups would read as several values or a collection); the scratch scheduler keeps them on the job
+  (`print_cups.sh`). **Amended by the security review of step 6b (MINOR 5), see 6-23:** only a value that differs from the
+  default goes (a default sent, the paper source of `media-col-default` among them, overrode the queue's own settings). Not in 6b (a follow-up): a PPD's vendor options with no IPP name, Layout (pages per sheet, border) and
+  Paper Handling (page order, odd or even pages).
+
+**Fixes of the security review of step 6b** (opus, FAIL: BLOCKER 1, MAJORs 2 and 3, MINORs 4 to 6, NITs; each decision
+delegated by the owner on 2026-10-27, numbered after 6-19; the review's probes are now tests: `tst_print.cpp`
+`PrintPreview.TheChildThatDrawsIsConfined` and `TheChildGetsOnlyTheLocale`).
+- **6-20. The child that draws a page, confined by Landlock and an allow-list (BLOCKER 1, MAJOR 2).** Question: how is the
+  child kept from acting on other processes and from reading the user's data? Options: (a) a longer deny-list; (b) a seccomp
+  allow-list, measured; (c) (b) and Landlock for the files. **Choice: (c)**, in this order before a byte is read:
+  - Landlock (the kernel's own sandbox, no dependency): reading files and folders under `/usr` only (pdfium's fonts:
+    `/usr/share/fonts`, `/usr/share/X11/fonts`, `/usr/local/share/fonts`; measured: it opens nothing else), no write, link,
+    rename or truncation anywhere, no device ioctl, no TCP (ABI 4), signals and abstract sockets scoped to itself (ABI 6); the
+    rights the kernel's ABI knows are all handled, so none is left open by omission. The document is read from descriptor 0,
+    never through `/dev/stdin` (which Landlock now refuses).
+  - A seccomp allow-list measured with a ptrace recorder (`--print-preview` on three documents: shapes, embedded fonts and the
+    standard fonts pdfium substitutes from `/usr/share/fonts`; 800 and 2048 pixels; and the AddressSanitizer build the tests
+    run): memory, the descriptors it has, time, futexes, `getdents64`, stat, `openat` read-only, `eventfd2`, `pipe2`,
+    `sigaltstack`; `clone` only with `CLONE_THREAD` and no `CLONE_NEW*` (`clone3` answers ENOSYS, so glibc falls back to
+    `clone`; a thread of its own still starts); `fcntl` for descriptor flags only (no lock, lease or notification); `prctl` for a
+    thread's or a mapping's name only; `kill`, `tgkill`, `rt_tgsigqueueinfo` and `prlimit64` for itself only;
+    `sched_getaffinity` for any task, read only (glibc's `pthread_getattr_np` asks it with a thread's id, which a filter cannot
+    tell from another process's). Anything else answers EPERM: `fork`, `vfork`, `execve`, sockets, `ioctl` (TIOCSTI and
+    TIOCLINUX among them), `flock`, `inotify`, `setpriority`, `sched_set*`, `ioprio_set`, `migrate_pages`, `move_pages`,
+    `process_madvise`, `kcmp`, `pidfd_open`, `ptrace`, mounts and namespaces. Installed for every thread (TSYNC); a TSYNC that
+    fails, or a kernel without `seccomp()`, is no filter (no fallback to the calling thread alone: the review's NIT).
+  - The process: `setsid` (no terminal, not grassfield-portal's process group), an environment that holds the locale's
+    variables only (`LANG`, `LC_ALL`, `LC_CTYPE`), `RLIMIT_DATA` 512 MiB (a page of 2048 pixels needs less than 192 MiB), CPU
+    10 s, `oom_score_adj` 1000 (the OOM killer's first choice in the unit), one child at a time for the whole process.
+
+  Fail closed: when Landlock (a kernel before 5.13, or Landlock not enabled) or the filter cannot be installed, the child draws
+  nothing; the sheet says "No Preview" and the document still prints, saves and opens in Preview. Rule applied: an
+  application's document is data, and the least the reader needs, nothing more; macOS's sheet would rather show no preview than
+  a reader with the user's rights. **Residual risk, for the owner:** a flaw in pdfium that runs code in the child can still
+  read what is under `/usr` (public files), draw anything into the sheet's preview (only the user sees it), use its 10 s of CPU
+  and 512 MiB, and signal itself; with Landlock ABI 1 to 5 (kernels 5.13 to 6.11) the scoping of signals and abstract sockets
+  is the filter's alone (it refuses both anyway). The allow-list is measured on x86_64; on aarch64 it is built from the same
+  names untested, and a call it lacks there means "No Preview", never a wider child. Named by the counter-review of step 6b
+  (NIT): Landlock does not cover a path's metadata, so `stat`, `statx` and `faccessat` on any path the child names still answer
+  (whether a file of the user's exists, its size, times and mode; never its contents), and the child learns its own processors
+  (6-27).
+- **6-21. Where the documents wait, and how much (MAJOR 3).** Question: how is a sandboxed application kept from filling the
+  portal's memory, or the disk, with documents it never lets the user print? Options: (a) keep the temporary folder and lower the
+  limit per document; (b) on disk in the user's cache folder (`$XDG_CACHE_HOME/grassfield/print`, 0700, `O_TMPFILE`) with one
+  budget for every document waiting at once. **Choice: (b)**, the budget 2 GiB (the largest single document, 6-4): a document
+  that would go over what the others waiting left is not kept (its print ends with 2), and a request that ends gives its share
+  back. The limits line up: on disk the pages are page cache the kernel reclaims, never unreclaimable tmpfs in the unit's
+  MemoryMax (1 GiB); in memory the unit holds grassfield-portal (tens of MiB) and one child at a time (at most 512 MiB of data,
+  6-20, the OOM killer's first choice), so neither the documents nor a child can have the portal itself killed; on disk at most
+  2 GiB wait at once. Rule applied: what an application sends cannot take more than one document's room, whatever the number
+  of requests.
+- **6-22. Open in Preview's copies (MINOR 4).** Question: where do the copies go, how long do they stay, and how does their
+  name reach Preview intact? Options: (a) the runtime folder, as 6-17 had it; (b) the user's cache folder
+  (`$XDG_CACHE_HOME/grassfield/preview`, 0700, a folder `print-XXXXXX` of its own per copy), the old ones removed. **Choice:
+  (b)**: on disk, so a copy of up to 2 GiB never counts against the unit's MemoryMax; at each new copy, the ones older than a day
+  and all but the newest 15 go (16 with the new one), with what they hold, never through a link (a link named like a copy's
+  folder is left alone). The name is at most 255 bytes in UTF-8, cut on a character's boundary (a long title in Japanese no
+  longer fails the copy; Save as PDF's suggested name too). `systemd-run --expand-environment=no` (systemd 254 and later; the
+  flag is looked for in `systemd-run --help` once), else no dollar sign in the copy's name. Accepted: an application whose
+  sandbox lets it read the user's cache folder (`--filesystem=home` or `xdg-cache`) can read the copies there, as it can read
+  the user's documents. Rule applied: nothing an application sends may count against the portal's memory, nor stay forever.
+- **6-23. A printer's own options only when changed (MINOR 5).** Question: does the job carry every option the sheet shows?
+  Options: (a) every value shown; (b) only a value that differs from the default the sheet showed (the user's lpoptions, else
+  the printer's). **Choice: (b)**: a default sent overrode the queue's own settings (a paper source taken from
+  `media-col-default` forced a tray); not sending it leaves the queue to apply its own default. Rule applied: the job carries
+  what the user chose, nothing the printer would do anyway. **Amended by the counter-review of step 6b (MINOR 1):** the default
+  compared was the one the sheet showed, the user's lpoptions value when there is one, and libcups's `cupsCreateDestJob` does
+  not add lpoptions to a job (`lp` adds them itself; the first text's "as GTK and lp do" was wrong for lpoptions): lpoptions
+  print-quality=5 on a queue whose default is 4 showed Best and printed Normal. The option now keeps the queue's own default
+  apart (`queueDefault`: `<name>-default`, or `media-col-default`'s source and type; the first value when the queue reports
+  none and the user named none), and only a value equal to it is left out: the user's lpoptions value goes when it differs
+  (`print_cups.sh` checks it with an lpoptions file).
+- **6-24. A document on a pipe never goes on truncated (MINOR 6).** Question: what happens when a sheet does not show in time
+  (RequestHost's deadline) while its document comes on a pipe? Options: (a) go to x-d-p-gtk as before; (b) go to x-d-p-gtk only
+  while no byte of the pipe was read, else end with response 2. **Choice: (b)**: the reader and the forward agree once
+  (`compare_exchange` on the request's source: untouched, being read, or gone to x-d-p-gtk), so the pipe is read only while the
+  call has not gone and the call goes only while the pipe is unread (`RequestHost::forwardable`). A file read in place still
+  goes on as it came. Rule applied: never hand on half a document.
+- **The review's NITs**: the filter's TSYNC result is checked as such (6-20); the standard finishings (staple, punch, fold,
+  bind, saddle stitch, the corners, two staples or holes) are named in the UI language by their IPP keyword, another keyword
+  keeps CUPS's name or the keyword in words; a page being drawn shows "Preparing Preview…" instead of the page before under the
+  new number; the private file is read from where the application's descriptor stands (6-21).
+
+- **Fixes of the counter-review of step 6b** (opus, PASS with MINORs 1 and 2 and NITs; each decision delegated by the owner on
+  2026-10-27; 6-23 and 6-20 amended above; the counter-review's probes are tests too: `AChildWithAnotherThreadDrawsNothing`
+  and the cases added to `TheChildThatDrawsIsConfined`).
+- **6-25. Landlock on a single thread (MINOR 2).** Question: `landlock_restrict_self` confines the calling thread and the ones it
+  starts after, not one already running; how is a thread started earlier (a static initializer, a future Qt, a sanitizer's
+  runtime) kept inside? Options: (a) Landlock's TSYNC flag; (b) count the threads (`Threads:` in `/proc/self/status`, read before
+  Landlock closes `/proc`) and confine only a process of one thread. **Choice: (b)**: TSYNC is the kernel's Landlock ABI 8, after
+  the reference kernel (6.18, ABI 7); with one thread the domain covers every thread the child will ever have. A child of more
+  than one thread draws nothing (measured: the child is one thread there). Rule applied: fail closed. seccomp's TSYNC covers
+  every thread already.
+- **6-26. What a call the allow-list does not hold answers (NIT).** Options: (a) EPERM; (b) ENOSYS, as a call this kernel lacks.
+  **Choice: (b)**: glibc and Qt fall back to an older call only on ENOSYS (`clone3` to `clone`, as the list already did for it),
+  so a newer library that tries a newer call still draws, through a call the list holds; both refuse the same. A listed call
+  with an argument the list refuses (another process's id, a lock, a namespace flag) still answers EPERM. Rule applied: the
+  same refusals, the fewest failures that are not refusals.
+- **6-27. `sched_getaffinity` (NIT).** Options: (a) any task, read only (8deaa800); (b) itself only (0 or its own id), any task
+  only in a sanitizer build. **Choice: (b)**: another task's mask would tell that the task exists, and on which processors it
+  runs; only AddressSanitizer asks it with a thread's own id (`pthread_getattr_np`), which no filter can tell from another
+  process's. Rule applied: nothing about another process.
+- **6-28. A document sent first: printable once kept; over the budget, to x-d-p-gtk (NITs).** Questions: Print waited for the
+  first preview pass, which queues behind other sheets' children (one at a time, up to about 11 s each); and a full budget
+  (6-21) ended every other application's print with 2 while one application held it. Options: (a) as 6-21 had them; (b) the
+  sheet may print, save or open the document as soon as it is kept and valid (`documentRead`), its page count and first page's
+  size coming apart (`documentReady`; the document's paper suggested to the sheet when it comes after the printer's options,
+  `documentPaper`, taken unless the user chose a paper); and a document refused for the budget goes to x-d-p-gtk as it came when
+  it is a file read in place (its position untouched: 6-24's rule), ending with 2 only when it came on a pipe that was read.
+  **Choice: (b)**. Rule applied: the preview is a help, never a gate; nothing that printed before step 6b stops printing because
+  another application holds the room. Found while testing it: the first printer's options carried the sheet's first paper by
+  its name (A4, the default before any printer is known), which won over the document's own size, so 6-13's paper held only for
+  A4 documents; the first printer's options now take the document's paper where the printer lists it (once), and a size known
+  only later is suggested (`documentPaper`).
+- **6-29. Open in Preview's name and `$` (NIT).** The dollar sign is replaced (by the fullwidth ＄) in every name the copy may take,
+  before the 255-byte cap, so the name never grows past it after the cap; the replacement holds whatever starts Preview
+  (`systemd-run` with or without `--expand-environment=no`, and uwsm's own `systemd-run` when it starts applications as
+  services, `UWSM_APP_UNIT_TYPE=service`). Options: (a) replace only where systemd-run lacks the flag (8deaa800); (b) always.
+  **Choice: (b)**. Rule applied: never hand a launcher a string it may expand.
+- **6-30. Old copies when the portal starts (NIT).** Options: (a) at the next Open in Preview only; (b) also when grassfield-portal
+  starts (off its GUI thread). **Choice: (b)**: a copy no longer waits for another print to go. Rule applied: nothing an
+  application sent stays longer than a day.
 
 ### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
 Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland from the portal
@@ -2694,7 +3080,7 @@ requests #8, #9 and #10 are merged (owner).
 6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Here because it reuses the process, the
    sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13). In two pull requests (decision 6-1):
    **6a**, PreparePrint's sheet, Print with its token, Save as PDF, no printer; **6b**, Print with no sheet before it (with the
-   document's preview), Presets and a printer's own options (decisions 6-1 to 6-9).
+   document's preview), Open in Preview, Presets and a printer's own options (decisions 6-1 to 6-9, then 6-10 to 6-19).
 7. **Screen-sharing picker** (D-6): stand-ins, IPC `picker` with the one-time socket, the shell panel, the recording
    indicator. After #8–#10.
 8. **Screenshots re-wired** (D-10, Q4). After #8–#10 (bindings and a shell notice).

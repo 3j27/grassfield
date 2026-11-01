@@ -26,7 +26,8 @@
 #  9 Print through the frontend as GTK makes it, over a scratch CUPS scheduler (tests/integration/print-cups.sh, when a cupsd
 #    the user can run is there): the print sheet over its default queue prints, the application gets GTK's settings with the
 #    printer and one copy (GTK must not make them) and a token, and Print with the token sends the document there with the two
-#    copies asked (A-PR1, A-PR2 without the nested session)
+#    copies asked (A-PR1, A-PR2 without the nested session); 9b, step 6b: Print with no token (libportal's callers): the sheet
+#    over the document, its pages counted by the backend's confined child, prints it there as it was sent
 # Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal (and for 9 a scratch CUPS: print-cups.sh), and the built backend (GRASSFIELD_PORTAL, or
 # apps/portal/build-direct.sh with g++, Qt 6 and KDE Frameworks 6) with the Grassfield.I18n plugin (ui/i18n/build-direct.sh);
 # the runtime part SKIPs without them, and when libdbus cannot reach the bus.
@@ -133,6 +134,7 @@ starts() { wc -l <"$d/backend.starts" 2>/dev/null || echo 0; }
 exited() { [[ ! -e /proc/$1 ]] || grep -q '^State:[[:space:]]*Z' "/proc/$1/status" 2>/dev/null; }
 
 printdoc() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" print "$@"; }
+printfirst() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" print-first "$@"; }
 # The scratch CUPS scheduler of scenario 9 (cups_ready, start_cups, stop_cups).
 . "$root/tests/integration/print-cups.sh"
 
@@ -333,6 +335,18 @@ else
   document=$(ls "$cupsdir/spool"/d*-001 2>/dev/null | head -1)
   desc="9 ... the scheduler has the job ($job) with its two copies and the document the application made [copies $copies]"
   check bash -c '[[ -n $1 && $2 == 2 && -n $3 ]] && cmp -s "$3" "$4"' _ "$job" "$copies" "$document" "$d/document.pdf"
+  # 9b (step 6b): Print with no token, as libportal's callers make it: the sheet over the document (read into the backend's
+  # private file, its pages counted by the backend's confined child), the sheet's test answer prints it at once; the job reaches
+  # the scheduler with the document as it was sent.
+  out=$(printfirst "$root/tests/fixtures/print/two-pages.pdf" 30)
+  desc="9b a document sent first: the sheet prints it, response 0 [$out]"
+  check test "$(value 'd.get("print", {}).get("response")' <<<"$out")" = "0"
+  desc="9b ... the backend kept it and its child counted its two pages [$(grep -o 'a document of [0-9]* pages to print' "$d/backend.log" | tail -1)]"
+  check grep -q "a document of 2 pages to print" "$d/backend.log"
+  wait_until 15 bash -c '[[ $(CUPS_SERVER=localhost:$1 lpstat -W completed -o Office | wc -l) -ge 2 ]]' _ "$cups_port"
+  second=$(ls "$cupsdir/spool"/d*-001 2>/dev/null | sort | tail -1)
+  desc="9b ... the scheduler has a second job with the document as it was sent [$second]"
+  check bash -c '[[ -n $1 && $1 != "$2" ]] && cmp -s "$1" "$3"' _ "$second" "$document" "$root/tests/fixtures/print/two-pages.pdf"
   stop_bus
   stop_cups
 fi

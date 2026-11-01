@@ -16,6 +16,7 @@
 #include <QString>
 
 #include <atomic>
+#include <sys/types.h>
 #include <functional>
 #include <memory>
 
@@ -81,6 +82,11 @@ private:
     Limits m_limits;
     QList<std::shared_ptr<Call>> m_calls;
 };
+
+// Reads what `fd` has next into `into` (at most `size` bytes): the count, 0 at its end, -1 (and `error` set) when it is silent
+// for idleMs, fails, or `stopped` says so (asked every 200 ms at most while it waits, so a shutdown never waits on a silent
+// source).
+ssize_t readChunk(int fd, char *into, size_t size, int idleMs, const std::function<bool()> &stopped, QString *error);
 
 // Writes what `fd` holds (taken: closed when done) as `name` in `folder` (Save as PDF): only a PDF ("%PDF-" first), at most
 // maxBytes. `folder` is the folder as the Save panel's answer named it, its links resolved then; it is opened from "/" one folder

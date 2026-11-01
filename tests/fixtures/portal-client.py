@@ -31,6 +31,8 @@ tests/integration/portal_settings.sh (ADR-0035 D-8). Output is JSON on stdout (a
                                                PreparePrint with GTK's settings (two copies) and an A4 page setup, then, when the
                                                sheet answers 0, Print with the document PATH (a descriptor) and the token:
                                                {"prepare": <Response>, "print": <Response>}
+    portal-client.py print-first PATH SECONDS  org.freedesktop.portal.Print's Print with no token, as libportal's callers make it
+                                               (the document PATH as a descriptor, no PreparePrint before it): {"print": <Response>}
     portal-client.py permission TABLE ID       the permission store's entry (org.freedesktop.impl.portal.PermissionStore's
                                                Lookup): {"permissions": {app: [...]}}, or {"error": name}
 """
@@ -167,6 +169,21 @@ def print_document(conn, path, seconds):
     print(json.dumps(out), flush=True)
 
 
+def print_first(conn, path, seconds):
+    sender = conn.get_unique_name()[1:].replace(".", "_")
+    token = "gffirst%d" % (GLib.get_monotonic_time() % 1000000)
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    fds = Gio.UnixFDList.new()
+    index = fds.append(fd)
+    os.close(fd)
+    options = {"handle_token": GLib.Variant("s", token)}
+    request = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, token)
+    out = {"print": wait_response(conn, request, lambda: conn.call_with_unix_fd_list_sync(
+        DEST, PATH, "org.freedesktop.portal.Print", "Print", GLib.Variant("(ssha{sv})", ("", "Report", index, options)),
+        None, Gio.DBusCallFlags.NONE, 10000, fds, None), seconds)}
+    print(json.dumps(out), flush=True)
+
+
 def camera(conn, seconds):
     token = "gfcam%d" % (GLib.get_monotonic_time() % 1000000)
     sender = conn.get_unique_name()[1:].replace(".", "_")
@@ -256,6 +273,9 @@ def main():
         return
     if command == "print":
         print_document(conn, sys.argv[2], sys.argv[3])
+        return
+    if command == "print-first":
+        print_first(conn, sys.argv[2], sys.argv[3])
         return
     if command == "permission":
         permission(conn, sys.argv[2], sys.argv[3])

@@ -14,7 +14,9 @@ function finite(v) {
 // foreign protocol versions, malformed text, an enter or open without a usable light). `address` is lower-case hex without
 // 0x; `light` is the zoom light's rectangle in global layout coordinates (null for leave); `tileable` whether the window can
 // be tiled now (the popover greys its tiles otherwise); `splittable` whether it also fits half of its output's Split View
-// (TL33, TL8: the popover greys Left and Right of Screen otherwise).
+// (TL33, TL8: the popover greys Left and Right of Screen otherwise); `fit` {zones, places} the zones and the places its minimum
+// does not fit (ADR-0036 D69, fitNames: the popover greys those arrangements, Layouts zones and places; both [] for leave and
+// for an older plugin, which offers everything).
 function parseHover(data) {
     let msg = null;
     try {
@@ -29,10 +31,73 @@ function parseHover(data) {
         return null;
     const address = hex[1].toLowerCase();
     if (msg.state === "leave")
-        return {address: address, state: "leave", light: null, tileable: false, splittable: false};
+        return {address: address, state: "leave", light: null, tileable: false, splittable: false, fit: noFit()};
     if (!finite(msg.x) || !finite(msg.y) || !finite(msg.w) || !finite(msg.h) || msg.w <= 0 || msg.h <= 0)
         return null;
-    return {address: address, state: msg.state, light: {x: msg.x, y: msg.y, w: msg.w, h: msg.h}, tileable: msg.tileable === true, splittable: msg.splittable === true};
+    return {address: address, state: msg.state, light: {x: msg.x, y: msg.y, w: msg.w, h: msg.h}, tileable: msg.tileable === true, splittable: msg.splittable === true,
+        fit: {zones: fitNames(msg.unfitZones), places: fitNames(msg.unfitPlaces)}};
+}
+
+// ---- what a window fits (ADR-0036 D69) ----
+
+// At most this many names in a list, each at most kMaxFitName characters (the plugin lists 26 zones and 13 places at most).
+var kMaxFitNames = 64;
+var kMaxFitName = 24;
+
+// The names of a list of the plugin (a zone "x,y,w,h" in twelfths, a place "top-left"): the strings of at most kMaxFitName
+// characters, at most kMaxFitNames of them; [] for a missing or malformed list.
+function fitNames(list) {
+    return (Array.isArray(list) ? list : []).filter(n => typeof n === "string" && n.length > 0 && n.length <= kMaxFitName).slice(0, kMaxFitNames);
+}
+
+// A window that fits everything (nothing known, or an older plugin): nothing greyed, the plugin still refuses what does not fit.
+function noFit() {
+    return {zones: [], places: []};
+}
+
+// A zone [x, y, w, h] in twelfths (a glyph token) as the plugin names it: "x,y,w,h".
+function zoneKey(zone) {
+    return Array.isArray(zone) && zone.length === 4 ? zone.join(",") : "";
+}
+
+// The window fits place `place` ("left", "top-left", "left-third"…; Fill and Center always fit) with fit {zones, places}.
+function placeFits(fit, place) {
+    return place === "fill" || place === "center" || !fit || (fit.places || []).indexOf(place) < 0;
+}
+
+// The window fits zone `zone` ([x, y, w, h]: a Layouts zone, or an arrangement's first zone, its own) with fit {zones, places}.
+function zoneFits(fit, zone) {
+    const key = zoneKey(zone);
+    return key === "" || !fit || (fit.zones || []).indexOf(key) < 0;
+}
+
+// gfc1-reply: grassfield-tiling
+// The zones and the places each window does not fit, from the reply of `hyprctl grassfield-tiling` ("unfitZones", D69): an
+// object keyed by lower-case hex address without 0x, each {zones, places} (fitNames); a malformed entry left out; null when
+// the reply is malformed (an older plugin's reply, without "unfitZones", lists none).
+function parseUnfitZones(text) {
+    let msg = null;
+    try {
+        msg = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "tiling")
+        return null;
+    const out = {};
+    (Array.isArray(msg.unfitZones) ? msg.unfitZones : []).forEach(w => {
+        const a = w && typeof w === "object" ? hexAddress(w.address) : "";
+        if (a !== "")
+            out[a] = {zones: fitNames(w.zones), places: fitNames(w.places)};
+    });
+    return out;
+}
+
+// What window `address` (any address form) does not fit, from parseUnfitZones' object (null or not listed: it fits
+// everything, noFit).
+function fitOf(unfitZones, address) {
+    const a = hexAddress(address);
+    return a !== "" && unfitZones && unfitZones[a] ? unfitZones[a] : noFit();
 }
 
 // What a click on the green light does while its tiling popover is open (ADR-0036 D64: the overlay takes that click, the

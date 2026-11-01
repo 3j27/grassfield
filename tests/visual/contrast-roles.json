@@ -42,6 +42,7 @@
    {"file": "shell/overlay/ControlCenter.qml", "class": "secondary", "count": 3},
    {"file": "shell/overlay/Dialog.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/AppAboutPanel.qml", "class": "secondary", "count": 1},
+   {"file": "shell/overlay/SharePickerPanel.qml", "class": "secondary", "count": 3},
    {"file": "shell/overlay/VolumeMenu.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/controlcenter/Caption.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/controlcenter/RadioRow.qml", "class": "secondary", "count": 1},

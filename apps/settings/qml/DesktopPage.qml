@@ -153,6 +153,16 @@ SettingsPage {
                 onToggled: c => root.store.set("dock.showRecents", c)
             }
         }
+
+        // Windows' End Task (owner AQ5, ADR-0038 AM63): the Dock menu of a running app gains End Task, its Option + Force Quit.
+        SettingsRow {
+            title: qsTr("Show End Task in Dock menus")
+            Toggle {
+                accessibleName: qsTr("Show End Task in Dock menus")
+                checked: root.store.value("dock.endTask")
+                onToggled: c => root.store.set("dock.endTask", c)
+            }
+        }
     }
 
     // Folders kept in the Dock as stacks (dock.folders). Dragging a folder onto the Dock's right section adds one too.
