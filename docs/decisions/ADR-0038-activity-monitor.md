@@ -698,7 +698,10 @@ Answer: A (see "Answers").
   goes when the app's last window closes. The app watches the folder and the file (inotify) and reads the file again at each
   sample, so a shell that crashed (its file left behind, its writer gone) stops counting at once. Anything that is not a
   valid version 1 file from a live writer is no projection (Terms), and the app behaves as without a shell (AM75).
-- **AD49. Quit through the shell waits, a second at most** (AM52, AM61; step 3). Quit of a process that owns windows asks the
+- **AD49. Quit through the shell waits for the outcome, 10 s at most** (AM52, AM61; step 3; amended after the review of
+  5bfd4419, whose first bound, a second with `qs` starting included, could offer Force Quit while the app showed its save
+  prompt on a loaded machine: the outcome is now the shell's "ok", the process gone, or its windows gone from the
+  projection, looked for every 250 ms; Force Quit only on "refused" or nothing within 10 s). As first written: Quit of a process that owns windows asks the
   shell (`qs ipc ... call activity quit <pid>`, through `shellIpcArgs()`) and answers "pending"; the sheet then takes no
   click or key (Grassfield.Ui's Sheet: a confirm handler may answer `false`, then closes the sheet or shows its error
   itself). "ok" sends nothing more (the app may ask to save), "no-windows" sends SIGTERM through AM51's descriptor, and

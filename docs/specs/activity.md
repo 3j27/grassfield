@@ -346,19 +346,23 @@ items (Settings does it); a background collector; any network access.
   `{"v":1,"writer":{"pid":N,"start":N},"windows":[{"pid":N,"app":"<app id>","idleInhibit":bool}…],"notResponding":[N…]}`,
   at most 256 windows, from `Compositor.knownWindows()` after `Compositor.refreshToplevels()` on a window opening, closing or
   changing class, and from `NotResponding.marks`, coalesced over 250 ms. No title. The file is removed when the last such
-  toplevel closes and when the shell stops. The app reads it on change (inotify) and ignores it when stale (Terms: writer)
+  toplevel closes. When the shell stops it may stay (a reload keeps the same process, so the shell cannot tell a stop from
+  a reload): the app drops it at its next reading, its writer being gone (review of 5bfd4419). The app reads it on change (inotify) and ignores it when stale (Terms: writer)
   or invalid (over 64 KiB, another `v`, a value of the wrong type). Step 3 (AD48): the shell's `ActivityLink`; the writer
   is the shell, named by the script that writes the file (its parent); the app reads the file again at each sample, so a
   crashed shell's file stops counting. It names a windowed process (AM17: its app's desktop entry name and icon), marks one
   that does not respond (AM27), lists Windowed Processes (AM12), counts Recent hangs (AM57) and adds a window's idle
   inhibitor to Preventing Sleep (AM38).
 - **AM61** IPC target `activity`, function `quit(pid: int): string`, class action, caller `grassfield-activity`: refused
-  (`refused`) for a pid ≤ 1 or in a dev session for a pid outside the nested session; otherwise refreshes the toplevels,
-  closes every window whose client pid is `pid` (`Compositor.close`, as the Dock's Quit) and answers `ok`, or `no-windows`
-  when there was none. Never kills. Listed in `docs/specs/security.md` "IPC surface" and `tests/security/ipc_inventory.sh`.
-  Step 3 (AD49): the app's Quit waits for the answer a second at most, the sheet taking no click or key meanwhile; "ok"
-  sends nothing, "no-windows" SIGTERM through AM51's descriptor, "refused" or no answer leaves Force Quit alone. A shell
-  reaches its own compositor's windows only (a nested session's shell, the nested ones).
+  (`refused`) for a pid ≤ 1; otherwise closes every window whose client pid is `pid` and that the shell can close
+  (`Compositor.close`, as the Dock's Quit), from the window list as the shell last read it (read again at every window
+  opened or closed, AM60), and answers `ok`, or `no-windows` when there was none. Never kills. Listed in
+  `docs/specs/security.md` "IPC surface" and `tests/security/ipc_inventory.sh`. A shell reaches its own compositor's windows
+  only (a nested session's shell, the nested ones); in a development session the app's dev guard (AM56) refuses a process
+  outside the nested session before the shell is asked (review of 5bfd4419: the shell has no refusal of its own). Step 3
+  (AD49, as amended): the app's Quit waits for the outcome, up to 10 s with `qs` starting included, the sheet taking no
+  click or key meanwhile: "ok", the process gone or its windows gone from the projection close the sheet; "no-windows"
+  sends SIGTERM through AM51's descriptor; "refused" or no outcome within the bound leaves Force Quit alone.
 - **AM62** Dock tile graph: View > Dock Icon: Show Application Icon (default), Show Network Usage, Show Disk Activity, Show
   CPU Usage, Show CPU History. Other than the icon, the app writes `dock-tile.json` in the runtime folder (0600, renamed
   into place) at each sample: `{"v":1,"writer":{"pid":N,"start":N},"kind":"network|disk|cpu-usage|cpu-history",
