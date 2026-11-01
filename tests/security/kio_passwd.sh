@@ -29,7 +29,8 @@
 #    Secret Service that is not gnome-keyring is "unknown"
 # 12 bounds: one caller's ninth and tenth open requests answered at once; the shell's bound of 8 shared with gcr's prompts
 # 13 wrong answers from the shell (a name where none is asked, ok without a password, a choice not offered, an empty
-#    password) each end their query with nothing
+#    password) each end their query with nothing; the shell's refusal (result "refused", its bound) ends its query with
+#    nothing and, unlike the user's Cancel, keeps no cancelled entry: the server's next query gets a sheet
 # 14 a name changed in the sheet: the result's URL names it, and the old URL's next query is not blocked
 # 15 hide-username-line: no name field, the user name kept; <NoAuthPrompt>: nothing at once, no sheet
 # 16 the caller leaves while its query is shown: the shell gets "cancel"
@@ -437,6 +438,18 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
     desc="a wrong answer ($wrong) ends its query with nothing, the shell told \"cancel\" [$out]"
     check bash -c '[[ $1 == "query rc=1 modified=0 "* ]] && grep -q "{\"id\":\"$3\",\"type\":\"cancel\"}" "$2"' _ "$out" "$d/s.shell" "$gid"
   done
+  # The shell's refusal: two queries of one server (windows 1 and 2, sequence number 0), the first shown and refused. After
+  # the user's Cancel the second would be answered with nothing at once (a cancelled entry newer than it, as in 12).
+  n=$(prompts s)
+  before=$(grep -c '^result query' "$d/st.log")
+  say st "many 2 sftp://refused.example/"
+  wait_prompt s "$n"
+  gid=$(last_id s)
+  say s "raw {\"type\":\"answer\",\"id\":\"$gid\",\"result\":\"refused\"}"
+  desc="the shell's refusal ends its query with nothing (the shell not told \"cancel\") and keeps no cancelled entry: the server's second query gets a sheet"
+  check wait_until 10 bash -c '[[ $(grep -c "^result query [0-9]* modified=0" "$1") -gt 0 && $(( $(grep -c "^result query" "$1") - $2 )) == 1 && $(grep -c "\"type\":\"prompt\"" "$3") == $(( $4 + 2 )) ]] && grep -q "request $5 refused by the shell" "$6" && ! grep -q "{\"id\":\"$5\",\"type\":\"cancel\"}" "$3"' _ "$d/st.log" "$before" "$d/s.shell" "$n" "$gid" "$d/bridge.log"
+  say s "answer last cancel"
+  wait_until 10 bash -c '[[ $(( $(grep -c "^result query" "$1") - $2 )) == 2 ]]' _ "$d/st.log" "$before"
 
   # --- 14 a name changed in the sheet -----------------------------------------------------------------------------------
   n=$(prompts s)
@@ -584,6 +597,7 @@ kinds-gate-ignored#bridge#Bridge.cpp#                m_kio->setWanted(m_kinds.co
 keyring-protection-ignored#bridge#KioServer.cpp#                    r->keyring = kio::fileProtection(#                    (void)kio::fileProtection(
 name-kept-when-the-shell-goes#bridge#KioServer.cpp#        if (m_nameWanted)\n            m_releaseSource = g_timeout_add(kReleaseDelayMs, onRelease, this);#        if (false)\n            m_releaseSource = g_timeout_add(kReleaseDelayMs, onRelease, this);
 user-cancel-not-kept#bridge#KioServer.cpp#            m_cache.add(r->key, r->info, 0, m_seqNr, true);#            ;
+refusal-as-cancel#bridge#Bridge.cpp#            m_kio->abandon(request, QStringLiteral("the shell could not take it"));#            m_kio->userCancel(request);
 old-key-left-prompted#bridge#KioServer.cpp#            m_prompted.removeOne(r->promptedKey);#            m_prompted.removeOne(r->key);
 no-per-caller-bound#bridge#KioServer.cpp#        if (mine >= kPerCaller)#        if (mine >= 99)
 name-where-none-asked-accepted#bridge#Bridge.cpp#        else if (answer.hasIdentity && !asksName)#        else if (false)

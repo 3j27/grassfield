@@ -513,7 +513,7 @@ namespace gf::prompter {
         const bool asksName = request->nameMode == QLatin1String("edit");
         QString    wrong;
         if (!answer.ok && (answer.hasPassword || answer.hasIdentity || answer.hasChoice))
-            wrong = QStringLiteral("a secret, a name or a choice in a cancellation");
+            wrong = QStringLiteral("a secret, a name or a choice in a cancellation or a refusal");
         else if (answer.ok && !answer.hasPassword)
             wrong = QStringLiteral("ok without a password");
         else if (answer.ok && asksName && !answer.hasIdentity)
@@ -532,6 +532,13 @@ namespace gf::prompter {
         m_book.release(answer.id);
         if (!m_kio)
             return;
+        if (answer.refused) {
+            // The shell could not take it (its bound): "nothing" to KIO's client, as when the bridge cannot ask, and no
+            // cancelled entry in the cache (that is the user's Cancel only): the worker may ask again (decision 9-31, 9-37).
+            log(QStringLiteral("request %1 refused by the shell").arg(answer.id));
+            m_kio->abandon(request, QStringLiteral("the shell could not take it"));
+            return;
+        }
         if (!answer.ok) {
             m_kio->userCancel(request);
             return;
