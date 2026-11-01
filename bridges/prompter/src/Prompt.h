@@ -13,7 +13,11 @@
 
 #include <gcr/gcr.h>
 
+#include <QList>
+#include <QSet>
 #include <QString>
+
+#include <functional>
 
 G_BEGIN_DECLS
 #define GF_TYPE_PROMPT (gf_prompt_get_type())
@@ -63,5 +67,34 @@ namespace gf::prompter {
 
     // For the tests: the prompt still holds a password.
     bool holdsPassword(GfPrompt* prompt);
+
+    // Work on prompts left for a later turn of the default main context, so that nothing calls into gcr from inside gcr's
+    // own callbacks (opus final check of step 9a). A job holds a reference to each of its prompts, released once it has
+    // run; the jobs that have not run when their owner goes are removed with it, their references released, so no job
+    // ever runs after its owner (opus re-check of step 9a, NIT).
+    class PromptsLater {
+      public:
+        using Job = std::function<void(const QList<GfPrompt*>& prompts)>;
+
+        PromptsLater() = default;
+        ~PromptsLater();
+        PromptsLater(const PromptsLater&)            = delete;
+        PromptsLater& operator=(const PromptsLater&) = delete;
+
+        // Takes over one reference to each prompt; `job` (may be empty: the references only go later) runs in a later turn.
+        void schedule(QList<GfPrompt*> prompts, Job job);
+        // Removes every job that has not run, without running it, and releases its references.
+        void clear();
+        // The jobs that have not run.
+        qsizetype pending() const {
+            return m_sources.size();
+        }
+
+      private:
+        struct Entry;
+        static gboolean run(gpointer data);
+        static void     done(gpointer data);
+        QSet<guint>     m_sources;
+    };
 
 } // namespace gf::prompter

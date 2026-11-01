@@ -73,6 +73,10 @@ namespace gf::prompter {
         for (GfPrompt* prompt : std::as_const(m_prompts))
             detachSink(prompt);
         m_prompts.clear();
+        // What was left for a later turn never runs after the bridge (it would find the bridge gone): removed, its
+        // references released; the sinks are detached first, so a prompt that goes now reports nowhere (opus re-check of
+        // step 9a, NIT).
+        m_later.clear();
         if (m_acquiredSub)
             g_dbus_connection_signal_unsubscribe(m_bus, m_acquiredSub);
         if (m_lostSub)
@@ -300,13 +304,7 @@ namespace gf::prompter {
     // callbacks (withdraw and forget always do, cancelRequest through dropClient), where a last reference going would
     // dispose a prompt gcr is still working on (opus final check of step 9a: the audit of the paths into gcr).
     void Bridge::unrefLater(GfPrompt* prompt) {
-        g_idle_add_full(
-            G_PRIORITY_DEFAULT,
-            [](gpointer data) -> gboolean {
-                g_object_unref(data);
-                return G_SOURCE_REMOVE;
-            },
-            prompt, nullptr);
+        m_later.schedule({prompt}, {});
     }
 
     void Bridge::withdraw(GfPrompt* prompt) {
@@ -603,38 +601,24 @@ namespace gf::prompter {
         closeOpenPromptsLater();
     }
 
-    namespace {
-        struct ClosingBatch {
-            Bridge*          bridge;
-            QList<GfPrompt*> prompts; // references
-        };
-    } // namespace
-
     void Bridge::closeOpenPromptsLater() {
         if (m_prompts.isEmpty())
             return;
-        auto* batch = new ClosingBatch{this, m_prompts.values()};
-        for (GfPrompt* prompt : std::as_const(batch->prompts))
+        const QList<GfPrompt*> open = m_prompts.values();
+        for (GfPrompt* prompt : open)
             g_object_ref(prompt); // the address cannot be reused by another prompt meanwhile
-        g_idle_add_full(G_PRIORITY_DEFAULT, closeBatch, batch, nullptr);
-    }
-
-    gboolean Bridge::closeBatch(gpointer data) {
-        auto*   batch  = static_cast<ClosingBatch*>(data);
-        Bridge* self   = batch->bridge;
-        int     closed = 0;
-        for (GfPrompt* prompt : std::as_const(batch->prompts)) {
-            // A prompt gcr ended meanwhile was disposed, which took it out of m_prompts: nothing to close.
-            if (self->m_prompts.contains(prompt)) {
-                gcr_prompt_close(GCR_PROMPT(prompt));
-                ++closed;
+        m_later.schedule(open, [this](const QList<GfPrompt*>& prompts) {
+            int closed = 0;
+            for (GfPrompt* prompt : prompts) {
+                // A prompt gcr ended meanwhile was disposed, which took it out of m_prompts: nothing to close.
+                if (m_prompts.contains(prompt)) {
+                    gcr_prompt_close(GCR_PROMPT(prompt));
+                    ++closed;
+                }
             }
-            g_object_unref(prompt);
-        }
-        // gcr disposes each prompt it ends, which takes it out of m_prompts: what is left was not ended.
-        log(QStringLiteral("%1 open gcr prompt(s) closed: their callers saw the name go (%2 still open)").arg(closed).arg(self->m_prompts.size()));
-        delete batch;
-        return G_SOURCE_REMOVE;
+            // gcr disposes each prompt it ends, which takes it out of m_prompts: what is left was not ended.
+            log(QStringLiteral("%1 open gcr prompt(s) closed: their callers saw the name go (%2 still open)").arg(closed).arg(m_prompts.size()));
+        });
     }
 
     // --- the well-known name ------------------------------------------------------------------------------------------------

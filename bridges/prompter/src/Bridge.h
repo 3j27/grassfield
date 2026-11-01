@@ -100,10 +100,10 @@ namespace gf::prompter {
         void cancelRequest(const QString& id, bool tellShell);
         void cancelAll(bool tellShell);
 
-        // dropClient's closing of gcr's open prompts, in a later main loop turn (never inside gcr's callbacks).
-        void            closeOpenPromptsLater();
-        static gboolean closeBatch(gpointer data);
-        static void     unrefLater(GfPrompt* prompt);
+        // In a later main loop turn (never inside gcr's callbacks): dropClient's closing of gcr's open prompts, and a
+        // request's reference to its prompt on the paths that run inside gcr.
+        void closeOpenPromptsLater();
+        void unrefLater(GfPrompt* prompt);
 
         void wantName(bool want);
         void refreshName();
@@ -139,6 +139,7 @@ namespace gf::prompter {
         RequestBook             m_book{limits::kRequests};
         QHash<QString, Pending> m_pending; // id -> request
         QSet<GfPrompt*>         m_prompts; // live prompts reporting here
+        PromptsLater            m_later;   // cleared in ~Bridge once no prompt reports here any more
 
         bool    m_nameWanted = false;
         quint64 m_nameGen    = 0;
