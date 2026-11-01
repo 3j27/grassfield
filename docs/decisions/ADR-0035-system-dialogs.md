@@ -1543,7 +1543,7 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
   from captures too. Rule applied: SC4.
 
 **Delivered in step 9c (udiskie's passphrase and NetworkManager's Wi-Fi secrets; KIO's password server is 9e).** The
-integrator's brief for this step (2026-11-01) put the NetworkManager agent, planned above as 9d, in the same step as udiskie;
+brief for this step (2026-11-01) put the NetworkManager agent, planned above as 9d, in the same step as udiskie;
 nothing else of the order changes. Built under the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment
 2026-10-31"); no new dependency (libgcr-4 and Qt Core as in 9a; no libnm: NetworkManager's agent interface is spoken with
 GDBus, the bridge's bus library since 9-5).
