@@ -984,6 +984,20 @@ function photoAbout(photo, lang) {
     return photo ? {title: photoName(photo, lang), author: photo.author, sourceUrl: photo.sourceUrl, licenseShort: photo.licenseShort, licenseUrl: photo.licenseUrl} : null;
 }
 
+// What the desktop's "About This Wallpaper" shows for one output (ADR-0040 step 2c): `out` is the output's report (WallpaperState
+// .outputs[name]: {source, state, path}), `online` the online picture's ({entry}), `photos` the shipped list (parsePhotos). The
+// online picture's attribution while that output shows it, ready; the photograph's while it shows one of the list, ready; null
+// otherwise (the menu then has no About This Wallpaper).
+function aboutEntryOf(out, online, photos, lang) {
+    if (!out || out.state !== "ready")
+        return null;
+    if (out.source === "online")
+        return online && online.entry ? online.entry : null;
+    if (out.source === "file" && typeof out.path === "string" && out.path !== "")
+        return photoAbout(photoAt(photos, out.path), lang);
+    return null;
+}
+
 // ---- the artwork's variant (ADR-0040 section 2, IQ-W1 C) ----
 // The variant GrassfieldArtwork draws for `artwork` under the user's `choice` (wallpaper.artworkVariant), the appearance
 // (`dark`) and the phase of the day (TimeOfDay, "" while it is not known). Grassfield: Time of Day is the phase in the

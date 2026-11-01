@@ -83,6 +83,17 @@ Singleton {
             statusTimer.start();
     }
 
+    // The shipped photographs (ADR-0040 step 2c): their list beside them (photos.json in the package's folder; a dev session's
+    // .dev/photos, scripts/dev/photos.sh), read once at start as Settings reads it; [] without them.
+    readonly property string photosDir: dev ? repoRoot + "/.dev/photos" : "/usr/share/grassfield/wallpapers/photos"
+    property var photos: []
+
+    // What the desktop's "About This Wallpaper" shows for an output: the online picture's attribution or the shown photograph's
+    // ({title, author, sourceUrl, licenseShort, licenseUrl}; WallpaperConfig.aboutEntryOf); null when neither is on screen.
+    function aboutEntry(output: string): var {
+        return WallpaperConfig.aboutEntryOf(outputs[output], online, photos, Qt.locale().name);
+    }
+
     // True while the picture of an output is the online daily one (the desktop menu's "About This Wallpaper").
     function onlineShown(output: string): bool {
         const o = outputs[output];
@@ -291,6 +302,14 @@ Singleton {
             root.stateReady = true;
         }
         onLoadFailed: root.stateReady = true
+    }
+
+    FileView {
+        id: photosReader
+        path: root.photosDir + "/photos.json"
+        printErrors: false
+        onLoaded: root.photos = WallpaperConfig.parsePhotos(text(), root.photosDir)
+        onLoadFailed: root.photos = []
     }
 
     FileView {

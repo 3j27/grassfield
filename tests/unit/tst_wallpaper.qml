@@ -926,6 +926,46 @@ TestCase {
         compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: many}), dir).length, 64);
     }
 
+    // The desktop's About This Wallpaper (ADR-0040 step 2c): the online picture's attribution or the shown photograph's, only
+    // while that output shows it, ready.
+    function test_aboutEntryOf() {
+        const dir = "/usr/share/grassfield/wallpapers/photos";
+        const photos = WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), dir);
+        const online = {entry: {title: "Day", author: "B", sourceUrl: "https://commons.wikimedia.org/wiki/File:D.jpg"}};
+        compare(WallpaperConfig.aboutEntryOf({source: "online", state: "ready"}, online, photos, "en_US").title, "Day");
+        compare(WallpaperConfig.aboutEntryOf({source: "online", state: "waiting"}, online, photos, "en_US"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "online", state: "ready"}, {}, photos, "en_US"), null);
+        const shown = WallpaperConfig.aboutEntryOf({source: "file", state: "ready", path: dir + "/golden-mist.jpg"}, online, photos, "fr_FR");
+        compare(shown.title, "Brume dorée");
+        compare(shown.author, "A");
+        compare(shown.licenseShort, "CC BY 4.0");
+        compare(shown.sourceUrl, "https://commons.wikimedia.org/wiki/File:X.jpg");
+        compare(WallpaperConfig.aboutEntryOf({source: "file", state: "preparing", path: dir + "/golden-mist.jpg"}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "file", state: "ready", path: "/home/a/Pictures/golden-mist.jpg"}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "folder", state: "ready", path: dir}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "builtin", state: "builtin"}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf(undefined, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "file", state: "ready", path: dir + "/golden-mist.jpg"}, online, [], "en"), null);
+    }
+
+    // The desktop uses that one rule for its menu item and its card, and the shell reads the shipped list (shell/ needs
+    // Quickshell: read from the sources).
+    function test_aboutEntryWiring() {
+        function read(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("../../" + rel), false);
+            xhr.send();
+            return xhr.responseText.replace(/\/\/.*$/gm, "");
+        }
+        const icons = read("shell/desktop/IconsView.qml");
+        verify(/aboutWallpaper: WallpaperState\.aboutEntry\(root\.screen\.name\) !== null/.test(icons), "the menu item for either attribution");
+        verify(/AttributionCard \{\s*entry: WallpaperState\.aboutEntry\(root\.screen\.name\)/.test(icons), "the card shows the same entry");
+        const state = read("shell/services/WallpaperState.qml");
+        verify(/WallpaperConfig\.aboutEntryOf\(outputs\[output\], online, photos, Qt\.locale\(\)\.name\)/.test(state));
+        verify(/onLoaded: root\.photos = WallpaperConfig\.parsePhotos\(text\(\), root\.photosDir\)/.test(state), "the list read as Settings reads it");
+        verify(/photosDir: dev \? repoRoot \+ "\/\.dev\/photos" : "\/usr\/share\/grassfield\/wallpapers\/photos"/.test(state), "the folders of scripts/dev/photos.sh and of the package");
+    }
+
     // The list the package installs: every photograph reads, sixteen of them (the owner's call of 2026-10-31).
     function test_photosShippedList() {
         const xhr = new XMLHttpRequest();

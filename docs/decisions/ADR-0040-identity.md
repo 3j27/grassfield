@@ -134,7 +134,9 @@ and IQ-B3 here changes the palette only, not which controls read it.
     Wallpaper lists them in a Photographs section after the Grassfield artwork (`WallpaperConfig.parsePhotos`; an entry of
     the wrong shape is left out, an id is a plain file name); one is chosen as a picture (source `file`, through the
     helper like any other) and About This Wallpaper names its author, source and licence. The desktop's own About This
-    Wallpaper card shows them once `shell/desktop` has merged. Legal: E40 and `THIRD_PARTY.md` "5c";
+    Wallpaper card shows them too (2026-11-01, the owner's « Maintenant dans la #79 »: `WallpaperState` reads the list
+    as Settings does, `WallpaperConfig.aboutEntryOf` picks the online picture's or the shown photograph's attribution,
+    `tst_wallpaper.qml` +2). Legal: E40 and `THIRD_PARTY.md` "5c";
     `tests/ci/wallpaper_photos.py` holds the list, the pins, the PKGBUILD and the legal texts together. The package weight:
     estimated at about 70 MB from the 960 px thumbnails at the same quality (the originals could not be downloaded in the
     container that built it); the build gives the real figure. `scripts/dev/photos.sh` prepares them under `.dev/photos`

@@ -39,7 +39,8 @@ FocusScope {
     // Context menu: kind "icon" | "desktop", position in window coordinates.
     property string menuKind: ""
     property point menuAt: Qt.point(0, 0)
-    // "About This Wallpaper" (the online daily picture's attribution) is open: a card anchored where the menu was.
+    // "About This Wallpaper" (the online daily picture's attribution, or a shipped photograph's) is open: a card anchored where
+    // the menu was.
     property bool aboutOpen: false
 
     readonly property real margin: Tokens.desktopIconMargin
@@ -760,7 +761,7 @@ FocusScope {
                 bounds: menuPopup.contentItem
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
-                aboutWallpaper: WallpaperState.onlineShown(root.screen.name)
+                aboutWallpaper: WallpaperState.aboutEntry(root.screen.name) !== null
                 count: root.selectedNames.length
                 singleName: root.selectedNames.length === 1 ? root.selectedNames[0] : ""
                 pasteCount: files.clipboardPaths.length
@@ -817,6 +818,7 @@ FocusScope {
             id: aboutLoader
             active: root.aboutOpen
             sourceComponent: AttributionCard {
+                entry: WallpaperState.aboutEntry(root.screen.name) || ({})
                 onCloseRequested: root.closeAbout("esc")
             }
             onLoaded: (item as Item).forceActiveFocus()

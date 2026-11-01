@@ -3,16 +3,17 @@ import QtQuick
 import Grassfield.Ui
 import qs.services
 
-// "About This Wallpaper": the attribution of the online daily picture (Title, Author, Source, Licence, Last updated), on the
-// frosted material, opened from the desktop menu. Everything shown comes from the helper's sanitized sidecar and is drawn as
+// "About This Wallpaper": the attribution of the online daily picture, or of a shipped photograph (ADR-0040 step 2c; the
+// host passes it as `entry`): Title, Author, Source, Licence, Last updated (the online picture only), on the frosted
+// material, opened from the desktop menu. Everything shown comes from the helper's sanitized sidecar and is drawn as
 // plain text (never rich text). The licence name links to the licence and the file page to its source (CC BY 4.0 section
 // 3(a)(1)(C)): a link opens only on a click or Return, only an https address (WallpaperConfig.linkOf), as an argument vector
 // through Apps.openDetached. Return, Space, Esc and the button close the card (a focused link opens instead).
 FocusScope {
     id: root
 
-    // {title, author, credit, caption, licenseShort, licenseUrl, sourceUrl, fetchedAt}
-    readonly property var entry: WallpaperState.online.entry || ({})
+    // {title, author, credit, caption, licenseShort, licenseUrl, sourceUrl, fetchedAt}; a photograph's has no caption or fetchedAt.
+    property var entry: WallpaperState.online.entry || ({})
 
     signal closeRequested
 
@@ -37,6 +38,8 @@ FocusScope {
     readonly property string sourceLabel: qsTr("Source")
     readonly property string licenceLabel: qsTr("Licence")
     readonly property string updatedLabel: qsTr("Last updated")
+    // Both sources are Wikimedia Commons: the online picture of the day, and every shipped photograph (its source page is a
+    // Commons file page, tests/ci/wallpaper_photos.py).
     readonly property string commonsName: qsTr("Wikimedia Commons")
 
     // {label, value (plain), linkText + url (a link)}.
