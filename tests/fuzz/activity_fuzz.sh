@@ -2,8 +2,8 @@
 # Mutation fuzzing of Activity Monitor's readers (review of 5bfd4419, NIT 6): builds tests/fuzz/activity_parsers_fuzz.cpp
 # with AddressSanitizer and UndefinedBehaviorSanitizer beside the readers it feeds (apps/activity/src: the projection,
 # the journal's unit records, cpu.stat, /proc/net/wireless, a cache size, a desktop entry, a unit's name, Inspect's
-# readers) and runs it: no crash, a bounded time per call, the same answer twice, each reader's promises. Scratch files
-# only, nothing of the session read or written. Budget: GF_FUZZ_ITERATIONS (default 2000 per reader), GF_FUZZ_SEED.
+# readers) and runs it: no crash, a bounded CPU time per call (the thread's own, so a loaded machine does not fail it), the
+# same answer twice, each reader's promises. Scratch files only, nothing of the session read or written. Budget: GF_FUZZ_ITERATIONS (default 2000 per reader), GF_FUZZ_SEED.
 # Prints PASS/FAIL lines; exit 0 when every reader passed (a SKIP line without g++ or Qt 6 Core).
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
