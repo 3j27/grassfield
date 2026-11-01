@@ -382,6 +382,15 @@ void Print::choosePrinter(int id, const QString &printer, const QVariantMap &cho
             p->applyPresetOnRead = false;
             carried = presetChoices(*p, carried);
         }
+        // A document sent first whose size is known: its paper, where this printer lists it, the first time a printer's options
+        // are read (later the user's paper is carried as for any other choice). Its size known later: documentPaper (6-28).
+        if (p->document && !p->documentPaperApplied && caps.known && p->pageSetup.contains(QStringLiteral("Width"))) {
+            p->documentPaperApplied = true;
+            const print::Media paper = print::findMedia(caps.media, {}, p->pageSetup.value(QStringLiteral("Width")).toDouble(),
+                                                        p->pageSetup.value(QStringLiteral("Height")).toDouble());
+            if (!paper.name.isEmpty())
+                carried.media = paper;
+        }
         p->choices = carried;
         emit printerChosen(id, printer, print::toQml(caps), print::toQml(carried));
     });
@@ -892,7 +901,8 @@ void Print::inspectDocument(int id, const std::function<bool()> &stopped)
         // printer's options when they are read after this, by the sheet (unless the user chose a paper) when they were before.
         const double w = info->pageSize.width() * 25.4 / 72, h = info->pageSize.height() * 25.4 / 72;
         p->pageSetup = {{QStringLiteral("Width"), std::min(w, h)}, {QStringLiteral("Height"), std::max(w, h)}};
-        if (p->capabilities.known && !p->reading) {
+        if (p->capabilities.known && !p->reading && !p->documentPaperApplied) {
+            p->documentPaperApplied = true;
             const print::Media paper = print::findMedia(p->capabilities.media, {}, std::min(w, h), std::max(w, h));
             if (!paper.name.isEmpty()) {
                 p->choices.media = paper;

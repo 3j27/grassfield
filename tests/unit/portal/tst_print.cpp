@@ -1473,8 +1473,7 @@ TEST_F(PrintTest, ADocumentSentFirstGetsTheSheetWithItsPreview)
         o.uiDeadlineMs = 60000;
         o.spoolFolder = dir.path();
     });
-    // The printer's own default paper is A5: the document's A4 wins.
-    system.officeDefault = QStringLiteral("iso_a5_148x210mm");
+    // The printer's own default paper is A4 (the sheet's first state too): the document's A5 wins.
     QList<QPair<int, int>> ready;
     QList<int> kept;
     QList<QVariantMap> papers;
@@ -1487,7 +1486,9 @@ TEST_F(PrintTest, ADocumentSentFirstGetsTheSheetWithItsPreview)
                      [&drawn](int id, int page, const QString &source) { drawn.append({id, page, source}); });
     QObject::connect(printer.get(), &Print::dismissed, printer.get(), [&dismissed](int id) { dismissed.append(id); });
     const int imagesBefore = PreviewImages::size();
-    const QByteArray pdf = twoPages();
+    // The fixture with its first page A5 (420 x 595 points; the same length, so its cross-reference table still holds).
+    QByteArray pdf = twoPages();
+    pdf.replace("/MediaBox [0 0 595 842]", "/MediaBox [0 0 420 595]");
     auto reply = printDocument(kHandle, pdf, {});
     ASSERT_TRUE(waitFor([&] { return !chosen.isEmpty() && !ready.isEmpty(); }, 15000));
     ASSERT_EQ(opened.size(), 1);
@@ -1499,7 +1500,7 @@ TEST_F(PrintTest, ADocumentSentFirstGetsTheSheetWithItsPreview)
     // The document's paper: chosen with the printer's options when its size came first, else suggested to the sheet after.
     const QString paper = papers.isEmpty() ? chosen.first().choices.value("media").toMap().value("name").toString()
                                            : papers.last().value("name").toString();
-    EXPECT_EQ(paper, QStringLiteral("iso_a4_210x297mm")) << "the document's paper over the printer's A5";
+    EXPECT_EQ(paper, QStringLiteral("iso_a5_148x210mm")) << "the document's paper over the printer's A4";
     EXPECT_TRUE(gtk.calls.isEmpty());
 
     printer->renderPage(id, 0, 120, 160);
@@ -1745,7 +1746,9 @@ TEST_F(PrintTest, APrintersOwnOptionsGoWithTheJob)
 TEST_F(PrintTest, ADocumentReadFromAPipeIsNeverSentOnTruncated)
 {
     make([this](Print::Options &o) {
-        o.uiDeadlineMs = 300;
+        // Long enough for the reader to have taken the pipe's first bytes (a deadline before that sends the untouched pipe to
+        // x-d-p-gtk whole, which is right too, but not this test's case).
+        o.uiDeadlineMs = 1500;
         o.spoolFolder = dir.path();
     });
     std::shared_ptr<Reply> reply;

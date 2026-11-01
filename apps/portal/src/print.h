@@ -206,6 +206,8 @@ private:
         QStringList images;
         // The preset is applied when the printer's options are read (the sheet's first printer, or a preset chosen meanwhile).
         bool applyPresetOnRead = false;
+        // A document's own paper was chosen or suggested once (6-13, 6-28).
+        bool documentPaperApplied = false;
     };
     struct Ticket {
         QString appId;
