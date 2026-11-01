@@ -232,6 +232,7 @@ private:
     Performance m_performance;
     Inspectors m_inspectors;
     QString m_runtimeFolder;
+    bool m_tileWritten = false; // AM62: this app wrote dock-tile.json (it removes no other)
     ProjectionWatch m_projection;
     SnapshotPtr m_lastSnapshot;   // the table's last sample, for a projection that changes between two
     bool m_inSnapshot = false;

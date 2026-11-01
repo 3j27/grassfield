@@ -90,6 +90,7 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
 
     // AM57: Inspect's reads run on the sampler's thread too (AD35), between its samples.
     m_inspectors.setWorker(m_worker);
+    m_inspectors.setMainActions(&m_actions);
     m_inspectors.setInterval(m_state.interval);
     m_inspectors.setNames(
         [this](int pid, quint64 start) {
@@ -175,7 +176,9 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
 
 ActivityApp::~ActivityApp()
 {
-    removeDockTile(m_runtimeFolder); // AM62: the tile shows the icon again once the app has quit
+    // AM62: the tile shows the icon again once the app has quit; only a file this app wrote is removed (review of 5bfd4419).
+    if (m_tileWritten)
+        removeDockTile(m_runtimeFolder);
     if (m_saveTimer.isActive()) {
         m_saveTimer.stop();
         writeState(m_statePath, m_state);
@@ -558,13 +561,18 @@ void ActivityApp::setDockIcon(const QString &key)
 
 void ActivityApp::writeDockTile()
 {
+    // Never a file this app did not write (another instance's, a test's): it removes only its own.
     if (m_state.dockIcon == QLatin1String("icon")) {
-        removeDockTile(m_runtimeFolder);
+        if (m_tileWritten) {
+            removeDockTile(m_runtimeFolder);
+            m_tileWritten = false;
+        }
         return;
     }
     const QVariantList samples = m_summary.dockTileSamples(m_state.dockIcon, kDockTileSamples);
-    if (!samples.isEmpty())
-        activity::writeDockTile(m_runtimeFolder, dockTileText(QCoreApplication::applicationPid(), ownStartTime(), m_state.dockIcon, samples));
+    if (!samples.isEmpty()
+        && activity::writeDockTile(m_runtimeFolder, dockTileText(QCoreApplication::applicationPid(), ownStartTime(), m_state.dockIcon, samples)))
+        m_tileWritten = true;
 }
 
 void ActivityApp::setWindowShown(bool shown)

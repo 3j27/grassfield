@@ -15,6 +15,8 @@
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <csignal>
+#include <sys/wait.h>
 #include <unistd.h>
 
 using namespace activity;
@@ -124,4 +126,38 @@ TEST(RuntimeFiles, TheWatchReadsItWhenItComesChangesAndGoes)
     ASSERT_TRUE(QFile::remove(folder + QStringLiteral("/windows.json")));
     ASSERT_TRUE(changed.wait(3000));
     EXPECT_FALSE(watch.projection().valid);
+}
+
+// Review of 5bfd4419 (MINOR 3, AM60): when the shell stops, its file may stay (a reload keeps the same process, so the shell
+// does not remove it then); the app drops it at its next reading, its writer being gone.
+TEST(RuntimeFiles, AStoppedShellsFileIsDroppedAtTheNextReading)
+{
+    QTemporaryDir runtime;
+    const QString folder = runtimeFolder(runtime.path(), QStringLiteral("wayland-8"));
+    ASSERT_TRUE(QDir().mkpath(folder));
+    // The writer: a child standing for the shell.
+    const pid_t shell = fork();
+    if (shell == 0) {
+        for (;;)
+            pause();
+    }
+    std::ifstream statFile("/proc/" + std::to_string(shell) + "/stat");
+    std::stringstream text;
+    text << statFile.rdbuf();
+    StatFields st;
+    ASSERT_TRUE(parseStat(text.str(), st, false));
+    {
+        QFile out(folder + QStringLiteral("/windows.json"));
+        ASSERT_TRUE(out.open(QIODevice::WriteOnly));
+        out.write(projection(shell, st.starttime));
+    }
+    ProjectionWatch watch(folder, "/proc");
+    EXPECT_TRUE(watch.projection().valid);
+    kill(shell, SIGKILL);
+    waitpid(shell, nullptr, 0);
+    QSignalSpy changed(&watch, &ProjectionWatch::changed);
+    watch.recheck(); // the app's next sample
+    EXPECT_EQ(changed.count(), 1);
+    EXPECT_FALSE(watch.projection().valid);
+    EXPECT_TRUE(QFile::exists(folder + QStringLiteral("/windows.json"))); // left there, and of no account
 }

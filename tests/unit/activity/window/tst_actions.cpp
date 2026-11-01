@@ -5,6 +5,7 @@
 #include "actions.h"
 #include "procparse.h"
 
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
@@ -499,4 +500,103 @@ TEST(ProcessActions, AnAnswerAfterTheSheetClosedGoesNowhere)
     later.at(1)(QStringLiteral("no-windows"));
     ASSERT_TRUE(finished.wait(2000));
     EXPECT_EQ(ending(a), SIGTERM);
+}
+
+// Review of 5bfd4419 (MINOR 4): Quit waits for the outcome of the shell's close, up to its bound, before it offers Force Quit:
+// the projection no longer naming the process, or the process gone, is the outcome even without the shell's answer (a `qs`
+// slow to start on a loaded machine); nothing within the bound leaves Force Quit alone, and nothing is ever signalled.
+TEST(ProcessActions, QuitWaitsForTheShellsOutcome)
+{
+    Actions t(kAppUnit);
+    t.actions.setShellQuitBound(800);
+    t.actions.setShellQuit([](int, std::function<void(const QString &)>) {}); // a shell that never answers
+    QSignalSpy finished(&t.actions, &ProcessActions::quitFinished);
+    const auto quitWith = [&](pid_t pid) {
+        t.actions.release();
+        t.actions.setSelection({own(pid, "foot")});
+        t.actions.prepare(QStringLiteral("quit"));
+        finished.clear();
+        return t.actions.quit();
+    };
+
+    // Its windows closed: the projection drops it.
+    const pid_t a = idleChild();
+    t.actions.setProjection(true, {a});
+    EXPECT_TRUE(quitWith(a).value(QStringLiteral("pending")).toBool());
+    t.actions.setProjection(true, {});
+    ASSERT_TRUE(finished.wait(2000));
+    EXPECT_TRUE(finished.at(0).at(0).toMap().value(QStringLiteral("done")).toBool());
+    EXPECT_EQ(ending(a, false), -1); // nothing sent
+
+    // It quit (after its save prompt, say): the process is gone.
+    const pid_t b = idleChild();
+    t.actions.setProjection(true, {b});
+    EXPECT_TRUE(quitWith(b).value(QStringLiteral("pending")).toBool());
+    kill(b, SIGTERM);
+    EXPECT_EQ(ending(b), SIGTERM); // reaped: its pidfd now answers ESRCH
+    ASSERT_TRUE(finished.wait(2000));
+    EXPECT_TRUE(finished.at(0).at(0).toMap().value(QStringLiteral("done")).toBool());
+
+    // Nothing within the bound: Force Quit alone, nothing sent.
+    const pid_t c = idleChild();
+    t.actions.setProjection(true, {c});
+    QElapsedTimer clock;
+    clock.start();
+    EXPECT_TRUE(quitWith(c).value(QStringLiteral("pending")).toBool());
+    ASSERT_TRUE(finished.wait(3000));
+    EXPECT_GE(clock.elapsed(), 700);
+    EXPECT_TRUE(finished.at(0).at(0).toMap().value(QStringLiteral("unsafe")).toBool());
+    EXPECT_EQ(ending(c, false), -1);
+    EXPECT_TRUE(t.actions.forceQuit().value(QStringLiteral("done")).toBool());
+    EXPECT_EQ(ending(c), SIGKILL);
+    EXPECT_EQ(kShellQuitMs, 10000); // the product's bound
+}
+
+// Review of 5bfd4419 (MAJOR 1): an Inspect window's actions take the main window's hooks, so a test's child (in the unit of
+// whatever runs the tests, an app's terminal) is quit by SIGTERM there as from the main window.
+TEST(ProcessActions, AnInspectWindowsActionsTakeTheMainHooks)
+{
+    Actions main(kPlain);
+    ProcessActions inspect("/proc");
+    inspect.adoptHooks(main.actions);
+    const pid_t a = idleChild();
+    inspect.setSelection({own(a)});
+    ASSERT_TRUE(inspect.prepare(QStringLiteral("quit")).value(QStringLiteral("ok")).toBool());
+    EXPECT_TRUE(inspect.quit().value(QStringLiteral("done")).toBool());
+    EXPECT_EQ(ending(a), SIGTERM);
+    // Its own reader otherwise: an app unit's process without a projection is Force Quit only (AM52).
+    Actions appMain(kAppUnit);
+    ProcessActions other("/proc");
+    other.adoptHooks(appMain.actions);
+    const pid_t b = idleChild();
+    other.setSelection({own(b)});
+    other.prepare(QStringLiteral("quit"));
+    EXPECT_TRUE(other.quit().value(QStringLiteral("unsafe")).toBool());
+    EXPECT_TRUE(other.forceQuit().value(QStringLiteral("done")).toBool());
+    EXPECT_EQ(ending(b), SIGKILL);
+}
+
+// Review of 5bfd4419 (MINOR 3, AM61): in a development session a process outside the nested session is refused by the app's
+// dev guard (AM56) before the shell is asked, so the nested shell, which reaches its own compositor's windows only, never
+// gets such a pid.
+TEST(ProcessActions, TheDevGuardRefusesBeforeTheShellIsAsked)
+{
+    DevSession dev{QByteArray()}; // no root: every process is outside the nested session
+    Actions t(kAppUnit);
+    QStringList asked;
+    t.actions.setShellQuit([&](int pid, std::function<void(const QString &)> answer) {
+        asked << QString::number(pid);
+        answer(QStringLiteral("ok"));
+    });
+    const pid_t a = idleChild();
+    t.actions.setProjection(true, {a});
+    t.actions.setSelection({own(a, "foot")});
+    t.actions.prepare(QStringLiteral("quit"));
+    const QVariantMap r = t.actions.quit();
+    EXPECT_FALSE(r.value(QStringLiteral("done")).toBool());
+    EXPECT_FALSE(r.value(QStringLiteral("pending")).toBool());
+    EXPECT_TRUE(asked.isEmpty());
+    EXPECT_EQ(ending(a, false), -1);
+    kill(a, SIGKILL);
+    ending(a);
 }

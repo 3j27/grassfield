@@ -177,6 +177,8 @@ public:
     int hangs(int pid, quint64 start) const { return m_hangs ? m_hangs(pid, start) : -1; }
     // AM52, AM60: the projection, for each window's Quit.
     void setProjection(bool valid, QSet<int> windowPids);
+    // The main window's actions, whose hooks each inspection's actions take (adoptHooks).
+    void setMainActions(const ProcessActions *main) { m_mainActions = main; }
 
     // The inspection of a process, made when none is open; nullptr when the process ended or its pid names another one
     // now (AM51's check). `opened` follows, the window raised or made.
@@ -193,6 +195,7 @@ signals:
     void opened(QObject *inspection);
 
 private:
+    const ProcessActions *m_mainActions = nullptr;
     void deliver(quint64 id, unsigned what, const ProcessDetails &details);
 
     std::string m_procRoot;

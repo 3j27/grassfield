@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QSet>
 #include <QString>
+#include <QTimer>
 #include <QVariantMap>
 
 #include <functional>
@@ -17,8 +18,11 @@
 namespace activity
 {
 
-// AM52: how long Quit waits for the shell to answer `activity quit` before it offers Force Quit alone.
-constexpr int kShellQuitMs = 1000;
+// AM52: how long Quit waits for the outcome of the shell's close (its answer, the process gone or its windows gone) before it
+// offers Force Quit alone; `qs` starting on a loaded machine is part of it (review of 5bfd4419).
+constexpr int kShellQuitMs = 10000;
+// How often Quit looks for that outcome meanwhile.
+constexpr int kShellQuitPollMs = 250;
 
 class ProcessActions : public QObject
 {
@@ -73,6 +77,11 @@ public:
     // descriptors). A test's children are in the unit of whatever runs the tests, an app's terminal or a container.
     using UnitReader = std::function<std::string(int pid)>;
     void setUnitReader(UnitReader reader) { m_unitReader = std::move(reader); }
+    // An Inspect window's actions take the main window's hooks: its unit reader and its shell call when a test set them
+    // (review of 5bfd4419: A-W3 quit a child of a terminal's app unit as an app's process).
+    void adoptHooks(const ProcessActions &main);
+    // Tests: Quit's bound for the shell's outcome (kShellQuitMs by default).
+    void setShellQuitBound(int ms) { m_shellQuitBound = ms; }
 
     // AM60: the shell's projection, as the app read it last: whether there is one (a live shell wrote it) and the pids that
     // own a window.
@@ -81,7 +90,11 @@ public:
     // "refused"), or "" when there is no shell to ask or it did not answer within kShellQuitMs. By default `qs ipc ... call
     // activity quit <pid>` (apps/runmode.h shellIpcArgs); tests put their own.
     using ShellQuit = std::function<void(int pid, std::function<void(const QString &answer)> answer)>;
-    void setShellQuit(ShellQuit quit) { m_shellQuit = std::move(quit); }
+    void setShellQuit(ShellQuit quit)
+    {
+        m_shellQuit = std::move(quit);
+        m_shellQuitSet = true;
+    }
 
 signals:
     void selectionChanged();
@@ -100,8 +113,9 @@ private:
         // AD43: a command run in a terminal (a controlling terminal, and a parent in the same unit: not the process that
         // started the unit).
         bool terminal = false;
-        // AM52: it owns a window (the projection), so the shell closes its windows.
+        // AM52: it owns a window (the projection), so the shell closes its windows; its outcome is known.
         bool windowed = false;
+        bool answered = false;
     };
     // The dev guard (AM56): "" when every pending process may be acted on, else the sheet's message (one journal line).
     QString devRefusal(const char *what) const;
@@ -109,6 +123,8 @@ private:
     QVariantMap deliverTo(const std::vector<const Pending *> &targets, int sig, const char *what);
     void askShell(const Pending &p);
     void takeShellAnswer(int pid, const QString &answer);
+    // While Quit waits: a process that ended, or that owns no window in the projection now, was quit.
+    void pollOutcome();
     void finishQuit();
     static QVariantMap done();
     static QVariantMap failed(const QString &error, bool unsafe = false);
@@ -116,6 +132,10 @@ private:
     std::string m_procRoot;
     UnitReader m_unitReader;
     ShellQuit m_shellQuit;
+    bool m_shellQuitSet = false; // a test's, which an Inspect window's actions adopt too
+    int m_shellQuitBound = kShellQuitMs;
+    QTimer m_outcome;            // Quit's look for the outcome, every kShellQuitPollMs while it waits
+    QTimer m_bound;              // and its bound
     bool m_projection = false;
     QSet<int> m_windowPids;
     // A Quit waiting for the shell: the answers still to come, whether one was unsafe or a signal failed, the app itself.

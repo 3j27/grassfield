@@ -27,8 +27,22 @@ QString errorText(int error)
 
 ProcessActions::ProcessActions(std::string procRoot, QObject *parent) : QObject(parent), m_procRoot(std::move(procRoot))
 {
-    // AM61: `qs ipc ... call activity quit <pid>`, its answer on stdout; killed after kShellQuitMs (AM52: no answer within a
-    // second is no answer). Without a shell to call (a dev session that names none) the answer is "" at once.
+    // AM52: while Quit waits, the outcome is looked for at kShellQuitPollMs, up to its bound.
+    m_outcome.setInterval(kShellQuitPollMs);
+    connect(&m_outcome, &QTimer::timeout, this, &ProcessActions::pollOutcome);
+    m_bound.setSingleShot(true);
+    connect(&m_bound, &QTimer::timeout, this, [this] {
+        // No outcome within the bound: what is still open gets Force Quit's offer.
+        std::vector<int> open;
+        for (const Pending &p : m_pending) {
+            if (p.windowed && !p.answered)
+                open.push_back(p.handle.pid());
+        }
+        for (int pid : open)
+            takeShellAnswer(pid, QString());
+    });
+    // AM61: `qs ipc ... call activity quit <pid>`, its answer on stdout; killed at Quit's bound (AM52). Without a shell to
+    // call (a dev session that names none) the answer is "" at once.
     m_shellQuit = [this](int pid, std::function<void(const QString &)> answer) {
         const QStringList ipc = grassfield::apps::runmode::shellIpcArgs();
         if (ipc.isEmpty()) {
@@ -61,9 +75,19 @@ ProcessActions::ProcessActions(std::string procRoot, QObject *parent) : QObject(
             if (error == QProcess::FailedToStart)
                 reply(QString());
         });
-        timer->start(kShellQuitMs);
+        timer->start(m_shellQuitBound);
         process->start(QStringLiteral("qs"), ipc + QStringList{QStringLiteral("activity"), QStringLiteral("quit"), QString::number(pid)});
     };
+}
+
+void ProcessActions::adoptHooks(const ProcessActions &main)
+{
+    m_unitReader = main.m_unitReader;
+    if (main.m_shellQuitSet) {
+        m_shellQuit = main.m_shellQuit;
+        m_shellQuitSet = true;
+    }
+    m_shellQuitBound = main.m_shellQuitBound;
 }
 
 void ProcessActions::setProjection(bool valid, QSet<int> windowPids)
@@ -180,6 +204,8 @@ void ProcessActions::release()
 {
     m_pending.clear();
     m_waiting = 0;
+    m_outcome.stop();
+    m_bound.stop();
     ++m_generation; // a shell's answer still to come goes nowhere
 }
 
@@ -272,10 +298,14 @@ QVariantMap ProcessActions::quit()
     }
     m_waiting = windowed;
     ++m_generation;
+    for (Pending &p : m_pending)
+        p.answered = false;
     for (const Pending &p : m_pending) {
         if (p.windowed)
             askShell(p);
     }
+    m_outcome.start();
+    m_bound.start(m_shellQuitBound);
     return {{QStringLiteral("pending"), true}};
 }
 
@@ -298,15 +328,31 @@ void ProcessActions::askShell(const Pending &p)
     });
 }
 
+void ProcessActions::pollOutcome()
+{
+    // The shell's close done, whatever its answer's delay: the process ended, or it owns no window in the projection now.
+    std::vector<int> quit;
+    for (const Pending &p : m_pending) {
+        if (!p.windowed || p.answered)
+            continue;
+        const bool ended = p.handle.signal(0) == ESRCH;
+        if (ended || (m_projection && !m_windowPids.contains(p.handle.pid())))
+            quit.push_back(p.handle.pid());
+    }
+    for (int pid : quit)
+        takeShellAnswer(pid, QStringLiteral("ok"));
+}
+
 void ProcessActions::takeShellAnswer(int pid, const QString &answer)
 {
-    const Pending *found = nullptr;
-    for (const Pending &p : m_pending) {
+    Pending *found = nullptr;
+    for (Pending &p : m_pending) {
         if (p.windowed && p.handle.pid() == pid)
             found = &p;
     }
-    if (!found || m_waiting <= 0)
+    if (!found || found->answered || m_waiting <= 0)
         return;
+    found->answered = true;
     if (answer == QLatin1String("no-windows")) {
         // Its windows closed meanwhile: a signal, through the descriptor, as a process without windows.
         if (!deliverTo({found}, SIGTERM, "quit").value(QStringLiteral("done")).toBool())
@@ -315,8 +361,11 @@ void ProcessActions::takeShellAnswer(int pid, const QString &answer)
         qInfo().noquote() << "activity: the shell did not quit pid" << pid << ":" << (answer.isEmpty() ? QStringLiteral("no answer") : answer);
         m_waitUnsafe = true;
     }
-    if (--m_waiting == 0)
+    if (--m_waiting == 0) {
+        m_outcome.stop();
+        m_bound.stop();
         finishQuit();
+    }
 }
 
 void ProcessActions::finishQuit()

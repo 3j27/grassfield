@@ -308,7 +308,17 @@ TEST(InspectKernel, AChildReadThroughItsDescriptorUntilItEnds)
     int pipeFds[2];
     ASSERT_EQ(pipe(pipeFds), 0);
     const int tcp = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    ASSERT_GE(tcp, 0);
+    const int probe = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (tcp < 0 || probe < 0) { // a sandbox without sockets (review of 5bfd4419): nothing to read here
+        close(pipeFds[0]);
+        close(pipeFds[1]);
+        if (tcp >= 0)
+            close(tcp);
+        if (probe >= 0)
+            close(probe);
+        GTEST_SKIP() << "no TCP or Unix sockets in this sandbox";
+    }
+    close(probe);
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -322,7 +332,13 @@ TEST(InspectKernel, AChildReadThroughItsDescriptorUntilItEnds)
     un.sun_family = AF_UNIX;
     const std::string path = "/tmp/activity-inspect-" + std::to_string(getpid()) + ".sock";
     std::snprintf(un.sun_path, sizeof un.sun_path, "%s", path.c_str());
-    ASSERT_EQ(bind(unixFd, reinterpret_cast<sockaddr *>(&un), sizeof un), 0);
+    if (bind(unixFd, reinterpret_cast<sockaddr *>(&un), sizeof un) != 0) { // a read-only /tmp or a sandbox's policy
+        close(unixFd);
+        close(tcp);
+        close(pipeFds[0]);
+        close(pipeFds[1]);
+        GTEST_SKIP() << "a Unix socket cannot be bound in " << path;
+    }
 
     const pid_t child = fork();
     if (child == 0) {

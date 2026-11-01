@@ -5,6 +5,7 @@
 #include "samplerworker.h"
 
 #include <QDBusConnection>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QMutex>
@@ -434,4 +435,54 @@ TEST(ActivityService, AShellCallIsKilledAfterItsTime)
     EXPECT_TRUE(QTest::qWaitFor([&] { return p.isNull(); }, 5000));
     EXPECT_LT(t.elapsed(), 5000);
     EXPECT_EQ(runWithTimeout({}, QProcessEnvironment::systemEnvironment(), 200, &parent), nullptr);
+}
+
+// Review of 5bfd4419 (MINOR 2): the app removes only the dock-tile.json it wrote, never another's (a live session's, another
+// instance's): a file it found stays through its samples and its end; its own goes when the icon is chosen again.
+TEST(ActivityApp, ItRemovesOnlyItsOwnDockTile)
+{
+    QTemporaryDir runtime;
+    const QByteArray runtimeBefore = qgetenv("XDG_RUNTIME_DIR"), displayBefore = qgetenv("WAYLAND_DISPLAY");
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    qputenv("WAYLAND_DISPLAY", "wayland-test");
+    const QString folder = runtimeFolder();
+    ASSERT_TRUE(QDir().mkpath(folder));
+    const QString tile = folder + QStringLiteral("/dock-tile.json");
+    const QByteArray theirs = R"({"v":1,"writer":{"pid":4242,"start":1},"kind":"cpu-usage","samples":[0.5]})";
+    {
+        QFile out(tile);
+        ASSERT_TRUE(out.open(QIODevice::WriteOnly));
+        out.write(theirs);
+    }
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    f.write("proc/stat", "cpu  100 0 100 800 0 0 0 0 0 0\ncpu0 100 0 100 800 0 0 0 0 0 0\n");
+    {
+        Isolated iso;
+        ActivityApp app(fixtureOptions(f), iso.statePath());
+        QSignalSpy samples(&app, &ActivityApp::sampled);
+        app.setInterval(1);
+        app.setWindowShown(true);
+        ASSERT_TRUE(samples.wait(5000));
+        QFile read(tile);
+        ASSERT_TRUE(read.open(QIODevice::ReadOnly));
+        EXPECT_EQ(read.readAll(), theirs); // the Dock icon is the app's icon: the file found stays
+        read.close();
+        app.setDockIcon(QStringLiteral("cpu-history"));
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            QFile now(tile);
+            return now.open(QIODevice::ReadOnly) && now.readAll().contains("\"cpu-history\"");
+        }, 5000)); // its own replaces it
+        app.setDockIcon(QStringLiteral("icon"));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !QFile::exists(tile); }, 5000)); // and goes
+        {
+            QFile again(tile); // someone else's again
+            ASSERT_TRUE(again.open(QIODevice::WriteOnly));
+            again.write(theirs);
+        }
+        QTest::qWait(1500); // samples come and go
+    }
+    EXPECT_TRUE(QFile::exists(tile)); // the app's end left it
+    runtimeBefore.isNull() ? qunsetenv("XDG_RUNTIME_DIR") : qputenv("XDG_RUNTIME_DIR", runtimeBefore);
+    displayBefore.isNull() ? qunsetenv("WAYLAND_DISPLAY") : qputenv("WAYLAND_DISPLAY", displayBefore);
 }

@@ -35,6 +35,7 @@
 
 #include <csignal>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #ifndef ACTIVITY_ROOT
@@ -431,6 +432,11 @@ TEST(ActivityWindow, HiddenItSamplesNothingAndItKeepsItsSize)
 
 int main(int argc, char **argv)
 {
+    // Review of 5bfd4419: no test reaches the live session's runtime files (its dock-tile.json, its projection): a private
+    // runtime directory, and no display to name a folder by (a test that needs one sets its own).
+    QTemporaryDir runtime;
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    qunsetenv("WAYLAND_DISPLAY");
     // Always offscreen, whatever the session says: a test never opens a window on the owner's compositor.
     qputenv("QT_QPA_PLATFORM", "offscreen");
     qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
@@ -766,6 +772,9 @@ TEST(ActivityInspect, AnotherOwnersProcessAndTheMainWindowsClose)
 {
     if (geteuid() == 0)
         GTEST_SKIP() << "run as the app's user: root's own processes are its own";
+    struct stat init{};
+    if (stat("/proc/1", &init) != 0 || init.st_uid == geteuid()) // a container whose pid 1 is this user's (review of 5bfd4419)
+        GTEST_SKIP() << "pid 1 is this user's here: no other owner's process to inspect";
     Window w(true);
     ASSERT_TRUE(open(w, kPlainUnit, {}));
     ProcessTable &t = w.backend->processTable();

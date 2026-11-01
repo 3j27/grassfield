@@ -431,6 +431,8 @@ Inspection *Inspectors::open(int pid, quint64 start, const QString &name)
         shown = QString::fromStdString(reader->read(0, monotonicSeconds()).comm);
     const quint64 id = m_nextId++;
     auto *inspection = new Inspection(this, id, std::move(reader), shown, m_procRoot);
+    if (m_mainActions)
+        inspection->processActions().adoptHooks(*m_mainActions);
     inspection->processActions().setProjection(m_projectionValid, m_windowPids);
     m_open.insert(id, inspection);
     emit opened(inspection);

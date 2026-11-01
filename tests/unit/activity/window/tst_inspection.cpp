@@ -405,3 +405,30 @@ TEST(Inspection, TheShellsProjectionNamesMarksAndCountsHangs)
     restore("XDG_DATA_DIRS", dataBefore);
     restore("XDG_DATA_HOME", homeBefore);
 }
+
+// Review of 5bfd4419 (MAJOR 1): an inspection's own actions take the main window's hooks when it opens (its shell call and its
+// unit reader, which tests set), so Inspect's Quit follows the same path as the main window's.
+TEST(Inspection, ItsActionsTakeTheMainWindowsHooks)
+{
+    Registry r;
+    r.fx.inspectable(300, 5000, kMe, 100);
+    ProcessActions main(r.fx.proc());
+    QStringList asked;
+    main.setShellQuit([&](int pid, std::function<void(const QString &)> answer) {
+        asked << QString::number(pid);
+        answer(QStringLiteral("ok"));
+    });
+    main.setUnitReader([](int) { return std::string("/user.slice/user-1000.slice/user@1000.service/app.slice/fixture.service"); });
+    r.inspectors.setMainActions(&main);
+    r.inspectors.setProjection(true, {300});
+    Inspection *i = r.inspectors.open(300, 5000, QStringLiteral("Worker"));
+    ASSERT_NE(i, nullptr);
+    ProcessActions &actions = i->processActions();
+    actions.setSelection({ProcessActions::Target{300, 5000, QStringLiteral("Worker"), true, false}});
+    ASSERT_TRUE(actions.prepare(QStringLiteral("quit")).value(QStringLiteral("ok")).toBool());
+    QSignalSpy finished(&actions, &ProcessActions::quitFinished);
+    EXPECT_TRUE(actions.quit().value(QStringLiteral("pending")).toBool()); // a windowed process: the shell, the main's hook
+    ASSERT_TRUE(finished.wait(2000));
+    EXPECT_EQ(asked, QStringList{QStringLiteral("300")});
+    actions.release();
+}
