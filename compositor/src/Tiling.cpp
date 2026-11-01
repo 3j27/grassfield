@@ -165,6 +165,7 @@ namespace gf::tiler {
             std::vector<tiling::SplitDesk>    splits;          // TL33: the Split View Desktops the plugin made
             std::unordered_map<uint64_t, tiling::TileRecord> splitHomes; // TL33: a member's tile on its home Desktop before its split
             std::vector<uint64_t>             chromeMembers;   // step 6e (D73): the members whose titlebars were last made to follow
+            std::vector<uint64_t>             backInReach;     // windows that left a Split View, their titlebar not in reach yet (locked, hidden)
         };
 
         // Constructed on first use inside a guarded call (R13).
@@ -966,18 +967,48 @@ namespace gf::tiler {
         // windows that came back, a move released, an edge double-clicked, a key that may have changed Alt during a drag.
         // ---- the Full Screen tile (TL33) ----
 
+        // Step 6e (D73; the review of #99): a window that left a Split View any way (moved to another Desktop by a key, the
+        // plugin unloaded) gets its titlebar back where it can be reached: its frame, with the band it has again above it,
+        // below the menu bar of its output (a member's surface sat at the output's top edge: its bar came back above the
+        // output). A window back in a Split View meanwhile, in full screen or zoomed is left alone; a hidden one (minimized,
+        // on a special workspace) waits until it shows again (false: later). Unsplit's own places (its box from before, its
+        // tile) are below the menu bar already: nothing moves then.
+        bool titlebarBackInReach(const PHLWINDOW& w) {
+            if (!w)
+                return true; // closed
+            if (!w->m_isMapped || w->isHidden() || !w->m_workspace || w->m_workspace->m_isSpecialWorkspace)
+                return false;
+            if (fullscreenNow(w) || !tiling::movable(factsOf(w)) || !g_layoutManager || tiling::splitOfWindow(st().splits, idOf(w)))
+                return true;
+            const auto target = w->layoutTarget();
+            if (!target)
+                return true;
+            const CBox current = target->position();
+            const CBox held    = gf::topClamp::belowMenuBar(w, current, gf::chrome::bandOf(w));
+            if (!sameBox(held, current)) {
+                applySurface(w, held);
+                logRequest(Log::DEBUG, "split: {:x} left a Split View: its titlebar back below the menu bar, at {:.0f},{:.0f}", idOf(w), held.x, held.y);
+            }
+            return true;
+        }
+
         // Step 6e (D73): a member's titlebar is away (CGrassfieldTitlebar::shouldShow reads inSplit) and no band is kept above
         // it. The windows that joined or left a Split View Desktop since the last call have theirs refreshed: it goes, or comes
-        // back above the window. After every change of the members (a split, a pick, an unsplit, splitCheck's prune).
+        // back above the window, then in reach (titlebarBackInReach). After every change of the members (a split, a pick, an
+        // unsplit, splitCheck's prune).
         void titlebarsFollowSplits() {
             auto&      s       = st();
             auto       now     = tiling::splitMembers(s.splits);
             const auto changed = tiling::membersChanged(s.chromeMembers, now);
-            s.chromeMembers    = std::move(now);
             for (const auto id : changed) {
                 if (const auto w = windowById(id))
                     CGrassfieldTitlebar::refreshWindow(w);
+                if (!std::ranges::binary_search(now, id))
+                    s.backInReach.push_back(id); // it left: its titlebar comes back where it can be reached
             }
+            s.chromeMembers = std::move(now);
+            if (!gf::deferredFocus::sessionLocked()) // D55: nothing moves behind the lock; at the unlock's check instead
+                std::erase_if(s.backInReach, [](uint64_t id) { return titlebarBackInReach(windowById(id)); });
         }
 
         // The Split View Desktop `workspace` got its second window, or its first one fills it: one window left alone is
@@ -1638,6 +1669,7 @@ namespace gf::tiler {
         s.splits.clear(); // TL33: a Split View Desktop of a previous load is an ordinary Desktop now
         s.splitHomes.clear();
         s.chromeMembers.clear();
+        s.backInReach.clear();
         if (!bus || !Desktop::windowState() || !State::monitorState() || !Fullscreen::controller())
             return false;
         auto& ev = bus->m_events;
@@ -1658,7 +1690,7 @@ namespace gf::tiler {
             // D67: the windows an unplug left off every output while locked are gathered then too.
             l.push_back(g_pSessionLockManager->m_events.unlock.listen([] {
                 gf::guarded("tiling session unlock", [] {
-                    if (!st().splits.empty() || st().gatherPending)
+                    if (!st().splits.empty() || st().gatherPending || !st().backInReach.empty())
                         scheduleAfter();
                 });
             }));
@@ -1686,6 +1718,24 @@ namespace gf::tiler {
         s.relayoutPending = false;
         s.gatherPending   = false;
         s.resuming.clear();
+        // Step 6e (D73, D75; the review of #99): the unload ends every Split View. A member dragged by its revealed bar goes back
+        // in its half first (the titlebars drop their gesture after this stop, when the tiler places nothing any more); then
+        // each member gets its titlebar band back below the menu bar (the unload drops the titlebars; a later load draws them
+        // again above the surface). Not while locked (D55).
+        if (const auto dragged = s.memberDrag.lock()) {
+            if (const auto* r = s.book.find(idOf(dragged)); r && tiling::splitOfWindow(s.splits, idOf(dragged)) && !gf::deferredFocus::sessionLocked())
+                applySurface(dragged, toCBox(r->box));
+        }
+        s.memberDrag.reset();
+        const auto members = tiling::splitMembers(s.splits);
+        s.splits.clear();
+        s.splitHomes.clear();
+        s.chromeMembers.clear();
+        s.backInReach.clear();
+        if (!gf::deferredFocus::sessionLocked()) {
+            for (const auto id : members)
+                titlebarBackInReach(windowById(id));
+        }
         s.book.clear(); // windows keep their boxes; groups are forgotten
         s.suggestion.reset();
         // TL30: a drag of a shared edge ends with the boxes the windows have (the book is cleared just above: no notice for
