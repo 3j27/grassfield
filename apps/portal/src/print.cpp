@@ -206,12 +206,17 @@ constexpr int kKeptPages = 4;
 
 } // namespace
 
+void Print::SpoolFile::giveBack()
+{
+    if (budget && !givenBack.exchange(true))
+        budget->give(reserved);
+}
+
 Print::SpoolFile::~SpoolFile()
 {
     if (fd >= 0)
         ::close(fd);
-    if (budget)
-        budget->give(reserved);
+    giveBack();
 }
 
 Print::Print(const QDBusConnection &bus, PrintSystem *system, const Options &options, QObject *parent)
@@ -993,8 +998,11 @@ void Print::ended(int id)
 {
     const auto it = m_pending.find(id);
     if (it != m_pending.end()) {
-        // What reads or draws its document stops; the pages drawn go.
+        // What reads or draws its document stops; the pages drawn go; its room in the budget comes back now (a child that was
+        // drawing it may hold the file a moment longer while it is stopped).
         it->stop->store(true);
+        if (it->spool)
+            it->spool->giveBack();
         for (const QString &key : std::as_const(it->images))
             PreviewImages::remove(key);
     }

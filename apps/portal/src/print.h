@@ -162,9 +162,12 @@ private:
     // The private file of a document sent first, closed when the last of its users (the request, a page being drawn) lets go.
     struct SpoolFile {
         int fd = -1;
-        // What it took of the budget, given back when it goes.
+        // What it took of the budget, given back once: when its request ends (a document no longer waits, even while a child
+        // that was drawing it is being stopped), else when it goes.
         std::shared_ptr<SpoolBudget> budget;
         qint64 reserved = 0;
+        std::atomic<bool> givenBack{false};
+        void giveBack();
         ~SpoolFile();
     };
     // Where a document sent first stands (Pending::source): untouched, a pipe being read (then it cannot go on to x-d-p-gtk), or
