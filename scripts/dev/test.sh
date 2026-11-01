@@ -273,6 +273,11 @@ gtest_suite tests/unit/activity "apps/activity/build-direct.sh --tests >/dev/nul
 # Built twice: plain, then with ASan and UBSan.
 gtest_suite tests/unit/menu-bridge "bridges/menu-bridge/build-direct.sh --tests >/dev/null && bridges/menu-bridge/build-direct.sh --tests --asan" \
   ".dev/build/menu-bridge-unit-tests --gtest_brief=1" ".dev/build/menu-bridge-unit-tests-asan --gtest_brief=1"
+# grassfield-prompter (ADR-0035 D-9) logic: the caller's text made plain, the prompter/1 parser and messages, the bound of 8,
+# the shell's cgroup and the socket peer, the trusted requesters (temporary trees), the bus filter, the GcrPrompt object.
+# Built twice: plain, then with ASan and UBSan. The process on a private bus: tests/security/prompter_bridge.sh.
+gtest_suite tests/unit/prompter "bridges/prompter/build-direct.sh --tests >/dev/null && bridges/prompter/build-direct.sh --tests --asan" \
+  ".dev/build/prompter-unit-tests --gtest_brief=1" ".dev/build/prompter-unit-tests-asan --gtest_brief=1"
 # Isolation: no test or dev script may start an app (grassfield-settings/files/preview, foot, ...) without
 # scripts/dev/isolated.sh (nothing may be written to the owner's home), and the checker itself is tested.
 if want logic; then

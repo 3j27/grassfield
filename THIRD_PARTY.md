@@ -74,6 +74,7 @@ cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstd
 | curl | `grassfield-wallpaper fetch` downloads the online pictures of the day (argument vector, https only) | curl licence (MIT-style); run, not linked |
 | KF6 KIO, Solid, CoreAddons, Service 6.29.0 | linked by `grassfield-files` and `grassfield-portal` (the Files library) | headers: LGPL-2.0-or-later (`kio/job.h`, `kio/renamedialog.h`); "LGPL-2.0-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`kio/openurljob.h`); "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`solid/device.h`) |
 | KF6 WindowSystem 6.31.0 | linked by `grassfield-portal`: an Open or Save panel becomes the child of the application's window (xdg-foreign v2, ADR-0035 D-4); already installed as a dependency of KIO | header: LGPL-2.1-or-later (`kwindowsystem.h`) |
+| libgcr-4 4.4.1 (package gcr-4) and GLib/GIO 2.90 (package glib2) | linked by `grassfield-prompter`: gcr's system prompter protocol, its `sx-aes-1` exchange and secure memory, and GDBus (ADR-0035 D-9); gcr-4 is already installed with gnome-keyring, glib2 with qt6-base | LGPL-2.1-or-later per pacman; header: LGPL-2.1-or-later (`gcr/gcr-system-prompter.h`) |
 | extra-cmake-modules (build) | CMake modules | pacman "LGPL"; module headers BSD-3-Clause/BSD-2-Clause |
 | uwsm | session launcher | MIT |
 
@@ -145,7 +146,7 @@ no Apple font is used, shipped or required.
 
 ## 5. Icons and wallpaper
 
-Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). The symbolic icons are Grassfield's own (`ls branding/icons/symbolic/*.svg | wc -l` prints 98 (96 symbolic icons and the two logo files))
+Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). The symbolic icons are Grassfield's own (`ls branding/icons/symbolic/*.svg | wc -l` prints 100 (98 symbolic icons and the two logo files))
 (CC-BY-SA-4.0); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
 No Apple asset is used. Licence of Grassfield-made art (symbolic icons, cursors, wallpaper): CC-BY-SA-4.0, decided by the
 owner on 2026-10-27 (an earlier text attributed this to decision D-9, which concerned the icon pack). The Grassfield

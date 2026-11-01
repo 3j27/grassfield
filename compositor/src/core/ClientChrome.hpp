@@ -143,6 +143,14 @@ namespace gf::chrome {
     };
     RevealedPress revealedPress(titlebar::HitTarget hit, bool memberInPlace);
 
+    // Whether a light of the plugin's titlebar can be used: drawn in colour with its glyph, its click acting. `fullscreen`: the
+    // bar of a window in full screen (lightAvailableInFullscreen); `fixedSize`: the window's minimum is its maximum on both
+    // axes (core tiling::fixedSize); `sized`: it is zoomed or in full screen now. The zoom light of a window of fixed size is
+    // disabled, as macOS disables the green button of a window that cannot be resized and the Window menu greys its Zoom and
+    // Enter Full Screen (ADR-0040 step 1b's review: a click zoomed About-like windows); once such a window is zoomed or in full
+    // screen anyway, the light brings it back (Unzoom, Exit Full Screen stay in the menu too).
+    bool lightAvailable(titlebar::Button button, bool fullscreen, bool fixedSize, bool sized);
+
     // The presses on a revealed titlebar are the plugin's alone: they are cancelled on Hyprland's event bus with their
     // releases. Hyprland 0.56.2 returns from CInputManager::onMouseButton right after the bus when an event is cancelled,
     // before it records the button as held or released (read from the binary), so a cancelled press and its cancelled

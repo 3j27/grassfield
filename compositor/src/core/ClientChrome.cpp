@@ -81,6 +81,12 @@ namespace gf::chrome {
         return hit == titlebar::HitTarget::DragArea && memberInPlace ? RevealedPress::MemberDrag : RevealedPress::Nothing;
     }
 
+    bool lightAvailable(titlebar::Button button, bool fullscreen, bool fixedSize, bool sized) {
+        if (fullscreen && !lightAvailableInFullscreen(button))
+            return false;
+        return button != titlebar::Button::Zoom || !fixedSize || sized;
+    }
+
     void CRevealPresses::onPress(uint32_t button, bool onBar) {
         m_owed.erase(button);
         if (onBar)

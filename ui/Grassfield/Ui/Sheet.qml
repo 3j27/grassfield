@@ -110,6 +110,10 @@ Item {
             return;
         const cb = root.confirmHandler;
         const error = cb ? cb(field.text) : "";
+        // false: the handler answers later (it closes the sheet or sets errorText itself; Activity Monitor's Quit through
+        // the shell).
+        if (error === false)
+            return;
         if (error && error !== "") {
             root.errorText = error;
             return;

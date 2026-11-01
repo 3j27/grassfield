@@ -146,7 +146,7 @@ Singleton {
     }
 
     // The windows Hyprland reported, as {pid and cls (from its list: 0 and "" until it was read for that window), title (live,
-    // from its events)} (NotResponding).
+    // from its events), idleInhibit (its list's inhibitingIdle)} (NotResponding, Activity Monitor's projection).
     function knownWindows(): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         return all.map(t => {
@@ -154,9 +154,16 @@ Singleton {
             return {
                 pid: d && d.pid ? d.pid : 0,
                 cls: d && d.class ? d.class : "",
-                title: t.title ?? ""
+                title: t.title ?? "",
+                idleInhibit: !!(d && d.inhibitingIdle === true)
             };
         });
+    }
+
+    // The toplevel handles Hyprland reported, in knownWindows()' order (AM61: the windows `activity quit` closes).
+    function knownToplevels(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => t.wayland);
     }
 
     // Activate (focus, un-minimize) a toplevel through the protocol. A window parked by hide()
@@ -651,6 +658,12 @@ Singleton {
     // opens nothing from its zoom light).
     function fixedSize(toplevel: var): bool {
         return WindowTiling.isFixed(TilingLink.fixed, addressOf(toplevel));
+    }
+
+    // The zones and the places the window does not fit, {zones, places} (ADR-0036 D69; from the plugin's last reply: not known
+    // yet, nothing is greyed and the plugin still refuses what does not fit).
+    function fitOf(toplevel: var): var {
+        return WindowTiling.fitOf(TilingLink.unfitZones, addressOf(toplevel));
     }
 
     // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.

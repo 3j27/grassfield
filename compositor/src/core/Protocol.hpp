@@ -54,6 +54,9 @@ namespace gf::gfc {
     inline constexpr std::string_view kLuaSplit = "split";
     // hl.plugin.grassfield.unsplit(address): Exit Full Screen of a window of a Split View Desktop (tiling.md TL33)
     inline constexpr std::string_view kLuaUnsplit = "unsplit";
+    // hl.plugin.grassfield.window_size(mode): the Full Screen and Zoom keys ("fullscreen" | "maximized", bindings.lua): returns
+    // Hyprland's own fullscreen dispatcher, or a no-op for a window of fixed size (ADR-0040 step 1b's review)
+    inline constexpr std::string_view kLuaWindowSize = "window_size";
     // `hyprctl grassfield-tiling`: the tiling state (the `tiling` event is only a change notice, ADR-0036).
     inline constexpr std::string_view kHyprctlTilingCommand = "grassfield-tiling";
 

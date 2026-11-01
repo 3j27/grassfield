@@ -559,6 +559,22 @@
         <translation>Quitter</translation>
     </message>
     <message>
+        <source>Turn on Efficiency Mode for “%1”?</source>
+        <translation>Activer le mode efficacité pour «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The whole app runs at the lowest priority whenever the computer is busy, so other apps stay responsive. It may run more slowly until you turn Efficiency Mode off or quit it.</source>
+        <translation>Toute l’app s’exécute avec la priorité la plus basse quand l’ordinateur est occupé, afin que les autres apps restent réactives. Elle peut être plus lente jusqu’à ce que vous désactiviez le mode efficacité ou que vous la quittiez.</translation>
+    </message>
+    <message>
+        <source>Turn On</source>
+        <translation>Activer</translation>
+    </message>
+    <message>
+        <source>Don&apos;t ask again</source>
+        <translation>Ne plus demander</translation>
+    </message>
+    <message>
         <source>Choose a signal to send to “%1” (PID %2).</source>
         <translation>Choisissez le signal à envoyer à «&#xa0;%1&#xa0;» (PID %2).</translation>
     </message>
@@ -592,6 +608,26 @@
     <message>
         <source>Network</source>
         <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Show Application Icon</source>
+        <translation>Afficher l’icône de l’application</translation>
+    </message>
+    <message>
+        <source>Show Network Usage</source>
+        <translation>Afficher l’utilisation du réseau</translation>
+    </message>
+    <message>
+        <source>Show Disk Activity</source>
+        <translation>Afficher l’activité du disque</translation>
+    </message>
+    <message>
+        <source>Show CPU Usage</source>
+        <translation>Afficher l’utilisation du processeur</translation>
+    </message>
+    <message>
+        <source>Show CPU History</source>
+        <translation>Afficher l’historique du processeur</translation>
     </message>
     <message>
         <source>GPU %1</source>
@@ -721,6 +757,10 @@
         <translation>Utilisateur</translation>
     </message>
     <message>
+        <source>Status</source>
+        <translation>État</translation>
+    </message>
+    <message>
         <source>Swapped Memory</source>
         <translation>Mémoire en swap</translation>
     </message>
@@ -775,12 +815,59 @@
         <translation>Noyau</translation>
     </message>
     <message>
+        <source>%1 (Not Responding)</source>
+        <translation>%1 (ne répond pas)</translation>
+    </message>
+    <message>
+        <source>Not Responding</source>
+        <translation>Ne répond pas</translation>
+    </message>
+    <message>
+        <source>Efficiency Mode</source>
+        <translation>Mode efficacité</translation>
+    </message>
+    <message>
+        <source>Stopped</source>
+        <translation>Arrêté</translation>
+    </message>
+    <message>
+        <source>Zombie</source>
+        <translation>Zombie</translation>
+    </message>
+    <message>
         <source>Yes</source>
         <translation>Oui</translation>
     </message>
     <message>
         <source>No</source>
         <translation>Non</translation>
+    </message>
+</context>
+<context>
+    <name>ActivityType</name>
+    <message>
+        <source>Apps</source>
+        <translation>Apps</translation>
+    </message>
+    <message>
+        <source>Background Processes</source>
+        <translation>Processus en arrière-plan</translation>
+    </message>
+    <message>
+        <source>Session Processes</source>
+        <translation>Processus de la session</translation>
+    </message>
+    <message>
+        <source>System Processes</source>
+        <translation>Processus système</translation>
+    </message>
+    <message>
+        <source>Other Users</source>
+        <translation>Autres utilisateurs</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation>%1 (%2)</translation>
     </message>
 </context>
 <context>
@@ -818,8 +905,16 @@
         <translation>Processus GPU</translation>
     </message>
     <message>
+        <source>Windowed Processes</source>
+        <translation>Processus fenêtrés</translation>
+    </message>
+    <message>
         <source>Selected Processes</source>
         <translation>Processus sélectionnés</translation>
+    </message>
+    <message>
+        <source>Processes, by Type</source>
+        <translation>Processus, par type</translation>
     </message>
     <message>
         <source>Processes, by GPU</source>
@@ -878,6 +973,49 @@
     <message>
         <source>OK</source>
         <translation>OK</translation>
+    </message>
+</context>
+<context>
+    <name>AppHistoryWindow</name>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>CPU Time</source>
+        <translation>Temps processeur</translation>
+    </message>
+    <message>
+        <source>Memory Peak</source>
+        <translation>Pic de mémoire</translation>
+    </message>
+    <message>
+        <source>Launches</source>
+        <translation>Lancements</translation>
+    </message>
+    <message>
+        <source>Last Used</source>
+        <translation>Dernière utilisation</translation>
+    </message>
+    <message>
+        <source>App History</source>
+        <translation>Historique des apps</translation>
+    </message>
+    <message>
+        <source>Period</source>
+        <translation>Période</translation>
+    </message>
+    <message>
+        <source>Usage history isn&apos;t available.</source>
+        <translation>L’historique d’utilisation n’est pas disponible.</translation>
+    </message>
+    <message>
+        <source>Sorted descending</source>
+        <translation>Tri décroissant</translation>
+    </message>
+    <message>
+        <source>Sorted ascending</source>
+        <translation>Tri croissant</translation>
     </message>
 </context>
 <context>
@@ -2244,6 +2382,10 @@
         <translation>Musique</translation>
     </message>
     <message>
+        <source>Activity Monitor</source>
+        <translation>Moniteur d’activité</translation>
+    </message>
+    <message>
         <source>Keyboard brightness up</source>
         <translation>Luminosité du clavier +</translation>
     </message>
@@ -3249,6 +3391,40 @@
     </message>
 </context>
 <context>
+    <name>CpuHistoryWindow</name>
+    <message>
+        <source>GPU History</source>
+        <translation>Historique du GPU</translation>
+    </message>
+    <message>
+        <source>CPU History</source>
+        <translation>Historique du processeur</translation>
+    </message>
+    <message>
+        <source>No app is using a GPU.</source>
+        <translation>Aucune app n’utilise de GPU.</translation>
+    </message>
+    <message>
+        <source>%1: %2%</source>
+        <translation>%1&#xa0;: %2&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Processor %1: %2%</source>
+        <translation>Processeur %1&#xa0;: %2&#xa0;%</translation>
+    </message>
+</context>
+<context>
+    <name>CpuUsageWindow</name>
+    <message>
+        <source>CPU Usage</source>
+        <translation>Utilisation du processeur</translation>
+    </message>
+    <message>
+        <source>Processor %1: %2%</source>
+        <translation>Processeur %1&#xa0;: %2&#xa0;%</translation>
+    </message>
+</context>
+<context>
     <name>CurrentNetworkRow</name>
     <message>
         <source>Secured</source>
@@ -3508,6 +3684,10 @@
     <message>
         <source>Show indicators for open applications</source>
         <translation>Afficher les indicateurs des applications ouvertes</translation>
+    </message>
+    <message>
+        <source>Show End Task in Dock menus</source>
+        <translation>Afficher Fin de tâche dans les menus du Dock</translation>
     </message>
     <message>
         <source>Choose a folder for the Dock</source>
@@ -3940,6 +4120,10 @@
     <message>
         <source>Recent Documents</source>
         <translation>Documents récents</translation>
+    </message>
+    <message>
+        <source>End Task</source>
+        <translation>Fin de tâche</translation>
     </message>
     <message>
         <source>Are you sure you want to permanently erase the items in the Trash?</source>
@@ -4952,6 +5136,10 @@
         <translation>Colonnes</translation>
     </message>
     <message>
+        <source>Dock Icon</source>
+        <translation>Icône du Dock</translation>
+    </message>
+    <message>
         <source>Update Frequency</source>
         <translation>Fréquence de mise à jour</translation>
     </message>
@@ -4972,8 +5160,48 @@
         <translation>Quitter le processus</translation>
     </message>
     <message>
+        <source>Inspect Process</source>
+        <translation>Inspecter le processus</translation>
+    </message>
+    <message>
         <source>Send Signal to Process…</source>
         <translation>Envoyer un signal au processus…</translation>
+    </message>
+    <message>
+        <source>Efficiency Mode</source>
+        <translation>Mode efficacité</translation>
+    </message>
+    <message>
+        <source>Activity Monitor</source>
+        <translation>Moniteur d’activité</translation>
+    </message>
+    <message>
+        <source>CPU Usage</source>
+        <translation>Utilisation du processeur</translation>
+    </message>
+    <message>
+        <source>CPU History</source>
+        <translation>Historique du processeur</translation>
+    </message>
+    <message>
+        <source>GPU History</source>
+        <translation>Historique du GPU</translation>
+    </message>
+    <message>
+        <source>Clear CPU History</source>
+        <translation>Effacer l’historique du processeur</translation>
+    </message>
+    <message>
+        <source>Performance</source>
+        <translation>Performances</translation>
+    </message>
+    <message>
+        <source>App History</source>
+        <translation>Historique des apps</translation>
+    </message>
+    <message>
+        <source>Login Items…</source>
+        <translation>Ouverture de session…</translation>
     </message>
     <message>
         <source>Copy %1 Items</source>
@@ -5266,6 +5494,29 @@
     <message>
         <source>Refresh</source>
         <translation>Actualiser</translation>
+    </message>
+</context>
+<context>
+    <name>GrassfieldAskpass</name>
+    <message>
+        <source>Enter a password to unlock the disk.</source>
+        <translation>Saisissez un mot de passe pour déverrouiller le disque.</translation>
+    </message>
+    <message>
+        <source>Enter a password to unlock the disk “%1”.</source>
+        <translation>Saisissez un mot de passe pour déverrouiller le disque «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Encrypted Disk</source>
+        <translation>Disque chiffré</translation>
+    </message>
+    <message>
+        <source>Unlock</source>
+        <translation>Déverrouiller</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
     </message>
 </context>
 <context>
@@ -5679,6 +5930,53 @@
     <message>
         <source>Remove the selected input source</source>
         <translation>Supprimer la méthode de saisie sélectionnée</translation>
+    </message>
+</context>
+<context>
+    <name>InspectWindow</name>
+    <message>
+        <source>Parent Process:</source>
+        <translation>Processus parent&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Process Group:</source>
+        <translation>Groupe de processus&#xa0;:</translation>
+    </message>
+    <message>
+        <source>User:</source>
+        <translation>Utilisateur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>% CPU:</source>
+        <translation>% processeur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Recent hangs:</source>
+        <translation>Blocages récents&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Memory</source>
+        <translation>Mémoire</translation>
+    </message>
+    <message>
+        <source>Statistics</source>
+        <translation>Statistiques</translation>
+    </message>
+    <message>
+        <source>Open Files and Ports</source>
+        <translation>Fichiers et ports ouverts</translation>
+    </message>
+    <message>
+        <source>Details</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>Quit</source>
+        <translation>Quitter</translation>
+    </message>
+    <message>
+        <source>Quit this process</source>
+        <translation>Quitter ce processus</translation>
     </message>
 </context>
 <context>
@@ -6895,8 +7193,16 @@
         <translation>Quitter le processus</translation>
     </message>
     <message>
+        <source>Inspect Process</source>
+        <translation>Inspecter le processus</translation>
+    </message>
+    <message>
         <source>Send Signal to Process…</source>
         <translation>Envoyer un signal au processus…</translation>
+    </message>
+    <message>
+        <source>Efficiency Mode</source>
+        <translation>Mode efficacité</translation>
     </message>
     <message>
         <source>Copy</source>
@@ -6933,6 +7239,10 @@
     <message>
         <source>Quit the selected processes</source>
         <translation>Quitter les processus sélectionnés</translation>
+    </message>
+    <message>
+        <source>Inspect the selected process</source>
+        <translation>Inspecter le processus sélectionné</translation>
     </message>
     <message>
         <source>Act on the selected processes</source>
@@ -8027,6 +8337,33 @@
     <message>
         <source>Loading…</source>
         <translation>Chargement…</translation>
+    </message>
+</context>
+<context>
+    <name>PerformanceWindow</name>
+    <message>
+        <source>Performance</source>
+        <translation>Performances</translation>
+    </message>
+    <message>
+        <source>Resources</source>
+        <translation>Ressources</translation>
+    </message>
+    <message>
+        <source>CPU graph</source>
+        <translation>Graphique du processeur</translation>
+    </message>
+    <message>
+        <source>Overall Utilization</source>
+        <translation>Utilisation globale</translation>
+    </message>
+    <message>
+        <source>Logical Processors</source>
+        <translation>Processeurs logiques</translation>
+    </message>
+    <message>
+        <source>Processor %1: %2%</source>
+        <translation>Processeur %1&#xa0;: %2&#xa0;%</translation>
     </message>
 </context>
 <context>
@@ -9973,6 +10310,199 @@
     <message>
         <source>No Results for “%1”</source>
         <translation>Aucun résultat pour « %1 »</translation>
+    </message>
+</context>
+<context>
+    <name>SecretAgent</name>
+    <message>
+        <source>Password sent</source>
+        <translation>Mot de passe envoyé</translation>
+    </message>
+    <message>
+        <source>Request cancelled</source>
+        <translation>Demande annulée</translation>
+    </message>
+    <message>
+        <source>What you type is ignored for a moment.</source>
+        <translation>Ce que vous tapez est ignoré pendant un instant.</translation>
+    </message>
+</context>
+<context>
+    <name>SecretSheet</name>
+    <message>
+        <source>Username: %1</source>
+        <translation>Nom d’utilisateur&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Mot de passe</translation>
+    </message>
+    <message>
+        <source>New password</source>
+        <translation>Nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Confirmation</translation>
+    </message>
+    <message>
+        <source>Verify the new password</source>
+        <translation>Confirmer le nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>Password strength: none</source>
+        <translation>Robustesse du mot de passe&#xa0;: aucune</translation>
+    </message>
+    <message>
+        <source>Password strength: weak</source>
+        <translation>Robustesse du mot de passe&#xa0;: faible</translation>
+    </message>
+    <message>
+        <source>Password strength: fair</source>
+        <translation>Robustesse du mot de passe&#xa0;: moyenne</translation>
+    </message>
+    <message>
+        <source>Password strength: strong</source>
+        <translation>Robustesse du mot de passe&#xa0;: élevée</translation>
+    </message>
+    <message>
+        <source>Show password</source>
+        <translation>Afficher le mot de passe</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Join</source>
+        <translation>Rejoindre</translation>
+    </message>
+</context>
+<context>
+    <name>SecretSheetModel</name>
+    <message>
+        <source>Requested by NetworkManager</source>
+        <translation>Demandé par NetworkManager</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, while the screen was locked. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1 and waited while the screen saver was on. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1 et a attendu pendant que l’économiseur d’écran était affiché. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, while another one was open. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant qu’une autre était ouverte. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, right after another one. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, juste après une autre. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1. Click the alert to answer it: no key answers a confirmation before that.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour y répondre&#xa0;: aucune touche ne répond à une confirmation avant cela.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1. Click the alert to type the password: nothing typed elsewhere goes into it.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour saisir le mot de passe&#xa0;: rien de ce qui est tapé ailleurs n’y entre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>Unidentified program</source>
+        <translation>Programme non identifié</translation>
+    </message>
+    <message>
+        <source>Keyring</source>
+        <translation>Trousseau</translation>
+    </message>
+    <message>
+        <source>GnuPG</source>
+        <translation>GnuPG</translation>
+    </message>
+    <message>
+        <source>SSH</source>
+        <translation>SSH</translation>
+    </message>
+    <message>
+        <source>Disks</source>
+        <translation>Disques</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WPA3 password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WPA3.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WEP password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WEP.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires WPA2 enterprise credentials.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite des identifiants WPA2 entreprise.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WPA2 password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WPA2.</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks you to confirm</source>
+        <translation>Un programme non identifié vous demande de confirmer</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks for a new password</source>
+        <translation>Un programme non identifié demande un nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks for a password</source>
+        <translation>Un programme non identifié demande un mot de passe</translation>
+    </message>
+    <message>
+        <source>%1 asks you to confirm</source>
+        <translation>%1 vous demande de confirmer</translation>
+    </message>
+    <message>
+        <source>%1 asks for a new password</source>
+        <translation>%1 demande un nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>%1 asks for a password</source>
+        <translation>%1 demande un mot de passe</translation>
+    </message>
+    <message>
+        <source>Another program sent this message through %1. It is not verified:</source>
+        <translation>Un autre programme a envoyé ce message par %1. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>%1 sent this message:</source>
+        <translation>%1 a envoyé ce message&#xa0;:</translation>
+    </message>
+    <message>
+        <source>The program sent this message. It is not verified:</source>
+        <translation>Le programme a envoyé ce message. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>A WPA2 password has 8 to 63 characters, or 64 hexadecimal digits.</source>
+        <translation>Un mot de passe WPA2 compte de 8 à 63 caractères, ou 64 chiffres hexadécimaux.</translation>
+    </message>
+    <message>
+        <source>The passwords do not match. Type the new password again in both fields.</source>
+        <translation>Les mots de passe ne correspondent pas. Tapez à nouveau le nouveau mot de passe dans les deux champs.</translation>
+    </message>
+    <message>
+        <source>This password is too long.</source>
+        <translation>Ce mot de passe est trop long.</translation>
     </message>
 </context>
 <context>
@@ -11988,6 +12518,25 @@
     </message>
 </context>
 <context>
+    <name>TileGraphView</name>
+    <message>
+        <source>CPU usage</source>
+        <translation>Utilisation du processeur</translation>
+    </message>
+    <message>
+        <source>CPU history</source>
+        <translation>Historique du processeur</translation>
+    </message>
+    <message>
+        <source>Disk activity</source>
+        <translation>Activité du disque</translation>
+    </message>
+    <message>
+        <source>Network usage</source>
+        <translation>Utilisation du réseau</translation>
+    </message>
+</context>
+<context>
     <name>TilingPopover</name>
     <message>
         <source>Window tiling</source>
@@ -13090,6 +13639,462 @@
     <message>
         <source>Fills the screen below the menu bar, or restores the window. Alt-click for full screen</source>
         <translation>Remplit l’écran sous la barre des menus, ou restaure la fenêtre. Alt-clic pour le plein écran</translation>
+    </message>
+</context>
+<context>
+    <name>activity::AppHistory</name>
+    <message>
+        <source>Last 12 Hours</source>
+        <translation>12 dernières heures</translation>
+    </message>
+    <message>
+        <source>Last 7 Days</source>
+        <translation>7 derniers jours</translation>
+    </message>
+    <message>
+        <source>Last 30 Days</source>
+        <translation>30 derniers jours</translation>
+    </message>
+    <message>
+        <source>Resource use since %1 for %2</source>
+        <translation>Utilisation des ressources depuis le %1 pour %2</translation>
+    </message>
+    <message>
+        <source>%1, CPU Time %2, Memory Peak %3, Launches %4, Last Used %5</source>
+        <translation>%1, temps processeur %2, pic de mémoire %3, lancements %4, dernière utilisation %5</translation>
+    </message>
+</context>
+<context>
+    <name>activity::Efficiency</name>
+    <message>
+        <source>This process is part of your session.</source>
+        <translation>Ce processus fait partie de votre session.</translation>
+    </message>
+    <message>
+        <source>This process isn&apos;t running as an app.</source>
+        <translation>Ce processus ne s’exécute pas en tant qu’app.</translation>
+    </message>
+    <message>
+        <source>The process has ended.</source>
+        <translation>Le processus s’est terminé.</translation>
+    </message>
+    <message>
+        <source>Development session: only the nested session&apos;s processes can be changed.</source>
+        <translation>Session de développement&#xa0;: seuls les processus de la session imbriquée peuvent être modifiés.</translation>
+    </message>
+    <message>
+        <source>Efficiency Mode couldn&apos;t be turned on.</source>
+        <translation>Le mode efficacité n’a pas pu être activé.</translation>
+    </message>
+    <message>
+        <source>Efficiency Mode couldn&apos;t be turned off.</source>
+        <translation>Le mode efficacité n’a pas pu être désactivé.</translation>
+    </message>
+</context>
+<context>
+    <name>activity::Inspection</name>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Real-time, first in first out</source>
+        <translation>Temps réel, premier entré premier sorti</translation>
+    </message>
+    <message>
+        <source>Real-time, round robin</source>
+        <translation>Temps réel, tourniquet</translation>
+    </message>
+    <message>
+        <source>Batch</source>
+        <translation>Par lots</translation>
+    </message>
+    <message>
+        <source>Idle</source>
+        <translation>Au repos</translation>
+    </message>
+    <message>
+        <source>Deadline</source>
+        <translation>Échéance</translation>
+    </message>
+    <message>
+        <source>Real Memory Size:</source>
+        <translation>Taille de la mémoire réelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Virtual Memory Size:</source>
+        <translation>Taille de la mémoire virtuelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Shared Memory Size:</source>
+        <translation>Taille de la mémoire partagée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Private Memory Size:</source>
+        <translation>Taille de la mémoire privée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Proportional Memory Size:</source>
+        <translation>Taille de la mémoire proportionnelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Swapped Memory:</source>
+        <translation>Mémoire en swap&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Compressed Memory:</source>
+        <translation>Mémoire compressée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Peak Memory:</source>
+        <translation>Mémoire maximale&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Threads:</source>
+        <translation>Fils d’exécution&#xa0;:</translation>
+    </message>
+    <message>
+        <source>User CPU Time:</source>
+        <translation>Temps processeur utilisateur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>System CPU Time:</source>
+        <translation>Temps processeur système&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Voluntary Context Switches:</source>
+        <translation>Changements de contexte volontaires&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Involuntary Context Switches:</source>
+        <translation>Changements de contexte involontaires&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Minor Faults:</source>
+        <translation>Défauts de page mineurs&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Major Faults:</source>
+        <translation>Défauts de page majeurs&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Read Calls:</source>
+        <translation>Appels de lecture&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Write Calls:</source>
+        <translation>Appels d’écriture&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Started:</source>
+        <translation>Démarré&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Nice:</source>
+        <translation>Nice&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Scheduler Policy:</source>
+        <translation>Politique d’ordonnancement&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Unit:</source>
+        <translation>Unité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Command:</source>
+        <translation>Commande&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Executable:</source>
+        <translation>Exécutable&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Working Folder:</source>
+        <translation>Dossier de travail&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Pipe</source>
+        <translation>Tube</translation>
+    </message>
+    <message>
+        <source>TCP %1 (listening)</source>
+        <translation>TCP %1 (en écoute)</translation>
+    </message>
+    <message>
+        <source>TCP %1</source>
+        <translation>TCP %1</translation>
+    </message>
+    <message>
+        <source>TCP %1 to %2</source>
+        <translation>TCP %1 vers %2</translation>
+    </message>
+    <message>
+        <source>UDP %1</source>
+        <translation>UDP %1</translation>
+    </message>
+    <message>
+        <source>UDP %1 to %2</source>
+        <translation>UDP %1 vers %2</translation>
+    </message>
+    <message>
+        <source>Local socket</source>
+        <translation>Socket local</translation>
+    </message>
+    <message>
+        <source>Local socket %1</source>
+        <translation>Socket local %1</translation>
+    </message>
+    <message>
+        <source>The open files of another user&apos;s process can&apos;t be read.</source>
+        <translation>Les fichiers ouverts du processus d’un autre utilisateur ne peuvent pas être lus.</translation>
+    </message>
+    <message>
+        <source>The open files of this process can&apos;t be read.</source>
+        <translation>Les fichiers ouverts de ce processus ne peuvent pas être lus.</translation>
+    </message>
+    <message>
+        <source>%1 more descriptors aren&apos;t listed.</source>
+        <translation>%1 autres descripteurs ne sont pas listés.</translation>
+    </message>
+</context>
+<context>
+    <name>activity::Performance</name>
+    <message>
+        <source>%1/s</source>
+        <translation>%1/s</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Ethernet</source>
+        <translation>Ethernet</translation>
+    </message>
+    <message>
+        <source>GPU %1</source>
+        <translation>GPU %1</translation>
+    </message>
+    <message>
+        <source>CPU</source>
+        <translation>Processeur</translation>
+    </message>
+    <message>
+        <source>%1 GHz</source>
+        <translation>%1&#xa0;GHz</translation>
+    </message>
+    <message>
+        <source>Memory</source>
+        <translation>Mémoire</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>SSD</source>
+        <translation>SSD</translation>
+    </message>
+    <message>
+        <source>HDD</source>
+        <translation>HDD</translation>
+    </message>
+    <message>
+        <source>Disk %1 (%2)</source>
+        <translation>Disque %1 (%2)</translation>
+    </message>
+    <message>
+        <source>Send %1 · Receive %2</source>
+        <translation>Envoi %1 · Réception %2</translation>
+    </message>
+    <message>
+        <source>Utilization:</source>
+        <translation>Utilisation&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Speed:</source>
+        <translation>Vitesse&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Base Speed:</source>
+        <translation>Vitesse de base&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Processes:</source>
+        <translation>Processus&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Threads:</source>
+        <translation>Fils d’exécution&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Up Time:</source>
+        <translation>Temps de fonctionnement&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Sockets:</source>
+        <translation>Sockets&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Cores:</source>
+        <translation>Cœurs&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Logical Processors:</source>
+        <translation>Processeurs logiques&#xa0;:</translation>
+    </message>
+    <message>
+        <source>L1 Cache:</source>
+        <translation>Cache L1&#xa0;:</translation>
+    </message>
+    <message>
+        <source>L2 Cache:</source>
+        <translation>Cache L2&#xa0;:</translation>
+    </message>
+    <message>
+        <source>L3 Cache:</source>
+        <translation>Cache L3&#xa0;:</translation>
+    </message>
+    <message>
+        <source>% Utilization</source>
+        <translation>% d’utilisation</translation>
+    </message>
+    <message>
+        <source>In Use:</source>
+        <translation>Utilisée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Available:</source>
+        <translation>Disponible&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Committed:</source>
+        <translation>Engagée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Cached:</source>
+        <translation>En cache&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Compressed:</source>
+        <translation>Compressée&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Swap Used:</source>
+        <translation>Swap utilisé&#xa0;:</translation>
+    </message>
+    <message>
+        <source>In Use</source>
+        <translation>Utilisée</translation>
+    </message>
+    <message>
+        <source>Compressed</source>
+        <translation>Compressée</translation>
+    </message>
+    <message>
+        <source>Cached</source>
+        <translation>En cache</translation>
+    </message>
+    <message>
+        <source>Free</source>
+        <translation>Libre</translation>
+    </message>
+    <message>
+        <source>Memory Usage</source>
+        <translation>Utilisation de la mémoire</translation>
+    </message>
+    <message>
+        <source>Active Time:</source>
+        <translation>Temps d’activité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Read Speed:</source>
+        <translation>Vitesse de lecture&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Write Speed:</source>
+        <translation>Vitesse d’écriture&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Average Response Time:</source>
+        <translation>Temps de réponse moyen&#xa0;:</translation>
+    </message>
+    <message>
+        <source>%1 ms</source>
+        <translation>%1&#xa0;ms</translation>
+    </message>
+    <message>
+        <source>Capacity:</source>
+        <translation>Capacité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Type:</source>
+        <translation>Type&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Active Time</source>
+        <translation>Temps d’activité</translation>
+    </message>
+    <message>
+        <source>Disk Transfer Rate</source>
+        <translation>Débit du disque</translation>
+    </message>
+    <message>
+        <source>Send:</source>
+        <translation>Envoi&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Receive:</source>
+        <translation>Réception&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Interface:</source>
+        <translation>Interface&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Connection Type:</source>
+        <translation>Type de connexion&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>Network:</source>
+        <translation>Réseau&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Signal:</source>
+        <translation>Signal&#xa0;:</translation>
+    </message>
+    <message>
+        <source>%1 dBm</source>
+        <translation>%1&#xa0;dBm</translation>
+    </message>
+    <message>
+        <source>IPv4 Address:</source>
+        <translation>Adresse IPv4&#xa0;:</translation>
+    </message>
+    <message>
+        <source>IPv6 Address:</source>
+        <translation>Adresse IPv6&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Throughput</source>
+        <translation>Débit</translation>
+    </message>
+    <message>
+        <source>Memory (%1):</source>
+        <translation>Mémoire (%1)&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Driver:</source>
+        <translation>Pilote&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Location:</source>
+        <translation>Emplacement&#xa0;:</translation>
     </message>
 </context>
 <context>

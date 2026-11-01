@@ -143,3 +143,22 @@ process is down, how sleep behaves). IQ-T5 (ADR-0040) applies to a crash of the 
 above (the IPC contract move, the lock state across processes, the UI imports, the memory of a second process) are
 answered step by step there; nothing of this ADR's rules changes: `WlSessionLock`, `PamContext("omarchy-lock-password")`
 and Quickshell's polkit only, no unlock on a failure.
+
+## Amendment 2026-10-31 (ADR-0035 D-9, owner decision Q12: the secret sheets)
+In force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step (ADR-0035 D-9:
+applied in step 9 only after the integrator's review and the owner's agreement on that step). The text is the owner's
+(ADR-0035 "Owner decisions", Q12, 2026-10-27).
+
+**Scope.** The security modules gain the secret sheets fed by `grassfield-prompter` (ADR-0035 D-9, and D-11 for pairing):
+gcr system prompts, KIO network passwords, NetworkManager secrets, BlueZ pairing. The building blocks are WlSessionLock,
+`PamContext("omarchy-lock-password")`, Quickshell Polkit and these secret sheets, only (CLAUDE.md, Hard rules).
+
+**Rules** (master-prompt R12, its new bullet):
+- the secret sheets of ADR-0035 belong to these modules: everything this ADR requires of them applies (opus reviewer PASS
+  for every change, the security tests, failures stay locked);
+- one queue holds every secret sheet and the polkit sheet; no sheet takes the keyboard from another;
+- a secret sheet never looks like the authorization sheet;
+- the requester shown is the one the bridge resolves from D-Bus credentials, never text from the caller.
+
+Nothing else of this ADR changes: no PAM module or PAM service file, no greeter, no setuid code and nothing that runs as
+root (the bridge is an unprivileged systemd user unit).

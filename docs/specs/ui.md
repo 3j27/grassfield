@@ -60,6 +60,7 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `dock.animateOpening` | bool | true | Dock, Settings |
 | `dock.showIndicators` | bool | true | Dock, Settings |
 | `dock.minimizeEffect` | `"funnel"` \| `"shrink"` | `"funnel"` | Settings ("Minimize animation": "Funnel" \| "Shrink"); the shell pushes it to the compositor plugin (`hl.plugin.grassfield.config("minimizeEffect", …)`, feature `minimize-effect`), `"fade"` instead while `accessibility.reduceMotion` is true; without the plugin minimize has no animation |
+| `dock.endTask` | bool | false | Dock (End Task in an app's menu, ADR-0038 AM63), Settings ("Show End Task in Dock menus") |
 | `notifications.dnd` | bool | false | Notifications (banners suppressed except critical), menu bar moon |
 | `notifications.previews` | `"always"` \| `"unlocked"` \| `"never"` | `"unlocked"` | Notifications (`never` hides bodies; `unlocked` hides them while locked) |
 | `notifications.appPreviews` | list of `{app, previews}` | `[]` | Per-app override of `notifications.previews` (docs/specs/notifications.md) |

@@ -83,8 +83,10 @@ check bash -c '[[ $("$1" status) == off ]] && "$1" toggle && [[ $("$1" status) =
 
 # --- screenshots, autostart, units, packaging ---------------------------------------------------------------------------
 sys=$root/config/hypr/grassfield/system.lua
-desc="screenshots: Super+Shift+3/4/5 (by keycode) and Print run Omarchy's capture tool (screen, selection, picker)"
-check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"fullscreen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"region\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"smart\")" "$1" && grep -q "bind(\"PRINT\"" "$1" || grep -q "hl.bind(\"PRINT\", capture(\"smart\")" "$1"' _ "$sys"
+desc="screenshots: Super+Shift+3 (by keycode) runs Grassfield's capture of the screen, Super+Shift+4/5 and Print a selection, never Omarchy's tool (ADR-0035 D-10)"
+check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"screen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"selection\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"selection\")" "$1" && grep -q "hl.bind(\"PRINT\", capture(\"selection\")" "$1" && grep -q "exec_cmd(\"/usr/lib/grassfield/grassfield-capture \" .. mode)" "$1" && ! grep -q "omarchy-capture" "$1"' _ "$sys"
+desc="screenshots: slurp's crosshair layer (namespace selection) is never faded out, so no picture shows it (ADR-0035 D-10)"
+check grep -q 'hl.layer_rule({ name = "gf-capture-selection-no-anim", match = { namespace = "^selection\$" }, no_anim = true })' "$root/config/hypr/grassfield/windows.lua"
 
 auto=$root/config/hypr/grassfield/autostart.lua
 for unit in crash-watch battery-watch migrate-notify automount; do
@@ -95,8 +97,8 @@ done
 # The Secret Service handover (ADR-0035 D-12): its first phase (a leftover ksecretd lets go of org.freedesktop.secrets) ends
 # before the shell starts, so no app opened from the Dock reaches KWallet there; the shell never waits more than 10 s for it.
 u=$pk/systemd/grassfield-secrets-handover.service
-desc="grassfield-secrets-handover.service, grassfield-portal-settings.service and grassfield-security.service (the last two not waited for): started before the shell in the same chain, after the menu bridge"
-check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
+desc="grassfield-prompter.service, grassfield-secrets-handover.service, grassfield-portal-settings.service and grassfield-security.service (the prompter, the portal backend and the security process not waited for): started before the shell in the same chain, after the menu bridge"
+check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start --no-block grassfield-prompter.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
 desc="grassfield-secrets-handover.service: started by the session, skips itself outside it, NoNewPrivileges, seccomp, installed by the PKGBUILD"
 check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -q "for unit in .*secrets-handover" "$2"' _ "$u" "$pk/arch/PKGBUILD"
 desc="grassfield-secrets-handover.service: no core file, no swap, no Qt D-Bus message dump (secret values pass through it)"
@@ -108,6 +110,23 @@ desc="grassfield-secrets-handover.service: none of the options that would put it
 check bash -c '! grep -qE "^(PrivateUsers|PrivateTmp|PrivateDevices|PrivateNetwork|NetworkNamespacePath|PrivateIPC|IPCNamespacePath|PrivateMounts|PrivatePIDs|MountAPIVFS|BindLogSockets|BindPaths|BindReadOnlyPaths|TemporaryFileSystem|RootDirectory|RootImage|ExtensionDirectories|ExtensionImages|ProtectSystem|ProtectHome|ProtectProc|ProcSubset|ProtectKernelTunables|ProtectKernelModules|ProtectKernelLogs|ProtectControlGroups|ProtectClock|ProtectHostname|ReadWritePaths|ReadOnlyPaths|InaccessiblePaths|ExecPaths|NoExecPaths)=" "$1"' _ "$u"
 desc="grassfield-secrets-handover.service: Type=notify with a 10 s start limit, no [Install], runs the helper where CMake installs it"
 check bash -c 'grep -qx "Type=notify" "$1" && grep -qx "NotifyAccess=main" "$1" && grep -qx "TimeoutStartSec=10" "$1" && ! grep -q "^\[Install\]" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-secrets-handover" "$1" && grep -q "RUNTIME DESTINATION lib/grassfield" "$2" && grep -q "cmake --install \"\$srcdir/secrets-handover-build\"" "$3"' _ "$u" "$root/apps/secrets-handover/CMakeLists.txt" "$pk/arch/PKGBUILD"
+# The password-prompt bridge (ADR-0035 D-9): it identifies its callers through /proc/<pid>/exe, so no option may put it in a
+# user namespace of its own (decision 9-8, as 2c-6); passwords pass through it.
+u=$pk/systemd/grassfield-prompter.service
+desc="grassfield-prompter.service: skips itself outside the session, NoNewPrivileges, seccomp, AF_UNIX only, no capability"
+check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -qx "CapabilityBoundingSet=" "$1" && grep -qx "MemoryDenyWriteExecute=yes" "$1"' _ "$u"
+desc="grassfield-prompter.service: no core file, no swap, no GDBus or Qt message dump, Qt keeps GLib's event loop"
+check bash -c 'grep -qx "LimitCORE=0" "$1" && grep -qx "MemorySwapMax=0" "$1" && grep -qx "UnsetEnvironment=G_DBUS_DEBUG G_MESSAGES_DEBUG G_DEBUG QDBUS_DEBUG QT_NO_GLIB" "$1"' _ "$u"
+desc="grassfield-prompter.service: none of the options that would put it in a user namespace of its own"
+check bash -c '! grep -qE "^(PrivateUsers|PrivateTmp|PrivateDevices|PrivateNetwork|NetworkNamespacePath|PrivateIPC|IPCNamespacePath|PrivateMounts|PrivatePIDs|MountAPIVFS|BindLogSockets|BindPaths|BindReadOnlyPaths|TemporaryFileSystem|RootDirectory|RootImage|ExtensionDirectories|ExtensionImages|ProtectSystem|ProtectHome|ProtectProc|ProcSubset|ProtectKernelTunables|ProtectKernelModules|ProtectKernelLogs|ProtectControlGroups|ProtectClock|ProtectHostname|ReadWritePaths|ReadOnlyPaths|InaccessiblePaths|ExecPaths|NoExecPaths)=" "$1"' _ "$u"
+desc="grassfield-prompter.service: the shell's unit is an argument (--peer-unit grassfield-shell.service), the socket directory is kept for the menu bridge, no [Install]"
+check bash -c 'grep -qx "ExecStart=/usr/lib/grassfield/grassfield-prompter --peer-unit grassfield-shell.service" "$1" && grep -qx "RuntimeDirectory=grassfield" "$1" && grep -qx "RuntimeDirectoryPreserve=yes" "$1" && grep -qx "UMask=0077" "$1" && ! grep -q "^\[Install\]" "$1" && ! grep -q "^Environment=" "$1"' _ "$u"
+desc="grassfield-prompter: installed where its unit runs it, built, tested and packaged by the PKGBUILD, which declares gcr-4"
+check bash -c 'grep -q "RUNTIME DESTINATION lib/grassfield" "$1" && grep -q "packaging/systemd/grassfield-prompter.service DESTINATION lib/systemd/user" "$1" && grep -q "cmake --install \"\$srcdir/prompter-build\"" "$2" && grep -q "\"\$srcdir/prompter-build/prompter-unit-tests\"" "$2" && grep -qE "^  depends=\(.* gcr-4\)" "$2" && grep -qE "^ +quickshell gcr-4\)" "$2"' _ "$root/bridges/prompter/CMakeLists.txt" "$pk/arch/PKGBUILD"
+# udiskie's password command (ADR-0035 D-9, step 9c): grassfield-askpass, built and installed with the bridge, where the
+# automount unit runs it, the disk's name one argument of udiskie's own formatting.
+desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
+check bash -c 'grep -qxF "ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray --password-prompt \"/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}\"" "$1" && grep -qF "install(TARGETS grassfield-prompter grassfield-askpass RUNTIME DESTINATION lib/grassfield)" "$2" && grep -qF "add_executable(grassfield-askpass src/askpass.cpp" "$2"' _ "$pk/systemd/grassfield-automount.service" "$root/bridges/prompter/CMakeLists.txt"
 for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
   desc="drop-in keeps Omarchy's $unit.service out of the Grassfield session only"
   d=$pk/systemd/$unit.service.d/10-grassfield.conf

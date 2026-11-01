@@ -135,6 +135,20 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
   the protocol maximum too). The minimum is never under Hyprland's own floor, `MIN_WINDOW_SIZE` (20 px, what its resizes
   fall back to): an app that states no minimum is not squeezed to a 1 px frame (integrator review of a6d04df).
+  Since ADR-0036 D69 (capture defect of 2026-10-30: Quarters at 1440 x 900 with Settings, 420 px tall at least, came out
+  with shifted rows) a window is placed only in a zone it fits, its minimum with its titlebar band inside the zone's frame
+  as the glyph shows it (a half beside a neighbour: the TL7 frame): the popover and the Window menu grey the places,
+  arrangements and Layouts zones it does not fit (`unfitZones`, ADR-0007), `tile`, `arrange` and a pick refuse them, a drag
+  shows no preview there (a place on the frame `tile` applies, a half beside a neighbour included: `unfitPlaces`),
+  an arrangement's fill gives each remaining zone the topmost window that fits it (a zone no window
+  fits stays empty) and the suggestion offers only windows that fit. Fill and Center are always offered. The make-room
+  above now serves windows already placed whose work area shrinks (the margins switch, the Dock). The shell as built
+  (review of D69): greyed, never hidden, as macOS greys a tile it cannot make. The popover reads the event's lists
+  (WindowTiling.parseHover `fit`): a place by `unfitPlaces`, an arrangement by its first zone (the window's own) in
+  `unfitZones`, a Layouts zone by itself (TileGlyph `disabledZones`: fainter, no pointer, no press, no number key), a layout
+  none of whose zones fits greyed whole; the Window menu reads the reply's per-window lists when it opens (TilingLink
+  `unfitZones`, Compositor.fitOf) and greys those Halves, Quarters and Arrange items, their key texts kept; the keys
+  themselves reach the plugin, which refuses them.
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
@@ -296,7 +310,12 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   A window of fixed size (minimum = maximum on both axes, core `fixedSize`; About This Computer, ADR-0040 step 1b) posts
   no `tile-hover` from its zoom light, which its app draws disabled, and `tile_popover` (Super+Ctrl+L) is refused for it:
   nothing opens, on hover or click (integrator nested pass of 85c2c10, scenario 6). The reply lists such windows
-  (`fixed`); `tests/compositor/tiling.sh` case `fixed`.
+  (`fixed`); `tests/compositor/tiling.sh` case `fixed`. Its review: the plugin's own titlebar draws that zoom light
+  disabled too (grey, no glyph) and its click, Alt-click and a double-click set to Zoom do nothing, unless the window is
+  zoomed or in full screen already (core `lightAvailable`; case `fixed bar`); Super+Alt+F (Zoom) and Super+Ctrl+F (Full
+  Screen) leave it alone the same way: `bindings.lua` asks the plugin's `window_size(mode)` at each press, which returns
+  Hyprland's own dispatcher or a no-op (core `sizeKeyActs`; Hyprland's dispatcher as before without the plugin;
+  `tests/compositor/size_keys.sh`, case `fixed keys`).
 - **TL25** Window menu (T0, `AppMenuModel.qml`, M26-M28): Minimize, Zoom, Fill, Center, —, Move & Resize ›, Full Screen
   Tile › (T4), —, Enter Full Screen, —, Move to Desktop ›, —, Bring All to Front, —, the windows. Move & Resize › has the
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt

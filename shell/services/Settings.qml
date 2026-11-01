@@ -60,6 +60,7 @@ Singleton {
     readonly property bool dockMinimizeIntoApp: store.dockMinimizeIntoApp
     readonly property bool dockAnimateOpening: store.dockAnimateOpening
     readonly property bool dockShowIndicators: store.dockShowIndicators
+    readonly property bool dockEndTask: store.dockEndTask
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
     readonly property string accentColor: store.accentColor

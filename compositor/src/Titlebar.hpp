@@ -147,8 +147,9 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // also for a window whose bar is hidden (client chrome: Hyprland's move, tiling.md TL16).
     void drawPreview(const PHLMONITOR& monitor, float alpha);
     // The glyphs over the lights; `bar` in monitor-local logical coordinates. `fullscreen`: the zoom light shows the arrows
-    // and minimize none (unavailable).
-    void drawGlyphs(const CBox& bar, float scale, float alpha, bool fullscreen);
+    // and minimize none (unavailable); `fixedSize` and `sized`: a window of fixed size neither zoomed nor in full screen shows
+    // no zoom glyph (its light is disabled, core lightAvailable).
+    void drawGlyphs(const CBox& bar, float scale, float alpha, bool fullscreen, bool fixedSize, bool sized);
     // The content's own pixels in the surface's rounded top corners (under the surface), when its texture maps 1:1.
     void drawContentCorners(const PHLWINDOW& w, const CBox& bar, double rounding, float scale, float alpha);
 

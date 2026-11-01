@@ -52,7 +52,12 @@
 #   fixed          (ADR-0040 step 1b) About This Computer (grassfield-settings --about, minimum = maximum): listed in the
 #                  reply's "fixed"; tile_popover, the pointer resting on its disabled zoom light and a click there post no
 #                  tile-hover and open no shell popup, its box unchanged (skipped without apps/settings/build-direct.sh)
-#   move-to        on another output when there is one: a tiled window takes the same place there (still tiled, that
+#   fixed bar      (step 1b's review) an xdgact window of fixed size with the plugin's titlebar: listed in "fixed"; its zoom
+#                  light drawn disabled (captured under the pointer) and a click there leaves its box and mode; a resizable
+#                  window's light still zooms (the control)
+#   fixed keys     (step 1b's review) Super+Alt+F and Super+Ctrl+F leave that window (bindings.lua asks the plugin's
+#                  window_size, which refuses it, logged); the control zooms with Super+Alt+F and back
+#   move-to      on another output when there is one: a tiled window takes the same place there (still tiled, that
 #                  output's Desktop) and back; a Free window keeps its size and lands on that output (skipped with one
 #                  output)
 #   move-invalid   move_to an unknown output or the window's own: the `tiling` notice says "invalid", nothing moves
@@ -82,6 +87,10 @@
 #                  suggestion; true again, the same placement has one
 #   minimized      the third window minimized by the plugin from GF-REF is offered after a new zone placement of the first;
 #                  a pick brings it back to GF-REF's Desktop into the middle third, in the first's group (D27)
+#   fit wide       (D69, after the step 4c cases) an xdgact window wider than a quarter: its open event's unfitZones lists the
+#                  quarters and the left and right halves, not the top half (an ordinary window's lists none); a quarter and
+#                  Quarters asked by it are refused (nothing moves), the top half places it; Quarters asked by an ordinary
+#                  window leaves it out and its quarters share rows and columns; the reply's unfitZones lists it
 # Step 4b (docs/specs/tiling.md TL29; only with tiling-groups; right after the step 4a cases, whose first and third windows
 # end in one group):
 #   group-front    the second window (no group) focused above the group; group_front(first): the third window, then the
@@ -1303,6 +1312,84 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     say "SKIP: fixed (no Settings build at $settings_bin: apps/settings/build-direct.sh)"
   fi
 
+  # fixed bar (ADR-0040 step 1b's review): a window of fixed size drawn with the plugin's own titlebar (an xdgact window of
+  # 420x300, minimum = maximum): its zoom light is disabled (drawn grey with no glyph under the pointer: captured) and a click
+  # there leaves its box and its mode; a resizable window's click still zooms (the control).
+  close_shell_popup "fixed bar" # a popup left by the case before would take the clicks below (review of D69, MINOR 3)
+  open_xdg gf-fixed-bar 420x300
+  if [[ -n $xdg_addr ]]; then
+    fixed_addr=$xdg_addr fixed_pid=$xdg_pid
+    mode_box() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.fullscreen)"'; }
+    zoom_light_of() { # address: the middle of the plugin titlebar's zoom light, relative to GF-REF
+      local x y
+      read -r x y _ < <(mode_box "$1")
+      echo "$((x + zl - mx)) $((y - GF_TB_MID - my))"
+    }
+    zl=$(jq -r '.window | .titlebarLightInset.value + 2 * (.lightDiameter.value + .lightGap.value) + .lightDiameter.value / 2 | floor' "$root/ui/tokens/tokens.json")
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$fixed_addr' })" >>"$log" 2>&1
+    sleep 0.5
+    fb0=$(mode_box "$fixed_addr")
+    say "  fixed bar: $fixed_addr $fb0"
+    fixed_listed() { tiling_state | jq -e --arg a "${fixed_addr#0x}" '(.fixed // []) | index($a) != null' >/dev/null 2>&1; }
+    check "fixed bar: the reply lists the window among those of fixed size" fixed_listed
+    close_shell_popup "fixed bar"
+    read -r fzx fzy < <(zoom_light_of "$fixed_addr")
+    pointer abs $((fzx + 120)) $((fzy + 80)) sleep 200 abs "$fzx" "$fzy" sleep 400
+    "$root/scripts/dev/shot.sh" tiling-fixed-bar-light "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-fixed-bar-light.png" "$run/" 2>/dev/null
+    pointer click sleep 800
+    check "fixed bar: a click on its disabled zoom light leaves its box and mode (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
+    check "fixed bar: the plugin says why" plugin_logged "titlebar zoom: refused for a window of fixed size"
+    close_shell_popup "fixed bar"
+    # The control: a resizable window's zoom light still zooms, and back.
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+    sleep 0.5
+    read -r czx czy < <(zoom_light_of "$addr")
+    pointer abs "$czx" "$czy" sleep 300 click sleep 800
+    check "fixed bar: the control's zoom light zooms it" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
+    nestctl dispatch "hl.dsp.window.fullscreen({ mode = 'maximized' })" >>"$log" 2>&1 # back (the focused control)
+    sleep 0.8
+    check "fixed bar: the control is back from its zoom" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
+    pointer abs 20 $((mh / 2)) sleep 200
+    close_shell_popup "fixed bar"
+    # fixed keys (step 1b's review: Super+Alt+F zoomed About to 1918x980, Super+Ctrl+F made it full screen): bindings.lua asks
+    # the plugin's window_size, which refuses a window of fixed size; the control still zooms with Super+Alt+F, and back.
+    # The chords go through tests/tools/vkbd (keysyms, the last one tapped with the others held), as tests/visual/flow-lib.sh
+    # fl_chord does: wtype's modifiers reach apps but never Hyprland's binds, and a modifier wtype leaves held turns the next
+    # Escape into Super+Alt+Escape (a first run of this case left Force Quit open over every later case).
+    chord() {
+      local args=() mods=() k last=$# i=0
+      for k in "$@"; do
+        i=$((i + 1))
+        if ((i < last)); then args+=(down "$k" sleep 60); mods=("$k" "${mods[@]}"); else args+=(tap "$k" sleep 60); fi
+      done
+      for k in "${mods[@]}"; do args+=(up "$k"); done
+      timeout 20 "$root/tests/tools/vkbd/vkbd.sh" "${args[@]}" >>"$log" 2>&1
+    }
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$fixed_addr' })" >>"$log" 2>&1
+    sleep 0.5
+    chord Super_L Alt_L f
+    sleep 1
+    check "fixed keys: Super+Alt+F leaves the window of fixed size (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
+    check "fixed keys: the plugin refused the zoom" plugin_logged "window_size: maximized refused: window ${fixed_addr#0x} is of fixed size"
+    chord Super_L Control_L f
+    sleep 1
+    check "fixed keys: Super+Ctrl+F leaves it too (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
+    check "fixed keys: the plugin refused the full screen" plugin_logged "window_size: fullscreen refused: window ${fixed_addr#0x} is of fixed size"
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+    sleep 0.5
+    chord Super_L Alt_L f
+    sleep 1
+    check "fixed keys: Super+Alt+F zooms the control (the bind reaches Hyprland)" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
+    chord Super_L Alt_L f
+    sleep 1
+    check "fixed keys: Super+Alt+F again unzooms it" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
+    close_shell_popup "fixed keys"
+    kill "$fixed_pid" 2>/dev/null
+    sleep 0.5
+  else
+    check "fixed bar: the xdgact window opened" false
+  fi
+
   # covered: a layer surface of a tiny Quickshell config (the run directory, never the repository): Exclusive or not, at a
   # place on GF-REF (layout coordinates x y w h).
   layer_pid=""
@@ -1778,6 +1865,80 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "shared-edge: outside the handle one window is resized, the other stays" only_one
   else
     say "SKIP: step 4c cases (the plugin does not advertise tiling-shared-edge)"
+  fi
+
+  # ADR-0036 D69 (capture defect of 2026-10-30: Quarters at 1440 x 900 with a window taller than a quarter came out with
+  # shifted rows): a window is placed only in a zone it fits. An xdgact window at least half the output plus 200 px wide fits
+  # the top and bottom halves (the whole width) and no quarter nor left or right half: the popover's event lists those zones;
+  # a quarter is refused and moves nothing, the top half places it; Quarters asked by it is refused; Quarters asked by an
+  # ordinary window leaves it out (each zone takes the topmost window that fits it) and comes out aligned; the reply lists it.
+  tile_ipc "$addr" previous
+  tile_ipc "$addr2" previous
+  tile_ipc "$addr3" previous
+  open_xdg gf-fit-wide $((mw / 2 + 200))
+  if [[ -n $xdg_addr ]]; then
+    fit_open() { # address jq-condition: tile_popover posts open for that window, the condition holding on its event
+      mark_events
+      nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$1\")" >>"$log" 2>&1
+      event_came ".type == \"tile-hover\" and .address == \"${1#0x}\" and .state == \"open\" and $2"
+      local ok=$?
+      say "  event: $last_event"
+      close_shell_popup "fit wide"
+      return $ok
+    }
+    check "fit wide: its event lists the quarters and the left and right halves, not the top half" fit_open "$xdg_addr" \
+      '(.unfitZones | (index("0,0,6,6") != null and index("6,6,6,6") != null and index("0,0,6,12") != null and index("6,0,6,12") != null and index("0,0,12,6") == null))'
+    check "fit wide: an ordinary window's event lists no zone" fit_open "$addr" '.unfitZones == []'
+    xdg_box() { nestctl clients -j | jq -r --arg a "$xdg_addr" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"'; }
+    wb=$(xdg_box)
+    mark_events
+    tile_ipc "$xdg_addr" top-left
+    check "fit wide: tile to a quarter is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    check "fit wide: the refusal moved nothing (was $wb)" test "$(xdg_box)" = "$wb"
+    check "fit wide: the refusal left no record" test "$(record_of "$xdg_addr")" = null
+    mark_events
+    tile_ipc "$xdg_addr" top
+    check "fit wide: the top half places it" event_came '.type == "tiling" and .reason == "placed"'
+    check "fit wide: its record is the top half" test "$(record_of "$xdg_addr" | jq -r '.place')" = top
+    tile_ipc "$xdg_addr" previous
+    wb=$(xdg_box)
+    mark_events
+    arrange "{\"layout\":\"quarters\",\"windows\":[\"$xdg_addr\"]}"
+    check "fit wide: Quarters asked by it is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+    check "fit wide: that refusal moved nothing (was $wb)" test "$(xdg_box)" = "$wb"
+    nestctl dispatch "hl.dsp.focus({ window = 'address:$xdg_addr' })" >>"$log" 2>&1 # the topmost window: the fill meets it first
+    sleep 0.5
+    wb=$(xdg_box)
+    mark_events
+    arrange "{\"layout\":\"quarters\",\"windows\":[\"$addr\"]}"
+    check "fit wide: Quarters asked by an ordinary window is placed" event_came '.type == "tiling" and .reason == "placed"'
+    check "fit wide: its fill leaves the wide window out (no record, not moved; was $wb)" test "$(record_of "$xdg_addr"):$(xdg_box)" = "null:$wb"
+    quarters_aligned() {
+      local q
+      q=$(tiling_state | jq -c '[.outputs[].windows[] | select(.layout == "quarters" and .state == "tiled") | {zone, x, y, w, h}]')
+      say "  quarters: $q"
+      jq -e 'length >= 2
+        and ([.[] | select(.zone == 0 or .zone == 1) | [.y, .h]] | unique | length <= 1)
+        and ([.[] | select(.zone == 2 or .zone == 3) | [.y, .h]] | unique | length <= 1)
+        and ([.[] | select(.zone == 0 or .zone == 2) | [.x, .w]] | unique | length <= 1)
+        and ([.[] | select(.zone == 1 or .zone == 3) | [.x, .w]] | unique | length <= 1)' <<<"$q" >/dev/null
+    }
+    check "fit wide: the quarters placed share their rows and columns" quarters_aligned
+    "$root/scripts/dev/shot.sh" tiling-fit-wide-quarters "$out" >>"$log" 2>&1 && cp "$dev/shots/tiling-fit-wide-quarters.png" "$run/" 2>/dev/null
+    reply_lists_wide() {
+      local z
+      z=$(tiling_state | jq -c --arg a "${xdg_addr#0x}" '[.unfitZones[] | select(.address == $a) | .zones][0] // null')
+      say "  reply unfitZones of the wide window: $z"
+      jq -e 'index("0,0,6,6") != null and index("0,0,12,6") == null' <<<"$z" >/dev/null
+    }
+    check "fit wide: the reply lists its unfit zones" reply_lists_wide
+    for a in $(tiling_state | jq -r '.outputs[].windows[] | select(.layout == "quarters") | "0x" + .address'); do
+      tile_ipc "$a" previous
+    done
+    kill "$xdg_pid" 2>/dev/null
+    sleep 0.5
+  else
+    check "fit wide: the xdgact window opened" false
   fi
 
   # Step 6a (TL33, ADR-0036 D41-D47): Full Screen › Left or Right of Screen makes a Split View Desktop. Every window back to
