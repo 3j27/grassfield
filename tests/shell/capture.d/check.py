@@ -2,9 +2,11 @@
 # The fakes answer as the real tools do (reviews of step 8): slurp 1.5.0 (Arch's) gives the smallest fed box for a click
 # inside one and cancels a click outside every box; notify-send prints the notice's id then the action, ends its output before
 # it ends and, sent SIGINT while it waits, closes its notice and ends; it shows as `notify-send` in /proc, as the real one.
+import datetime
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -180,7 +182,8 @@ def calls(name=None):
 def capture(mode, program=None, path=None, **extra):
     if os.path.exists(os.path.join(log, "calls")):
         os.unlink(os.path.join(log, "calls"))
-    env = {"PATH": (path or fake) + ":/usr/bin:/bin", "HOME": home, "FAKE_LOG": log, "FAKE_MONITORS": MONITORS,
+    # A path given is the whole PATH (hermetic: the system's own tools, notify-send first, are never reached through it).
+    env = {"PATH": path or fake + ":/usr/bin:/bin", "HOME": home, "FAKE_LOG": log, "FAKE_MONITORS": MONITORS,
            "FAKE_CLIENTS": CLIENTS, "FAKE_ANSWER": "default"}
     env.update(extra)
     began = time.monotonic()
@@ -225,11 +228,37 @@ run = calls("systemd-run")
 check(run and run[0]["argv"][-5:] == [os.path.join(fake, "uwsm-app"), "--", "org.grassfield.Preview.desktop", first, second],
       "a click opens Preview with the capture's pictures, as the Dock starts an app [%r]" % (run[0]["argv"] if run else None))
 
-# A second capture the same second: other names, never a file overwritten.
+# A second capture: two more pictures (whether it lands in the same second or not; the fixed-time check follows).
 before = files(desktop)
 r, _ = capture("screen")
 check(len(files(desktop)) == len(before) + 2 and all(name.fullmatch(f) for f in files(desktop)),
-      "another capture never overwrites a picture: %r" % files(desktop))
+      "a second capture adds its own two pictures: %r" % files(desktop))
+
+# Never a file overwritten, nor a link followed, whatever the second (integrator review of step 8, MINOR): every name the
+# capture can take in the next 30 s is already there: "<stem>.png" a picture, " (2)" a link to a file outside the home folder,
+# " (3)" a dangling link into the home folder. The capture takes " (4)" and " (5)" and leaves all three untouched.
+crowded = os.path.join(home, "Crowded")
+os.makedirs(crowded)
+outside, nowhere = os.path.join(tmp, "outside.png"), os.path.join(home, "nowhere.png")
+with open(outside, "wb") as f:
+    f.write(b"outside")
+began = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+stems = ["Screenshot %s" % (began + datetime.timedelta(seconds=s)).strftime("%Y-%m-%d at %H.%M.%S") for s in range(-1, 30)]
+for stem in stems:
+    with open(os.path.join(crowded, stem + ".png"), "wb") as f:
+        f.write(b"earlier " + stem.encode())
+    os.symlink(outside, os.path.join(crowded, stem + " (2).png"))
+    os.symlink(nowhere, os.path.join(crowded, stem + " (3).png"))
+r, _ = capture("screen", FAKE_DESKTOP=crowded, TZ="UTC")
+new = sorted(set(files(crowded)) - {s + e for s in stems for e in (".png", " (2).png", " (3).png")})
+kept = all(open(os.path.join(crowded, s + ".png"), "rb").read() == b"earlier " + s.encode()
+           and os.readlink(os.path.join(crowded, s + " (2).png")) == outside
+           and os.readlink(os.path.join(crowded, s + " (3).png")) == nowhere for s in stems)
+check(r.returncode == 0 and len(new) == 2 and all(f.endswith((" (4).png", " (5).png")) for f in new)
+      and all(not os.path.islink(os.path.join(crowded, f)) for f in new) and kept
+      and open(outside, "rb").read() == b"outside" and not os.path.lexists(nowhere),
+      "every name taken (a picture, a link out, a dangling link): the capture takes the next free ones, overwrites and "
+      "follows nothing [%r]" % new)
 
 # The click on the notice is never lost (review of step 8, MAJOR 1: notify-send's output ended before it could be reaped,
 # and the helper took that for its wait running out): 40 notices clicked as soon as they show.
@@ -391,7 +420,10 @@ check(waiting.returncode == 143 and any(c.get("signal") == "INT" for c in calls(
 # No click: no Preview.
 r, _ = capture("screen", FAKE_ANSWER="")
 check(calls("systemd-run") == [], "the notice closed without a click: Preview does not open")
-# Without notify-send (libnotify is optional): the notice through gdbus, no button.
+# Without notify-send (libnotify is optional): the notice through gdbus, no button. Hermetic (integrator review of step 8,
+# MAJOR): PATH is the fakes without notify-send and nothing else, so a machine's own /usr/bin/notify-send is never run.
+check(shutil.which("notify-send", path=quiet) is None and shutil.which("gdbus", path=quiet),
+      "the case without notify-send cannot reach one")
 r, _ = capture("screen", path=quiet)
 bus = calls("gdbus")
 check(r.returncode == 0 and bus and "org.freedesktop.Notifications.Notify" in bus[0]["argv"]

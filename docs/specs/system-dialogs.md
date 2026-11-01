@@ -803,9 +803,11 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
   order; the windows then the displays as slurp's boxes, in the veil's colour; the last capture's notice closed before the
   next, the crosshair not waiting for it, the picture waiting; SIGTERM while the notice waits; Esc and a
   second press (only this helper's slurp); slurp's colours equal to the tokens; the names in English and French and
-  " (2)"; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
+  " (2)"; every name a capture can take in the next 30 s already there (a picture, a link out of the home folder, a
+  dangling link): the next free ones taken, nothing overwritten or followed; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
   notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
-  closing its notice), gdbus without notify-send; Preview through `uwsm-app`; failures leave no file.
+  closing its notice), gdbus without notify-send (a PATH of the fakes only, so the machine's own notify-send is never
+  reached); Preview through `uwsm-app`; failures leave no file.
 - A-SC2 (L0) `tests/shell/session_services.sh`: the four bindings call `grassfield-capture`, never `omarchy-capture`.
 - A-SC3 (L2, owner) in the real session: Shift-Cmd-3 and Shift-Cmd-4 with a drag and a click on a window; the file on the
   Desktop and in the clipboard; the notice and Preview.
