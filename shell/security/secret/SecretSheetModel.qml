@@ -47,13 +47,14 @@ QtObject {
     // Who asked, under a NetworkManager request's title (the program the bridge checked the call came from); "" otherwise.
     readonly property string requesterDetail: network ? qsTr("Requested by NetworkManager") : ""
 
-    // The network of an nm request: its SSID (plain, a field of the title's sentence), its security, whether it asks for a
-    // name (WPA2 Enterprise). The name typed (not a secret: the connection's own identity at first) and whether the
-    // password is shown as typed (Show password; back to hidden for each request and whenever the fields are emptied).
+    // The network of an nm request: its SSID (plain, a field of the title's sentence), its security, and for WPA2 Enterprise
+    // the connection's username, shown read-only: NetworkManager keeps only secrets from an agent's reply, so a name typed
+    // here would be thrown away (opus review of step 9c, MAJOR; decision 9-33). Whether the password is shown as typed (Show
+    // password; back to hidden for each request and whenever the fields are emptied).
     readonly property string networkSsid: network ? Prompter.flatten(request.network.ssid, Prompter.CAPS.ssid) : ""
     readonly property string networkSecurity: network ? request.network.security : ""
-    readonly property bool needsIdentity: networkSecurity === "enterprise"
-    property string identity: ""
+    readonly property bool showsIdentity: networkSecurity === "enterprise"
+    readonly property string identity: showsIdentity ? Prompter.flatten(request.network.identity, Prompter.CAPS.identity) : ""
     property bool showPassword: false
 
     // The sheet's own title, Grassfield's words: who asks, and for what.
@@ -179,10 +180,9 @@ QtObject {
         return qsTr("The Wi-Fi network “%1” requires a WPA2 password.").arg(ssid);
     }
 
-    // Join may be pressed: a password of an acceptable length for the network (read as a length, never as text) and, for
-    // enterprise, a name.
-    function networkReady(passwordLength: int, identityLength: int): bool {
-        return network && canSubmit && Prompter.networkLengthOk(networkSecurity, passwordLength) && (!needsIdentity || identityLength > 0);
+    // Join may be pressed: a password of an acceptable length for the network (read as a length, never as text).
+    function networkReady(passwordLength: int): bool {
+        return network && canSubmit && Prompter.networkLengthOk(networkSecurity, passwordLength);
     }
 
     function titleOf(role: string, name: string, kind: string, isNew: bool): string {
@@ -255,11 +255,6 @@ QtObject {
                 clearRequested();
                 return false;
             }
-            if (needsIdentity && root.identity === "") {
-                priv.error = qsTr("Type your username.");
-                clearRequested();
-                return false;
-            }
         }
         if (asksPassword && !network) {
             if (typeof password !== "string" || (password.length === 0 && !passwordNew)) {
@@ -278,7 +273,7 @@ QtObject {
             }
         }
         priv.error = "";
-        root.answerRequested(true, asksPassword ? password : null, root.choice, needsIdentity ? root.identity : null);
+        root.answerRequested(true, asksPassword ? password : null, root.choice, null);
         clearRequested();
         return answered;
     }
@@ -303,7 +298,6 @@ QtObject {
         priv.error = "";
         if (request)
             root.choice = request.choice !== null && request.choice.chosen === true;
-        root.identity = request && request.kind === "nm" ? request.network.identity : "";
         clearRequested();
     }
 }

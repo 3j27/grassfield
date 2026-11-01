@@ -22,8 +22,6 @@ var MAX_BRIDGE_LINE = 16384;
 var MAX_SHELL_LINE = 16384;
 // A password: at most 4096 bytes of UTF-8 (limits::kPassword; the bridge cancels a longer one).
 var MAX_PASSWORD_BYTES = 4096;
-// An nm answer's name (identity): at most 1024 bytes of UTF-8 (limits::kIdentity).
-var MAX_IDENTITY_BYTES = 1024;
 // The securities of an nm request (bridges/prompter/src/NmSecrets.h): WPA/WPA2 Personal, WPA3 Personal, WEP, WPA2 Enterprise.
 var SECURITIES = ["wpa", "wpa3", "wep", "enterprise"];
 // The bridge's caps (bridges/prompter/src/Text.h, ADR-0035 decision 9-11), UTF-16 code units, the ellipsis included.
@@ -333,6 +331,10 @@ function parseNetworkPrompt(m) {
         return failure("nm prompt: an SSID that shows nothing");
     if (n.security !== "enterprise" && n.identity !== "")
         return failure("nm prompt: a name for a network that asks for none");
+    // An enterprise network's username is shown, never asked (NetworkManager keeps only secrets from an agent's reply):
+    // the bridge sends one only with the connection's own (opus review of step 9c, MAJOR).
+    if (n.security === "enterprise" && flatten(n.identity, CAPS.identity) === "")
+        return failure("nm prompt: an enterprise network without its username");
     return {
         ok: true,
         message: {
@@ -366,9 +368,10 @@ function helloLine(version) {
 
 // The one answer to `request` (a parsed prompt, or what the client kept of it: id, kind, passwordNew, choice, security):
 // "ok" with the password for a password request (a string, "" only for a new password) and the check box's state when
-// the prompt had one; for an nm request the password (not empty) and, for enterprise, the name (`identity`, not empty);
-// "cancel" carries no password and no name. Returns the line, or "" when it would be wrong (no password for an ok
-// password answer, one over MAX_PASSWORD_BYTES, a missing name, a line over MAX_SHELL_LINE): nothing is sent then.
+// the prompt had one; for an nm request the password only (not empty: NetworkManager keeps nothing else of a reply, opus
+// review of step 9c); "cancel" carries no password. `identity` is for a kind that asks a name (none does yet): never sent.
+// Returns the line, or "" when it would be wrong (no password for an ok password answer, one over MAX_PASSWORD_BYTES, a
+// line over MAX_SHELL_LINE): nothing is sent then.
 function answerLine(request, ok, password, choice, identity) {
     if (!isObject(request) || !validId(request.id) || KINDS.indexOf(request.kind) < 0)
         return "";
@@ -378,13 +381,6 @@ function answerLine(request, ok, password, choice, identity) {
             if (typeof password !== "string" || password.length === 0 || utf8Length(password) > MAX_PASSWORD_BYTES)
                 return "";
             m.password = password;
-            // The client keeps `security`; a parsed prompt has it in `network`.
-            const security = typeof request.security === "string" && request.security !== "" ? request.security : isObject(request.network) ? request.network.security : "";
-            if (security === "enterprise") {
-                if (typeof identity !== "string" || identity.length === 0 || utf8Length(identity) > MAX_IDENTITY_BYTES)
-                    return "";
-                m.identity = identity;
-            }
         }
         const nmLine = JSON.stringify(m);
         return utf8Length(nmLine) <= MAX_SHELL_LINE ? nmLine : "";
@@ -398,4 +394,11 @@ function answerLine(request, ok, password, choice, identity) {
         m.choice = choice === true;
     const line = JSON.stringify(m);
     return utf8Length(line) <= MAX_SHELL_LINE ? line : "";
+}
+
+// The shell's refusal of a request it cannot take (its bound of MAX_REQUESTS, no queue): result "refused", never a user's
+// "cancel", so that NetworkManager hears NoSecrets, not UserCanceled (opus review of step 9c, NIT; decision 9-31). "" for
+// an id the bridge would not have sent.
+function refusalLine(id) {
+    return validId(id) ? JSON.stringify({type: "answer", id: id, result: "refused"}) : "";
 }

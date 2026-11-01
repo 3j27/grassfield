@@ -15,9 +15,9 @@ import qs.security
 //    own error line;
 //  - Cancel and OK, Grassfield's labels (decision 9-16).
 // A NetworkManager request (step 9c) is the macOS Wi-Fi alert: the Wi-Fi glyph, the title naming the network (its SSID a
-// quoted field in Grassfield's sentence), "Requested by NetworkManager" under it, the name field (WPA2 Enterprise), the
-// password field, Show password (the typed characters shown while it is checked), Cancel and Join (only for a password of an
-// acceptable length). No caller text.
+// quoted field in Grassfield's sentence), "Requested by NetworkManager" under it, the connection's username (WPA2
+// Enterprise, read-only), the password field, Show password (the typed characters shown while it is checked, never
+// selectable or copyable), Cancel and Join (only for a password of an acceptable length). No caller text.
 // Esc cancels. Every string from the caller is plain text (Text.PlainText), one line from the bridge, capped here in lines.
 FocusScope {
     id: root
@@ -48,20 +48,16 @@ FocusScope {
 
     Keys.onEscapePressed: root.model.cancel()
 
-    // The first control a user types into: the (first) password field, or OK for a confirmation; for a network, its name
-    // field when the name is still empty, else the password field. Never while the input is disabled (forcing the focus
-    // onto a disabled control would still move this scope's focus to it). Read from the request itself: the sheet is made
-    // as the request arrives, before every binding of the model has followed it.
+    // The first control a user types into: the (first) password field, or OK for a confirmation. Never while the input is
+    // disabled (forcing the focus onto a disabled control would still move this scope's focus to it). Read from the request
+    // itself: the sheet is made as the request arrives, before every binding of the model has followed it.
     function focusField(): void {
         const request = root.model.request;
         if (!root.inputEnabled || !request)
             return;
-        if (request.kind === "nm") {
-            if (request.network.security === "enterprise" && identityField.text === "")
-                identityField.forceActiveFocus();
-            else
-                field.forceActiveFocus();
-        } else if (request.kind !== "password")
+        if (request.kind === "nm")
+            field.forceActiveFocus();
+        else if (request.kind !== "password")
             okButton.forceActiveFocus();
         else if (request.passwordNew === true)
             newField.forceActiveFocus();
@@ -74,7 +70,7 @@ FocusScope {
     function accept(): void {
         if (root.model.network) {
             // Join only for a password of an acceptable length (and a name): the field keeps what was typed otherwise.
-            if (root.model.networkReady(field.length, identityField.text.length))
+            if (root.model.networkReady(field.length))
                 field.submit();
             return;
         }
@@ -313,20 +309,22 @@ FocusScope {
             Accessible.name: text
         }
 
-        // A WPA2 Enterprise network's username: not a secret (the connection's own identity at first), so a plain field.
-        TextField {
-            id: identityField
+        // A WPA2 Enterprise network's username, as the connection holds it: read-only, since NetworkManager keeps only
+        // secrets from an agent's reply (opus review of step 9c, MAJOR).
+        Text {
             objectName: "secretIdentity"
-            visible: root.model.needsIdentity
-            enabled: root.inputEnabled && root.model.canSubmit
             width: parent.width
-            height: visible ? implicitHeight : 0
-            text: root.model.identity
-            placeholderText: qsTr("Username")
-            accessibleName: qsTr("Username")
-            inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-            onTextEdited: root.model.identity = text
-            onAccepted: field.forceActiveFocus()
+            textFormat: Text.PlainText
+            text: root.model.showsIdentity ? qsTr("Username: %1").arg(root.model.identity) : ""
+            visible: text !== ""
+            color: Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            wrapMode: Text.WrapAnywhere
+            maximumLineCount: 2
+            elide: Text.ElideRight
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
         }
 
         PasswordField {
@@ -340,6 +338,9 @@ FocusScope {
             accessibleName: qsTr("Password")
             // Show password (a network's only): the characters as typed, never anywhere else than in this field.
             reveal: root.model.network && root.model.showPassword
+            // Shown, it is never selectable or copyable (opus review of step 9c, MINOR): not to the clipboard, not to the
+            // primary selection.
+            copyable: false
             // A network's Return goes through Join's rule (accept): a password too short stays in the field.
             submitOnReturn: !root.model.network
             onReturnPressed: root.accept()
@@ -478,7 +479,7 @@ FocusScope {
             primary: true
             width: buttonRow.buttonWidth
             text: root.model.network ? qsTr("Join") : qsTr("OK")
-            enabled: root.model.canSubmit && (!root.model.network || root.model.networkReady(field.length, identityField.text.length))
+            enabled: root.model.canSubmit && (!root.model.network || root.model.networkReady(field.length))
             onClicked: root.accept()
         }
     }

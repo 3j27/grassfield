@@ -50,11 +50,24 @@ Scope {
     // One answer to request `id`, once: "ok" (with the password for a password request) or "cancel". False when `id` is not
     // a request of this connection still open (already answered, withdrawn, never sent), when the line would be wrong
     // (Prompter.answerLine), or when the connection is not ready: nothing is sent then.
-    // `identity`: the name of an nm request of security "enterprise" answered ok, else null.
+    // `identity`: a name the user typed, for a kind that asks one (none does: never sent, Prompter.answerLine).
     function answer(id: string, ok: bool, password: var, choice: bool, identity: var): bool {
         if (priv.state !== "ready" || priv.closing || !Object.prototype.hasOwnProperty.call(priv.open, id))
             return false;
         const line = Prompter.answerLine(priv.open[id], ok, password, choice, identity);
+        if (line === "")
+            return false;
+        root.forget(id);
+        socket.write(line + "\n");
+        socket.flush();
+        return true;
+    }
+
+    // The shell cannot take request `id` (its bound): "refused", once, only for an id it holds (Prompter.refusalLine).
+    function refuse(id: string): bool {
+        if (priv.state !== "ready" || priv.closing || !Object.prototype.hasOwnProperty.call(priv.open, id))
+            return false;
+        const line = Prompter.refusalLine(id);
         if (line === "")
             return false;
         root.forget(id);

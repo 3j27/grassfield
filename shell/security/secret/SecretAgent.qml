@@ -63,12 +63,12 @@ Scope {
         onLost: root.dropAll()
     }
 
-    // A request from the bridge: queued (ADR-0035 D-9: at most 8 secret requests; the ninth is answered "cancelled", and
-    // so is any without a queue).
+    // A request from the bridge: queued (ADR-0035 D-9: at most 8 secret requests; the ninth is refused, and so is any
+    // without a queue: "refused", which the bridge answers "cancelled" to gcr and NoSecrets to NetworkManager).
     function enqueue(request: var): void {
         if (root.queue === null || root.requestCount >= Prompter.MAX_REQUESTS || !root.queue.addSecret(request.id)) {
             console.warn("grassfield-secret: request " + request.id + " answered \"cancelled\": " + root.requestCount + " requests held");
-            client.answer(request.id, false, null, false, null);
+            client.refuse(request.id);
             return;
         }
         request.arrivedAt = new Date();
