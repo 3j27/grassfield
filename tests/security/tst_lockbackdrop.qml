@@ -187,7 +187,7 @@ TestCase {
         compare((v.match(/root\.frozenMoving = /g) || []).length, 1);
         compare((v.match(/lockArt\.motionMs = /g) || []).length, 2, "at creation, and the start until they first move");
         verify(/readonly property bool motionPlays: root\.frozenMoving && root\.backdrop !== null && root\.backdrop\.kind === "art" && !root\.releasing && !Appearance\.reduceMotion && !root\.motionHeld\n/.test(v));
-        compare(block(v, "onMotionPlaysChanged: {").replace(/\s+/g, " "), "onMotionPlaysChanged: { if (root.motionPlays) root.motionTaken = true; }");
+        compare(block(v, "onMotionPlaysChanged: {").replace(/\s+/g, " "), "onMotionPlaysChanged: { if (root.motionPlays) Qt.callLater(() => { root.motionTaken = true; }); }");
         compare(block(v, "onMotionStartChanged: {").replace(/\s+/g, " "), "onMotionStartChanged: { if (root.frozenMoving && !root.motionTaken) lockArt.motionMs = root.motionStart; }");
         const art = block(v, "WallpaperArt {");
         verify(/id: lockArt/.test(art) && /moving: root\.frozenMoving/.test(art) && /playing: root\.motionPlays/.test(art), art);
@@ -197,9 +197,16 @@ TestCase {
         compare((v.match(/root\.motionRest = /g) || []).length, 1, "written only when the fade starts");
         const anim = block(v, "NumberAnimation {\n        id: motionStop");
         verify(/target: lockArt/.test(anim) && /property: "motionMs"/.test(anim) && /easing\.type: Easing\.OutQuad/.test(anim), anim);
-        // The view still only offers data: no signal but the two it had.
+        // The view still only offers data: no signal but the two it had, each emitted from one place.
         compare((v.match(/^\s*signal\s/gm) || []).length, 2);
         verify(/signal submitted\(string password\)/.test(v) && /signal edited/.test(v));
+        compare((v.match(/root\.submitted\(/g) || []).length, 1);
+        compare((v.match(/root\.edited\(/g) || []).length, 1);
+        // Counter-review of 7db57a7d (MINOR): no handler can be added unnoticed, in the view or on its instance in Lock.qml
+        // (a handler there could submit a password, end the release or unlock).
+        const handlers = text => (text.match(/^\s*((?:\w+\.)?on[A-Z]\w*)\s*:/gm) || []).map(h => h.trim().replace(/\s*:$/, "")).sort();
+        compare(handlers(v), ["Component.onCompleted", "onEdited", "onMotionPlaysChanged", "onMotionStartChanged", "onOfferedBackdropChanged", "onPressed",
+            "onReleasingChanged", "onResumesChanged", "onSubmitted", "onTriggered"]);
         // Lock.qml: through the stills only, frozen by the view; the rest handed back in a try.
         const lock = source("shell/security/lock/Lock.qml");
         verify(/readonly property bool moving: root\.stills \? root\.stills\.moving : false/.test(lock));
@@ -207,6 +214,9 @@ TestCase {
         verify(/function restMotion\(output: string, at: real\): void \{\s*try \{\s*if \(root\.stills && output !== "" && at >= 0\)\s*root\.stills\.restMotion\(output, at\);\s*\} catch \(e\) \{/.test(lock));
         verify(/^\s*moving: root\.moving\n\s*motionHeld: root\.displaysOff \|\| !controller\.locked\n\s*motionStart: root\.motionOf\(surface\.screen \? surface\.screen\.name : ""\)\n\s*onMotionRestChanged: root\.restMotion\(surface\.screen \? surface\.screen\.name : "", view\.motionRest\)\n/m.test(lock), "each line to its end");
         compare((lock.match(/onMotionRestChanged/g) || []).length, 1);
+        const instance = block(lock, "            LockView {");
+        compare(handlers(instance), ["Component.onDestruction", "onEdited", "onFieldEmptyChanged", "onMotionRestChanged", "onSubmitted"]);
+        compare(instance.match(/controller\.\w+\(/g), ["controller.submit(", "controller.clearMessage("], "the instance calls the controller twice: a password, a cleared message");
         verify(!/WallpaperState/.test(lock), "Lock.qml itself reads no wallpaper state");
         verify(/property bool displaysOff: false/.test(lock));
         // Idle tells it the displays are off, outside its own display logic (setDisplays unchanged).

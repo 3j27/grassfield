@@ -124,9 +124,14 @@ Item {
     property real motionRest: -1
     readonly property bool motionPlays: root.frozenMoving && root.backdrop !== null && root.backdrop.kind === "art" && !root.releasing && !Appearance.reduceMotion && !root.motionHeld
 
+    // Taken once they play, a turn later: a screen name that arrives after creation changes the backdrop and `motionStart` in
+    // the same notification, the backdrop first (counter-review of 7db57a7d, NIT); the first step is wallpaper.movingFrameMs
+    // away, so nothing moves before the start is taken.
     onMotionPlaysChanged: {
         if (root.motionPlays)
-            root.motionTaken = true;
+            Qt.callLater(() => {
+                root.motionTaken = true;
+            });
     }
     onMotionStartChanged: {
         if (root.frozenMoving && !root.motionTaken)

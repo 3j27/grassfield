@@ -261,8 +261,10 @@ and IQ-B3 here changes the palette only, not which controls read it.
     is the artwork, not while releasing, not under Reduce Motion, not while Idle has the displays off (`Lock.displaysOff`,
     set from Idle's `displayOff`) and not once unlocked (`LockView.motionHeld`; the start position is taken until they
     first move). Opus security review of bdc11b2d: **PASS**; its two MINORs (the tests' patterns, three mutants) and three
-    NITs are fixed in the next commit, each mutant now killed. When the release fade starts they slow down linearly to a
-    stop within it
+    NITs are fixed in 7db57a7d, each mutant now killed. Counter-review of 7db57a7d and de14f4c1: **PASS**; its MINOR (no
+    handler could be added unnoticed: the view's and its instance's handlers are pinned, three mutants) and its NIT (the
+    start taken a turn after the clouds first play) are fixed after it. When the release fade starts they slow down
+    linearly to a stop within it
     (`Easing.OutQuad` over the controller's `releaseMs`; `WallpaperConfig.lockMotionRest`), and `Lock.qml` gives that frame
     to the desktop at once (`restMotion`, in a `try`), so the desktop under the lock is the frame the lock rests on. The
     release never waits for it, and the lock path (`lock`, `engage`, `release`, `restore`) reads none of it.
