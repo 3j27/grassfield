@@ -983,10 +983,24 @@ TEST_F(PrompterTrust, KnownCallersAskOnSomeoneElsesBehalf) {
     EXPECT_TRUE(keyring.identified);
     EXPECT_TRUE(keyring.onBehalf);
     EXPECT_TRUE(keyring.name.isEmpty()); // the shell names the role in its own words
-    // In namespaces of its own, a known program is not named (the integrator's review of PR #95, NIT).
+    // In namespaces of its own, a known program is not named (the integrator's review of PR #95, NIT)...
     ExeFacts elsewhere       = facts(bin(QStringLiteral("keyringd")));
     elsewhere.sameNamespaces = false;
     EXPECT_EQ(requesterFor(elsewhere, where()).role, QStringLiteral("unidentified"));
+    // ...save the disk helper, which udiskie's unit runs in namespaces of its own (decision 9-26, amended); its path, its
+    // file by device and inode and the trace check still hold.
+    Where diskWhere = where();
+    diskWhere.known = {{bin(QStringLiteral("keyringd")), QStringLiteral("disk")}};
+    const RequesterView disk = requesterFor(elsewhere, diskWhere);
+    EXPECT_EQ(disk.role, QStringLiteral("disk"));
+    EXPECT_TRUE(disk.identified);
+    EXPECT_TRUE(disk.onBehalf);
+    ExeFacts otherFile = elsewhere;
+    otherFile.file     = fileIdOf(bin(QStringLiteral("editor"))); // the path names another file than the one it runs
+    EXPECT_EQ(requesterFor(otherFile, diskWhere).role, QStringLiteral("unidentified"));
+    ExeFacts traced = elsewhere;
+    traced.traced   = true;
+    EXPECT_EQ(requesterFor(traced, diskWhere).role, QStringLiteral("unidentified"));
 }
 
 TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
@@ -1199,7 +1213,7 @@ TEST(PrompterIdentity, AFileBindMountedOverATrustedPathInAnotherNamespaceIsSeen)
 
 // The integrator's review of PR #95 (NIT): a known caller is named only in the bridge's own mount and user namespaces, as
 // an app: a real child in namespaces of its own running a known program reads as unidentified.
-TEST(PrompterIdentity, AKnownCallerInNamespacesOfItsOwnIsUnidentified) {
+TEST(PrompterIdentity, AKnownCallerInNamespacesOfItsOwnIsUnidentifiedSaveTheDiskHelper) {
     if (!rootOwnsSystemFiles())
         GTEST_SKIP() << "/usr/bin is not root's here";
     int ready[2];
@@ -1254,6 +1268,13 @@ TEST(PrompterIdentity, AKnownCallerInNamespacesOfItsOwnIsUnidentified) {
     const RequesterView r = requesterFor(facts, w);
     EXPECT_EQ(r.role, QStringLiteral("unidentified"));
     EXPECT_EQ(r.path, QStringLiteral("/usr/bin/sleep"));
+    // The disk helper is named there all the same (decision 9-26, amended: udiskie's unit runs it in namespaces of its own).
+    Where disk = w;
+    disk.known = {{QStringLiteral("/usr/bin/sleep"), QStringLiteral("disk")}};
+    const RequesterView d = requesterFor(facts, disk);
+    EXPECT_EQ(d.role, QStringLiteral("disk"));
+    EXPECT_TRUE(d.identified);
+    EXPECT_TRUE(d.onBehalf);
     facts.sameNamespaces = true;
     EXPECT_EQ(requesterFor(facts, w).role, QStringLiteral("keyring")) << "the same facts in the bridge's namespaces";
 }

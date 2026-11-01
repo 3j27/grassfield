@@ -347,8 +347,10 @@ namespace gf::prompter {
             return r;
         if (const QString role = knownRole(facts.file, where.known, where.owner, where.top); !role.isEmpty()) {
             // Only in the bridge's mount and user namespaces, as an app (the integrator's review of PR #95, NIT): a process
-            // in namespaces of its own can make a known path name other files (decision 9-14, amended).
-            if (!facts.sameNamespaces)
+            // in namespaces of its own can make a known path name other files there (decision 9-14, amended). Save the disk
+            // helper (decision 9-26, amended): udiskie's unit runs it in namespaces of its own, and any program of the user
+            // can run it in the bridge's anyway, so the check would protect nothing for it.
+            if (!facts.sameNamespaces && role != QLatin1String("disk"))
                 return r;
             r.role       = role;
             r.identified = true;
