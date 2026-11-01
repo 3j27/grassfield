@@ -1054,6 +1054,18 @@
         <translation>Déplacer vers %1</translation>
     </message>
     <message>
+        <source>Move Window to Desktop</source>
+        <translation>Placer la fenêtre sur le bureau</translation>
+    </message>
+    <message>
+        <source>Make Window Full Screen</source>
+        <translation>Mettre la fenêtre en plein écran</translation>
+    </message>
+    <message>
+        <source>Replace Tiled Window</source>
+        <translation>Remplacer la fenêtre en mosaïque</translation>
+    </message>
+    <message>
         <source>Fill &amp; Arrange</source>
         <translation>Remplir et disposer</translation>
     </message>
