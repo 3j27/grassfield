@@ -618,7 +618,24 @@ TEST_F(KioDialogsTest, NoApplicationAsksThenChoosesOne)
         return read(QStringLiteral("to/opened")) == QByteArray("\x00\x01\x02\x03", 4);
     })) << "the chosen application opened the document";
 
-    // Cancel on the alert: no panel, nothing opened, and the job ends as cancelled.
+    // Cancel on the alert: no panel, nothing opened, and the job ends as cancelled. Hermetic: no grassfield-store on the PATH
+    // (an empty folder: the machine's own /usr/bin/grassfield-store is not seen) and not a dev session (the dev build beside
+    // this binary is not taken), whatever the machine running the test has installed.
+    struct Restore {
+        QByteArray path = qgetenv("PATH"), dev = qgetenv("GRASSFIELD_DEV");
+        bool hadDev = qEnvironmentVariableIsSet("GRASSFIELD_DEV");
+        ~Restore()
+        {
+            qputenv("PATH", path);
+            if (hadDev)
+                qputenv("GRASSFIELD_DEV", dev);
+        }
+    } restore; // put back however the case ends
+    const QByteArray savedPath = restore.path;
+    qunsetenv("GRASSFIELD_DEV");
+    const QString noStore = path(QStringLiteral("no-store-bin"));
+    ASSERT_TRUE(QDir().mkpath(noStore));
+    qputenv("PATH", noStore.toUtf8());
     m_asked.clear();
     panels.clear();
     QFile::remove(path(QStringLiteral("to/opened")));
@@ -632,6 +649,36 @@ TEST_F(KioDialogsTest, NoApplicationAsksThenChoosesOne)
     EXPECT_EQ(error, int(KIO::ERR_USER_CANCELED));
     EXPECT_EQ(m_asked.size(), 1);
     EXPECT_TRUE(panels.isEmpty());
+    EXPECT_FALSE(m_asked.first().value(QStringLiteral("store")).toBool()) << "no Grassfield Store here: no Search the Store";
+    qputenv("PATH", savedPath);
+
+    // Search the Store (Finder's App Store button; ADR-0035 5c-3, Store step 4): offered once Grassfield Store is on the PATH;
+    // it starts the Store on the document's type (--page=type:<type>), and the job ends as cancelled (nothing opens it yet).
+    const QString bin = path(QStringLiteral("bin"));
+    ASSERT_TRUE(QDir().mkpath(bin));
+    {
+        QFile store(bin + QStringLiteral("/grassfield-store"));
+        ASSERT_TRUE(store.open(QIODevice::WriteOnly));
+        store.write("#!/bin/sh\necho \"$*\" >\"$(dirname \"$0\")/asked.tmp\" && mv \"$(dirname \"$0\")/asked.tmp\" \"$(dirname \"$0\")/asked\"\n");
+        store.close();
+        store.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    }
+    qputenv("PATH", bin.toUtf8() + ':' + savedPath);
+    m_asked.clear();
+    answer({{QStringLiteral("button"), QStringLiteral("store")}});
+    EXPECT_FALSE(run(open()));
+    qputenv("PATH", savedPath);
+    ASSERT_EQ(m_asked.size(), 1);
+    EXPECT_TRUE(m_asked.first().value(QStringLiteral("store")).toBool());
+    EXPECT_TRUE(panels.isEmpty()) << "no Choose Application panel";
+    EXPECT_TRUE(waitFor([&bin] {
+        return QFile::exists(bin + QStringLiteral("/asked"));
+    })) << "the Store was started";
+    QFile asked(bin + QStringLiteral("/asked"));
+    ASSERT_TRUE(asked.open(QIODevice::ReadOnly));
+    const QByteArray args = asked.readAll().trimmed();
+    EXPECT_TRUE(args.startsWith("--page=type:") && args.contains('/')) << args.constData();
+    EXPECT_FALSE(QFile::exists(path(QStringLiteral("to/opened"))));
 
     // Cancel in the panel: the job ends as cancelled.
     answer({{QStringLiteral("button"), QStringLiteral("choose")}});

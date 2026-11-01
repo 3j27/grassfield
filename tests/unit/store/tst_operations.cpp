@@ -4,6 +4,7 @@
 // and a fake Omarchy terminal whose script stands for grassfield-store-run (b.2: its started and exit files, each way it
 // can end). One operation at a time; success = exit code 0 AND the state; the locks; the time limits; store.json's record
 // and the recovery at start.
+#include "flatpak.h"
 #include "operations.h"
 #include "statefile.h"
 #include "storetest.h"
@@ -113,7 +114,10 @@ fin 0)SH";
 
 // flatpak's stand-in (b.3, step 3c): `install --user --noninteractive flathub <ref>` prints S24's lines and adds the app to
 // the flatpaks file (fmode fail: flatpak's error; slow: it waits for SIGTERM after its first ref, S25), `uninstall` removes it
-// and `--unused` the runtime, `list --user --app` answers from the file. Each call is written to fcalls.
+// and `--unused` the runtime, `list --user --app` answers from the file. Step 4: `update --user --noninteractive -- <ref>...`
+// prints "Updating <ref>" and takes each ref out of the fupdates file, `remote-ls --user --updates` lists that file's refs
+// (S31); fmode offline: the update says "Nothing to update." and exits 0, the listing fails (S31d); stale: the update exits 0
+// and updates nothing. Each call is written to fcalls.
 const QByteArray kFlatpak = R"SH(root=$(dirname "$0")
 echo "$*" >>"$root/fcalls"
 mode=$(cat "$root/fmode" 2>/dev/null)
@@ -136,6 +140,29 @@ case "$1" in
     grep -vx "$5" "$root/flatpaks" >"$root/f2"; mv "$root/f2" "$root/flatpaks"
     echo "Uninstalling app/$5/x86_64/stable" ;;
   list) cat "$root/flatpaks" ;;
+  update)
+    [ "$mode" = fail ] && { echo "error: Could not connect"; exit 1; }
+    if [ "$mode" = offline ] || [ "$mode" = stale ]; then echo; echo "Nothing to update."; exit 0; fi
+    shift 3
+    commit=
+    case "$1" in --commit=*) commit=${1#--commit=}; shift ;; esac
+    shift
+    for ref in "$@"; do
+      [ "$ref" = "$(cat "$root/failref" 2>/dev/null)" ] && { echo "error: Server returned status 404"; exit 1; }
+      echo "Updating $ref"
+      [ -n "$commit" ] && echo "$ref $commit" >>"$root/fcommits"
+      # newer: a newer commit was published meanwhile, so a pinned ref is still listed after its update (S32e)
+      if [ -z "$commit" ] || [ "$mode" != newer ]; then grep -vx "$ref" "$root/fupdates" >"$root/u2"; mv "$root/u2" "$root/fupdates"; fi
+    done ;;
+  info)
+    c=$(grep "^$5 " "$root/fcommits" 2>/dev/null | tail -1 | cut -d' ' -f2)
+    [ -n "$c" ] || exit 1
+    echo "$c" ;;
+  remote-ls)
+    [ "$mode" = offline ] && { echo "error: Unable to load summary from remote flathub" >&2; exit 1; }
+    while read -r ref; do
+      [ -n "$ref" ] && printf '%s\t%s\tflathub\t%s\n' "$(echo "$ref" | cut -d/ -f2)" "$(echo "$ref" | cut -d/ -f4)" "$ref"
+    done <"$root/fupdates" ;;
   *) exit 2 ;;
 esac)SH";
 
@@ -168,6 +195,7 @@ struct Fixture {
         config.omarchy = [installer](const QString &command, const QStringList &args) { return QStringList{installer, command} + args; };
         config.flatpak = storetest::script(root + QStringLiteral("/flatpak"), kFlatpak);
         storetest::writeFile(root + QStringLiteral("/flatpaks"), "");
+        storetest::writeFile(root + QStringLiteral("/fupdates"), "");
         config.pollMs = 20;
     }
     void mode(const QByteArray &m) { storetest::writeFile(dir.filePath(QStringLiteral("mode")), m); }
@@ -886,6 +914,203 @@ TEST(Operations, FlatpakInstallAndRemove)
     without.enqueue(flatpakRecord(QStringLiteral("org.example.Draw"), QStringLiteral("install")));
     ASSERT_TRUE(waitFor([&] { return ended.count() == 1; }));
     EXPECT_EQ(without.results().value(QStringLiteral("org.example.Draw")).outcome, QStringLiteral("notFinished"));
+}
+
+// A Flatpak's update (step 4): its refs (an app's, or the group's apps and runtimes), the app's own ref among them when it
+// updates one app; only on the flatpak path.
+OperationRecord flatpakUpdate(const QString &app, const QStringList &refs, const QString &appRef, const QStringList &commits = {})
+{
+    OperationRecord r;
+    r.id = newOperationId();
+    r.kind = QStringLiteral("update");
+    r.path = QStringLiteral("flatpak");
+    r.app = app;
+    r.name = app;
+    r.packages = refs;
+    r.flatpak = appRef;
+    r.commits = commits;
+    while (r.commits.size() < refs.size())
+        r.commits.append(QString());
+    return r;
+}
+
+TEST(Operations, FlatpakUpdateRecords)
+{
+    const QString notes = QStringLiteral("app/org.example.Notes/x86_64/stable");
+    const QString platform = QStringLiteral("runtime/org.example.Platform/x86_64/1");
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes).toJson()));
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {notes, platform}, QString()).toJson()));
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes, platform}, notes).toJson()))
+        << "one app's update names its ref alone";
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, platform).toJson())) << "an app's ref";
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), {}, QString()).toJson())) << "no ref";
+    for (const QString &bad : {QStringLiteral("--system"), QStringLiteral("app/org.example.Notes"), QStringLiteral("app/org.example.Notes/x86_64/../x"),
+                               QStringLiteral("extension/org.example.X/x86_64/1")})
+        EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), {notes, bad}, QString()).toJson())) << bad.toStdString();
+    QJsonObject helper = flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes).toJson();
+    helper.insert(QStringLiteral("path"), QStringLiteral("helper"));
+    EXPECT_FALSE(OperationRecord::fromJson(helper)) << "only a Flatpak updates through the Store";
+    // Not even with a package name the helper takes: the system updates as a whole, in Software Update (SD32).
+    helper.insert(QStringLiteral("packages"), QJsonArray{QStringLiteral("example-notes")});
+    helper.insert(QStringLiteral("flatpak"), QString());
+    EXPECT_FALSE(OperationRecord::fromJson(helper)) << "a package's update through the helper";
+    helper.insert(QStringLiteral("kind"), QStringLiteral("install"));
+    helper.remove(QStringLiteral("commits")); // an update's
+    EXPECT_TRUE(OperationRecord::fromJson(helper)) << "the same record as an install is the helper's";
+    // As many refs as a check lists (Update All takes them all, one operation), no more.
+    QStringList many;
+    for (int i = 0; i < kMaxFlatpakUpdates; ++i)
+        many.append(QStringLiteral("app/org.example.A%1/x86_64/stable").arg(i));
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), many, QString()).toJson())) << "512";
+    many.append(QStringLiteral("app/org.example.Last/x86_64/stable"));
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), many, QString()).toJson())) << "at most 512";
+
+    // A commit for each ref (SD33, S32): 64 lowercase hex digits, or "" (unpinned); a pinned one only on an app's ref.
+    const QString c1(64, QLatin1Char('a'));
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes, {c1}).toJson()));
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), {notes, platform}, QString(), {c1, QString()}).toJson()));
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), {notes, platform}, QString(), {c1, c1}).toJson()))
+        << "a runtime is not pinned";
+    for (const QString &bad : {QStringLiteral("abc"), QString(64, QLatin1Char('A')), QString(63, QLatin1Char('a')), QStringLiteral("--system")})
+        EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes, {bad}).toJson())) << bad.toStdString();
+    QJsonObject shorter = flatpakUpdate(QStringLiteral("all"), {notes, platform}, QString()).toJson();
+    shorter.insert(QStringLiteral("commits"), QJsonArray{c1});
+    EXPECT_FALSE(OperationRecord::fromJson(shorter)) << "one commit per ref";
+    QJsonObject install = flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("install")).toJson();
+    install.insert(QStringLiteral("commits"), QJsonArray{c1});
+    EXPECT_FALSE(OperationRecord::fromJson(install)) << "commits are an update's";
+
+    // Its commands (S32d: --commit takes one ref): each pinned app alone, then the rest together.
+    const QString paint = QStringLiteral("app/org.example.Paint/x86_64/stable");
+    const QString c2(64, QLatin1Char('b'));
+    const QStringList base{QStringLiteral("update"), QStringLiteral("--user"), QStringLiteral("--noninteractive")};
+    EXPECT_EQ(flatpakUpdateCommands(flatpakUpdate(QStringLiteral("all"), {notes, platform, paint}, QString(), {c1, QString(), c2})),
+              (QList<QStringList>{base + QStringList{QStringLiteral("--commit=") + c1, QStringLiteral("--"), notes},
+                                  base + QStringList{QStringLiteral("--commit=") + c2, QStringLiteral("--"), paint},
+                                  base + QStringList{QStringLiteral("--"), platform}}));
+    EXPECT_EQ(flatpakUpdateCommands(flatpakUpdate(QStringLiteral("all"), {notes, platform}, QString())),
+              (QList<QStringList>{base + QStringList{QStringLiteral("--"), notes, platform}}));
+}
+
+// An update runs flatpak update with its refs; it is done when a new check no longer lists them, never on the exit code
+// alone (offline flatpak exits 0 with "Nothing to update.", S31d).
+TEST(Operations, FlatpakUpdate)
+{
+    Fixture f;
+    Operations ops(f.config);
+    Ended finished(ops);
+    const QString notes = QStringLiteral("app/org.example.Notes/x86_64/stable");
+    const QString paint = QStringLiteral("app/org.example.Paint/x86_64/stable");
+    const QString platform = QStringLiteral("runtime/org.example.Platform/x86_64/1");
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fupdates")), (notes + QLatin1Char('\n') + paint + QLatin1Char('\n') + platform + QLatin1Char('\n')).toUtf8());
+    int total = 0;
+    QObject::connect(&ops, &Operations::changed, &ops, [&] {
+        for (const QVariant &v : ops.list())
+            total = qMax(total, v.toMap().value(QStringLiteral("total")).toInt());
+    });
+    ops.enqueue(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << ops.results().value(QStringLiteral("org.example.Notes")).outcome.toStdString();
+    EXPECT_EQ(total, 1);
+    EXPECT_EQ(f.read(QStringLiteral("fcalls")), "update --user --noninteractive -- " + notes.toUtf8()
+                                                    + "\nremote-ls --user --updates --columns=application,branch,origin,ref\n");
+
+    // Offline: flatpak says nothing was to update and exits 0; the check cannot answer: not finished, never done.
+    QFile::remove(f.dir.filePath(QStringLiteral("fcalls")));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "offline");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 2; }));
+    Operations::Result r = ops.results().value(QStringLiteral("store:flatpak-updates"));
+    EXPECT_EQ(r.kind, QStringLiteral("update"));
+    EXPECT_EQ(r.outcome, QStringLiteral("notFinished"));
+    EXPECT_EQ(r.present, 0);
+    EXPECT_EQ(r.total, 2);
+    EXPECT_EQ(f.read(QStringLiteral("fcalls")), "update --user --noninteractive -- " + paint.toUtf8() + " " + platform.toUtf8()
+                                                    + "\nremote-ls --user --updates --columns=application,branch,origin,ref\n");
+
+    // Exit 0, the refs still listed: not finished either.
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "stale");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    EXPECT_EQ(ops.results().value(QStringLiteral("store:flatpak-updates")).outcome, QStringLiteral("notFinished"));
+
+    // flatpak's own failure keeps its words; then all of it, done.
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "fail");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 4; }));
+    r = ops.results().value(QStringLiteral("store:flatpak-updates"));
+    EXPECT_EQ(r.outcome, QStringLiteral("failed"));
+    EXPECT_TRUE(r.details.contains(QLatin1String("Could not connect")));
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 5; }));
+    EXPECT_TRUE(ops.results().isEmpty());
+    EXPECT_EQ(f.read(QStringLiteral("fupdates")), "");
+}
+
+// A pinned update (SD33, S32): each app updated to the commit its plan checked, one command each, then the rest; a pinned
+// ref is done when its installed commit is that one, even with a newer one listed already (S32e); a command that fails ends
+// the update, and what it did is counted.
+TEST(Operations, FlatpakUpdatePinned)
+{
+    Fixture f;
+    Operations ops(f.config);
+    Ended finished(ops);
+    const QString notes = QStringLiteral("app/org.example.Notes/x86_64/stable");
+    const QString paint = QStringLiteral("app/org.example.Paint/x86_64/stable");
+    const QString platform = QStringLiteral("runtime/org.example.Platform/x86_64/1");
+    const QString c1(64, QLatin1Char('a')), c2(64, QLatin1Char('b'));
+    const QByteArray listed = (notes + QLatin1Char('\n') + paint + QLatin1Char('\n') + platform + QLatin1Char('\n')).toUtf8();
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fupdates")), listed);
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "newer");
+    int total = 0, done = 0;
+    QObject::connect(&ops, &Operations::changed, &ops, [&] {
+        for (const QVariant &v : ops.list()) {
+            total = qMax(total, v.toMap().value(QStringLiteral("total")).toInt());
+            done = qMax(done, v.toMap().value(QStringLiteral("done")).toInt());
+        }
+    });
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {notes, paint, platform}, QString(), {c1, c2, QString()}));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << ops.results().value(QStringLiteral("store:flatpak-updates")).outcome.toStdString();
+    EXPECT_EQ(total, 3);
+    EXPECT_EQ(done, 3) << "the Updating lines of the three commands";
+    const QByteArray update = "update --user --noninteractive ";
+    EXPECT_EQ(f.read(QStringLiteral("fcalls")), update + "--commit=" + c1.toUtf8() + " -- " + notes.toUtf8() + "\n"
+                                                    + update + "--commit=" + c2.toUtf8() + " -- " + paint.toUtf8() + "\n"
+                                                    + update + "-- " + platform.toUtf8() + "\n"
+                                                    + "remote-ls --user --updates --columns=application,branch,origin,ref\n"
+                                                    + "info --user --show-commit -- " + notes.toUtf8() + "\n"
+                                                    + "info --user --show-commit -- " + paint.toUtf8() + "\n");
+    EXPECT_EQ(f.read(QStringLiteral("fupdates")), (notes + QLatin1Char('\n') + paint + QLatin1Char('\n')).toUtf8())
+        << "the newer commits are listed: a new plan asks about them";
+
+    // The second command fails (its commit is gone from Flathub, S32d): the rest is not run; one of three was done.
+    QFile::remove(f.dir.filePath(QStringLiteral("fcalls")));
+    QFile::remove(f.dir.filePath(QStringLiteral("fcommits")));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fupdates")), listed);
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "");
+    storetest::writeFile(f.dir.filePath(QStringLiteral("failref")), paint.toUtf8());
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {notes, paint, platform}, QString(), {c1, c2, QString()}));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 2; }));
+    const Operations::Result r = ops.results().value(QStringLiteral("store:flatpak-updates"));
+    EXPECT_EQ(r.outcome, QStringLiteral("interrupted"));
+    EXPECT_EQ(r.present, 1);
+    EXPECT_EQ(r.total, 3);
+    EXPECT_TRUE(r.details.contains(QLatin1String("status 404")));
+    EXPECT_FALSE(f.read(QStringLiteral("fcalls")).contains("-- " + platform.toUtf8())) << "nothing after the failed command";
+
+    // Its installed commit is another one: not done.
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    QFile::remove(f.dir.filePath(QStringLiteral("failref")));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fcommits")), (notes + QLatin1Char(' ') + c2 + QLatin1Char('\n')).toUtf8());
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "stale");
+    ops.enqueue(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes, {c1}));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    EXPECT_EQ(ops.results().value(QStringLiteral("org.example.Notes")).outcome, QStringLiteral("notFinished"));
 }
 
 // Stopping an install (SD26): SIGTERM to flatpak, which ends at once (S25); the outcome says it was stopped, and only a

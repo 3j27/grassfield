@@ -249,8 +249,10 @@ Built in step 5c (Files' own Open With; ADR-0035 5c-1 to 5c-7):
   chosen opens the documents; Cancel and Esc open nothing. No "Always Open With" box (5c-4).
 - OW3 A document whose type has no application (KIO's question in Files): Finder's alert, "There is no application set to open
   the document “X”.", with Choose Application… (the default, Return) and Cancel (Esc); Choose Application… opens the panel,
-  and the application chosen opens the document. A job that ends takes its alert or panel away. No store button until
-  Grassfield Store can search by document type (5c-3).
+  and the application chosen opens the document. A job that ends takes its alert or panel away. With Grassfield Store
+  installed (Store step 4, 5c-3's follow-up): "Search the Store" too, Finder's App Store button, and the message "Search
+  Grassfield Store for an app that opens it, or choose an application on this computer."; it opens the Store on the apps
+  that open the document's type (`grassfield-store --page=type:<type>`, ADR-0037 SD34) and the document stays closed.
 - The panel's line cuts a long name in its middle (its extension and the closing quote stay) and shows an address decoded,
   without its password.
 - Every selected document goes to the application chosen, each as one argument (KIO starts it; no shell reads a name).

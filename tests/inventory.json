@@ -276,6 +276,7 @@
  {"path": "tests/unit/store/tst_pacman.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_signature.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_storebackend.cpp", "layer": "logic"},
+ {"path": "tests/unit/store/tst_storeinstance.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_operations.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_plancheck.cpp", "layer": "logic"},
  {"path": "tests/unit/store/tst_removal.cpp", "layer": "logic"},

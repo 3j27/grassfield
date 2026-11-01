@@ -225,7 +225,7 @@ does not check its gate.
 | controlcenter | state | dev | `tests/visual/flow-quicksettings.sh`, `flow-settings.sh`: what the shell applies (appearance, transparency, DND, Night Shift availability); read-only |
 | controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
-| dock | reopen | action | a running single-instance app launched again while its window is off screen: Activity Monitor (`qs ipc -p <shell> call dock reopen org.grassfield.Activity`, apps/runmode.h shellIpcArgs; ADR-0038 AD34) and Settings (`... dock reopen org.grassfield.Settings`, apps/settings/src/settingsinstance.h; ADR-0040 step 1b). Brings that app's windows forward as a click on its tile does (a minimized one back, `Launch.activationPlan`); launches, closes and reads nothing; an id with no window in the Dock does nothing; refused while locked |
+| dock | reopen | action | a running single-instance app launched again while its window is off screen: Activity Monitor (`qs ipc -p <shell> call dock reopen org.grassfield.Activity`, apps/runmode.h shellIpcArgs; ADR-0038 AD34), Settings (`... dock reopen org.grassfield.Settings`, apps/settings/src/settingsinstance.h; ADR-0040 step 1b) and Grassfield Store (`... dock reopen org.grassfield.Store`, apps/store/src/storeinstance.h; ADR-0037 SD35). Brings that app's windows forward as a click on its tile does (a minimized one back, `Launch.activationPlan`); launches, closes and reads nothing; an id with no window in the Dock does nothing; refused while locked |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
 | dock | pinned, dragstate, forceinterrupt, forcehold, noactivate, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, iconrect, stack, addfolder | fixtures | visual tests; `click` launches an app; `iconrect` reads the drawn icon rectangle; `noactivate` makes a Dock activation do nothing (click tests); `addfolder` changes `dock.folders` |
 | dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |
@@ -792,6 +792,14 @@ bar; Tab reaches it, then the arrow keys, Page Up/Down, Home and End), so the ac
 the area takes no focus while AuthAgent keeps the keys. Unit-tested (`tst_authdialogmodel` test_storeRequestInPlainWords:
 15 messages that must not be read, the other action; `tst_authdialog` test_12_storeRequestNamesPackagesAndProgram and
 test_13_storeRequestNamesEveryPackage: 64 names of 128 characters, the helper's most).
+
+Grassfield Store's session-bus name (ADR-0037 SD35, step 4): one Store per user, as Settings and Activity Monitor. The running
+Store owns `org.grassfield.Store` (`.Dev` and a digest of the state directory in a dev or isolated run), object
+/org/grassfield/Store, one scriptable method `Open(s page, s token)`: a second launch hands it its `--page` (printable, at most
+512 characters) and its xdg-activation token (printable ASCII, at most 256) and leaves. The window checks the page again
+(Main.qml's openPage: a section, a category, an app, a search, Installed, Updates, or `type:<type>` for a well-formed media
+type); anything else keeps the page shown. It opens a page and brings the window forward, nothing else: no plan, no
+install, no removal, no update (each still needs its own button and, for the system's packages, the helper's password).
 
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,

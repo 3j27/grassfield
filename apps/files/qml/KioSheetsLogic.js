@@ -254,12 +254,14 @@ function notice(request) {
     };
 }
 
-// A document whose type has no application (KIO's Open With question; ADR-0035 5c-3): Finder's alert without its App Store
-// button (Grassfield Store cannot yet search by document type). Choose Application… (the default) opens the Choose Application panel; Cancel and Esc open nothing.
+// A document whose type has no application (KIO's Open With question; ADR-0035 5c-3): Finder's alert. Choose Application…
+// (the default) opens the Choose Application panel; Search the Store (Finder's App Store button, offered when Grassfield
+// Store is there: request.store) opens the Store on the apps that open this type; Cancel and Esc open nothing.
 function noApplication(request) {
     return {
         title: qsTr("There is no application set to open the document “%1”.").arg(request.name),
-        message: qsTr("Choose an application on this computer to open it."),
+        message: request.store ? qsTr("Search Grassfield Store for an app that opens it, or choose an application on this computer.")
+                               : qsTr("Choose an application on this computer to open it."),
         confirmText: qsTr("Choose Application…"),
         confirmId: "choose",
         destructive: false,
@@ -267,7 +269,7 @@ function noApplication(request) {
         cancelText: qsTr("Cancel"),
         cancelId: "cancel",
         returnCancels: false,
-        extras: [],
+        extras: request.store ? [{id: "store", text: qsTr("Search the Store")}] : [],
         applyToAll: false
     };
 }

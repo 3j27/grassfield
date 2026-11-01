@@ -3153,6 +3153,8 @@ QtObject {
     readonly property int storeWindowMinWidth: 760
     // estimate: the sidebar's items and the account row [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeWindowMinHeight: 520
+    // estimate: a notice that goes by itself (an app that could not be opened) stays this long, ms [ref: docs/decisions/ADR-0039-design-polish.md step 2]
+    readonly property int storeNoticeLifetime: 6000
     // sidebar 220 pt, flush with the window (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeSidebarWidth: 220
     // the selection pill and the search field 10 pt from both sidebar edges (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
