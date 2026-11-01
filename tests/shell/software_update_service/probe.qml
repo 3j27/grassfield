@@ -361,12 +361,29 @@ ShellRoot {
                 SoftwareUpdate.request("omarchy");
                 when(() => !SoftwareUpdate.checking && root.savedToolkitAt() === "2026-10-28T11:30:00Z", () => {
                     root.check(root.announced === before + 1 && SoftwareUpdate.toolkitLogout && root.saved().toolkitLogout === true, "t3: a later update in the same session announces nothing more, the log out stays due (" + (root.announced - before) + ")");
-                    put("answer", answer(null, null));
-                    root.callsAtIpc = calls().length;
-                    console.log("software-update-service: ipc-ready");
-                    when(() => calls().length > root.callsAtIpc, finish);
+                    stepK();
                 });
             });
+        });
+    }
+
+    // The calls log is read again until two reads agree before step k's baseline is taken: the t-steps read it no more,
+    // and the first reload after them can return the content before their three runs (the integrator's review of
+    // f8b0916, round 3: k then counted their runs as its own).
+    property int callsLast: -1
+
+    function stepK(): void {
+        put("answer", answer(null, null));
+        root.callsLast = -1;
+        when(() => {
+            const n = calls().length;
+            const stable = n === root.callsLast;
+            root.callsLast = n;
+            return stable;
+        }, () => {
+            root.callsAtIpc = root.callsLast;
+            console.log("software-update-service: ipc-ready");
+            when(() => calls().length > root.callsAtIpc, finish);
         });
     }
 

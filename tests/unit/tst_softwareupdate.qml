@@ -131,6 +131,13 @@ TestCase {
         compare(Logic.toolkitAsked(Logic.combine(asked, answer("up-to-date"))), {"qt6-base": "6.12.0-1"}, "kept through an answer");
         compare(Logic.toolkitAsked(Logic.withToolkitAsked(asked, Logic.toolkitReplaced(a, start, {}))), {"qt6-base": "6.12.0-1"}, "a readable time records nothing");
         compare(Logic.toolkitAsked({toolkitAsked: {a: 1, b: "x"}}), {b: "x"}, "strings only");
+        // A shell restarted in the same session after the log out was asked on an unreadable time: the file's flag and the
+        // announcement marked with this session's start keep it due; another session's flag is stale.
+        let due = Logic.withLogoutPending(Logic.withAnnounced(Logic.combine(asked, unknown), [{id: "toolkit " + start}]), false, true);
+        verify(!Logic.toolkitLogout(due, start, Logic.toolkitAsked(due)), "the versions asked for say nothing more...");
+        verify(Logic.toolkitDueFromFile(due, start), "...but the file says the log out was found due in this session");
+        verify(!Logic.toolkitDueFromFile(due, start + 1), "another session's flag is stale");
+        verify(!Logic.toolkitDueFromFile(Logic.withLogoutPending(due, true, false), start), "no flag, nothing due");
         verify(Logic.toolkitLogout(toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", false), start), "a pkgrel rebuild replaces the file too: a log out, without a move");
         verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: {record: false, packages: []}}), start), "nothing listed");
         verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: null}), start), "no list");

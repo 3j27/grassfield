@@ -149,6 +149,14 @@ function toolkitLogout(answer, sessionStartMs, asked) {
     return toolkitReplaced(answer, sessionStartMs, asked).length > 0;
 }
 
+// The file says a log out for the toolkit was found due in THIS session (its flag, and the announcement marked with this
+// session's start): a shell restarted in the same session keeps it due, even when the packages' install times could not be
+// read and were recorded as asked for (the integrator's review of f8b0916, round 3). Another session's flag is stale.
+function toolkitDueFromFile(file, sessionStartMs) {
+    const f = normalize(file);
+    return f.toolkitLogout === true && f.announced.indexOf("toolkit " + sessionStartMs) >= 0;
+}
+
 // The file with the packages of `replaced` whose install time could not be read recorded as asked for.
 function withToolkitAsked(file, replaced) {
     const out = normalize(file);

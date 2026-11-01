@@ -509,6 +509,13 @@ of the session, never in a terminal.
   GF-083's `logoutPending` and the toolkit's `toolkitLogout` are separate flags in the file, so the pane's title says
   "Log out to finish updating Grassfield" only when Grassfield itself was updated and "Log out to finish updating" when
   only the system libraries were (with the French entries).
+- Review round 3 (2026-11-01, the integrator's review of f8b0916: FAIL, one blocker): the probe's step k took its
+  baseline of checker runs from a stale reading (the t-steps read the calls log no more, and the first reload after
+  them returned the content before their three runs), so k counted their runs as its own; the baseline is now taken
+  once two reads of the log agree. Nit: a shell restarted in the same session after a log out asked on an unreadable
+  install time dropped the flag (the versions were recorded as asked for): the file's flag, with the announcement
+  marked with this session's start, keeps it due (`toolkitDueFromFile`); another session's flag is stale. A Settings
+  unit case covers the toolkit-only title. The integrator runs the offscreen and unit suites (none here).
 - Review: the checker reads two more world-readable files and runs `pacman -Q` five times more; nothing runs as root;
   nothing under `shell/security/` changes.
 

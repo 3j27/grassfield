@@ -178,12 +178,14 @@ Singleton {
     }
 
     // At load: a log out an earlier shell found due for the toolkit (a crash and Restart=always in between) is still due
-    // when the file's list, against the session's start (not this shell's), says so; a previous session's flag is not (the
-    // integrator's review of 9043ac4, major 2, and of e03013d). The caller saves the adopted file once.
+    // when the file's list, against the session's start (not this shell's), says so, or when the file says it was found due
+    // in this very session (the announcement marked with this session's start: the install times may have been unreadable
+    // and recorded as asked for); a previous session's flag is not (the integrator's reviews of 9043ac4, e03013d and
+    // f8b0916). The caller saves the adopted file once.
     function adopt(f: var): var {
         const n = SoftwareUpdateLogic.normalize(f);
         const replaced = SoftwareUpdateLogic.toolkitReplaced(n, sessionStartedAt, SoftwareUpdateLogic.toolkitAsked(n));
-        if (replaced.length > 0)
+        if (replaced.length > 0 || SoftwareUpdateLogic.toolkitDueFromFile(n, sessionStartedAt))
             toolkitLogout = true;
         return SoftwareUpdateLogic.withLogoutPending(replaced.length > 0 ? SoftwareUpdateLogic.withToolkitAsked(n, replaced) : n, logoutPending, toolkitLogout);
     }
