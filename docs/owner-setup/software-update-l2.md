@@ -34,8 +34,8 @@ df -h /
 `checkupdates` compares a copy of the package databases in `/tmp`; it changes nothing on the system.
 
 Go on only if all of these hold:
-- `step 3: yes` is printed (otherwise your installed build predates Update Now without a terminal: rebuild first, section
-  3 of `real-session.md`);
+- `step 3: yes` is printed (otherwise your installed build predates Update Now without a terminal: rebuild first: sections
+  2 (the snapshot) and 3 of `real-session.md`);
 - the three files are listed and BUILD-DEPS has five lines (`qt6-base`, `quickshell`, `hyprland`, `aquamarine`,
   `kcoreaddons`);
 - at least one `checkupdates` line changes a package whose BUILD-DEPS version differs in the way that refuses:
@@ -110,7 +110,7 @@ Send these files, after looking at them: they hold package names, versions and t
 | "Connect this computer to power to update." or "This computer needs 10 GB of free space to update." | the run stopped at its first checks; nothing was changed | plug in or free space, then try again |
 | "Another update is running." | Omarchy's update or another run holds the lock | wait for it to finish, then try again |
 | "The update could not be installed. Nothing was changed." | offline, or a mirror did not answer | send section 2's files |
-| "Restart your computer to finish updating", or progress past "Preparing the update…" ("Saving a snapshot…", "Downloading…", "Installing…") | the check let the update through: it is installing for real | do not close anything; let it finish, then send section 2's files and `pacman -Q` |
+| "Restart your computer to finish updating", or progress past "Preparing the update…" ("Saving a snapshot of this computer…", "Downloading updates…", "Installing updates…") | the check let the update through: it is installing for real | do not close anything; let it finish, then send section 2's files and `pacman -Q` |
 
 Nothing to undo after the expected result: no package, no database, no snapshot and no file outside `/run` and your
 runtime folder changed.
