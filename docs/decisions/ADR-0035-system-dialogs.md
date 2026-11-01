@@ -1763,7 +1763,12 @@ none widens a rule of Q12's text).
   `tst_prompter.cpp` (a real child in a user and mount namespace of its own: the disk role named, the keyring role not;
   the disk role refused when the path names another file or the process is traced), `askpass.sh` (the installed helper
   run under `unshare --user --mount` still gets "Disks"), mutants `disk-not-exempt` and `every-known-caller-exempt`
-  (`prompter_bridge.sh --mutants`).
+  (`prompter_bridge.sh --mutants`). **Amended after the integrator's review of PR #96.** The whole text under "Disks" can
+  be the caller's, not only the disk name: a program that runs the helper with `LD_PRELOAD` (a known caller keeps its role
+  with extra code, 9-14), or that runs code of its own with its executable remapped to the real helper in namespaces of
+  its own (the exemption above), chooses the title, the message and the description the prompt carries. The shell already
+  shows all of that text framed as another program's unverified words (SC3b); the row says only which program the bridge
+  saw.
 - **9-27. When is the NetworkManager agent registered, and on which bus?** Options: (a) for the bridge's whole life; (b) while
   a shell that draws kind `nm` is connected, unregistered when it goes, registered again when NetworkManager comes back on
   the bus. **Choice: (b)** (D-9: "when the shell is not connected the agent unregisters"); the object stays exported for the

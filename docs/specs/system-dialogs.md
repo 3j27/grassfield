@@ -839,7 +839,9 @@ queued meanwhile (opus review of step 9b, NIT-1); a shared or captured
 output is black while a secret or authorization sheet is up (the layer covers the output, decision 9-22); the strength meter
 reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet's look are not verified; step 9c:
 "Disks" names `grassfield-askpass`, which any program of the user can run with a disk name and a passphrase destination of
-its own (the text under the row is shown as unverified, SC3b), and a passphrase udiskie refuses is not asked again (udiskie
+its own (the text under the row is shown as unverified, SC3b); with `LD_PRELOAD`, or its executable remapped to the
+helper's in namespaces of its own, such a program chooses the whole text under the row (title, message and description),
+not only the disk name (decision 9-26, amended after the integrator's review of PR #96), and a passphrase udiskie refuses is not asked again (udiskie
 2.7.0 reports the failure, which `--no-notify` hides; the disk stays locked until it is plugged in again); the helper's
 identification inside udiskie's sandbox (`PrivateUsers=self`) relies on the bridge reading `/proc/<pid>/exe` across that
 user namespace, checked here with the installed helper in a user and mount namespace that `unshare` makes, not under
