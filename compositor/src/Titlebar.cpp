@@ -1460,8 +1460,12 @@ void CGrassfieldTitlebar::updateReveal() {
         deco->m_revealed = next;
         deco->damageRevealed(); // where it is
         changed = true;
-        if (!sessionLocked())
-            gf::logRequest(Log::DEBUG, "titlebar of a {} {}", gf::tiler::inSplit(w) ? "Split View window" : "full-screen window", next ? "revealed" : "away");
+        if (!sessionLocked()) {
+            if (gf::tiler::inSplit(w)) // which half's bar (tests/compositor/tiling.sh split-titles reads it)
+                gf::logRequest(Log::DEBUG, "titlebar of Split View window {:x} {}", addressOf(w), next ? "revealed" : "away");
+            else
+                gf::logRequest(Log::DEBUG, "titlebar of a full-screen window {}", next ? "revealed" : "away");
+        }
     }
     if (changed)
         postReveals();
