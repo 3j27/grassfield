@@ -391,8 +391,8 @@ for i in 0 1 2 3 4 5 6 7 8 9 10; do
 done
 desc="a long-lived client whose prompt was in flight at each of eight shell departures is served again after them"
 check bash -c '[[ $(grep -c "^[0-7] cancelled$" "$1") == 8 ]] && grep -qx "8 password=long-lived-8" "$1" && grep -qx "10 password=long-lived-10" "$1" && ! grep -q "open error" "$1"' _ "$d/ll.out"
-desc="...because at each departure gcr's open prompts were closed, not left to fill the pool of 64"
-check bash -c '[[ $(grep -c "open gcr prompt(s) closed: their callers saw the name go" "$1") -ge 8 ]]' _ "$d/main.log"
+desc="...because at each departure gcr ended its open prompts (none left to fill the pool of 64)"
+check bash -c '[[ $(grep -c "open gcr prompt(s) closed: their callers saw the name go (0 still open)$" "$1") -ge 8 ]] && ! grep -q "still open)$" <(grep -v "(0 still open)$" "$1")' _ "$d/main.log"
 say "ll$n_shell" close
 wait_until 5 unowned
 
