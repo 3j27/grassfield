@@ -103,6 +103,13 @@ ActivityState readState(const QString &path)
         s.width = w;
         s.height = h;
     }
+    const QJsonObject others = root.value(QStringLiteral("windows")).toObject();
+    for (const QString &kind : windowKinds()) {
+        const QJsonObject o = others.value(kind).toObject();
+        const int ow = o.value(QStringLiteral("width")).toInt(0), oh = o.value(QStringLiteral("height")).toInt(0);
+        if (ow >= 200 && ow <= 16384 && oh >= 150 && oh <= 16384)
+            s.windows.insert(kind, QSize(ow, oh));
+    }
     if (const std::optional<Tab> tab = tabFromKey(root.value(QStringLiteral("tab")).toString()))
         s.tab = *tab;
     if (const std::optional<View> view = viewFromKey(root.value(QStringLiteral("view")).toString()); view && *view != View::Selected)
@@ -116,6 +123,15 @@ ActivityState readState(const QString &path)
     const QString network = root.value(QStringLiteral("networkGraph")).toString();
     if (network == QLatin1String("packets") || network == QLatin1String("data"))
         s.networkGraph = network;
+    const QString dock = root.value(QStringLiteral("dockIcon")).toString();
+    if (dockIconKinds().contains(dock))
+        s.dockIcon = dock;
+    const QJsonValue ask = root.value(QStringLiteral("askEfficiency"));
+    if (ask.isBool())
+        s.askEfficiency = ask.toBool();
+    const QString period = root.value(QStringLiteral("appHistoryPeriod")).toString();
+    if (period == QLatin1String("12h") || period == QLatin1String("7d") || period == QLatin1String("30d"))
+        s.appHistoryPeriod = period;
     const QJsonObject tabs = root.value(QStringLiteral("tabs")).toObject();
     for (Tab tab : kTabs) {
         const QJsonValue v = tabs.value(tabKey(tab));
@@ -125,17 +141,41 @@ ActivityState readState(const QString &path)
     return s;
 }
 
+const QStringList &windowKinds()
+{
+    static const QStringList kinds{QStringLiteral("performance"), QStringLiteral("appHistory"), QStringLiteral("cpuHistory"),
+                                   QStringLiteral("gpuHistory")};
+    return kinds;
+}
+
+const QStringList &dockIconKinds()
+{
+    static const QStringList kinds{QStringLiteral("icon"), QStringLiteral("network"), QStringLiteral("disk"),
+                                   QStringLiteral("cpu-usage"), QStringLiteral("cpu-history")};
+    return kinds;
+}
+
 bool writeState(const QString &path, const ActivityState &state)
 {
     QJsonObject root;
     root.insert(QStringLiteral("version"), kVersion);
     if (state.width > 0 && state.height > 0)
         root.insert(QStringLiteral("window"), QJsonObject{{QStringLiteral("width"), state.width}, {QStringLiteral("height"), state.height}});
+    QJsonObject others;
+    for (auto it = state.windows.constBegin(); it != state.windows.constEnd(); ++it) {
+        if (windowKinds().contains(it.key()) && it->isValid())
+            others.insert(it.key(), QJsonObject{{QStringLiteral("width"), it->width()}, {QStringLiteral("height"), it->height()}});
+    }
+    if (!others.isEmpty())
+        root.insert(QStringLiteral("windows"), others);
     root.insert(QStringLiteral("tab"), tabKey(state.tab));
     root.insert(QStringLiteral("view"), viewKey(state.view == View::Selected ? View::All : state.view));
     root.insert(QStringLiteral("interval"), state.interval);
     root.insert(QStringLiteral("diskGraph"), state.diskGraph);
     root.insert(QStringLiteral("networkGraph"), state.networkGraph);
+    root.insert(QStringLiteral("dockIcon"), state.dockIcon);
+    root.insert(QStringLiteral("askEfficiency"), state.askEfficiency);
+    root.insert(QStringLiteral("appHistoryPeriod"), state.appHistoryPeriod);
     QJsonObject tabs;
     for (const auto &[tab, t] : state.tabs) {
         QJsonArray columns;

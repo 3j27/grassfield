@@ -46,6 +46,7 @@ const ColumnInfo kColumns[] = {
     {Column::ReceivedPackets, "receivedPackets", QT_TRANSLATE_NOOP("ActivityColumn", "Rcvd Packets (TCP)"), true, 0},
     {Column::Pid, "pid", QT_TRANSLATE_NOOP("ActivityColumn", "PID"), true, 0},
     {Column::User, "user", QT_TRANSLATE_NOOP("ActivityColumn", "User"), false, 0},
+    {Column::Status, "status", QT_TRANSLATE_NOOP("ActivityColumn", "Status"), false, 0},
 };
 
 const ColumnInfo &info(Column column)
@@ -58,10 +59,9 @@ const ColumnInfo &info(Column column)
 const TabColumns &tabColumns(Tab tab)
 {
     using C = Column;
-    // ADR-0038 "What each tab reads": the defaults, then the optional ones (Status waits for step 4, Preventing Sleep's
-    // window flag for step 3).
+    // ADR-0038 "What each tab reads": the defaults, then the optional ones (Status from step 4, Windows' Task Manager's).
     static const TabColumns cpu{{C::Name, C::CpuPercent, C::CpuTime, C::Threads, C::WakeUps, C::GpuPercent, C::GpuTime, C::OpenFiles,
-                                 C::Kind, C::Command, C::Pid, C::User},
+                                 C::Kind, C::Status, C::Command, C::Pid, C::User},
                                 {C::Name, C::CpuPercent, C::CpuTime, C::Threads, C::GpuPercent, C::GpuTime, C::Pid, C::User},
                                 C::CpuPercent};
     static const TabColumns memory{{C::Name, C::Memory, C::Threads, C::RealMemory, C::PrivateMemory, C::SharedMemory, C::CompressedMemory,

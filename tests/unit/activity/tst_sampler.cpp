@@ -853,6 +853,9 @@ TEST(Sampler, UserAndSystemAsMacOSMeansThem)
     EXPECT_DOUBLE_EQ(snap.system.idleShare, 0.6);
     ASSERT_EQ(snap.system.perCpuBusy.size(), 1u);
     EXPECT_DOUBLE_EQ(snap.system.perCpuBusy[0], 0.4);
+    ASSERT_EQ(snap.system.perCpuUser.size(), 1u);
+    EXPECT_DOUBLE_EQ(snap.system.perCpuUser[0], 0.3); // AM71: the kernel's split per processor (user mode)
+    EXPECT_LT(first.system.perCpuUser.at(0), 0);
 
     // Without the processes (the Dock's graph while the window is hidden), the kernel's split stays.
     f.write("proc/stat", "cpu  1600 0 1200 9200 0 0 0 0 0 0\ncpu0 1600 0 1200 9200 0 0 0 0 0 0\n");
@@ -1229,4 +1232,47 @@ TEST(Sampler, TheCodeAddressFlagIsPartOfTheCache)
     EXPECT_EQ(s.sample(ReadProcesses, 1.0).counters.statParses, 1u); // new: with its code addresses
     EXPECT_EQ(s.sample(ReadProcesses, 2.0).counters.statParses, 1u); // the same line, read without them now
     EXPECT_EQ(s.sample(ReadProcesses, 3.0).counters.statParses, 0u);
+}
+
+// AM65, AM68: an own process in a launch's unit has the unit's number (the same for the unit's processes, another for another
+// launch, 0 outside such a unit); ReadEfficiency reads each eligible unit's cgroup once: cpu.idle 1 (CPUWeight=idle) or a
+// cpu.weight of 1 is Efficiency Mode, whoever set it; nothing is read without the flag, or for a unit it does not apply to.
+TEST(Sampler, AppUnitsAndTheirEfficiencyMode)
+{
+    Fixture f;
+    const std::string slice = user + "/app.slice/app-graphical.slice/";
+    f.process(100, "foot", kMe, 10, 5000, nul({"/usr/bin/foot"}), slice + "app-Hyprland-foot-1a2b3c4d.scope");
+    f.process(101, "foot-helper", kMe, 10, 5001, nul({"/usr/bin/foot"}), slice + "app-Hyprland-foot-1a2b3c4d.scope");
+    f.process(200, "foot", kMe, 10, 5002, nul({"/usr/bin/foot"}), slice + "app-Hyprland-foot-99aa88bb.scope");
+    f.process(300, "mpv", kMe, 10, 5003, nul({"/usr/bin/mpv"}), slice + "app-Hyprland-mpv\\x2dplayer@0011aabb.service");
+    f.process(400, "pipewire", kMe, 10, 5004, nul({"/usr/bin/pipewire"}), user + "/app.slice/pipewire.service");
+    const std::string cg = "sys/fs/cgroup" + slice;
+    f.write(cg + "app-Hyprland-foot-1a2b3c4d.scope/cpu.idle", "1\n");
+    f.write(cg + "app-Hyprland-foot-99aa88bb.scope/cpu.idle", "0\n");
+    f.write(cg + "app-Hyprland-foot-99aa88bb.scope/cpu.weight", "100\n");
+    f.write(cg + "app-Hyprland-mpv\\x2dplayer@0011aabb.service/cpu.weight", "1\n");
+    f.write("sys/fs/cgroup" + user + "/app.slice/pipewire.service/cpu.weight", "1\n");
+    Sampler s(options(f));
+    Snapshot snap = s.sample(ReadProcesses, 10.0);
+    EXPECT_NE(row(snap, 100)->unitKey, 0u);
+    EXPECT_EQ(row(snap, 100)->unitKey, row(snap, 101)->unitKey);
+    EXPECT_NE(row(snap, 100)->unitKey, row(snap, 200)->unitKey);
+    EXPECT_NE(row(snap, 300)->unitKey, 0u);
+    EXPECT_EQ(row(snap, 300)->appId, "mpv-player");
+    EXPECT_EQ(row(snap, 400)->unitKey, 0u);
+    EXPECT_EQ(snap.counters.weightReads, 0u);
+    EXPECT_FALSE(row(snap, 100)->efficient);
+
+    snap = s.sample(ReadProcesses | ReadEfficiency, 12.0);
+    EXPECT_TRUE(row(snap, 100)->efficient);
+    EXPECT_TRUE(row(snap, 101)->efficient); // the whole unit
+    EXPECT_FALSE(row(snap, 200)->efficient);
+    EXPECT_TRUE(row(snap, 300)->efficient);
+    EXPECT_FALSE(row(snap, 400)->efficient); // not an app unit (AM68): never read
+    // foot's first unit: cpu.idle; its second: cpu.idle then cpu.weight; mpv's: no cpu.idle, then cpu.weight.
+    EXPECT_EQ(snap.counters.weightReads, 5u);
+
+    f.write(cg + "app-Hyprland-foot-1a2b3c4d.scope/cpu.idle", "0\n"); // turned off elsewhere
+    snap = s.sample(ReadProcesses | ReadEfficiency, 14.0);
+    EXPECT_FALSE(row(snap, 100)->efficient);
 }

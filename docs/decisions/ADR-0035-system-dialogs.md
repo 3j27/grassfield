@@ -1236,6 +1236,270 @@ Recommendation: S2, delivered after D-8 has made the stock prompts follow the ap
 **Owner decision Q1 (2026-10-27): S2.** Q10: the NetworkManager secret agent is part of the same step. Q11: KIO's network
 passwords too (D-12). Q12: the amendment text above.
 
+**Delivered in step 9a (the bridge; the shell's queue and sheets are step 9b, udiskie 9c, the NetworkManager agent 9d,
+KIO's password server 9e).** The security rule is amended with Q12's text (CLAUDE.md, master-prompt R12, ADR-0010
+"Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step. `bridges/prompter` (C++20, Qt Core, libgcr-4,
+GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), installed as
+`/usr/lib/grassfield/grassfield-prompter`, run by `packaging/systemd/grassfield-prompter.service`, which
+`config/hypr/grassfield/autostart.lua` starts before the shell without waiting for it.
+- **gcr's side.** libgcr's `GcrSystemPrompter` (mode MULTIPLE, decision 9-2) is registered at `/org/gnome/keyring/Prompter`
+  on the bridge's own GDBus connection for the bridge's whole life (9-3) and runs gcr's protocol and its `sx-aes-1`
+  exchange. Its prompts are `GfPrompt` objects (`src/Prompt.{h,cpp}`, a GObject class written in C++ implementing
+  `GcrPrompt`): each hands its request to the bridge and is answered once, or ends "cancelled" (the caller's
+  `StopPrompting` or departure cancels gcr's cancellable; the prompt then withdraws the request and completes it in a
+  later main loop turn). The password arrives in gcr's secure memory; libgcr encrypts it for the caller at once and the
+  prompt zeroes and frees its copy in the next turn, and in any case before its next request and when it goes. A bus filter
+  (`src/Filter.{h,cpp}`, 9-1) tells each prompt its caller.
+- **The name.** `org.gnome.keyring.SystemPrompter` is requested (flags 0: queued behind an owner, never replaceable) when
+  the shell says hello and released when the shell goes; a request that reaches the bridge with no shell is answered
+  "cancelled" at once. The bridge follows the name's owner through `GetNameOwner` after every reply and `NameAcquired` or
+  `NameLost` signal, and tells the shell "released", "queued" or "owned" (9-10).
+- **The socket.** `$XDG_RUNTIME_DIR/grassfield/prompter.sock`: directory 0700 (created only in a parent of the user's
+  alone, an existing one lstat-checked and narrowed), socket 0600 (umask 077 around `bind`, checked after), a live socket
+  of another bridge refused, a stale one replaced, removed at exit only when it is still the bridge's own (device and
+  inode). A peer is accepted when `SO_PEERCRED` says it is the user and its cgroup is the `--peer-unit` unit's (9-7); one
+  shell at a time. Reads go into a buffer of gcr's secure memory that is wiped line by line (9-5).
+- **Identification** (`src/Identity.{h,cpp}`): `GetConnectionCredentials` of the caller, `ProcessFD`, its PID from
+  `/proc/self/fdinfo`, `/proc/<pid>/exe` read and opened, the pidfd checked again; trusted only when the path names that
+  same file now and the file and every directory above it are root's and not writable by group or others, and the process
+  is not traced; then "keyring", "gnupg", "ssh", "app" (one desktop entry whose Exec is exactly that program, for a
+  process that runs only trusted code) or "unidentified" with the path (9-4, 9-14). The row names the program whose
+  process opened the bus connection, not proof of whose code is asking (9-14).
+  Caller text and desktop-entry text are flattened and capped (`src/Text.{h,cpp}`, 9-13).
+- **The protocol** `prompter/1` (`src/Protocol.{h,cpp}`; spec section 5, "prompter/1 protocol"): hello both ways, name,
+  prompt, cancel and error from the bridge, answer from the shell; at most 8 requests outstanding (the 9th is answered
+  "cancelled" without reaching the shell); errors fail closed (9-6). Kinds `password` and `confirm`; `nm`, `kio` and
+  `bluetooth` are reserved for 9d, 9e and step 10 (9-9).
+- **Packaging.** The unit (no namespace option, seccomp, no core file, no swap, non-dumpable, 9-8); the PKGBUILD builds the
+  bridge, runs its unit tests in `check()` and installs it with its unit; `grassfield-desktop` and the build declare
+  `gcr-4` (already installed with gnome-keyring, probe P15). libsecret is not used yet (9e).
+- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (35 cases at first, 41 after the opus review, also under ASan and
+  UBSan): the flattening and caps, the
+  line parser on valid, malformed, oversized and hostile lines, the messages, the bound of 8 and ids never reused, the
+  cgroup line and the unit names, the socket peer of a socket pair, the socket directory checks, trusted executables and
+  desktop entries on temporary trees, processes through their pidfd (alive, then gone), the bus filter on bodies and
+  messages, and the GcrPrompt object (answers, the strength and the choice reported back, withdrawals, closing, the
+  password wiped). `tests/security/prompter_bridge.sh` (headless; a private dbus-daemon, a fake shell
+  `tests/fixtures/prompter-shell.py`, real libgcr clients `tests/fixtures/prompter-client.py` and Arch's
+  `pinentry-gnome3`, fake name holders): refusals at start; the socket's modes; the process not dumpable; no name without
+  a shell; a peer outside the expected unit, a second shell, another protocol version, an answer before hello refused;
+  the name owned after hello; a password and a confirmation through the exchange, the caller identified from its pidfd,
+  its text flattened, the choice back; a caller that names another connection in its own properties shown as itself;
+  pinentry-gnome3 shown as GnuPG and given its PIN; StopPrompting and a caller killed reach the shell as "cancel"; nine
+  requests at once (eight shown, the ninth cancelled at once, the eight answered); an answer to an unknown id ignored, a
+  wrong answer cancelling its request, an over-long line closing the connection; the shell's departure cancelling and
+  releasing, its return taking the name again; an attacker asking to replace the owner only queued and never called; the
+  bridge queued behind a holder, then owning the name; no test password in the output (44 checks at first, 49 after the
+  opus review: refused connections logged once, one connection's ninth open prompt refused, a malformed PerformPrompt
+  answered InvalidArgs). `tests/shell/session_services.sh` checks the unit, the autostart and the PKGBUILD.
+- **The opus security review of step 9a: PASS** (no blocker, no major), with three minors and four nits, all fixed in
+  the same pull request: the amendment's "in force" note now names the owner's agreement on the step as well (MINOR-1);
+  a requester row is documented as what it is, the program that opened the connection, with a rule for 9b (MINOR-2, 9-4,
+  9-14); `SO_PEERPIDFD`'s EINVAL refuses the peer (MINOR-3, 9-7); only slices between the user's manager and the shell's
+  unit (NIT-1, 9-7); at most 8 open prompts per connection and refusals logged once per 10 s (NIT-2, 9-11); a malformed
+  `PerformPrompt` answered InvalidArgs (NIT-3, 9-6); gcr-ssh-agent shown as "ssh" (NIT-4, 9-4).
+- **The opus counter-review of step 9a: PASS**, with three minors and two nits, fixed before step 9b connects a shell; the
+  protocol `prompter/1` is unchanged: a long-lived client whose prompts the shell's departures left open is no longer
+  locked out (MINOR-A: 9-3, 9-11); an interface-less `StopPrompting` no longer lowers a count gcr never lowered (MINOR-B:
+  9-11); an app's mapped code is compared by device and inode with the file its path names, and only for a process in the
+  bridge's own mount and user namespaces (MINOR-C: 9-14); the count of refused connections is written when its window
+  ends, and the queued owner's line reads only its executable (NITs: 9-10, 9-11). Tests after it: 45 unit cases, 54
+  checks in `tests/security/prompter_bridge.sh`, with the reviewer's probes turned into tests (a long-lived client across
+  eight shell departures, seventy interface-less rounds, a file bind-mounted over a trusted path in another namespace,
+  thousands of mappings with an untrusted one last, a peer that exited and was reaped).
+- **The opus final check of step 9a: FAIL, one major, fixed** (MINOR-A, B and C confirmed closed): the closing of gcr's
+  prompts that MINOR-A added ran inside `dropClient`, which can run inside gcr's own callbacks, and re-entered gcr into a
+  use-after-free (9-3); the unanswered `PromptReady` entries now go with their prompt (9-11). Tests after it: 46 unit cases,
+  58 checks in `tests/security/prompter_bridge.sh`, passing with the plain bridge and with one built with ASan and UBSan;
+  the reviewer's repro (a half-closed shell, a caller with eight prompts that leaves) is one of them, and it made the
+  ASan bridge crash before the fix. The opus re-check: PASS, one NIT fixed (the deferred work no longer outlives the
+  bridge, 9-3); 47 unit cases.
+- **What 9a changes for the user: nothing.** No shell connects before step 9b, and without a connected shell the bridge
+  never asks for the name: every prompt is the stock gcr-prompter's, as before.
+
+**Decisions of step 9a** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **9-1. How does the bridge learn which caller a prompt serves?** libgcr's `GcrSystemPrompter` creates each `GcrPrompt`
+  without telling it its caller (`gcr/gcr-system-prompter.c` `active_prompt_create`), and D-9 shows the caller resolved
+  from the bus. Options: (a) a filter on the bridge's GDBus connection rewrites every incoming `PerformPrompt` call to the
+  prompter object before it is dispatched: only GcrPrompt's own caller properties pass (right types, strings up to
+  16 KiB) and a private property `grassfield-caller` carries the message's sender, which the bus daemon writes; gcr sets
+  the properties on the caller's prompt (`prompt_update_properties`) right before asking it; (b) match `BeginPrompting`
+  messages to new prompts by their order; (c) speak gcr's prompter protocol in the bridge, with libgcr's
+  `GcrSecretExchange` for the cryptography only; (d) interpose GLib's `g_dbus_connection_register_object` to see each
+  call's sender. **Choice: (a).** Rule applied: D-9 keeps libgcr for the protocol and the cryptography; the identity comes
+  from the bus header, never from an order of events or from the caller; (b) misattributes silently as soon as GDBus
+  refuses a call before gcr sees it, (c) adds protocol code on the secret path, (d) depends on symbol interposition. The
+  property is never notified, so libgcr never echoes it to a caller; no sender gives "Unidentified program"; a
+  `PerformPrompt` of another shape is dropped.
+- **9-2. One prompt at a time in gcr, or all at once?** Options: (a) `GCR_SYSTEM_PROMPTER_SINGLE`, gcr's own queue;
+  (b) `MULTIPLE`, every caller gets its prompt at once. **Choice: (b).** Rule applied: D-9's one queue is the shell's
+  (with the polkit sheet); a second queue inside gcr would hide waiting requests from the shell and from the bound of 8.
+- **9-3. When is gcr's prompter object registered?** Options: (a) only while a shell is connected; (b) for the bridge's
+  whole life, only the name following the shell. **Choice: (b).** Rule applied: fail closed, never blocking. With no
+  shell a request is answered "cancelled" at once; unregistering while a prompt is in flight would race libgcr's own
+  clean-up (an answer arriving after it would be sent on a cleared connection). Releasing the name is enough: libgcr's
+  clients watch the prompter's name and cancel when its owner goes (`gcr/gcr-system-prompt.c` `on_prompter_vanished`).
+  **Amended after the opus counter-review of step 9a (MINOR-A):** such a client also forgets its prompt without ever
+  stopping it (`gcr-system-prompt.c:472-475, 786-799`), so gcr kept it until the client left the bus, and a long-lived
+  client (gnome-keyring-daemon) was locked out after eight departures of the shell. When the shell goes, the bridge now
+  closes every open prompt (`gcr_prompt_close`, the interface's own way to say a prompt closed): gcr ends each one, tells
+  its caller `PromptDone` and drops it, without unregistering anything (journal: "N open gcr prompt(s) closed ... (0
+  still open)", the count of what gcr did not end; `tests/security/prompter_bridge.sh` checks it at eight departures).
+  **Amended after the opus final check of step 9a (MAJOR).** The first version closed the prompts inside `dropClient`.
+  `dropClient` also runs inside gcr's own callbacks: a withdrawal sent to the shell from gcr's `prompt_stop_prompting`
+  (the bridge's `withdraw`, or `forget` from a prompt's disposal) meets a write error, and when gcr is ending a departed
+  caller's prompts (`on_caller_vanished`, which keeps those callers' callbacks in a local queue), closing every prompt
+  there freed callbacks that queue still held: a use-after-free, a crash in the reviewer's repro. Options: (a) close them
+  in a later main loop turn; (b) keep the prompts open (MINOR-A again); (c) make `dropClient` itself wait for a later turn.
+  **Choice: (a).** Rule applied: never call into a library from inside its own callbacks; `cancelAll` and the name's
+  release stay immediate (they schedule the completions and send an asynchronous call, and call nothing in gcr), so no
+  request outlives the shell. The closing holds a reference to each prompt and skips one that gcr ended meanwhile (it is
+  disposed, out of the bridge's set). The same audit made the requests' references to their prompts go in a later turn
+  too, on the paths that run inside gcr (`withdraw`, `forget`, `cancelRequest` from `dropClient`): a request holds its
+  prompt through gcr's pending task anyway, so a last reference never goes there, and now cannot. The paths into gcr, all
+  checked: an answer's completion runs from the socket's notifier, never inside gcr; a cancellation's completion, the
+  password's wiping and these closings and releases run in later turns; `onNewPrompt` (inside gcr's `BeginPrompting`) only
+  creates and records; `submit`, `withdraw` and `forget` (inside gcr) can reach `dropClient` through `send`, which now calls
+  nothing in gcr; the name's request and release are asynchronous bus calls. **Amended after the opus re-check of step 9a
+  (NIT):** that work left for a later turn held a raw pointer to the bridge and references to prompts, and nothing
+  removed it when the bridge went; it never ran only because the bridge goes after the main loop has stopped. It is now
+  the bridge's (`PromptsLater`, `Prompt.h`): `~Bridge` detaches the prompts first, then removes whatever has not run
+  and releases its references, so no such work ever runs after the bridge, whatever the main loop does next.
+- **9-4. Which requesters are named?** Options: (a) the rule of the step's brief: a desktop entry of the same executable,
+  "Keyring" for gnome-keyring, "GnuPG" for gpg-agent and pinentry, anything else "Unidentified program" with the path;
+  (b) also a trusted executable's own file name. **Choice: (a)**, with the entry rule made strict: the entry's `Exec` is
+  the program and field codes only, and exactly one entry of `/usr/share/applications` runs that file (compared by device
+  and inode). Rule applied: macOS names the app or warns; an interpreter (`python3` running any script), a wrapper or a
+  launcher with arguments must never lend an entry's name to whatever it runs. The fixed paths: gnome-keyring is
+  `/usr/bin/gnome-keyring-daemon`; for GnuPG the caller on the bus is `/usr/bin/pinentry-gnome3` (gpg-agent runs it),
+  `/usr/bin/gpg-agent` is listed too. **Amended after the opus review of step 9a (MINOR-2, NIT-4):** the first version
+  said these rows name the program that asks "on another app's behalf"; what they prove is less: the row names the program
+  whose process opened the bus connection, and "Keyring", "GnuPG" and "SSH" can be made to ask by any program of the user,
+  with text of its own (gpg-agent's `GET_PASSPHRASE` through `gpg-connect-agent`, `pinentry-gnome3` run directly with its
+  own `SETDESC`, `ssh-add` through gcr-ssh-agent, an app asking gnome-keyring to unlock a collection). So `onBehalf` means
+  "the text below is another program's, unverified", and step 9b shows it so (spec section 5, SC3b), never as the
+  Keyring's, GnuPG's or SSH's own words. `/usr/lib/gcr-ssh-agent` (gcr-4, root's) asks on ssh's behalf and gets the role
+  `ssh` (D-9 lists gcr-ssh-agent among gcr's prompting clients); the first version showed it as "Unidentified program".
+- **9-5. How does the bridge read the shell?** Options: (a) `QLocalServer` and `QJsonDocument`, as the menu bridge;
+  (b) a plain Unix socket read into a buffer of gcr's secure memory, a strict parser of flat JSON objects that leaves the
+  password escaped in the line and decodes it straight into gcr's secure memory, the line wiped once handled; outgoing
+  lines (no secret) built with Qt's JSON. **Choice: (b).** Rule applied: D-9 ("the bridge reads it into a buffer it zeroes
+  after handing it to libgcr"); Qt's socket and JSON classes keep copies the bridge cannot wipe. With it, every bus call
+  goes through GDBus, since libgcr's prompter needs a `GDBusConnection`: no QtDBus, no QtNetwork; GLib is already a
+  dependency of `qt6-base` (its event dispatcher) and of `gcr-4`.
+- **9-6. What does a protocol error do?** **Choice:** an answer to an id that is not outstanding (withdrawn, answered,
+  never sent) is ignored; a wrong answer to an outstanding id (an unknown key, a password where none is asked, "ok"
+  without one, a choice where none was shown, a password over 4096 bytes) cancels that request and tells the shell
+  "cancel"; a line that cannot be attributed (not one flat JSON object, over 16 KiB, an answer without a usable id, an
+  answer before hello, another protocol version) closes the connection, which cancels every request and releases the name
+  until the shell reconnects; an unknown message type or a repeated hello is answered "error" and counted, and the ninth
+  such line closes the connection. Rule applied: fail closed, never a password invented (D-9); the menu bridge closes on an
+  over-long line too (ADR-0008). **Amended after the opus review of step 9a (NIT-3):** a `PerformPrompt` of the wrong
+  shape was dropped without a reply (its caller waited for its own timeout); the filter now answers it
+  `org.freedesktop.DBus.Error.InvalidArgs` (from the main loop, never from GDBus's worker thread) and gcr still never sees
+  it.
+- **9-7. Who may connect, and how is the shell's cgroup read?** **Choice:** `SO_PEERCRED`'s user must be the bridge's; the
+  peer's cgroup is read through `SO_PEERPIDFD` (Linux 6.5): the pidfd's PID from its fdinfo, `/proc/<pid>/cgroup`, then
+  the pidfd checked alive, so a reused PID cannot pass. On an older kernel the PID of `SO_PEERCRED` is read (a residual
+  race, in the spec's known limitations). The unified-hierarchy path must end with the `--peer-unit` unit and, in a
+  session, contain `user@<uid>.service`; the unit comes from the systemd unit's command line only (default
+  `grassfield-shell.service`), never from the environment; a development run (on a private test bus only) matches the
+  last component only, as a container has no user manager. One shell at a time ("busy"). The secret sheets share one
+  queue with the polkit sheet, so they live in the polkit agent's process: when ADR-0041 S3 moves the agent to
+  `grassfield-security.service`, the sheets and `--peer-unit` move with it. Rule applied: D-9's socket rule; the brief's
+  "no environment-variable bypass". **Amended after the opus review of step 9a.** MINOR-3: the first version also fell
+  back to `SO_PEERCRED`'s PID on EINVAL, which Linux 6.5 to 6.15 answer when the peer has exited and been reaped, exactly
+  when its PID can belong to another process: only ENOPROTOOPT (a kernel without `SO_PEERPIDFD`) falls back now, any other
+  error refuses the peer (Linux 6.18, the container's, gives a pidfd of the dead process, whose PID reads -1: refused as
+  well, checked with the reviewer's probe).
+  NIT-1: in a session every component between `user@<uid>.service` and the unit must be a slice (`<name>.slice`), so a
+  cgroup nested in a scope or another unit whose last component merely bears the unit's name is refused.
+- **9-8. The unit.** **Choice:** hardening without namespaces, as 2c-6 (the bridge reads `/proc/<pid>/exe` of its callers
+  and needs root's files to show as root's): `NoNewPrivileges`, `RestrictAddressFamilies=AF_UNIX`, `RestrictNamespaces`,
+  `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality`, `MemoryDenyWriteExecute`, `SystemCallFilter=@system-service`,
+  an empty capability set; `LimitCORE=0`, `MemorySwapMax=0` and a non-dumpable process; `UnsetEnvironment` of
+  `G_DBUS_DEBUG`, `G_MESSAGES_DEBUG`, `G_DEBUG`, `QDBUS_DEBUG` and `QT_NO_GLIB`; `Restart=on-failure` with the menu
+  bridge's back-off; `RuntimeDirectory=grassfield`, kept, shared with the menu bridge; no `[Install]`: started by
+  `autostart.lua` before the shell with `--no-block`. Budget measured in the container (Qt 6.12, gcr 4.4.1): 18.5 MB
+  resident idle, 21.1 MB after ten prompts, 4 threads; `MemoryHigh=48M`, `MemoryMax=128M`, `TasksMax=16`. Rule applied:
+  section 5.8 (a hardened user unit with a budget).
+- **9-9. Kinds and versions.** **Choice:** each hello lists kinds; the bridge sends a request only of a kind the shell's
+  hello listed (another is answered "cancelled" without showing) and 9a sends `password` and `confirm`; `nm` (9d), `kio`
+  (9e) and `bluetooth` (step 10) are added within `prompter/1` with their own prompt and answer fields; changing the
+  fields of an existing kind means `prompter/2`. Rule applied: one protocol for every secret sheet (D-9), a shell never
+  asked to draw what it cannot.
+- **9-10. The name's state.** **Choice:** the bridge tells the shell "released", "queued" or "owned" after its hello and
+  at every change, and writes who holds the name when it is queued (the owner's executable, from its pidfd). Rule applied:
+  a desktop that cannot show a prompt must be diagnosable without a technical step for the user (the journal says it).
+  **Amended after the opus counter-review of step 9a (NIT):** for that line the bridge reads the owner's executable only,
+  not its namespaces, tracer and mappings.
+- **9-11. Limits.** **Choice:** 8 requests outstanding (D-9); 64 gcr prompts open at once (beyond, a new one answers
+  "cancelled"); a password of at most 4096 bytes after decoding, never cut; shell lines of at most 16 KiB; caller strings
+  over 16 KiB dropped by the filter; texts capped in UTF-16 code units, the ellipsis included: title 128, message 256,
+  description 1024, warning 256, check box 128, buttons 32, requester name 128, icon and desktop id 256, path 512. Rule
+  applied: bounded input everywhere on the secret path; macOS alerts show a few lines. **Amended after the opus review of
+  step 9a (NIT-2):** the 64 open prompts were one global pool that one connection could fill, and a refused socket peer
+  could write a journal line per attempt. Now the bus filter counts each connection's open prompts (a `BeginPrompting`
+  not yet stopped; a connection that leaves the bus is forgotten, the bridge listening to every `NameOwnerChanged` for
+  that) and answers a ninth `BeginPrompting` of one connection `org.freedesktop.DBus.Error.LimitsExceeded` before gcr sees
+  it; 64 stays the global bound; refused connections are written once per 10 s with the count of those not written. A
+  prompt stays open until its caller stops prompting or leaves the bus (gcr's design), counting against that caller
+  only. **Amended after the opus counter-review of step 9a.** MINOR-A: a count was released only by a `StopPrompting` or
+  by the connection leaving, and gcr's clients send no `StopPrompting` when the prompter's name goes, so a long-lived
+  client was locked out for the session after eight shell departures. MINOR-B: the filter counted a `StopPrompting`
+  whatever its interface field said, while GDBus answers an interface-less call `UnknownMethod` and gcr never sees it, so
+  one connection could fill the 64-prompt pool. Now the count follows what gcr itself holds, from messages no caller can
+  forge: a `BeginPrompting` counts only with the prompter's interface named exactly; a prompt stops counting when gcr sends
+  its caller `PromptDone` (an outgoing message: after a `StopPrompting`, after the bridge closes the prompt), when the
+  caller answers gcr's `PromptReady` with an error (gcr then drops the prompt without `PromptDone`; the filter keeps the
+  serials of unanswered `PromptReady` calls, at most 4096), when the caller leaves the bus, and every count goes when the
+  prompter's name leaves the bridge. A `StopPrompting` itself counts for nothing. NIT: the count of the refusals not
+  written is written when the 10-s window ends, even when no refusal follows. **Amended after the opus final check of step
+  9a (NIT):** an unanswered `PromptReady` entry stayed when gcr cancelled the call itself (a `StopPrompting` while a
+  `PromptReady` was in flight) or when the caller never answered, so a caller cycling prompts it never answers could fill
+  the 4096 entries and push out other callers' entries. An entry now goes with gcr's `PromptDone` for the same callback,
+  with a newer `PromptReady` for it, and with its caller leaving the bus.
+- **9-12. The password's strength reported to the caller.** Options: (a) a score; (b) 0 for an empty password, 1
+  otherwise, as gcr's own dialog does (gnome-keyring reads it to ask about storing passwords unencrypted). **Choice:
+  (b).** The meter the user sees is the shell's (step 9b). Rule applied: gcr's contract as its own prompter keeps it.
+- **9-13. What "plain, flattened" removes.** **Choice:** control characters, DEL and the line and paragraph separators
+  become spaces; bidirectional marks, embeddings, overrides and isolates, zero-width and invisible formatting characters,
+  interlinear annotation, tag characters and noncharacters are removed; unpaired surrogates become U+FFFD; runs of white
+  space become one space; the result is cut on a code point boundary with an ellipsis. The same rule for desktop-entry
+  names and executable paths. Rule applied: D-9 (caller text plain, flattened, capped) and the `plainText` rule of the
+  settings contract (ADR-0010 amendment of 2026-10-26).
+- **9-14. Can the bridge tell that the program named in the row is the code asking?** (opus review of step 9a, MINOR-2.)
+  Question: any program of the user can make a named program ask (9-4), connect to the bus and then fork and exec a
+  trusted program while its child keeps the connection, `LD_PRELOAD` its code into a trusted program, or, as its ancestor,
+  `ptrace` one, change its code and detach. Options: (a) document the limit only; (b) document it, and refuse an identity
+  to a traced process (`TracerPid` not 0) and lend an app's desktop entry only to a process whose every file mapped
+  executable (`/proc/<pid>/maps`) is a trusted file, read through the same pidfd and checked alive after; (c) as (b), with
+  the mapped-code check for the on-behalf roles too; (d) compare the process's start time or thread-group leader with the
+  connection's. **Choice: (b).** Rule applied: macOS names the app or warns, and a cheap check that stops the cheapest
+  borrowing (`LD_PRELOAD`, `LD_LIBRARY_PATH`, a plugin from the user's files) is worth having for the app row, which
+  otherwise any program could borrow by preloading itself into the app. (c) would turn "Keyring" and "GnuPG" into
+  "Unidentified program" after every library upgrade until the next login (their libraries show as deleted) without
+  stopping anyone: any program can make them ask through their own interfaces. (d) proves nothing: `exec` keeps the
+  process's PID and start time, and the bus gives no time for a connection. What remains, in the spec's known
+  limitations: the fork-and-exec of a trusted program after connecting, an ancestor's `ptrace` that detached, and
+  everything a program can make the on-behalf roles say; the row names the program that opened the connection, and step
+  9b shows the caller's text under an on-behalf row as unverified text from another program.
+  **Amended after the opus counter-review of step 9a (MINOR-C).** The check trusted the paths `/proc/<pid>/maps` names,
+  and a process in a user and mount namespace of its own (`unshare -Urm`) can bind-mount a file of its own over a trusted
+  path: its mapping then shows the trusted path with the user's file's device and inode. Options: (a) compare each
+  mapping's device and inode with `stat` of its path; (b) compare them with the file the path names in the bridge's
+  mount namespace, the device taken from the path's mount (`statx`'s mount id looked up in `/proc/self/mountinfo`), and
+  lend an app's row only to a process that shares the bridge's mount and user namespaces; (c) refuse other namespaces
+  only. **Choice: (b).** Rule applied: identity from what the kernel says, never from a name. `stat`'s `st_dev` is not
+  what `/proc/<pid>/maps` shows on btrfs, the file system of Omarchy's installation (the maps line carries the inode's
+  superblock device, btrfs's `stat` a device of each subvolume: UNVERIFIED here, there is no btrfs file system in the
+  container), so (a) would leave every app unidentified there; the mount's device is
+  the superblock's on every file system (checked here on the container's overlayfs: maps `00:29`, mountinfo `0:41`, the
+  same device, and the same inode); the namespace rule stops the forge at its root, since an unprivileged process can
+  bind-mount only in namespaces of its own. What remains, in the spec's known limitations: a trusted app running code of
+  the user's through its own scripting maps no untrusted file (`emacs --batch -l`, `nvim -l`, an app's plugin
+  interpreter) and still gets the app's row.
+
 ### D-10. What Omarchy still shows (category D; O1–O11)
 - **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):
   - step "screenshots": Grassfield's bindings call a Grassfield capture script instead of `omarchy-capture-screenshot`. It keeps
@@ -1246,6 +1510,47 @@ passwords too (D-12). Q12: the amendment text above.
     mode does); Esc cancels. Saved to the Desktop as on macOS (**owner decision Q4**; Omarchy saves to Pictures).
   - later chantier (own ADR): the macOS capture toolbar (Shift-Cmd-5: screen, window, selection, recording, Options) and the
     floating thumbnail, drawn by the shell; recording then replaces Omarchy's `gpu-screen-recorder` path.
+
+  **Delivered in step 8.**
+  - **The helper:** `packaging/bin/grassfield-capture`, `python3 -I`, standard library only, strings through `tr()`.
+    - `screen` captures every enabled display, one picture each (`grim -o`), the focused one first (8-4).
+    - `selection` runs `slurp` over the live screen, with no freeze, in the colours of `capture.*` in `ui/tokens/tokens.json`.
+      - The boxes a click can pick are the windows on the shown workspaces, then each display's logical rectangle. They are filled with the veil itself (slurp draws them with Cairo's SOURCE operator, which replaces the veil), so the veil stays even; the box under the pointer takes the selection's fill and border. slurp 1.5.0, Arch's, cancels a click outside every box: without the displays, a click on the bare Desktop, the menu bar or the Dock captured nothing (counter-review of step 8, MAJOR A).
+      - On a workspace with a fullscreen or zoomed window (Hyprland's fullscreen modes 2 and 1), that window and the ones drawn over it (pinned, or allowed over it) are the workspace's boxes, never the ones behind.
+      - A drag captures that area.
+      - A click captures the window under it. slurp answers the smallest box under the pointer, so the helper reads the pointer (`hyprctl -j cursorpos`) and takes the window drawn on top there, as Hyprland draws them (`render/Renderer.cpp`): pinned windows above all, then a special workspace's windows, a window over a fullscreen one above it, floating above tiled, then the later in Hyprland's clients list, which goes from the bottom up; where a fullscreen or zoomed window is, only its own workspace's windows (and pinned ones) are over it, so another display's window that reaches there is under it (fourth review of step 8, MINOR 1) (third review of step 8, MAJOR: the first fix ranked by focus, so a Picture-in-Picture window pinned over a focused browser gave the browser). A pointer that has left slurp's box since the click, or cannot be read, leaves slurp's answer. A click whose hand moved a pixel or two (slurp answers 2x1) takes the window on top at that point.
+      - A click on no window captures the display under it.
+      - Esc cancels, and a second press while the crosshair shows cancels it: `pkill` on this helper's exact slurp command line, so another program's slurp is left alone (review of step 8, MINORs 1-3; counter-review, MINORs B and C).
+    - grim writes a hidden file of the helper's on the Desktop (xdg-user-dir, never the home folder or `/`, else `~/Desktop`), made with `O_EXCL`; it is then linked to the first free name, "Screenshot 2026-10-31 at 14.05.12.png", or « Capture d’écran 2026-10-31 à 14.05.12.png » in French, then " (2)" and on, so no file is ever overwritten and the Desktop never shows a picture being written (a file system without hard links gets a copy under an `O_EXCL` name).
+    - The focused display's picture, or the selection, is copied with `wl-copy`.
+    - The notice is the shell's ordinary banner (no `-t 0`: it would have stayed on screen, in the next screenshot too; review of step 8, MAJOR 2) with the picture (an `image-path` hint), Preview's icon, and "Open in Preview", both as the click and as a button. It opens the capture's pictures in `org.grassfield.Preview` through `systemd-run … uwsm-app`, as the Dock starts an app. The helper waits for notify-send's end (`communicate`), not for the end of its output, so a click is never taken for the wait running out (review of step 8, MAJOR 1: about 6 % of clicks were lost).
+  - **Bindings:** `config/hypr/grassfield/system.lua` calls `/usr/lib/grassfield/grassfield-capture screen|selection` and names no Omarchy command. `config/hypr/grassfield/windows.lua` gives slurp's layer (namespace `selection`) `no_anim`: grim takes the picture as slurp ends, and Hyprland's fade-out of a closing layer would otherwise put slurp's veil and outline in it (fourth review of step 8, MAJOR; Omarchy ships the same rule). `scripts/dev/omarchy-compat.sh` no longer requires Omarchy's capture commands.
+  - **Packaging:** grim and slurp are declared.
+  - **Tests:** `tests/shell/capture.sh` (every tool faked; the colours held to the tokens) and `tests/shell/session_services.sh` (the bindings).
+
+  Decisions of step 8. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user; 8-4 after its review, 8-5 after its counter-review):
+  - **8-1. Shift-Cmd-5 and Print until the toolbar.**
+    - Options: (a) nothing until the toolbar exists; (b) a selection, as Shift-Cmd-4.
+    - **Choice: (b).**
+    - Rule applied: a key the user knows from macOS must do something useful. The selection is what the toolbar opens on by default.
+  - **8-2. How long "Open in Preview" stays live.** The notice's button works only while the helper waits.
+    - Options: (a) wait until the notice is dismissed, however long; (b) wait 2 minutes, then close the notice.
+    - **Choice: (b).** notify-send is sent SIGINT and closes the notice it showed itself (by that notice's id, on its own connection); the helper sends no CloseNotification of its own, which could name another notice after a restart of the shell.
+    - The next capture closes the last one's notice the same way before it takes its picture, and takes the picture at least 0.5 s after (the shell unmaps the banner at once; Hyprland fades a layer out in at most its global speed, 300 ms), so a picture never shows the notice of the one before (counter-review of step 8, MINOR D). The crosshair does not wait: only the picture does (third review, MINOR 3). The pid and its start time are kept in `$XDG_RUNTIME_DIR/grassfield/capture-notice`; the process is held by a pidfd, then signalled only if it is still that one (same start time), the user's, and `notify-send` with this helper's `-p`. Without notify-send (the gdbus fallback), the last notice is not closed. A helper told to end (SIGTERM) while it waits has notify-send close its notice first.
+    - Rule applied: no helper waits without a bound. The picture stays on the Desktop, and Preview opens it from there.
+  - **8-3. A picture too large for the notice.** The shell shows a notice image up to 8 MiB (`History.js`); a large multi-display PNG is bigger.
+    - Options: (a) a second, scaled capture for the notice; (b) Preview's icon in its place (`-i org.grassfield.Preview`).
+    - **Choice: (b).**
+    - Rule applied: one capture, so the notice never shows a picture other than the one saved. A known limitation.
+  - **8-4. Shift-Cmd-3 with several displays** (review of step 8, MINOR 5: the first build took the focused display only).
+    - Options: (a) the focused display; (b) every display, one file each, as macOS saves them ("… (2).png" for the next).
+    - **Choice: (b).** The focused display comes first and gets the plain name; its picture is the one copied and shown in the notice; "Open in Preview" opens them all.
+    - Rule applied: macOS first; a display left out is a picture the user expected and does not have.
+  - **8-5. A click on a window and Grassfield's title bar** (counter-review of step 8, MINOR E).
+    - Question: Hyprland gives a window's own box; the compositor plugin's title bar is a decoration above it, shown for windows that do not draw their own (`Titlebar.cpp` `shouldShow`: not client chrome, the decorate rule, not fullscreen). The helper cannot tell which windows carry it.
+    - Options: (a) extend every window's box upward by the title bar's height (wrong for every app that draws its own title bar: 32 pixels of whatever is above); (b) the window's own box, without Grassfield's title bar; (c) the plugin reports each window's decorated box (a compositor change, with its own gates C1-C3).
+    - **Choice: (b) now; (c) with the capture toolbar's chantier.**
+    - Rule applied: never capture pixels that are not the window's. A known limitation in the spec: a click on a window's title bar itself, outside its own box, captures the window behind it or the display (third review of step 8, MINOR 4).
 - **Migrations and updates in a terminal (O3, O4):** accepted. They are Omarchy's maintenance tools running in a terminal, as
   a command-line update is on macOS; the Grassfield path is Software Update (ADR-0033), whose own sheet asks the questions.
 - **Omarchy menus (O5):** nothing opens (verified by code: the stand-in `omarchy-shell` fails as Omarchy's wrapper does);
@@ -1831,7 +2136,8 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   9, already installed with gnome-keyring) and libsecret (step 9, already installed with pinentry; counter-review of PR #13,
   minor); no libnm.
 - A packaged drop-in keeps Omarchy's `bt-agent` out of the Grassfield session (step 10).
-- The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12).
+- The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12): done in step 9a,
+  in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step.
 - One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins), `/usr/share/grassfield/xdg` (the
   session's portal configuration) and `/usr/share/grassfield/xdg-config` (the session's `kwalletrc`, Q17-b).
 - The Grassfield session exports `GTK_USE_PORTAL=1`, adds `portals` to `GDK_DEBUG` and prepends `XDG_DATA_DIRS` and

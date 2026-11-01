@@ -182,6 +182,8 @@ bind("XF86Explorer", "Files", launch("files"), { locked = false })
 bind("XF86MyComputer", "Files", launch("files"), { locked = false })
 bind("XF86Tools", "Grassfield Settings", launch("settings"), { locked = false })
 bind("XF86AudioMedia", "Music", launch("music"), { locked = false })
+-- Ctrl+Shift+Esc opens Activity Monitor from anywhere (Windows' Task Manager key; owner AQ6, ADR-0038 AM64).
+bind("CTRL + SHIFT + ESCAPE", "Activity Monitor", launch("activity"), { locked = false })
 
 -- Hardware keys: real volume/brightness changes plus the OSD (shell/osd).
 bind("XF86AudioRaiseVolume", "Volume up", shell("volume", "up"), { repeating = true, locked = true })

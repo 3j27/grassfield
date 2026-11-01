@@ -42,6 +42,7 @@ enum class Column {
     ReceivedPackets,
     Pid,
     User,
+    Status, // AM27, AM70 (step 4): Not Responding, Efficiency Mode, Stopped, Zombie
 };
 
 struct TabColumns {
