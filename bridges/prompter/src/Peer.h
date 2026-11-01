@@ -72,6 +72,12 @@ namespace gf::prompter {
         explicit LogThrottle(qint64 windowMs) : m_windowMs(windowMs) {}
         // True when the event may be written now; *suppressed then holds how many were not written before it.
         bool allow(qint64 nowMs, qint64* suppressed);
+        // The events not written so far, now counted as reported (the bridge writes them when its window ends, so a burst
+        // followed by silence is reported too: counter-review of step 9a, NIT).
+        qint64 takeSuppressed();
+        qint64 windowMs() const {
+            return m_windowMs;
+        }
 
       private:
         qint64 m_windowMs;

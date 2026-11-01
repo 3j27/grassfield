@@ -161,6 +161,12 @@ namespace gf::prompter {
         return true;
     }
 
+    qint64 LogThrottle::takeSuppressed() {
+        const qint64 n = m_suppressed;
+        m_suppressed   = 0;
+        return n;
+    }
+
     QString socketPath(const QString& overridePath, const QString& runtimeDir) {
         if (!overridePath.isEmpty())
             return QDir::isAbsolutePath(overridePath) ? QDir::cleanPath(overridePath) : QString();

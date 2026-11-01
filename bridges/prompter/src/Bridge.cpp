@@ -9,6 +9,7 @@
 
 #include <QFile>
 #include <QSocketNotifier>
+#include <QTimer>
 
 #include <cerrno>
 #include <cstring>
@@ -152,7 +153,12 @@ namespace gf::prompter {
         }
         m_socketDev      = st.st_dev;
         m_socketIno      = st.st_ino;
-        m_acceptNotifier = new QSocketNotifier(m_listenFd, QSocketNotifier::Read);
+        m_refusalReport.setSingleShot(true);
+        QObject::connect(&m_refusalReport, &QTimer::timeout, [this] {
+            if (const qint64 n = m_refusals.takeSuppressed(); n > 0)
+                log(QStringLiteral("%1 more connection(s) refused in the last %2 s, not logged one by one").arg(n).arg(m_refusals.windowMs() / 1000));
+        });
+                m_acceptNotifier = new QSocketNotifier(m_listenFd, QSocketNotifier::Read);
         QObject::connect(m_acceptNotifier, &QSocketNotifier::activated, [this] { onAcceptReady(); });
         log(QStringLiteral("listening on %1 for %2 (the name is requested once the shell says hello)").arg(flatten(path, caps::kPath), m_options.peerUnit));
         return true;
@@ -343,7 +349,8 @@ namespace gf::prompter {
                 return;
             }
             const PeerCheck check = checkSocketPeer(fd, m_options.uid, m_options.peerUnit, m_options.requireUserManager);
-            // A refused peer can try again at once: the journal gets one line per 10 s, with the count of the others.
+            // A refused peer can try again at once: the journal gets one line per 10 s, with the count of the others,
+            // written when the window ends even if no refusal follows.
             qint64 suppressed = 0;
             if (!check.accepted) {
                 if (m_refusals.allow(monotonicMs(), &suppressed))
@@ -353,6 +360,7 @@ namespace gf::prompter {
                                  suppressed ? QStringLiteral(" (and %1 refused connection(s) not logged)").arg(suppressed) : QString()));
                 sendNow(fd, errorMessage(QStringLiteral("refused"), QStringLiteral("not the shell")));
                 ::close(fd);
+                reportRefusalsLater();
                 continue;
             }
             if (m_client >= 0) {
@@ -362,6 +370,7 @@ namespace gf::prompter {
                             .arg(suppressed ? QStringLiteral(" (and %1 refused connection(s) not logged)").arg(suppressed) : QString()));
                 sendNow(fd, errorMessage(QStringLiteral("busy"), QStringLiteral("another shell is connected")));
                 ::close(fd);
+                reportRefusalsLater();
                 continue;
             }
             m_client   = fd;
@@ -380,6 +389,12 @@ namespace gf::prompter {
                     .arg(check.raceFree ? QStringLiteral("cgroup read through its pidfd") : QStringLiteral("cgroup read through SO_PEERCRED's pid")));
             send(helloMessage(bridgeKinds()));
         }
+    }
+
+    void Bridge::reportRefusalsLater() {
+        if (m_refusalReport.isActive())
+            return;
+        m_refusalReport.start(static_cast<int>(m_refusals.windowMs()));
     }
 
     void Bridge::onClientReadable() {
@@ -565,6 +580,19 @@ namespace gf::prompter {
         m_kinds.clear();
         cancelAll(false);
         wantName(false);
+        // gcr's clients forget a prompt without stopping it when the prompter's name goes (gcr-system-prompt.c
+        // on_prompter_vanished): gcr would keep it, and the filter would count it, until the client leaves the bus. Each
+        // open prompt is closed instead, so gcr ends it and tells its caller PromptDone (counter-review of step 9a,
+        // MINOR-A). Closing one can dispose others: references are held, and the set is copied first.
+        const QList<GfPrompt*> open = m_prompts.values();
+        for (GfPrompt* prompt : open)
+            g_object_ref(prompt);
+        for (GfPrompt* prompt : open) {
+            gcr_prompt_close(GCR_PROMPT(prompt));
+            g_object_unref(prompt);
+        }
+        if (!open.isEmpty())
+            log(QStringLiteral("%1 open gcr prompt(s) closed: their callers saw the name go").arg(open.size()));
     }
 
     // --- the well-known name ------------------------------------------------------------------------------------------------
@@ -670,7 +698,7 @@ namespace gf::prompter {
             if (g_variant_lookup(dict, "ProcessFD", "h", &handle) && fds && handle >= 0 && handle < g_unix_fd_list_get_length(fds)) {
                 const int pidfd = g_unix_fd_list_get(fds, handle, nullptr);
                 if (pidfd >= 0) {
-                    exe = exeFactsOfPidfd(pidfd).path;
+                    exe = exeFactsOfPidfd(pidfd, false).path; // the executable only: a journal line needs no more
                     ::close(pidfd);
                 }
             }
