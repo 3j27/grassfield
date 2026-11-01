@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTest>
 
 #include <gtest/gtest.h>
 
@@ -15,6 +16,7 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -552,6 +554,41 @@ TEST(ProcessActions, QuitWaitsForTheShellsOutcome)
     EXPECT_TRUE(t.actions.forceQuit().value(QStringLiteral("done")).toBool());
     EXPECT_EQ(ending(c), SIGKILL);
     EXPECT_EQ(kShellQuitMs, 10000); // the product's bound
+}
+
+// The integrator's review of the merge of #86: each process's outcome counts once. The look every 250 ms sees a's windows
+// gone; the shell's late answers for a ("refused", then "ok") change nothing, and Quit ends with b's answer, done.
+TEST(ProcessActions, AnOutcomeCountsOnceForEachProcess)
+{
+    Actions t(kAppUnit);
+    t.actions.setShellQuitBound(5000);
+    std::map<int, std::function<void(const QString &)>> answers;
+    t.actions.setShellQuit([&](int pid, std::function<void(const QString &)> answer) { answers[pid] = std::move(answer); });
+    QSignalSpy finished(&t.actions, &ProcessActions::quitFinished);
+    const pid_t a = idleChild(), b = idleChild();
+    t.actions.setProjection(true, {a, b});
+    t.actions.setSelection({own(a, "foot"), own(b, "foot")});
+    t.actions.prepare(QStringLiteral("quit"));
+    ASSERT_TRUE(t.actions.quit().value(QStringLiteral("pending")).toBool());
+    ASSERT_EQ(answers.size(), 2u);
+    t.actions.setProjection(true, {b}); // a's windows closed
+    QTest::qWait(600);
+    answers[a](QStringLiteral("refused"));
+    answers[a](QStringLiteral("ok"));
+    QTest::qWait(100);
+    EXPECT_EQ(finished.count(), 0); // b is still awaited
+    answers[b](QStringLiteral("ok"));
+    ASSERT_TRUE(finished.wait(2000));
+    const QVariantMap r = finished.at(0).at(0).toMap();
+    EXPECT_TRUE(r.value(QStringLiteral("done")).toBool());
+    EXPECT_FALSE(r.value(QStringLiteral("unsafe")).toBool());
+    QTest::qWait(100);
+    EXPECT_EQ(finished.count(), 1);
+    for (const pid_t p : {a, b}) {
+        EXPECT_EQ(ending(p, false), -1); // nothing sent
+        kill(p, SIGKILL);
+        ending(p);
+    }
 }
 
 // Review of 5bfd4419 (MAJOR 1): an Inspect window's actions take the main window's hooks, so a test's child (in the unit of
