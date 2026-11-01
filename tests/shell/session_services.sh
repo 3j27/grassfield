@@ -121,6 +121,10 @@ desc="grassfield-prompter.service: the shell's unit is an argument (--peer-unit 
 check bash -c 'grep -qx "ExecStart=/usr/lib/grassfield/grassfield-prompter --peer-unit grassfield-shell.service" "$1" && grep -qx "RuntimeDirectory=grassfield" "$1" && grep -qx "RuntimeDirectoryPreserve=yes" "$1" && grep -qx "UMask=0077" "$1" && ! grep -q "^\[Install\]" "$1" && ! grep -q "^Environment=" "$1"' _ "$u"
 desc="grassfield-prompter: installed where its unit runs it, built, tested and packaged by the PKGBUILD, which declares gcr-4"
 check bash -c 'grep -q "RUNTIME DESTINATION lib/grassfield" "$1" && grep -q "packaging/systemd/grassfield-prompter.service DESTINATION lib/systemd/user" "$1" && grep -q "cmake --install \"\$srcdir/prompter-build\"" "$2" && grep -q "\"\$srcdir/prompter-build/prompter-unit-tests\"" "$2" && grep -qE "^  depends=\(.* gcr-4\)" "$2" && grep -qE "^ +quickshell gcr-4\)" "$2"' _ "$root/bridges/prompter/CMakeLists.txt" "$pk/arch/PKGBUILD"
+# udiskie's password command (ADR-0035 D-9, step 9c): grassfield-askpass, built and installed with the bridge, where the
+# automount unit runs it, the disk's name one argument of udiskie's own formatting.
+desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
+check bash -c 'grep -qxF "ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray --password-prompt \"/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}\"" "$1" && grep -qF "install(TARGETS grassfield-prompter grassfield-askpass RUNTIME DESTINATION lib/grassfield)" "$2" && grep -qF "add_executable(grassfield-askpass src/askpass.cpp" "$2"' _ "$pk/systemd/grassfield-automount.service" "$root/bridges/prompter/CMakeLists.txt"
 for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
   desc="drop-in keeps Omarchy's $unit.service out of the Grassfield session only"
   d=$pk/systemd/$unit.service.d/10-grassfield.conf

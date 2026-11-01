@@ -154,7 +154,8 @@ build() {
   cmake -S "$(_root)/bridges/menu-bridge" -B "$srcdir/menu-bridge-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DGRASSFIELD_BUILD_TESTS=ON
   cmake --build "$srcdir/menu-bridge-build"
-  # grassfield-prompter (ADR-0035 D-9): gcr's system prompter for the session, the shell draws the prompts; its user unit.
+  # grassfield-prompter (ADR-0035 D-9): gcr's system prompter for the session, the shell draws the prompts, and its
+  # NetworkManager secret agent (step 9c); its user unit; grassfield-askpass, udiskie's password command (step 9c).
   cmake -S "$(_root)/bridges/prompter" -B "$srcdir/prompter-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DGRASSFIELD_BUILD_TESTS=ON
   cmake --build "$srcdir/prompter-build"
@@ -314,7 +315,8 @@ package_grassfield-desktop() {
   # /usr/share/dbus-1/interfaces/org.grassfield.MenuBridge1.xml (started by the session's autostart.lua).
   DESTDIR="$pkgdir" cmake --install "$srcdir/menu-bridge-build"
   # grassfield-prompter (ADR-0035 D-9): /usr/lib/grassfield/grassfield-prompter and its user unit
-  # /usr/lib/systemd/user/grassfield-prompter.service (started by the session's autostart.lua).
+  # /usr/lib/systemd/user/grassfield-prompter.service (started by the session's autostart.lua);
+  # /usr/lib/grassfield/grassfield-askpass (run by udiskie in grassfield-automount.service, step 9c).
   DESTDIR="$pkgdir" cmake --install "$srcdir/prompter-build"
 
   # Grassfield Settings app (M4).
