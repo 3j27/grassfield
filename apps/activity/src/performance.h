@@ -79,9 +79,11 @@ public:
 
     // Tests and the Wi-Fi name: the network's name of a Wi-Fi interface (by default NetworkManager on the system bus,
     // read-only); "" when none is known.
-    using WifiName = std::function<QString(const QString &interface)>;
+    // The answer comes later, never on the window's thread's time (review of 5bfd4419: the system bus asked without
+    // blocking).
+    using WifiName = std::function<void(const QString &interface, std::function<void(const QString &name)> done)>;
     void setWifiName(WifiName name) { m_wifiName = std::move(name); }
-    static QString networkManagerSsid(const QString &interface);
+    static void networkManagerSsid(const QString &interface, std::function<void(const QString &name)> done);
 
 signals:
     void changed();
@@ -95,6 +97,8 @@ private:
         std::map<std::string, History> engines;
     };
     void rebuild();
+    // A Wi-Fi interface selected: its network's name asked once (the answer rebuilds the details).
+    void askWifiName(const std::string &interface);
     QVariantMap cpuDetail() const;
     QVariantMap memoryDetail() const;
     QVariantMap diskDetail(const std::string &name) const;

@@ -3,11 +3,13 @@
 #include "format.h"
 
 #include <QDBusConnection>
-#include <QDBusInterface>
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDBusObjectPath>
-#include <QDBusReply>
 #include <QDBusVariant>
 #include <QFile>
+#include <QPointer>
 
 #include <algorithm>
 #include <cmath>
@@ -375,9 +377,10 @@ void Performance::rebuild()
             m_detail = memoryDetail();
         else if (m_selected.startsWith(QLatin1String("disk:")))
             m_detail = diskDetail(rest);
-        else if (m_selected.startsWith(QLatin1String("net:")))
+        else if (m_selected.startsWith(QLatin1String("net:"))) {
+            askWifiName(rest);
             m_detail = netDetail(rest);
-        else
+        } else
             m_detail = gpuDetail(rest);
     }
     emit changed();
@@ -489,10 +492,6 @@ QVariantMap Performance::netDetail(const std::string &name) const
 {
     const QString interface = QString::fromStdString(name);
     const bool wifi = kindOf(name) == "wifi";
-    if (wifi && m_wifiFor != interface) { // asked once each time the interface is selected or the window shows
-        m_wifiFor = interface;
-        m_wifi = m_wifiName ? m_wifiName(interface) : QString();
-    }
     if (wifi) {
         QFile f(QString::fromStdString(m_procRoot + "/net/wireless"));
         m_signal = f.open(QIODevice::ReadOnly) ? wirelessSignal(f.read(64 * 1024).toStdString(), name) : 0;
@@ -565,36 +564,86 @@ QVariantMap Performance::gpuDetail(const std::string &pdev) const
                        {QStringLiteral("figures"), figures}};
 }
 
-QString Performance::networkManagerSsid(const QString &interface)
+void Performance::askWifiName(const std::string &name)
 {
-    // Read-only, on the system bus: the device of that interface, its active access point, the point's SSID.
-    QDBusConnection bus = QDBusConnection::systemBus();
-    if (!bus.isConnected())
-        return {};
+    const QString interface = QString::fromStdString(name);
+    if (kindOf(name) != "wifi" || m_wifiFor == interface)
+        return; // asked once each time the interface is selected or the window shows
+    m_wifiFor = interface;
+    m_wifi.clear();
+    if (!m_wifiName)
+        return;
+    QPointer<Performance> self(this);
+    m_wifiName(interface, [self, interface](const QString &answer) {
+        // Always later, on this object's thread: the details are built again with it.
+        QMetaObject::invokeMethod(
+            self.data(),
+            [self, interface, answer] {
+                if (!self || self->m_wifiFor != interface)
+                    return;
+                self->m_wifi = answer;
+                self->rebuild();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+namespace
+{
+
+// One asynchronous property read on the system bus; `done` gets the value, or an invalid QVariant.
+void getProperty(const QString &path, const QString &interface, const QString &property, std::function<void(const QVariant &)> done)
+{
     const QString service = QStringLiteral("org.freedesktop.NetworkManager");
-    QDBusInterface nm(service, QStringLiteral("/org/freedesktop/NetworkManager"), service, bus);
-    nm.setTimeout(500);
-    const QDBusReply<QDBusObjectPath> device = nm.call(QStringLiteral("GetDeviceByIpIface"), interface);
-    if (!device.isValid())
-        return {};
-    QDBusInterface wireless(service, device.value().path(), QStringLiteral("org.freedesktop.DBus.Properties"), bus);
-    wireless.setTimeout(500);
-    const QDBusReply<QDBusVariant> point = wireless.call(QStringLiteral("Get"), service + QStringLiteral(".Device.Wireless"),
-                                                        QStringLiteral("ActiveAccessPoint"));
-    if (!point.isValid())
-        return {};
-    const QString path = point.value().variant().value<QDBusObjectPath>().path();
-    if (path.isEmpty() || path == QLatin1String("/"))
-        return {};
-    QDBusInterface ap(service, path, QStringLiteral("org.freedesktop.DBus.Properties"), bus);
-    ap.setTimeout(500);
-    const QDBusReply<QDBusVariant> ssid = ap.call(QStringLiteral("Get"), service + QStringLiteral(".AccessPoint"), QStringLiteral("Ssid"));
-    if (!ssid.isValid())
-        return {};
-    // An SSID is bytes: shown as UTF-8, its control characters dropped (plain text).
-    QString name = QString::fromUtf8(ssid.value().variant().toByteArray());
-    name.removeIf([](QChar c) { return c.category() == QChar::Other_Control || c.category() == QChar::Other_Format; });
-    return name.left(64);
+    QDBusMessage call = QDBusMessage::createMethodCall(service, path, QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                       QStringLiteral("Get"));
+    call << interface << property;
+    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(call, 1000));
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher, [watcher, done](QDBusPendingCallWatcher *) {
+        const QDBusPendingReply<QDBusVariant> reply = *watcher;
+        done(reply.isError() ? QVariant() : reply.value().variant());
+        watcher->deleteLater();
+    });
+}
+
+} // namespace
+
+void Performance::networkManagerSsid(const QString &interface, std::function<void(const QString &)> done)
+{
+    // Read-only, on the system bus, never blocking: the device of that interface, its active access point, the point's
+    // SSID, each asked when the last answered.
+    QDBusConnection bus = QDBusConnection::systemBus();
+    if (!bus.isConnected()) {
+        done(QString());
+        return;
+    }
+    const QString service = QStringLiteral("org.freedesktop.NetworkManager");
+    QDBusMessage call = QDBusMessage::createMethodCall(service, QStringLiteral("/org/freedesktop/NetworkManager"), service,
+                                                       QStringLiteral("GetDeviceByIpIface"));
+    call << interface;
+    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(call, 1000));
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher, [watcher, done, service](QDBusPendingCallWatcher *) {
+        const QDBusPendingReply<QDBusObjectPath> device = *watcher;
+        watcher->deleteLater();
+        if (device.isError()) {
+            done(QString());
+            return;
+        }
+        getProperty(device.value().path(), service + QStringLiteral(".Device.Wireless"), QStringLiteral("ActiveAccessPoint"),
+                    [done, service](const QVariant &point) {
+                        const QString path = point.value<QDBusObjectPath>().path();
+                        if (path.isEmpty() || path == QLatin1String("/")) {
+                            done(QString());
+                            return;
+                        }
+                        getProperty(path, service + QStringLiteral(".AccessPoint"), QStringLiteral("Ssid"), [done](const QVariant &ssid) {
+                            // An SSID is bytes: shown as UTF-8, its control characters dropped (plain text).
+                            QString name = QString::fromUtf8(ssid.toByteArray());
+                            name.removeIf([](QChar c) { return c.category() == QChar::Other_Control || c.category() == QChar::Other_Format; });
+                            done(name.left(64));
+                        });
+                    });
+    });
 }
 
 } // namespace activity

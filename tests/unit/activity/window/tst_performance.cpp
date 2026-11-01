@@ -6,6 +6,8 @@
 #include "format.h"
 #include "performance.h"
 
+#include <QCoreApplication>
+
 #include <gtest/gtest.h>
 
 using namespace activity;
@@ -87,7 +89,9 @@ TEST(Performance, TheSidebarAndTheDetailsWhileShown)
     f.write("proc/net/wireless", "wlan0: 0000   58.  -52.  -256 0 0 0 0 0 0\n");
     Performance p(f.proc(), f.sys());
     p.setLocale(QLocale(QLocale::English, QLocale::UnitedStates));
-    p.setWifiName([](const QString &i) { return i == QLatin1String("wlan0") ? QStringLiteral("Home") : QString(); });
+    p.setWifiName([](const QString &i, std::function<void(const QString &)> done) {
+        done(i == QLatin1String("wlan0") ? QStringLiteral("Home") : QString());
+    });
     p.take(sample(0.2, 0.1, {0.5}, {0.4}));
     EXPECT_TRUE(p.resources().isEmpty()); // nothing built while no window shows it
     p.setSelected(QStringLiteral("memory"));
@@ -126,6 +130,9 @@ TEST(Performance, TheSidebarAndTheDetailsWhileShown)
     EXPECT_NEAR(sum, 1.0, 1e-9); // In Use, Compressed, Cached and Free make the whole
 
     p.setSelected(QStringLiteral("net:wlan0"));
+    d = p.detail();
+    EXPECT_EQ(figureOf(d, QStringLiteral("Network:")), QStringLiteral("—")); // asked, never waited for (review of 5bfd4419)
+    QCoreApplication::processEvents();                                     // its answer, later
     d = p.detail();
     EXPECT_EQ(figureOf(d, QStringLiteral("Network:")), QStringLiteral("Home"));
     EXPECT_EQ(figureOf(d, QStringLiteral("Signal:")), QStringLiteral("-52 dBm"));
