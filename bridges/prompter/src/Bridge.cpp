@@ -423,23 +423,14 @@ namespace gf::prompter {
                 return;
             }
             m_inLen += static_cast<std::size_t>(n);
-            std::size_t start = 0;
-            while (m_client >= 0) {
-                const void* newline = std::memchr(m_in + start, '\n', m_inLen - start);
-                if (!newline)
-                    break;
-                const std::size_t end = static_cast<std::size_t>(static_cast<const char*>(newline) - m_in);
-                handleLine(std::string_view(m_in + start, end - start));
-                if (m_client < 0)
-                    return; // dropped: dropClient wiped the buffer
-                explicit_bzero(m_in + start, end - start + 1);
-                start = end + 1;
-            }
-            if (start > 0) {
-                std::memmove(m_in, m_in + start, m_inLen - start);
-                explicit_bzero(m_in + (m_inLen - start), start);
-                m_inLen -= start;
-            }
+            // Each complete line is handled, then wiped (takeLines, Protocol.h).
+            const std::size_t rest = takeLines(m_in, m_inLen, [this](std::string_view line) {
+                handleLine(line);
+                return m_client >= 0;
+            });
+            if (m_client < 0)
+                return; // dropped: dropClient wiped the buffer
+            m_inLen = rest;
             if (m_inLen > limits::kShellLine) {
                 protocolError(QStringLiteral("too-long"), QStringLiteral("a line over %1 bytes").arg(limits::kShellLine), true);
                 return;

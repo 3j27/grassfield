@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <string>
+#include <vector>
 #include <sys/socket.h>
 #include <sched.h>
 #include <sys/mman.h>
@@ -296,6 +297,36 @@ TEST(PrompterProtocol, PromptMessageCarriesTheRequesterAndTheTexts) {
     EXPECT_EQ(hello.value(QStringLiteral("v")).toString(), QStringLiteral("prompter/1"));
     EXPECT_EQ(hello.value(QStringLiteral("max")).toInt(), limits::kRequests);
     EXPECT_EQ(QJsonDocument::fromJson(cancelMessage(QStringLiteral("p9"))).object().value(QStringLiteral("id")).toString(), QStringLiteral("p9"));
+}
+
+// The integrator's review of PR #95: every line the shell sent is wiped once handled, before the next one is, and so are
+// the bytes the incomplete rest leaves behind when it moves to the start.
+TEST(PrompterProtocol, LinesAreHandledThenWiped) {
+    std::string       buffer = "{\"a\":\"one\"}\n{\"b\":\"two\"}\nrest";
+    std::string       copy   = buffer;
+    std::vector<std::string> seen;
+    bool              earlierWiped = true;
+    const std::size_t left = takeLines(buffer.data(), buffer.size(), [&](std::string_view line) {
+        for (const char* p = buffer.data(); p < line.data(); ++p)
+            earlierWiped = earlierWiped && *p == '\0';
+        seen.emplace_back(line);
+        return true;
+    });
+    EXPECT_EQ(seen, (std::vector<std::string>{"{\"a\":\"one\"}", "{\"b\":\"two\"}"}));
+    EXPECT_TRUE(earlierWiped) << "a handled line stays in the buffer while the next one is handled";
+    ASSERT_EQ(left, 4u);
+    EXPECT_EQ(buffer.substr(0, 4), "rest");
+    EXPECT_EQ(buffer.substr(4), std::string(copy.size() - 4, '\0')) << "the handled lines and the moved bytes are wiped";
+    // No complete line: nothing handled, nothing moved.
+    std::string partial = "{\"half";
+    EXPECT_EQ(takeLines(partial.data(), partial.size(), [](std::string_view) { return true; }), partial.size());
+    EXPECT_EQ(partial, "{\"half");
+    // A handler that drops the connection: nothing more is handled, moved or wiped (the dropper wiped the buffer).
+    std::string dropped = "x\ny\nz";
+    int         calls   = 0;
+    EXPECT_EQ(takeLines(dropped.data(), dropped.size(), [&](std::string_view) { return ++calls < 1; }), 0u);
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(dropped, "x\ny\nz");
 }
 
 // --- the bound ---------------------------------------------------------------------------------------------------------
