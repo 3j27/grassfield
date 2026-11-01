@@ -1,0 +1,22 @@
+#!/bin/sh
+# grassfield-pacman-watch: pacman's local database changed (grassfield-pacman-watch.path; ADR-0041 step 2b, U31). Once the
+# burst of a transaction has settled, ask the shell for a Software Update check (`update check system`: not a user's check,
+# so a toolkit package replaced under the session is announced, U31). The shell runs its checker, which lists the toolkit as
+# installed; a check that finds pacman mid-transaction is followed by the next trigger's. Exit 0 whatever the shell answers
+# (no shell: nothing to ask, and the scheduled checks still run). Read-only; nothing runs as root.
+#   GRASSFIELD_PACMAN_WATCH_SETTLE   seconds to wait first (default 5)       } read in a dev session only (GRASSFIELD_DEV=1
+#   GRASSFIELD_PACMAN_WATCH_IPC      the command run instead of qs ipc       } outside the session), as grassfield-lid's knobs
+set -u
+# The call must not be defeatable by the session's environment: a stray QS_MANIFEST or QS_CONFIG_NAME made `qs ipc -p` exit
+# 108 (re-review of bf9e280, M1); the unit clears the same, and the helper's knobs.
+unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
+settle=5
+ipc="qs ipc -p /usr/share/grassfield/shell"
+if [ "${GRASSFIELD_DEV:-}" = 1 ] && [ "${GRASSFIELD_SESSION:-}" != 1 ]; then
+  settle=${GRASSFIELD_PACMAN_WATCH_SETTLE:-$settle}
+  ipc=${GRASSFIELD_PACMAN_WATCH_IPC:-$ipc}
+fi
+sleep "$settle"
+# shellcheck disable=SC2086  # $ipc is a command with its options
+timeout -k 0.2 5 $ipc call update check system
+exit 0

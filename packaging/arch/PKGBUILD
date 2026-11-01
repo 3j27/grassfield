@@ -295,9 +295,11 @@ package_grassfield-desktop() {
   find "$root/packaging/session-bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/session-bin/" {} +
   install -Dm644 "$root/packaging/sddm/grassfield.conf" "$pkgdir/etc/sddm.conf.d/grassfield.conf"
   install -Dm644 "$root/packaging/sddm/grassfield-login.desktop" "$pkgdir/usr/share/grassfield/sddm/wayland-sessions/grassfield-login.desktop"
-  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal shell-failed security; do
+  for unit in crash-watch battery-watch migrate-notify automount secrets-handover portal-settings portal shell-failed security pacman-watch; do
     install -Dm644 "$root/packaging/systemd/grassfield-$unit.service" "$pkgdir/usr/lib/systemd/user/grassfield-$unit.service"
   done
+  # ADR-0041 step 2b (U31): the path unit that starts grassfield-pacman-watch.service when pacman's local database changes.
+  install -Dm644 "$root/packaging/systemd/grassfield-pacman-watch.path" "$pkgdir/usr/lib/systemd/user/grassfield-pacman-watch.path"
   for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
     install -Dm644 "$root/packaging/systemd/$unit.service.d/10-grassfield.conf" \
       "$pkgdir/usr/lib/systemd/user/$unit.service.d/10-grassfield.conf"

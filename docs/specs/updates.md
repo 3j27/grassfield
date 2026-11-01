@@ -260,9 +260,12 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   updating Grassfield" with "Log Out…" and the subtitle "Some of the update is used only after you log in again."; the
   log out stays due until the session ends, through a restart of the shell (re-read from the file). A package installed
   before the session started is what the session already runs on, and asks for nothing. Where the check comes from: the
-  scheduled checks (U7), the check `omarchy update` asks for at its end (U9) and Update Now's own; a `pacman -Syu` typed in
-  a terminal is seen by the next scheduled check or at the next login (the path unit that watches pacman's database is
-  step 2b's second slice).
+  scheduled checks (U7), the check `omarchy update` asks for at its end (U9), Update Now's own, and `grassfield-pacman-watch`:
+  a user path unit watches `/var/lib/pacman/local` (it changes at every transaction, readable by every user) and starts a
+  oneshot service that waits 5 s for the transaction's burst to settle and asks the shell for a check (origin `system`,
+  announced as a scheduled check is), so a `pacman -Syu` typed in a terminal is seen within seconds of its end. The shell's
+  reloads of the session configuration (a display trial, the input files) wait while pacman holds its database lock
+  (`/var/lib/pacman/db.lck`), at most 10 s, so a trial never reloads a half-written tree.
 - U30. A failure before any change says "The update could not be installed. Nothing was changed." (offline, a mirror, a
   download, a plan pacman refuses or that cannot be read); once the checked sync databases became the system's, it says "The
   update could not be installed." and "The updates were not installed…" instead (and the terminal answer of U28 the same);

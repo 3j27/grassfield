@@ -475,10 +475,12 @@ Singleton {
 
         // ADR-0033 d.7, U9: a check, which joins one already running. "user": Settings or Grassfield Store (what it finds is
         // shown there, never announced); "omarchy": the omarchy-shell shim from inside `omarchy update` (its lock is held:
-        // the checker answers update-running and the waiter checks once it is released). Answers "ok", or "refused" for
-        // another origin. It starts only Grassfield's own checker and returns nothing it found.
+        // the checker answers update-running and the waiter checks once it is released); "system": grassfield-pacman-watch
+        // (ADR-0041 step 2b, U31: pacman's local database changed, the transaction's burst settled; announced as a scheduled
+        // check is). Answers "ok", or "refused" for another origin. It starts only Grassfield's own checker and returns
+        // nothing it found.
         function check(origin: string): string {
-            if (origin !== "user" && origin !== "omarchy")
+            if (origin !== "user" && origin !== "omarchy" && origin !== "system")
                 return "refused";
             root.request(origin);
             return "ok";
