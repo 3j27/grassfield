@@ -1510,6 +1510,171 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   bind-mount only in namespaces of its own. What remains, in the spec's known limitations: a trusted app running code of
   the user's through its own scripting maps no untrusted file (`emacs --batch -l`, `nvim -l`, an app's plugin
   interpreter) and still gets the app's row.
+  **Amended after the integrator's review of PR #95 (NIT, hardening).** A known caller ("Keyring", "GnuPG", "SSH") is named
+  only for a process in the bridge's own mount and user namespaces, as an app: a process in namespaces of its own can make
+  a trusted path name other files there. The mapped-code check stays an app's only ((c) above). Their user units
+  (`gnome-keyring-daemon.service`, `gcr-ssh-agent.service`, `gpg-agent.service`) use no namespace option, so nothing
+  changes for them. Tests: `tst_prompter.cpp` (`KnownCallersAskOnSomeoneElsesBehalf`, and a real child in a user and mount
+  namespace of its own running a known program: unidentified); mutant `known-caller-in-any-namespace`.
+
+**Delivered in step 9b (the shell's queue and secret sheets; udiskie is 9c, the NetworkManager agent 9d, KIO's password
+server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31").
+- **The client** (`shell/security/secret/PrompterClient.qml`, the pure rules in `Prompter.js`): one Quickshell `Socket` to
+  `$XDG_RUNTIME_DIR/grassfield/prompter.sock`; in a dev session only to the test socket `GRASSFIELD_PROMPTER_SOCKET` names
+  (9-21). Its hello names the kinds it draws (`password`, `confirm`). The bridge is read strictly (9-20): a line that is not
+  exactly one of its messages closes the connection, which the bridge treats as the shell's departure (every request
+  "cancelled", the name released); a cancel for an id the shell does not hold is ignored. One answer per request, only for
+  an id it holds (`answer()` forgets the id before it writes). A lost connection drops every request and is tried again
+  after 1 s, doubling to 30 s, reset by the bridge's next hello. Quickshell 0.3.2's `Socket` is never closed from inside its
+  own signals (`tests/ci/socket_errors.py`).
+- **The one queue** (`shell/security/SheetQueue.{qml,js}`, made by `shell.qml` and given to both agents): one sheet on
+  screen at a time, in arrival order across the polkit sheet and the secret sheets; a place is kept until its sheet is gone
+  (answered, cancelled, withdrawn, and the key sink's linger after it over); the end of a sheet is said before the queue
+  changes, so the next sheet arrives as one "right after another" (held). How polkit joins it: 9-15.
+- **The secret agent** (`shell/security/secret/SecretAgent.qml`): the polkit agent's reviewed window rules in the same code
+  shape (nothing over the lock, held after an unlock, the screen saver, another sheet or a wait in the queue, shown without
+  the keyboard until a click past the 500 ms guard; the fields emptied after each attempt and whenever the sheet hides; the
+  key sink and its linger; Esc on the sink cancels), layer namespace `grassfield-secret`, Overlay layer, the keyboard
+  `Exclusive` only while it may type. A request never replaces the one on screen: it waits in the queue. At most 8 secret
+  requests are held (shown or waiting); the ninth is answered "cancelled" at once; a polkit request is never refused by that
+  bound. An "ok" is sent only for the request on screen with the keyboard (never behind the lock, never held); a cancellation
+  whenever its sheet is open. Each request gets a serial number when it arrives, so an answer to an earlier request never
+  stands for a later one with the same id (a bridge that restarts counts its ids from p1 again). A password sent keeps the keys on the sink a moment (9-19). `SessionState.authorizing` covers the
+  secret sheets too (the clipboard history records nothing meanwhile). Dev hook `secrets state` (counts only, refused outside a
+  dev session; security.md IPC table).
+- **The sheet** (`SecretSheet.qml`, `SecretSheetModel.qml`): a macOS alert, never the authorization sheet (9-18): the
+  requester's icon and a title naming it in Grassfield's words (only the bridge's requester: an app's desktop name, "Keyring",
+  "GnuPG", "SSH", "Unidentified program" with its executable path in the secondary style); then the caller's title, message,
+  description and warning in a framed block introduced as the caller's text, under an on-behalf row as another program's
+  unverified text (spec SC3b); the password field (`PasswordField`, `ImhSensitiveData`), or New and Verify with a strength
+  meter (9-17) for a new password, none for a confirmation; the caller's check box; Cancel and OK, Grassfield's labels (9-16).
+  Two own glyphs, `key` and `exclamationmark-triangle` (branding/icons/symbolic).
+- **The polkit agent** (`shell/security/polkit/AuthAgent.qml`, 9-15): a `queue` property, `waiting`, `queuePresent`, the
+  gated `flow` binding and one handler; nothing else of it changed, and every polkit test passes unchanged
+  (`authagent_flows.sh` with its 26 mutants, `lock_surfaces.sh` with its 253 checks, `mutate_authdialog.sh`, `tst_authdialog*.qml`).
+  `PasswordField.qml` gains `allowEmpty` (default false: the lock and the polkit sheet unchanged) and `length` (9-17, 9-20).
+- **Hyprland** (`config/hypr/grassfield/privacy.lua`, 9-22): `no_screen_share` layer rules for `grassfield-secret` and
+  `grassfield-polkit`; `windows.lua`'s blur fallback lists `secret`.
+- **Tests.** `tests/security/tst_prompter.qml` (52: the bridge's lines read strictly, the flattening rule, the answer lines,
+  the socket path rule, the back-off), `tst_sheetqueue.qml` (5), `tst_secretsheetmodel.qml` (19);
+  `tests/security/secret_sheets.sh` (the real agents with their Quickshell types replaced, the real sheets and queue, real
+  keys and clicks: 20 cases after the opus review, run beside the model's unit test, and 14 static checks; `--mutants`: 27
+  mutants, all caught);
+  `tests/security/secret_bridge.sh` (44 checks)
+  (the real client and agent in an offscreen Quickshell against a fake bridge, and the real bridge on a private bus with
+  libgcr's client: a password the shell answers reaches the gcr client through the exchange; `--mutants`: 7, all caught);
+  `tests/security/screenshare_rules.sh` (the layer rules, with a mutation). Nested and visual: NOT VERIFIED (the scenario is
+  in the spec's acceptance criteria, A-SC7).
+- **The opus security review of step 9b: FAIL** (one major, one minor, two nits; the polkit gate, the linger, the answer
+  rule, the parser, the phishing rules, the layer rules and the dev gating found sound), fixed on top of the step: MAJOR-1
+  (an unheld confirmation answered by one stray key) by 9-23; MINOR-1 (an empty new password sent by one stray Return) by
+  9-24; NIT-1 (a polkit request arriving during a linger keeps the earlier place) recorded in 9-15 and the spec's known
+  limitations; NIT-2 (the shell reads whatever serves the socket path) in the spec's known limitations.
+- **The integrator's opus security review of PR #95: FAIL on gate Q1 only** (no security defect): qmllint on the owner's
+  toolchain (Qt 6.11.2, Quickshell 0.3.1) reports `signal-handler-parameters` on `PrompterClient.qml`'s `onError`
+  (`Socket.error` carries a `QLocalSocket::LocalSocketError`, a type that qmllint does not know there): the line is wrapped
+  in `qmllint disable/enable signal-handler-parameters`, as the shell's other such handlers; no other handler of the step
+  takes a C++-typed parameter. The container's Qt 6.12 does not report it (not reproduced here). Folded in, from the review of
+  PR #94 (step 9a's code, which failed closed; these paths had no test): `tests/security/prompter_bridge.sh` checks that a
+  connected shell gets no name before its hello and that a request reaching the bridge with no shell, or before the hello,
+  is answered "cancelled" at once (`prompter-client.py --prompter`); the bridge's line handling moves to `takeLines`
+  (`Protocol.h`), whose wiping of every handled line and of the bytes the rest leaves behind is unit-tested; the pidfd's
+  re-check after the reads is unit-tested through a seam (`exeFactsOfPidfd`'s `beforeRecheck`, tests only); known callers
+  now need the bridge's mount and user namespaces too (9-14 amended); `tests/fuzz/prompter_protocol.sh` fuzzes the shell's
+  side of the protocol (libFuzzer when clang++ is there, else a mutation loop under GCC's ASan and UBSan); `tests/ci/import_graph.py`
+  checks that `shell/shell.qml` alone imports `qs.security.secret`; `prompter_bridge.sh --mutants` builds and runs six
+  mutants of these guards (the name before the hello, the two wipes, the answer without a shell, the re-check, the known
+  callers' namespaces), each caught. 9-23 gains the integrator's decision on one click on OK.
+
+**Decisions of step 9b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **9-15. How does the polkit sheet join the one queue?** Quickshell 0.3 hands the agent one request at a time (a new one
+  replaces the open one in the same sheet) and the agent's window rules are the result of six reviews. Options: (a) gate the
+  request handed to the polkit sheet: while a secret sheet came first, the model is given no request at all (`flow:
+  agent.isActive && !root.waiting ? agent.flow : null`), so nothing of it is mapped, focused or held; when its turn comes the
+  request arrives as one "right after another" (the queue tells the polkit model a secret sheet ended, `noteEnded`, before it
+  changes), held, without the keyboard until a click past the guard; (b) a `waiting` input read by the window's `shown`,
+  `visible` and `takesKeys` bindings (the reviewed lines change, and at a request's arrival a binding could map the window for
+  a moment before the queue placed the request); (c) one agent hosting both kinds of sheet (a rewrite of the reviewed agent).
+  **Choice: (a).** Rule applied: "If integrating the polkit agent into a shared queue needs changes in AuthAgent.qml, keep them
+  minimal" (the step's brief) and R12's "no sheet takes the keyboard from another". The changes, each needed: the `queue`
+  property (null outside the shell: the agent's own harness runs unchanged); `waiting` (the queue says a secret sheet came
+  first; a request with no place yet counts as arriving now, behind every queued secret request, so the binding is right
+  whatever order the bindings run in); `queuePresent` (the polkit sheet's place: from a request's arrival until its sheet is
+  gone, the linger included; `shell.qml` binds the queue to it); the gated `flow`; the `noteEnded` handler. What it costs: a
+  polkit request that waited prints the time it was handed to the sheet, "right after another one", not when polkit sent it;
+  a newer polkit request still replaces the open or waiting one (Quickshell's behaviour) and keeps its place. **Amended after
+  the opus review of step 9b (NIT-1):** that place is kept while the polkit sheet is present, its key sink's linger included,
+  so a polkit request that arrives during the linger after an earlier one is shown before a secret request queued meanwhile
+  (out of arrival order; it is held, with the keys on the sink: the keyboard rule holds). Giving it a new place would need
+  two polkit places (the linger's, before the secret request, and the new request's, after it), which Quickshell's one
+  request at a time does not provide; recorded in the spec's known limitations.
+- **9-16. The caller's button labels.** Options: (a) the caller's `continue` and `cancel` labels when given (the first
+  version of SC3); (b) Grassfield's "Cancel" and "OK" always. **Choice: (b).** Rule applied: R12 (a secret sheet never looks
+  like the authorization sheet; who asks is never the caller's text): a caller could label its button "Allow" or
+  "Authenticate"; macOS's keychain alerts keep their own labels. The labels still reach the bridge's log, never the screen.
+- **9-17. The new password's strength meter.** Options: (a) a score from the characters (as gcr's own dialog); (b) the length
+  only (0 empty, weak under 8, fair under 12, strong). **Choice: (b).** Rule applied: SC5 (the shell keeps no copy it does not
+  need): reading the text at every key would make a JavaScript copy of the password per key; the length is read from the
+  field (`PasswordField.length`) without one, and length is what makes a password strong (NIST SP 800-63B). The caller is
+  told 0 or 1 by the bridge (9-12).
+- **9-18. The sheet's shape and rows.** Options: (a) the authorization sheet's frame with another glyph; (b) the alert of the
+  shell's dialogs (`shell/overlay/Dialog.qml`: 260 wide, its radius, the icon at the top left, a bold title, left-aligned
+  text, capsule buttons of one width) with the requester's icon and a title naming it, then the caller's text framed and
+  introduced as the caller's. **Choice: (b)**, drawn in `shell/security/secret` with `Grassfield.Ui` only (security modules
+  import no UI module; the frame moves into `Grassfield.Ui` when a surface outside the shell needs it, Common rule 1). The
+  caller's warning is shown in the danger colour inside that block, not under the field (the first version of SC3): under
+  the field it read as the sheet's own error. The glyphs: a key for Keyring, GnuPG and SSH, a warning triangle for an
+  unidentified program, an app's theme icon (a plain name, through `ThemeIcons`) else the apps glyph. Rule applied: macOS
+  (its keychain prompt is an alert naming the app), R12 (never the authorization sheet: no lock or shield, never
+  "Authentication required", another shape, width and title).
+- **9-19. When is a secret sheet held, and when do the keys linger?** **Choice:** the polkit sheet's rules (locked, the
+  screen saver, within 1 s of an unlock or of another sheet's end), plus a request that waited in the queue behind another
+  sheet ("waited": its notice says it arrived while another one was open). The sink lingers after a request withdrawn under
+  the user's typing (as polkit's) and after a password sent ("Password sent"; up to 1 s without a key, at most 3 s): gcr's
+  callers ask again after a wrong password with a new request, which a moment later would otherwise find the keyboard back
+  on the window underneath while the user retypes. A cancellation or a confirmation gives the keyboard back at once. Rule
+  applied: R12 (no sheet takes the keyboard from another; nothing typed for one request reaches another or the window
+  underneath); the polkit sheet's reviewed rules reused, never weakened.
+- **9-20. What the shell accepts from the bridge.** **Choice:** exactly the messages of prompter/1 with exactly their keys and
+  types, texts within the bridge's caps (flattened again by the shell's copy of decision 9-13's rule), a requester consistent
+  with its role, only the kinds of its hello; anything else, a line over 16384 UTF-16 units, a duplicate id, a prompt before
+  the bridge's hello closes the connection; the bridge's `error` before its hello is its refusal (logged, then closed); a
+  `cancel` for an id the shell does not hold is ignored (it crossed the shell's answer). An empty password is sent only for a
+  new password (gcr then offers to store passwords unencrypted, as Omarchy's default keyring is); an unlock field that is
+  empty sends nothing, as the polkit sheet. Rule applied: D-9 (fail closed: never an answer invented); the bridge's own
+  rules (9-6, 9-11).
+- **9-21. Who connects, in which session.** **Choice:** outside a dev session `$XDG_RUNTIME_DIR/grassfield/prompter.sock`
+  only, whatever the environment says; in a dev session only the socket of `GRASSFIELD_PROMPTER_SOCKET` (ADR-0019 dev
+  plumbing: `shell.qml` reads it through `Mode.devValue`, the security module uses it only behind its own `RunMode.dev` gate),
+  else nothing. Rule applied: ADR-0019 (a dev shell never reaches the user's bridge; a leaked value changes nothing in a real
+  session); `tests/ci/run_mode.py` (security modules read no other `GRASSFIELD_*` variable).
+- **9-23. Can a confirmation take the keyboard when it arrives?** (opus review of step 9b, MAJOR-1.) Question: a
+  confirmation with no other reason to be held took the keyboard at once with OK focused, so one stray Space, Return or Enter
+  granted it; a program of the user can make gpg-agent or gcr-ssh-agent ask for a confirmation at a moment of its choosing
+  (an SSH key marked "confirm" used through a forwarded agent), while the user types elsewhere. The polkit sheet never allows
+  this (its field has the focus, and Allow with an empty field sends nothing). Options: (a) every confirmation is held: shown
+  without the keyboard until a click past the 500 ms guard, the keys staying with the window the user was typing in; (b) it
+  takes the keyboard with no button focused and ignores activation keys until a click or Tab. **Choice: (a).** Rule applied:
+  R12 (no answer from a key typed for something else), the reviewed hold reused (its guard, its click, its notice: "Click
+  the alert to answer it: no key answers a confirmation before that."), never a new mechanism; (b) would also swallow what
+  the user was typing elsewhere. After the click, OK has the focus and Return answers, as on macOS. Tests: `secret_sheets.sh`
+  test_19 (Space, Return and Enter with OK focused send nothing; a click within the guard gives nothing; past it Return
+  answers), test_14 amended; mutant `confirm-not-held`. **Decided by the integrator on 2026-11-01** (review of PR #95,
+  closest to macOS: a pairing sheet's Connect button): one click on OK, past the 500 ms guard, confirms a confirmation sheet
+  (the click both lets the alert take the keyboard and presses OK); within the guard it answers nothing. Test:
+  `secret_sheets.sh` test_21.
+- **9-24. Can a stray Return send an empty new password?** (opus review of step 9b, MINOR-1.) Question: Return in New took
+  both fields at once, so one Return on an untouched New and Verify sheet answered with an empty password (gcr then stores
+  passwords unencrypted). **Choice:** Return in New only moves the focus to Verify and hands nothing over
+  (`PasswordField.submitOnReturn`, default true: the lock and the polkit sheet unchanged); Return in Verify takes both fields
+  but sends nothing when both are empty; an empty new password goes out only from OK (a click, or Space or Return once Tab
+  reached it). Rule applied: R12, 9-20 (an empty new password stays possible, but only deliberately). Tests: test_20, test_13
+  amended; mutants `empty-new-password-by-return`, `return-in-new-submits`.
+- **9-22. Screen sharing.** **Choice:** `no_screen_share` layer rules for `grassfield-secret` and, as D-9 proposed under the
+  same review, `grassfield-polkit` (`config/hypr/grassfield/privacy.lua`; Hyprland 0.56.2 accepts the key for layers,
+  `LayerRuleEffectContainer.cpp:23`, and `Hyprland --verify-config` refuses a misspelt one). Both sheets' layers cover the
+  output (the dimmed backdrop), so a shared or captured output is black while a sheet is up: macOS hides its secure prompts
+  from captures too. Rule applied: SC4.
 
 ### D-10. What Omarchy still shows (category D; O1–O11)
 - **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):

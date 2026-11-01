@@ -194,6 +194,7 @@ does not check its gate.
 | idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
 | saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
+| secrets | state | dev | the secret sheets' state (ADR-0035 D-9, step 9b): the bridge connection, the name's state, counts of the shown, held, waiting and lingering requests; never a requester or a text (`tests/security/secret_bridge.sh`) |
 | search | toggle | action | SUPER+SPACE |
 | search | clipboard | action | SUPER+CTRL+V (Search in its Clipboard view, ADR-0034; again closes it; refused while locked through `show()`) |
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
@@ -245,7 +246,7 @@ Grassfield processes that serve the security modules over a Unix socket of their
 
 | Socket | Server | Who may connect | What it carries |
 |---|---|---|---|
-| `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600) | `grassfield-prompter` (ADR-0035 D-9, step 9a; `grassfield-prompter.service`) | one peer at a time, running as the user, whose cgroup is the unit of the bridge's `--peer-unit` (`grassfield-shell.service`, only slices above it up to the user's manager), read through `SO_PEERPIDFD` (a peer without a pidfd is refused, except on a kernel without `SO_PEERPIDFD`); a refused peer gets `refused` and is closed, the refusals logged once per 10 s | `prompter/1` (docs/specs/system-dialogs.md section 5): the bridge sends the requests of gcr callers (with the requester it resolved from their bus credentials) and their withdrawals; the shell sends its hello and its answers, a password once per answer. Nothing it accepts runs a command, unlocks, or reaches polkit; a wrong or unattributable line cancels requests, never invents an answer. No shell connects before step 9b |
+| `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600) | `grassfield-prompter` (ADR-0035 D-9, step 9a; `grassfield-prompter.service`) | one peer at a time, running as the user, whose cgroup is the unit of the bridge's `--peer-unit` (`grassfield-shell.service`, only slices above it up to the user's manager), read through `SO_PEERPIDFD` (a peer without a pidfd is refused, except on a kernel without `SO_PEERPIDFD`); a refused peer gets `refused` and is closed, the refusals logged once per 10 s | `prompter/1` (docs/specs/system-dialogs.md section 5): the bridge sends the requests of gcr callers (with the requester it resolved from their bus credentials) and their withdrawals; the shell sends its hello and its answers, a password once per answer. Nothing it accepts runs a command, unlocks, or reaches polkit; a wrong or unattributable line cancels requests, never invents an answer. The shell's client (`shell/security/secret/PrompterClient.qml`, step 9b) connects in a real session to this socket only, and in a dev session only to the test socket that `GRASSFIELD_PROMPTER_SOCKET` names (ADR-0019 dev plumbing, passed by `shell.qml`; ignored in a real session); it reads the bridge strictly and closes the connection on any line it does not expect |
 
 ## Lock coverage: restart, Omarchy's sleep-lock, failing inhibitor (GF-030, D-12)
 macOS model: the screen always locks before sleep, and the lock never silently goes away.
@@ -692,7 +693,10 @@ Omarchy `no_screen_share` rule; fixture tree with a new app, a table match, an `
 never run; a `1password.lua` that stops before its rule still leaves 1Password protected; nothing readable;
 wiring; mutation "keep every rule" fails it), `Hyprland --verify-config` in `just check` (a misspelt key fails it), and
 nested `lock_privacy.sh screenshare` (DT-05: a window with app_id `Bitwarden` is black in a `grim` capture; NOT
-VERIFIED until run).
+VERIFIED until run). The same file hides the shell's secret sheets and its authorization sheet: layer rules
+`gf-no-screen-share-secret` (`^grassfield-secret$`) and `gf-no-screen-share-polkit` (`^grassfield-polkit$`), `no_screen_share`
+(ADR-0035 D-9, step 9b, decision 9-22; `screenshare_rules.sh` checks both regexes against the namespaces the agents set, with
+a mutation). Both layers cover the output, so a capture is black while either sheet is up (nested capture NOT VERIFIED).
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
 - Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
@@ -771,6 +775,16 @@ theme's icon (Qt searches only directories the user cannot change, `ui/i18n/icon
 from a user icon of that name (see security-images.md, `tests/security/theme_icon_files.sh`); else the lock alone; the Image
 loads asynchronously, review of 100692f). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
 `test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
+
+**One queue with the secret sheets (ADR-0035 D-9, step 9b, decision 9-15).** The polkit sheet and the secret sheets of
+`shell/security/secret` share one queue (`shell/security/SheetQueue.qml`, made by `shell.qml`): one sheet on screen at a time,
+in arrival order. While a secret sheet came first, the polkit agent hands its model no request (`AuthAgent.waiting`, the gated
+`flow`): nothing of it is mapped, focused or held, and nothing is answered meanwhile. When the secret sheet is gone, the queue
+tells the polkit model a sheet ended before it hands the request over, so the request arrives held ("right after another
+one"), without the keyboard until a click past the guard. The polkit sheet keeps its place while it is present, its linger
+included (`AuthAgent.queuePresent`), so a secret sheet never shows over it. A polkit request is never refused by the secret
+sheets' bound of 8. The agent's window rules are unchanged (`tests/security/authagent_flows.sh`, `lock_surfaces.sh`);
+`tests/security/secret_sheets.sh` runs both agents and the queue together with real keys.
 
 ## L5 polkit (owner, real session)
 Never `pkexec` a real program for this test; `pkcheck` only asks polkit whether this terminal's shell may run the action

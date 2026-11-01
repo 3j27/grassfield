@@ -2,9 +2,11 @@
 """gcr clients and name holders for tests/security/prompter_bridge.sh (ADR-0035 D-9), on a private test bus only.
 
   password [--title T] [--message M] [--description D] [--warning W] [--choice LABEL] [--new] [--close-when FILE]
+           [--prompter NAME]
       a real gcr-4 client (libgcr's GcrSystemPrompt, the sx-aes-1 exchange included) asks the system prompter for a
       password; prints "password=<what it received>" (and "choice=0|1") or "cancelled". --close-when: closes the prompt
-      (StopPrompting) as soon as FILE exists, and prints "closed".
+      (StopPrompting) as soon as FILE exists, and prints "closed". --prompter: ask NAME (a unique name: the bridge reached
+      without its well-known name, as a client that found it earlier) instead of the system prompter's name.
   confirm [--title T] ...          the same for a confirmation: prints "continue" or "cancel"
   many N                           N prompts at once from one process: prints "<i> password=..." or "<i> cancelled"
   forge --caller NAME              speaks gcr's protocol by hand (BeginPrompting, then PerformPrompt with the exchange) and
@@ -56,7 +58,7 @@ def private_bus_only():
 
 
 def open_prompt(args):
-    prompt = Gcr.SystemPrompt.open_for_prompter(NAME, 5, None)
+    prompt = Gcr.SystemPrompt.open_for_prompter(args.prompter or NAME, 5, None)
     if args.title:
         prompt.set_title(args.title)
     if args.message:
@@ -331,6 +333,7 @@ def main():
     ap.add_argument("--log")
     ap.add_argument("--flags", type=int, default=0)
     ap.add_argument("--caller")
+    ap.add_argument("--prompter")
     args = ap.parse_args()
     if args.mode in ("password", "confirm"):
         ask(args, args.mode)

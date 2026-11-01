@@ -13,7 +13,7 @@
 -- The matches Omarchy 4.0.x ships are always applied as well (duplicates dropped), so a file that stops early, moves or
 -- disappears never leaves 1Password or Bitwarden unprotected (fail safe). Loaded by core.lua in both the real and the
 -- nested session. Returns { source = "omarchy"|"builtin" (nothing read from Omarchy), matches = { <match table>... },
--- skipped = { "<file>: <error>"... } }.
+-- skipped = { "<file>: <error>"... }, layers = { <namespace regex>... } (the shell's sheets, below) }.
 
 local M = { source = "omarchy", matches = {}, skipped = {} }
 
@@ -144,5 +144,13 @@ end
 for i, match in ipairs(M.matches) do
   hl.window_rule({ name = "gf-no-screen-share-" .. i, match = match, no_screen_share = true })
 end
+
+-- The shell's password sheets and its authorization sheet (ADR-0035 D-9, step 9b): their layer surfaces are hidden from
+-- screen sharing and screencopy (Hyprland 0.56.2 accepts no_screen_share for layers,
+-- src/desktop/rule/layerRule/LayerRuleEffectContainer.cpp:23, and draws such a layer black in a capture). Both layers cover
+-- the output while a sheet is up (the dimmed backdrop), so a capture is black meanwhile. Fixed names, nothing read.
+M.layers = { "^grassfield-secret$", "^grassfield-polkit$" }
+hl.layer_rule({ name = "gf-no-screen-share-secret", match = { namespace = M.layers[1] }, no_screen_share = true })
+hl.layer_rule({ name = "gf-no-screen-share-polkit", match = { namespace = M.layers[2] }, no_screen_share = true })
 
 return M

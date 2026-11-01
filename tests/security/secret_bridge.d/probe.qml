@@ -1,0 +1,102 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import Quickshell
+import qs.security
+import qs.security.secret
+
+// The shell's real prompter/1 client in Quickshell (tests/security/secret_bridge.sh copies this as shell.qml next to links
+// to the real shell modules; offscreen, no compositor). PROBE_MODE:
+//   client  PrompterClient on PROBE_SOCKET, answering as a user would by the request's title: "answer-ok" (the password
+//           "pw-<id>", or ok for a confirmation), "answer-cancel", "answer-twice" (a second answer must be refused),
+//           "answer-late" (after the bridge withdrew it: refused), "leave" (no answer);
+//   agent   the real SecretAgent with a SheetQueue, its dev socket PROBE_SOCKET; prints its dev state (devState) when it
+//           changes.
+// Prints "probe: <event>" lines; the test reads them and the fake bridge's PASS/FAIL lines.
+ShellRoot {
+    id: root
+
+    settings.watchFiles: false
+
+    readonly property string mode: Quickshell.env("PROBE_MODE")
+    property var client: null
+    property var agent: null
+    property string lastState: ""
+
+    function log(text: string): void {
+        console.info("probe: " + text);
+    }
+
+    function answerAs(request: var): void {
+        const c = root.client;
+        const title = request.texts.title;
+        const password = request.kind === "password" ? "pw-" + request.id : null;
+        const choice = request.choice !== null && request.choice.chosen;
+        root.log("prompted " + request.id + " " + request.kind + " " + request.requester.role + " " + title);
+        if (title === "answer-ok")
+            root.log("answer " + request.id + " " + c.answer(request.id, true, password, choice));
+        else if (title === "answer-cancel")
+            root.log("answer " + request.id + " " + c.answer(request.id, false, null, choice));
+        else if (title === "answer-twice")
+            root.log("answer " + request.id + " " + c.answer(request.id, true, password, choice) + " second=" + c.answer(request.id, true, "again", choice));
+        else if (title === "answer-late")
+            lateTimer.pending = request;
+    }
+
+    Timer {
+        id: lateTimer
+        property var pending: null
+        interval: 300
+        running: pending !== null
+        onTriggered: {
+            const r = pending;
+            pending = null;
+            root.log("late answer " + r.id + " " + root.client.answer(r.id, true, "pw-" + r.id, false));
+        }
+    }
+
+    Component {
+        id: clientC
+        PrompterClient {
+            path: Quickshell.env("PROBE_SOCKET")
+            shellVersion: "probe"
+            onPrompted: request => root.answerAs(request)
+            onWithdrawn: id => root.log("withdrawn " + id)
+            onLost: root.log("lost")
+            onStateChanged: root.log("state " + state)
+        }
+    }
+
+    SheetQueue {
+        id: sheetQueue
+    }
+
+    Component {
+        id: agentC
+        SecretAgent {
+            queue: sheetQueue
+            devSocket: Quickshell.env("PROBE_SOCKET")
+            shellVersion: "probe"
+        }
+    }
+
+    Timer {
+        interval: 100
+        repeat: true
+        running: root.agent !== null
+        onTriggered: {
+            const s = root.agent.devState();
+            if (s !== root.lastState) {
+                root.lastState = s;
+                root.log("devState " + s);
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.mode === "client")
+            root.client = clientC.createObject(root);
+        else if (root.mode === "agent")
+            root.agent = agentC.createObject(root);
+        root.log("started " + root.mode);
+    }
+}
