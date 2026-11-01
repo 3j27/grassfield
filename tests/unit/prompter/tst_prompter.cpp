@@ -942,8 +942,14 @@ TEST_F(PrompterTrust, EntriesThatDoNotCount) {
 
 TEST(PrompterIdentityList, KiosWorkerIsTheKioRole) {
     bool found = false;
-    for (const KnownCaller& k : knownCallers())
-        found = found || (k.path == QStringLiteral("/usr/lib/kf6/kioworker") && k.role == QStringLiteral("kio"));
+    for (const KnownCaller& k : knownCallers()) {
+        found = found || (k.path == QStringLiteral("/usr/lib/kf6/kioworker") && k.role == QStringLiteral("kio") && k.trustedCodeOnly);
+        // The other known callers keep their role with extra code (decision 9-14); only the worker, which loads a plugin
+        // from any path, needs trusted code (the security review of step 9e, MINOR-2).
+        if (k.role != QStringLiteral("kio")) {
+            EXPECT_FALSE(k.trustedCodeOnly) << k.path.toStdString();
+        }
+    }
     EXPECT_TRUE(found);
 }
 
@@ -1007,6 +1013,40 @@ TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
     ExeFacts keyringPlugins = facts(bin(QStringLiteral("keyringd")));
     keyringPlugins.code.append(CodeMapping{QStringLiteral("/home/u/.local/lib/evil.so"), 0, 1, 7});
     EXPECT_EQ(requesterFor(keyringPlugins, where()).role, QStringLiteral("keyring"));
+}
+
+// KIO's worker loads whatever plugin its command line names, from any path (KIO 6.31.0 kioworker.cpp:49-65): its row is
+// lent only while every file it maps executable is trusted (the security review of step 9e, MINOR-2).
+TEST_F(PrompterTrust, KiosWorkerRowNeedsOnlyTrustedCode) {
+    writeFile(bin(QStringLiteral("worker")), "#!/bin/sh\n", 0755);
+    writeFile(m_top + QStringLiteral("/usr/bin/kio_ftp.so"), "\x7f" "ELF", 0644);
+    const CodeMapping plugin = fileMapping(m_top + QStringLiteral("/usr/bin/kio_ftp.so"), selfMountDevices());
+    ASSERT_NE(plugin.inode, 0u);
+    Where w = where();
+    w.known.append(KnownCaller{bin(QStringLiteral("worker")), QStringLiteral("kio"), true});
+    ExeFacts worker = facts(bin(QStringLiteral("worker")));
+    worker.code.append(plugin);
+    const RequesterView kio = requesterFor(worker, w);
+    EXPECT_EQ(kio.role, QStringLiteral("kio"));
+    EXPECT_TRUE(kio.identified);
+    EXPECT_TRUE(kio.onBehalf);
+    // A plugin from the user's files, a replaced one, other namespaces, mappings not read: an unidentified program, the
+    // worker's executable named.
+    ExeFacts foreign = worker;
+    foreign.code.append(CodeMapping{QStringLiteral("/home/u/evil.so"), plugin.major, plugin.minor, plugin.inode});
+    const RequesterView borrowed = requesterFor(foreign, w);
+    EXPECT_EQ(borrowed.role, QStringLiteral("unidentified"));
+    EXPECT_FALSE(borrowed.identified);
+    EXPECT_EQ(borrowed.path, bin(QStringLiteral("worker")));
+    ExeFacts replaced = worker;
+    replaced.code.last().inode += 1;
+    EXPECT_EQ(requesterFor(replaced, w).role, QStringLiteral("unidentified"));
+    ExeFacts elsewhere       = worker;
+    elsewhere.sameNamespaces = false;
+    EXPECT_EQ(requesterFor(elsewhere, w).role, QStringLiteral("unidentified"));
+    ExeFacts unread  = worker;
+    unread.codeKnown = false;
+    EXPECT_EQ(requesterFor(unread, w).role, QStringLiteral("unidentified"));
 }
 
 TEST(PrompterIdentity, MapsAndStatusParsing) {
