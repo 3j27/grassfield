@@ -891,8 +891,9 @@ TestCase {
     // ADR-0040 step 2c: the shipped photographs' list. An entry of the wrong shape is left out, never shown half, and an id
     // is a plain name: it becomes a file name in the folder.
     function photoEntry(over) {
-        return Object.assign({id: "golden-mist", name: {en: "Golden Mist", fr: "Brume dorée"}, author: "A", credit: "A, CC BY 4.0",
-            licenseShort: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/", sourceUrl: "https://commons.wikimedia.org/wiki/File:X.jpg"}, over || {});
+        return Object.assign({id: "golden-mist", name: {en: "Golden Mist", fr: "Brume dorée"}, author: "A", credit: "© A, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+            licenseShort: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/", sourceUrl: "https://commons.wikimedia.org/wiki/File:X.jpg",
+            file: "Mist v1.2 over the field.JPEG"}, over || {});
     }
 
     function test_photosParse() {
@@ -907,14 +908,28 @@ TestCase {
         compare(WallpaperConfig.photoName(one[0], "fy_NL"), "Golden Mist");
         compare(WallpaperConfig.photoAt(one, dir + "/golden-mist.jpg").id, "golden-mist");
         compare(WallpaperConfig.photoAt(one, dir + "/other.jpg"), null);
-        compare(WallpaperConfig.photoAbout(one[0], "en").title, "Golden Mist");
+        // As its licence asks to be credited (the integrator's review of e067f26f): the work's own title (its file name without
+        // the extension), the author's line with its copyright notice (the licence's address is the Licence row's link), and
+        // Grassfield's changes; no author field, so the row reads Credit.
+        compare(one[0].title, "Mist v1.2 over the field");
+        const about = WallpaperConfig.photoAbout(one[0], "fr_FR");
+        compare(about.title, "Mist v1.2 over the field");
+        compare(about.credit, "© A, CC BY 4.0, via Wikimedia Commons");
+        compare(about.author, undefined);
+        compare(about.modified, true);
+        compare(about.licenseUrl, "https://creativecommons.org/licenses/by/4.0/");
         compare(WallpaperConfig.photoAbout(null, "en"), null);
+        compare(WallpaperConfig.photoCredit("A <https://x.org/a>, B <http://y.org/b>, C"), "A, B, C");
+        compare(WallpaperConfig.photoCredit("A <not a link>"), "A <not a link>");
+        compare(WallpaperConfig.photoCredit(undefined), "");
+        for (const [file, title] of [["a.jpg", "a"], ["a.png", "a"], ["a.tif", "a"], ["a.b.webp", "a.b"], ["no extension", "no extension"], ["a.svg", "a.svg"]])
+            compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry({file: file})]}), dir)[0].title, title, file);
         for (const text of ["", "{", "[]", "null", JSON.stringify({photos: {}}), JSON.stringify({photos: [null, 3, "x"]})])
             compare(WallpaperConfig.parsePhotos(text, dir), [], text);
         compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), "relative/dir"), []);
         const bad = [{id: "../etc/passwd"}, {id: "a/b"}, {id: "Golden"}, {id: ""}, {id: 3}, {name: {en: "x"}}, {name: {en: "x\u202ey", fr: "y"}},
             {author: ""}, {credit: undefined}, {licenseUrl: "http://creativecommons.org/"}, {sourceUrl: "file:///etc/passwd"},
-            {licenseShort: "x".repeat(600)}];
+            {licenseShort: "x".repeat(600)}, {file: ""}, {file: undefined}, {file: "a\u202eb.jpg"}];
         for (const over of bad)
             compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry(over)]}), dir), [], JSON.stringify(over));
         // Each id once: the second is left out.
@@ -936,8 +951,9 @@ TestCase {
         compare(WallpaperConfig.aboutEntryOf({source: "online", state: "waiting"}, online, photos, "en_US"), null);
         compare(WallpaperConfig.aboutEntryOf({source: "online", state: "ready"}, {}, photos, "en_US"), null);
         const shown = WallpaperConfig.aboutEntryOf({source: "file", state: "ready", path: dir + "/golden-mist.jpg"}, online, photos, "fr_FR");
-        compare(shown.title, "Brume dorée");
-        compare(shown.author, "A");
+        compare(shown.title, "Mist v1.2 over the field");
+        compare(shown.credit, "© A, CC BY 4.0, via Wikimedia Commons");
+        compare(shown.modified, true);
         compare(shown.licenseShort, "CC BY 4.0");
         compare(shown.sourceUrl, "https://commons.wikimedia.org/wiki/File:X.jpg");
         compare(WallpaperConfig.aboutEntryOf({source: "file", state: "preparing", path: dir + "/golden-mist.jpg"}, online, photos, "en"), null);
@@ -957,6 +973,10 @@ TestCase {
             xhr.send();
             return xhr.responseText.replace(/\/\/.*$/gm, "");
         }
+        // The card labels a photograph's row Credit and adds Grassfield's changes.
+        const card = read("shell/desktop/AttributionCard.qml");
+        verify(/\{label: root\.entry\.author \? root\.authorLabel : root\.creditLabel, value: root\.entry\.author \|\| root\.entry\.credit \|\| ""/.test(card));
+        verify(/\{label: root\.changesLabel, value: root\.entry\.modified === true \? root\.changesText : ""/.test(card));
         const icons = read("shell/desktop/IconsView.qml");
         verify(/aboutWallpaper: WallpaperState\.aboutEntry\(root\.screen\.name\) !== null/.test(icons), "the menu item for either attribution");
         verify(/AttributionCard \{\s*entry: WallpaperState\.aboutEntry\(root\.screen\.name\)/.test(icons), "the card shows the same entry");
@@ -1031,6 +1051,18 @@ TestCase {
         const photos = WallpaperConfig.parsePhotos(xhr.responseText, "/usr/share/grassfield/wallpapers/photos");
         compare(photos.length, 16);
         compare(photos.length, JSON.parse(xhr.responseText).photos.length, "no entry is left out");
+        // Each one's About This Wallpaper: its own title, a credit naming its author and licence, and the changes.
+        for (const p of photos) {
+            const a = WallpaperConfig.photoAbout(p, "fr_FR");
+            verify(a.title !== "" && a.title !== p.name.en && a.title !== p.name.fr, p.id);
+            verify(a.credit.indexOf(p.author) >= 0, p.id + ": " + a.credit);
+            verify(!/<https?:/.test(a.credit), p.id);
+            if (p.licenseShort.indexOf("CC BY") === 0)
+                verify(a.credit.indexOf(p.licenseShort) >= 0, p.id + ": " + a.credit);
+            compare(a.modified, true);
+        }
+        // The copyright notice the author asked for stays (Argenberg's).
+        compare(WallpaperConfig.photoAbout(photos.find(p => p.id === "mountain-pasture"), "en").credit.indexOf("© Vyacheslav Argenberg, CC BY 4.0"), 0);
     }
 
     // ADR-0040 step 2: the artwork and its variant (wallpaper.artwork, wallpaper.artworkVariant).

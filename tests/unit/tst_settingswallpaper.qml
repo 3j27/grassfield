@@ -392,14 +392,19 @@ TestCase {
         compare(t.backend.files["/home/u/.local/state/grassfield/wallpaper-recent.json"], undefined);
         verify(photos.model[2].selected);
         compare(t.page.headline, WallpaperConfig.photoName(t.page.photos[2], t.page.language));
-        // About This Wallpaper names the author, the source and the licence (CC BY 4.0 section 3(a)(1)).
-        compare(t.page.aboutEntry.author, "Jakub Hałun");
+        // About This Wallpaper credits it as its licence asks (CC BY 4.0 section 3(a)(1); the integrator's review of e067f26f):
+        // the work's own title, the author's attribution line, the source, the licence and Grassfield's changes.
+        compare(t.page.aboutEntry.title, "Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322");
+        compare(t.page.aboutEntry.credit, "Jakub Hałun, CC BY 4.0, via Wikimedia Commons");
         compare(t.page.aboutEntry.licenseShort, "CC BY 4.0");
         const about = find(t.page.contentItem, i => i.caption === "About This Wallpaper");
         verify(about);
         tryVerify(() => about.parent.visible);
-        verify(find(about, i => i.title === "Author" && i.valueText === "Jakub Hałun" && i.visible));
+        verify(find(about, i => i.title === "Title" && i.valueText === "Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322" && i.visible));
+        verify(find(about, i => i.title === "Credit" && i.valueText === "Jakub Hałun, CC BY 4.0, via Wikimedia Commons" && i.visible));
+        verify(!find(about, i => i.title === "Author" && i.visible), "a photograph's row is its credit");
         verify(find(about, i => i.text === "CC BY 4.0" && i.target === "https://creativecommons.org/licenses/by/4.0/" && i.visible));
+        verify(find(about, i => i.title === "Changes" && i.valueText === "Resized and re-encoded by Grassfield, metadata removed" && i.visible));
         verify(!find(about, i => i.title === "Last updated" && i.visible), "a photograph has no update time");
         // Another picture: no attribution.
         t.page.usePicture(testCase.pictures[0]);

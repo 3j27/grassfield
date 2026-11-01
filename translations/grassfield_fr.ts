@@ -1506,8 +1506,20 @@
         <translation>Auteur</translation>
     </message>
     <message>
+        <source>Credit</source>
+        <translation>Crédit</translation>
+    </message>
+    <message>
         <source>Source</source>
         <translation>Source</translation>
+    </message>
+    <message>
+        <source>Changes</source>
+        <translation>Modifications</translation>
+    </message>
+    <message>
+        <source>Resized and re-encoded by Grassfield, metadata removed</source>
+        <translation>Redimensionnée et réencodée par Grassfield, métadonnées supprimées</translation>
     </message>
     <message>
         <source>Wikimedia Commons</source>
@@ -12811,6 +12823,10 @@
         <translation>Auteur</translation>
     </message>
     <message>
+        <source>Credit</source>
+        <translation>Crédit</translation>
+    </message>
+    <message>
         <source>Source</source>
         <translation>Source</translation>
     </message>
@@ -12865,6 +12881,14 @@
     <message>
         <source>Add Video…</source>
         <translation>Ajouter une vidéo…</translation>
+    </message>
+    <message>
+        <source>Changes</source>
+        <translation>Modifications</translation>
+    </message>
+    <message>
+        <source>Resized and re-encoded by Grassfield, metadata removed</source>
+        <translation>Redimensionnée et réencodée par Grassfield, métadonnées supprimées</translation>
     </message>
     <message>
         <source>Choose a folder of pictures</source>

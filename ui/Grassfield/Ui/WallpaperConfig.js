@@ -937,7 +937,8 @@ function photoText(s) {
     return typeof s === "string" && s.length > 0 && s.length <= MAX_PHOTO_TEXT && !HIDDEN.test(s);
 }
 
-// [{id, path, name: {en, fr}, author, credit, licenseShort, licenseUrl, sourceUrl}] from the manifest's text, the pictures at
+// [{id, path, name: {en, fr}, title, author, credit, licenseShort, licenseUrl, sourceUrl}] from the manifest's text (`title`:
+// the work's own title, its Commons file name without the extension, which CC BY 2.0 and 3.0 ask for), the pictures at
 // `dir` + "/" + id + ".jpg"; [] for anything that is not a manifest. Each id once, at most MAX_PHOTOS.
 function parsePhotos(text, dir) {
     let doc = null;
@@ -957,13 +958,14 @@ function parsePhotos(text, dir) {
             continue;
         if (!p.name || !photoText(p.name.en) || !photoText(p.name.fr))
             continue;
-        if (!photoText(p.author) || !photoText(p.credit) || !photoText(p.licenseShort))
+        if (!photoText(p.author) || !photoText(p.credit) || !photoText(p.licenseShort) || !photoText(p.file))
             continue;
         if (linkOf(p.licenseUrl) === "" || linkOf(p.sourceUrl) === "")
             continue;
         seen[p.id] = true;
-        out.push({id: p.id, path: dir.replace(/\/+$/, "") + "/" + p.id + ".jpg", name: {en: p.name.en, fr: p.name.fr}, author: p.author, credit: p.credit,
-            licenseShort: p.licenseShort, licenseUrl: p.licenseUrl, sourceUrl: p.sourceUrl});
+        out.push({id: p.id, path: dir.replace(/\/+$/, "") + "/" + p.id + ".jpg", name: {en: p.name.en, fr: p.name.fr},
+            title: p.file.replace(/\.(?:jpe?g|png|tiff?|webp)$/i, ""), author: p.author, credit: p.credit, licenseShort: p.licenseShort,
+            licenseUrl: p.licenseUrl, sourceUrl: p.sourceUrl});
     }
     return out;
 }
@@ -978,10 +980,20 @@ function photoAt(photos, path) {
     return Array.isArray(photos) ? (photos.find(p => p.path === path) || null) : null;
 }
 
-// What "About This Wallpaper" shows for a photograph: the fields of an online entry (title, author, sourceUrl, licenseShort,
-// licenseUrl), so one view serves both.
+// What "About This Wallpaper" shows for a photograph, as its licence asks to be credited (the integrator's review of e067f26f):
+// the work's own title (not Grassfield's name for it), the credit its author asked for with its copyright notice (Commons'
+// attribution line, its licence link written out once as the Licence row), the licence and its link, the source, and
+// `modified`: Grassfield changed the picture (resized, re-encoded, metadata removed: THIRD_PARTY.md). The fields of an online
+// entry, so one view serves both; `lang` is unused (the title is the work's own).
 function photoAbout(photo, lang) {
-    return photo ? {title: photoName(photo, lang), author: photo.author, sourceUrl: photo.sourceUrl, licenseShort: photo.licenseShort, licenseUrl: photo.licenseUrl} : null;
+    return photo ? {title: photo.title, credit: photoCredit(photo.credit), sourceUrl: photo.sourceUrl, licenseShort: photo.licenseShort,
+        licenseUrl: photo.licenseUrl, modified: true} : null;
+}
+
+// Commons' attribution line without the licence's address in angle brackets ("© A, CC BY 4.0 <https://…>, via Wikimedia
+// Commons" -> "© A, CC BY 4.0, via Wikimedia Commons"); the address is the Licence row's link.
+function photoCredit(credit) {
+    return typeof credit === "string" ? credit.replace(/\s*<https?:\/\/[^<>\s]*>/g, "") : "";
 }
 
 // What the desktop's "About This Wallpaper" shows for one output (ADR-0040 step 2c): `out` is the output's report (WallpaperState

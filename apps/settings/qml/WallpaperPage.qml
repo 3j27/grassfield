@@ -1037,9 +1037,10 @@ SettingsPage {
                     valueText: root.aboutEntry ? root.aboutEntry.title : ""
                 }
 
+                // A photograph's credit is its author's own attribution line, with its copyright notice (WallpaperConfig.photoAbout).
                 SettingsRow {
                     visible: !!(root.aboutEntry && (root.aboutEntry.author || root.aboutEntry.credit))
-                    title: qsTr("Author")
+                    title: root.aboutEntry && root.aboutEntry.author ? qsTr("Author") : qsTr("Credit")
                     valueText: root.aboutEntry ? (root.aboutEntry.author || root.aboutEntry.credit) : ""
                 }
 
@@ -1074,6 +1075,13 @@ SettingsPage {
                         target: licenceRow.link
                         onActivated: root.openLink(licenceRow.link)
                     }
+                }
+
+                // What Grassfield did to a shipped photograph (THIRD_PARTY.md): the licence's "indicate if You modified" it.
+                SettingsRow {
+                    visible: !!root.aboutEntry && root.aboutEntry.modified === true
+                    title: qsTr("Changes")
+                    valueText: qsTr("Resized and re-encoded by Grassfield, metadata removed")
                 }
 
                 SettingsRow {

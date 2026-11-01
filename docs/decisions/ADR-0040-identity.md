@@ -133,7 +133,9 @@ and IQ-B3 here changes the palette only, not which controls read it.
     depends on, as it does on the icon theme (so it is downloaded again with each release, like the icons). Settings >
     Wallpaper lists them in a Photographs section after the Grassfield artwork (`WallpaperConfig.parsePhotos`; an entry of
     the wrong shape is left out, an id is a plain file name); one is chosen as a picture (source `file`, through the
-    helper like any other) and About This Wallpaper names its author, source and licence. The desktop's own About This
+    helper like any other) and About This Wallpaper credits it as its licence asks (its own title, the author's credit line
+    with its copyright notice, the source, the licence, Grassfield's changes: the integrator's review of e067f26f). The
+    desktop's own About This
     Wallpaper card shows them too (2026-11-01, the owner's « Maintenant dans la #79 »: `WallpaperState` reads the list
     as Settings does, `WallpaperConfig.aboutEntryOf` picks the online picture's or the shown photograph's attribution,
     `tst_wallpaper.qml` +2). Legal: E40 and `THIRD_PARTY.md` "5c";
