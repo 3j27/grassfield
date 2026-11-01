@@ -839,6 +839,21 @@ Item {
             compare(other.text, "marker", "the clipboard never got the password");
         }
 
+        // Merge of step 9c into 9e: a KIO request past the bound of 8 is refused like any secret request, "refused" (never a
+        // user's "cancel": the bridge then gives KIO's client nothing and caches no cancellation, decision 9-31), never shown.
+        function test_34_serverNinthRefused() {
+            for (let i = 1; i <= 8; i++)
+                client.prompt("p" + i, {});
+            client.promptServer("p9", {});
+            compare(rig.secret.requestCount, 8);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p9", result: "refused"}, "the shell's refusal, never a user's cancel");
+            compare(rig.queue.secretCount, 8);
+            tryVerify(() => shownIds.length > 0, 3000, "the first request is shown");
+            wait(50);
+            compare(shownIds.indexOf("p9"), -1, "the server sheet was never shown");
+        }
+
         // The caller's text is plain: markup is shown as typed, never rendered.
         function test_15_plainText() {
             client.prompt("p1", {texts: {title: "<b>Admin</b> password", message: "<img src=x>", description: "", warning: "Wrong!", "continue": "", cancel: ""}});

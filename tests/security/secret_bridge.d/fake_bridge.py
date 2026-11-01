@@ -14,7 +14,7 @@ Scenarios:
                  before hello, another protocol version and a duplicate id each close the connection; the next attempt
                  waits 1 s, then 2 s, then 4 s (no hello in between), and 1 s again after a hello
   bound          SecretAgent: nine requests; the ninth is refused at once ("refused", never a user's "cancel"), the others
-                 are not answered
+                 are not answered; two places freed, a third kio request is refused the same way
   session-socket SecretAgent in a real session: it connects to <socket> (the session's), never to <other socket> (a dev
                  socket it was given)
   nothing        no connection at all within 4 s on <socket>
@@ -287,6 +287,15 @@ def scenario_bound(server):
     c.send({"type": "cancel", "id": "p1"})
     extra = c.quiet(1.0)
     check("withdrawn requests are not answered", extra == [], repr(extra))
+    # Two places free again: two KIO requests fill them, a third is refused like any other kind ("refused": the bridge then
+    # gives KIO's client nothing and caches no cancellation).
+    c.send(kio_prompt(10, "leave.example"))
+    c.send(kio_prompt(11, "leave.example"))
+    c.send(kio_prompt(12, "leave.example"))
+    a = c.json()
+    check("a kio request past the bound is refused too", a == {"type": "answer", "id": "p12", "result": "refused"}, repr(a))
+    extra = c.quiet(1.0)
+    check("the two kio requests in the bound wait for the user", extra == [], repr(extra))
     c.close()
 
 
