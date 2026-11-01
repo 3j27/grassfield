@@ -8,7 +8,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <csignal>
+#include <memory>
+#include <thread>
 
 using namespace grassfield::store;
 
@@ -66,6 +70,35 @@ TEST(ChildProcess, TheDeadlineStopsTheWholeGroup)
     while (alive() && wait.elapsed() < 3000)
         ::usleep(20000);
     EXPECT_FALSE(alive());
+}
+
+// The cancel flag (the Store quitting): a child running is stopped within its 100 ms look, its group too, and its output is
+// not used; set before, nothing starts.
+TEST(ChildProcess, TheCancelFlagStopsIt)
+{
+    ChildOptions o;
+    o.timeoutMs = 60000;
+    auto cancel = std::make_shared<std::atomic_bool>(false);
+    o.cancel = cancel;
+    std::thread setter([cancel] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        *cancel = true;
+    });
+    QElapsedTimer clock;
+    clock.start();
+    const ChildResult r = runChild(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), QStringLiteral("echo started; sleep 60")}, o);
+    setter.join();
+    EXPECT_LT(clock.elapsed(), 6000) << "not its 60 s deadline";
+    EXPECT_TRUE(r.started);
+    EXPECT_TRUE(r.cancelled);
+    EXPECT_FALSE(r.timedOut);
+    EXPECT_FALSE(r.ok());
+    const ChildResult again = runChild(QStringLiteral("/bin/true"), {}, o);
+    EXPECT_FALSE(again.started) << "the flag already set: nothing starts";
+    EXPECT_TRUE(again.cancelled);
+    EXPECT_FALSE(again.ok());
+    *cancel = false;
+    EXPECT_TRUE(runChild(QStringLiteral("/bin/true"), {}, o).ok());
 }
 
 TEST(ChildProcess, OutputOverTheCapIsNotUsed)
