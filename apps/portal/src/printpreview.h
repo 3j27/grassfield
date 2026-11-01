@@ -8,11 +8,12 @@
 // its standard output. The child (ADR-0035 6-10, as the security review of step 6b required it, 6-20 to 6-22):
 // - starts in a session of its own (setsid: no terminal), with an allow-listed environment (no bus address, display or the
 //   user's variables), no descriptor but its three, at most 512 MiB of data, 10 s of CPU, the OOM killer's first choice, a
-//   deadline, killed with its parent; one child at a time for the whole process;
+//   deadline, killed with its parent; one child at a time for the whole process; a single thread when it confines itself;
 // - before it reads a byte of the document, restricts itself with Landlock to reading files and folders under /usr (the fonts;
 //   no file of the user's, no /proc, no /dev/tty; no write anywhere; no TCP; signals and abstract sockets scoped to itself where
 //   the kernel has ABI 6), then installs a seccomp allow-list measured on what Qt PDF calls (anything else fails: no socket, no
-//   program, no fork, a thread only, no ioctl, no lock, no inotify, a signal or a resource limit only for itself);
+//   program, no fork, a thread only, no ioctl, no lock, no inotify, a signal or a resource limit only for itself; a call it does
+//   not list answers ENOSYS);
 // - draws nothing when either cannot be installed (an older kernel, another architecture): the sheet says "No Preview" and the
 //   document still prints.
 // grassfield-portal then reads only a header and raw pixels (no image decoder runs on what the child answers).

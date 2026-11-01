@@ -1106,8 +1106,9 @@ TEST(PrintPreview, TheChildThatDrawsIsConfined)
                 failed |= quint64(1) << bit;
             ++bit;
         };
-        // Refused by the seccomp list (EPERM) or by Landlock (EACCES).
-        const auto refused = [](long result) { return result < 0 && (errno == EPERM || errno == EACCES); };
+        // Refused: by the seccomp list (EPERM for a listed call with an argument it refuses, ENOSYS for an unlisted call) or by
+        // Landlock (EACCES).
+        const auto refused = [](long result) { return result < 0 && (errno == EPERM || errno == EACCES || errno == ENOSYS); };
         if (!confineRenderer())
             failed = ~quint64(0);
         // 0-1: what it may do: read what it was given, read under /usr.
@@ -1174,7 +1175,15 @@ TEST(PrintPreview, TheChildThatDrawsIsConfined)
         struct sched_param param {};
         check(refused(::sched_setscheduler(parent, SCHED_OTHER, &param)));
         check(refused(::syscall(SYS_ioprio_set, 1 /* IOPRIO_WHO_PROCESS */, parent, 0)));
-        // 37-40: no lock (a covert channel: the review's probe), no watch, no terminal input (TIOCSTI), no ioctl at all.
+        // 37: another task's processors (it would tell that the task exists; a sanitizer build allows it, for its own threads).
+        cpu_set_t processors;
+#ifdef __SANITIZE_ADDRESS__
+        check(true);
+#else
+        check(refused(::sched_getaffinity(parent, sizeof processors, &processors)));
+#endif
+        check(::sched_getaffinity(0, sizeof processors, &processors) == 0);
+        // 39-42: no lock (a covert channel: the review's probe), no watch, no terminal input (TIOCSTI), no ioctl at all.
         check(refused(::flock(document, LOCK_EX | LOCK_NB)));
         struct flock region {};
         region.l_type = F_RDLCK;
@@ -1198,6 +1207,38 @@ TEST(PrintPreview, TheChildThatDrawsIsConfined)
     EXPECT_EQ(keep.readAll(), QByteArray("keep"));
     EXPECT_FALSE(QFileInfo::exists(QFile::decodeName(made)));
     EXPECT_FALSE(QFileInfo::exists(QStringLiteral("/usr/.grassfield-probe")));
+}
+
+// Landlock confines the thread that installs it and the ones it starts after (the counter-review of step 6b, MINOR 2): a process
+// with another thread already running is not confined at all, and draws nothing.
+TEST(PrintPreview, AChildWithAnotherThreadDrawsNothing)
+{
+    int report[2];
+    ASSERT_EQ(::pipe2(report, O_CLOEXEC), 0);
+    const pid_t pid = ::fork();
+    ASSERT_GE(pid, 0);
+    if (pid == 0) {
+        pthread_t thread;
+        int hold[2];
+        if (::pipe(hold) != 0)
+            ::_exit(2);
+        // A thread that waits (on a pipe nobody writes) while the confinement is tried.
+        ::pthread_create(&thread, nullptr, [](void *fd) -> void * {
+            char byte;
+            ::read(*static_cast<int *>(fd), &byte, 1);
+            return nullptr;
+        }, &hold[0]);
+        const char confined = confineRenderer() ? 1 : 0;
+        ::write(report[1], &confined, 1);
+        ::_exit(0);
+    }
+    ::close(report[1]);
+    char confined = 1;
+    ASSERT_EQ(::read(report[0], &confined, 1), 1);
+    ::close(report[0]);
+    int status = 0;
+    ASSERT_EQ(::waitpid(pid, &status, 0), pid);
+    EXPECT_EQ(confined, 0) << "two threads: no confinement, no preview";
 }
 
 // The child's environment is allow-listed (the review's MAJOR 2): the locale only, never the bus address, the display or the

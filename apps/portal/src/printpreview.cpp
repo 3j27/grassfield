@@ -203,8 +203,29 @@ namespace {
 // Landlock (ADR-0035 6-20): reading files and folders under /usr only (the fonts pdfium looks for: /usr/share/fonts,
 // /usr/share/X11/fonts, /usr/local/share/fonts), nothing written anywhere, no TCP; signals and abstract sockets scoped to the
 // child where the kernel has ABI 6. The rights handled follow the kernel's ABI, so every right it knows is denied unless listed.
+// The threads of this process, from /proc/self/status (read before Landlock closes /proc); 0 when it cannot be read.
+int threadCount()
+{
+    const int status = ::open("/proc/self/status", O_RDONLY | O_CLOEXEC);
+    if (status < 0)
+        return 0;
+    char text[4096];
+    const ssize_t n = ::read(status, text, sizeof text - 1);
+    ::close(status);
+    if (n <= 0)
+        return 0;
+    text[n] = 0;
+    const char *line = std::strstr(text, "\nThreads:");
+    return line ? std::atoi(line + 9) : 0;
+}
+
 bool restrictFiles()
 {
+    // landlock_restrict_self confines the calling thread and the threads it starts after, not one already running (TSYNC is the
+    // kernel's ABI 8 and later, after the reference 6.18): a process with more than one thread draws nothing (the counter-review
+    // of step 6b, MINOR 2). The child is one thread here (measured); seccomp's TSYNC covers every thread anyway.
+    if (threadCount() != 1)
+        return false;
     const long abi = ::syscall(SYS_landlock_create_ruleset, nullptr, 0, LANDLOCK_CREATE_RULESET_VERSION);
     if (abi < 1)
         return false;
@@ -245,7 +266,8 @@ bool restrictFiles()
 
 // The seccomp allow-list (ADR-0035 6-20), measured with a ptrace recorder on the calls the child makes once confined (Qt Core,
 // Qt PDF, glibc; and AddressSanitizer's in a test build), three documents (shapes, embedded and standard fonts), 800 and 2048
-// pixels: anything else fails with EPERM (clone3 with ENOSYS, so that glibc makes its threads with clone).
+// pixels. A call the list does not hold answers ENOSYS, as one this kernel lacks would (glibc then falls back to an older
+// call, clone3 to clone among them; ADR-0035 6-26); a listed call with an argument it refuses answers EPERM.
 bool installFilter()
 {
 #if !(defined(__x86_64__) || defined(__aarch64__)) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
@@ -258,6 +280,7 @@ bool installFilter()
 #endif
     constexpr uint32_t kAllow = SECCOMP_RET_ALLOW;
     constexpr uint32_t kRefuse = SECCOMP_RET_ERRNO | EPERM;
+    constexpr uint32_t kUnknown = SECCOMP_RET_ERRNO | ENOSYS;
     std::vector<sock_filter> f;
     const auto add = [&f](sock_filter s) { f.push_back(s); };
     const auto loadNumber = [&add] { add(BPF_STMT(BPF_LD | BPF_W | BPF_ABS, uint32_t(offsetof(struct seccomp_data, nr)))); };
@@ -298,10 +321,6 @@ bool installFilter()
         add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
         loadNumber();
     };
-    const auto answer = [&add](long nr, int error) {
-        add(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, uint32_t(nr), 0, 1));
-        add(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (uint32_t(error) & SECCOMP_RET_DATA)));
-    };
     const uint32_t self = uint32_t(::getpid());
 
     // Memory, the descriptors it has, time, its own threads and signals, the files Landlock lets it read.
@@ -332,10 +351,7 @@ bool installFilter()
     add(BPF_STMT(BPF_RET | BPF_K, kAllow));
     add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
     loadNumber();
-    // clone3's flags are behind a pointer: unknown, so that glibc falls back to clone.
-#ifdef SYS_clone3
-    answer(SYS_clone3, ENOSYS);
-#endif
+    // clone3's flags are behind a pointer: unknown (the default below), so that glibc falls back to clone.
     // Descriptor flags, never a lock, a lease or a notification.
     allowWhen(SYS_fcntl, 1, {F_GETFD, F_SETFD, F_GETFL, F_SETFL});
     // A thread's name and an anonymous mapping's name.
@@ -345,11 +361,17 @@ bool installFilter()
     allowWhen(SYS_tgkill, 0, {self});
     allowWhen(SYS_rt_tgsigqueueinfo, 0, {self});
     allowWhen(SYS_prlimit64, 0, {0, self});
-    // The processors a task may run on, read only: glibc's pthread_getattr_np asks it with a thread's own id, which no filter can
-    // tell from another process's (AddressSanitizer does it for every thread it starts); it changes nothing.
+#ifdef __SANITIZE_ADDRESS__
+    // A sanitizer build (the tests): AddressSanitizer asks the processors of each thread it starts by the thread's id
+    // (pthread_getattr_np), which no filter can tell from another process's; read only.
     allow(SYS_sched_getaffinity);
-    // Anything else: refused.
-    add(BPF_STMT(BPF_RET | BPF_K, kRefuse));
+#else
+    // The processors it may run on, for itself only (another task's would tell that it exists, and its mask: counter-review of
+    // step 6b, NIT).
+    allowWhen(SYS_sched_getaffinity, 0, {0, self});
+#endif
+    // Anything else: as if this kernel had no such call.
+    add(BPF_STMT(BPF_RET | BPF_K, kUnknown));
     sock_fprog program{static_cast<unsigned short>(f.size()), f.data()};
     // Every thread of the process (TSYNC): 0, or the id of a thread it could not join (then the child draws nothing).
     return ::syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, &program) == 0;
