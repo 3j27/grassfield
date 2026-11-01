@@ -130,6 +130,30 @@ TestCase {
         compare(other.motionMs, 0);
     }
 
+    // The clouds are one translucent layer (the integrator's review of e067f26f, NIT: two overlapping clouds showed each other's
+    // edge): at the clouds' opacity, over their band only, at half the resolution; no layer without them.
+    function test_theCloudsAreOneLayer() {
+        function layers(item) {
+            const out = [];
+            (function walk(i) {
+                for (const c of i.children) {
+                    if (c.layer.enabled)
+                        out.push(c);
+                    walk(c);
+                }
+            })(item);
+            return out;
+        }
+        const item = createTemporaryObject(artComponent, testCase, {artwork: "grassfield", variant: "day.light", moving: true});
+        const one = layers(item);
+        compare(one.length, 1);
+        compare(one[0].opacity, Tokens.wallpaperMovingCloudOpacityLight);
+        compare(one[0].y, item.height * 0.1);
+        compare(one[0].height, item.height * 0.4);
+        compare(one[0].layer.textureSize, Qt.size(Math.ceil(item.width / 2), Math.ceil(item.height * 0.4 / 2)));
+        compare(layers(createTemporaryObject(artComponent, testCase, {artwork: "grassfield", variant: "day.light"})).length, 0);
+    }
+
     Component {
         id: artComponent
         GrassfieldArtwork {

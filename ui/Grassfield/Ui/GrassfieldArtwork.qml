@@ -120,42 +120,55 @@ Item {
         }
     }
 
-    // The moving variant's clouds (seeded: the same sky on every output), under the hills.
-    Repeater {
-        model: root.movingOn ? ArtworkLogic.clouds(5, 4) : []
+    // The moving variant's clouds (seeded: the same sky on every output), under the hills. All four are one translucent
+    // layer (the integrator's review of e067f26f, NIT): where clouds or their parts overlap, the union is drawn once, so no
+    // cloud's edge shows across another. The layer covers only the clouds' band (Artwork.clouds: between 0.1 and 0.5 of the
+    // height) at half the resolution (soft shapes), so its texture costs no more than the four clouds' own layers did.
+    Item {
+        id: cloudLayer
+        readonly property real from: 0.1
+        visible: root.movingOn
+        y: root.height * cloudLayer.from
+        width: root.width
+        height: root.height * 0.4
+        opacity: root.artPalette.cloudAlpha
+        layer.enabled: root.movingOn
+        layer.smooth: true
+        layer.textureSize: Qt.size(Math.max(1, Math.ceil(cloudLayer.width / 2)), Math.max(1, Math.ceil(cloudLayer.height / 2)))
 
-        Item {
-            id: cloud
+        Repeater {
+            model: root.movingOn ? ArtworkLogic.clouds(5, 4) : []
 
-            required property var modelData
+            Item {
+                id: cloud
 
-            x: root.width * ArtworkLogic.cloudX(cloud.modelData, root.motionMs, Tokens.wallpaperMovingCloudMs)
-            y: root.height * cloud.modelData.y
-            width: root.width * cloud.modelData.w
-            height: root.height * cloud.modelData.h * 2
-            opacity: root.artPalette.cloudAlpha
-            // One translucent shape (the overlaps of its parts do not show), drawn as one texture.
-            layer.enabled: true
+                required property var modelData
 
-            // A long rounded base and three rounded tops.
-            Rectangle {
-                y: cloud.height * 0.55
-                width: cloud.width
-                height: cloud.height * 0.45
-                radius: height / 2
-                color: root.artPalette.cloud
-            }
-            Repeater {
-                model: [[0.1, 0.5], [0.3, 0.85], [0.56, 0.62]]
+                x: root.width * ArtworkLogic.cloudX(cloud.modelData, root.motionMs, Tokens.wallpaperMovingCloudMs)
+                y: root.height * (cloud.modelData.y - cloudLayer.from)
+                width: root.width * cloud.modelData.w
+                height: root.height * cloud.modelData.h * 2
 
+                // A long rounded base and three rounded tops.
                 Rectangle {
-                    required property var modelData
-                    x: cloud.width * modelData[0]
-                    y: cloud.height - height
-                    width: cloud.height * modelData[1]
-                    height: width
-                    radius: width / 2
+                    y: cloud.height * 0.55
+                    width: cloud.width
+                    height: cloud.height * 0.45
+                    radius: height / 2
                     color: root.artPalette.cloud
+                }
+                Repeater {
+                    model: [[0.1, 0.5], [0.3, 0.85], [0.56, 0.62]]
+
+                    Rectangle {
+                        required property var modelData
+                        x: cloud.width * modelData[0]
+                        y: cloud.height - height
+                        width: cloud.height * modelData[1]
+                        height: width
+                        radius: width / 2
+                        color: root.artPalette.cloud
+                    }
                 }
             }
         }
