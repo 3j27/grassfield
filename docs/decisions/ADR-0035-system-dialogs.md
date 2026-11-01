@@ -1208,6 +1208,12 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   checks in `tests/security/prompter_bridge.sh`, with the reviewer's probes turned into tests (a long-lived client across
   eight shell departures, seventy interface-less rounds, a file bind-mounted over a trusted path in another namespace,
   thousands of mappings with an untrusted one last, a peer that exited and was reaped).
+- **The opus final check of step 9a: FAIL, one major, fixed** (MINOR-A, B and C confirmed closed): the closing of gcr's
+  prompts that MINOR-A added ran inside `dropClient`, which can run inside gcr's own callbacks, and re-entered gcr into a
+  use-after-free (9-3); the unanswered `PromptReady` entries now go with their prompt (9-11). Tests after it: 46 unit cases,
+  58 checks in `tests/security/prompter_bridge.sh`, passing with the plain bridge and with one built with ASan and UBSan;
+  the reviewer's repro (a half-closed shell, a caller with eight prompts that leaves) is one of them, and it made the
+  ASan bridge crash before the fix.
 - **What 9a changes for the user: nothing.** No shell connects before step 9b, and without a connected shell the bridge
   never asks for the name: every prompt is the stock gcr-prompter's, as before.
 
@@ -1239,6 +1245,22 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   closes every open prompt (`gcr_prompt_close`, the interface's own way to say a prompt closed): gcr ends each one, tells
   its caller `PromptDone` and drops it, without unregistering anything (journal: "N open gcr prompt(s) closed ... (0
   still open)", the count of what gcr did not end; `tests/security/prompter_bridge.sh` checks it at eight departures).
+  **Amended after the opus final check of step 9a (MAJOR).** The first version closed the prompts inside `dropClient`.
+  `dropClient` also runs inside gcr's own callbacks: a withdrawal sent to the shell from gcr's `prompt_stop_prompting`
+  (the bridge's `withdraw`, or `forget` from a prompt's disposal) meets a write error, and when gcr is ending a departed
+  caller's prompts (`on_caller_vanished`, which keeps those callers' callbacks in a local queue), closing every prompt
+  there freed callbacks that queue still held: a use-after-free, a crash in the reviewer's repro. Options: (a) close them
+  in a later main loop turn; (b) keep the prompts open (MINOR-A again); (c) make `dropClient` itself wait for a later turn.
+  **Choice: (a).** Rule applied: never call into a library from inside its own callbacks; `cancelAll` and the name's
+  release stay immediate (they schedule the completions and send an asynchronous call, and call nothing in gcr), so no
+  request outlives the shell. The closing holds a reference to each prompt and skips one that gcr ended meanwhile (it is
+  disposed, out of the bridge's set). The same audit made the requests' references to their prompts go in a later turn
+  too, on the paths that run inside gcr (`withdraw`, `forget`, `cancelRequest` from `dropClient`): a request holds its
+  prompt through gcr's pending task anyway, so a last reference never goes there, and now cannot. The paths into gcr, all
+  checked: an answer's completion runs from the socket's notifier, never inside gcr; a cancellation's completion, the
+  password's wiping and these closings and releases run in later turns; `onNewPrompt` (inside gcr's `BeginPrompting`) only
+  creates and records; `submit`, `withdraw` and `forget` (inside gcr) can reach `dropClient` through `send`, which now calls
+  nothing in gcr; the name's request and release are asynchronous bus calls.
 - **9-4. Which requesters are named?** Options: (a) the rule of the step's brief: a desktop entry of the same executable,
   "Keyring" for gnome-keyring, "GnuPG" for gpg-agent and pinentry, anything else "Unidentified program" with the path;
   (b) also a trusted executable's own file name. **Choice: (a)**, with the entry rule made strict: the entry's `Exec` is
@@ -1328,7 +1350,11 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   caller answers gcr's `PromptReady` with an error (gcr then drops the prompt without `PromptDone`; the filter keeps the
   serials of unanswered `PromptReady` calls, at most 4096), when the caller leaves the bus, and every count goes when the
   prompter's name leaves the bridge. A `StopPrompting` itself counts for nothing. NIT: the count of the refusals not
-  written is written when the 10-s window ends, even when no refusal follows.
+  written is written when the 10-s window ends, even when no refusal follows. **Amended after the opus final check of step
+  9a (NIT):** an unanswered `PromptReady` entry stayed when gcr cancelled the call itself (a `StopPrompting` while a
+  `PromptReady` was in flight) or when the caller never answered, so a caller cycling prompts it never answers could fill
+  the 4096 entries and push out other callers' entries. An entry now goes with gcr's `PromptDone` for the same callback,
+  with a newer `PromptReady` for it, and with its caller leaving the bus.
 - **9-12. The password's strength reported to the caller.** Options: (a) a score; (b) 0 for an empty password, 1
   otherwise, as gcr's own dialog does (gnome-keyring reads it to ask about storing passwords unencrypted). **Choice:
   (b).** The meter the user sees is the shell's (step 9b). Rule applied: gcr's contract as its own prompter keeps it.

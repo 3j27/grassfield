@@ -542,7 +542,8 @@ Rules (fail closed: no answer is ever invented):
   MINOR-A and MINOR-B): a `BeginPrompting` counts with the prompter's interface named only, a prompt stops counting when
   gcr ends it (its `PromptDone` to the caller, the caller's error to its `PromptReady`, the caller leaving the bus), and
   every count goes when the prompter's name leaves the bridge; when the shell goes, the bridge closes every open gcr prompt
-  (its callers cancelled already, on seeing the name go), so neither gcr nor the count keeps them.
+  in the next main loop turn (its callers cancelled already, on seeing the name go; never from inside gcr's own callbacks,
+  opus final check of step 9a), so neither gcr nor the count keeps them.
 - A peer whose pidfd the kernel will not give is refused, except on a kernel without `SO_PEERPIDFD` (ENOPROTOOPT); in a
   session only slices may lie between `user@<uid>.service` and the shell's unit. Refused connections are logged once per
   10 s, with the count of the others.
