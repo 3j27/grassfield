@@ -13,7 +13,7 @@ import "../dock/AutoHide.js" as AutoHide
 import "StatusLogic.js" as Logic
 import "ClockFormat.js" as ClockFormat
 
-// Top bar, one per screen. Left: Grassfield menu (leaf mark), the focused app name with its
+// Top bar, one per screen. Left: Grassfield menu (the Grassfield mark), the focused app name with its
 // application menu, then the app's own menus when it exports them (T1/T2 through MenuBridge) or the
 // T0 File menu, then Window. Right (real backends only): network, volume, battery (when present),
 // Control Center, clock. Popups are rendered by qs.overlay through Popups.
