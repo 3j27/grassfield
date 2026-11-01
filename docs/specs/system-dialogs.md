@@ -2,7 +2,8 @@
 
 Status: step 0 (docs only, owner brief 2026-10-27 « toutes les boîtes de dialogue au design Grassfield »); §6 is built
 (steps 2b and 2c), §4 (step 3), §9 (step 4a in Files, step 4b in the panels), §1 (step 4b) and §2's permission alerts (step
-5a; Open With is step 5b); §4b's notice is built but not active on Hyprland 0.56.2; the other sections are not built yet. Decisions and delivery order:
+5a; Open With is step 5b); §4b's notice is built but not active on Hyprland 0.56.2; §5's bridge (step 9a) and the shell's queue
+and secret sheets for gcr's prompts (step 9b) are built; the other sections are not built yet. Decisions and delivery order:
 `docs/decisions/ADR-0035-system-dialogs.md`. Inventory (every dialog of a Grassfield session, its provider and category):
 `docs/audits/dialogs-2026-10-27/inventory.md`. Row ids (P*, H*, S*, K*, O*, T*, G*) refer to that inventory; Q* are the
 owner's decisions recorded in the ADR.
@@ -281,8 +282,10 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   `screen:`/`region:` output listed by `hyprctl -j monitors`, a region inside that output's logical size. Anything else prints
   nothing.
 - SP4 one picker at a time: a request while a picker is open gets `busy` (cancelled).
-- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on every monitor, or
-  the shell's crash-recovery marker, the test of `packaging/shims/omarchy-shell:64-74`) and the shell answers `locked`; either
+- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on any monitor, or
+  the shell's crash-recovery marker read as the shell reads it, `shell/security/LockMachine.js`: only `unlocked` or
+  `unlocked sleeps=<n>` is unlocked, and only while `<n>` is the machine's count of suspends or that count cannot be read) and
+  the shell answers `locked`; either
   way the request is cancelled and no picker shows, Grassfield's or stock. Every error counts as locked: `hyprctl` failing or
   silent for 1 s, output that is not the expected JSON, no monitor, a marker file that exists but cannot be read.
 - SP6 the panel: tabs "Entire Screen" (one live thumbnail per display, the display's name), "Window" (live thumbnails of the
@@ -291,8 +294,9 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   picker cannot know which app); "Remember this choice" unticked at every opening, whatever `--allow-token` says (owner
   decision Q14); Cancel / Share (default once something is selected); double-click shares at once.
 - SP7 keyboard: arrows move in the grid, Return shares, Esc cancels, Cmd-1/2/3 switch tabs.
-- SP8 the recording indicator in the menu bar while Hyprland reports an active screencast; its menu says what is shared (a
-  display or a window), not which app shares it (Hyprland's events carry only the source).
+- SP8 the recording indicator in the menu bar while an app shares through the portal (xdph's PipeWire streams, ADR-0035 7-9:
+  Hyprland's screencast event comes from every capture, the shell's thumbnails too); its menu says what is shared (the
+  picker's choice for that stream when it made one), not which app shares it.
 - SP9 no acknowledgement within 1 s and the session not locked: the stand-in removes the socket file, then execs the stock
   picker (a late `accepted` finds no socket and shows nothing).
 
@@ -312,10 +316,67 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   that display).
 - A-SP6 (L1) shell stopped, session unlocked: the stock picker opens.
 
+### Built in step 7a (ADR-0035 7-1 to 7-8)
+- **Stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` (`python3 -I`) and `hyprland-preview-share-picker`, Omarchy's name, which runs it with `--stock-name`.
+  - `env-grassfield` puts that directory first in the systemd user manager's PATH, where xdph runs.
+- **Shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, plus the dev hooks `status` and `choose`).
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`.
+- **The channel as built (SP2, SP2b):**
+  - The stand-in's first line on the socket is `<id> list <json>`: xdph's windows as `{handle, class, title, address}`. The address is Hyprland's, in hex, or `""`. The titles never go into a command line (7-2).
+  - The shell opens the panel when that line arrives, at most 2 s after `accepted`; otherwise it closes the connection and shows nothing.
+  - The shell's answer is `<id> <flags>/screen:<output>` or `<id> <flags>/window:<handle>`.
+  - Lines with another id are ignored. A line longer than 4096 bytes, or one that is not ASCII, cancels.
+  - `request` answers `refused` to an id that is not 128-bit lowercase hex, or a socket that is not `<128-bit hex>.sock` directly in `$XDG_RUNTIME_DIR/grassfield/picker/`. The stand-in, which always uses that form, then treats it like a missing shell.
+- **The panel (SP6, SP7):**
+  - "Share Your Screen", "An app wants to share your screen. Choose what it can see.", and Entire Screen / Window as a segmented control.
+  - A grid of live thumbnails, three to a row, two rows before it scrolls.
+  - Windows are grouped by app name, then sorted by title. A window without an address, or one the shell does not know, shows its app's icon.
+  - Remember this choice is unticked at every opening.
+  - Cancel and Share. Share is dimmed until a tile is chosen; nothing is selected at first (7-3).
+  - Arrows move in the grid, Return shares, Esc cancels, Cmd-1 and Cmd-2 switch the tabs, and a double-click shares.
+  - Nothing answers keys or clicks for `panel.alertArmMs` after the panel shows, or after the last key pressed meanwhile (7-8);
+    Esc and Cancel always cancel.
+- **Cancelled:**
+  - when another popup takes the panel's place or a click lands outside it (7-5);
+  - when the session locks;
+  - when the stand-in's end closes (it gave up, or xdph ended: the stand-in notices xdph's end of stdout closing).
+- **Not in 7a:** Selection, the recording indicator and the greying of protected windows came in step 7b, below.
+- **Tests:**
+  - `tests/shell/share_picker.sh`: A-SP1, A-SP2, A-SP2b and A-SP3 against fakes, with a copy of xdph 1.4.1's parser.
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms; case 13: a failed connection (no socket file, a refused one, a stand-in that gave up because the shell's answer took over 1 s) does not stop the next request from showing its panel, and no request's socket is left once it ended; cases 1 and 2: the panel (loaded as the Overlay loads it) opens with Remember this choice unticked and unarmed, and is armed after `panel.alertArmMs` with Remember still unticked, though xdph passed `--allow-token` (review of PR #83, MINOR 1).
+  - `tests/unit/tst_sharepicker.qml`.
+  - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
+
+### Built in step 7b (ADR-0035 7-9 to 7-14)
+- **Selection (SP6):** a third tab (Cmd-3).
+  - The chosen display's live preview, with a display chooser when there are several; a drag on it marks the area.
+  - The area must be at least `panel.sharePickerMinArea` either way, and its size shows under the preview ("640 × 360 on DP-1").
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels. An area past the display is never answered, by the shell or by the stand-in.
+- **Windows that hide from capture (SP6):** Hyprland's effective `no_screen_share`, asked with `hyprctl -j getprop` for every listed window when the panel opens (16 at a time, 1 s each at most). Such a window is greyed with "This window can't be shared" and never answered; no window is answered before Hyprland's answers have come. A query that cannot run greys none (Hyprland still blacks such a window out: 7-13).
+- **The recording indicator (SP8):** a status item, `screen-share`, while xdph has a stream (a PipeWire video node named `xdg-desktop-portal-hyprland`); it never gives way when the status area is crowded.
+  - Its menu has one row per share, named by what the picker chose for it ("Entire screen: DP-1", "Window: …", "Part of DP-1"), best effort: one new stream and one choice answered in the last 3 s. Otherwise "Screen or window" (a share an app restored with its token, or two at once).
+  - Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) the indicator stays in view: its glyph on its own capsule of the band's glass at the bar's right inset, coming as the bar leaves and going as it comes back (7-14). It takes no click; the top edge brings the bar back.
+- **Tests:**
+  - `tst_sharepicker.qml`.
+  - `share_picker_ipc.sh`, cases 9-12 (11 with a private PipeWire and a stream made as xdph makes it, `share_picker_ipc.d/fake-xdph-stream.c`; 12 with the getprop answers held by gate files).
+  - `share_picker_nested.sh`, check 5.
+  - `tst_barhide.qml`: the indicator while the bar is away (7-14).
+  - The indicator in a real share (Chromium) is the integrator's.
+
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
-3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
-requesting app.
+4 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
+requesting app. A shell that hangs with its panel open leaves the panel drawn: the stand-in gives up after 15 s, and if the
+app asks again the stock picker opens beside the frozen panel (only the stock picker can answer). The indicator shows shares
+made through the portal only: a recorder that captures without it (wf-recorder, OBS's own Wayland capture) is not shown
+(7-9), and any PipeWire client can light it by naming a video node after xdph (nothing is shared then). An area is drawn on a
+preview: about 3 logical pixels of a 1920-pixel display per preview pixel (7-10). A row of the indicator's menu can name another
+app's choice when an app restores a share with its token within 3 s of the picker answering a different app that has not
+started its stream yet (7-12). While the bar is away the indicator's capsule is drawn on the display, so a share of that
+display shows it (7-14).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 
@@ -347,7 +408,8 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 ### Acceptance criteria
 - A-NR1 (L0, `tests/shell/hyprland_dialog.sh`) the stand-in with fake `qs`, `hyprctl` and stock dialog: en and fr texts
   parsed, titles with " - ", a leading "-" or a newline, a class with " - "; ambiguous (two processes, an app named to
-  match another split), other-locale, malformed, refused, unanswered (1-s deadline) calls exec the stock dialog with the
+  match another split), other-locale, malformed, refused, unanswered (10-s deadline, ADR-0035 decision 3-16: a slow shell
+  under load is waited for, no shell ends the call at once) calls exec the stock dialog with the
   same pid and arguments; spawned by a double fork as Hyprland spawns it, the pipe stays open after "ok" and ends when the
   stand-in is killed; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
   the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals, a rename that lifts an
@@ -395,8 +457,11 @@ that fails) and its other toasts stay Hyprland's too (ADR-0035 D-2).
 Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12): applied in step 9a (CLAUDE.md,
 master-prompt R12, ADR-0010 "Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step; R12 applies (opus
 PASS, fail closed where a secret is involved, nothing logged). Step 9a builds the bridge, its socket protocol (below) and
-its unit; the shell's queue and sheets come in step 9b, udiskie's helper in 9c, the NetworkManager agent in 9d, KIO's
-password server in 9e. Until 9b no shell connects, so the bridge never takes the name and nothing changes for the user.
+its unit; step 9b the shell's queue and secret sheets for gcr's `password` and `confirm` prompts (ADR-0035 "Delivered in
+step 9b", decisions 9-15 to 9-22); step 9c udiskie's helper and the NetworkManager agent (planned as 9d, merged into 9c by
+this step's brief; ADR-0035 "Delivered in step 9c", decisions 9-25 to 9-35); KIO's password server comes in 9e.
+From 9b the shell connects in the session: gcr's prompts (gnome-keyring, pinentry-gnome3, gcr-ssh-agent) are drawn by the
+shell; from 9c also an encrypted removable disk's password (udiskie) and NetworkManager's Wi-Fi secrets.
 
 ### macOS reference behavior
 System-modal alert centred on the active display, above every window, never on the lock screen: the requesting app's icon,
@@ -412,7 +477,7 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   (requested without `ALLOW_REPLACEMENT`, so nobody can take it away; queued behind a stock gcr-prompter that still holds it,
   which frees it 10 s after its last prompt); libgcr runs `BeginPrompting`/`PerformPrompt`/`StopPrompting` and the `sx-aes-1`
   exchange.
-- SC2 one queue in the shell for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
+- SC2 (built in step 9b: `shell/security/SheetQueue.qml`, ADR-0035 9-15) one queue in the shell for every secret sheet and the polkit sheet: one sheet on screen at a time, in arrival order; a new
   request never takes the keyboard from the sheet on screen (the polkit sheet's `WlrKeyboardFocus.Exclusive` stays where it is,
   `shell/security/polkit/AuthAgent.qml:241`) and is shown only after that sheet is answered or cancelled; a request withdrawn by
   its caller (`StopPrompting`, `CancelGetSecrets`, BlueZ `Cancel`, the KIO client gone) leaves the queue unseen; at most 8
@@ -421,17 +486,24 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   "Authentication required"; a fixed top row with the requester's icon and name that only the bridge fills, from the pidfd of
   `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
-  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers; anything
+  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers, each only
+  for a process in the bridge's own mount and user namespaces (as an app's row: the integrator's review of PR #95);
+  "Disks" for udiskie's helper `grassfield-askpass` in any namespaces (udiskie's unit runs it in its own, decision 9-26
+  amended); anything
   else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
-  as plain text, flattened and capped, in the secondary style; `warning` in red under the field; a secure field (`password-new`:
-  New and Verify fields and a strength bar); `choice-label` as a check box; `continue-label` / `cancel-label` (else "OK" /
-  "Cancel"); a `confirm` prompt has no field.
+  as plain text, flattened and capped, in the secondary style, framed and introduced as the caller's; `warning` in red in that
+  frame (step 9b, decision 9-18: under the field it read as the sheet's own error); a secure field (`password-new`: New and
+  Verify fields and a strength bar from the length, decision 9-17); `choice-label` as a check box; the buttons are always
+  Grassfield's "Cancel" and "OK", never the caller's `continue-label` / `cancel-label` (step 9b, decision 9-16); a `confirm`
+  prompt has no field. Built in step 9b as a macOS alert (`shell/security/secret/SecretSheet.qml`, decision 9-18). A
+  confirmation is always shown held, no key answering it before a click past the guard (decision 9-23); Return in New moves
+  on to Verify, and an empty new password is sent only from OK (decision 9-24).
 - SC3b the row names the program whose process opened the bus connection, not proof of whose code is asking (opus review
   of step 9a, MINOR-2; ADR-0035 9-4, 9-14): "Keyring", "GnuPG" and "SSH" can be made to ask by any program of the user,
   with text of its own. Under such a row (`onBehalf`) the caller's text is shown as unverified text from another program
   (the secondary style, introduced as such, for example "Another app sent this message:"), never as the Keyring's,
   GnuPG's or SSH's own words, never in the title's place, and nothing in the sheet vouches for it.
-- SC4 security rules of the polkit sheet: nothing over the lock (a request that arrives while locked waits and is shown after
+- SC4 (built in step 9b: `shell/security/secret/SecretAgent.qml`, decisions 9-19, 9-22) security rules of the polkit sheet: nothing over the lock (a request that arrives while locked waits and is shown after
   the unlock without the keyboard until a click 500 ms after it appears); the field is cleared after each answer and on close;
   `ImhSensitiveData`, no input method; Esc and Cancel answer "no"; the shell never logs any field. The surface's layer namespace
   `grassfield-secret` is hidden from screen sharing by a session layer rule (`no_screen_share`, accepted for layers by Hyprland
@@ -442,17 +514,33 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   as for the polkit sheet today); the bridge reads the password into a buffer it zeroes after handing it to libgcr or to the
   D-Bus reply.
 - SC6 fallback: shell not connected → the bridge releases the name (the stock gcr-prompter is activated for the next prompt) and
-  unregisters its NetworkManager agent; it takes them again when the shell reconnects; a request in flight when the shell
-  disconnects is answered "no".
-- SC7 udiskie: `grassfield-askpass udiskie <device>` opens a gcr prompt ("Enter a password to unlock the disk “%1”.",
-  "Remember this password" when udiskie offers its cache), prints the password and a newline on stdout, exit 0; cancel: no
-  output, exit 1 (udiskie then leaves the disk locked).
-- SC8 NetworkManager: the bridge's secret agent answers `GetSecrets` for `802-11-wireless-security` and `802-1x` with the
-  sheet's Wi-Fi form ("The Wi-Fi network “%1” requires a WPA2 password.", Show password, Cancel / Join; identity and password
-  for 802.1X), `CancelGetSecrets` closes it, `SaveSecrets`/`DeleteSecrets` store nothing in Grassfield (NM keeps the secret as
-  the connection says). It accepts calls only from the current owner of `org.freedesktop.NetworkManager` on the system bus;
-  other callers get an error and no sheet. VPN settings get "no secrets": NetworkManager shows no VPN dialog itself (an agent
-  like nm-applet runs the VPN plugin's auth dialog, which this one does not), so a VPN that needs secrets at connect time fails,
+  unregisters its NetworkManager agent (built in step 9c: registered only while a shell that draws kind `nm` is connected,
+  and again when NetworkManager comes back on the bus, decision 9-27); it takes them again when the shell reconnects; a
+  request in flight when the shell disconnects is answered "no" (gcr: cancelled; NetworkManager: `NoSecrets`).
+- SC7 udiskie (built in step 9c: `bridges/prompter/src/askpass.cpp`, decisions 9-25, 9-26): `grassfield-automount.service`
+  runs udiskie with `--password-prompt "/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}"`;
+  `grassfield-askpass udiskie <device>` opens a gcr prompt (title "Encrypted Disk", message "Enter a password to unlock the
+  disk “%1”." with the device flattened; French with the system catalog), prints the password and a newline on stdout
+  straight from gcr's secure memory, exit 0; cancel or a prompt that ends without an answer: no output, exit 1 (udiskie then
+  leaves the disk locked); wrong arguments or stdout a terminal: exit 2 before asking; no prompt possible: exit 3. No
+  "Remember this password" check box: udiskie's command interface cannot carry the choice back (its cache follows its own
+  configuration). The bridge names the helper `disk` ("Disks"), on someone's behalf: any program can run it with a disk name
+  of its own (SC3b).
+- SC8 NetworkManager (built in step 9c: `bridges/prompter/src/NmAgent.{h,cpp}`, `NmSecrets.{h,cpp}`, decisions 9-27 to 9-35):
+  the bridge's secret agent answers `GetSecrets` for `802-11-wireless-security` (WPA/WPA2 `psk`, WPA3 `psk`, WEP
+  `wep-key<wep-tx-keyidx>`) and `802-1x` (the password, an EAP method that takes a name and a password, the connection's
+  username shown read-only: NetworkManager keeps only secrets from an agent's reply, opus review of step 9c) of a Wi-Fi connection, when
+  the flags allow interaction, with the sheet's Wi-Fi alert ("The Wi-Fi network “%1” requires a WPA2 password." / "… a WPA3
+  password." / "… a WEP password." / "… requires WPA2 enterprise credentials.", "Requested by NetworkManager", "Username: …"
+  for enterprise (read-only), Show password (never selectable or copyable, 9-34), Cancel / Join), always held until a click
+  past the guard (9-28); Join answers the secrets, Cancel
+  `UserCanceled`; `CancelGetSecrets` closes it (shown or queued, `AgentCanceled`); a request unanswered after 110 s is
+  withdrawn (`NoSecrets`, NetworkManager stops waiting at 120 s); `SaveSecrets` is refused (`Failed`: nothing is stored in
+  Grassfield, so NetworkManager asks another agent) and `DeleteSecrets` succeeds; NetworkManager keeps system-owned secrets as
+  the connection says. It accepts calls only from the current owner of `org.freedesktop.NetworkManager` on the system bus,
+  asked when each call arrives; other callers get `PermissionDenied` and no sheet. Without interaction allowed, for VPN, wired
+  802.1X, EAP-TLS, LEAP, OWE, an enterprise connection without a stored username: `NoSecrets` without a sheet. VPN: NetworkManager shows no VPN dialog itself (an agent like
+  nm-applet runs the VPN plugin's auth dialog, which this one does not), so a VPN that needs secrets at connect time fails,
   as it does today.
 - SC9 KIO network passwords (ADR-0035 D-12 b): the bridge owns `org.kde.kpasswdserver6` at `/modules/kpasswdserver`
   (interface `org.kde.KPasswdServer`: `checkAuthInfoAsync`, `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo`, the result
@@ -492,7 +580,7 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   narrowed to int, a const local that blocked a move), and what remains is Qt's own idiom (static `QStringLiteral`
   constants, `S_IW*` bit masks, a `QDBusArgument` operator returning its argument, an enum's base type).
 
-### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13)
+### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13; kind nm and role disk in step 9c, 9-26 and 9-33)
 Transport: the Unix stream socket `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600), served by
 `grassfield-prompter`; UTF-8 JSON, one object per line, ended by a line feed. The bridge accepts one peer at a time, only
 one that runs as the user and whose cgroup is the unit named by the bridge's `--peer-unit` (`grassfield-shell.service`;
@@ -501,28 +589,37 @@ second shell `{"type":"error","code":"busy"}`, and the connection is closed. Not
 shell; the shell sends a password once, in its answer, and the bridge decodes it straight into gcr's secure memory.
 
 Bridge to shell:
-- `{"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}`: first line, at once.
+- `{"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}`: first line, at once; `kinds`
+  ends with `"nm"` when the bridge's NetworkManager agent runs (it has a system bus, step 9c).
 - `{"type":"name","state":"released"|"queued"|"owned"}`: after the shell's hello and at every change of
   `org.gnome.keyring.SystemPrompter`'s ownership (queued: another process holds it, usually the stock gcr-prompter for 10 s
   after its last prompt; the bridge gets it when that process lets it go).
 - `{"type":"prompt","id":"p<N>","kind":"password"|"confirm","requester":{...},"texts":{...},"choice":{...}|null,
   "passwordNew":bool,"strength":bool}`:
   - `id`: `p` and a decimal number, never reused while the bridge runs;
-  - `requester`: `role` (`app`, `keyring`, `gnupg`, `ssh` or `unidentified`), `name` (the desktop entry's unlocalised
-    `Name` for `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG", `ssh` "SSH" and
-    `unidentified` "Unidentified program" in its own translated words), `desktopId` and `icon` (the entry's, for `app`),
-    `path` (the caller's executable when known, shown in the secondary style for `unidentified`), `identified` (true for
-    `app`, `keyring`, `gnupg`, `ssh`), `onBehalf` (true for `keyring`, `gnupg` and `ssh`: these programs ask for others
-    and any program of the user can make them ask, so the caller's text under the row is another program's unverified
-    text, SC3b). Only the bridge fills it, from the caller's bus credentials (SC3); it names the program whose process
+  - `requester`: `role` (`app`, `keyring`, `gnupg`, `ssh`, `disk` or `unidentified`), `name` (the desktop entry's
+    unlocalised `Name` for `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG", `ssh` "SSH", `disk`
+    "Disks" and `unidentified` "Unidentified program" in its own translated words), `desktopId` and `icon` (the entry's, for
+    `app`), `path` (the caller's executable when known, shown in the secondary style for `unidentified`), `identified` (true
+    for `app`, `keyring`, `gnupg`, `ssh`, `disk`), `onBehalf` (true for `keyring`, `gnupg`, `ssh` and `disk`: these programs
+    ask for others and any program of the user can make them ask, so the caller's text under the row is another program's
+    unverified text, SC3b; `disk` is `/usr/lib/grassfield/grassfield-askpass`, udiskie's password command, step 9c). Only the bridge fills it, from the caller's bus credentials (SC3); it names the program whose process
     opened the connection: an `app` row only for a process that is not traced and runs nothing but trusted code;
   - `texts`: `title`, `message`, `description`, `warning`, `continue`, `cancel`: the caller's own text, plain, on one line,
     capped (title 128, message 256, description 1024, warning 256, buttons 32 UTF-16 code units, an ellipsis when cut);
     empty when the caller set none (the shell then uses its own words, "OK" and "Cancel");
   - `choice`: the check box (`label`, capped at 128, and `chosen`, its initial state) or null when there is none;
   - `passwordNew`: a new password (New and Verify fields); `strength`: show the strength meter (both only for `password`).
-- `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, or the bridge
-  cancelled it after a wrong answer): the shell removes its sheet, shown or still queued, and does not answer it.
+- `{"type":"prompt","id":"p<N>","kind":"nm","network":{"ssid":"...","security":"wpa"|"wpa3"|"wep"|"enterprise",
+  "identity":"..."}}` (step 9c): a NetworkManager request, sent only for a call whose sender is the current owner of
+  `org.freedesktop.NetworkManager` on the system bus, so it carries no requester object (the shell draws its own row:
+  "Wi-Fi", "Requested by NetworkManager"); `ssid` the connection's SSID, plain, at most 64 UTF-16 code units, never empty,
+  shown only as a quoted field of the sheet's sentence; `security` WPA/WPA2 Personal, WPA3 Personal, WEP or WPA2 Enterprise;
+  `identity` the connection's own username for `enterprise`, never empty there (a connection without one is not asked),
+  shown read-only (NetworkManager keeps only secrets from an agent's reply), empty otherwise.
+- `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, NetworkManager
+  cancelled it or left the bus, its answer's time ran out, or the bridge cancelled it after a wrong answer): the shell removes
+  its sheet, shown or still queued, and does not answer it.
 - `{"type":"error","code":"<code>","message":"<text>"}`: `refused`, `busy`, `version`, `bad-line`, `too-long`,
   `unknown-type`, `bad-answer`.
 
@@ -530,9 +627,20 @@ Shell to bridge (at most 16 KiB per line):
 - `{"v":"prompter/1","type":"hello","shell":"<version>","kinds":[...]}`: the first line, once; `kinds` lists what the
   shell draws. The bridge asks for the name only after it, and sends only requests of a listed kind (another kind is
   answered "cancelled" to its caller without reaching the shell).
-- `{"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false}`: `password` only for a
-  `password` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password); `choice`
-  only when the prompt had a check box.
+- `{"type":"answer","id":"p<N>","result":"ok"|"cancel"|"refused","password":"...","choice":true|false}`: `password`
+  only for a `password` or `nm` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password
+  for gcr, never for `nm`); `choice` only when the prompt had a check box (never for `nm`); `refused` is the shell's own
+  refusal (beyond its bound of 8, or without a queue): gcr gets "cancelled", NetworkManager `NoSecrets`, never the user's
+  `UserCanceled` (opus review of step 9c). The bridge parses an `identity` (at most 1024 bytes) but no kind accepts one: an
+  `nm` answer with it, or that breaks the other rules, cancels its request (NetworkManager gets `NoSecrets`).
+
+The shell's reading (step 9b, decision 9-20; `shell/security/secret/Prompter.js`): exactly these messages with exactly
+these keys and types, texts within the caps above, a requester consistent with its role, only the kinds of its hello;
+anything else, a line over 16384 UTF-16 code units, a duplicate id or a prompt before the bridge's hello closes the
+connection; an `error` before the bridge's hello is its refusal (logged); a `cancel` for an id the shell does not hold is
+ignored. The shell answers each request once, only an id it holds, an "ok" only for the request on screen with the keyboard;
+an empty password only for a new one. It holds at most 8 secret requests (shown or waiting) and answers a ninth "cancelled"
+at once. After a lost connection it tries again after 1 s, doubling to 30 s, reset by the bridge's next hello.
 
 Rules (fail closed: no answer is ever invented):
 - At most 8 requests outstanding; a 9th caller is answered "cancelled" at once and the shell never sees it. At most 64
@@ -556,9 +664,12 @@ Rules (fail closed: no answer is ever invented):
   message of a connection closes it too.
 - When the shell disconnects, every outstanding request is answered "cancelled" and the name is released; the stock
   gcr-prompter is then activated for the next prompt, as before step 9.
-- Kinds `nm` (Wi-Fi and 802.1X secrets, step 9d), `kio` (server name and password, step 9e) and `bluetooth` (pairing, step
-  10) are reserved; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of an existing
-  kind is `prompter/2`.
+- Kind `nm` (Wi-Fi and 802.1X secrets) is built in step 9c; `kio` (server name and password, step 9e) and `bluetooth`
+  (pairing, step 10) are reserved; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of
+  an existing kind is `prompter/2`; a new value of a field (the role `disk`, step 9c) is not: bridge and shell ship together,
+  and a shell that does not know it closes the connection (9-26).
+- NetworkManager's requests share the ids and the bound of 8 with gcr's; the 9th, from either side, is refused (gcr:
+  cancelled; NetworkManager: `NoSecrets`).
 
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
@@ -587,8 +698,54 @@ Rules (fail closed: no answer is ever invented):
   the name is released), A-SC3 and A-SC3b for the requester the bridge sends (a caller that names another connection in
   its own properties, a caller that exits, an executable the user can write: `tests/unit/prompter`,
   `tests/security/prompter_bridge.sh`), the bound of 8 of A-SC2 and A-SC6's mutants of the bridge (the uid and cgroup check,
-  the caller checks, the bound, the buffer wiping); the sheets, the queue's keyboard rule and the polkit sheet's place in
-  the queue are step 9b's.
+  the caller checks, the bound); the sheets, the queue's keyboard rule and the polkit sheet's place in the queue are step
+  9b's. The buffer wiping of A-SC6 had no test in step 9a (the integrator's review of PR #94); since the review of PR #95
+  the line handling is `takeLines` (`Protocol.h`), unit-tested, and `prompter_bridge.sh --mutants` kills its two wipes
+  (`lines-not-wiped`, `rest-not-wiped`), with the name taken before the hello, the answer without a shell, the pidfd's
+  re-check and the known callers' namespaces; `tests/fuzz/prompter_protocol.sh` fuzzes the same reading.
+- Step 9b covers A-SC2 (`tests/security/secret_sheets.sh`: the polkit sheet keeps the keyboard while a gcr request arrives,
+  which shows after, held, and the reverse; a withdrawn request never shows; the ninth cancelled), A-SC3 for the sheet (a
+  caller whose text says "Authentication required" gets the secret sheet's title with the bridge's requester, no lock or shield
+  glyph), A-SC3b's polkit request queued behind 8 secret requests, A-SC6's mutants of the shell (the queue's focus rule, the
+  lock refusal, the click guard, the hold after a wait, an "ok" without the keyboard, the bound, the caller's text or labels in
+  the sheet's places, the client's strictness and its single answer: `secret_sheets.sh --mutants`,
+  `secret_bridge.sh --mutants`), and A-SC1 through the shell (`tests/security/secret_bridge.sh`: the real bridge on a private
+  bus, the shell's real client in Quickshell, libgcr's client gets the password the shell answered).
+- A-SC7 nested scenario for step 9b (owner approval: `just nested-up`, `just shot`): with the nested session up, build the
+  bridge (`bridges/prompter/build-direct.sh`), start it as a development run on the nested session's private bus
+  (`env DBUS_SESSION_BUS_ADDRESS=$(cat .dev/bus.address) GF_TEST_BUS=1 GF_TEST_BUS_DIR=/tmp GRASSFIELD_DEV=1
+  .dev/build/grassfield-prompter --socket .dev/run/prompter.sock --peer-unit <the last component of the dev shell's cgroup>`),
+  restart the dev shell with `GRASSFIELD_PROMPTER_SOCKET=$PWD/.dev/run/prompter.sock scripts/dev/shell-run.sh`, check
+  that `tests/visual/ipc.sh secrets state` (the dev hook, nested environment) says `ready owned`, then ask with libgcr's test client on that
+  bus (`python3 -I tests/fixtures/prompter-client.py password --title "Unlock the login keyring" --choice "Remember"`, same
+  environment as the bridge): `just shot secret-sheet` (the alert, its requester row, the framed caller text), type a
+  password and Return (the client prints it), then `pkexec --help`-safe polkit with a gcr request arriving meanwhile (the
+  polkit sheet keeps the keyboard; the secret sheet shows after, held). Visual NOT verified in step 9b.
+- Step 9c covers A-SC4 (`tests/security/nm_agent.sh`: the real bridge on a private "system" bus with a fake NetworkManager:
+  WPA2, WPA3, WEP and enterprise secrets typed in a fake shell reach it; flags without interaction, VPN, EAP-TLS and a wired
+  connection get `NoSecrets` without a sheet; a caller that does not own `org.freedesktop.NetworkManager` gets
+  `PermissionDenied` and nothing is shown, its `CancelGetSecrets` cancels nothing; `CancelGetSecrets` withdraws the sheet;
+  the shell's departure unregisters, its return registers, a restarted NetworkManager is registered with again; the bound of
+  8 shared with gcr; the 110-s withdrawal; `--mutants`: the sender check, the unregistering, the VPN and interaction
+  refusals, the cancellation, the kinds gate, the user's cancel, the name check, the timeout, `SaveSecrets`, the
+  re-registration), the Wi-Fi sheet (`tests/security/secret_sheets.sh`: held, Join's length rule, Show password,
+  enterprise, NetworkManager's cancel while typed into, the queue with polkit and gcr, the lock hiding the shown password;
+  mutants), the shell's real client end to end (`tests/security/secret_bridge.sh` e2e with the fake NetworkManager) and SC7
+  for the helper (`tests/security/askpass.sh`: through the real bridge, the passphrase printed once with a newline, exit 0;
+  Cancel and the shell's departure exit 1 with nothing printed; wrong arguments and a terminal exit 2; French; the stock
+  prompter's stand-in by D-Bus activation when no bridge holds the name; the disk role when the helper is the installed
+  root-owned file; mutants).
+- A-SC7 nested scenario for step 9c (owner approval: `just nested-up`, `just shot`): as for step 9b, with a second private
+  dbus-daemon as the "system" bus (the session bus's test configuration with `<type>system</type>` and its own socket under
+  `/tmp`, as `tests/security/nm_agent.sh` writes it) and the fake NetworkManager on it (`env DBUS_SYSTEM_BUS_ADDRESS=<that
+  bus> GF_TEST_BUS_DIR=/tmp python3 -I tests/fixtures/fake-networkmanager.py --log /tmp/nm.log --commands /tmp/nm.cmd`), the
+  bridge started with the same `DBUS_SYSTEM_BUS_ADDRESS`; once `/tmp/nm.log` says `#register`, `echo 'get w1
+  802-11-wireless-security 0x1 ssid=Café' >/tmp/nm.cmd`: `just shot wifi-sheet` (the Wi-Fi glyph, the sentence with the SSID,
+  "Requested by NetworkManager", held), click past the guard, type a password, tick Show password (`just shot
+  wifi-sheet-shown`), Return (`/tmp/nm.log` gets the psk); then `.dev/build/grassfield-askpass udiskie /dev/sdz1 >/tmp/disk.out`
+  on the nested session's bus: `just shot disk-sheet` (the drive glyph, "Disks asks for a password", the helper's text framed
+  as another program's). Visual NOT verified in step 9c; a real NetworkManager, a real udiskie with a LUKS image and the
+  helper's identification inside udiskie's sandbox (`PrivateUsers=self`) are the owner's L2 checks.
 - A-SC9 (L0) the handover against fakes on a private bus (`tests/integration/secrets_handover.sh`): the items move once and
   an item the keychain holds is kept; KWallet's own entries (stored as kwalletd 6.29 stores them) move too, and so does an
   older entry KWallet lists only once open; nothing is final from a locked listing that lists nothing; an empty value is
@@ -622,14 +779,49 @@ traced process and to one that maps code from untrusted files (`LD_PRELOAD`, `LD
 since it was loaded), which also leaves an app unidentified after an upgrade of its libraries until it restarts. The
 mapped files are compared by device and inode with the files their paths name, and only for a process in the bridge's
 own mount and user namespaces (opus counter-review of step 9a, MINOR-C: a user namespace lets a process bind-mount its
-own file over a trusted path); a trusted app that runs code of the user's through its own scripting maps no untrusted
+own file over a trusted path; the known callers need those namespaces too since the integrator's review of PR #95, so a
+known program run in a sandbox of its own shows as "Unidentified program", save "Disks", decision 9-26 amended); a trusted app that runs code of the user's through its own scripting maps no untrusted
 file (`emacs --batch -l`, `nvim -l`, an app's plugin interpreter) and still gets the app's row. The gcr
 protocol is unauthenticated: its exchange protects the
 password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); a
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
-secrets are not asked (SC8); until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
+secrets are not asked (SC8); the shell's sheets (step 9b): copies of a typed password stay in the shell's heap until reused
+(the field's text, the JavaScript string handed to the model, the answer's JSON line and the socket's write buffer; none can
+be zeroed, SC5, as the polkit sheet's); the shell reads whatever serves `$XDG_RUNTIME_DIR/grassfield/prompter.sock`: a
+same-user process can stop the bridge and bind that path (the same-user stance of every Grassfield socket), and Quickshell's
+line reader then keeps a line without a line feed from that server in memory until one comes (the 16384 cap is checked per
+line, once a line ends); `JSON.parse` keeps the last of two equal
+keys (the bridge's Qt writer never repeats one; every value's type is still checked); a wrong password makes gcr's caller
+ask again as a new request, which appears after "Password sent", held, and needs a click (macOS shakes the same alert); a
+polkit request that waited behind a secret sheet says it arrived "right after another one" at the time it got its turn
+(decision 9-15), and a newer polkit request takes the place of a waiting one (Quickshell keeps one); a polkit request that
+arrives during the key sink's linger after an earlier one keeps that one's place, so it is shown, held, before a secret request
+queued meanwhile (opus review of step 9b, NIT-1); a shared or captured
+output is black while a secret or authorization sheet is up (the layer covers the output, decision 9-22); the strength meter
+reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet's look are not verified; step 9c:
+"Disks" names `grassfield-askpass`, which any program of the user can run with a disk name and a passphrase destination of
+its own (the text under the row is shown as unverified, SC3b), and a passphrase udiskie refuses is not asked again (udiskie
+2.7.0 reports the failure, which `--no-notify` hides; the disk stays locked until it is plugged in again); the helper's
+identification inside udiskie's sandbox (`PrivateUsers=self`) relies on the bridge reading `/proc/<pid>/exe` across that
+user namespace, checked here with the installed helper in a user and mount namespace that `unshare` makes, not under
+systemd's own sandbox; the NetworkManager agent stores no secret: a connection whose secrets
+are agent-owned (`psk-flags=1`, as some editors make them) is asked for its password at every connection, and its
+`SaveSecrets` is refused so that another agent may store them; system-owned secrets the agent returns are kept by
+NetworkManager only when the user has its `settings.modify.system` (or `modify.own`) permission without authentication
+(NetworkManager discards them otherwise and the connection fails: NOT VERIFIED on the owner's polkit rules); VPN, wired
+802.1X, EAP-TLS (a certificate's password), LEAP and a PIN are not asked (`NoSecrets`); an enterprise network's username
+cannot be changed from the sheet (NetworkManager keeps only secrets from an agent's reply: it is changed where the connection
+is edited, as on GNOME; a connection without one is not asked); NetworkManager sends the connection's current system-owned
+secrets (the old password of a network asked again) inside `GetSecrets`' connection argument to a user with the modify
+permission, and that copy stays in GDBus's buffers of the call until it is answered (never read, forwarded or logged by
+the bridge); an SSID is shown as the connection
+holds it, flattened, so two networks with look-alike names look alike (macOS shows the name too); a WPA2 password of 64
+characters that are not hexadecimal is refused by NetworkManager, not by the sheet; NetworkManager stops waiting at 120 s,
+so a Wi-Fi sheet left unanswered is withdrawn at 110 s; GDBus marshals a copy of a Wi-Fi secret into the reply it writes and
+frees it unwiped (the bridge is not dumpable and has no core file and no swap); a real NetworkManager and the Wi-Fi alert's
+look are not verified; until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
 the Secret Service for a session when a KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's
 dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins. The handover (SC10, step 2c) moves what
 KWallet holds into the keychain, and makes a leftover ksecretd quit; what remains: a Chromium that made a new key before the
@@ -742,7 +934,8 @@ backend left only Qt's idiom.
 The print sheet attaches to the document's window: a preview of the pages on the left (page arrows under it), on the right
 Printer, Presets, Copies, Pages (All, From–to, Selection), then Paper Size, Orientation, Scale, Two-Sided and the printer's
 options in collapsible sections; at the bottom "PDF" (a menu: Save as PDF…, Open in Preview) and Cancel / Print (default).
-The last-used printer and settings are remembered per app.
+The last printer used is shown first; Last Used Settings, a preset of the Presets menu shared by every application, brings the
+last print's settings back (ADR-0035 6-18).
 
 ### Functional requirements
 - PR1 `PreparePrint`: the sheet without preview (the document is not sent yet), every option the destination reports through
@@ -750,7 +943,7 @@ The last-used printer and settings are remembered per app.
   for the matching `Print` call.
 - PR2 `Print` with a valid token: submits the document fd to the chosen CUPS destination with the chosen options, no UI; without
   a token: the full sheet with the preview of the document (Qt PDF for PDF, the first page of PostScript as an image when it can
-  be rendered, else "No preview").
+  be rendered, else "No preview"; step 6b sends a document that is not a PDF to x-d-p-gtk instead, ADR-0035 6-12).
 - PR3 "Save as PDF…" opens the D-4 save panel and writes the document there (PDF input) instead of printing.
 - PR4 no printer: the sheet says "No printers available" with "Add Printer…" (opens Settings > Printers).
 - PR5 never blocks: CUPS calls run off the UI thread with deadlines (a dead network printer never freezes the sheet); the UI
@@ -793,11 +986,52 @@ The last-used printer and settings are remembered per app.
   job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
 - `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
 
+### Built in step 6b (ADR-0035 6-10 to 6-30)
+- PR2 without a token done: Print with no sheet before it (libportal's callers) opens the sheet with the document's preview on
+  the left, one page at a time with "‹ 1 of N ›" and Page Up / Page Down (6-14); Orientation and Scale are not offered (the
+  document is laid out), Pages is All Pages or a range, which the printer applies (`page-ranges`), and the paper of the
+  document's first page is chosen where the printer has it (6-13). The document is kept in an unlinked private file on disk
+  (the user's cache folder), within one 2 GiB budget for every document waiting (6-11, 6-21), and its pages are drawn by a
+  confined child of grassfield-portal (Qt PDF; Landlock: reading under /usr only; a measured seccomp allow-list: no socket,
+  program, process, lock, ioctl, nor any act on another process; setsid, the locale's variables only, 512 MiB, one child at a
+  time, one thread when it confines itself; an unlisted call answers ENOSYS; raw pixels read back; no preview when the
+  confinement cannot be installed) (6-10, 6-20, 6-25 to 6-27). The sheet may print as soon as the document is kept, its preview
+  coming apart, and the document's own paper chosen with the first printer's options, or suggested when its size comes after
+  them (6-13, 6-28). Print sends the job at once from that file and the sheet goes (6-15); a document that is not a PDF goes to
+  x-d-p-gtk as it came, or fails when it came on a pipe, as does one whose sheet does not show in time once part of a pipe was
+  read (6-12, 6-24); one the full budget refuses goes to x-d-p-gtk as it came when it is a file (6-28).
+- PR3 done with macOS's "PDF" pull-down (6-16): Save as PDF… (6-3's Save panel and writer) and Open in Preview: a private copy
+  in `$XDG_CACHE_HOME/grassfield/preview` (a name within 255 bytes; the copies older than a day, or beyond 16, removed), written
+  as Save as PDF writes, opened in Preview started as the Dock starts an application (`systemd-run --expand-environment=no`)
+  (6-17, 6-22). In both flows.
+- PR1 done with the Presets (6-18): Default Settings and Last Used Settings (one for every printer, kept in grassfield-portal's
+  state when Print sends a job: two sides, colour, collation and the printer's own options, never the copies, pages, paper,
+  orientation or scale), the sheet opening on Last Used Settings when there are some; and with a printer's own options (6-19):
+  Feed From, Media Type and Quality in "Media & Quality", Output Bin and Finishing in "Printer Options", disclosure sections
+  closed at first, only what the printer reports with two values or more, its defaults first (the user's lpoptions, else the
+  queue's), each value sent as CUPS takes it, only one the printer listed and only when the queue would not apply it by itself
+  (the user's lpoptions value goes; 6-23); the standard finishings named in the UI language.
+- A-PR1 extended: `tst_printlogic.cpp` (options, page ranges, Open in Preview, presets and their JSON, file names within 255
+  bytes), `tst_print.cpp` (the confinement against the security review's probes, the child's environment and session, the
+  private file and its budget, the pages drawn by the child, a document sent first through the D-Bus interface, one that is not
+  a PDF, one on a pipe never sent on truncated, Open in Preview and its copies' bounds, Last Used Settings, a printer's
+  options), `print_cups.sh` (the scratch scheduler reports the queue's
+  own options with their names and defaults, and keeps them on the job), `tst_printsheet.qml` (the Presets, the sections, the
+  PDF pull-down, the preview and its pages). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9b (Print with
+  no token through the real frontend: the sheet, the backend's child counting the pages, the job in the scratch scheduler with
+  the document as sent). Evince or a libportal application in a nested session, and A-PR3, are the integrator's.
+
 ### Known limitations
 Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, Electron and Qt apps keep their dialogs); no
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
-Settings. Step 6a: a Print with no sheet before it gets x-d-p-gtk's dialog; no Presets; a printer's options beyond paper, two
-sides and colour (trays, quality, finishing) are its defaults. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
+Settings. Step 6b: no named presets (Save Current Settings as Preset…), no Layout (pages per sheet) or Paper Handling (page
+order, odd or even pages) sections, and a PPD's vendor options with no IPP name are not shown (the printer's defaults apply);
+a document sent first that is not a PDF gets x-d-p-gtk's dialog; the preview needs Landlock (a kernel from 5.13 with Landlock
+enabled, as Arch's is) and x86_64 or aarch64 (the allow-list is measured on x86_64 only), else it says "No Preview" and the
+document still prints; the child can still learn a path's metadata (whether a file exists, its size, times and mode; never its
+contents: Landlock does not cover stat); Open in Preview's copies stay in the user's cache folder for up to a day (16 at most), where an
+application allowed to read that folder can read them; a finishing that is neither standard nor named by CUPS is shown as its
+keyword in English words. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
 a GTK 3 application asking for n copies gets n × n (GTK renders the n copies its answer names and x-d-p-gtk's job asks for n
 again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes to the folder the Save panel's answer named as
 it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that

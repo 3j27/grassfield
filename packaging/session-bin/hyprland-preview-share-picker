@@ -1,0 +1,5 @@
+#!/bin/sh
+# Grassfield session stand-in for Omarchy's hyprland-preview-share-picker, the picker its ~/.config/hypr/xdph.conf names
+# (ADR-0035 D-6, step 7a): the same program as hyprland-share-picker next to it, which runs /usr/bin/<this name> when the
+# shell does not answer. xdph finds this file through PATH, so $0 is its full path (the kernel passes it to the interpreter).
+exec "${0%/*}/hyprland-share-picker" --stock-name hyprland-preview-share-picker "$@"

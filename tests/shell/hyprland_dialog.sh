@@ -2,8 +2,9 @@
 # ADR-0035 D-3: packaging/session-bin/hyprland-dialog, the stand-in Hyprland runs as its "Application Not Responding"
 # dialog in a Grassfield session. An ANR call for exactly one client process is reported to the shell (`anr report`) and the
 # stand-in then waits, silent, with the same pid (Hyprland kills it when the app answers or closes). Every other call, and
-# every case where the window cannot be told apart or the shell does not say "ok" within 1 s, runs the stock dialog with the
-# same arguments and the same pid. A scratch copy runs against fake `qs`, `hyprctl` and stock dialog;
+# every case where the window cannot be told apart, no shell runs, the shell refuses or it does not say "ok" within 10 s (a
+# shell that hangs; a slow one under load is waited for, decision 3-16), runs the stock dialog with the same arguments and
+# the same pid. A scratch copy runs against fake `qs`, `hyprctl` and stock dialog;
 # the texts are pinned against the installed Hyprland when there is one.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -50,7 +51,8 @@ cat >"$tmp/fake/qs" <<'EOF'
 printf '%s\0' "$@" >"$FAKE_DIR/qs.args"
 env | grep -E '^QS_(CONFIG_PATH|CONFIG_NAME|MANIFEST)=' >"$FAKE_DIR/qs.env" || true
 case "$FAKE_QS" in
-  hang) exec sleep 5 ;;
+  hang) exec sleep 30 ;;
+  slow) sleep 3; printf 'ok\n' ;;
   fail) echo "no running instance" >&2; exit 1 ;;
   *) printf '%s\n' "$FAKE_QS" ;;
 esac
@@ -254,12 +256,29 @@ FAKE_CLIENTS=$(clients 4242 foot "~")
 FAKE_QS="refused" falls_back "the shell refuses" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
 desc="... after asking it"
 check test -e "$tmp/qs.args"
-FAKE_QS=fail falls_back "no shell answers" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
+FAKE_QS=fail falls_back "no shell answers (qs ends at once: the stock dialog at once)" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
 FAKE_QS="" falls_back "an empty answer" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
+
+# Decision 3-16 (capture defect of 2026-10-30): under load the shell, qs's own start included, may answer after seconds; the
+# 1-s deadline ran the stock English dialog in a French session. A shell that says ok after 3 s gets the mark, no stock
+# dialog; one that hangs gets the stock dialog after 10 s, not before.
+FAKE_QS=slow start "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
+slow_ok() {
+  sleep 2.5
+  [[ ! -f $tmp/stock.args ]] && kill -0 "$run_pid" 2>/dev/null || return 1
+  sleep 1
+  waits_silently
+}
+desc="a shell that says ok after 3 s (load): no stock dialog meanwhile, then the stand-in waits silently"
+check slow_ok
+stop
 t0=$(date +%s%N)
-FAKE_QS=hang falls_back "a shell that hangs (1-s deadline)" 3 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
-desc="... within 2 s"
-check test $((($(date +%s%N) - t0) / 1000000)) -lt 2000
+FAKE_QS=hang falls_back "a shell that hangs (10-s deadline)" 13 "${EN[@]}" --text "$(en_text "~" foot)" "${EN_B[@]}"
+hang_ms=$((($(date +%s%N) - t0) / 1000000))
+desc="... not before the 10-s deadline (${hang_ms} ms)"
+check test "$hang_ms" -ge 9500
+desc="... nor long after it (${hang_ms} ms)"
+check test "$hang_ms" -lt 12500
 
 falls_back "another language" 2 --title "Anwendung reagiert nicht" --text "Eine Anwendung ~ - foot reagiert nicht." --buttons "Beenden;Warten"
 falls_back "English title with French buttons" 2 "${EN[@]}" --text "$(en_text "~" foot)" "${FR_B[@]}"

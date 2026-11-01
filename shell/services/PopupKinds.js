@@ -5,7 +5,7 @@
 // Unit-tested in tests/unit/tst_popupkinds.qml, which also holds this list to the Overlay's.
 
 const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "nowplaying", "volume", "network", "battery",
-    "controlcenter", "dock", "dockstack", "forcequit", "confirm", "appabout", "notice", "tiling", "tilingSuggest"];
+    "controlcenter", "dock", "dockstack", "forcequit", "confirm", "appabout", "notice", "tiling", "tilingSuggest", "sharePicker", "screenshare"];
 
 function known(kind) {
     return kinds.indexOf(kind) >= 0;
@@ -13,7 +13,7 @@ function known(kind) {
 
 // The kinds drawn as a Dialog (shell/overlay/Dialog.qml): an alert or a sheet, each with its own corner. tests/unit/
 // tst_overlayblur.qml holds this list to the Overlay's components: a new kind built on Dialog that is not here fails it.
-const dialogs = ["forcequit", "confirm", "appabout", "notice"];
+const dialogs = ["forcequit", "confirm", "appabout", "notice", "sharePicker"];
 
 // The symbol a notice shows (ADR-0040 IQ-B1 B: its subject's, never the Grassfield mark): `symbol` when it names one, the
 // information symbol otherwise. A caller that leaves it out passes undefined, or "undefined" through a string-typed parameter

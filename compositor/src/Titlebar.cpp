@@ -234,12 +234,17 @@ namespace {
         gf::ipc::postMinimizeRequest(reinterpret_cast<uintptr_t>(w.get()));
     }
 
-    // The one zoom toggle, shared by the zoom button and the double-click on the drag area.
+    // The one zoom toggle, shared by the zoom button and the double-click on the drag area. A window of fixed size is not
+    // zoomed (its zoom light is disabled, core lightAvailable; ADR-0040 step 1b's review); a zoomed one still unzooms.
     void toggleZoom(const PHLWINDOW& w) {
         auto& fs = Fullscreen::controller();
         if (!fs)
             return;
         const auto current = fs->getFullscreenModes(w).internal;
+        if (current == Fullscreen::FSMODE_NONE && gf::tiler::fixedSize(w)) {
+            gf::logRequest(Log::DEBUG, "titlebar zoom: refused for a window of fixed size");
+            return;
+        }
         const auto target  = current == Fullscreen::FSMODE_MAXIMIZED ? Fullscreen::FSMODE_NONE : Fullscreen::FSMODE_MAXIMIZED;
         fs->setFullscreenMode(w, target, target, false);
     }
@@ -267,6 +272,12 @@ namespace {
         if (!fs)
             return;
         const auto mode = fullscreenMode(w);
+        // A window of fixed size: the light is drawn disabled and its click does nothing, Alt included (macOS; ADR-0040 step
+        // 1b's review), unless the window is zoomed or in full screen already: then it brings it back.
+        if (!gf::chrome::lightAvailable(tb::Button::Zoom, false, gf::tiler::fixedSize(w), mode != Fullscreen::FSMODE_NONE)) {
+            gf::logRequest(Log::DEBUG, "titlebar zoom: refused for a window of fixed size");
+            return;
+        }
         switch (gf::chrome::zoomAction(mode == Fullscreen::FSMODE_MAXIMIZED, mode == Fullscreen::FSMODE_FULLSCREEN, altHeld())) {
             case gf::chrome::ZoomAction::EnterFullscreen:
                 gf::logRequest(Log::DEBUG, "titlebar zoom with Alt -> full screen");
@@ -441,8 +452,8 @@ namespace {
     // The topmost window under `pos` whose zoom light contains it (TL22, TL24), and that light. The windows are walked as
     // titlebarHoveredAt walks them (geometry only, from the top); a revealed full-screen bar is over every window. A window of
     // fixed size (gf::tiler::fixedSize) is under the pointer, but none of its lights opens the tiling popover: nothing in it
-    // can be tiled, and a Grassfield app draws that light disabled (ADR-0040 step 1b: About This Computer's grey zoom light
-    // opened the popover, the nested pass of 85c2c10).
+    // can be tiled, and its zoom light is disabled, drawn so by a Grassfield app and by the plugin's titlebar alike (core
+    // lightAvailable; ADR-0040 step 1b: About This Computer's grey zoom light opened the popover, the nested pass of 85c2c10).
     std::optional<std::pair<PHLWINDOW, CBox>> zoomLightAt(const Vector2D& pos) {
         const auto  inLight = [&pos](const CBox& light) {
             CBox hit = light;
@@ -481,7 +492,7 @@ namespace {
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.leave, gf::tiling::HoverState::Leave));
         if (change.enter && w && gf::state().tilingLayouts) // off (TL32): Super+Ctrl+L and the Window menu still open it
             gf::ipc::postEvent(key, gf::tiling::tileHoverJson(*change.enter, gf::tiling::HoverState::Enter, gf::tiling::Rect{light.x, light.y, light.w, light.h},
-                                                              gf::tiler::tileable(w), gf::tiler::splittable(w)));
+                                                              gf::tiler::tileable(w), gf::tiler::splittable(w), gf::tiler::unfitZones(w), gf::tiler::unfitPlaces(w)));
     }
 
     void armZoomTimer(uint64_t ms);
@@ -706,7 +717,7 @@ void CGrassfieldTitlebar::popoverRequest(std::string_view address) {
     const CBox light   = zoomLightOf(w).value_or(CBox{surface.x, surface.y - band, theme::kTitlebarHeight, theme::kTitlebarHeight});
     gf::ipc::postEvent(gf::events::Key{.channel = gf::events::Channel::TileHover, .id = 0},
                        gf::tiling::tileHoverJson(*id, gf::tiling::HoverState::Open, gf::tiling::Rect{light.x, light.y, light.w, light.h}, gf::tiler::tileable(w),
-                                                 gf::tiler::splittable(w)));
+                                                 gf::tiler::splittable(w), gf::tiler::unfitZones(w), gf::tiler::unfitPlaces(w)));
 }
 
 SDecorationPositioningInfo CGrassfieldTitlebar::getPositioningInfo() {
@@ -923,17 +934,20 @@ void CGrassfieldTitlebar::drawBar(const PHLWINDOW& w, const CBox& bar, float sca
     addRect(rule.scale(scale).round(), toColor(palette.rule, alpha), 0, power);
 
     // Buttons (owner-drawn circles): coloured on the active window, grey on the others; coloured again with their glyphs
-    // while the pointer is over the group (macOS). On a full-screen window minimize stays grey (unavailable).
+    // while the pointer is over the group (macOS). On a full-screen window minimize stays grey (unavailable), and so does the
+    // zoom light of a window of fixed size that is neither zoomed nor in full screen (core lightAvailable).
     const bool active = Desktop::focusState() && Desktop::focusState()->window() == w;
+    const bool fixed  = gf::tiler::fixedSize(w);
+    const bool sized  = fullscreenMode(w) != Fullscreen::FSMODE_NONE;
     for (const auto button : tb::kButtonOrder) {
-        const bool available = !fullscreen || gf::chrome::lightAvailableInFullscreen(button);
+        const bool available = gf::chrome::lightAvailable(button, fullscreen, fixed, sized);
         const auto r         = tb::buttonRect(button);
         CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
         box.scale(scale).round();
         addRect(box, toColor(tb::lightColor(button, active && available, hovered && available, appearance), alpha), static_cast<int>(std::round(box.w / 2.0)), 2.F);
     }
     if (hovered)
-        drawGlyphs(bar, scale, alpha, fullscreen);
+        drawGlyphs(bar, scale, alpha, fullscreen, fixed, sized);
 
     // Title, centered on the bar, never over the buttons.
     const int maxWidthPx = static_cast<int>(std::floor(tb::maxTitleWidth(bar.w) * scale));
@@ -966,11 +980,11 @@ void CGrassfieldTitlebar::drawBar(const PHLWINDOW& w, const CBox& bar, float sca
     g_pHyprRenderer->addPassElement(makeUnique<CTexPassElement>(data));
 }
 
-void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha, bool fullscreen) {
+void CGrassfieldTitlebar::drawGlyphs(const CBox& bar, float scale, float alpha, bool fullscreen, bool fixedSize, bool sized) {
     for (size_t i = 0; i < tb::kButtonOrder.size(); ++i) {
         const auto button = tb::kButtonOrder[i];
-        if (fullscreen && !gf::chrome::lightAvailableInFullscreen(button))
-            continue;
+        if (!gf::chrome::lightAvailable(button, fullscreen, fixedSize, sized))
+            continue; // a disabled light shows no glyph (macOS)
         const auto r      = tb::buttonRect(button);
         CBox       box{bar.x + r.x, bar.y + r.y, r.w, r.h};
         box.scale(scale).round(); // the light exactly as drawn above

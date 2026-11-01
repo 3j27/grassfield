@@ -18,3 +18,5 @@ ExclusiveSurfaces 1.0 ExclusiveSurfaces.qml
 StackPopup 1.0 StackPopup.qml
 TilingPopover 1.0 TilingPopover.qml
 TilingSuggestions 1.0 TilingSuggestions.qml
+ScreenShareMenu 1.0 ScreenShareMenu.qml
+SharePickerPanel 1.0 SharePickerPanel.qml

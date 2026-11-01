@@ -248,6 +248,21 @@ TEST(ClientChromeFullscreenTitlebar, MinimizeIsUnavailable) {
     EXPECT_TRUE(lightAvailableInFullscreen(gf::titlebar::Button::Zoom));
 }
 
+// ADR-0040 step 1b's review: a window of fixed size drawn with the plugin's titlebar showed a live zoom light and a click
+// zoomed it. Its zoom light is disabled (macOS greys the green button of a window that cannot be resized), unless it is zoomed
+// or in full screen already (the light brings it back, as the menu's Unzoom and Exit Full Screen); its other lights are not.
+TEST(ClientChromeFixedSize, TheZoomLightOfAWindowOfFixedSizeIsDisabled) {
+    using gf::titlebar::Button;
+    EXPECT_FALSE(lightAvailable(Button::Zoom, false, true, false)) << "fixed size, as it is";
+    EXPECT_TRUE(lightAvailable(Button::Zoom, false, true, true)) << "fixed size but zoomed: Unzoom";
+    EXPECT_TRUE(lightAvailable(Button::Zoom, true, true, true)) << "fixed size in full screen: Exit Full Screen";
+    EXPECT_TRUE(lightAvailable(Button::Zoom, false, false, false)) << "a resizable window";
+    EXPECT_TRUE(lightAvailable(Button::Close, false, true, false));
+    EXPECT_TRUE(lightAvailable(Button::Minimize, false, true, false));
+    EXPECT_FALSE(lightAvailable(Button::Minimize, true, false, true)) << "full screen keeps its rule";
+    EXPECT_TRUE(lightAvailable(Button::Close, true, false, true));
+}
+
 TEST(ClientChromeFullscreenTitlebar, OnlyThePressesOnTheBarHaveTheirReleaseCancelled) {
     constexpr uint32_t kLeft  = 0x110;
     constexpr uint32_t kRight = 0x111;

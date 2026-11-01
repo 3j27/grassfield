@@ -368,6 +368,8 @@ Variants {
                     return networkMenu;
                 case "battery":
                     return batteryMenu;
+                case "screenshare":
+                    return screenShareMenu;
                 case "controlcenter":
                     return controlCenter;
                 case "dock":
@@ -376,6 +378,8 @@ Variants {
                     return stackPopup;
                 case "forcequit":
                     return forceQuit;
+                case "sharePicker":
+                    return sharePicker;
                 case "confirm":
                     return confirmDialog;
                 case "appabout":
@@ -443,6 +447,11 @@ Variants {
         }
 
         Component {
+            id: screenShareMenu
+            ScreenShareMenu {}
+        }
+
+        Component {
             id: controlCenter
             ControlCenter {}
         }
@@ -460,6 +469,11 @@ Variants {
         Component {
             id: forceQuit
             ForceQuitPanel {}
+        }
+
+        Component {
+            id: sharePicker
+            SharePickerPanel {}
         }
 
         Component {

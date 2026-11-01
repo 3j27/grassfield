@@ -57,6 +57,13 @@ function inputHeight(barHeight, revealZone, away) {
     return away ? Math.min(barHeight, revealZone) : barHeight;
 }
 
+// The screen-sharing indicator's own piece of the band while the bar is away (ADR-0035 7-14): its opacity while an app shares
+// the screen (`sharing`) for the bar's slide position `visible` (0 hidden, 1 shown, already eased). It comes as the bar leaves
+// and goes as the bar comes back with the indicator's status item; nothing without a share.
+function pinnedIndicatorOpacity(sharing, visible) {
+    return sharing ? 1 - Math.min(1, Math.max(0, visible)) : 0;
+}
+
 // Vertical offset of the bar content for a slide position `visible` (0 hidden, 1 shown, already eased).
 function slideOffset(barHeight, visible) {
     return -barHeight * (1 - Math.min(1, Math.max(0, visible)));

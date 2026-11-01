@@ -235,6 +235,9 @@ namespace gf::prompter {
             {QStringLiteral("/usr/bin/pinentry-gnome3"), QStringLiteral("gnupg")},
             {QStringLiteral("/usr/bin/gpg-agent"), QStringLiteral("gnupg")},
             {QStringLiteral("/usr/lib/gcr-ssh-agent"), QStringLiteral("ssh")},
+            // udiskie's password command in grassfield-automount.service (step 9c): any program of the user can run it with a
+            // disk name of its own, so its text is another program's too (onBehalf).
+            {QStringLiteral("/usr/lib/grassfield/grassfield-askpass"), QStringLiteral("disk")},
         };
         return known;
     }
@@ -343,6 +346,12 @@ namespace gf::prompter {
         if (!trustedPath(facts.path, where.owner, where.top) || !(fileIdOf(facts.path) == facts.file))
             return r;
         if (const QString role = knownRole(facts.file, where.known, where.owner, where.top); !role.isEmpty()) {
+            // Only in the bridge's mount and user namespaces, as an app (the integrator's review of PR #95, NIT): a process
+            // in namespaces of its own can make a known path name other files there (decision 9-14, amended). Save the disk
+            // helper (decision 9-26, amended): udiskie's unit runs it in namespaces of its own, and any program of the user
+            // can run it in the bridge's anyway, so the check would protect nothing for it.
+            if (!facts.sameNamespaces && role != QLatin1String("disk"))
+                return r;
             r.role       = role;
             r.identified = true;
             r.onBehalf   = true;
@@ -378,7 +387,7 @@ namespace gf::prompter {
         }
     } // namespace
 
-    ExeFacts exeFactsOfPidfd(int pidfd, bool withCode) {
+    ExeFacts exeFactsOfPidfd(int pidfd, bool withCode, const std::function<void()>& beforeRecheck) {
         ExeFacts     facts;
         const qint64 pid = pidOfPidfd(pidfd);
         if (pid <= 0)
@@ -414,6 +423,8 @@ namespace gf::prompter {
             }
         }
         // Every read is of the pidfd's process only if it still runs now: otherwise the PID may have been reused.
+        if (beforeRecheck)
+            beforeRecheck();
         facts.alive = pidfdAlive(pidfd);
         if (!facts.alive) {
             facts.path.clear();

@@ -8,6 +8,7 @@ import Quickshell.Io
 import Quickshell.Services.Polkit
 import Quickshell.Wayland
 import Grassfield.Ui
+import qs.security
 import qs.services
 import "../../lib/RunMode.js" as RunMode
 
@@ -23,6 +24,18 @@ Scope {
     // A request is open: its sheet shown, or held (behind the lock or the screen saver, or queued). Read only by shell.qml for
     // SessionState.authorizing (the clipboard history records nothing while it is true and 2 s after, ADR-0034 Q11).
     readonly property bool requestActive: dialogModel.active
+
+    // The one queue of the polkit sheet and the secret sheets (ADR-0035 D-9, step 9b; SheetQueue), given by shell.qml; null
+    // outside it (this agent's own harness), where nothing waits.
+    property SheetQueue queue: null
+    // A secret sheet came first: the request waits (ADR-0035 D-9: no sheet takes the keyboard from another). The model is
+    // handed no request meanwhile (`flow` below), so nothing of it is mapped, focused or held until the queue lets it; it
+    // then arrives as a request right after another one ended (SheetQueue.sheetEnded, below): held, its notice "right after
+    // another one", without the keyboard until a click past the guard.
+    readonly property bool waiting: root.queue !== null && root.queue.polkitWaits
+    // The polkit sheet's place in the queue: from a request's arrival (while it waits too) until its sheet is gone, the key
+    // sink's linger included (shell.qml binds SheetQueue.polkitPresent to it).
+    readonly property bool queuePresent: agent.isActive || root.requestOpen || root.sinkingKeys
 
     PolkitAgent {
         id: agent
@@ -41,7 +54,7 @@ Scope {
         id: dialogModel
         // Quickshell qmltypes name the AuthFlow property type without exporting it (metadata quirk).
         // qmllint disable unresolved-type
-        flow: agent.isActive ? agent.flow : null
+        flow: agent.isActive && !root.waiting ? agent.flow : null
         // qmllint enable unresolved-type
 
         // A request arrived, or none is left.
@@ -103,6 +116,17 @@ Scope {
         if (follows) {
             dialogModel.clearRequested();
             dialogModel.noteShown();
+        }
+    }
+
+    // A secret sheet left the screen: a polkit request handed over now comes right after another one ended, and is held as
+    // such (AuthDialogModel.followsAnother). The queue says so before it changes, so before the request can be handed over.
+    Connections {
+        target: root.queue
+
+        function onSheetEnded(kind: string): void {
+            if (kind === "secret")
+                dialogModel.noteEnded();
         }
     }
 
