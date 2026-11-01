@@ -502,6 +502,23 @@ Item {
             compare(client.answers[0].ok, true);
         }
 
+        // Decided by the integrator on 2026-11-01 (closest to macOS: a pairing sheet's Connect button): one click on OK, past
+        // the guard, confirms a confirmation sheet; within the guard the same click gives nothing.
+        function test_27_confirmByOneClickOnOk() {
+            client.prompt("p1", {kind: "confirm"});
+            shown("p1");
+            compare(rig.secret.heldByLock, true);
+            waitForItemPolished(named("secretOk").parent);
+            waitForRendering(rig.secret.sheet);
+            mouseClick(named("secretOk"));
+            compare(client.answers.length, 0, "a click on OK within the guard answers nothing");
+            compare(rig.secret.userFocused, false);
+            wait(600);
+            mouseClick(named("secretOk"));
+            compare(client.answers.length, 1, "one click on OK past the guard confirms");
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok"});
+        }
+
         // Opus review of step 9b, MINOR-1: an empty new password is never sent by a stray Return. Return in New moves on to
         // Verify; Return in Verify with both fields empty sends nothing; OK (a click) may send an empty new password.
         function test_20_emptyNewPasswordNotByReturn() {

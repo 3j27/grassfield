@@ -190,7 +190,8 @@ package_grassfield-desktop() {
   # networkmanager and bluez-utils (which pulls bluez) are the D-Bus services the Settings Wi-Fi and Bluetooth pages talk to (GF-049:
   # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
   # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
-  # with Omarchy.
+  # with Omarchy. grim and slurp take Grassfield's screenshots (packaging/bin/grassfield-capture, ADR-0035 D-10, step 8): declared
+  # too, now that Grassfield runs them itself.
   # Software Update (ADR-0033): grassfield-keyring (O12: the keys pacman trusts for [grassfield], built and published beside
   # these packages by grassfieldhq/grassfield-packages, as omarchy depends on omarchy-keyring; added once that repository
   # built it, owner decision O21), pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync),
@@ -202,11 +203,13 @@ package_grassfield-desktop() {
   # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
+  # libcups: grassfield-portal's print sheet asks CUPS for the printers and sends the jobs (ADR-0035 D-7, owner decision Q6);
+  # already there with qt6-base and gtk3, declared since the backend links it.
   # gcr-4: libgcr-4, which grassfield-prompter links for gcr's system prompter protocol and its exchange (ADR-0035 D-9);
   # already installed with gnome-keyring (probe P15), declared because Grassfield's own binary needs it. libsecret: the
   # bridge's KIO password server keeps remembered network passwords in the Secret Service with it (ADR-0035 D-12 b, step
   # 9e); already installed with gcr-4, declared for the same reason.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk gcr-4 libsecret)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grim slurp grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups gcr-4 libsecret)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
@@ -221,7 +224,7 @@ package_grassfield-desktop() {
     'localsearch: file results in Search'
     'plocate: file names in Search when localsearch has no index (ADR-0027)'
     'kio-extras: network locations and image thumbnails in Files'
-    'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery)'
+    'libnotify: notices from the session helpers (log out blocked by an open document, crash, low battery, a screenshot and its Open in Preview)'
     'udiskie: mounts removable media when they are connected'
     'hyprsunset: Night Light (grassfield-nightshift)'
     'kimageformats: HEIF, AVIF and JPEG XL pictures as wallpapers (the helper reads what Qt can read)'
@@ -295,6 +298,12 @@ package_grassfield-desktop() {
     "$root/packaging/pacman/grassfield-update-helper" "$root/packaging/pacman/grassfield-channel-scriptlet"
   install -m644 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel.sh"
   install -Dm644 "$root/packaging/pacman/org.grassfield.packages.policy" "$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
+  # Owner decision SU-M2 (ADR-0033 s5; OPUS SECURITY REVIEW): the sudo of Omarchy's migrations that grassfield-update-helper
+  # runs, alone in its folder (the first of their PATH), the polkit rule that lets their unit alone start root units, and
+  # that unit's primary group (no member; pacman's sysusers hook creates it).
+  install -Dm755 "$root/packaging/pacman/grassfield-update-sudo" "$pkgdir/usr/lib/grassfield/update-sudo/sudo"
+  install -Dm644 "$root/packaging/pacman/49-grassfield-update.rules" "$pkgdir/usr/share/polkit-1/rules.d/49-grassfield-update.rules"
+  install -Dm644 "$root/packaging/pacman/grassfield-update.sysusers" "$pkgdir/usr/lib/sysusers.d/grassfield-update.conf"
   install -Dm644 -t "$pkgdir/usr/share/grassfield/pacman/" "$srcdir/pacman/repository.conf" "$srcdir/pacman/grassfield-stable.conf" \
     "$srcdir/pacman/grassfield-beta.conf" "$srcdir/pacman/grassfield-signing-key.asc"
   install -Dm755 "$root/packaging/pacman/pre-refresh-pacman" "$pkgdir/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman"

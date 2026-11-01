@@ -368,7 +368,14 @@ namespace gf::prompter {
             return r;
         bool codeChecked = false;
         if (const QString role = knownRole(facts.file, where.known, where.owner, where.top, &codeChecked); !role.isEmpty()) {
-            // KIO's worker runs a plugin from any path: its row only for trusted code (the security review of step 9e, MINOR-2).
+            // Only in the bridge's mount and user namespaces, as an app (the integrator's review of PR #95, NIT): a process
+            // in namespaces of its own can make a known path name other files there (decision 9-14, amended). Save the disk
+            // helper (decision 9-26, amended): udiskie's unit runs it in namespaces of its own, and any program of the user
+            // can run it in the bridge's anyway, so the check would protect nothing for it.
+            if (!facts.sameNamespaces && role != QLatin1String("disk"))
+                return r;
+            // KIO's worker runs a plugin from any path: its row only for trusted code, in the bridge's namespaces too (the
+            // security review of step 9e, MINOR-2).
             if (codeChecked && !runsTrustedCodeOnly(facts, where))
                 return r;
             r.role       = role;
@@ -399,7 +406,7 @@ namespace gf::prompter {
         }
     } // namespace
 
-    ExeFacts exeFactsOfPidfd(int pidfd, bool withCode) {
+    ExeFacts exeFactsOfPidfd(int pidfd, bool withCode, const std::function<void()>& beforeRecheck) {
         ExeFacts     facts;
         const qint64 pid = pidOfPidfd(pidfd);
         if (pid <= 0)
@@ -435,6 +442,8 @@ namespace gf::prompter {
             }
         }
         // Every read is of the pidfd's process only if it still runs now: otherwise the PID may have been reused.
+        if (beforeRecheck)
+            beforeRecheck();
         facts.alive = pidfdAlive(pidfd);
         if (!facts.alive) {
             facts.path.clear();
