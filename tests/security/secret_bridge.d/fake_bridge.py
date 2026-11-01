@@ -10,7 +10,10 @@ Scenarios:
                  withdrawal, a cancel for an unknown id ignored, a late answer to a withdrawn request never sent, a
                  confirmation without a password, the check box's state; NetworkManager's kind (step 9c): an answer carries
                  the password only (enterprise included: NetworkManager keeps nothing else), a cancel nothing, an nm prompt
-                 with a name for a WPA2 network closes the connection; a malformed line, an over-long line, a prompt
+                 with a name for a WPA2 network closes the connection; BlueZ's kind (step 10): a passkey answered with its 6
+                 digits, a confirmation with nothing, a code shown follows its progress lines (the probe cancels it once two
+                 digits are typed), progress for an id the shell does not hold is ignored, progress for a request that shows
+                 no passkey closes the connection; a malformed line, an over-long line, a prompt
                  before hello, another protocol version and a duplicate id each close the connection; the next attempt
                  waits 1 s, then 2 s, then 4 s (no hello in between), and 1 s again after a hello
   bound          SecretAgent: nine requests; the ninth is refused at once ("refused", never a user's "cancel"), the others
@@ -145,9 +148,14 @@ def kio_prompt(n, server, name_mode="edit", remember="off", keyring="protected",
             "login": {"name": name, "nameMode": name_mode, "realm": "", "retry": False, "remember": remember, "keyring": keyring}}
 
 
+def bt_prompt(n, name, mode, code=""):
+    return {"type": "prompt", "id": "p%d" % n, "kind": "bluetooth", "device": {"name": name, "address": "AA:BB:CC:DD:EE:01", "icon": "keyboard"},
+            "pairing": {"mode": mode, "code": code, "entered": 0, "service": "", "uuid": ""}}
+
+
 def shell_hello(c, desc):
     h = c.json()
-    check(desc, isinstance(h, dict) and h.get("v") == "prompter/1" and h.get("type") == "hello" and h.get("kinds") == ["password", "confirm", "nm", "kio"]
+    check(desc, isinstance(h, dict) and h.get("v") == "prompter/1" and h.get("type") == "hello" and h.get("kinds") == ["password", "confirm", "nm", "kio", "bluetooth"]
           and isinstance(h.get("shell"), str) and set(h) == {"v", "type", "shell", "kinds"}, repr(h))
 
 
@@ -156,7 +164,7 @@ def scenario_client(server):
     check("the shell connects", c is not None)
     if c is None:
         return
-    shell_hello(c, "the shell's hello is the first line, prompter/1, the kinds it draws (password, confirm, nm, kio)")
+    shell_hello(c, "the shell's hello is the first line, prompter/1, the kinds it draws (password, confirm, nm, kio, bluetooth)")
     hello(c)
     c.send({"type": "name", "state": "owned"})
     c.send(prompt(1, "answer-ok"))
@@ -199,6 +207,19 @@ def scenario_client(server):
     c.send(kio_prompt(25, "answer-cancel.example"))
     a = c.json()
     check("a kio request cancelled carries nothing", a == {"type": "answer", "id": "p25", "result": "cancel"}, repr(a))
+    c.send(bt_prompt(26, "answer-ok", "passkey"))
+    a = c.json()
+    check("a bluetooth passkey answered ok carries its 6 digits as the password", a == {"type": "answer", "id": "p26", "result": "ok", "password": "123456"}, repr(a))
+    c.send(bt_prompt(27, "answer-ok", "confirm", "000042"))
+    a = c.json()
+    check("a bluetooth confirmation answered ok carries nothing", a == {"type": "answer", "id": "p27", "result": "ok"}, repr(a))
+    c.send(bt_prompt(28, "answer-ok", "display-passkey", "000042"))
+    c.send({"type": "progress", "id": "p99", "entered": 1})
+    c.send({"type": "progress", "id": "p28", "entered": 1})
+    c.send({"type": "progress", "id": "p28", "entered": 2})
+    a = c.json()
+    check("a code shown is never answered ok; its progress reaches the client (cancelled at 2 digits); progress for an unknown id is ignored",
+          a == {"type": "answer", "id": "p28", "result": "cancel"}, repr(a))
     extra = c.quiet(0.6)
     check("nothing else is sent (the late answer to p4 included)", extra == [], repr(extra))
     bad = prompt(7, "answer-ok")
@@ -266,6 +287,16 @@ def scenario_client(server):
     hello(c)
     c.send(kio_prompt(31, "Your Bank"))
     check("a kio prompt whose server is not a host name closes the connection (never answered)", c.closed())
+    c.close()
+    closed_at = time.monotonic()
+    c = reconnect("then 1 s again", 0.8, 1.5)
+    if c is None:
+        return
+    c.json()
+    hello(c)
+    c.send(bt_prompt(32, "leave", "confirm", "000042"))
+    c.send({"type": "progress", "id": "p32", "entered": 1})
+    check("progress for a bluetooth request that shows no passkey closes the connection", c.closed())
     c.close()
 
 

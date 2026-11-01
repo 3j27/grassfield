@@ -5,7 +5,8 @@ import "../../shell/security/secret/Prompter.js" as Prompter
 // prompter/1, the shell's side (shell/security/secret/Prompter.js; ADR-0035 D-9, step 9b): the bridge's lines read strictly
 // (anything else closes the connection), the flattening rule of the bridge (decision 9-13), the answer lines, the socket
 // path's run-mode rule and the back-off; step 9c: NetworkManager's kind (nm), its length rule and answers, the disk role;
-// step 9e: KIO's kind (kio), its server rule, its answers, the kio role.
+// step 9e: KIO's kind (kio), its server rule, its answers, the kio role; step 10: BlueZ's kind (bluetooth), its modes and
+// fields, the progress of a code shown, its answers.
 TestCase {
     name: "Prompter"
 
@@ -162,7 +163,7 @@ TestCase {
     }
 
     function test_hello_line() {
-        compare(JSON.parse(Prompter.helloLine("1.0\n")), {v: "prompter/1", type: "hello", shell: "1.0", kinds: ["password", "confirm", "nm", "kio"]});
+        compare(JSON.parse(Prompter.helloLine("1.0\n")), {v: "prompter/1", type: "hello", shell: "1.0", kinds: ["password", "confirm", "nm", "kio", "bluetooth"]});
     }
 
     // --- step 9c: NetworkManager's kind and the disk role --------------------------------------------------------------
@@ -321,6 +322,121 @@ TestCase {
         compare(JSON.parse(Prompter.answerLine(fixed, true, "pw", true, "eve")), {type: "answer", id: "p9", result: "ok", password: "pw"}, "no name, no choice where none is asked");
         const kept = {id: "p9", kind: "kio", passwordNew: false, choice: null, security: "", nameMode: "edit", remember: "on"};
         compare(JSON.parse(Prompter.answerLine(kept, true, "pw", false, "bob")), {type: "answer", id: "p9", result: "ok", identity: "bob", password: "pw", choice: false}, "what the client keeps of it");
+    }
+
+    // Step 10: a BlueZ pairing step as the bridge sends it (a confirmation by default).
+    function pairingPrompt(device, pairing) {
+        return {
+            type: "prompt",
+            id: "p5",
+            kind: "bluetooth",
+            device: Object.assign({name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
+            pairing: Object.assign({mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""}, pairing || {})
+        };
+    }
+
+    function test_pairingPrompt() {
+        const r = parse(pairingPrompt());
+        verify(r.ok, r.reason);
+        compare(r.message.kind, "bluetooth");
+        compare(r.message.requester.role, "bluetooth", "the shell's own row, never the request's");
+        compare(r.message.device, {name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"});
+        compare(r.message.pairing, {mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""});
+        compare(r.message.texts.title, "", "no caller text");
+        compare(r.message.choice, null);
+        const flat = parse(pairingPrompt({name: "Key
+board‮"}));
+        verify(flat.ok, flat.reason);
+        compare(flat.message.device.name, "Key board", "the name flattened again");
+        for (const ok of [{mode: "pin", code: ""}, {mode: "passkey", code: ""}, {mode: "display-pin", code: "482913"}, {mode: "display-pin", code: "0000"},
+                          {mode: "display-passkey", code: "000001", entered: 6}, {mode: "authorize", code: ""},
+                          {mode: "authorize-service", code: "", service: "audio", uuid: "0000110b-0000-1000-8000-00805f9b34fb"},
+                          {mode: "authorize-service", code: "", service: "other", uuid: "03b80e5a-ede8-4b33-a751-6ce34ec4c700"}]) {
+            const m = parse(pairingPrompt({}, ok));
+            verify(m.ok, JSON.stringify(ok) + ": " + m.reason);
+        }
+        for (const icon of Prompter.DEVICE_ICONS)
+            verify(parse(pairingPrompt({icon: icon})).ok, icon);
+    }
+
+    function test_pairingPromptRefused_data() {
+        return [
+            {tag: "an extra key", p: Object.assign(pairingPrompt(), {requester: {}})},
+            {tag: "an extra device key", p: pairingPrompt({path: "/org/bluez/hci0"})},
+            {tag: "an extra pairing key", p: pairingPrompt({}, {pin: "1"})},
+            {tag: "an unknown mode", p: pairingPrompt({}, {mode: "yes"})},
+            {tag: "a lower-case address", p: pairingPrompt({address: "aa:bb:cc:dd:ee:01"})},
+            {tag: "an address with text", p: pairingPrompt({address: "AA:BB:CC:DD:EE:01 evil"})},
+            {tag: "an icon outside the list", p: pairingPrompt({icon: "../../lock"})},
+            {tag: "a name that shows nothing", p: pairingPrompt({name: "​ ‮"})},
+            {tag: "a name over its cap", p: pairingPrompt({name: "x".repeat(65)})},
+            {tag: "a name that is not text", p: pairingPrompt({name: 7})},
+            {tag: "a passkey of 5 digits", p: pairingPrompt({}, {code: "00042"})},
+            {tag: "a passkey with a letter", p: pairingPrompt({}, {code: "00004a"})},
+            {tag: "a passkey as a number", p: pairingPrompt({}, {code: 42})},
+            {tag: "a code where none is shown", p: pairingPrompt({}, {mode: "pin", code: "1234"})},
+            {tag: "a PIN shown with punctuation", p: pairingPrompt({}, {mode: "display-pin", code: "12-34"})},
+            {tag: "a PIN shown over 16", p: pairingPrompt({}, {mode: "display-pin", code: "1".repeat(17)})},
+            {tag: "digits typed for a confirmation", p: pairingPrompt({}, {entered: 1})},
+            {tag: "digits typed over 6", p: pairingPrompt({}, {mode: "display-passkey", entered: 7})},
+            {tag: "digits typed not a whole number", p: pairingPrompt({}, {mode: "display-passkey", entered: 1.5})},
+            {tag: "digits typed as text", p: pairingPrompt({}, {mode: "display-passkey", entered: "1"})},
+            {tag: "a service for a confirmation", p: pairingPrompt({}, {service: "audio", uuid: "0000110b-0000-1000-8000-00805f9b34fb"})},
+            {tag: "an unknown service", p: pairingPrompt({}, {mode: "authorize-service", code: "", service: "root", uuid: "0000110b-0000-1000-8000-00805f9b34fb"})},
+            {tag: "a service without its UUID", p: pairingPrompt({}, {mode: "authorize-service", code: "", service: "audio", uuid: ""})},
+            {tag: "an upper-case UUID", p: pairingPrompt({}, {mode: "authorize-service", code: "", service: "audio", uuid: "0000110B-0000-1000-8000-00805F9B34FB"})}
+        ];
+    }
+    function test_pairingPromptRefused(d) {
+        verify(!parse(d.p).ok, d.tag);
+    }
+
+    function test_progress() {
+        const r = parse({type: "progress", id: "p5", entered: 3});
+        verify(r.ok, r.reason);
+        compare(r.message, {type: "progress", id: "p5", entered: 3});
+        verify(!parse({type: "progress", id: "p5", entered: 3}, false).ok, "nothing before hello");
+        verify(!parse({type: "progress", id: "p5", entered: 7}).ok, "at most 6 digits");
+        verify(!parse({type: "progress", id: "p5", entered: -1}).ok);
+        verify(!parse({type: "progress", id: "p5", entered: "3"}).ok);
+        verify(!parse({type: "progress", id: "x5", entered: 3}).ok, "an id the bridge would never give");
+        verify(!parse({type: "progress", id: "p5", entered: 3, code: "000042"}).ok, "nothing else");
+    }
+
+    function test_pairingAnswerLines() {
+        const pin = parse(pairingPrompt({}, {mode: "pin", code: ""})).message;
+        compare(JSON.parse(Prompter.answerLine(pin, true, "12ab", false, null)), {type: "answer", id: "p5", result: "ok", password: "12ab"});
+        compare(Prompter.answerLine(pin, true, "12-ab", false, null), "", "a PIN of letters and digits only");
+        compare(Prompter.answerLine(pin, true, "", false, null), "", "never an empty PIN");
+        compare(Prompter.answerLine(pin, true, "1".repeat(17), false, null), "", "at most 16");
+        compare(JSON.parse(Prompter.answerLine(pin, false, "12ab", true, "eve")), {type: "answer", id: "p5", result: "cancel"}, "a cancellation carries nothing");
+        const passkey = parse(pairingPrompt({}, {mode: "passkey", code: ""})).message;
+        compare(JSON.parse(Prompter.answerLine(passkey, true, "012345", false, null)), {type: "answer", id: "p5", result: "ok", password: "012345"});
+        compare(Prompter.answerLine(passkey, true, "12345", false, null), "", "exactly 6 digits");
+        compare(Prompter.answerLine(passkey, true, "12345a", false, null), "");
+        const confirm = parse(pairingPrompt()).message;
+        compare(JSON.parse(Prompter.answerLine(confirm, true, "000042", true, "eve")), {type: "answer", id: "p5", result: "ok"}, "a confirmation carries nothing");
+        const display = parse(pairingPrompt({}, {mode: "display-passkey", code: "000042"})).message;
+        compare(Prompter.answerLine(display, true, null, false, null), "", "a code shown is never answered ok");
+        compare(JSON.parse(Prompter.answerLine(display, false, null, false, null)), {type: "answer", id: "p5", result: "cancel"});
+        const kept = {id: "p5", kind: "bluetooth", passwordNew: false, choice: null, security: "", nameMode: "", remember: "", mode: "passkey"};
+        compare(JSON.parse(Prompter.answerLine(kept, true, "999999", false, null)), {type: "answer", id: "p5", result: "ok", password: "999999"}, "what the client keeps of it");
+        compare(Prompter.answerLine({id: "p5", kind: "bluetooth", mode: "maybe"}, true, null, false, null), "", "an unknown mode");
+    }
+
+    function test_pairingCodeRules() {
+        verify(Prompter.pairingLengthOk("pin", 1));
+        verify(Prompter.pairingLengthOk("pin", 16));
+        verify(!Prompter.pairingLengthOk("pin", 17));
+        verify(!Prompter.pairingLengthOk("pin", 0));
+        verify(Prompter.pairingLengthOk("passkey", 6));
+        verify(!Prompter.pairingLengthOk("passkey", 5));
+        verify(!Prompter.pairingLengthOk("confirm", 6));
+        verify(Prompter.pairingCodeOk("pin", "0000"));
+        verify(!Prompter.pairingCodeOk("pin", "00 00"));
+        verify(Prompter.pairingCodeOk("passkey", "000000"));
+        verify(!Prompter.pairingCodeOk("passkey", "00000١"), "ASCII digits only");
+        verify(!Prompter.pairingCodeOk("display-passkey", "000000"));
     }
 
     function test_kioRole() {

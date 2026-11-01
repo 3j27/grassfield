@@ -7,7 +7,7 @@ import qs.services
 // agents): the real SecretAgent and AuthAgent (Quickshell types replaced, logic untouched), the real SecretSheet,
 // SecretSheetModel, AuthDialog, AuthDialogModel and SheetQueue, wired as shell.qml wires them; a fake prompter client and
 // mock polkit flows. Real key and mouse events. ADR-0035 D-9, master-prompt R12. Step 9c: NetworkManager's Wi-Fi alert. Step
-// 9e: KIO's server sheet.
+// 9e: KIO's server sheet. Step 10: BlueZ's pairing sheets.
 Item {
     id: top
     width: 800
@@ -863,6 +863,143 @@ Item {
             compare(named("secretCaller_message").textFormat, Text.PlainText);
             compare(named("secretCaller_warning").text, "Wrong!");
             compare(named("secretTitle").text, "Keyring asks for a password");
+        }
+
+        // Step 10 (decision 10-7): a pairing confirmation is held; no key answers it, OK focused or not; after a click past
+        // the guard, Connect (Return) answers it with nothing but "ok".
+        function test_35_pairingConfirmHeld() {
+            client.promptPairing("p1", {});
+            shown("p1");
+            compare(rig.secret.heldByLock, true, "always held");
+            compare(rig.secret.heldWhy, "pairing-answer");
+            compare(rig.secret.sheet.takesKeys, false);
+            verify(named("secretHeldNotice").text.indexOf("no key answers it before that") >= 0);
+            compare(named("secretTitle").text, "Connection Request from “Magic Keyboard”");
+            compare(named("secretRequester").text, "Bluetooth device AA:BB:CC:DD:EE:01");
+            compare(named("secretGlyph").name, "keyboard");
+            compare(named("secretPairingMessage").text, "Connect only if the device shows the same code.");
+            compare(named("secretPairingCode").text, "000042");
+            compare(named("secretPairingCode").visible, true);
+            compare(named("secretField").visible, false, "no field for a confirmation");
+            compare(named("secretCallerBlock").visible, false, "no caller text");
+            compare(named("secretOk").text, "Connect");
+            compare(named("secretCancel").text, "Cancel");
+            named("secretOk").forceActiveFocus();
+            keyClick(Qt.Key_Space);
+            keyClick(Qt.Key_Return);
+            keyClick(Qt.Key_Enter);
+            compare(client.answers.length, 0, "no key answers it before the click");
+            clickPastGuard();
+            tryVerify(() => named("secretOk").activeFocus);
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok"});
+        }
+
+        // Step 10: an incoming pairing or service: Decline / Connect; Esc on the held sheet declines.
+        function test_36_pairingAuthorizeDecline() {
+            client.promptPairing("p1", {mode: "authorize-service", code: "", service: "file-transfer", uuid: "00001106-0000-1000-8000-00805f9b34fb"}, {name: "Phone", icon: "phone"});
+            shown("p1");
+            compare(rig.secret.heldByLock, true);
+            compare(named("secretCancel").text, "Decline");
+            compare(named("secretOk").text, "Connect");
+            compare(named("secretGlyph").name, "phone");
+            compare(named("secretPairingMessage").text, "The device wants to use file transfer on this computer.");
+            compare(named("secretPairingCode").visible, false);
+            keyClick(Qt.Key_Escape);
+            compare(client.answers.length, 1, "Esc declines");
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "cancel"});
+        }
+
+        // Step 10: a passkey field: nothing before the click; Connect waits for 6 characters; 6 that are not digits are not
+        // sent; 6 digits go once, then the keys stay a moment on the sink ("Code sent").
+        function test_37_pairingPasskey() {
+            client.promptPairing("p1", {mode: "passkey", code: ""});
+            shown("p1");
+            compare(rig.secret.heldWhy, "pairing-code");
+            verify(named("secretHeldNotice").text.indexOf("Click the alert to type the code") >= 0);
+            compare(named("secretPairingMessage").text, "Enter the code shown on the device.");
+            named("secretField").forceActiveFocus();
+            typeText("123456");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0, "no answer before the click past the guard");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            compare(named("secretField").length, 0, "emptied");
+            typeText("12345");
+            compare(named("secretOk").enabled, false, "Connect waits for 6 characters");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0);
+            compare(named("secretField").length, 5, "Return with too few characters keeps what was typed");
+            typeText("a");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0, "six characters that are not all digits");
+            compare(named("secretError").text, "Type the 6 digits of the code.");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            typeText("012345");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "012345"});
+            tryVerify(() => !rig.secret.model.active);
+            compare(rig.secret.lingering, true, "the keys stay on the sink a moment");
+            compare(rig.secret.lingerWhy, "code");
+            compare(find(rig.secret.notice, i => i.text === "Code sent") !== null, true);
+        }
+
+        // Step 10 (decision 10-8): a code shown: held without a notice, no OK, Cancel alone across the row; the digits typed on
+        // the device update the sheet and nothing else (no arrival, no hold change, no focus moved, no keyboard taken); a
+        // queued code shown keeps its own count; Cancel (a click, even within the guard) answers "cancel".
+        function test_38_pairingDisplayProgress() {
+            client.promptPairing("p1", {mode: "display-passkey", code: "000042", entered: 0});
+            client.promptPairing("p2", {mode: "display-passkey", code: "000777", entered: 0}, {name: "Other"});
+            shown("p1");
+            compare(rig.secret.heldByLock, true);
+            compare(rig.secret.heldWhy, "pairing-display");
+            compare(named("secretHeldNotice").visible, false, "nothing to click for: no notice");
+            compare(named("secretOk").visible, false, "no OK for a code shown");
+            compare(named("secretCancel").visible, true);
+            compare(named("secretCancel").width, sheet().width - 2 * sheet().pad, "Cancel alone fills the row");
+            compare(named("secretPairingCode").text, "000042");
+            compare(named("secretPairingProgress").text, "Digits typed on the device: 0 of 6");
+            const focused = top.Window.activeFocusItem;
+            const seen = shownIds.length;
+            client.progress("p1", 3);
+            compare(named("secretPairingProgress").text, "Digits typed on the device: 3 of 6");
+            compare(top.Window.activeFocusItem, focused, "the focus did not move");
+            compare(rig.secret.sheet.takesKeys, false, "the keyboard is not taken");
+            compare(rig.secret.heldByLock, true);
+            compare(rig.secret.userFocused, false);
+            compare(shownIds.length, seen, "the request did not arrive again");
+            client.progress("p2", 5);
+            compare(named("secretPairingProgress").text, "Digits typed on the device: 3 of 6", "another request's count is its own");
+            mouseClick(named("secretCancel"));
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "cancel"});
+            shown("p2");
+            compare(named("secretPairingCode").text, "000777");
+            compare(named("secretPairingProgress").text, "Digits typed on the device: 5 of 6", "the queued request's count, kept while it waited");
+        }
+
+        // Step 10: the device's name is a field of Grassfield's sentence, plain; a PIN field takes letters and digits only.
+        function test_39_pairingNamePlainAndPin() {
+            client.promptPairing("p1", {mode: "pin", code: ""}, {name: "<b>Admin</b> keyboard", icon: ""});
+            shown("p1");
+            compare(named("secretTitle").text, "Connection Request from “<b>Admin</b> keyboard”");
+            compare(named("secretTitle").textFormat, Text.PlainText);
+            compare(named("secretGlyph").name, "bluetooth");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            typeText("00-00");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0);
+            compare(named("secretError").text, "A PIN has 1 to 16 letters or digits.");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            typeText("0000");
+            mouseClick(named("secretOk"));
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "0000"});
         }
     }
 }

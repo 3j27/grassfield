@@ -4,7 +4,8 @@ import "../../../shell/security/secret/Prompter.js" as Prompter
 // PrompterClient for the secret agent's harness (tests/security/secret_sheets.sh): the same properties, signals and
 // answer() rule (once per open request, the line Prompter.answerLine builds), no socket. secret_sheets.sh copies it next
 // to the Prompter.js under test (its import then names that copy). The tests send requests
-// (prompt), withdrawals (withdraw) and a lost connection (drop), and read what the shell answered (`answers`).
+// (prompt), withdrawals (withdraw), a code shown's progress (progress, step 10) and a lost connection (drop), and read
+// what the shell answered (`answers`).
 QtObject {
     id: fake
 
@@ -19,6 +20,7 @@ QtObject {
 
     signal prompted(var request)
     signal withdrawn(string id)
+    signal progressed(string id, int entered)
     signal lost
 
     function answer(id: string, ok: bool, password: var, choice: bool, identity: var): bool {
@@ -76,6 +78,35 @@ QtObject {
         fake.openCount = Object.keys(fake.open).length;
         fake.prompted(parsed.message);
         return parsed.message;
+    }
+
+    // A BlueZ pairing step (kind bluetooth, step 10) as the bridge sends it, parsed by the real parser (a confirmation for a
+    // keyboard by default).
+    function promptPairing(id: string, pairing: var, device: var): var {
+        const m = {
+            type: "prompt",
+            id: id,
+            kind: "bluetooth",
+            device: Object.assign({name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
+            pairing: Object.assign({mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""}, pairing || {})
+        };
+        const parsed = Prompter.parseBridgeLine(JSON.stringify(m), true);
+        if (!parsed.ok)
+            throw new Error(parsed.reason);
+        fake.open[id] = parsed.message;
+        fake.openCount = Object.keys(fake.open).length;
+        fake.prompted(parsed.message);
+        return parsed.message;
+    }
+
+    // The digits typed on the device for a code shown (PrompterClient's rule: only for a display-passkey request it holds).
+    function progress(id: string, entered: int): void {
+        const parsed = Prompter.parseBridgeLine(JSON.stringify({type: "progress", id: id, entered: entered}), true);
+        if (!parsed.ok)
+            throw new Error(parsed.reason);
+        if (!Object.prototype.hasOwnProperty.call(fake.open, id) || fake.open[id].pairing.mode !== "display-passkey")
+            return;
+        fake.progressed(id, entered);
     }
 
     // A request as the bridge sends it, parsed by the real parser (keyring by default).

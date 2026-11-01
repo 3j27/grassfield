@@ -6,7 +6,9 @@
 # secret_sheets.d/sheets.qml with real key and mouse events, a fake prompter client and mock polkit flows (step 9c: the
 # Wi-Fi alert of a NetworkManager request: held, Join's length rule, Show password, enterprise, cancelled by NetworkManager
 # while typed into, in the queue with polkit and gcr, hidden again by the lock; step 9e: KIO's server sheet: held, the name
-# field's modes, Connect's rule, Remember and the keyring's line, the realm framed, retry, an unidentified requester): a gcr password
+# field's modes, Connect's rule, Remember and the keyring's line, the realm framed, retry, an unidentified requester; step 10:
+# BlueZ's pairing sheets: held, no key answering a confirmation or an authorization, Decline, the passkey's and the PIN's
+# rules, a code shown with Cancel alone following the digits typed on the device without touching the keyboard): a gcr password
 # answered once, the field then empty; cancel; a withdrawn request (queued: never shown; shown: the sink keeps the rest of
 # the password); the ninth request cancelled; a queued request held when its turn comes; the polkit sheet keeping the
 # keyboard while a gcr request arrives and the reverse; nothing over the lock; held after an unlock and under the screen
@@ -133,6 +135,12 @@ expect("a NetworkManager request is always held (decision 9-28)",
 expect("a KIO request is always held (decision 9-38)",
        re.search(r"root\.heldByLock = sheetModel\.active && \(typing \|\| waited \|\| confirm \|\| network \|\| server \|\|", agent) is not None
        and re.search(r'const server = sheetModel\.active && sheetModel\.request\.kind === "kio";', agent) is not None)
+expect("a Bluetooth pairing step is always held (decision 10-7)",
+       re.search(r"root\.heldByLock = sheetModel\.active && \(typing \|\| waited \|\| confirm \|\| network \|\| server \|\| pairing \|\|", agent) is not None
+       and re.search(r'const pairing = sheetModel\.active && sheetModel\.request\.kind === "bluetooth";', agent) is not None)
+expect("a Bluetooth code shown has no OK, only Cancel (decision 10-6)",
+       re.search(r"visible:\s*!root\.model\.displaysCode\s*\n", sheet) is not None
+       and re.search(r'if \(mode === "display-pin" \|\| mode === "display-passkey"\)\s*\n\s*return "";', code(read("shell/security/secret/Prompter.js"))) is not None)
 expect("shell.qml wires one SheetQueue to both agents and the polkit sheet's place",
        re.search(r"SheetQueue\s*\{\s*id:\s*sheetQueue\s*polkitPresent:\s*authAgent\.queuePresent\s*\}", shell) is not None
        and re.search(r"AuthAgent\s*\{\s*id:\s*authAgent\s*queue:\s*sheetQueue\s*\}", shell) is not None
@@ -206,10 +214,20 @@ answered-twice#SecretSheetModel.qml#    readonly property bool canSubmit: !!requ
 empty-unlock-password-sent#SecretSheetModel.qml#            if (typeof password !== "string" || (password.length === 0 && !passwordNew)) {#            if (typeof password !== "string") {#SecretSheet.qml#            id: field\n            objectName: "secretField"#            id: field\n            allowEmpty: true\n            objectName: "secretField"
 new-passwords-not-compared#SecretSheetModel.qml#            if (passwordNew && password !== verify) {#            if (false) {
 caller-title-as-the-sheet-title#SecretSheetModel.qml#    readonly property string title: server ? serverTitleOf(nameMode, serverName) : network ? networkTitleOf(networkSecurity, networkSsid) : titleOf(role, requesterName, kind, passwordNew)#    readonly property string title: request ? request.texts.title : ""
-caller-labels-on-the-buttons#SecretSheet.qml#            text: root.model.network ? qsTr("Join") : root.model.server ? qsTr("Connect") : qsTr("OK")#            text: root.model.request && root.model.request.texts.continueLabel !== "" ? root.model.request.texts.continueLabel : qsTr("OK")
-confirm-not-held (MAJOR-1 of the opus review)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || network || server || sheetModel.arrivesHeld(
-network-not-held (decision 9-28)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || confirm || server || sheetModel.arrivesHeld(
-server-not-held (decision 9-38)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || sheetModel.arrivesHeld(
+caller-labels-on-the-buttons#SecretSheet.qml#            text: root.model.network ? qsTr("Join") : root.model.server || root.model.pairing ? qsTr("Connect") : qsTr("OK")#            text: root.model.request && root.model.request.texts.continueLabel !== "" ? root.model.request.texts.continueLabel : qsTr("OK")
+confirm-not-held (MAJOR-1 of the opus review)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || pairing || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || network || server || pairing || sheetModel.arrivesHeld(
+network-not-held (decision 9-28)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || pairing || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || confirm || server || pairing || sheetModel.arrivesHeld(
+server-not-held (decision 9-38)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || pairing || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || pairing || sheetModel.arrivesHeld(
+pairing-not-held (decision 10-7)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || pairing || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || server || sheetModel.arrivesHeld(
+pairing-progress-not-shown (decision 10-8)#SecretAgent.qml#        if (sheetModel.active && sheetModel.id === id)\n            sheetModel.entered = entered;#        if (sheetModel.active && sheetModel.id === id)\n            ;
+pairing-progress-takes-the-keyboard (decision 10-8)#SecretAgent.qml#        if (sheetModel.active && sheetModel.id === id)\n            sheetModel.entered = entered;#        if (sheetModel.active && sheetModel.id === id) {\n            sheetModel.entered = entered;\n            root.userFocused = true;\n        }
+pairing-progress-arrives-again (decision 10-8)#SecretAgent.qml#        if (sheetModel.active && sheetModel.id === id)\n            sheetModel.entered = entered;#        if (sheetModel.active && sheetModel.id === id)\n            sheetModel.request = Object.assign({}, request);
+pairing-queued-count-lost#SecretAgent.qml#        request.pairing.entered = entered;#        ;
+pairing-display-has-ok (decision 10-6)#SecretSheet.qml#            visible: !root.model.displaysCode#            visible: true
+pairing-display-answered-ok (decision 10-6)#SecretSheetModel.qml#            if (displaysCode) {#            if (false) {
+pairing-code-form-not-checked#SecretSheetModel.qml#            if (asksCode && !Prompter.pairingCodeOk(pairingMode, password)) {#            if (false) {
+pairing-connect-ignores-the-length#SecretSheet.qml#                if (root.model.pairingReady(field.length))\n                    field.submit();#                field.submit();
+pairing-name-as-rich-text#SecretSheet.qml#            objectName: "secretTitle"\n            width: parent.width\n            textFormat: Text.PlainText#            objectName: "secretTitle"\n            width: parent.width\n            textFormat: Text.RichText
 connect-without-a-name#SecretSheetModel.qml#        return server && canSubmit && passwordLength > 0 && (nameMode !== "edit" || nameLength > 0);#        return server && canSubmit && passwordLength > 0;#SecretSheetModel.qml#            if (nameMode === "edit" && root.loginName === "") {#            if (false) {
 server-name-dropped#SecretSheetModel.qml#nameMode === "edit" ? root.loginName : null#null
 remember-state-ignored#SecretSheetModel.qml#            root.choice = request.kind === "kio" ? request.login.remember === "on" : request.choice !== null && request.choice.chosen === true;#            root.choice = request.kind === "kio" ? false : request.choice !== null && request.choice.chosen === true;

@@ -5,7 +5,8 @@
 # there, the REAL grassfield-prompter on a private test bus with a real libgcr client. Never the user's bus, socket or
 # secrets: every socket and runtime directory is the test's own; test passwords only.
 #   client   the client: its hello; one answer per request, only for its own open ids (an nm and a kio request's own fields,
-#            steps 9c and 9e; a kio server that is not a host name closes the connection); a withdrawal; a cancel for an
+#            steps 9c and 9e; a kio server that is not a host name closes the connection; a bluetooth request's code, and the
+#            progress of a code shown, step 10); a withdrawal; a cancel for an
 #            unknown id ignored; no late answer to a withdrawn request; a confirmation without a password; the check box's
 #            state; a malformed line, an over-long line, a prompt before hello, another version and a duplicate id each
 #            close the connection; the next attempt after 1 s, 2 s, 4 s, reset by a hello; no password in the shell's output
@@ -20,7 +21,9 @@
 #            password, an enterprise password (nothing else: the fake keeps only secrets, as NetworkManager) and a
 #            cancellation answered in the shell reach NetworkManager; step 9e: the shell's hello (kind kio) makes the bridge
 #            hold org.kde.kpasswdserver6, and a KIO query (tests/fixtures/kpasswd-peer.py) answered in the shell gets its name
-#            and password, a cancelled one nothing (SKIP
+#            and password, a cancelled one nothing; step 10: with a fake bluetoothd (tests/fixtures/fake-bluez.py) on that
+#            "system" bus, the shell's hello (kind bluetooth) registers the pairing agent as the default, and a passkey and a
+#            confirmation answered in the shell reach bluetoothd (SKIP
 #            without dbus-daemon, PyGObject with Gcr 4, a built bridge or g++ with Qt 6 Core and gcr-4, or a cgroup of this
 #            process)
 #
@@ -213,6 +216,10 @@ e2e() {
   "${run_env[@]}" python3 -I "$root/tests/fixtures/fake-networkmanager.py" --log "$e/nm.log" --commands "$e/nm.cmd" </dev/null >"$e/nm.err" 2>&1 &
   pids+=("$!")
   wait_until 5 grep -q '^#owned' "$e/nm.log" 2>/dev/null || { bad "e2e: the fake NetworkManager owns its name: $(cat "$e/nm.err")"; return 0; }
+  mkfifo "$e/bz.cmd"
+  "${run_env[@]}" python3 -I "$root/tests/fixtures/fake-bluez.py" --log "$e/bz.log" --commands "$e/bz.cmd" </dev/null >"$e/bz.err" 2>&1 &
+  pids+=("$!")
+  wait_until 5 grep -q '^#owned' "$e/bz.log" 2>/dev/null || { bad "e2e: the fake bluetoothd owns its name: $(cat "$e/bz.err")"; return 0; }
   local sock=$e/run/grassfield/prompter.sock
   "${run_env[@]}" GRASSFIELD_DEV=1 "$bridge" --socket "$sock" --peer-unit "$leaf" >"$e/bridge.log" 2>&1 &
   pids+=("$!")
@@ -229,7 +236,7 @@ e2e() {
   grep -q '^continue$' "$e/c2.out" && pass "e2e: a confirmation answered ok: the client continues" || bad "e2e: confirm: $(cat "$e/c2.out" | tr '\n' ' ')"
   "${run_env[@]}" timeout 20 python3 -I "$c" password --title answer-cancel >"$e/c3.out" 2>&1
   grep -q '^cancelled$' "$e/c3.out" && pass "e2e: a cancellation: the client gets no password" || bad "e2e: cancel: $(cat "$e/c3.out" | tr '\n' ' ')"
-  grep -q "request p1 answered: ok" "$e/bridge.log" && grep -q 'shell probe says hello (draws: password,confirm,nm,kio)' "$e/bridge.log" \
+  grep -q "request p1 answered: ok" "$e/bridge.log" && grep -q 'shell probe says hello (draws: password,confirm,nm,kio,bluetooth)' "$e/bridge.log" \
     && pass "e2e: the bridge's journal: the shell's hello and its answers" || bad "e2e: bridge log: $(grep -E 'hello|answered' "$e/bridge.log" | head -3 | tr '\n' ' ')"
   # Step 9c: NetworkManager's secrets through the shell's real client.
   wait_until 10 grep -q '^#register .* org.grassfield.prompter$' "$e/nm.log" && pass "e2e: the shell's hello (kinds password, confirm, nm) registers the NetworkManager agent" \
@@ -259,9 +266,20 @@ e2e() {
   timeout 5 bash -c "$say_nm" _ "$e/st.cmd" "query sftp://answer-cancel.example/"
   wait_until 15 grep -qE '^result query [0-9]+ modified=0 user=- password=-$' "$e/st.log" \
     && pass "e2e: a KIO query cancelled in the shell gets nothing" || bad "e2e: kio cancel: $(cat "$e/st.log" | tr '\n' ' ')"
-  grep -q "pw-p" "$e/bridge.log" "$e/probe.out" && bad "e2e: a password in an output" || pass "e2e: no password in the bridge's or the shell's output"
+  # Step 10: BlueZ's pairing steps through the shell's real client.
+  wait_until 10 grep -q '^#default .* /org/grassfield/prompter/BluetoothAgent$' "$e/bz.log" \
+    && pass "e2e: the shell's hello (kind bluetooth) registers the pairing agent as bluetoothd's default" || bad "e2e: no default agent: $(cat "$e/bz.log" | tr '\n' ' ')"
+  timeout 5 bash -c "$say_nm" _ "$e/bz.cmd" "device AA_BB_CC_DD_EE_01 alias=answer-ok icon=input-keyboard"
+  timeout 5 bash -c "$say_nm" _ "$e/bz.cmd" "passkey b1 AA_BB_CC_DD_EE_01"
+  wait_until 15 grep -qx 'b1 ok 123456' "$e/bz.log" && grep -qE 'prompted p[0-9]+ bluetooth passkey' "$e/probe.out" \
+    && pass "e2e: a passkey answered in the shell reaches bluetoothd (the real client reads the bridge's bluetooth line)" || bad "e2e: passkey: $(grep '^b1' "$e/bz.log") $(grep bluetooth "$e/probe.out" | tr '\n' ' ')"
+  timeout 5 bash -c "$say_nm" _ "$e/bz.cmd" "confirm b2 AA_BB_CC_DD_EE_01 42"
+  wait_until 15 grep -qx 'b2 ok' "$e/bz.log" && pass "e2e: a confirmation answered in the shell: Connect reaches bluetoothd" || bad "e2e: confirm: $(grep '^b2' "$e/bz.log")"
+  grep -q "pw-p\|123456" "$e/bridge.log" "$e/probe.out" && bad "e2e: a password or a code in an output" || pass "e2e: no password or code in the bridge's or the shell's output"
   stop_probe
   wait_until 10 grep -q '^#unregister .* ok$' "$e/nm.log" && pass "e2e: the shell gone, the agent unregisters" || bad "e2e: no Unregister: $(tail -3 "$e/nm.log" | tr '\n' ' ')"
+  wait_until 10 grep -q '^#unregister .* /org/grassfield/prompter/BluetoothAgent$' "$e/bz.log" && pass "e2e: the shell gone, the pairing agent unregisters" \
+    || bad "e2e: no UnregisterAgent: $(tail -3 "$e/bz.log" | tr '\n' ' ')"
 }
 e2e
 
@@ -296,8 +314,12 @@ no-back-off#security/secret/PrompterClient.qml#            retry.interval = Prom
 no-hello#security/secret/PrompterClient.qml#socket.write(Prompter.helloLine(root.shellVersion)#socket.write(""
 strict-parser-off#security/secret/Prompter.js#    if (!exactKeys(m, ["type", "id", "kind", "requester", "texts", "choice", "passwordNew", "strength"]))#    if (false)
 nm-name-sent (opus review of step 9c, MAJOR)#security/secret/Prompter.js#        const nmLine = JSON.stringify(m);#        if (typeof identity === "string")\n            m.identity = identity;\n        const nmLine = JSON.stringify(m);
-nm-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm", "kio"];#var KINDS = ["password", "confirm", "kio"];
-kio-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm", "kio"];#var KINDS = ["password", "confirm", "nm"];
+nm-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm", "kio", "bluetooth"];#var KINDS = ["password", "confirm", "kio", "bluetooth"];
+kio-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm", "kio", "bluetooth"];#var KINDS = ["password", "confirm", "nm", "bluetooth"];
+bluetooth-not-drawn (step 10)#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm", "kio", "bluetooth"];#var KINDS = ["password", "confirm", "nm", "kio"];
+progress-ignored (step 10)#security/secret/PrompterClient.qml#            root.progressed(m.id, m.entered);#            ;
+progress-for-any-request (step 10)#security/secret/PrompterClient.qml#            if (priv.open[m.id].mode !== "display-passkey") {#            if (false) {
+bluetooth-display-answered-ok (step 10)#security/secret/Prompter.js#            if (mode === "display-pin" || mode === "display-passkey")\n                return "";#            if (false)\n                return "";
 kio-server-lenient#security/secret/Prompter.js#    if (typeof m.server !== "string" || m.server.length > CAPS.server || !SERVER_PATTERN.test(m.server))#    if (typeof m.server !== "string" || m.server.length > CAPS.server)
 kio-name-where-none-asked#security/secret/Prompter.js#            if (login.nameMode === "edit") {#            if (true) {
 nm-network-lenient#security/secret/Prompter.js#    if (n.security !== "enterprise" && n.identity !== "")#    if (false)

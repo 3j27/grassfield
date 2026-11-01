@@ -7,7 +7,9 @@ import "../../shell/security/secret"
 // agent (once, never an empty unlock password, a new password typed twice alike); the holds of the polkit sheet; step 9c:
 // the Wi-Fi alert of a NetworkManager request (its sentence, who asked, Join's length rule, the name, Show password) and the
 // disk role of grassfield-askpass; step 9e: the server sheet of a KIO request (its sentence, who asked, the realm framed as
-// unverified, the name field's modes, Remember this password and the keyring's line, retry, Connect's rule).
+// unverified, the name field's modes, Remember this password and the keyring's line, retry, Connect's rule); step 10: a BlueZ
+// pairing step (macOS's connection request: the device's name as a field, its address, each mode's sentence and code, the
+// digits typed on the device, Connect's rule and the code's form, a code shown never answered ok, the hold reasons).
 TestCase {
     id: test
     name: "SecretSheetModel"
@@ -389,5 +391,123 @@ TestCase {
     function test_serverHeldNotice() {
         const m = createTemporaryObject(modelC, test, {request: server()});
         verify(m.heldNotice(new Date(), "server").indexOf("Click the alert to type your name and password: nothing typed elsewhere goes into it.") >= 0);
+    }
+
+    // Step 10: a BlueZ pairing step as the agent holds it (a confirmation by default).
+    function pairing(p, device) {
+        return request({
+            kind: "bluetooth",
+            requester: {role: "bluetooth", name: "", desktopId: "", icon: "", path: "", identified: true, onBehalf: false},
+            texts: {title: "", message: "", description: "", warning: "", continueLabel: "", cancelLabel: ""},
+            device: Object.assign({name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
+            pairing: Object.assign({mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""}, p || {})
+        });
+    }
+
+    function test_pairingSheet_data() {
+        return [
+            {tag: "pin", p: {mode: "pin", code: ""}, message: "Enter the device's PIN code.", code: "", field: true, display: false, authorizes: false},
+            {tag: "passkey", p: {mode: "passkey", code: ""}, message: "Enter the code shown on the device.", code: "", field: true, display: false, authorizes: false},
+            {tag: "display-pin", p: {mode: "display-pin", code: "482913"}, message: "Type this code on the device, then press Return on it.", code: "482913", field: false, display: true, authorizes: false},
+            {tag: "display-passkey", p: {mode: "display-passkey", code: "000042", entered: 2}, message: "Type this code on the device, then press Return on it.", code: "000042", field: false, display: true, authorizes: false},
+            {tag: "confirm", p: {}, message: "Connect only if the device shows the same code.", code: "000042", field: false, display: false, authorizes: false},
+            {tag: "authorize", p: {mode: "authorize", code: ""}, message: "The device wants to pair with this computer.", code: "", field: false, display: false, authorizes: true},
+            {tag: "authorize-service", p: {mode: "authorize-service", code: "", service: "audio", uuid: "0000110b-0000-1000-8000-00805f9b34fb"}, message: "The device wants to use audio streaming on this computer.", code: "", field: false, display: false, authorizes: true}
+        ];
+    }
+    function test_pairingSheet(d) {
+        const m = createTemporaryObject(modelC, test, {request: pairing(d.p)});
+        compare(m.pairing, true);
+        compare(m.title, "Connection Request from “Magic Keyboard”", "the device's name is a field of Grassfield's sentence");
+        compare(m.requesterDetail, "Bluetooth device AA:BB:CC:DD:EE:01");
+        compare(m.requesterName, "Bluetooth");
+        compare(m.glyph, "keyboard");
+        compare(m.pairingMessage, d.message);
+        compare(m.pairingCode, d.code);
+        compare(m.asksCode, d.field);
+        compare(m.asksPassword, d.field, "the field is the PIN's or the passkey's");
+        compare(m.displaysCode, d.display);
+        compare(m.authorizes, d.authorizes);
+        compare(m.hasCallerText, false, "no caller text");
+        compare(m.callerIntro, "");
+        compare(m.hasChoice, false);
+        compare(m.entered, d.tag === "display-passkey" ? 2 : 0);
+        compare(m.pairingProgress, d.tag === "display-passkey" ? "Digits typed on the device: 2 of 6" : "");
+        compare(m.serviceUuid, "", "a named service shows no UUID");
+        compare(m.pairingHeldWhyOf(d.p.mode || "confirm"), d.field ? "pairing-code" : d.display ? "pairing-display" : "pairing-answer");
+    }
+
+    function test_pairingNameAndGlyph() {
+        const m = createTemporaryObject(modelC, test, {request: pairing({}, {name: "Key\nboard\u202e", icon: ""})});
+        compare(m.title, "Connection Request from “Key board”", "the name flattened again");
+        compare(m.glyph, "bluetooth", "no icon: the Bluetooth glyph");
+        m.request = pairing({}, {icon: "lock"});
+        compare(m.glyph, "bluetooth", "never a glyph outside the bridge's list");
+        m.request = pairing({mode: "authorize-service", code: "", service: "other", uuid: "03b80e5a-ede8-4b33-a751-6ce34ec4c700"});
+        compare(m.pairingMessage, "The device wants to use a Bluetooth service on this computer.");
+        compare(m.serviceUuid, "03b80e5a-ede8-4b33-a751-6ce34ec4c700", "an unnamed service shows its UUID");
+        for (const key of ["remote-control", "headset", "hands-free", "file-transfer", "object-push", "network", "input", "phonebook", "messages", "serial", "dial-up"])
+            verify(m.serviceLabelOf(key) !== m.serviceLabelOf("other"), key);
+    }
+
+    function test_pairingCodeRules() {
+        const m = createTemporaryObject(modelC, test, {request: pairing({mode: "passkey", code: ""})});
+        const sent = wired(m);
+        verify(!m.pairingReady(5));
+        verify(m.pairingReady(6), "a passkey at 6 characters");
+        verify(!m.pairingReady(7));
+        verify(!m.submit("12345a", null), "6 characters that are not digits");
+        compare(m.error, "Type the 6 digits of the code.");
+        compare(sent.length, 0);
+        verify(m.submit("012345", null));
+        compare(sent, [{ok: true, password: "012345", choice: false}]);
+        m.request = pairing({mode: "pin", code: ""});
+        const pins = wired(m);
+        verify(m.pairingReady(1));
+        verify(m.pairingReady(16));
+        verify(!m.pairingReady(17));
+        verify(!m.submit("12-34", null));
+        compare(m.error, "A PIN has 1 to 16 letters or digits.");
+        verify(m.submit("0000", null));
+        compare(pins, [{ok: true, password: "0000", choice: false}]);
+    }
+
+    function test_pairingAnswers() {
+        const m = createTemporaryObject(modelC, test, {request: pairing()});
+        let sent = wired(m);
+        verify(!m.pairingReady(6), "a confirmation has no field");
+        verify(m.submit(null, null));
+        compare(sent, [{ok: true, password: null, choice: false}], "Connect carries nothing");
+        m.request = pairing({mode: "authorize", code: ""});
+        sent = wired(m);
+        m.cancel();
+        compare(sent, [{ok: false, password: null, choice: false}], "Decline");
+        m.request = pairing({mode: "display-passkey", code: "000042"});
+        sent = wired(m);
+        verify(!m.submit(null, null), "a code shown is never answered ok");
+        verify(!m.submit("000042", null));
+        compare(sent.length, 0);
+        m.cancel();
+        compare(sent, [{ok: false, password: null, choice: false}], "only Cancel");
+    }
+
+    function test_pairingEnteredFollowsTheRequest() {
+        const m = createTemporaryObject(modelC, test, {request: pairing({mode: "display-passkey", code: "000042", entered: 3})});
+        compare(m.entered, 3);
+        m.entered = 5;
+        compare(m.pairingProgress, "Digits typed on the device: 5 of 6");
+        m.request = pairing({mode: "display-passkey", code: "000043", entered: 0});
+        compare(m.entered, 0, "a new request starts from its own count");
+        m.request = pairing();
+        compare(m.entered, 0);
+        compare(m.pairingProgress, "");
+    }
+
+    function test_pairingHeldNotice() {
+        const m = createTemporaryObject(modelC, test, {request: pairing({mode: "pin", code: ""})});
+        const at = new Date(2026, 10, 1, 9, 30);
+        verify(m.heldNotice(at, "pairing-code").indexOf("Click the alert to type the code: nothing typed elsewhere goes into it.") >= 0);
+        verify(m.heldNotice(at, "pairing-answer").indexOf("no key answers it before that") >= 0);
+        compare(m.heldNotice(at, "pairing-display"), "", "a code shown needs no click to be read");
     }
 }
