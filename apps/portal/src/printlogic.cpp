@@ -492,10 +492,11 @@ QList<QPair<QString, QString>> cupsOptions(const Choices &c, const Capabilities 
     }
     if (caps.color)
         out.append({QStringLiteral("print-color-mode"), c.color ? QStringLiteral("color") : QStringLiteral("monochrome")});
-    // The printer's own options, each only when it is not the printer's default, with a value it listed, as it listed it.
+    // The printer's own options, each only when the queue would not apply it by itself, with a value it listed, as it listed it.
     for (const PrinterOption &o : caps.options) {
         const QString value = c.options.value(o.name);
-        if (!optionSection(o.name).isEmpty() && value != o.defaultValue && o.lists(value) && validOptionValue(value))
+        const bool queueDoesIt = !o.queueDefault.isEmpty() && value == o.queueDefault;
+        if (!optionSection(o.name).isEmpty() && !queueDoesIt && o.lists(value) && validOptionValue(value))
             out.append({o.name, value});
     }
     return out;

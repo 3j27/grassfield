@@ -70,13 +70,19 @@ struct OptionValue {
 };
 
 // A printer's own option beyond paper, two sides and colour (step 6b): an IPP attribute CUPS reports for the printer
-// (cupsCopyDestInfo; optionSection names the ones the sheet shows), the values it lists, in its order, and the one it uses
-// when asked for none (the user's lpoptions, else the printer's default).
+// (cupsCopyDestInfo; optionSection names the ones the sheet shows), the values it lists, in its order, the one the sheet shows
+// first (the user's lpoptions, else the queue's default, else the first), and the one the queue applies when a job names none
+// (its own default; "" when the queue reports none and the user's lpoptions name one, which then must be sent: libcups's
+// cupsCreateDestJob does not add lpoptions to a job, as lp does; counter-review of step 6b, MINOR 1).
 struct PrinterOption {
     QString name;
     QList<OptionValue> values;
     QString defaultValue;
-    bool operator==(const PrinterOption &o) const { return name == o.name && values == o.values && defaultValue == o.defaultValue; }
+    QString queueDefault;
+    bool operator==(const PrinterOption &o) const
+    {
+        return name == o.name && values == o.values && defaultValue == o.defaultValue && queueDefault == o.queueDefault;
+    }
     bool lists(const QString &value) const;
 };
 
@@ -191,9 +197,9 @@ bool toGtk(const Choices &choices, QVariantMap *settings, QVariantMap *pageSetup
 // The CUPS options of the job (name, value): copies, collation, paper, two sides, colour and the printer's own options; never
 // pages, scale or orientation (GTK applied them, see above). Empty for Save as PDF and Open in Preview. The paper goes only as
 // one the printer lists, or, when it lists none, as a PWG name (validMediaName): never the application's text as it came; a
-// printer's own option only when it differs from the printer's default (a default sent would override the queue's own
-// settings, a tray forced among them: security review of step 6b, MINOR 5) and with a value that printer lists
-// (validOptionValue too).
+// printer's own option only when it differs from what the queue applies by itself (its queueDefault: a default sent would
+// override the queue's own settings, a tray forced among them, security review of step 6b, MINOR 5; the user's lpoptions value
+// is sent when it differs, counter-review, MINOR 1) and with a value that printer lists (validOptionValue too).
 QList<QPair<QString, QString>> cupsOptions(const Choices &choices, const Capabilities &capabilities);
 // The same for a document the application sent first (Print with no token): it is made already, so the printer applies the
 // page ranges ("page-ranges", 1-based); the scale and orientation are the document's own (the sheet does not offer them).

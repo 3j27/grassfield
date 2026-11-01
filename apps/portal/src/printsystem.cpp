@@ -103,9 +103,10 @@ QString optionValue(ipp_attribute_t *attribute, int index)
 }
 
 // The printer's own options the sheet shows (print::printerOptionNames), each with two values or more (step 6b): the values it
-// lists, as CUPS names them (CUPS localizes a queue's own names; an enum CUPS does not name gets its keyword in words), and
-// the one it uses by default: the user's own (lpoptions), else the printer's (<name>-default, or for the paper's source and type
-// media-col-default's), else the first.
+// lists, as CUPS names them (CUPS localizes a queue's own names; an enum CUPS does not name gets its keyword in words), the one
+// shown first (the user's own, lpoptions, else the queue's, else the first), and the queue's own default apart (<name>-default,
+// or for the paper's source and type media-col-default's): only a value that differs from it goes with a job (the
+// counter-review of step 6b, MINOR 1: the user's lpoptions value must go, libcups does not add it).
 QList<print::PrinterOption> printerOptions(http_t *http, cups_dest_t *dest, cups_dinfo_t *info, const int &cancel)
 {
     QList<print::PrinterOption> out;
@@ -132,19 +133,24 @@ QList<print::PrinterOption> printerOptions(http_t *http, cups_dest_t *dest, cups
         }
         if (option.values.size() < 2)
             continue;
-        QString fallback = fromUtf8(cupsGetOption(n.constData(), dest->num_options, dest->options));
-        if (!option.lists(fallback)) {
-            fallback.clear();
-            if (ipp_attribute_t *given = cupsFindDestDefault(http, dest, info, n.constData()))
-                fallback = optionValue(given, 0);
-            else if (name == QLatin1String("media-source") || name == QLatin1String("media-type")) {
-                ipp_attribute_t *media = cupsFindDestDefault(http, dest, info, "media-col");
-                ipp_t *collection = media && ippGetValueTag(media) == IPP_TAG_BEGIN_COLLECTION ? ippGetCollection(media, 0) : nullptr;
-                if (ipp_attribute_t *member = collection ? ippFindAttribute(collection, n.constData(), IPP_TAG_ZERO) : nullptr)
-                    fallback = optionValue(member, 0);
-            }
+        QString own = fromUtf8(cupsGetOption(n.constData(), dest->num_options, dest->options));
+        if (!option.lists(own))
+            own.clear();
+        QString queue;
+        if (ipp_attribute_t *given = cupsFindDestDefault(http, dest, info, n.constData()))
+            queue = optionValue(given, 0);
+        else if (name == QLatin1String("media-source") || name == QLatin1String("media-type")) {
+            ipp_attribute_t *media = cupsFindDestDefault(http, dest, info, "media-col");
+            ipp_t *collection = media && ippGetValueTag(media) == IPP_TAG_BEGIN_COLLECTION ? ippGetCollection(media, 0) : nullptr;
+            if (ipp_attribute_t *member = collection ? ippFindAttribute(collection, n.constData(), IPP_TAG_ZERO) : nullptr)
+                queue = optionValue(member, 0);
         }
-        option.defaultValue = option.lists(fallback) ? fallback : option.values.first().value;
+        if (!option.lists(queue))
+            queue.clear();
+        option.defaultValue = !own.isEmpty() ? own : !queue.isEmpty() ? queue : option.values.first().value;
+        // What the queue does with no value: its own default; with none reported, the first value when the user named none (the
+        // sheet shows it and it goes unsent), else nothing (the user's value goes).
+        option.queueDefault = !queue.isEmpty() ? queue : own.isEmpty() ? option.values.first().value : QString();
         out.append(option);
     }
     return out;

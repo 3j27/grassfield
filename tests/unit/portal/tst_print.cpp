@@ -495,10 +495,10 @@ QStringList renderer()
 QList<print::PrinterOption> officeOptions()
 {
     return {{QStringLiteral("media-source"), {{QStringLiteral("auto"), QStringLiteral("Automatic"), QStringLiteral("auto")}, {QStringLiteral("tray-1"), QStringLiteral("Tray 1"), QStringLiteral("tray-1")}},
-             QStringLiteral("auto")},
+             QStringLiteral("auto"), QStringLiteral("auto")},
             {QStringLiteral("print-quality"),
              {{QStringLiteral("3"), QStringLiteral("Draft"), QStringLiteral("3")}, {QStringLiteral("4"), QStringLiteral("Normal"), QStringLiteral("4")}, {QStringLiteral("5"), QStringLiteral("High"), QStringLiteral("5")}},
-             QStringLiteral("4")}};
+             QStringLiteral("4"), QStringLiteral("4")}};
 }
 
 } // namespace
@@ -1805,6 +1805,24 @@ TEST_F(PrintTest, OpenInPreviewKeepsItsCopiesInBounds)
     EXPECT_FALSE(Print::sessionPreviewCommand(false, false).contains(QStringLiteral("uwsm-app")));
 }
 
+// The user's own default (lpoptions) reaches the job when it differs from the queue's (the counter-review of step 6b, MINOR 1:
+// libcups does not add lpoptions to a job, as lp does).
+TEST_F(PrintTest, TheUsersOwnDefaultReachesTheJob)
+{
+    QList<print::PrinterOption> options = officeOptions();
+    options[1].defaultValue = QStringLiteral("5"); // lpoptions print-quality=5; the queue's own stays 4
+    system.officeOptions = options;
+    auto reply = preparedAnswer(kHandle, {});
+    ASSERT_EQ(reply->response, 0u);
+    EXPECT_EQ(chosen.last().choices.value("options").toMap().value("print-quality").toString(), QStringLiteral("5")) << "shown first";
+    auto job = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/job"), reply, "%PDF-1.4 x");
+    ASSERT_TRUE(waitFor([&] { return job->done; }));
+    ASSERT_EQ(system.jobs.size(), 1);
+    EXPECT_TRUE(system.jobs.first().options.contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    for (const auto &o : system.jobs.first().options)
+        EXPECT_NE(o.first, QStringLiteral("media-source")) << "the queue's own default is not sent";
+}
+
 // The libcups side against a real scheduler (A-PR1): tests/integration/print_cups.sh runs this with a scratch cupsd whose default
 // queue GF_TEST_CUPS_PRINTER writes its jobs to a file, its PPD offering A4, US Letter and A5, two sides and colour; skipped
 // elsewhere. The printers listed (the default flagged, its name and place), what it supports read off the GUI thread (its own
@@ -1890,11 +1908,27 @@ TEST(CupsPrintSystem, ListsReadsAndPrintsThroughTheScheduler)
         qualities << v.section(QLatin1Char('='), 0, 0);
     EXPECT_EQ(qualities, (QStringList{QStringLiteral("3"), QStringLiteral("4"), QStringLiteral("5")}));
     const auto defaultOf = [&caps](const QString &name) { return caps.option(name) ? caps.option(name)->defaultValue : QString(); };
+    const auto queueDefaultOf = [&caps](const QString &name) { return caps.option(name) ? caps.option(name)->queueDefault : QString(); };
+    // print_cups.sh sets the user's lpoptions print-quality=5 (GF_TEST_CUPS_LPOPTIONS): shown first, the queue's own 4 kept apart.
+    const bool lpoptions = qEnvironmentVariable("GF_TEST_CUPS_LPOPTIONS") == QLatin1String("print-quality=5");
     EXPECT_EQ(defaultOf(QStringLiteral("media-source")), QStringLiteral("auto"));
     EXPECT_EQ(defaultOf(QStringLiteral("media-type")), QStringLiteral("stationery"));
-    EXPECT_EQ(defaultOf(QStringLiteral("print-quality")), QStringLiteral("4"));
+    EXPECT_EQ(defaultOf(QStringLiteral("print-quality")), lpoptions ? QStringLiteral("5") : QStringLiteral("4"));
+    EXPECT_EQ(queueDefaultOf(QStringLiteral("print-quality")), QStringLiteral("4"));
+    EXPECT_EQ(queueDefaultOf(QStringLiteral("media-source")), QStringLiteral("auto"));
     EXPECT_EQ(defaultOf(QStringLiteral("output-bin")), QStringLiteral("upper"));
     EXPECT_EQ(defaultOf(QStringLiteral("finishings")), QStringLiteral("3"));
+    // The sheet's first state sends the user's own quality and nothing the queue does by itself (counter-review, MINOR 1).
+    const print::Choices firstState = print::initialChoices(queue, caps, {}, {}, false, false);
+    const PrintSystem::Options firstOptions = print::cupsOptions(firstState, caps);
+    if (lpoptions) {
+        EXPECT_TRUE(firstOptions.contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    }
+    for (const auto &o : firstOptions) {
+        if (o.first != QLatin1String("print-quality")) {
+            EXPECT_TRUE(print::optionSection(o.first).isEmpty()) << o.first.toStdString() << " is the queue's own default";
+        }
+    }
 
     QTemporaryDir dir;
     ASSERT_TRUE(dir.isValid());

@@ -53,12 +53,12 @@ Capabilities withOptions()
 {
     Capabilities c = office();
     c.options = {{QStringLiteral("media-source"), {{QStringLiteral("auto"), QStringLiteral("Automatic"), QStringLiteral("auto")}, {QStringLiteral("tray-1"), QStringLiteral("Tray 1"), QStringLiteral("tray-1")}},
-                  QStringLiteral("auto")},
+                  QStringLiteral("auto"), QStringLiteral("auto")},
                  {QStringLiteral("print-quality"),
                   {{QStringLiteral("3"), QStringLiteral("Draft"), QStringLiteral("3")}, {QStringLiteral("4"), QStringLiteral("Normal"), QStringLiteral("4")}, {QStringLiteral("5"), QStringLiteral("High"), QStringLiteral("5")}},
-                  QStringLiteral("4")},
+                  QStringLiteral("4"), QStringLiteral("4")},
                  {QStringLiteral("finishings"), {{QStringLiteral("3"), QStringLiteral("None"), QStringLiteral("3")}, {QStringLiteral("20"), QStringLiteral("Staple Top Left"), QStringLiteral("20")}},
-                  QStringLiteral("3")}};
+                  QStringLiteral("3"), QStringLiteral("3")}};
     return c;
 }
 
@@ -418,6 +418,21 @@ TEST(PrintLogic, APrintersOwnOptionsGoOnlyAsItListsThem)
     const Choices defaults = initialChoices(QStringLiteral("Office"), caps, {}, {}, false, false);
     for (const auto &o : cupsOptions(defaults, caps))
         EXPECT_TRUE(optionSection(o.first).isEmpty()) << o.first.toStdString();
+    // The user's own default (lpoptions) differs from the queue's: shown first, and sent, since libcups does not add lpoptions
+    // to a job (the counter-review of step 6b, MINOR 1); also when the queue reports no default of its own.
+    Capabilities mine = caps;
+    mine.options[1].defaultValue = QStringLiteral("5");
+    const Choices lpoptions = initialChoices(QStringLiteral("Office"), mine, {}, {}, false, false);
+    EXPECT_EQ(lpoptions.options.value(QStringLiteral("print-quality")), QStringLiteral("5"));
+    EXPECT_TRUE(cupsOptions(lpoptions, mine).contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    mine.options[1].queueDefault.clear();
+    EXPECT_TRUE(cupsOptions(lpoptions, mine).contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    // The user choosing the queue's own default over the lpoptions one: nothing to send, the queue applies it by itself.
+    Choices queueOwn = lpoptions;
+    queueOwn.options.insert(QStringLiteral("print-quality"), QStringLiteral("4"));
+    mine.options[1].queueDefault = QStringLiteral("4");
+    for (const auto &o : cupsOptions(queueOwn, mine))
+        EXPECT_NE(o.first, QStringLiteral("print-quality")) << "what the queue does by itself";
     // A value listed that CUPS would read as more than one, or as a collection: never sent.
     Capabilities odd = caps;
     odd.options[1].values.append({QStringLiteral("5,6"), QStringLiteral("x"), QString()});
