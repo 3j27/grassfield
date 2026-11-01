@@ -276,7 +276,8 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   runs under a group of its own (`grassfield-update`, no member) so that none of the person's other processes can reach
   into it.
   - Conditions: systemd; a person (uid 1000 or more) who is an administrator (`wheel`); no migration from before the update
-    pending; the unit's group without a member or a password; Omarchy's migrations folder and the sudo root's alone; and a
+    pending; the unit's group without a member or a password; Omarchy's migrations and commands folders and the sudo root's
+    alone; and a
     trial `sudo true` through the channel before any change. Otherwise U28's terminal, with nothing changed.
   - The migrations' `sudo` accepts `-n`, `-H`, `-u root`, `-v`, `-k`, `-K`, `-l`, `--` and refuses every other option or
     target, and any command that is not root's alone (it and its folders). The unit has no namespace of its own. A

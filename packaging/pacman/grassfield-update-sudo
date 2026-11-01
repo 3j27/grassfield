@@ -80,8 +80,19 @@ target=root
 
 # A path and every folder above it, links resolved, owned by root and writable by no one else: the file root runs cannot be
 # changed or swapped by anyone but root between this check and its run (the integrator's review, MINOR 2).
-root_alone() { # path
-  local p owner mode
+root_alone() { # path: every folder on the path as written, each link on it root's; then, links resolved, the file and every
+  # folder above it (the integrator's follow-up 1: the folder that holds a link decides who can swap it)
+  local p=$1 owner mode
+  [[ $p == /* ]] || return 1
+  while [[ $p != / ]]; do
+    if [[ -L $p ]]; then
+      read -r owner < <(/usr/bin/stat -c %u -- "$p" 2>/dev/null) && [[ $owner == 0 ]] || return 1
+    fi
+    p=${p%/*}
+    [[ -n $p ]] || p=/
+    read -r owner mode < <(/usr/bin/stat -L -c '%u %a' -- "$p" 2>/dev/null) || return 1
+    [[ $owner == 0 && $mode =~ ^[0-7]{3,4}$ ]] && (((8#$mode & 8#022) == 0)) || return 1
+  done
   p=$(/usr/bin/realpath -e -- "$1" 2>/dev/null) || return 1
   while :; do
     read -r owner mode < <(/usr/bin/stat -c '%u %a' -- "$p" 2>/dev/null) || return 1

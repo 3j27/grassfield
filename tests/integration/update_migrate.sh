@@ -122,6 +122,8 @@ mkdir -p "/run/user/$uid" "/run/user/$duid" "/run/user/$euid" && chown carol: "/
   chown erin: "/run/user/$euid" && chmod 700 "/run/user/$uid" "/run/user/$duid" "/run/user/$euid"
 # A command in a root-owned folder that others can write: the migrations' sudo refuses it.
 install -d -m 775 /usr/local/gu-gw && printf '#!/bin/sh\necho group-writable\n' >/usr/local/gu-gw/gu-x && chmod 755 /usr/local/gu-gw/gu-x
+# A link to a root-alone program, kept in that folder: the link could be swapped (the integrator's follow-up 1).
+ln -s /usr/bin/true /usr/local/gu-gw/true-link
 
 say "the channel: the migrations' sudo inside grassfield-update-migrate.service (the helper's properties)"
 # The unit as the helper's migrate_unit makes it.
@@ -175,6 +177,7 @@ sudo -nHs true 2>/dev/null; r c-s "$?"
 sudo -nHunobody id -u 2>/dev/null; r c-u "$?"
 sudo "$HOME/bin/gu-evil" >/dev/null 2>&1; r user-path "$?"
 sudo /usr/local/gu-gw/gu-x >/dev/null 2>&1; r gw-path "$?"
+sudo /usr/local/gu-gw/true-link >/dev/null 2>&1; r gw-link "$?"
 r root-env "$(LD_PRELOAD=/nonexistent.so LD_LIBRARY_PATH=/x PYTHONPATH=/x PYTHONSTARTUP=/x PERL5LIB=/x BASH_ENV=/x ENV=/x GU_CALLER=leak sudo env 2>/dev/null | cut -d= -f1 | sort | tr '\n' ' ')"
 EOF
 chmod 755 "$W/channel.sh"
@@ -203,8 +206,8 @@ expect "any other unit operation from the unit -> refused (polkit still active)"
 expect "the real sudo cannot run in the unit (NoNewPrivileges)" test "$(get real-sudo)" != 0
 expect "no user namespace in the unit (RestrictNamespaces; the integrator's MINOR 1)" test "$(get userns)" == refused
 expect "an unknown letter in a cluster is refused (-nHE, -nHs, -nHunobody)" test "$(get c-E):$(get c-s):$(get c-u)" == "1:1:1"
-expect "a command that is not root's alone is refused (the person's file; a folder others can write)" \
-  test "$(get user-path):$(get gw-path)" == "1:1"
+expect "a command that is not root's alone is refused (the person's file; a folder others can write; a link kept there)" \
+  test "$(get user-path):$(get gw-path):$(get gw-link)" == "1:1:1"
 # The root unit's environment: systemd's own for a root service, and SUDO_*; nothing of the caller's (LD_*, PYTHON*,
 # PERL5LIB, BASH_ENV, ENV, any other variable).
 allowed=" HOME INVOCATION_ID LANG LANGUAGE LC_ALL LOGNAME MEMORY_PRESSURE_WATCH MEMORY_PRESSURE_WRITE PATH SHELL SUDO_GID SUDO_UID SUDO_USER SYSTEMD_EXEC_PID USER "
@@ -260,6 +263,7 @@ mkpkg() {
     fi
   done
   chmod -R a+rX "$dir"
+  [[ -n ${GU_WORLD_WRITABLE-} ]] && chmod 666 "$dir/$GU_WORLD_WRITABLE"   # one file the package leaves writable by all
   find "$dir/usr/share/omarchy/bin" "$dir/usr/bin" -type f -exec chmod 755 {} + 2>/dev/null
   (cd "$dir" && bsdtar --zstd -cf "$W/pkgs/$name-$ver-1-any.pkg.tar.zst" .PKGINFO usr) || { echo "FAIL: mkpkg $name"; exit 1; }
 }
@@ -288,6 +292,9 @@ mkpkg omarchy 5 "${base_files[@]}" "$m700f" "usr/share/omarchy/migrations/750.sh
   "usr/share/omarchy/migrations/900.sh=sudo touch /root/su-m2-900"
 mkpkg omarchy 6 "${base_files[@]}" "$m700f" "usr/share/omarchy/migrations/750.sh=sudo false" \
   "usr/share/omarchy/migrations/900.sh=sudo touch /root/su-m2-900" "usr/share/omarchy/migrations/950.sh=sudo touch /root/su-m2-950"
+GU_WORLD_WRITABLE=usr/share/omarchy/migrations/980.sh mkpkg omarchy 7 "${base_files[@]}" "$m700f" \
+  "usr/share/omarchy/migrations/750.sh=sudo false" "usr/share/omarchy/migrations/900.sh=sudo touch /root/su-m2-900" \
+  "usr/share/omarchy/migrations/950.sh=sudo touch /root/su-m2-950" "usr/share/omarchy/migrations/980.sh=sudo touch /root/su-m2-980"
 publish() {
   rm -f "$W/repo"/*
   cp "$W/keyring.pkg.tar.zst" "$W/repo/archlinux-keyring-$(ver archlinux-keyring)-any.pkg.tar.zst"
@@ -360,8 +367,19 @@ chmod 775 /usr/share/omarchy/migrations
 runner carol; op=$(last)
 expect "Omarchy's migrations folder writable by its group -> done terminal, omarchy stays 1 ($(state carol))" \
   test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
-expect "  its log says why (the integrator's MINOR 2)" logsays "$op" "migrations folder or Grassfield's sudo is not root's alone"
+expect "  its log says why (the integrator's MINOR 2)" logsays "$op" "migrations or commands folder, or Grassfield's sudo, is not root's alone"
 chmod 755 /usr/share/omarchy/migrations
+chmod 775 /usr/share/omarchy/bin
+runner carol; op=$(last)
+expect "Omarchy's commands folder writable by its group -> done terminal, omarchy stays 1 ($(state carol); follow-up 2)" \
+  test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
+chmod 755 /usr/share/omarchy/bin
+chmod 775 /usr/lib/grassfield/update-sudo
+runner carol; op=$(last)
+expect "Grassfield's sudo in a folder others can write -> done terminal, omarchy stays 1 ($(state carol); follow-up 4)" \
+  test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
+expect "  its log says why" logsays "$op" "or Grassfield's sudo, is not root's alone"
+chmod 755 /usr/lib/grassfield/update-sudo
 # The run in the background: while 700 holds a pipe, a process of carol's outside the unit tries the unit's processes.
 cat >"$W/attacker.sh" <<'EOF'
 #!/bin/bash
@@ -448,6 +466,14 @@ expect "root itself, without pkexec's user (no person): 950 needs root -> exit 7
 expect "  its log says why" logsays "$op" "no person to run them as"
 env -i PATH=/usr/bin "$H" unit "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')" "$uid" - - </dev/null >/dev/null 2>&1; rc=$?
 expect "the unit form outside grassfield-update.service -> usage (2)" test "$rc" == 2
+
+say "a migration the transaction leaves writable by all (the integrator's follow-up 4)"
+publish grassfield-desktop-1 qt6-base-6.11.0 omarchy-keyring-1 omarchy-7
+runner carol; op=$(last)
+expect "omarchy 7 (950 needs root, 980 installed writable by all) -> done done with deferred migrations, omarchy 7 installed ($(state carol))" \
+  test "$(state carol):$(ver omarchy):$(grep -cx 'migrations ran' "$D/$op.exit")" == "done done migrations:7-1:0"
+expect "  no migration ran with root (950's sudo did not run), and the log says why" \
+  bash -c "test ! -e /root/su-m2-950 && grep -q '980.sh is not root.s alone: no migration runs with root' '$D/$op.log'"
 
 echo
 if ((fails)); then echo "update_migrate: $fails FAIL"; exit 1; fi
