@@ -232,6 +232,11 @@ public:
     Q_INVOKABLE bool open(const QString &id);
     // Ctrl+Q: quits at once, or once the running operation ended (the window closes meanwhile; waiting ones are dropped).
     Q_INVOKABLE void quitWhenIdle();
+    // The Store asked for again (a second launch handed over its page, SD35): the window is back, so the quit Ctrl+Q or the
+    // closed window asked for is off; the running operation ends with the window still there.
+    void reopened();
+    // A quit waits for the running operation to end (quitWhenIdle, not reopened since).
+    bool quitPending() const { return m_quitWhenIdle; }
     // "Open Software Update" of a refused plan (SR15): Settings at General, where Software Update lives (ADR-0033); false
     // when it did not start (in a dev session only through the fake program).
     Q_INVOKABLE bool openSoftwareUpdate();
@@ -387,9 +392,16 @@ private:
     QTimer m_checkDeadline;   // the checker's 200 s backstop (ADR-0033 d.7)
     QTimer m_updatesPoll;     // while the page is shown
     QFileSystemWatcher m_stateWatcher;
-    QHash<QString, QStringList> m_updatePlans; // app id or kFlatpakUpdatesApp -> the refs its plan checked
+    // An update's plan (SD33): the refs it checked and, for each, the commit it checked ("" when unread: a runtime, or an
+    // app the sheet said it could not check).
+    struct UpdatePlan {
+        QStringList refs, commits;
+    };
+    QHash<QString, UpdatePlan> m_updatePlans;              // app id or kFlatpakUpdatesApp -> its last plan
+    QHash<QString, std::pair<int, int>> m_updatePlanning; // a plan running: the apps checked, of how many
     bool m_quitWhenIdle = false;
-    QThreadPool m_pool; // last member: waits for the jobs while the rest is still there
+    QThreadPool m_updatePool; // Updates' jobs (step 4); with m_pool, after every other member: they wait for their jobs,
+    QThreadPool m_pool;       // last member: waits for the jobs while the rest is still there; m_cancel stops their children
 };
 
 } // namespace grassfield::store

@@ -388,6 +388,26 @@ TestCase {
         sheet.confirm();
         verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") >= 0);
         tryVerify(() => !sheet.visible);
+        // Only what could not be read (SD33): the sheet asks too, never a silent update; Cancel runs nothing.
+        t.backend.operations = [];
+        t.backend.calls = [];
+        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, widened: [], unknown: ["Draw"]};
+        tryVerify(() => update() !== null);
+        update().clicked();
+        tryVerify(() => sheet.visible);
+        verify(sheet.message.indexOf("What this update lets Draw reach could not be read.") === 0, sheet.message);
+        verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") < 0, "not without the sheet's button");
+        sheet.cancel();
+        tryVerify(() => !sheet.visible);
+        verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") < 0, "Cancel: nothing runs");
+        // While its plan reads the commits and access (SD33): dimmed, with why; the group's line counts the apps.
+        t.backend.flatpakUpdates = {"flatpak:org.example.Draw": "checking"};
+        t.backend.updates = Object.assign({}, t.backend.updates, {flatpak: Object.assign({}, t.backend.updates.flatpak, {planning: {done: 1, total: 3}, block: "checking"})});
+        t.backend.revision += 1;
+        tryVerify(() => update() !== null && !update().enabled);
+        verify(shown("Checking what the updates change: 1 of 3 apps…"));
+        verify(!button("Update All").enabled, "Update All waits for the plan");
+        t.backend.updates = Object.assign({}, t.backend.updates, {flatpak: Object.assign({}, t.backend.updates.flatpak, {planning: undefined, block: ""})});
         // Offline: dimmed, with why.
         t.backend.operations = [];
         t.backend.flatpakUpdates = {"flatpak:org.example.Draw": "offline"};

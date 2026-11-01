@@ -7770,12 +7770,20 @@
         <translation>AUR</translation>
     </message>
     <message>
+        <source>Update the Flatpak apps?</source>
+        <translation>Mettre à jour les apps Flatpak&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The Flatpak apps can&apos;t be updated now</source>
+        <translation>Impossible de mettre à jour les apps Flatpak maintenant</translation>
+    </message>
+    <message>
         <source>Update “%1”?</source>
         <translation>Mettre à jour «&#xa0;%1&#xa0;»&#xa0;?</translation>
     </message>
     <message>
         <source>“%1” can&apos;t be updated now</source>
-        <translation>«&#xa0;%1&#xa0;» ne peut pas être mise à jour maintenant</translation>
+        <translation>Impossible de mettre à jour «&#xa0;%1&#xa0;» maintenant</translation>
     </message>
     <message>
         <source>Get Flatpak?</source>
@@ -7804,6 +7812,10 @@
     <message>
         <source>What this update lets %1 reach could not be read.</source>
         <translation>Ce à quoi cette mise à jour permet à %1 d’accéder n’a pas pu être lu.</translation>
+    </message>
+    <message>
+        <source>They&apos;re updated in your own folder, for you alone, without administrator rights.</source>
+        <translation>Elles sont mises à jour dans votre propre dossier, pour vous seul, sans droits d’administrateur.</translation>
     </message>
     <message>
         <source>It&apos;s updated in your own folder, for you alone, without administrator rights.</source>
@@ -11322,6 +11334,10 @@
         <translation>Le Store a cessé de suivre cette opération au bout d’un long moment. Vérifiez ce qui est installé dans Installées.</translation>
     </message>
     <message>
+        <source>Checking what this update changes…</source>
+        <translation>Vérification de ce que change cette mise à jour…</translation>
+    </message>
+    <message>
         <source>Flathub needs Flatpak, and getting it hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
         <translation>Flathub a besoin de Flatpak, et son obtention n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose à nouveau dès que son catalogue l’aura été.</translation>
     </message>
@@ -11672,6 +11688,10 @@
     <message>
         <source>Software Update couldn&apos;t check for updates. Open it to check.</source>
         <translation>Mise à jour de logiciels n’a pas pu rechercher de mises à jour. Ouvrez-la pour lancer la recherche.</translation>
+    </message>
+    <message>
+        <source>Checking what the updates change: %1 of %2 apps…</source>
+        <translation>Vérification de ce que changent les mises à jour&#xa0;: %1 apps sur %2…</translation>
     </message>
     <message>
         <source>Checking Flathub for updates…</source>

@@ -144,9 +144,11 @@ TEST(Flatpak, UpdateAccessAdded)
     FlatpakTools tools;
     tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
                                       "echo \"$*\" >>'" + d + "/calls'\n"
-                                      "case \"$1\" in\n"
-                                      "  info) cat '" + d + "/installed'; if [ -e '" + d + "/unreadable' ]; then exit 1; fi ;;\n"
-                                      "  remote-info) cat '" + d + "/newer' ;;\n"
+                                      "case \"$1 $3\" in\n"
+                                      "  'info --show-commit') cat '" + d + "/installed-commit' ;;\n"
+                                      "  'remote-info --show-commit') cat '" + d + "/commit' ;;\n"
+                                      "  info*) cat '" + d + "/installed'; if [ -e '" + d + "/unreadable' ]; then exit 1; fi ;;\n"
+                                      "  remote-info*) cat '" + d + "/newer' ;;\n"
                                       "esac\n");
     const QString ref = QStringLiteral("app/org.example.Hello/x86_64/stable");
     std::optional<QStringList> added = flatpakAccessAdded(tools, ref);
@@ -176,6 +178,41 @@ TEST(Flatpak, UpdateAccessAdded)
     EXPECT_FALSE(flatpakAccessAdded(tools, ref));
     QFile::remove(dir.filePath(QStringLiteral("unreadable")));
     EXPECT_FALSE(flatpakAccessAdded(tools, QStringLiteral("runtime/org.example.Platform/x86_64/1"))) << "an app's ref only";
+
+    // A cut list ("more:<n>", 30 lines at most) is never matched: the same count on both sides may hide new names.
+    QByteArray many = "[Application]\nname=org.example.Hello\n[Session Bus Policy]\n";
+    for (int i = 10; i < 50; ++i)
+        many += "org.example.Service" + QByteArray::number(i) + "=talk\n";
+    storetest::writeFile(dir.filePath(QStringLiteral("installed")), many);
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), many);
+    const std::optional<QStringList> cut = flatpakAccess(many);
+    ASSERT_TRUE(cut && cut->size() == 30 && cut->last().startsWith(QLatin1String("more:")));
+    added = flatpakAccessAdded(tools, ref);
+    ASSERT_TRUE(added);
+    EXPECT_EQ(*added, QStringList{cut->last()}) << "the named services match; the cut count is new";
+
+    // The commit (S32a): Flathub's, and the installed one; 64 lowercase hex digits, else unread. With a commit, its own
+    // metadata is read (--commit), the one the update then deploys.
+    const QString c1(64, QLatin1Char('a'));
+    storetest::writeFile(dir.filePath(QStringLiteral("commit")), c1.toUtf8() + "\n");
+    storetest::writeFile(dir.filePath(QStringLiteral("installed-commit")), QByteArray(64, 'b') + "\n");
+    EXPECT_EQ(flatpakRemoteCommit(tools, ref), c1);
+    EXPECT_EQ(flatpakInstalledCommit(tools, ref), QString(64, QLatin1Char('b')));
+    QFile::remove(dir.filePath(QStringLiteral("calls")));
+    storetest::writeFile(dir.filePath(QStringLiteral("installed")), "[Application]\nname=org.example.Hello\n");
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nfilesystems=home;\n");
+    added = flatpakAccessAdded(tools, ref, c1);
+    ASSERT_TRUE(added);
+    EXPECT_EQ(*added, (QStringList{QStringLiteral("home"), QStringLiteral("login"), QStringLiteral("outside")}));
+    EXPECT_EQ(readAll(dir.filePath(QStringLiteral("calls"))), "info --user --show-metadata -- " + ref.toUtf8() + "\n"
+                                                                "remote-info --user --show-metadata --commit=" + c1.toUtf8() + " flathub " + ref.toUtf8() + "\n");
+    EXPECT_FALSE(flatpakAccessAdded(tools, ref, QStringLiteral("abc"))) << "not a commit";
+    for (const QByteArray &bad : {QByteArray("abc\n"), QByteArray(64, 'A') + "\n", QByteArray(63, 'a') + "\n", QByteArray(65, 'a') + "\n", QByteArray()}) {
+        storetest::writeFile(dir.filePath(QStringLiteral("commit")), bad);
+        EXPECT_EQ(flatpakRemoteCommit(tools, ref), QString()) << bad.constData();
+    }
+    EXPECT_TRUE(isFlatpakCommit(c1));
+    EXPECT_FALSE(isFlatpakCommit(c1 + QLatin1Char('\n')));
 }
 
 TEST(Flatpak, TerminalLinesAndSizes)
@@ -690,17 +727,25 @@ TEST(Flatpak, RealUpdate)
     ASSERT_TRUE(before);
     ASSERT_TRUE(std::any_of(before->cbegin(), before->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref && u.app && u.origin == kFlathubRemote; }))
         << "Hello 1.3 on the repository";
-    const std::optional<QStringList> added = flatpakAccessAdded(tools, ref);
+    // The plan's commit (S32a) and its access, then the Store's own command, pinned to that commit (S32c).
+    const QString commit = flatpakRemoteCommit(tools, ref);
+    ASSERT_TRUE(isFlatpakCommit(commit));
+    EXPECT_NE(flatpakInstalledCommit(tools, ref), commit);
+    const std::optional<QStringList> added = flatpakAccessAdded(tools, ref, commit);
     ASSERT_TRUE(added);
     EXPECT_TRUE(added->isEmpty()) << added->join(QLatin1Char(',')).toStdString();
+    OperationRecord record;
+    record.packages = {ref};
+    record.commits = {commit};
+    const QList<QStringList> commands = flatpakUpdateCommands(record);
+    ASSERT_EQ(commands.size(), 1);
     ChildOptions options;
     options.timeoutMs = 120000;
     options.extraEnv = tools.env;
-    const ChildResult r = runChild(tools.flatpak, {QStringLiteral("update"), QStringLiteral("--user"), QStringLiteral("--noninteractive"),
-                                                   QStringLiteral("--"), ref},
-                                   options);
+    const ChildResult r = runChild(tools.flatpak, commands.first(), options);
     EXPECT_EQ(r.exitCode, 0) << r.out.toStdString() << r.err.toStdString();
     EXPECT_GE(flatpakSteps(r.out, true), 1) << r.out.toStdString();
+    EXPECT_EQ(flatpakInstalledCommit(tools, ref), commit) << "the commit checked is the one deployed";
     const std::optional<QList<FlatpakUpdate>> after = listFlatpakUpdates(tools);
     ASSERT_TRUE(after);
     EXPECT_TRUE(std::none_of(after->cbegin(), after->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }));

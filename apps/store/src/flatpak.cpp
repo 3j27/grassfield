@@ -233,6 +233,7 @@ ChildOptions options(const FlatpakTools &tools, int timeoutMs)
     o.timeoutMs = timeoutMs;
     o.maxOut = 4 * 1024 * 1024;
     o.extraEnv = tools.env;
+    o.cancel = tools.cancel;
     return o;
 }
 
@@ -790,7 +791,7 @@ QList<FlatpakUpdate> parseFlatpakUpdates(const QByteArray &out)
     QList<FlatpakUpdate> updates;
     for (const QByteArray &raw : out.split('\n')) {
         const QStringList f = QString::fromUtf8(raw).trimmed().split(QLatin1Char('\t'));
-        if (f.size() != 4 || updates.size() >= 512)
+        if (f.size() != 4 || updates.size() >= kMaxFlatpakUpdates)
             continue;
         FlatpakUpdate u;
         u.id = f.at(0).trimmed();
@@ -816,16 +817,47 @@ std::optional<QList<FlatpakUpdate>> listFlatpakUpdates(const FlatpakTools &tools
     return parseFlatpakUpdates(r.out);
 }
 
-std::optional<QStringList> flatpakAccessAdded(const FlatpakTools &tools, const QString &ref)
+bool isFlatpakCommit(const QString &commit)
 {
-    if (!isFlatpakAppRef(ref))
+    static const QRegularExpression re(QStringLiteral("\\A[0-9a-f]{64}\\z"));
+    return re.match(commit).hasMatch();
+}
+
+QString flatpakRemoteCommit(const FlatpakTools &tools, const QString &ref)
+{
+    if (!isFlatpakRef(ref))
+        return {};
+    const ChildResult r = runChild(tools.flatpak, {QStringLiteral("remote-info"), QStringLiteral("--user"), QStringLiteral("--show-commit"),
+                                                   kFlathubRemote, ref},
+                                   options(tools, 30000));
+    const QString commit = r.ok() ? QString::fromLatin1(r.out).section(QLatin1Char('\n'), 0, 0).trimmed() : QString();
+    return isFlatpakCommit(commit) ? commit : QString();
+}
+
+QString flatpakInstalledCommit(const FlatpakTools &tools, const QString &ref)
+{
+    if (!isFlatpakRef(ref))
+        return {};
+    const ChildResult r = runChild(tools.flatpak, {QStringLiteral("info"), QStringLiteral("--user"), QStringLiteral("--show-commit"),
+                                                   QStringLiteral("--"), ref},
+                                   options(tools, 30000));
+    const QString commit = r.ok() ? QString::fromLatin1(r.out).section(QLatin1Char('\n'), 0, 0).trimmed() : QString();
+    return isFlatpakCommit(commit) ? commit : QString();
+}
+
+std::optional<QStringList> flatpakAccessAdded(const FlatpakTools &tools, const QString &ref, const QString &commit)
+{
+    if (!isFlatpakAppRef(ref) || (!commit.isEmpty() && !isFlatpakCommit(commit)))
         return std::nullopt;
     const ChildResult installed = runChild(tools.flatpak, {QStringLiteral("info"), QStringLiteral("--user"), QStringLiteral("--show-metadata"),
                                                            QStringLiteral("--"), ref},
                                            options(tools, 30000));
-    const ChildResult newer = runChild(tools.flatpak, {QStringLiteral("remote-info"), QStringLiteral("--user"), QStringLiteral("--show-metadata"),
-                                                       kFlathubRemote, ref},
-                                       options(tools, 30000));
+    // The commit the update will deploy (S32a: --commit reads it even once a newer one is published).
+    QStringList newerArgs{QStringLiteral("remote-info"), QStringLiteral("--user"), QStringLiteral("--show-metadata")};
+    if (!commit.isEmpty())
+        newerArgs << QStringLiteral("--commit=") + commit;
+    newerArgs << kFlathubRemote << ref;
+    const ChildResult newer = runChild(tools.flatpak, newerArgs, options(tools, 30000));
     if (!installed.ok() || !newer.ok())
         return std::nullopt;
     const std::optional<QStringList> before = flatpakAccess(installed.out);

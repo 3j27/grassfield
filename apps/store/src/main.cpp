@@ -100,7 +100,9 @@ int main(int argc, char *argv[])
         return 1;
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
     // A page another launch asked for: the window goes there (Main.qml openPage checks it) and comes forward.
-    QObject::connect(&instance, &grassfield::store::StoreInstance::openRequested, &app, [&engine](const QString &page, const QString &token) {
+    QObject::connect(&instance, &grassfield::store::StoreInstance::openRequested, &app, [&engine, &backend](const QString &page, const QString &token) {
+        // Asked for again while a quit waits for the running operation (Ctrl+Q, the window closed): the Store stays.
+        backend.reopened();
         auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
         if (!window)
             return;

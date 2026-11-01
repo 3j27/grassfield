@@ -444,6 +444,7 @@ StoreBackend::StoreBackend(QObject *parent)
     , m_cancel(std::make_shared<std::atomic_bool>(false))
 {
     m_pool.setMaxThreadCount(2); // one load and one product page's pacman -Si at a time
+    m_updatePool.setMaxThreadCount(2); // Updates: a check (the shell, pacman -Qu, Flathub's) and an update's plan at once
     // qGuiApp casts whatever application there is: the unit tests' is a QCoreApplication.
     if (auto *gui = guiApp())
         connect(gui, &QGuiApplication::focusWindowChanged, this, &StoreBackend::focusWindowChanged);
@@ -544,8 +545,15 @@ StoreBackend::StoreBackend(QObject *parent)
         m_stateWatcher.addPath(stateDir);
     connect(&m_stateWatcher, &QFileSystemWatcher::directoryChanged, this, &StoreBackend::followUpdates);
     connect(m_operations.get(), &Operations::idle, this, [this] {
-        if (m_quitWhenIdle)
+        // A window shown again since (the Dock, a second launch's hand-over) keeps the Store: the user is using it.
+        bool shown = false;
+        if (guiApp()) {
+            for (QWindow *w : QGuiApplication::topLevelWindows())
+                shown = shown || w->isVisible();
+        }
+        if (m_quitWhenIdle && !shown)
             QCoreApplication::quit();
+        m_quitWhenIdle = false;
     });
 }
 
@@ -1065,11 +1073,23 @@ QVariantMap StoreBackend::updates() const
         m.insert(QStringLiteral("page"), a != nullptr);
         apps.append(m);
     }
+    // An update's plan running (each app's commit and access read, SD33): how many apps it checked, of how many.
+    QVariant planning;
+    if (!m_updatePlanning.isEmpty()) {
+        int done = 0, total = 0;
+        for (const auto &p : m_updatePlanning) {
+            done += p.first;
+            total += p.second;
+        }
+        planning = QVariantMap{{QStringLiteral("done"), done}, {QStringLiteral("total"), total}};
+    }
     u.insert(QStringLiteral("flatpak"), QVariantMap{{QStringLiteral("on"), on},
                                                     {QStringLiteral("state"), m_flatpakUpdatesState},
                                                     {QStringLiteral("apps"), apps},
                                                     {QStringLiteral("runtimes"), runtimes},
-                                                    {QStringLiteral("block"), flatpakUpdateBlock()}});
+                                                    {QStringLiteral("planning"), planning},
+                                                    {QStringLiteral("block"), m_updatePlanning.contains(kFlatpakUpdatesApp) ? QStringLiteral("checking")
+                                                                                                                             : flatpakUpdateBlock()}});
     u.insert(QStringLiteral("count"), int(u.value(QStringLiteral("apps")).toList().size() + apps.size()));
     return u;
 }
@@ -1127,8 +1147,9 @@ void StoreBackend::askShellToCheck()
     }
     const QString program = env::shellProgram();
     const QStringList args = ipc + QStringList{QStringLiteral("update"), QStringLiteral("check"), QStringLiteral("user")};
+    options.cancel = m_cancel;
     QPointer<StoreBackend> self(this);
-    QThreadPool::globalInstance()->start([self, program, args, options] {
+    m_updatePool.start([self, program, args, options] {
         const ChildResult r = runChild(program, args, options);
         const bool asked = r.ok() && r.out.trimmed() == "ok";
         QMetaObject::invokeMethod(self.data(), [self, asked] {
@@ -1146,9 +1167,11 @@ void StoreBackend::readUnfinished()
 {
     // pacman -Qu while no update runs (S12): packages the last system update did not install (exit 1 when there are none).
     const QString pacman = env::pacman();
+    ChildOptions options;
+    options.cancel = m_cancel;
     QPointer<StoreBackend> self(this);
-    QThreadPool::globalInstance()->start([self, pacman] {
-        const ChildResult r = runChild(pacman, {QStringLiteral("-Qu")});
+    m_updatePool.start([self, pacman, options] {
+        const ChildResult r = runChild(pacman, {QStringLiteral("-Qu")}, options);
         const int count = r.started && !r.timedOut && !r.overflow && (r.exitCode == 0 || r.exitCode == 1)
             ? int(unfinishedUpdates(r.out).size())
             : 0;
@@ -1168,9 +1191,12 @@ void StoreBackend::checkFlatpakUpdates()
     m_flatpakUpdatesState = QStringLiteral("checking");
     emit updatesChanged();
     const FlatpakTools tools = flatpakTools();
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
     QPointer<StoreBackend> self(this);
-    QThreadPool::globalInstance()->start([self, tools] {
+    m_updatePool.start([self, tools, cancel] {
         const std::optional<QList<FlatpakUpdate>> all = listFlatpakUpdates(tools);
+        if (*cancel)
+            return;
         QMetaObject::invokeMethod(self.data(), [self, all] {
             if (!self)
                 return;
@@ -1248,21 +1274,24 @@ QString StoreBackend::flatpakUpdateBlock() const
 void StoreBackend::planFlatpakUpdate(const QString &id)
 {
     const QString kind = QStringLiteral("update");
+    if (m_updatePlanning.contains(id))
+        return; // its plan runs: its answer goes to the sheet that waits
     QStringList refs;
     if (id == kFlatpakUpdatesApp) {
         for (const FlatpakUpdate &u : m_flatpakUpdates)
-            refs.append(u.ref);
+            refs.append(u.ref); // all of them (kMaxFlatpakUpdates at most, as the check lists them): one operation
     } else if (const std::optional<FlatpakUpdate> u = flatpakUpdateOf(id)) {
         refs.append(u->ref);
     }
-    const QString block = refs.isEmpty() ? QStringLiteral("none") : refs.size() > 64 ? QStringLiteral("tooMany") : flatpakUpdateBlock();
+    const QString block = refs.isEmpty() ? QStringLiteral("none") : flatpakUpdateBlock();
     if (!block.isEmpty() || m_operations->queued(id)) {
         m_updatePlans.remove(id);
         emit planReady(id, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}, {QStringLiteral("detail"), block.isEmpty() ? QStringLiteral("queued") : block}});
         return;
     }
     // What each app's update lets it reach that it could not (SD25 for an update): flatpak's --noninteractive accepts it
-    // silently, so the sheet says it first.
+    // silently, so the sheet says it first. The commit read is the one checked and the one the update deploys (S32: a newer
+    // commit published meanwhile is listed again and asked about again, never taken silently).
     QList<std::pair<QString, QString>> apps; // ref, name
     for (const QString &ref : refs) {
         if (!isFlatpakAppRef(ref))
@@ -1270,26 +1299,54 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
         const StoreApp *a = flatpakApp(flatpakRefId(ref));
         apps.append({ref, a ? a->name.pick(m_language) : flatpakRefId(ref)});
     }
+    m_updatePlanning.insert(id, {0, int(apps.size())});
+    ++m_revision; // its button says it is checked
+    emit updatesChanged();
+    emit dataChanged();
     const FlatpakTools tools = flatpakTools();
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
     QPointer<StoreBackend> self(this);
-    QThreadPool::globalInstance()->start([self, id, kind, refs, apps, tools] {
+    m_updatePool.start([self, id, kind, refs, apps, tools, cancel] {
         QVariantList widened;
         QStringList unknown;
+        QHash<QString, QString> pinned;
+        int done = 0;
         for (const auto &[ref, name] : apps) {
-            const std::optional<QStringList> added = flatpakAccessAdded(tools, ref);
+            if (*cancel)
+                return;
+            const QString commit = flatpakRemoteCommit(tools, ref);
+            const std::optional<QStringList> added = commit.isEmpty() ? std::nullopt : flatpakAccessAdded(tools, ref, commit);
             if (!added)
                 unknown.append(name);
             else if (!added->isEmpty())
                 widened.append(QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("access"), *added}});
+            if (!commit.isEmpty())
+                pinned.insert(ref, commit);
+            QMetaObject::invokeMethod(self.data(), [self, id, done = ++done] {
+                if (!self || !self->m_updatePlanning.contains(id))
+                    return;
+                self->m_updatePlanning[id].first = done;
+                emit self->updatesChanged();
+            });
         }
+        if (*cancel)
+            return;
+        UpdatePlan plan;
+        plan.refs = refs;
+        for (const QString &ref : refs)
+            plan.commits.append(pinned.value(ref));
         const QVariantMap out{{QStringLiteral("refusal"), QString()},
                               {QStringLiteral("refs"), int(refs.size())},
                               {QStringLiteral("widened"), widened},
                               {QStringLiteral("unknown"), unknown}};
-        QMetaObject::invokeMethod(self.data(), [self, id, kind, refs, out] {
+        QMetaObject::invokeMethod(self.data(), [self, id, kind, plan, out] {
             if (!self)
                 return;
-            self->m_updatePlans.insert(id, refs);
+            self->m_updatePlanning.remove(id);
+            self->m_updatePlans.insert(id, plan);
+            ++self->m_revision;
+            emit self->updatesChanged();
+            emit self->dataChanged();
             emit self->planReady(id, kind, out);
         });
     });
@@ -1297,14 +1354,18 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
 
 bool StoreBackend::update(const QString &id)
 {
-    // The refs its plan checked, still listed (a check since may have found them updated), and nothing queued for it.
+    // The refs its plan checked, each with the commit it checked, still listed (a check since may have found them updated),
+    // and nothing queued for it.
     const auto it = m_updatePlans.constFind(id);
     if (it == m_updatePlans.cend() || m_operations->queued(id) || !flatpakUpdateBlock().isEmpty())
         return false;
-    QStringList refs;
-    for (const QString &ref : *it) {
-        if (std::any_of(m_flatpakUpdates.cbegin(), m_flatpakUpdates.cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }))
+    QStringList refs, commits;
+    for (qsizetype i = 0; i < it->refs.size(); ++i) {
+        const QString &ref = it->refs.at(i);
+        if (std::any_of(m_flatpakUpdates.cbegin(), m_flatpakUpdates.cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; })) {
             refs.append(ref);
+            commits.append(it->commits.value(i));
+        }
     }
     m_updatePlans.remove(id);
     if (refs.isEmpty())
@@ -1315,6 +1376,7 @@ bool StoreBackend::update(const QString &id)
     r.app = id;
     r.path = QStringLiteral("flatpak");
     r.packages = refs;
+    r.commits = commits;
     if (id == kFlatpakUpdatesApp) {
         r.name = QCoreApplication::translate("StoreBackend", "Flatpak apps");
     } else {
@@ -1496,6 +1558,7 @@ FlatpakTools StoreBackend::flatpakTools() const
     FlatpakTools tools;
     tools.flatpak = env::flatpak();
     tools.env = flatpakEnvironment();
+    tools.cancel = m_cancel;
     return tools;
 }
 
@@ -1815,7 +1878,9 @@ QVariantMap StoreBackend::actions(const QString &id) const
                 {QStringLiteral("uninstall"), can ? QString() : (apps::runmode::dev() ? QStringLiteral("dev") : QStringLiteral("missing"))}};
     }
     // A Flatpak with an update (SR13): "update" is "" when its Update runs now, else why not; "none" without one.
-    const QString update = flatpakUpdateOf(id) ? flatpakUpdateBlock() : QStringLiteral("none");
+    const QString update = !flatpakUpdateOf(id)            ? QStringLiteral("none")
+        : m_updatePlanning.contains(id)                         ? QStringLiteral("checking")
+                                                                : flatpakUpdateBlock();
     if (!otherFlatpak(id).isEmpty()) {
         return {{QStringLiteral("installed"), true}, {QStringLiteral("launcher"), true}, {QStringLiteral("get"), QStringLiteral("installed")},
                 {QStringLiteral("uninstall"), flatpakBlock()}, {QStringLiteral("update"), update}};
@@ -2333,6 +2398,11 @@ bool StoreBackend::openSoftwareUpdate()
         return !fake.isEmpty() && QProcess::startDetached(fake, argv);
     }
     return apps::startApplication(argv.constFirst(), argv.mid(1));
+}
+
+void StoreBackend::reopened()
+{
+    m_quitWhenIdle = false;
 }
 
 void StoreBackend::quitWhenIdle()

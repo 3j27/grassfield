@@ -88,6 +88,8 @@ function getBlockText(reason, kind) {
         return qsTr("A repository has this package: the Store installs it from there, from its own page.");
     case "flathubOff":
         return qsTr("Turn on Flathub in the Store's settings to install from it.");
+    case "checking":
+        return qsTr("Checking what this update changes…");
     case "noFlatpak":
         return qsTr("Flathub needs the flatpak package.");
     case "source":
@@ -417,10 +419,13 @@ function systemAction(u) {
     return (u.others || 0) > 0 || releases ? "update" : "";
 }
 
-// The Flatpak group's line (SR24): Flathub's check while it runs, or why it could not answer.
+// The Flatpak group's line (SR24): an update's plan while it reads each app's commit and access (SD33), Flathub's check while
+// it runs, or why it could not answer.
 function flatpakUpdatesLine(f) {
     if (!f || !f.on)
         return "";
+    if (f.planning && f.planning.total > 0)
+        return qsTr("Checking what the updates change: %1 of %2 apps…").arg(f.planning.done).arg(f.planning.total);
     if (f.state === "checking")
         return qsTr("Checking Flathub for updates…");
     if (f.state === "failed")

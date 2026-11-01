@@ -83,6 +83,8 @@ Sheet {
     }
 
     title: {
+        if (root.updating && root.app.id === "store:flatpak-updates") // Update All of the Flatpak group: its own words
+            return root.refusal === "" ? qsTr("Update the Flatpak apps?") : qsTr("The Flatpak apps can't be updated now");
         if (root.updating)
             return root.refusal === "" ? qsTr("Update “%1”?").arg(root.appName) : qsTr("“%1” can't be updated now").arg(root.appName);
         if (root.refusal === "" && root.getFlatpak)
@@ -119,7 +121,8 @@ Sheet {
             const parts = (root.plan.widened || []).map(w => qsTr("After this update, “%1” can also reach: %2.").arg(w.name).arg(Store.accessWords(w.access).join(", ")));
             if ((root.plan.unknown || []).length > 0)
                 parts.push(qsTr("What this update lets %1 reach could not be read.").arg((root.plan.unknown || []).join(", ")));
-            parts.push(qsTr("It's updated in your own folder, for you alone, without administrator rights."));
+            parts.push(root.app.id === "store:flatpak-updates" ? qsTr("They're updated in your own folder, for you alone, without administrator rights.")
+                                                               : qsTr("It's updated in your own folder, for you alone, without administrator rights."));
             return parts.join("\n\n");
         }
         switch (root.refusal) {

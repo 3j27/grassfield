@@ -188,6 +188,11 @@ TestCase {
         compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [], runtimes: 0}), "Your Flatpak apps are up to date.");
         compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [], runtimes: 2}), "2 runtimes have an update.");
         compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [{id: "a"}], runtimes: 2}), "");
+        // An update's plan reading each app's commit and access (SD33): counted, before anything else.
+        compare(Store.flatpakUpdatesLine({on: true, state: "checking", apps: [{id: "a"}], planning: {done: 2, total: 5}}), "Checking what the updates change: 2 of 5 apps…");
+        compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [], runtimes: 1, planning: {done: 0, total: 0}}), "1 runtime has an update.");
+        compare(Store.getBlockText("checking", "flatpak"), "Checking what this update changes…");
+        compare(Store.buttonState({}, {installed: true, launcher: true, update: "checking"}, null), "update");
         // The button: Update for an installed Flatpak with an update, never before Get.
         compare(Store.buttonState({}, {installed: true, launcher: true, update: ""}, null), "update");
         compare(Store.buttonState({}, {installed: true, launcher: true, update: "offline"}, null), "update");
