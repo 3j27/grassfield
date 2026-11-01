@@ -2,17 +2,21 @@
 // grassfield-prompter: gcr's system prompter for the Grassfield session; the shell draws the prompts (ADR-0035 D-9, owner
 // decision Q1 = S2; docs/specs/system-dialogs.md section 5).
 //
-// Usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--version]
+// Usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--bt-timeout-ms N] [--version]
 //   --peer-unit UNIT   the systemd unit whose process may connect as the shell (default grassfield-shell.service); set by
 //                      grassfield-prompter.service. Only an argument: no environment variable changes it.
 //   --socket PATH      the socket (default $XDG_RUNTIME_DIR/grassfield/prompter.sock); required in a development run
 //   --nm-timeout-ms N  development runs only (the tests): how long a NetworkManager request waits for its answer
 //                      (default 110000, under NetworkManager's own 120 s)
+//   --bt-timeout-ms N  development runs only (the tests): how long a Bluetooth pairing step waits for its answer
+//                      (default 55000, under bluetoothd's own 60 s)
 // KIO's password server (step 9e) is on the session bus; the Secret Service it remembers passwords in is reached through
 // libsecret's own connection to that bus.
-// The system bus (the NetworkManager secret agent, step 9c): in the session always unix:path=/run/dbus/system_bus_socket,
+// The system bus (the NetworkManager secret agent, step 9c; the BlueZ pairing agent, step 10): in the session always
+// unix:path=/run/dbus/system_bus_socket,
 // whatever DBUS_SYSTEM_BUS_ADDRESS says; in a development run only DBUS_SYSTEM_BUS_ADDRESS when it is a private test bus
-// under GF_TEST_BUS_DIR (none set: no agent). No system bus, or no NetworkManager on it: no agent, gcr's prompts unchanged.
+// under GF_TEST_BUS_DIR (none set: no agent). No system bus: no agents, gcr's prompts unchanged; NetworkManager or bluetoothd
+// absent from it: that agent registers when it comes.
 // Environment:
 //   GRASSFIELD_SESSION=1   required in the Grassfield session (the systemd unit checks it too)
 //   GRASSFIELD_DEV=1       development run (ADR-0019: only while GRASSFIELD_SESSION is not "1"): only on a private test bus
@@ -22,6 +26,7 @@
 // Exit status: 0 stopped by a signal, 1 the bus connection closed, 2 environment error, 3 refused by a safety check.
 
 #include "Bridge.h"
+#include "BtPairing.h"
 #include "Filter.h"
 #include "KioAuth.h"
 #include "NmSecrets.h"
@@ -65,7 +70,7 @@ namespace {
     constexpr char kSystemBus[] = "unix:path=/run/dbus/system_bus_socket";
 
     void onSystemClosed(GDBusConnection* /*bus*/, gboolean /*remotePeerVanished*/, GError* /*error*/, gpointer /*data*/) {
-        log(QStringLiteral("the system bus connection closed: NetworkManager has no agent until the bridge restarts"));
+        log(QStringLiteral("the system bus connection closed: NetworkManager and bluetoothd have no agent until the bridge restarts"));
     }
 
     GDBusConnection* connectBus(const QString& address, GError** error) {
@@ -114,6 +119,7 @@ int main(int argc, char** argv) {
     QString           socketArgument;
     QString           peerUnit    = QStringLiteral("grassfield-shell.service");
     int               nmTimeoutMs = 0; // 0: the default
+    int               btTimeoutMs = 0; // 0: the default
     const QStringList args     = QCoreApplication::arguments();
     for (qsizetype i = 1; i < args.size(); ++i) {
         if (args.at(i) == QLatin1String("--version")) {
@@ -137,7 +143,16 @@ int main(int argc, char** argv) {
             }
             continue;
         }
-        std::fprintf(stderr, "usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--version]\n");
+        if (args.at(i) == QLatin1String("--bt-timeout-ms") && i + 1 < args.size()) {
+            bool ok     = false;
+            btTimeoutMs = args.at(++i).toInt(&ok);
+            if (!ok || btTimeoutMs < 100 || btTimeoutMs > bt::kAnswerTimeoutMs) {
+                std::fprintf(stderr, "grassfield-prompter: --bt-timeout-ms takes 100 to %d\n", bt::kAnswerTimeoutMs);
+                return 2;
+            }
+            continue;
+        }
+        std::fprintf(stderr, "usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--bt-timeout-ms N] [--version]\n");
         return 2;
     }
 
@@ -157,7 +172,10 @@ int main(int argc, char** argv) {
         return refuse(QStringLiteral("--peer-unit %1 is not a systemd service name").arg(peerUnit));
     if (nmTimeoutMs && !dev)
         return refuse(QStringLiteral("--nm-timeout-ms is for development runs only"));
-    // The system bus of the NetworkManager agent: the real one in the session, only a private test bus in a development run.
+    if (btTimeoutMs && !dev)
+        return refuse(QStringLiteral("--bt-timeout-ms is for development runs only"));
+    // The system bus of the NetworkManager and BlueZ agents: the real one in the session, only a private test bus in a
+    // development run.
     QString systemAddress;
     if (dev) {
         systemAddress = qEnvironmentVariable("DBUS_SYSTEM_BUS_ADDRESS");
@@ -199,7 +217,7 @@ int main(int argc, char** argv) {
     if (!systemAddress.isEmpty()) {
         systemBus = connectBus(systemAddress, &error);
         if (!systemBus) {
-            log(QStringLiteral("no system bus (%1): no NetworkManager secret agent").arg(QString::fromUtf8(error ? error->message : "unknown error")));
+            log(QStringLiteral("no system bus (%1): no NetworkManager secret agent, no Bluetooth pairing agent").arg(QString::fromUtf8(error ? error->message : "unknown error")));
             g_clear_error(&error);
         } else if (dev && hasOwner(systemBus, "org.freedesktop.systemd1")) {
             g_object_unref(systemBus);
@@ -210,7 +228,7 @@ int main(int argc, char** argv) {
             g_signal_connect(systemBus, "closed", G_CALLBACK(onSystemClosed), nullptr);
         }
     } else {
-        log(QStringLiteral("a development run without DBUS_SYSTEM_BUS_ADDRESS: no NetworkManager secret agent"));
+        log(QStringLiteral("a development run without DBUS_SYSTEM_BUS_ADDRESS: no NetworkManager secret agent, no Bluetooth pairing agent"));
     }
 
     Bridge::Options options;
@@ -224,6 +242,8 @@ int main(int argc, char** argv) {
     options.keyringDirectory = kio::keyringDirectory(qEnvironmentVariable("XDG_DATA_HOME"), QString::fromUtf8(g_get_home_dir()));
     if (nmTimeoutMs)
         options.nmTimeoutMs = nmTimeoutMs;
+    if (btTimeoutMs)
+        options.btTimeoutMs = btTimeoutMs;
     int rc = 0;
     {
         Bridge  bridge(bus, options);

@@ -17,6 +17,11 @@
 //    "server":"<host>[:<port>]",
 //    "login":{"name":"...","nameMode":"edit"|"fixed"|"none","realm":"...","retry":true|false,"remember":"none"|"off"|"on",
 //             "keyring":"protected"|"unprotected"|"unknown"}}
+//   {"type":"prompt","id":"p<N>","kind":"bluetooth",                              (step 10: a BlueZ pairing step)
+//    "device":{"name":"...","address":"XX:XX:XX:XX:XX:XX","icon":"keyboard"|...|""},
+//    "pairing":{"mode":"pin"|"passkey"|"display-pin"|"display-passkey"|"confirm"|"authorize"|"authorize-service",
+//               "code":"...","entered":0-6,"service":"audio"|...|"other"|"","uuid":"..."}}
+//   {"type":"progress","id":"p<N>","entered":0-6}                                (step 10: digits typed on the device)
 //   {"type":"cancel","id":"p<N>"}
 //   {"type":"error","code":"<code>","message":"<text>"}
 // shell -> bridge (at most limits::kShellLine bytes per line, the newline excluded):
@@ -24,7 +29,9 @@
 //   {"type":"answer","id":"p<N>","result":"ok"|"cancel"|"refused","password":"...","choice":true|false,"identity":"..."}
 //   ("refused": the shell could not take the request (its bound); "identity" only for a kio request of nameMode "edit"
 //   answered ok: an nm reply carries the password only, an nm answer with a name is cancelled (opus review of step 9c);
-//   for kio, "choice" is "Remember this password", only when it was offered, and a cancel or a refusal carries nothing)
+//   for kio, "choice" is "Remember this password", only when it was offered, and a cancel or a refusal carries nothing;
+//   for bluetooth, "password" is the PIN (1 to 16 letters and digits) or the passkey (6 digits) typed, only for those modes
+//   answered ok; a code shown is answered "cancel" only)
 //
 // Everything the shell sends is untrusted: a strict parser for flat objects (strings, booleans, null, arrays of strings;
 // no numbers, no nesting, no duplicate keys, valid UTF-8, no NUL), every key and type checked. The password is never
@@ -175,11 +182,29 @@ namespace gf::prompter {
         QString       keyring;
     };
 
+    // A BlueZ pairing step (kind "bluetooth", step 10): the device (its name flattened, its address, an icon key), the mode,
+    // the code shown (a passkey's 6 digits, or the PIN to type on the device), the digits typed so far (display-passkey),
+    // the service's key and UUID (authorize-service). No requester object: the bridge sends this kind only for a call whose
+    // sender is the current owner of org.bluez on the system bus (BtAgent.h).
+    struct BtPromptView {
+        QString id;
+        QString mode;
+        QString name;
+        QString address;
+        QString icon;
+        QString code;
+        int     entered = 0;
+        QString service;
+        QString uuid;
+    };
+
     QByteArray helloMessage(const QStringList& kinds);
     QByteArray nameMessage(const QString& state);
     QByteArray promptMessage(const PromptView& prompt);
     QByteArray nmPromptMessage(const NmPromptView& prompt);
     QByteArray kioPromptMessage(const KioPromptView& prompt);
+    QByteArray btPromptMessage(const BtPromptView& prompt);
+    QByteArray progressMessage(const QString& id, int entered);
     QByteArray cancelMessage(const QString& id);
     QByteArray errorMessage(const QString& code, const QString& message);
 

@@ -28,13 +28,15 @@ namespace gf::prompter {
         constexpr int         kBusTimeoutMs = 5000;
 
         // The kinds this bridge can send: gcr's password and confirm, nm when its NetworkManager agent runs (step 9c), kio when
-        // its KIO password server runs (step 9e); bluetooth comes with step 10.
-        QStringList bridgeKinds(bool nm, bool kio) {
+        // its KIO password server runs (step 9e), bluetooth when its BlueZ pairing agent runs (step 10).
+        QStringList bridgeKinds(bool nm, bool kio, bool bluetooth) {
             QStringList kinds{QStringLiteral("password"), QStringLiteral("confirm")};
             if (nm)
                 kinds.append(QStringLiteral("nm"));
             if (kio)
                 kinds.append(QStringLiteral("kio"));
+            if (bluetooth)
+                kinds.append(QStringLiteral("bluetooth"));
             return kinds;
         }
 
@@ -122,6 +124,12 @@ namespace gf::prompter {
                 log(QStringLiteral("no NetworkManager secret agent: %1").arg(nmError));
                 m_nm.reset();
             }
+            // Bluetooth pairing (step 10): without it bluetoothd has no agent in this session (ADR-0035 decision 10-1).
+            m_bt = std::make_unique<BtAgent>(m_options.systemBus, this, m_options.btTimeoutMs);
+            if (QString btError; !m_bt->start(&btError)) {
+                log(QStringLiteral("no Bluetooth pairing agent: %1").arg(btError));
+                m_bt.reset();
+            }
         }
         // KIO's network passwords (step 9e): without it, KIO's clients reach kiod6 by D-Bus activation, as before.
         m_kio = std::make_unique<KioServer>(m_bus, this, KioServer::Options{m_options.uid, m_options.keyringDirectory});
@@ -204,6 +212,7 @@ namespace gf::prompter {
             dropClient(QStringLiteral("stopping"));
         m_nm.reset();  // answers whatever is still pending
         m_kio.reset(); // likewise, then releases its name
+        m_bt.reset();  // likewise
         if (m_listenFd >= 0) {
             delete m_acceptNotifier;
             m_acceptNotifier = nullptr;
@@ -374,6 +383,12 @@ namespace gf::prompter {
             // Fail closed: the KIO client gets "nothing" (its worker reports a cancelled login), nothing is cached.
             if (m_kio)
                 m_kio->abandon(pending.kio, QStringLiteral("cancelled by the bridge"));
+            return;
+        }
+        if (pending.bt) {
+            // Fail closed: bluetoothd is told Rejected (the pairing fails; a code shown just ends).
+            if (m_bt)
+                m_bt->refuse(pending.bt, bt::kErrorRejected, QStringLiteral("cancelled by the bridge"));
             return;
         }
         answerCancel(pending.prompt);
@@ -566,6 +581,132 @@ namespace gf::prompter {
         m_kio->answer(request, name, kio::Secret::adopt(secure, static_cast<std::size_t>(n)), answer.hasChoice && answer.choice);
     }
 
+    // --- Bluetooth's side (step 10) ------------------------------------------------------------------------------------------
+
+    QString Bridge::submitBt(BtRequest* request) {
+        if (m_client < 0 || !m_ready) {
+            log(QStringLiteral("a bluetooth request answered Rejected: no shell"));
+            return {};
+        }
+        if (!m_kinds.contains(QStringLiteral("bluetooth"))) {
+            log(QStringLiteral("a bluetooth request answered Rejected: the shell does not draw that kind"));
+            return {};
+        }
+        const QString id = m_book.reserve(request);
+        if (id.isEmpty()) {
+            log(QStringLiteral("a bluetooth request answered Rejected: %1 requests are outstanding").arg(m_book.count()));
+            return {};
+        }
+        Pending pending;
+        pending.bt   = request;
+        pending.sent = true;
+        m_pending.insert(id, pending);
+        request->id = id;
+        BtPromptView view;
+        view.id      = id;
+        view.mode    = bt::modeName(request->mode);
+        view.name    = request->device.name;
+        view.address = request->device.address;
+        view.icon    = request->device.icon;
+        view.code    = request->code;
+        view.entered = request->entered;
+        view.service = request->service;
+        view.uuid    = request->uuid;
+        send(btPromptMessage(view)); // may drop the shell, which then ends this request too (BtAgent checks)
+        return id;
+    }
+
+    void Bridge::withdrawBt(const QString& id) {
+        const auto it = m_pending.find(id);
+        if (it == m_pending.end() || !it->bt)
+            return;
+        m_pending.erase(it);
+        m_book.release(id);
+        if (m_client >= 0)
+            send(cancelMessage(id));
+    }
+
+    void Bridge::progressBt(const QString& id, int entered) {
+        const auto it = m_pending.constFind(id);
+        if (it == m_pending.constEnd() || !it->bt || m_client < 0)
+            return;
+        send(progressMessage(id, entered));
+    }
+
+    void Bridge::onBtAnswer(const ShellLine& answer, std::string_view line, BtRequest* request) {
+        // ADR-0035 decision 10-6: a code only for a PIN or a passkey answered ok; a code shown is only ever cancelled.
+        const bool code    = bt::asksCode(request->mode);
+        const bool display = bt::isDisplay(request->mode);
+        QString    wrong;
+        if (answer.hasChoice)
+            wrong = QStringLiteral("a choice where none was shown");
+        else if (answer.hasIdentity)
+            wrong = QStringLiteral("a name where none is asked");
+        else if (display && answer.ok)
+            wrong = QStringLiteral("ok for a code shown");
+        else if (answer.hasPassword && !(code && answer.ok))
+            wrong = QStringLiteral("a code where none is asked");
+        else if (code && answer.ok && !answer.hasPassword)
+            wrong = QStringLiteral("ok without a code");
+        if (!wrong.isEmpty()) {
+            log(QStringLiteral("invalid answer to %1: %2; the request is cancelled").arg(answer.id, wrong));
+            cancelRequest(answer.id, true);
+            protocolError(QStringLiteral("bad-answer"), wrong, false);
+            return;
+        }
+        m_pending.remove(answer.id);
+        m_book.release(answer.id);
+        if (!m_bt)
+            return;
+        if (answer.refused) {
+            // The shell could not take it (its bound): Rejected, never the user's Canceled (as 9-31).
+            log(QStringLiteral("request %1 refused by the shell").arg(answer.id));
+            m_bt->refuse(request, bt::kErrorRejected, QStringLiteral("the shell could not take it"));
+            return;
+        }
+        if (!answer.ok) {
+            log(QStringLiteral("request %1 answered: %2").arg(answer.id, display ? QStringLiteral("cancel (the code shown)")
+                                                                     : request->mode == bt::Mode::Authorize || request->mode == bt::Mode::AuthorizeService
+                                                                         ? QStringLiteral("decline")
+                                                                         : QStringLiteral("cancel")));
+            if (display)
+                m_bt->cancelDisplay(request);
+            else if (request->mode == bt::Mode::Authorize || request->mode == bt::Mode::AuthorizeService)
+                m_bt->refuse(request, bt::kErrorRejected, QStringLiteral("the user declined"));
+            else
+                m_bt->refuse(request, bt::kErrorCanceled, QStringLiteral("the user cancelled"));
+            return;
+        }
+        if (!code) {
+            m_bt->answerYes(request);
+            return;
+        }
+        // Decoded straight into gcr's secure memory; the line it came from is wiped by the caller.
+        auto*      secure = static_cast<char*>(gcr_secure_memory_alloc(limits::kPassword + 1));
+        const long n      = decodeJsonString(line.data() + answer.password.begin, answer.password.end - answer.password.begin, secure, limits::kPassword);
+        guint32    passkey = 0;
+        const bool valid   = n > 0
+                           && (request->mode == bt::Mode::Pin ? bt::validPin(secure, static_cast<std::size_t>(n))
+                                                              : bt::parsePasskey(secure, static_cast<std::size_t>(n), &passkey));
+        if (!valid || request->mode == bt::Mode::Passkey) {
+            explicit_bzero(secure, limits::kPassword + 1);
+            gcr_secure_memory_free(secure);
+        }
+        if (!valid) {
+            log(QStringLiteral("answer to %1: not a %2; the request is cancelled")
+                    .arg(answer.id, request->mode == bt::Mode::Pin ? QStringLiteral("PIN of 1 to 16 letters or digits") : QStringLiteral("passkey of 6 digits")));
+            send(cancelMessage(answer.id));
+            m_bt->refuse(request, bt::kErrorRejected, QStringLiteral("a wrong code from the shell"));
+            return;
+        }
+        if (request->mode == bt::Mode::Pin) {
+            secure[n] = '\0';
+            m_bt->answerPin(request, secure, static_cast<std::size_t>(n));
+        } else {
+            m_bt->answerPasskey(request, passkey);
+        }
+    }
+
     void Bridge::cancelAll(bool tellShell) {
         for (const QString& id : m_book.ids())
             cancelRequest(id, tellShell);
@@ -620,7 +761,7 @@ namespace gf::prompter {
             log(QStringLiteral("shell connected (pid %1, %2)")
                     .arg(check.pid)
                     .arg(check.raceFree ? QStringLiteral("cgroup read through its pidfd") : QStringLiteral("cgroup read through SO_PEERCRED's pid")));
-            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));
+            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr, m_bt != nullptr)));
         }
     }
 
@@ -698,6 +839,8 @@ namespace gf::prompter {
                 m_nm->setWanted(m_kinds.contains(QStringLiteral("nm")));
             if (m_kio)
                 m_kio->setWanted(m_kinds.contains(QStringLiteral("kio")));
+            if (m_bt)
+                m_bt->setWanted(m_kinds.contains(QStringLiteral("bluetooth")));
             return;
         }
         if (!m_ready) {
@@ -721,6 +864,10 @@ namespace gf::prompter {
         }
         if (pending.kio) {
             onKioAnswer(answer, line, pending.kio);
+            return;
+        }
+        if (pending.bt) {
+            onBtAnswer(answer, line, pending.bt);
             return;
         }
         QString wrong;
@@ -834,6 +981,9 @@ namespace gf::prompter {
         // one (step 9e).
         if (m_kio)
             m_kio->setWanted(false);
+        // bluetoothd loses its agent with the shell (step 10): it then refuses every pairing step that needs one.
+        if (m_bt)
+            m_bt->setWanted(false);
         // gcr's clients forget a prompt without stopping it when the prompter's name goes (gcr-system-prompt.c
         // on_prompter_vanished): gcr would keep it, and the filter would count it, until the client leaves the bus. Each
         // open prompt is closed instead, so gcr ends it and tells its caller PromptDone (counter-review of step 9a,

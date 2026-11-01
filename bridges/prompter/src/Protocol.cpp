@@ -612,6 +612,27 @@ namespace gf::prompter {
         });
     }
 
+    QByteArray btPromptMessage(const BtPromptView& p) {
+        return line({
+            {QStringLiteral("type"), QStringLiteral("prompt")},
+            {QStringLiteral("id"), p.id},
+            {QStringLiteral("kind"), QStringLiteral("bluetooth")},
+            {QStringLiteral("device"), QJsonObject{{QStringLiteral("name"), p.name}, {QStringLiteral("address"), p.address}, {QStringLiteral("icon"), p.icon}}},
+            {QStringLiteral("pairing"),
+             QJsonObject{
+                 {QStringLiteral("mode"), p.mode},
+                 {QStringLiteral("code"), p.code},
+                 {QStringLiteral("entered"), p.entered},
+                 {QStringLiteral("service"), p.service},
+                 {QStringLiteral("uuid"), p.uuid},
+             }},
+        });
+    }
+
+    QByteArray progressMessage(const QString& id, int entered) {
+        return line({{QStringLiteral("type"), QStringLiteral("progress")}, {QStringLiteral("id"), id}, {QStringLiteral("entered"), entered}});
+    }
+
     QByteArray cancelMessage(const QString& id) {
         return line({{QStringLiteral("type"), QStringLiteral("cancel")}, {QStringLiteral("id"), id}});
     }

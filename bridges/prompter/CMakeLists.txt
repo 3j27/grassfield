@@ -27,6 +27,7 @@ set(PROMPTER_LOGIC
     src/Filter.cpp src/Filter.h
     src/Prompt.cpp src/Prompt.h
     src/NmSecrets.cpp src/NmSecrets.h
+    src/BtPairing.cpp src/BtPairing.h
     src/KioAuth.cpp src/KioAuth.h
     src/Askpass.cpp src/Askpass.h)
 
@@ -34,6 +35,7 @@ add_executable(grassfield-prompter
     src/main.cpp
     src/Bridge.cpp src/Bridge.h
     src/NmAgent.cpp src/NmAgent.h
+    src/BtAgent.cpp src/BtAgent.h
     src/KioServer.cpp src/KioServer.h
     src/Log.h
     ${PROMPTER_LOGIC})
