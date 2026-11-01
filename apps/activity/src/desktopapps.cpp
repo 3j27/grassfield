@@ -67,6 +67,36 @@ DesktopApp parseDesktopApp(const QString &text, const QString &locale)
     return app;
 }
 
+QString execBasename(const QString &text)
+{
+    QString exec;
+    bool inEntry = false;
+    for (const QString &raw : text.split(QLatin1Char('\n'))) {
+        const QString line = raw.trimmed();
+        if (line.startsWith(QLatin1Char('['))) {
+            inEntry = line == QLatin1String("[Desktop Entry]");
+            continue;
+        }
+        if (inEntry && line.startsWith(QLatin1String("Exec="))) {
+            exec = line.mid(5).trimmed();
+            break;
+        }
+    }
+    const QStringList words = exec.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    qsizetype i = 0;
+    if (i < words.size() && words.at(i) == QLatin1String("env")) {
+        ++i;
+        while (i < words.size() && words.at(i).contains(QLatin1Char('=')))
+            ++i;
+    }
+    if (i >= words.size())
+        return QString();
+    QString program = words.at(i);
+    if (program.size() >= 2 && (program.startsWith(QLatin1Char('"')) || program.startsWith(QLatin1Char('\''))) && program.endsWith(program.at(0)))
+        program = program.mid(1, program.size() - 2);
+    return program.section(QLatin1Char('/'), -1);
+}
+
 DesktopApps::DesktopApps(QStringList dirs, QString locale)
     : m_dirs(std::move(dirs))
     , m_locale(std::move(locale))
@@ -101,6 +131,30 @@ const DesktopApp &DesktopApps::app(const QString &desktopId)
         }
     }
     return *m_cache.insert(desktopId, found);
+}
+
+const DesktopApp &DesktopApps::byExec(const QString &basename)
+{
+    if (!m_execRead) {
+        m_execRead = true;
+        for (const QString &dir : std::as_const(m_dirs)) {
+            const QDir apps(dir + QStringLiteral("/applications"));
+            const QStringList files = apps.entryList({QStringLiteral("*.desktop")}, QDir::Files, QDir::Name);
+            for (const QString &file : files) {
+                const QString id = file.chopped(8);
+                if (!validId(id) || m_execIds.size() >= 4096)
+                    continue;
+                QFile f(apps.filePath(file));
+                if (!f.open(QIODevice::ReadOnly) || f.size() > 256 * 1024)
+                    continue;
+                const QString program = execBasename(QString::fromUtf8(f.read(256 * 1024)));
+                if (!program.isEmpty() && !m_execIds.contains(program))
+                    m_execIds.insert(program, id);
+            }
+        }
+    }
+    const auto it = m_execIds.constFind(basename);
+    return it == m_execIds.constEnd() ? m_none : app(*it);
 }
 
 } // namespace activity

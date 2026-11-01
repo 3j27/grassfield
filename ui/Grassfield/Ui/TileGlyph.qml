@@ -7,7 +7,8 @@ import QtQuick
 // zone none. Sizes follow the tiling.glyph* tokens at the popover size and scale with `width` (a menu row draws it at the
 // icon size). `interactive` (a layout of the popover's Layouts section, TL27): each zone takes the pointer, zoneHovered
 // (-1 when it leaves) and zoneClicked report it, and each is a button named by `zoneNames`; `numbered` shows each zone's
-// number (the number keys, TL26).
+// number (the number keys, TL26). `disabledZones` (indices) are unavailable: drawn at the disabled opacity, taking no
+// pointer and no press (a zone the window does not fit, ADR-0036 D69; macOS greys a tile it cannot make, never hides it).
 Item {
     id: root
 
@@ -17,6 +18,7 @@ Item {
     property bool interactive: false
     property bool numbered: false
     property var zoneNames: []
+    property var disabledZones: []
 
     signal zoneHovered(int index)
     signal zoneClicked(int index)
@@ -62,17 +64,20 @@ Item {
             readonly property real x1: root.innerW * (zone.modelData[0] + zone.modelData[2]) / 12 - (zone.modelData[0] + zone.modelData[2] < 12 ? root.gap / 2 : 0)
             readonly property real y0: root.innerH * zone.modelData[1] / 12 + (zone.modelData[1] > 0 ? root.gap / 2 : 0)
             readonly property real y1: root.innerH * (zone.modelData[1] + zone.modelData[3]) / 12 - (zone.modelData[1] + zone.modelData[3] < 12 ? root.gap / 2 : 0)
+            readonly property bool available: (root.disabledZones || []).indexOf(zone.index) < 0
 
             x: root.innerX + zone.x0
             y: root.innerX + zone.y0
             width: Math.max(0, zone.x1 - zone.x0)
             height: Math.max(0, zone.y1 - zone.y0)
             radius: Math.max(0, Tokens.tilingGlyphRadius * root.ratio - root.innerX)
-            color: root.own < 0 || zone.index === root.own ? root.color : Appearance.withAlpha(root.color, Tokens.tilingGlyphOtherOpacity)
+            // A disabled zone: fainter than a light one, never in full (withAlpha sets the alpha).
+            color: !zone.available ? Appearance.withAlpha(root.color, Tokens.tilingGlyphOtherOpacity * Tokens.materialDisabledOpacity)
+                : root.own < 0 || zone.index === root.own ? root.color : Appearance.withAlpha(root.color, Tokens.tilingGlyphOtherOpacity)
             Accessible.role: Accessible.Button
             Accessible.name: zone.index < root.zoneNames.length ? String(root.zoneNames[zone.index]) : ""
             Accessible.ignored: !root.interactive
-            Accessible.onPressAction: if (root.interactive)
+            Accessible.onPressAction: if (root.interactive && zone.available)
                 root.zoneClicked(zone.index)
 
             Text {
@@ -88,7 +93,7 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
-                enabled: root.interactive
+                enabled: root.interactive && zone.available
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
                 onEntered: root.zoneHovered(zone.index)

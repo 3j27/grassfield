@@ -5,6 +5,7 @@
 #include "samplerworker.h"
 
 #include <QDBusConnection>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QMutex>
@@ -149,7 +150,37 @@ TEST(ActivityApp, RequestsWhileASampleRunsMakeOneMore)
     EXPECT_FALSE(samples.wait(1000)); // no third before the interval
     EXPECT_EQ(samples.count(), 2);
     ASSERT_EQ(requests.count(), 2);
-    EXPECT_EQ(requests.last().at(0).toUInt(), readsForColumns(Tab::Disk, tabColumns(Tab::Disk).defaults));
+    EXPECT_EQ(requests.last().at(0).toUInt(), readsForColumns(Tab::Disk, tabColumns(Tab::Disk).defaults) | ReadEfficiency);
+}
+
+// AM66, AM72 (review of steps 3 to 5): with Performance or GPU History on screen the GPU clients are read whatever the main
+// window's tab; with the main window hidden, the system's files and the GPU clients alone, and the table waits.
+TEST(ActivityApp, ThePerformanceWindowsReadWhatTheyDraw)
+{
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    Isolated iso;
+    ActivityApp app(fixtureOptions(f), iso.statePath());
+    QSignalSpy requests(&app, &ActivityApp::sampleRequested);
+    QSignalSpy samples(&app, &ActivityApp::sampled);
+    app.setTab(QStringLiteral("memory")); // a tab that reads no GPU client
+    app.setWindowShown(true);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return samples.count() >= 1; }, 5000));
+    EXPECT_EQ(requests.last().at(0).toUInt() & ReadGpu, 0u);
+    app.setAuxShown(QStringLiteral("gpuHistory"), true);
+    app.setTab(QStringLiteral("disk")); // a request with the window's reads
+    ASSERT_TRUE(QTest::qWaitFor([&] { return samples.count() >= 2; }, 5000));
+    EXPECT_EQ(requests.last().at(0).toUInt() & (ReadGpu | ReadDescriptors), static_cast<unsigned>(ReadGpu | ReadDescriptors));
+    const int rows = app.processTable().count();
+    app.setWindowShown(false);
+    f.process(101, "later", kMe, 100, 1, nul({"later"}), "/");
+    app.setAuxShown(QStringLiteral("performance"), true);
+    ASSERT_TRUE(QTest::qWaitFor([&] { return requests.count() >= 3; }, 5000));
+    const unsigned hidden = requests.last().at(0).toUInt();
+    EXPECT_EQ(hidden & (ReadSystemCpu | ReadSystemMemory | ReadGpu), static_cast<unsigned>(ReadSystemCpu | ReadSystemMemory | ReadGpu));
+    EXPECT_EQ(hidden & (ReadStatus | ReadIo | ReadEfficiency), 0u);
+    QTest::qWait(500);
+    EXPECT_EQ(app.processTable().count(), rows); // the table waits for its window
 }
 
 // Follow-up 2 (AD32): a pause is told by the update interval set in the window, which reaches the sampler.
@@ -404,4 +435,54 @@ TEST(ActivityService, AShellCallIsKilledAfterItsTime)
     EXPECT_TRUE(QTest::qWaitFor([&] { return p.isNull(); }, 5000));
     EXPECT_LT(t.elapsed(), 5000);
     EXPECT_EQ(runWithTimeout({}, QProcessEnvironment::systemEnvironment(), 200, &parent), nullptr);
+}
+
+// Review of 5bfd4419 (MINOR 2): the app removes only the dock-tile.json it wrote, never another's (a live session's, another
+// instance's): a file it found stays through its samples and its end; its own goes when the icon is chosen again.
+TEST(ActivityApp, ItRemovesOnlyItsOwnDockTile)
+{
+    QTemporaryDir runtime;
+    const QByteArray runtimeBefore = qgetenv("XDG_RUNTIME_DIR"), displayBefore = qgetenv("WAYLAND_DISPLAY");
+    qputenv("XDG_RUNTIME_DIR", runtime.path().toUtf8());
+    qputenv("WAYLAND_DISPLAY", "wayland-test");
+    const QString folder = runtimeFolder();
+    ASSERT_TRUE(QDir().mkpath(folder));
+    const QString tile = folder + QStringLiteral("/dock-tile.json");
+    const QByteArray theirs = R"({"v":1,"writer":{"pid":4242,"start":1},"kind":"cpu-usage","samples":[0.5]})";
+    {
+        QFile out(tile);
+        ASSERT_TRUE(out.open(QIODevice::WriteOnly));
+        out.write(theirs);
+    }
+    Fixture f;
+    f.process(100, "mine", kMe, 100, 1, nul({"mine"}), "/");
+    f.write("proc/stat", "cpu  100 0 100 800 0 0 0 0 0 0\ncpu0 100 0 100 800 0 0 0 0 0 0\n");
+    {
+        Isolated iso;
+        ActivityApp app(fixtureOptions(f), iso.statePath());
+        QSignalSpy samples(&app, &ActivityApp::sampled);
+        app.setInterval(1);
+        app.setWindowShown(true);
+        ASSERT_TRUE(samples.wait(5000));
+        QFile read(tile);
+        ASSERT_TRUE(read.open(QIODevice::ReadOnly));
+        EXPECT_EQ(read.readAll(), theirs); // the Dock icon is the app's icon: the file found stays
+        read.close();
+        app.setDockIcon(QStringLiteral("cpu-history"));
+        ASSERT_TRUE(QTest::qWaitFor([&] {
+            QFile now(tile);
+            return now.open(QIODevice::ReadOnly) && now.readAll().contains("\"cpu-history\"");
+        }, 5000)); // its own replaces it
+        app.setDockIcon(QStringLiteral("icon"));
+        ASSERT_TRUE(QTest::qWaitFor([&] { return !QFile::exists(tile); }, 5000)); // and goes
+        {
+            QFile again(tile); // someone else's again
+            ASSERT_TRUE(again.open(QIODevice::WriteOnly));
+            again.write(theirs);
+        }
+        QTest::qWait(1500); // samples come and go
+    }
+    EXPECT_TRUE(QFile::exists(tile)); // the app's end left it
+    runtimeBefore.isNull() ? qunsetenv("XDG_RUNTIME_DIR") : qputenv("XDG_RUNTIME_DIR", runtimeBefore);
+    displayBefore.isNull() ? qunsetenv("WAYLAND_DISPLAY") : qputenv("WAYLAND_DISPLAY", displayBefore);
 }

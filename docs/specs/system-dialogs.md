@@ -349,7 +349,8 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 ### Acceptance criteria
 - A-NR1 (L0, `tests/shell/hyprland_dialog.sh`) the stand-in with fake `qs`, `hyprctl` and stock dialog: en and fr texts
   parsed, titles with " - ", a leading "-" or a newline, a class with " - "; ambiguous (two processes, an app named to
-  match another split), other-locale, malformed, refused, unanswered (1-s deadline) calls exec the stock dialog with the
+  match another split), other-locale, malformed, refused, unanswered (10-s deadline, ADR-0035 decision 3-16: a slow shell
+  under load is waited for, no shell ends the call at once) calls exec the stock dialog with the
   same pid and arguments; spawned by a double fork as Hyprland spawns it, the pipe stays open after "ok" and ends when the
   stand-in is killed; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
   the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals, a rename that lifts an
@@ -394,9 +395,11 @@ Hyprland's bar, not a Grassfield notice, shows config errors on 0.56.2 (CE1); it
 that fails) and its other toasts stay Hyprland's too (ADR-0035 D-2).
 
 ## 5. Password prompts (gcr, udiskie, NetworkManager, KIO; S1–S4, S6, S8, K1; ADR-0035 D-9, D-12; owner decisions Q1, Q10–Q12)
-Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12), applied in step 9 after the integrator's
-review and the owner's agreement, before any code; R12 applies (opus PASS, fail closed where a secret is involved, nothing
-logged).
+Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12): applied in step 9a (CLAUDE.md,
+master-prompt R12, ADR-0010 "Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step; R12 applies (opus
+PASS, fail closed where a secret is involved, nothing logged). Step 9a builds the bridge, its socket protocol (below) and
+its unit; the shell's queue and sheets come in step 9b, udiskie's helper in 9c, the NetworkManager agent in 9d, KIO's
+password server in 9e. Until 9b no shell connects, so the bridge never takes the name and nothing changes for the user.
 
 ### macOS reference behavior
 System-modal alert centred on the active display, above every window, never on the lock screen: the requesting app's icon,
@@ -421,11 +424,16 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   "Authentication required"; a fixed top row with the requester's icon and name that only the bridge fills, from the pidfd of
   `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
-  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "Network" for KIO's workers; anything else, or no `ProcessFD`,
-  "Unidentified program" and the path); then the caller's `title`, `message`, `description`
+  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers; anything
+  else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
   as plain text, flattened and capped, in the secondary style; `warning` in red under the field; a secure field (`password-new`:
   New and Verify fields and a strength bar); `choice-label` as a check box; `continue-label` / `cancel-label` (else "OK" /
   "Cancel"); a `confirm` prompt has no field.
+- SC3b the row names the program whose process opened the bus connection, not proof of whose code is asking (opus review
+  of step 9a, MINOR-2; ADR-0035 9-4, 9-14): "Keyring", "GnuPG" and "SSH" can be made to ask by any program of the user,
+  with text of its own. Under such a row (`onBehalf`) the caller's text is shown as unverified text from another program
+  (the secondary style, introduced as such, for example "Another app sent this message:"), never as the Keyring's,
+  GnuPG's or SSH's own words, never in the title's place, and nothing in the sheet vouches for it.
 - SC4 security rules of the polkit sheet: nothing over the lock (a request that arrives while locked waits and is shown after
   the unlock without the keyboard until a click 500 ms after it appears); the field is cleared after each answer and on close;
   `ImhSensitiveData`, no input method; Esc and Cancel answer "no"; the shell never logs any field. The surface's layer namespace
@@ -487,6 +495,74 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   narrowed to int, a const local that blocked a move), and what remains is Qt's own idiom (static `QStringLiteral`
   constants, `S_IW*` bit masks, a `QDBusArgument` operator returning its argument, an enum's base type).
 
+### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13)
+Transport: the Unix stream socket `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600), served by
+`grassfield-prompter`; UTF-8 JSON, one object per line, ended by a line feed. The bridge accepts one peer at a time, only
+one that runs as the user and whose cgroup is the unit named by the bridge's `--peer-unit` (`grassfield-shell.service`;
+read race-free through `SO_PEERPIDFD` on Linux 6.5 and later). A refused peer gets `{"type":"error","code":"refused"}`, a
+second shell `{"type":"error","code":"busy"}`, and the connection is closed. Nothing secret flows from the bridge to the
+shell; the shell sends a password once, in its answer, and the bridge decodes it straight into gcr's secure memory.
+
+Bridge to shell:
+- `{"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}`: first line, at once.
+- `{"type":"name","state":"released"|"queued"|"owned"}`: after the shell's hello and at every change of
+  `org.gnome.keyring.SystemPrompter`'s ownership (queued: another process holds it, usually the stock gcr-prompter for 10 s
+  after its last prompt; the bridge gets it when that process lets it go).
+- `{"type":"prompt","id":"p<N>","kind":"password"|"confirm","requester":{...},"texts":{...},"choice":{...}|null,
+  "passwordNew":bool,"strength":bool}`:
+  - `id`: `p` and a decimal number, never reused while the bridge runs;
+  - `requester`: `role` (`app`, `keyring`, `gnupg`, `ssh` or `unidentified`), `name` (the desktop entry's unlocalised
+    `Name` for `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG", `ssh` "SSH" and
+    `unidentified` "Unidentified program" in its own translated words), `desktopId` and `icon` (the entry's, for `app`),
+    `path` (the caller's executable when known, shown in the secondary style for `unidentified`), `identified` (true for
+    `app`, `keyring`, `gnupg`, `ssh`), `onBehalf` (true for `keyring`, `gnupg` and `ssh`: these programs ask for others
+    and any program of the user can make them ask, so the caller's text under the row is another program's unverified
+    text, SC3b). Only the bridge fills it, from the caller's bus credentials (SC3); it names the program whose process
+    opened the connection: an `app` row only for a process that is not traced and runs nothing but trusted code;
+  - `texts`: `title`, `message`, `description`, `warning`, `continue`, `cancel`: the caller's own text, plain, on one line,
+    capped (title 128, message 256, description 1024, warning 256, buttons 32 UTF-16 code units, an ellipsis when cut);
+    empty when the caller set none (the shell then uses its own words, "OK" and "Cancel");
+  - `choice`: the check box (`label`, capped at 128, and `chosen`, its initial state) or null when there is none;
+  - `passwordNew`: a new password (New and Verify fields); `strength`: show the strength meter (both only for `password`).
+- `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, or the bridge
+  cancelled it after a wrong answer): the shell removes its sheet, shown or still queued, and does not answer it.
+- `{"type":"error","code":"<code>","message":"<text>"}`: `refused`, `busy`, `version`, `bad-line`, `too-long`,
+  `unknown-type`, `bad-answer`.
+
+Shell to bridge (at most 16 KiB per line):
+- `{"v":"prompter/1","type":"hello","shell":"<version>","kinds":[...]}`: the first line, once; `kinds` lists what the
+  shell draws. The bridge asks for the name only after it, and sends only requests of a listed kind (another kind is
+  answered "cancelled" to its caller without reaching the shell).
+- `{"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false}`: `password` only for a
+  `password` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password); `choice`
+  only when the prompt had a check box.
+
+Rules (fail closed: no answer is ever invented):
+- At most 8 requests outstanding; a 9th caller is answered "cancelled" at once and the shell never sees it. At most 64
+  gcr prompts open, at most 8 for one bus connection: a connection's ninth `BeginPrompting` is answered
+  `org.freedesktop.DBus.Error.LimitsExceeded` and never reaches gcr; a `PerformPrompt` of the wrong shape is answered
+  `org.freedesktop.DBus.Error.InvalidArgs`. A connection's count follows what gcr holds (opus counter-review of step 9a,
+  MINOR-A and MINOR-B): a `BeginPrompting` counts with the prompter's interface named only, a prompt stops counting when
+  gcr ends it (its `PromptDone` to the caller, the caller's error to its `PromptReady`, the caller leaving the bus), and
+  every count goes when the prompter's name leaves the bridge; when the shell goes, the bridge closes every open gcr prompt
+  in the next main loop turn (its callers cancelled already, on seeing the name go; never from inside gcr's own callbacks,
+  opus final check of step 9a), so neither gcr nor the count keeps them.
+- A peer whose pidfd the kernel will not give is refused, except on a kernel without `SO_PEERPIDFD` (ENOPROTOOPT); in a
+  session only slices may lie between `user@<uid>.service` and the shell's unit. Refused connections are logged once per
+  10 s, with the count of the others.
+- An answer to an id that is not outstanding is ignored. A wrong answer to an outstanding id (an unknown key, a password
+  where none is asked or missing for `ok`, a choice where none was shown, a password over 4096 bytes) cancels that request
+  (`cancel` to the shell, "cancelled" to the caller).
+- A line that cannot be attributed (not one flat JSON object of strings, booleans, null and arrays of strings; over
+  16 KiB; an answer without a usable id; anything before hello; another protocol version) closes the connection: every
+  outstanding request is cancelled and the name is released until the shell connects again. The ninth unknown or repeated
+  message of a connection closes it too.
+- When the shell disconnects, every outstanding request is answered "cancelled" and the name is released; the stock
+  gcr-prompter is then activated for the next prompt, as before step 9.
+- Kinds `nm` (Wi-Fi and 802.1X secrets, step 9d), `kio` (server name and password, step 9e) and `bluetooth` (pairing, step
+  10) are reserved; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of an existing
+  kind is `prompter/2`.
+
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
   receives a prompt while the bridge holds it; with the shell disconnected, the fake stock prompter is activated.
@@ -509,6 +585,13 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
 - A-SC7 (L1) nested: pinentry-gnome3 with a throwaway GNUPGHOME and key asks through the Grassfield sheet (screenshot, "visual
   NOT verified" otherwise); udiskie with a loop-mounted LUKS image and an sftp location are the owner's L2 checks.
 - A-SC8 opus PASS.
+- Step 9a covers the bridge's part of A-SC1 (a real libgcr-4 client and pinentry-gnome3 get their password through the
+  exchange; a process queued on the name, even asking to replace its owner, receives no call; with the shell disconnected
+  the name is released), A-SC3 and A-SC3b for the requester the bridge sends (a caller that names another connection in
+  its own properties, a caller that exits, an executable the user can write: `tests/unit/prompter`,
+  `tests/security/prompter_bridge.sh`), the bound of 8 of A-SC2 and A-SC6's mutants of the bridge (the uid and cgroup check,
+  the caller checks, the bound, the buffer wiping); the sheets, the queue's keyboard rule and the polkit sheet's place in
+  the queue are step 9b's.
 - A-SC9 (L0) the handover against fakes on a private bus (`tests/integration/secrets_handover.sh`): the items move once and
   an item the keychain holds is kept; KWallet's own entries (stored as kwalletd 6.29 stores them) move too, and so does an
   older entry KWallet lists only once open; nothing is final from a locked listing that lists nothing; an empty value is
@@ -523,7 +606,29 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
 
 ### Known limitations
 Name ownership is the only authorization (upstream design): a same-user process can still show a fake stock prompt through
-gcr-prompter while the bridge is down; the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
+gcr-prompter while the bridge is down, and one that holds or is queued for `org.gnome.keyring.SystemPrompter` when the
+shell goes gets the next prompts (the bridge releases the name then, by design: never blocking); a same-user process that
+owns the name before the bridge asks for it keeps it (the bridge says "queued" and logs who holds it). The socket's
+checks stop other processes of the user from passing for the shell, not same-user code that sets out to: the user owns
+their systemd manager's cgroups and can move a process into the shell's unit, and the shell's own children that stay in
+its cgroup (its helpers; an application started before `uwsm-app` is detected, ADR-0011) could connect while the shell is
+not connected (out of scope as for every Grassfield socket, security.md); on a kernel without `SO_PEERPIDFD` at all
+(before 6.5) the cgroup is read through the PID `SO_PEERCRED` gives, and a peer that exits and whose PID a process of the
+shell's unit reuses in between would pass (later kernels refuse such a peer). An interpreter or a launcher that runs other
+code is shown as "Unidentified program" with its path even when the code it runs is an app (9-4). The requester row
+names the program whose process opened the bus connection, not proof of whose code is asking (opus review of step 9a,
+MINOR-2; ADR-0035 9-14): "GnuPG", "Keyring" and "SSH" can be driven by any program of the user (`gpg-connect-agent`'s
+`GET_PASSPHRASE` with its own description, `pinentry-gnome3` run directly, `ssh-add`, an app asking gnome-keyring to
+unlock), hence SC3b; a process can connect to the bus, then fork and exec a trusted program while its child speaks on the
+connection, or, as the ancestor of a trusted program, ptrace it, change its code and detach; an app's row is refused to a
+traced process and to one that maps code from untrusted files (`LD_PRELOAD`, `LD_LIBRARY_PATH`, a library replaced
+since it was loaded), which also leaves an app unidentified after an upgrade of its libraries until it restarts. The
+mapped files are compared by device and inode with the files their paths name, and only for a process in the bridge's
+own mount and user namespaces (opus counter-review of step 9a, MINOR-C: a user namespace lets a process bind-mount its
+own file over a trusted path); a trusted app that runs code of the user's through its own scripting maps no untrusted
+file (`emacs --batch -l`, `nvim -l`, an app's plugin interpreter) and still gets the app's row. The gcr
+protocol is unauthenticated: its exchange protects the
+password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted); a
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
@@ -804,3 +909,55 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
 - A worker's message box whose job's delegate is deleted before the user answers goes unanswered, and KIO's notification
   queue then waits for it, holding the later message boxes of Files' workers (`usernotificationhandler.cpp:43-54`); KIO's
   own widget handler behaves the same way.
+
+
+## 10. Screenshots (inventory O1, O2, P8; ADR-0035 D-10, owner decision Q4; built in step 8)
+
+### macOS reference behavior
+Shift-Cmd-3 captures the screen, and Shift-Cmd-4 a selection: a drag captures an area, and the window mode captures a window.
+The picture is saved to the Desktop as "Screenshot <date> at <time>.png". Shift-Cmd-5 opens the capture toolbar. Grassfield
+gives the toolbar its own chantier; until then it does the selection (8-1).
+
+### Functional requirements
+- SC1 Shift-Cmd-3 captures every display, one picture each, as macOS does (8-4). Shift-Cmd-4, Shift-Cmd-5 and Print capture a
+  selection: a crosshair over the live screen in Grassfield's colours (`capture.*`: an even veil; the window or display
+  under the pointer outlined).
+  - A drag captures that area.
+  - A click captures the window drawn on top under the pointer (on a workspace with a fullscreen or zoomed window, that
+    window or one pinned over it), or the display under it when no window is there (the Desktop, the menu bar, the Dock).
+  - Esc, or a second press while the crosshair shows, cancels without saving; only this helper's crosshair is cancelled.
+- SC2 Each file is saved on the Desktop as macOS names it, translated (the next display's " (2)"), and never overwrites a
+  file; the Desktop never shows a picture being written. The Desktop is xdg-user-dir's, never the home folder.
+- SC3 The focused display's picture, or the selection, is copied to the clipboard as PNG.
+- SC4 A notice shows the picture, as the shell's ordinary banner (then in the Notification Center). A click or its "Open in
+  Preview" button opens the capture's pictures in Grassfield's Preview for 2 minutes; then the notice goes. The next capture
+  closes it first, so no picture shows the notice of the one before.
+- SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session binds the keys; the nested session never
+  captures the owner's screen.
+
+### Acceptance criteria
+- A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp 1.5.0: the smallest box for a
+  click, a click outside every box cancelled; notify-send's output ending before it does, under its own name in /proc):
+  every display for the screen, the focused one first; a drag, a click on a window, on a window behind a larger one in
+  front (opened without the focus), with the pointer unread or gone from slurp's box, with a hand that moved a pixel, on a
+  pinned Picture-in-Picture window over the focused one, on a fullscreen window and the windows pinned or opened over it,
+  on a display only, and outside every display, with fixtures that carry every field Hyprland gives, in its stacking
+  order; the windows then the displays as slurp's boxes, in the veil's colour; the last capture's notice closed before the
+  next, the crosshair not waiting for it, the picture waiting; SIGTERM while the notice waits; Esc and a
+  second press (only this helper's slurp); slurp's colours equal to the tokens; the names in English and French and
+  " (2)"; every name a capture can take in the next 30 s already there (a picture, a link out of the home folder, a
+  dangling link): the next free ones taken, nothing overwritten or followed; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
+  notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
+  closing its notice), gdbus without notify-send (a PATH of the fakes only, so the machine's own notify-send is never
+  reached); Preview through `uwsm-app`; failures leave no file.
+- A-SC2 (L0) `tests/shell/session_services.sh`: the four bindings call `grassfield-capture`, never `omarchy-capture`.
+- A-SC3 (L2, owner) in the real session: Shift-Cmd-3 and Shift-Cmd-4 with a drag and a click on a window; the file on the
+  Desktop and in the clipboard; the notice and Preview.
+
+### Known limitations
+A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click on a window captures the window's
+own box, without Grassfield's title bar; a click on the title bar itself captures the window behind it or the display
+(8-5). Without notify-send (libnotify is optional), the last capture's notice is not closed before the next. While the crosshair shows, slurp outlines the smallest box under the pointer,
+which can be a window behind a larger one; the picture is the window drawn on top under the pointer, as Hyprland draws them. The notification settings list the helper under its translated
+name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
+the toolbar's options are the later chantier's.

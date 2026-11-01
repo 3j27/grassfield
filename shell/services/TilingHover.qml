@@ -62,6 +62,7 @@ Singleton {
             address: hover.address,
             tileable: hover.tileable,
             splittable: hover.splittable,
+            fit: hover.fit, // the zones and places it does not fit (ADR-0036 D69: greyed in the popover)
             hover: hover.state === "enter",
             light: anchor.light,
             flipY: anchor.flipY

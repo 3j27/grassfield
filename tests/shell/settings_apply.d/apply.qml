@@ -42,6 +42,7 @@ ShellRoot {
         ["dock.minimizeIntoApp", true, () => Settings.dockMinimizeIntoApp === true],
         ["dock.animateOpening", false, () => Settings.dockAnimateOpening === false],
         ["dock.showIndicators", false, () => Settings.dockShowIndicators === false],
+        ["dock.endTask", true, () => Settings.dockEndTask === true],
         ["dock.minimizeEffect", "shrink", () => Settings.dockMinimizeEffect === "shrink"],
         ["desktop.showIcons", false, () => Settings.desktopShowIcons === false],
         ["menubar.showBackground", true, () => Settings.menubarShowBackground === true],

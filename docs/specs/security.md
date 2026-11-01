@@ -201,6 +201,7 @@ does not check its gate.
 | clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |
 | anr | report | action | `packaging/session-bin/hyprland-dialog`, the stand-in Hyprland runs as its "not responding" dialog (ADR-0035 D-3). Only marks an app in Force Quit and its Dock menu ("(Not Responding)"); kills nothing, answers `ok` or `refused` (the reason goes to the journal only); refuses another compositor's report, a pid of 1 or below, and a window two processes share |
 | anr | status | dev | returns the marked apps' window titles |
+| activity | quit | action | Activity Monitor's Quit of a process that owns windows (`apps/activity/src/actions.cpp`, through `shellIpcArgs()`; ADR-0038 AM52, AM61): closes the windows whose client is that pid, as the Dock's Quit (an xdg close: the app may ask to save); answers `ok`, `no-windows` (the app then sends SIGTERM itself) or `refused` (a pid of 1 or below); never kills, reads no title; a shell reaches its own compositor's windows only (a nested session's, the nested ones) |
 | update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
@@ -237,6 +238,14 @@ does not check its gate.
 | wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
 | visual | glyphs | dev | contrast run |
 <!-- ipc-inventory:end -->
+
+### Private sockets of the security modules (not Quickshell IPC)
+Grassfield processes that serve the security modules over a Unix socket of their own, outside `qs ipc` (ADR-0035
+"Consequences": every such socket is listed here in the step that adds it).
+
+| Socket | Server | Who may connect | What it carries |
+|---|---|---|---|
+| `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600) | `grassfield-prompter` (ADR-0035 D-9, step 9a; `grassfield-prompter.service`) | one peer at a time, running as the user, whose cgroup is the unit of the bridge's `--peer-unit` (`grassfield-shell.service`, only slices above it up to the user's manager), read through `SO_PEERPIDFD` (a peer without a pidfd is refused, except on a kernel without `SO_PEERPIDFD`); a refused peer gets `refused` and is closed, the refusals logged once per 10 s | `prompter/1` (docs/specs/system-dialogs.md section 5): the bridge sends the requests of gcr callers (with the requester it resolved from their bus credentials) and their withdrawals; the shell sends its hello and its answers, a password once per answer. Nothing it accepts runs a command, unlocks, or reaches polkit; a wrong or unattributable line cancels requests, never invents an answer. No shell connects before step 9b |
 
 ## Lock coverage: restart, Omarchy's sleep-lock, failing inhibitor (GF-030, D-12)
 macOS model: the screen always locks before sleep, and the lock never silently goes away.

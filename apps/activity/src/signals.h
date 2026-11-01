@@ -26,6 +26,8 @@ public:
     ProcessHandle &operator=(const ProcessHandle &) = delete;
 
     bool valid() const { return m_fd >= 0; }
+    // The /proc/<pid> directory descriptor, for reads through it (Inspect, AM57: `openat`, `readlinkat`); -1 when invalid.
+    int dir() const { return m_fd; }
     int pid() const { return m_pid; }
     uint64_t start() const { return m_start; }
     int ppid() const { return m_ppid; }
@@ -36,6 +38,11 @@ public:
     // The process's cgroup v2 path, read through the descriptor when the action needs it (AM52, AM54: a row keeps none,
     // AD25); "" when it cannot be read.
     std::string cgroup() const;
+    // Its parent's cgroup v2 path now (AD43: a command run in a terminal has its parent in its own unit): the parent's pid
+    // read again through the descriptor (currentPpid), the parent's /proc directory opened, its stat checked (not younger
+    // than this process: a younger one holds a reused pid, AD40) and its cgroup read through that directory. "" when any
+    // step fails.
+    std::string parentCgroup(const std::string &procRoot) const;
     // 0, or the errno of pidfd_send_signal: ESRCH when the process ended, EBADF or EINVAL on a fixture's directory.
     int signal(int sig) const;
 
@@ -46,10 +53,6 @@ private:
     int m_ppid = 0;
     int m_tty = 0;
 };
-
-// The cgroup v2 path of any process, read by path ("" when it cannot be read): a sheet process's parent, to tell whether
-// the process started its unit (AD43).
-std::string cgroupOf(const std::string &procRoot, int pid);
 
 // AM56: in a dev session, an action reaches only a process a root names or a descendant of one. A root is a pid record of
 // scripts/dev/pidfile.sh: a file holding the pid, and "<file>.start" its start time (stat field 22). `list` holds the

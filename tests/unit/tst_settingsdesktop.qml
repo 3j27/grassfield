@@ -141,7 +141,7 @@ TestCase {
         compare(last(t.store), {"dock.minimizeEffect": "shrink"});
         named(t.page.contentItem, "Window title bar double-click action").picked("minimize");
         compare(last(t.store), {"windows.titlebarDoubleClick": "minimize"});
-        const toggles = [["Minimize windows into application icon", "dock.minimizeIntoApp"], ["Automatically hide and show the Dock", "dock.autohide"], ["Animate opening applications", "dock.animateOpening"], ["Show indicators for open applications", "dock.showIndicators"], ["Show recent apps in Dock", "dock.showRecents"]];
+        const toggles = [["Minimize windows into application icon", "dock.minimizeIntoApp"], ["Automatically hide and show the Dock", "dock.autohide"], ["Animate opening applications", "dock.animateOpening"], ["Show indicators for open applications", "dock.showIndicators"], ["Show recent apps in Dock", "dock.showRecents"], ["Show End Task in Dock menus", "dock.endTask"]];
         for (const [name, key] of toggles) {
             const toggle = named(t.page.contentItem, name);
             verify(toggle, name);

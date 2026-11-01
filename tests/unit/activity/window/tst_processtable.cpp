@@ -353,6 +353,91 @@ TEST(ProcessTable, ByGpuGroupsTheClientsUnderTheirGpu)
     EXPECT_EQ(names(f.table), (QStringList{"0000:03:00.0", "encoder"}));
 }
 
+// AM65: a header per kind with its count, in Windows' order, a kind without a process left out; under Apps a header per app
+// unit (its window's name and icon first, else its entry's, else the unit's name) then a window's owner outside a unit;
+// the Kernel row with the System Processes; headers collapse and stay collapsed; the search keeps the matching rows.
+TEST(ProcessTable, ByTypeGroupsTheKindsAndTheApps)
+{
+    Fixture f;
+    f.table.setView(View::ByType);
+    const auto app = [](int pid, const char *name, double cpu, uint64_t unit, const char *appName = "", bool windowed = false) {
+        TableRow r = proc(pid, name, cpu);
+        r.process.kind = Kind::App;
+        r.process.unitKey = unit;
+        r.process.appId = "foot";
+        r.appName = QString::fromLatin1(appName);
+        r.icon = *appName ? QStringLiteral("foot") : QString();
+        r.windowed = windowed;
+        return r;
+    };
+    const auto kind = [](TableRow r, Kind k) {
+        r.process.kind = k;
+        return r;
+    };
+    TableRow other = kind(proc(70, "bob-shell", 1, false), Kind::OtherUser);
+    TableRow daemon = kind(proc(80, "systemd-journald", 2, false), Kind::System);
+    daemon.process.systemAccount = true;
+    TableRow nounit = app(60, "loose-window", 3, 0);
+    nounit.process.appId.clear();
+    f.table.setRows({app(10, "foot", 4, 0xa1, "Foot", true), app(11, "foot-child", 30, 0xa1), app(20, "foot", 50, 0xb2),
+                     kind(proc(30, "pipewire", 6), Kind::Background), kind(proc(40, "Hyprland", 9), Kind::Session),
+                     nounit, other, daemon, kernelRow(1)});
+    EXPECT_EQ(names(f.table), (QStringList{"Apps (4)", "foot (1)", "foot", "Foot (2)", "foot-child", "foot", "loose-window",
+                                           "Background Processes (1)", "pipewire", "Session Processes (1)", "Hyprland",
+                                           "System Processes (2)", "systemd-journald", "Kernel", "Other Users (1)", "bob-shell"}));
+    EXPECT_EQ(depths(f.table), (QList<int>{0, 1, 2, 1, 2, 2, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1}));
+    EXPECT_TRUE(f.table.data(f.table.index(1), ProcessTable::GroupRole).toBool());
+    EXPECT_EQ(f.table.data(f.table.index(3), ProcessTable::IconRole).toString(), QStringLiteral("foot"));
+    EXPECT_EQ(f.table.data(f.table.index(0), ProcessTable::IconRole).toString(), QString());
+    EXPECT_TRUE(f.table.data(f.table.index(3), ProcessTable::ExpandableRole).toBool());
+
+    f.table.setExpanded(3, false); // the windowed foot's unit collapsed, then the System Processes
+    EXPECT_EQ(names(f.table).mid(3, 3), (QStringList{"Foot (2)", "loose-window", "Background Processes (1)"}));
+    f.table.setExpanded(9, false);
+    EXPECT_EQ(names(f.table).mid(9), (QStringList{"System Processes (2)", "Other Users (1)", "bob-shell"}));
+    f.table.setRows({app(10, "foot", 4, 0xa1, "Foot", true), kind(proc(30, "pipewire", 6), Kind::Background), daemon});
+    EXPECT_EQ(names(f.table), (QStringList{"Apps (1)", "Foot (1)", "Background Processes (1)", "pipewire", "System Processes (1)"}));
+    f.table.setSearch(QStringLiteral("pipe"));
+    EXPECT_EQ(names(f.table), (QStringList{"Background Processes (1)", "pipewire"}));
+
+    // The window's name first, even when another process of the unit, sorted above it, has its entry's name.
+    f.table.setSearch(QString());
+    TableRow helper = app(30, "helper", 90, 0xc3, "Helper Entry");
+    TableRow window = app(31, "main", 10, 0xc3, "Window App", true);
+    f.table.setRows({helper, window});
+    EXPECT_EQ(names(f.table).mid(0, 2), (QStringList{"Apps (2)", "Window App (2)"}));
+}
+
+// AM27, AM70: the Status column, what is wrong first: Not Responding (the projection), then Efficiency Mode (the unit's
+// weight), then the kernel's Stopped and Zombie; nothing for a running process.
+TEST(ProcessTable, TheStatusColumn)
+{
+    Fixture f;
+    f.table.setColumns({Column::Name, Column::Status});
+    f.table.setSort(Column::Pid, false);
+    TableRow hung = proc(10, "hung", 1);
+    hung.notResponding = true;
+    hung.process.efficient = true;
+    TableRow efficient = proc(20, "efficient", 1);
+    efficient.process.efficient = true;
+    efficient.process.state = 'T';
+    TableRow stopped = proc(30, "stopped", 1);
+    stopped.process.state = 'T';
+    TableRow traced = proc(40, "traced", 1);
+    traced.process.state = 't';
+    TableRow zombie = proc(50, "zombie", 1);
+    zombie.process.state = 'Z';
+    TableRow running = proc(60, "running", 1);
+    running.process.state = 'R';
+    f.table.setRows({hung, efficient, stopped, traced, zombie, running});
+    QStringList status;
+    for (int i = 0; i < f.table.count(); ++i)
+        status << f.table.data(f.table.index(i), ProcessTable::CellsRole).toStringList().value(1);
+    EXPECT_EQ(status, (QStringList{"Not Responding", "Efficiency Mode", "Stopped", "Stopped", "Zombie", ""}));
+    EXPECT_TRUE(f.table.data(f.table.index(0), ProcessTable::NotRespondingRole).toBool());
+    EXPECT_FALSE(f.table.data(f.table.index(1), ProcessTable::NotRespondingRole).toBool());
+}
+
 TEST(ProcessTable, TheGpuViewsReadTheGpus)
 {
     EXPECT_EQ(readsForView(View::ByGpu), static_cast<unsigned>(ReadDescriptors | ReadGpu));
@@ -362,4 +447,8 @@ TEST(ProcessTable, TheGpuViewsReadTheGpus)
     EXPECT_EQ(viewTitle(View::ByGpu), QStringLiteral("Processes, by GPU"));
     EXPECT_EQ(views().at(1), View::Tree);
     EXPECT_EQ(views().back(), View::ByGpu);
+    EXPECT_EQ(views().at(views().size() - 2), View::ByType);
+    EXPECT_EQ(viewTitle(View::ByType), QStringLiteral("Processes, by Type"));
+    EXPECT_EQ(viewFromKey(QStringLiteral("byType")), View::ByType);
+    EXPECT_EQ(readsForView(View::ByType), 0u);
 }

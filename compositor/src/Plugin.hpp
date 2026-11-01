@@ -60,6 +60,7 @@ namespace gf {
         bool                               luaGroupFrontRegistered    = false;
         bool                               luaSplitRegistered         = false;
         bool                               luaUnsplitRegistered       = false;
+        bool                               luaWindowSizeRegistered    = false;
 
         // Settings pushed by the shell (hl.plugin.grassfield.config).
         gfc::DoubleClickAction doubleClickAction = gfc::DoubleClickAction::Zoom;

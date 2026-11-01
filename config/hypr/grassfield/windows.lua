@@ -70,3 +70,6 @@ hl.layer_rule({ name = "gf-desktop-menu-blur", match = { namespace = "^grassfiel
 
 -- The menu bar and dock must appear instantly; panels fade.
 hl.layer_rule({ name = "gf-bar-no-anim", match = { namespace = "^grassfield-(menubar|dock)$" }, no_anim = true })
+-- The screenshot crosshair (slurp's layer, namespace "selection") goes at once: grim takes the picture as slurp ends, and a
+-- fade would put slurp's veil and outline in it (ADR-0035 D-10, fourth review of step 8; Omarchy ships the same rule).
+hl.layer_rule({ name = "gf-capture-selection-no-anim", match = { namespace = "^selection$" }, no_anim = true })

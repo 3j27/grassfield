@@ -4,7 +4,9 @@
 # when its case ends): the Stop button's sheet and Quit send SIGTERM, Force Quit SIGKILL, a process that ends while the
 # sheet is open is silent, a session process gets the warning sheet first and no Stop in Send Signal's pop-up, and in a dev
 # session the guard refuses a process outside GRASSFIELD_ACTIVITY_DEV_ROOTS. The cases set GRASSFIELD_DEV and the roots
-# themselves, and give the children the unit each case needs (a test's children are in whatever unit runs it).
+# themselves, and give the children the unit each case needs (a test's children are in whatever unit runs it). A-W3 (step
+# 2d, AM57 to AM59): the Info button's Inspect window reads a child and quits it, and another owner's process (pid 1)
+# shows "—" where its files are refused, with Quit off.
 #
 # Usage: tests/apps/activity_actions.sh   Prints the cases; exit 0 passed, 1 failed, 2 refused (run as root: the app runs as
 # the user, and root may signal any process).
@@ -17,7 +19,7 @@ apps/activity/build-direct.sh --tests >/dev/null || { echo "FAIL: building activ
 # Offscreen, without the desktop's platform theme (QT_QPA_PLATFORMTHEME=gtk3 calls gtk_init, which needs a display; as
 # scripts/dev/test.sh; the integrator's review of 1153365).
 env -u DISPLAY -u WAYLAND_DISPLAY -u QT_QPA_PLATFORMTHEME QT_QPA_PLATFORM=offscreen timeout 300 \
-  .dev/build/activity-window-qml-tests --gtest_filter='ActivityActions.*' --gtest_brief=1
+  .dev/build/activity-window-qml-tests --gtest_filter='ActivityActions.*:ActivityInspect.*' --gtest_brief=1
 status=$?
-((status == 0)) && echo "PASS: A-W2" || echo "FAIL: A-W2 (exit $status)"
+((status == 0)) && echo "PASS: A-W2, A-W3" || echo "FAIL: A-W2, A-W3 (exit $status)"
 exit $((status == 0 ? 0 : 1))
