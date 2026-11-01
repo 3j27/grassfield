@@ -3,7 +3,7 @@ import Grassfield.Ui
 import qs.security.lock
 import qs.services
 
-// Grassfield menu (leaf mark): About, Settings, Recent Items (RecentItems), Force Quit, Sleep/Restart/Shut Down, Lock Screen,
+// Grassfield menu (the Grassfield mark): About, Settings, Recent Items (RecentItems), Force Quit, Sleep/Restart/Shut Down, Lock Screen,
 // Log Out.
 // About This Computer and Settings… launch grassfield-settings (`--about` for the first; GRASSFIELD_SETTINGS_CMD overrides the
 // command in dev). Lock Screen engages the session lock.
