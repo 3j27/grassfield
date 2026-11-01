@@ -36,7 +36,7 @@ Item {
 
     // The artwork's palette (the window's base colour and the menu bar tone of the artwork come from it).
     readonly property var art: artworkItem.art
-    readonly property var palette: artworkItem.palette
+    readonly property var artPalette: artworkItem.artPalette
     // The picture is decoded and shown (never true for an empty or failed source).
     readonly property bool pictureReady: image.status === Image.Ready && root.url !== ""
 

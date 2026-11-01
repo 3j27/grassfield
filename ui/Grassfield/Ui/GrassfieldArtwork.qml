@@ -21,8 +21,8 @@ Item {
 
     // The resolved palette (Artwork.palette) and its flat colour map: the desktop reads `art.skyTop` and `art.skyMid` for the
     // menu bar tone and every colour for the glass backdrop's range.
-    readonly property var palette: ArtworkLogic.palette(Tokens, root.artwork, root.variant)
-    readonly property var art: ArtworkLogic.flat(root.palette)
+    readonly property var artPalette: ArtworkLogic.palette(Tokens, root.artwork, root.variant)
+    readonly property var art: ArtworkLogic.flat(root.artPalette)
 
     // ---- the moving variant (ADR-0040 IQ-W3 A, step 9; the Grassfield artwork only) ----
     // `moving`: clouds drift across the sky and the sun's light changes slowly. It advances only while `playing` (the caller's
@@ -32,7 +32,7 @@ Item {
     property bool moving: false
     property bool playing: false
     property real motionMs: 0
-    readonly property bool movingOn: root.moving && root.palette.artwork === "grassfield"
+    readonly property bool movingOn: root.moving && root.artPalette.artwork === "grassfield"
     Timer {
         interval: Tokens.wallpaperMovingFrameMs
         repeat: true
@@ -45,23 +45,23 @@ Item {
         anchors.fill: parent
         gradient: Gradient {
             GradientStop {
-                position: root.palette.stops[0][0]
-                color: root.palette.stops[0][1]
+                position: root.artPalette.stops[0][0]
+                color: root.artPalette.stops[0][1]
             }
             GradientStop {
-                position: root.palette.stops[1][0]
-                color: root.palette.stops[1][1]
+                position: root.artPalette.stops[1][0]
+                color: root.artPalette.stops[1][1]
             }
             GradientStop {
-                position: root.palette.stops[2][0]
-                color: root.palette.stops[2][1]
+                position: root.artPalette.stops[2][0]
+                color: root.artPalette.stops[2][1]
             }
         }
     }
 
     // The night's stars (Grassfield at Night), seeded: the same sky on every output.
     Repeater {
-        model: root.palette.phase === "night" ? ArtworkLogic.stars(7, ArtworkLogic.starCount(root.width, root.height)) : []
+        model: root.artPalette.phase === "night" ? ArtworkLogic.stars(7, ArtworkLogic.starCount(root.width, root.height)) : []
 
         Rectangle {
             required property var modelData
@@ -71,7 +71,7 @@ Item {
             width: modelData.r * 2
             height: width
             radius: width / 2
-            color: root.palette.sun
+            color: root.artPalette.sun
             opacity: modelData.alpha
         }
     }
@@ -79,7 +79,7 @@ Item {
     // The sun (the moon at Night) or Ridgeline's low glow: a soft radial light (a Shape: a Rectangle's gradient is linear only).
     Shape {
         id: glow
-        readonly property var spec: root.palette.glow
+        readonly property var spec: root.artPalette.glow
         readonly property real cx: spec ? root.width * spec.x : 0
         readonly property real cy: spec ? root.height * spec.y : 0
         readonly property real r: spec ? root.height * spec.r : 0
@@ -98,15 +98,15 @@ Item {
                 focalY: glow.cy
                 GradientStop {
                     position: glow.spec ? glow.spec.alphas[0][0] : 0
-                    color: Qt.alpha(root.palette.sun, glow.spec ? glow.spec.alphas[0][1] : 0)
+                    color: Qt.alpha(root.artPalette.sun, glow.spec ? glow.spec.alphas[0][1] : 0)
                 }
                 GradientStop {
                     position: glow.spec ? glow.spec.alphas[1][0] : 1
-                    color: Qt.alpha(root.palette.sun, glow.spec ? glow.spec.alphas[1][1] : 0)
+                    color: Qt.alpha(root.artPalette.sun, glow.spec ? glow.spec.alphas[1][1] : 0)
                 }
                 GradientStop {
                     position: glow.spec ? glow.spec.alphas[2][0] : 1
-                    color: Qt.alpha(root.palette.sun, glow.spec ? glow.spec.alphas[2][1] : 0)
+                    color: Qt.alpha(root.artPalette.sun, glow.spec ? glow.spec.alphas[2][1] : 0)
                 }
             }
             PathAngleArc {
@@ -133,7 +133,7 @@ Item {
             y: root.height * cloud.modelData.y
             width: root.width * cloud.modelData.w
             height: root.height * cloud.modelData.h * 2
-            opacity: root.palette.cloudAlpha
+            opacity: root.artPalette.cloudAlpha
             // One translucent shape (the overlaps of its parts do not show), drawn as one texture.
             layer.enabled: true
 
@@ -143,7 +143,7 @@ Item {
                 width: cloud.width
                 height: cloud.height * 0.45
                 radius: height / 2
-                color: root.palette.cloud
+                color: root.artPalette.cloud
             }
             Repeater {
                 model: [[0.1, 0.5], [0.3, 0.85], [0.56, 0.62]]
@@ -155,7 +155,7 @@ Item {
                     width: cloud.height * modelData[1]
                     height: width
                     radius: width / 2
-                    color: root.palette.cloud
+                    color: root.artPalette.cloud
                 }
             }
         }
@@ -163,27 +163,27 @@ Item {
 
     // Grassfield: layered hills, far to near; each is a smooth closed curve.
     Repeater {
-        model: root.palette.artwork === "grassfield" ? [
+        model: root.artPalette.artwork === "grassfield" ? [
                 {
-                    "color": root.palette.hills[0],
+                    "color": root.artPalette.hills[0],
                     "base": 0.62,
                     "amp": 0.10,
                     "phase": 0.0
                 },
                 {
-                    "color": root.palette.hills[1],
+                    "color": root.artPalette.hills[1],
                     "base": 0.72,
                     "amp": 0.09,
                     "phase": 1.3
                 },
                 {
-                    "color": root.palette.hills[2],
+                    "color": root.artPalette.hills[2],
                     "base": 0.82,
                     "amp": 0.08,
                     "phase": 2.6
                 },
                 {
-                    "color": root.palette.hills[3],
+                    "color": root.artPalette.hills[3],
                     "base": 0.92,
                     "amp": 0.06,
                     "phase": 4.0
@@ -234,7 +234,7 @@ Item {
     // Meadow: four layers of blades, far to near, each layer one path.
     Shape {
         id: meadow
-        readonly property bool on: root.palette.artwork === "meadow"
+        readonly property bool on: root.artPalette.artwork === "meadow"
         readonly property var blades: on ? ArtworkLogic.meadowBlades(11) : []
         anchors.fill: parent
         visible: on
@@ -242,28 +242,28 @@ Item {
 
         ShapePath {
             strokeColor: "transparent"
-            fillColor: meadow.on ? Qt.alpha(root.palette.blades[0], root.palette.bladeAlphas[0]) : "transparent"
+            fillColor: meadow.on ? Qt.alpha(root.artPalette.blades[0], root.artPalette.bladeAlphas[0]) : "transparent"
             PathSvg {
                 path: meadow.on ? ArtworkLogic.meadowPath(meadow.blades[0], meadow.width, meadow.height) : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: meadow.on ? Qt.alpha(root.palette.blades[1], root.palette.bladeAlphas[1]) : "transparent"
+            fillColor: meadow.on ? Qt.alpha(root.artPalette.blades[1], root.artPalette.bladeAlphas[1]) : "transparent"
             PathSvg {
                 path: meadow.on ? ArtworkLogic.meadowPath(meadow.blades[1], meadow.width, meadow.height) : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: meadow.on ? Qt.alpha(root.palette.blades[2], root.palette.bladeAlphas[2]) : "transparent"
+            fillColor: meadow.on ? Qt.alpha(root.artPalette.blades[2], root.artPalette.bladeAlphas[2]) : "transparent"
             PathSvg {
                 path: meadow.on ? ArtworkLogic.meadowPath(meadow.blades[2], meadow.width, meadow.height) : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: meadow.on ? Qt.alpha(root.palette.blades[3], root.palette.bladeAlphas[3]) : "transparent"
+            fillColor: meadow.on ? Qt.alpha(root.artPalette.blades[3], root.artPalette.bladeAlphas[3]) : "transparent"
             PathSvg {
                 path: meadow.on ? ArtworkLogic.meadowPath(meadow.blades[3], meadow.width, meadow.height) : ""
             }
@@ -273,50 +273,50 @@ Item {
     // Field Rows: the bands of one colour in one path each (bands never overlap, so the order does not matter).
     Shape {
         id: rows
-        readonly property bool on: root.palette.artwork === "rows"
-        readonly property var paths: on ? ArtworkLogic.rowsPaths(root.palette.bands.length, width, height) : []
+        readonly property bool on: root.artPalette.artwork === "rows"
+        readonly property var paths: on ? ArtworkLogic.rowsPaths(root.artPalette.bands.length, width, height) : []
         anchors.fill: parent
         visible: on
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
             strokeColor: "transparent"
-            fillColor: rows.on ? root.palette.bands[0] : "transparent"
+            fillColor: rows.on ? root.artPalette.bands[0] : "transparent"
             PathSvg {
                 path: rows.on ? (rows.paths[0] ?? "") : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: rows.on ? root.palette.bands[1] : "transparent"
+            fillColor: rows.on ? root.artPalette.bands[1] : "transparent"
             PathSvg {
                 path: rows.on ? (rows.paths[1] ?? "") : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: rows.on ? root.palette.bands[2] : "transparent"
+            fillColor: rows.on ? root.artPalette.bands[2] : "transparent"
             PathSvg {
                 path: rows.on ? (rows.paths[2] ?? "") : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: rows.on ? root.palette.bands[3] : "transparent"
+            fillColor: rows.on ? root.artPalette.bands[3] : "transparent"
             PathSvg {
                 path: rows.on ? (rows.paths[3] ?? "") : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: rows.on ? root.palette.bands[4] : "transparent"
+            fillColor: rows.on ? root.artPalette.bands[4] : "transparent"
             PathSvg {
                 path: rows.on ? (rows.paths[4] ?? "") : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: rows.on ? root.palette.bands[5] : "transparent"
+            fillColor: rows.on ? root.artPalette.bands[5] : "transparent"
             PathSvg {
                 path: rows.on ? (rows.paths[5] ?? "") : ""
             }
@@ -326,7 +326,7 @@ Item {
     // Ridgeline: two quiet hill lines under a wide sky.
     Shape {
         id: ridge
-        readonly property bool on: root.palette.artwork === "ridgeline"
+        readonly property bool on: root.artPalette.artwork === "ridgeline"
         readonly property var paths: on ? ArtworkLogic.ridgelinePaths(width, height) : []
         anchors.fill: parent
         visible: on
@@ -334,14 +334,14 @@ Item {
 
         ShapePath {
             strokeColor: "transparent"
-            fillColor: ridge.on ? root.palette.hills[0] : "transparent"
+            fillColor: ridge.on ? root.artPalette.hills[0] : "transparent"
             PathSvg {
                 path: ridge.on ? (ridge.paths[0] ?? "") : ""
             }
         }
         ShapePath {
             strokeColor: "transparent"
-            fillColor: ridge.on ? root.palette.hills[1] : "transparent"
+            fillColor: ridge.on ? root.artPalette.hills[1] : "transparent"
             PathSvg {
                 path: ridge.on ? (ridge.paths[1] ?? "") : ""
             }

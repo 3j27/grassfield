@@ -95,8 +95,8 @@ Scope {
             Rectangle {
                 anchors.fill: parent
                 color: Ground.accepted
-                opacity: 0
 
+                // Starts at 0 (`from`): the animation sets the opacity before the first frame.
                 NumberAnimation on opacity {
                     from: 0
                     to: 1

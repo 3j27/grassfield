@@ -14,7 +14,7 @@ Item {
     property alias playing: inner.playing
     // Artwork palette (the desktop reads the tone's colours for the menu bar and every colour for the glass backdrop).
     readonly property alias art: inner.art
-    readonly property alias palette: inner.palette
+    readonly property alias artPalette: inner.artPalette
 
     GrassfieldArtwork {
         id: inner

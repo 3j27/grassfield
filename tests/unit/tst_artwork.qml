@@ -142,13 +142,13 @@ TestCase {
         for (const [a, v] of variants()) {
             const item = createTemporaryObject(artComponent, testCase, {artwork: a, variant: v});
             verify(item, a + " " + v);
-            compare(item.palette.artwork, a);
-            compare(item.art.skyTop, item.palette.tone.top);
+            compare(item.artPalette.artwork, a);
+            compare(item.art.skyTop, item.artPalette.tone.top);
         }
         // Without parameters: the default.
         const plain = createTemporaryObject(artComponent, testCase);
-        compare(plain.palette.phase, "evening");
-        compare(plain.palette.set, "dark");
+        compare(plain.artPalette.phase, "evening");
+        compare(plain.artPalette.set, "dark");
         verify(plain.clip, "the blades, bands and glow stay inside the picture");
     }
 }

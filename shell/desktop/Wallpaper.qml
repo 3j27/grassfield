@@ -412,7 +412,7 @@ Scope {
             function settled(desc: var, slot: WallpaperSlot): void {
                 if (!win.modelData)
                     return;
-                Ground.report(win.modelData.name, WallpaperConfig.groundOf(desc, slot.palette.ground, Tokens.sessionGround));
+                Ground.report(win.modelData.name, WallpaperConfig.groundOf(desc, slot.artPalette.ground, Tokens.sessionGround));
                 WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant});
             }
             Timer {
@@ -684,7 +684,7 @@ Scope {
                 }
                 // Two artworks blend for the whole fade: the band covers the moments neither tone reads (gate A2).
                 if (shownDesc.kind === "art" && pendingDesc.kind === "art" && win.modelData && win.fullHeight > 0)
-                    BarTone.reportArtFade(win.modelData.name, Qt.color(shown.art.skyTop), Qt.color(shown.art.skyMid), Tokens.menubarHeight / (shown.palette.tone.at * win.fullHeight), Qt.color(incoming.art.skyTop), Qt.color(incoming.art.skyMid), Tokens.menubarHeight / (incoming.palette.tone.at * win.fullHeight), win.toneSwitchAt);
+                    BarTone.reportArtFade(win.modelData.name, Qt.color(shown.art.skyTop), Qt.color(shown.art.skyMid), Tokens.menubarHeight / (shown.artPalette.tone.at * win.fullHeight), Qt.color(incoming.art.skyTop), Qt.color(incoming.art.skyMid), Tokens.menubarHeight / (incoming.artPalette.tone.at * win.fullHeight), win.toneSwitchAt);
                 // The bar's tone follows the new wallpaper once it dominates: from the fade's own progress (the incoming
                 // slot's opacity reaching 60 %), not from a timer (a fade is frame-driven, a timer is not).
                 toneDone = false;
@@ -742,7 +742,7 @@ Scope {
                 else if (source === "none")
                     BarTone.reportUnmeasured(win.modelData.name);
                 else if (win.fullHeight > 0)
-                    BarTone.reportGradient(win.modelData.name, Qt.color(slot.art.skyTop), Qt.color(slot.art.skyMid), Tokens.menubarHeight / (slot.palette.tone.at * win.fullHeight));
+                    BarTone.reportGradient(win.modelData.name, Qt.color(slot.art.skyTop), Qt.color(slot.art.skyMid), Tokens.menubarHeight / (slot.artPalette.tone.at * win.fullHeight));
             }
 
             NumberAnimation {
