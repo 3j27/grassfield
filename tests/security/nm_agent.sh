@@ -9,8 +9,10 @@
 #    a development run
 #  2 registration follows the shell: none without a shell, none for a shell that does not draw "nm", Register
 #    ("org.grassfield.prompter") once it does
-#  3 GetSecrets for WPA2 (psk), WPA3 (psk), WEP (the key of wep-tx-keyidx) and WPA2 Enterprise (identity and password):
-#    the shell gets kind nm with the SSID, the security and the connection's identity; its answer reaches NetworkManager
+#  3 GetSecrets for WPA2 (psk), WPA3 (psk), WEP (the key of wep-tx-keyidx) and WPA2 Enterprise (the password; the
+#    connection's username shown read-only): the shell gets kind nm with the SSID, the security and the username; its
+#    answer reaches NetworkManager, which (the fake as the real one) keeps only secret properties: nothing is dropped;
+#    an enterprise connection without a username is not asked (NoSecrets), an enterprise answer with a name is refused
 #  4 the SSID is plain text (a line feed and a direction override flattened)
 #  5 NoSecrets without a sheet: no interaction allowed (flags 0, USER_REQUESTED alone), VPN, an EAP method that takes a
 #    certificate's password, a wired connection
@@ -18,8 +20,9 @@
 #  7 a caller that is not the owner of org.freedesktop.NetworkManager gets PermissionDenied and the shell sees nothing;
 #    its CancelGetSecrets cancels nothing
 #  8 SaveSecrets is refused (Failed: nothing is stored here), DeleteSecrets succeeds
-#  9 a wrong answer from the shell (a name for a WPA2 network, ok without a password, an empty password) cancels the
-#    request: "cancel" to the shell, NoSecrets to NetworkManager
+#  9 a wrong answer from the shell (a name for a WPA2 network, ok without a password, an empty password, a name for an
+#    enterprise network) cancels the request: "cancel" to the shell, NoSecrets to NetworkManager; the shell's refusal
+#    ("refused", its bound) is NoSecrets, never UserCanceled
 # 10 the bound of 8 is shared with gcr's requests: four gcr prompts and four nm requests outstanding, the next nm request
 #    gets NoSecrets at once
 # 11 the shell goes with a request outstanding: NoSecrets, and the agent unregisters; it comes back: Register again
@@ -200,11 +203,18 @@ scenario_body() {
   n=$(prompts s)
   say nm "get e1 802-1x 0x1 keymgmt=wpa-eap eap=peap identity=alice ssid=Office"
   wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $2 ]]' _ "$d/s.shell" "$n"
-  desc="WPA2 Enterprise: security enterprise and the connection's identity as the name field's first text"
+  desc="WPA2 Enterprise: security enterprise and the connection's username (shown read-only)"
   check test "$(last_prompt s '"|".join((m["network"]["security"], m["network"]["identity"]))')" = "enterprise|alice"
-  say s "answer last ok-identity bob ent-pass-2"
-  desc="...the name and the password reach NetworkManager in 802-1x"
-  check wait_until 10 grep -qx 'e1 secrets {"802-1x": {"identity": "bob", "password": "ent-pass-2"}}' "$d/nm.nm"
+  say s "answer last ok ent-pass-2"
+  desc="...the password reaches NetworkManager in 802-1x, the only property of the reply, nothing dropped"
+  check wait_until 10 bash -c 'grep -qx "e1 secrets {\"802-1x\": {\"password\": \"ent-pass-2\"}}" "$1" && ! grep -q "^e1 dropped" "$1"' _ "$d/nm.nm"
+  n=$(prompts s)
+  say nm "get e2 802-1x 0x1 keymgmt=wpa-eap eap=peap ssid=Nameless"
+  desc="an enterprise connection without a username is not asked: NoSecrets (a name typed would be dropped by NetworkManager)"
+  check wait_until 10 grep -qx "e2 error org.freedesktop.NetworkManager.SecretAgent.NoSecrets" "$d/nm.nm"
+  sleep 0.3
+  desc="...and the shell was shown nothing"
+  check test "$(prompts s)" = "$n"
 
   # --- 4 the SSID is plain text ----------------------------------------------------------------------------------------
   n=$(prompts s)
@@ -275,21 +285,32 @@ scenario_body() {
 
   # --- 9 wrong answers from the shell -------------------------------------------------------------------------------------
   local tag line
-  for tag in b1 b2 b3; do
+  for tag in b1 b2 b3 b4; do
     n=$(prompts s)
-    say nm "get $tag 802-11-wireless-security 0x1 ssid=Wrong"
+    if [[ $tag == b4 ]]; then
+      say nm "get $tag 802-1x 0x1 keymgmt=wpa-eap eap=ttls identity=alice ssid=Wrong"
+    else
+      say nm "get $tag 802-11-wireless-security 0x1 ssid=Wrong"
+    fi
     wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $2 ]]' _ "$d/s.shell" "$n"
     cid=$(last_id s)
     case $tag in
       b1) line="{\"type\":\"answer\",\"id\":\"$cid\",\"result\":\"ok\",\"password\":\"pw-b1\",\"identity\":\"eve\"}" ;;
       b2) line="{\"type\":\"answer\",\"id\":\"$cid\",\"result\":\"ok\"}" ;;
       b3) line="{\"type\":\"answer\",\"id\":\"$cid\",\"result\":\"ok\",\"password\":\"\"}" ;;
+      b4) line="{\"type\":\"answer\",\"id\":\"$cid\",\"result\":\"ok\",\"password\":\"pw-b4\",\"identity\":\"mallory\"}" ;;
     esac
     say s "raw $line"
     wait_until 10 grep -qx "$tag error org.freedesktop.NetworkManager.SecretAgent.NoSecrets" "$d/nm.nm"
   done
-  desc="a name for a WPA2 network, ok without a password, an empty password: each cancels its request (NoSecrets, \"cancel\")"
-  check bash -c 'for t in b1 b2 b3; do grep -qx "$t error org.freedesktop.NetworkManager.SecretAgent.NoSecrets" "$1" || exit 1; done; [[ $(grep -c "\"type\":\"cancel\"" "$2") -ge 4 ]]' _ "$d/nm.nm" "$d/s.shell"
+  desc="a name for a WPA2 network, ok without a password, an empty password, a name for an enterprise network: each cancels its request (NoSecrets, \"cancel\")"
+  check bash -c 'for t in b1 b2 b3 b4; do grep -qx "$t error org.freedesktop.NetworkManager.SecretAgent.NoSecrets" "$1" || exit 1; done; [[ $(grep -c "\"type\":\"cancel\"" "$2") -ge 5 ]]' _ "$d/nm.nm" "$d/s.shell"
+  n=$(prompts s)
+  say nm "get r0 802-11-wireless-security 0x1 ssid=Full"
+  wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $2 ]]' _ "$d/s.shell" "$n"
+  say s "raw {\"type\":\"answer\",\"id\":\"$(last_id s)\",\"result\":\"refused\"}"
+  desc="the shell's refusal (\"refused\", its bound) is NoSecrets, never the user's UserCanceled"
+  check wait_until 10 grep -qx "r0 error org.freedesktop.NetworkManager.SecretAgent.NoSecrets" "$d/nm.nm"
 
   # --- 10 the bound is shared with gcr ------------------------------------------------------------------------------------
   if python3 -I -c 'import gi; gi.require_version("Gcr", "4"); from gi.repository import Gcr' 2>/dev/null; then
@@ -365,7 +386,7 @@ scenario_body() {
 
   # --- 14 nothing secret in the journal ---------------------------------------------------------------------------------
   desc="no test secret in the bridge's output"
-  check bash -c '! grep -q -e "correct horse" -e sae-pass -e abcde -e ent-pass -e too-late -e real-psk -e pw-b1 -e again-psk "$1" "$2"' _ "$d/main.log" "$d/short.log"
+  check bash -c '! grep -q -e "correct horse" -e sae-pass -e abcde -e ent-pass -e too-late -e real-psk -e pw-b1 -e pw-b4 -e again-psk "$1" "$2"' _ "$d/main.log" "$d/short.log"
   return $fail
 }
 
@@ -415,7 +436,10 @@ asked-without-interaction#NmSecrets.cpp#        if (!interactionAllowed(flags))#
 cancel-ignored#NmAgent.cpp#                endWith(request, nm::kErrorAgentCanceled, QStringLiteral("NetworkManager cancelled it"), true);#                ;
 registered-for-any-shell#Bridge.cpp#                m_nm->setWanted(m_kinds.contains(QStringLiteral("nm")));#                m_nm->setWanted(true);
 user-cancel-as-nosecrets#Bridge.cpp#                m_nm->refuse(request, nm::kErrorUserCanceled, QStringLiteral("the user cancelled"));#                m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("the user cancelled"));
-name-for-wpa-accepted#Bridge.cpp#        else if (!enterprise && answer.hasIdentity)#        else if (false)
+name-accepted#Bridge.cpp#        else if (answer.hasIdentity)\n            wrong = QStringLiteral("a name where none is asked");#        else if (false)\n            wrong = QStringLiteral("a name where none is asked");
+identity-in-the-reply (NetworkManager drops it)#NmSecrets.cpp#        g_variant_builder_init(&inner, G_VARIANT_TYPE("a{sv}"));#        g_variant_builder_init(&inner, G_VARIANT_TYPE("a{sv}"));\n        if (ask.security == Security::Enterprise)\n            g_variant_builder_add(&inner, "{sv}", "identity", g_variant_new_string(ask.identity.toUtf8().constData()));
+asked-without-a-username#NmSecrets.cpp#            if (a.identity.isEmpty())#            if (false)
+refusal-as-usercanceled#Bridge.cpp#                m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("the shell could not take it"));#                m_nm->refuse(request, nm::kErrorUserCanceled, QStringLiteral("the shell could not take it"));
 no-timeout#NmAgent.cpp#        request->timeout = g_timeout_add(static_cast<guint>(m_timeoutMs), onTimeout, request.get());#        request->timeout = 0;
 save-claims-success#NmAgent.cpp#            g_dbus_method_invocation_return_dbus_error(invocation, nm::kErrorFailed, "grassfield-prompter stores no secrets");#            g_dbus_method_invocation_return_value(invocation, nullptr);
 not-reregistered-after-a-restart#NmAgent.cpp#        if (!owner.isEmpty() && m_wanted)\n            sendRegister();#        if (false)\n            sendRegister();

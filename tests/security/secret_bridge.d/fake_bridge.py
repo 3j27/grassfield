@@ -8,12 +8,13 @@ prints PASS/FAIL lines. Test values only; never the user's socket (the paths com
 Scenarios:
   client         the client's protocol: its hello (version, kinds), one answer per request and only its own ids, a
                  withdrawal, a cancel for an unknown id ignored, a late answer to a withdrawn request never sent, a
-                 confirmation without a password, the check box's state; NetworkManager's kind (step 9c): a WPA2 answer
-                 carries the password only, an enterprise one the name too, a cancel nothing, an nm prompt with a name for a
-                 WPA2 network closes the connection; a malformed line, an over-long line, a prompt
+                 confirmation without a password, the check box's state; NetworkManager's kind (step 9c): an answer carries
+                 the password only (enterprise included: NetworkManager keeps nothing else), a cancel nothing, an nm prompt
+                 with a name for a WPA2 network closes the connection; a malformed line, an over-long line, a prompt
                  before hello, another protocol version and a duplicate id each close the connection; the next attempt
                  waits 1 s, then 2 s, then 4 s (no hello in between), and 1 s again after a hello
-  bound          SecretAgent: nine requests; the ninth is answered "cancelled" at once, the others are not answered
+  bound          SecretAgent: nine requests; the ninth is refused at once ("refused", never a user's "cancel"), the others
+                 are not answered
   session-socket SecretAgent in a real session: it connects to <socket> (the session's), never to <other socket> (a dev
                  socket it was given)
   nothing        no connection at all within 4 s on <socket>
@@ -182,8 +183,8 @@ def scenario_client(server):
     check("an nm request (WPA2) answered ok carries the password only", a == {"type": "answer", "id": "p20", "result": "ok", "password": "pw-p20"}, repr(a))
     c.send(nm_prompt(21, "answer-ok", "enterprise", "alice"))
     a = c.json()
-    check("an nm request (enterprise) answered ok carries the name and the password",
-          a == {"type": "answer", "id": "p21", "result": "ok", "password": "pw-p21", "identity": "user-p21"}, repr(a))
+    check("an nm request (enterprise) answered ok carries the password only (the username is shown, never sent)",
+          a == {"type": "answer", "id": "p21", "result": "ok", "password": "pw-p21"}, repr(a))
     c.send(nm_prompt(22, "answer-cancel", "wep"))
     a = c.json()
     check("an nm request cancelled carries nothing", a == {"type": "answer", "id": "p22", "result": "cancel"}, repr(a))
@@ -279,7 +280,7 @@ def scenario_bound(server):
     for n in range(1, 10):
         c.send(prompt(n, "leave"))
     a = c.json()
-    check("the ninth request is answered \"cancelled\" at once", a == {"type": "answer", "id": "p9", "result": "cancel"}, repr(a))
+    check("the ninth request is refused at once (\"refused\", never a user's cancel)", a == {"type": "answer", "id": "p9", "result": "refused"}, repr(a))
     extra = c.quiet(1.0)
     check("the eight others wait for the user (no answer invented)", extra == [], repr(extra))
     c.send({"type": "cancel", "id": "p3"})

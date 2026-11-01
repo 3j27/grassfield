@@ -21,9 +21,10 @@
 //   {"type":"error","code":"<code>","message":"<text>"}
 // shell -> bridge (at most limits::kShellLine bytes per line, the newline excluded):
 //   {"v":"prompter/1","type":"hello","shell":"<version>","kinds":["password","confirm","nm"]} (first line, once)
-//   {"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false,"identity":"..."}
-//   ("identity" only for an nm request of security "enterprise" answered ok, and for a kio request of nameMode "edit"
-//   answered ok; for kio, "choice" is "Remember this password", only when it was offered, and a cancel carries nothing)
+//   {"type":"answer","id":"p<N>","result":"ok"|"cancel"|"refused","password":"...","choice":true|false,"identity":"..."}
+//   ("refused": the shell could not take the request (its bound); "identity" only for a kio request of nameMode "edit"
+//   answered ok: an nm reply carries the password only, an nm answer with a name is cancelled (opus review of step 9c);
+//   for kio, "choice" is "Remember this password", only when it was offered, and a cancel or a refusal carries nothing)
 //
 // Everything the shell sends is untrusted: a strict parser for flat objects (strings, booleans, null, arrays of strings;
 // no numbers, no nesting, no duplicate keys, valid UTF-8, no NUL), every key and type checked. The password is never
@@ -107,6 +108,7 @@ namespace gf::prompter {
         // answer
         QString     id;
         bool        ok          = false;
+        bool        refused     = false; // result "refused": the shell could not take it (ok is false)
         bool        hasPassword = false;
         JsonString  password; // raw bytes in the line; decoded length checked against limits::kPassword
         bool        hasChoice   = false;

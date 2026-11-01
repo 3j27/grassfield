@@ -60,19 +60,23 @@ QtObject {
 
     // A KIO request's server (a host name and its port: a field of the title's sentence), its login: the name field's mode
     // ("edit", "fixed": shown only, "none": no name field), Remember this password ("none": not offered), the keyring's
-    // protection, and whether the last name and password failed.
+    // protection, and whether the last name and password failed. The name typed (not a secret: the caller's name at
+    // first); KIO's client takes it back from the reply, unlike NetworkManager (decision 9-33), so it is sent for "edit".
     readonly property string serverName: server ? request.server : ""
     readonly property string nameMode: server ? request.login.nameMode : ""
-    readonly property bool identityReadOnly: nameMode === "fixed"
+    readonly property bool asksName: server && nameMode !== "none"
+    readonly property bool nameReadOnly: nameMode === "fixed"
+    property string loginName: ""
     readonly property string keyringNotice: server && request.login.remember !== "none" && request.login.keyring === "unprotected" ? qsTr("Your keyring has no password: a password remembered here is stored unencrypted on this computer.") : ""
 
-    // The network of an nm request: its SSID (plain, a field of the title's sentence), its security, whether it asks for a
-    // name (WPA2 Enterprise). The name typed (not a secret: the connection's own identity at first) and whether the
-    // password is shown as typed (Show password; back to hidden for each request and whenever the fields are emptied).
+    // The network of an nm request: its SSID (plain, a field of the title's sentence), its security, and for WPA2 Enterprise
+    // the connection's username, shown read-only: NetworkManager keeps only secrets from an agent's reply, so a name typed
+    // here would be thrown away (opus review of step 9c, MAJOR; decision 9-33). Whether the password is shown as typed (Show
+    // password; back to hidden for each request and whenever the fields are emptied).
     readonly property string networkSsid: network ? Prompter.flatten(request.network.ssid, Prompter.CAPS.ssid) : ""
     readonly property string networkSecurity: network ? request.network.security : ""
-    readonly property bool needsIdentity: networkSecurity === "enterprise" || (server && nameMode !== "none")
-    property string identity: ""
+    readonly property bool showsIdentity: networkSecurity === "enterprise"
+    readonly property string identity: showsIdentity ? Prompter.flatten(request.network.identity, Prompter.CAPS.identity) : ""
     property bool showPassword: false
 
     // The sheet's own title, Grassfield's words: who asks, and for what.
@@ -211,8 +215,8 @@ QtObject {
     }
 
     // Connect may be pressed: a password (read as a length, never as text) and, when the sheet asks for one, a name.
-    function serverReady(passwordLength: int, identityLength: int): bool {
-        return server && canSubmit && passwordLength > 0 && (nameMode !== "edit" || identityLength > 0);
+    function serverReady(passwordLength: int, nameLength: int): bool {
+        return server && canSubmit && passwordLength > 0 && (nameMode !== "edit" || nameLength > 0);
     }
 
     // The Wi-Fi alert's sentence (macOS's): the SSID is a field inside Grassfield's words, never the title itself.
@@ -226,10 +230,9 @@ QtObject {
         return qsTr("The Wi-Fi network “%1” requires a WPA2 password.").arg(ssid);
     }
 
-    // Join may be pressed: a password of an acceptable length for the network (read as a length, never as text) and, for
-    // enterprise, a name.
-    function networkReady(passwordLength: int, identityLength: int): bool {
-        return network && canSubmit && Prompter.networkLengthOk(networkSecurity, passwordLength) && (!needsIdentity || identityLength > 0);
+    // Join may be pressed: a password of an acceptable length for the network (read as a length, never as text).
+    function networkReady(passwordLength: int): bool {
+        return network && canSubmit && Prompter.networkLengthOk(networkSecurity, passwordLength);
     }
 
     function titleOf(role: string, name: string, kind: string, isNew: bool): string {
@@ -297,7 +300,7 @@ QtObject {
                 clearRequested();
                 return false;
             }
-            if (nameMode === "edit" && root.identity === "") {
+            if (nameMode === "edit" && root.loginName === "") {
                 priv.error = qsTr("Type your name.");
                 clearRequested();
                 return false;
@@ -315,11 +318,6 @@ QtObject {
             }
             if (Prompter.utf8Length(password) > Prompter.MAX_PASSWORD_BYTES) {
                 priv.error = qsTr("This password is too long.");
-                clearRequested();
-                return false;
-            }
-            if (needsIdentity && root.identity === "") {
-                priv.error = qsTr("Type your username.");
                 clearRequested();
                 return false;
             }
@@ -341,7 +339,7 @@ QtObject {
             }
         }
         priv.error = "";
-        root.answerRequested(true, asksPassword ? password : null, root.choice, (network && needsIdentity) || nameMode === "edit" ? root.identity : null);
+        root.answerRequested(true, asksPassword ? password : null, root.choice, nameMode === "edit" ? root.loginName : null);
         clearRequested();
         return answered;
     }
@@ -367,7 +365,7 @@ QtObject {
         priv.error = request && request.kind === "kio" && request.login.retry === true ? qsTr("The name or password was not accepted. Try again.") : "";
         if (request)
             root.choice = request.kind === "kio" ? request.login.remember === "on" : request.choice !== null && request.choice.chosen === true;
-        root.identity = request && request.kind === "nm" ? request.network.identity : request && request.kind === "kio" ? request.login.name : "";
+        root.loginName = request && request.kind === "kio" ? request.login.name : "";
         clearRequested();
     }
 }

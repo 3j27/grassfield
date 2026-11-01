@@ -50,12 +50,26 @@ Scope {
     // One answer to request `id`, once: "ok" (with the password for a password request) or "cancel". False when `id` is not
     // a request of this connection still open (already answered, withdrawn, never sent), when the line would be wrong
     // (Prompter.answerLine), or when the connection is not ready: nothing is sent then.
-    // `identity`: the name of an nm request of security "enterprise", or of a kio request whose sheet asked for one, answered
-    // ok, else null; `choice`: a kio request's Remember this password.
+    // `identity`: the name of a kio request whose sheet asked for one (step 9e), answered ok, else null; never sent for nm
+    // (NetworkManager keeps only secrets from a reply: opus review of step 9c); `choice`: a kio request's Remember this
+    // password.
     function answer(id: string, ok: bool, password: var, choice: bool, identity: var): bool {
         if (priv.state !== "ready" || priv.closing || !Object.prototype.hasOwnProperty.call(priv.open, id))
             return false;
         const line = Prompter.answerLine(priv.open[id], ok, password, choice, identity);
+        if (line === "")
+            return false;
+        root.forget(id);
+        socket.write(line + "\n");
+        socket.flush();
+        return true;
+    }
+
+    // The shell cannot take request `id` (its bound): "refused", once, only for an id it holds (Prompter.refusalLine).
+    function refuse(id: string): bool {
+        if (priv.state !== "ready" || priv.closing || !Object.prototype.hasOwnProperty.call(priv.open, id))
+            return false;
+        const line = Prompter.refusalLine(id);
         if (line === "")
             return false;
         root.forget(id);

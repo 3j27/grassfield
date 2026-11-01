@@ -15,14 +15,14 @@ import qs.security
 //    own error line;
 //  - Cancel and OK, Grassfield's labels (decision 9-16).
 // A NetworkManager request (step 9c) is the macOS Wi-Fi alert: the Wi-Fi glyph, the title naming the network (its SSID a
-// quoted field in Grassfield's sentence), "Requested by NetworkManager" under it, the name field (WPA2 Enterprise), the
-// password field, Show password (the typed characters shown while it is checked), Cancel and Join (only for a password of an
-// acceptable length). No caller text.
+// quoted field in Grassfield's sentence), "Requested by NetworkManager" under it, the connection's username (WPA2
+// Enterprise, read-only), the password field, Show password (the typed characters shown while it is checked, never
+// selectable or copyable), Cancel and Join (only for a password of an acceptable length). No caller text.
 // A KIO request (step 9e) is the macOS server sheet: the globe glyph for KIO's worker (an app's icon, the warning triangle
 // for an unidentified program), the title naming the server (a host name, a quoted field in Grassfield's sentence), who
 // asked under it, the realm framed as the server's unverified words, the name field (read-only when the caller fixed the
-// name, absent when it asks for none), the password field, Remember this password and the line about a keyring without a
-// password, Cancel and Connect (only with a password, and a name when one is asked).
+// name, absent when it asks for none), the password field (no Show password), Remember this password and the line about a
+// keyring without a password, Cancel and Connect (only with a password, and a name when one is asked).
 // Esc cancels. Every string from the caller is plain text (Text.PlainText), one line from the bridge, capped here in lines.
 FocusScope {
     id: root
@@ -53,25 +53,21 @@ FocusScope {
 
     Keys.onEscapePressed: root.model.cancel()
 
-    // The first control a user types into: the (first) password field, or OK for a confirmation; for a network, its name
-    // field when the name is still empty, else the password field. Never while the input is disabled (forcing the focus
-    // onto a disabled control would still move this scope's focus to it). Read from the request itself: the sheet is made
-    // as the request arrives, before every binding of the model has followed it.
+    // The first control a user types into: the (first) password field, or OK for a confirmation. Never while the input is
+    // disabled (forcing the focus onto a disabled control would still move this scope's focus to it). Read from the request
+    // itself: the sheet is made as the request arrives, before every binding of the model has followed it.
     function focusField(): void {
         const request = root.model.request;
         if (!root.inputEnabled || !request)
             return;
         if (request.kind === "kio") {
-            if (request.login.nameMode === "edit" && identityField.text === "")
-                identityField.forceActiveFocus();
+            if (request.login.nameMode === "edit" && nameField.text === "")
+                nameField.forceActiveFocus();
             else
                 field.forceActiveFocus();
-        } else if (request.kind === "nm") {
-            if (request.network.security === "enterprise" && identityField.text === "")
-                identityField.forceActiveFocus();
-            else
-                field.forceActiveFocus();
-        } else if (request.kind !== "password")
+        } else if (request.kind === "nm")
+            field.forceActiveFocus();
+        else if (request.kind !== "password")
             okButton.forceActiveFocus();
         else if (request.passwordNew === true)
             newField.forceActiveFocus();
@@ -84,13 +80,13 @@ FocusScope {
     function accept(): void {
         if (root.model.server) {
             // Connect only with a password, and a name when one is asked: the fields keep what was typed otherwise.
-            if (root.model.serverReady(field.length, identityField.text.length))
+            if (root.model.serverReady(field.length, nameField.text.length))
                 field.submit();
             return;
         }
         if (root.model.network) {
             // Join only for a password of an acceptable length (and a name): the field keeps what was typed otherwise.
-            if (root.model.networkReady(field.length, identityField.text.length))
+            if (root.model.networkReady(field.length))
                 field.submit();
             return;
         }
@@ -329,21 +325,39 @@ FocusScope {
             Accessible.name: text
         }
 
-        // A WPA2 Enterprise network's username or a server's name: not a secret (the connection's own identity, the name the
-        // caller gave, at first), so a plain field; read-only when the caller fixed the name.
-        TextField {
-            id: identityField
+        // A WPA2 Enterprise network's username, as the connection holds it: read-only, since NetworkManager keeps only
+        // secrets from an agent's reply (opus review of step 9c, MAJOR).
+        Text {
             objectName: "secretIdentity"
-            visible: root.model.needsIdentity
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.model.showsIdentity ? qsTr("Username: %1").arg(root.model.identity) : ""
+            visible: text !== ""
+            color: Appearance.colors.textSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyCaptionSize
+            wrapMode: Text.WrapAnywhere
+            maximumLineCount: 2
+            elide: Text.ElideRight
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+        }
+
+        // A server's name (step 9e): not a secret (the name the caller gave, at first), so a plain field; KIO's client takes
+        // it back from the reply, unlike NetworkManager. Read-only when the caller fixed the name.
+        TextField {
+            id: nameField
+            objectName: "secretName"
+            visible: root.model.asksName
             enabled: root.inputEnabled && root.model.canSubmit
-            readOnly: !visible || !enabled || root.model.identityReadOnly
+            readOnly: !visible || !enabled || root.model.nameReadOnly
             width: parent.width
             height: visible ? implicitHeight : 0
-            text: root.model.identity
-            placeholderText: root.model.server ? qsTr("Name") : qsTr("Username")
-            accessibleName: root.model.server ? qsTr("Name") : qsTr("Username")
+            text: root.model.loginName
+            placeholderText: qsTr("Name")
+            accessibleName: qsTr("Name")
             inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-            onTextEdited: root.model.identity = text
+            onTextEdited: root.model.loginName = text
             onAccepted: field.forceActiveFocus()
         }
 
@@ -358,6 +372,9 @@ FocusScope {
             accessibleName: qsTr("Password")
             // Show password (a network's only): the characters as typed, never anywhere else than in this field.
             reveal: root.model.network && root.model.showPassword
+            // Shown, it is never selectable or copyable (opus review of step 9c, MINOR): not to the clipboard, not to the
+            // primary selection. A server's field is never shown (no Show password), so the guard only waits there.
+            copyable: false
             // A network's Return goes through Join's rule, a server's through Connect's (accept): a password too short, or a
             // missing name, keeps what was typed.
             submitOnReturn: !root.model.network && !root.model.server
@@ -514,7 +531,7 @@ FocusScope {
             primary: true
             width: buttonRow.buttonWidth
             text: root.model.network ? qsTr("Join") : root.model.server ? qsTr("Connect") : qsTr("OK")
-            enabled: root.model.canSubmit && (root.model.network ? root.model.networkReady(field.length, identityField.text.length) : !root.model.server || root.model.serverReady(field.length, identityField.text.length))
+            enabled: root.model.canSubmit && (root.model.network ? root.model.networkReady(field.length) : !root.model.server || root.model.serverReady(field.length, nameField.text.length))
             onClicked: root.accept()
         }
     }

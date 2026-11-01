@@ -481,11 +481,13 @@ namespace gf::prompter {
                 return ParseStatus::Invalid;
             }
             QString result;
-            if (!stringMember(text, member(members, "result"), &result) || (result != QLatin1String("ok") && result != QLatin1String("cancel"))) {
-                *error = QStringLiteral("result is neither ok nor cancel");
+            if (!stringMember(text, member(members, "result"), &result)
+                || (result != QLatin1String("ok") && result != QLatin1String("cancel") && result != QLatin1String("refused"))) {
+                *error = QStringLiteral("result is not ok, cancel or refused");
                 return ParseStatus::Invalid;
             }
-            out->ok = result == QLatin1String("ok");
+            out->ok      = result == QLatin1String("ok");
+            out->refused = result == QLatin1String("refused");
             if (const JsonMember* password = member(members, "password")) {
                 if (password->value.type != JsonValue::Type::String
                     || decodeJsonString(text.data() + password->value.string.begin, password->value.string.end - password->value.string.begin, nullptr,

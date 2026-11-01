@@ -4,7 +4,9 @@ import "LockMachine.js" as Machine
 
 // Password entry shared by the lock screen and the authorization dialog. The text lives only in
 // the TextInput: submit() hands it over once and empties the field in the same step. Copy,
-// undo history and input-method prediction are off (Password echo, sensitive-data hints).
+// undo history and input-method prediction are off (Password echo, sensitive-data hints). A field
+// shown as typed (reveal) keeps Qt's normal-echo behaviour, copy included, unless `copyable` is false
+// (a secret sheet's Show password: opus review of step 9c).
 FocusScope {
     id: root
 
@@ -24,8 +26,13 @@ FocusScope {
     property bool showSubmit: false
     // Read-only while an attempt is being checked (the placeholder then says so).
     property bool busy: false
-    // Show the typed text (PAM/polkit prompts that are not secret, e.g. a user name).
+    // Show the typed text (PAM/polkit prompts that are not secret, e.g. a user name; a secret sheet's Show password).
     property bool reveal: false
+    // False: while the text is shown (reveal), nothing of it can be selected, copied or cut (keys or mouse), so neither the
+    // clipboard nor the primary selection ever gets it; hidden, Qt's password echo copies nothing anyway. True (the default)
+    // keeps the TextInput's own behaviour (the polkit sheet's visible answers).
+    property bool copyable: true
+    readonly property bool guarded: root.reveal && !root.copyable
     // An empty field is handed over too (a secret sheet's new password: gcr's caller then offers to store passwords
     // unencrypted, ADR-0035 D-9). Off for the lock and the authorization sheet: an empty field sends nothing there.
     property bool allowEmpty: false
@@ -58,6 +65,9 @@ FocusScope {
         id: priv
         property bool caps: false
     }
+
+    onGuardedChanged: if (guarded)
+        input.deselect()
 
     function clear(): void {
         input.clear();
@@ -93,6 +103,9 @@ FocusScope {
         clip: true
         readOnly: root.busy
         echoMode: root.reveal ? TextInput.Normal : TextInput.Password
+        // Guarded: no mouse selection (on Wayland a mouse selection fills the primary selection), and a selection made
+        // while hidden is dropped as the text shows.
+        selectByMouse: !root.guarded
         passwordCharacter: "●"
         passwordMaskDelay: 0
         inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase | (root.reveal ? 0 : Qt.ImhHiddenText)
@@ -106,8 +119,16 @@ FocusScope {
 
         onAccepted: root.submitOnReturn ? root.submit() : root.returnPressed()
         onTextEdited: root.edited()
+        onSelectedTextChanged: if (root.guarded && input.selectedText.length > 0)
+            input.deselect()
 
         Keys.onPressed: event => {
+            // Guarded: Copy, Cut, Select All and every Shift selection key stop here, before the TextInput sees them.
+            if (root.guarded && (event.matches(StandardKey.Copy) || event.matches(StandardKey.Cut) || event.matches(StandardKey.SelectAll)
+                    || ((event.modifiers & Qt.ShiftModifier) !== 0 && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End, Qt.Key_PageUp, Qt.Key_PageDown].indexOf(event.key) >= 0))) {
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_Escape && input.length > 0) {
                 input.clear();
                 event.accepted = true;

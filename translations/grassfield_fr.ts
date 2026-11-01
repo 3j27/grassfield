@@ -9845,8 +9845,8 @@
 <context>
     <name>SecretSheet</name>
     <message>
-        <source>Username</source>
-        <translation>Nom d’utilisateur</translation>
+        <source>Username: %1</source>
+        <translation>Nom d’utilisateur&#xa0;: %1</translation>
     </message>
     <message>
         <source>Name</source>
@@ -10062,10 +10062,6 @@
     <message>
         <source>A WPA2 password has 8 to 63 characters, or 64 hexadecimal digits.</source>
         <translation>Un mot de passe WPA2 compte de 8 à 63 caractères, ou 64 chiffres hexadécimaux.</translation>
-    </message>
-    <message>
-        <source>Type your username.</source>
-        <translation>Saisissez votre nom d’utilisateur.</translation>
     </message>
     <message>
         <source>The passwords do not match. Type the new password again in both fields.</source>

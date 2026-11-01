@@ -9,9 +9,9 @@ import qs.security.secret
 //   client  PrompterClient on PROBE_SOCKET, answering as a user would by the request's title: "answer-ok" (the password
 //           "pw-<id>", or ok for a confirmation), "answer-cancel", "answer-twice" (a second answer must be refused),
 //           "answer-late" (after the bridge withdrew it: refused), "leave" (no answer); an nm request (step 9c) by its SSID,
-//           "answer-ok" (the password "pw-<id>" and, for enterprise, the name "user-<id>") or "answer-cancel"; a kio request
-//           (step 9e) by its server, "answer-ok.example" (the name "user-<id>" when asked, the password "pw-<id>", Remember
-//           checked when offered) or "answer-cancel.example";
+//           "answer-ok" (the password "pw-<id>"; for enterprise a name "user-<id>" too, which the client must not send) or
+//           "answer-cancel"; a kio request (step 9e) by its server, "answer-ok.example" (the name "user-<id>" when asked, the
+//           password "pw-<id>", Remember checked when offered) or "answer-cancel.example";
 //   agent   the real SecretAgent with a SheetQueue, its dev socket PROBE_SOCKET; prints its dev state (devState) when it
 //           changes.
 // Prints "probe: <event>" lines; the test reads them and the fake bridge's PASS/FAIL lines.

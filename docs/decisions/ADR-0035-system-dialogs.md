@@ -1562,19 +1562,19 @@ GDBus, the bridge's bus library since 9-5).
   draws kind `nm` is connected (9-27); every call answered only when its sender is the current owner of
   `org.freedesktop.NetworkManager`, asked from the bus when the call arrives, else `PermissionDenied` and nothing shown
   (9-29); `GetSecrets` for WPA/WPA2 and WPA3 Personal (`psk`), WEP (the key of `wep-tx-keyidx`) and WPA2 Enterprise
-  (`identity` and `password`) of a Wi-Fi connection, only when the flags allow interaction; everything else `NoSecrets`
+  (`password`; the connection's username shown read-only, 9-33) of a Wi-Fi connection, only when the flags allow interaction; everything else `NoSecrets`
   without a sheet, VPN included (9-30); `UserCanceled`, `AgentCanceled` and `NoSecrets` as NetworkManager reads them, and a
   request withdrawn after 110 s (9-31); `SaveSecrets` refused and `DeleteSecrets` answered (9-32). Its requests share the
   bridge's ids and its bound of 8 with gcr's.
 - **prompter/1** (spec section 5, "prompter/1 protocol"): the kind `nm` (`{"type":"prompt","id":…,"kind":"nm","network":
-  {"ssid","security","identity"}}`), an answer's `identity`, the requester role `disk` (9-33). The bridge's hello lists `nm`
-  only when its agent runs.
+  {"ssid","security","identity"}}`), an answer's result `refused` (the shell's own refusal, 9-31), the requester role `disk`
+  (9-33). The bridge's hello lists `nm` only when its agent runs.
 - **The shell** (`shell/security/secret/`): `Prompter.js` reads the nm kind strictly and gives it the shell's own requester
   row (role `network`); `SecretSheet` draws the macOS Wi-Fi alert ("The Wi-Fi network “%1” requires a WPA2 password." and its
-  WPA3, WEP and enterprise variants, "Requested by NetworkManager", the username field for enterprise, Show password, Cancel /
+  WPA3, WEP and enterprise variants, "Requested by NetworkManager", the connection's username for enterprise (read-only), Show password, Cancel /
   Join, Join only for a password of an acceptable length); `SecretAgent` holds every nm request until a click past the guard
-  (9-28); Show password shows the characters in that field only and is unchecked again for each request and whenever the
-  fields are emptied (9-34). The hold, queue and linger rules of 9b apply unchanged (a password sent lingers). French
+  (9-28); Show password shows the characters in that field only, never selectable or copyable, and is unchecked again for
+  each request and whenever the fields are emptied (9-34). The hold, queue and linger rules of 9b apply unchanged (a password sent lingers). French
   catalog: 18 strings (`scripts/dev/i18n-update.sh` now reads `bridges/` too, for the helper's).
 - **Tests.** `tests/unit/prompter/tst_prompter.cpp` (57 cases, plain and under ASan and UBSan: the nm kind's message, an
   answer's identity, every GetSecrets decision, the reply built on the secure buffer, the disk name, the helper's writes,
@@ -1589,6 +1589,14 @@ GDBus, the bridge's bus library since 9-5).
   helper built with ASan and UBSan; `askpass.sh` shows the role `disk` with the helper installed root-owned at its path
   (a container, never the owner's machine). Nested and visual: NOT VERIFIED; a real NetworkManager, a real udiskie with a LUKS disk and the
   helper inside udiskie's sandbox: NOT VERIFIED (owner L2, spec A-SC7).
+- **The opus security review of step 9c: FAIL** (one major, one minor, two nits; the sender check, the registration, the
+  flags, the bound, the helper and the hold found sound), fixed on top of the step: MAJOR (an enterprise username typed in
+  the sheet was dropped by NetworkManager, which keeps only secret properties from an agent's reply) by 9-33 amended;
+  MINOR (a shown password could be selected and copied) by 9-34 amended (`PasswordField.copyable`); NIT (the old secret
+  inside `GetSecrets`' connection argument) recorded in 9-35; NIT (the shell's refusal reached NetworkManager as
+  `UserCanceled`) by 9-31 amended (result `refused`). The fake NetworkManager now keeps only secret properties, as the real
+  one, and logs what it drops. Tests after it: see the counts above, as amended in the review's commits (unit 57,
+  `tst_passwordfield.qml` new, `nm_agent.sh` 42 checks and 14 mutants, `secret_sheets.sh` 34 mutants, `secret_bridge.sh` 10).
 - **What 9c changes for the user**: an encrypted removable disk asks for its password in Grassfield's sheet instead of
   udiskie's GTK dialog; a known Wi-Fi network whose password changed asks in Grassfield's Wi-Fi alert instead of failing
   silently (NetworkManager had no agent in the session).
@@ -1645,15 +1653,21 @@ none widens a rule of Q12's text).
   the key of `wep-tx-keyidx`); `802-1x` of a WPA Enterprise network (`wpa-eap`, `wpa-eap-suite-b-192`, `ieee8021x`) whose EAP
   methods include one that takes a name and a password (peap, ttls, pwd, fast, leap, md5), unless NetworkManager's hints ask
   for other secrets. Everything else is `NoSecrets` without a sheet: VPN (D-9: no VPN plugin dialog runs), LEAP of the
-  wireless setting, OWE, wired 802.1X, an EAP method that needs a certificate's password, a PIN. Rule applied: D-9 (PSK, WEP,
-  identity and password), macOS's three Wi-Fi alerts; anything the sheet cannot draw faithfully is not asked.
+  wireless setting, OWE, wired 802.1X, an EAP method that needs a certificate's password, a PIN, and (since the opus review
+  of step 9c) an enterprise connection without a stored username. Rule applied: D-9 (PSK, WEP, identity and password: the
+  identity shown, never answered, 9-33), macOS's three Wi-Fi alerts; anything the sheet cannot draw faithfully is not asked.
 - **9-31. What does NetworkManager get on each end?** (NetworkManager 1.58 `nm-agent-manager.c`, read as data.) **Choice:**
   the secrets on Join; `UserCanceled` on the user's Cancel (NetworkManager then stops asking other agents); `AgentCanceled`
   to a call that `CancelGetSecrets` withdrew (the shell is told "cancel", shown or queued); `NoSecrets` on every other end:
   the shell gone or never there, a wrong answer from it, the bound of 8, NetworkManager leaving the bus (its requests are
   withdrawn from the shell), and a request unanswered after 110 s. NetworkManager stops waiting at 120 s and never tells the
   agent (its timeout sends no `CancelGetSecrets`), so without the 110 s a password typed later would be lost silently.
-  Rule applied: fail closed (no secret invented), D-9.
+  Rule applied: fail closed (no secret invented), D-9. **Amended after the opus review of step 9c (NIT):** the shell's own
+  refusal (beyond its bound of 8, or without a queue) was sent as "cancel", which the bridge reports to NetworkManager as the
+  user's `UserCanceled`; the shell now sends the answer result `refused` (`Prompter.refusalLine`, `PrompterClient.refuse`), a
+  new value of an existing field within `prompter/1` (as 9-26's role), which the bridge answers "cancelled" to gcr and
+  `NoSecrets` to NetworkManager. Tests: `nm_agent.sh` (a refusal is `NoSecrets`), `secret_sheets.sh` test_04 and the fake
+  bridge's bound scenario (the ninth is `refused`); mutants `refusal-as-usercanceled`, `refusal-as-cancel`.
 - **9-32. `SaveSecrets` and `DeleteSecrets`.** Question: the brief proposed answering both with success. NetworkManager calls
   `SaveSecrets` with a connection's agent-owned secrets after something else changed them; on success it stops, on an error
   it asks the next agent (`_con_save_request_done`). Options: (a) success for both; (b) `SaveSecrets` refused (`Failed`: this
@@ -1669,14 +1683,46 @@ none widens a rule of Q12's text).
   at most 1024 bytes); a choice, a name where none is asked, an empty password or name cancel the request (`NoSecrets`). Join
   takes a WPA2 password of 8 to 64 characters (NetworkManager checks the rest) and any non-empty one for the others, read as a
   length, never as text. Rule applied: 9-9 (kinds added within `prompter/1`), R12 (the requester is never the caller's text).
+  **Amended after the opus review of step 9c (MAJOR).** NetworkManager keeps only secret properties from an agent's reply
+  (1.58: `nm-settings-connection.c` `validate_secret_flags` → `_nm_connection_for_each_secret(…, remove_non_secrets=TRUE)`;
+  libnm's `for_each_secret` keeps a property only when `nm_setting_get_secret_flags` knows it, and `identity` is defined
+  without `NM_SETTING_PARAM_SECRET`; `update_one_secret` "silently ignores non-secrets"), so a username typed in the sheet
+  never reached the connection: an edited name was ignored, and a connection without one would have been asked for one again
+  and again. Read as data: GNOME Shell's network agent shows the username of such a connection with no key (displayed, never
+  returned) and returns `identity` only when NetworkManager's hints name it, which 1.58's Wi-Fi device never does; and
+  NetworkManager's own `verify()` refuses an 802.1X connection with a password method (peap, ttls, leap, md5, fast, pwd)
+  without an identity, so a stored connection always has one. Options: (a) keep the field (it does nothing); (b) show the
+  stored username read-only, send the password only, and answer `NoSecrets` without a sheet when no username is stored; (c)
+  make the username editable by writing the connection (`Settings.Connection.Update`), which this agent's role (answering
+  `GetSecrets`) does not include and Q12's text does not cover. **Choice: (b).** The nm prompt's `identity` is now the
+  connection's username shown read-only ("Username: %1"), never empty for enterprise (the shell closes the connection
+  otherwise); an nm answer carries the password only, and an answer with `identity` cancels its request (`NoSecrets`).
+  Changing the username is done where the connection is edited, as on GNOME. Rule applied: never pretend (a field that
+  does nothing), fail closed, Q12 (no widening: no write to NetworkManager's settings). Tests: `nm_agent.sh` (the fake
+  NetworkManager keeps only secret properties and logs what it drops: nothing is dropped; a connection without a username is
+  `NoSecrets` with no sheet; an enterprise answer with a name is refused), `secret_sheets.sh` test_22, the model's and the
+  parser's tests; mutants `identity-in-the-reply`, `asked-without-a-username`, `name-accepted`, `nm-name-sent`.
 - **9-34. Show password.** **Choice:** a check box under the field (macOS's), for a network's password only; it changes the
   field's echo (`PasswordField.reveal`), never copies the text, is logged nowhere, and is unchecked for each request and
   whenever the fields are emptied (an attempt, a hold, the lock, the screen saver). Rule applied: macOS, SC5 (no copy made for
-  it).
+  it). **Amended after the opus review of step 9c (MINOR).** In normal echo Qt's `TextInput` lets the text be selected and
+  copied (Select All and Copy put the password on the clipboard; on Wayland a mouse selection fills the primary selection
+  too). `PasswordField` gains `copyable` (default true: the lock, the polkit sheet's visible answers unchanged): false and
+  shown, no mouse selection (`selectByMouse` false), Copy, Cut, Select All and Shift selection keys stop at the field, any
+  selection is dropped, and a selection made while hidden goes as the text shows; the secret sheet's password field sets
+  it false. `TextInput` has no context menu or drag. Tests: `tests/security/tst_passwordfield.qml` (from the reviewer's
+  probe: nothing reaches the clipboard, shown or hidden; the default unchanged), `secret_sheets.sh` test_26; mutants
+  `shown-password-copyable`, `password-field-guard-off`.
 - **9-35. The secret on the bridge's side.** **Choice:** the password is decoded from the shell's line straight into gcr's
   secure memory, and the `GetSecrets` reply's string is that buffer itself (`g_variant_new_from_data`, zeroed and freed when
   the reply goes); GDBus marshals a copy into the message it writes and frees it unwiped (known limitation; the process is
-  not dumpable, has no core file and no swap). The username is not a secret. Rule applied: SC5, D-9.
+  not dumpable, has no core file and no swap). The username is not a secret. Rule applied: SC5, D-9. **Amended after the
+  opus review of step 9c (NIT):** NetworkManager also sends the connection's current system-owned secrets inside
+  `GetSecrets`' `connection` argument to an agent whose user has the modify permission (`nm-agent-manager.c`
+  `_con_get_request_start_validated`), so the old PSK of a network being asked again sits in GDBus's buffers of that call
+  until it is answered and freed unwiped. The bridge reads only the SSID, the key management, the WEP index, the EAP methods
+  and the username from it, never forwards or logs it, and cannot drop GDBus's copy (the invocation holds its message until
+  it is answered). Known limitation, as the reply's copy.
 
 **Delivered in step 9e (KIO's network passwords through the bridge: D-12 b, owner decision Q11 = K1).** Built under the amended
 security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31"); KIO v6.31.0 read as data (the tarball of

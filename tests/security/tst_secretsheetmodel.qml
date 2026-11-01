@@ -220,7 +220,7 @@ TestCase {
         compare(m.glyph, "wifi-3");
         verify(!m.hasCallerText, "no caller text");
         compare(m.callerIntro, "");
-        compare(m.needsIdentity, d.tag === "enterprise");
+        compare(m.showsIdentity, d.tag === "enterprise");
     }
 
     function test_networkSsidStaysAField() {
@@ -230,9 +230,9 @@ TestCase {
 
     function test_networkJoinRule() {
         const m = createTemporaryObject(modelC, test, {request: network("wpa")});
-        verify(!m.networkReady(7, 0), "WPA2: 8 characters at least");
-        verify(m.networkReady(8, 0));
-        verify(!m.networkReady(65, 0));
+        verify(!m.networkReady(7), "WPA2: 8 characters at least");
+        verify(m.networkReady(8));
+        verify(!m.networkReady(65));
         const sent = wired(m);
         verify(!m.submit("short", null), "a WPA2 password too short is not sent");
         verify(m.error !== "");
@@ -241,24 +241,25 @@ TestCase {
         compare(sent, [{ok: true, password: "correct horse", choice: false}]);
         verify(!m.submit("again horse", null), "once");
         m.request = network("wep");
-        verify(m.networkReady(1, 0), "WEP: any length (NetworkManager checks the key)");
-        verify(!m.networkReady(0, 0));
+        verify(m.networkReady(1), "WEP: any length (NetworkManager checks the key)");
+        verify(!m.networkReady(0));
     }
 
+    // The connection's username is shown, read-only; the answer is the password only (NetworkManager keeps nothing else of a
+    // reply: opus review of step 9c, MAJOR).
     function test_networkEnterprise() {
-        const m = createTemporaryObject(modelC, test, {request: network("enterprise", "alice")});
-        compare(m.identity, "alice", "the connection's identity as the name's first text");
-        verify(m.networkReady(1, 5));
-        verify(!m.networkReady(1, 0), "a name is needed");
+        const m = createTemporaryObject(modelC, test, {request: network("enterprise", "alice\u202e")});
+        compare(m.identity, "alice", "the connection's username, flattened");
+        verify(m.showsIdentity);
+        verify(!m.asksName, "no name field: the server sheet's only");
+        compare(m.loginName, "");
+        verify(m.networkReady(1));
         const sent = wired(m);
-        m.identity = "";
-        verify(!m.submit("pw", null), "no name: nothing sent");
-        compare(sent.length, 0);
-        m.identity = "bob";
         verify(m.submit("pw", null));
-        compare(sent, [{ok: true, password: "pw", choice: false, identity: "bob"}]);
+        compare(sent, [{ok: true, password: "pw", choice: false}], "no name in the answer");
         m.request = network("wpa");
-        compare(m.identity, "", "a new request starts without a name");
+        compare(m.identity, "");
+        verify(!m.showsIdentity);
     }
 
     function test_networkCancelAndShowPassword() {
@@ -304,8 +305,10 @@ TestCase {
         compare(m.requesterDetail, "Requested by KIO for an app");
         compare(m.glyph, "globe");
         verify(!m.hasCallerText, "no realm: no caller text");
-        verify(m.needsIdentity);
-        verify(!m.identityReadOnly);
+        verify(m.asksName);
+        verify(!m.nameReadOnly);
+        verify(!m.showsIdentity, "no network username line");
+        compare(m.identity, "");
         verify(m.hasChoice);
         compare(m.choiceLabel, "Remember this password", "Grassfield's label");
         verify(!m.choice, "off at first");
@@ -334,33 +337,33 @@ TestCase {
 
     function test_serverNameModes() {
         const m = createTemporaryObject(modelC, test, {request: server({name: "alice", nameMode: "fixed"})});
-        verify(m.needsIdentity);
-        verify(m.identityReadOnly);
-        compare(m.identity, "alice");
+        verify(m.asksName);
+        verify(m.nameReadOnly);
+        compare(m.loginName, "alice");
         verify(m.serverReady(1, 0), "a name shown only is not typed");
         const sent = wired(m);
         verify(m.submit("pw", null));
         compare(sent, [{ok: true, password: "pw", choice: false}], "no name in the answer: the caller's stays");
         m.request = server({nameMode: "none"});
-        verify(!m.needsIdentity);
+        verify(!m.asksName);
         compare(m.title, "Enter your password for the server “example.org”.");
-        compare(m.identity, "");
+        compare(m.loginName, "");
     }
 
     function test_serverConnectRule() {
         const m = createTemporaryObject(modelC, test, {request: server({name: "alice", remember: "on"})});
-        compare(m.identity, "alice", "the caller's name (or the keyring's) as the name's first text");
+        compare(m.loginName, "alice", "the caller's name (or the keyring's) as the name's first text");
         verify(m.choice, "Remember on: the keyring holds one already");
         verify(!m.serverReady(0, 5), "a password is needed");
         verify(!m.serverReady(3, 0), "a name is needed");
         verify(m.serverReady(1, 1));
         const sent = wired(m);
-        m.identity = "";
+        m.loginName = "";
         verify(!m.submit("pw", null), "no name: nothing sent");
         verify(m.error !== "");
         verify(!m.submit("", null), "no password: nothing sent");
         compare(sent.length, 0);
-        m.identity = "bob";
+        m.loginName = "bob";
         m.choice = false;
         verify(m.submit("pw", null));
         compare(sent, [{ok: true, password: "pw", choice: false, identity: "bob"}]);
@@ -378,7 +381,7 @@ TestCase {
         verify(!m.hasChoice, "Remember not offered");
         compare(m.choiceLabel, "");
         const sent = wired(m);
-        m.identity = "bob";
+        m.loginName = "bob";
         m.cancel();
         compare(sent, [{ok: false, password: null, choice: false}]);
     }

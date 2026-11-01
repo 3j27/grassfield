@@ -11,7 +11,12 @@
 // - "802-11-wireless-security" of a Wi-Fi connection: key-mgmt "wpa-psk" (WPA/WPA2 Personal) and "sae" (WPA3 Personal)
 //   -> "psk"; "none" (WEP) -> "wep-key<wep-tx-keyidx>";
 // - "802-1x" of a Wi-Fi connection whose key-mgmt is "wpa-eap", "wpa-eap-suite-b-192" or "ieee8021x" (dynamic WEP), with
-//   an EAP method that takes a name and a password (peap, ttls, pwd, fast, leap, md5) -> "identity" and "password".
+//   an EAP method that takes a name and a password (peap, ttls, pwd, fast, leap, md5) -> "password" only. The username
+//   ("identity") is not a secret: NetworkManager keeps only secret properties from an agent's reply
+//   (nm-settings-connection.c validate_secret_flags -> _nm_connection_for_each_secret(remove_non_secrets), libnm's
+//   for_each_secret), so the sheet shows the connection's own username, read-only, and a connection without one is not
+//   asked (NetworkManager's verify() requires it for these methods anyway). Changing it would mean editing the connection,
+//   which this agent never does (opus review of step 9c, MAJOR; decision 9-33 amended).
 // Anything else is NoSecrets without a sheet: VPN settings (NetworkManager shows no VPN dialog itself; an agent such as
 // nm-applet runs the plugin's auth dialog, which this one does not), LEAP of 802-11-wireless-security, OWE, wired 802.1X,
 // EAP methods that need a certificate's password (tls), and a request for other secrets than a name and a password.
@@ -49,8 +54,7 @@ namespace gf::prompter::nm {
     inline constexpr guint32 kWpsPbcActive     = 0x8;
 
     inline constexpr int         kSsidCap      = 64;   // UTF-16 code units of the SSID shown (an SSID is at most 32 bytes)
-    inline constexpr int         kIdentityCap  = 256;  // UTF-16 code units of the connection's identity, the field's first text
-    inline constexpr std::size_t kIdentityBytes = 1024; // bytes of an identity the shell answers, UTF-8
+    inline constexpr int         kIdentityCap  = 256;  // UTF-16 code units of the connection's username, shown read-only
     // NetworkManager gives up on a GetSecrets call after 120 s (nm-secret-agent.c) and never tells the agent: a request
     // still open after this long is withdrawn from the sheet and answered NoSecrets, so no password typed later is lost.
     inline constexpr int kAnswerTimeoutMs = 110000;
@@ -65,9 +69,9 @@ namespace gf::prompter::nm {
         QString    why;         // when not: why, for the journal (never a secret, never the SSID)
         Security   security = Security::None;
         QString    ssid;     // flattened, not empty
-        QString    identity; // Enterprise: the connection's identity, flattened (the name field's first text)
+        QString    identity; // Enterprise: the connection's username, flattened, shown read-only (never answered)
         QByteArray setting;  // the setting the reply fills: "802-11-wireless-security" or "802-1x"
-        QByteArray key;      // "psk", "wep-key0".."wep-key3", or "password" (with "identity") for Enterprise
+        QByteArray key;      // "psk", "wep-key0".."wep-key3", or "password" for Enterprise
     };
 
     // The flags allow asking the user (ALLOW_INTERACTION or REQUEST_NEW).
@@ -76,9 +80,9 @@ namespace gf::prompter::nm {
     // The decision for one GetSecrets call: `connection` of type a{sa{sv}}, `hints` NULL-terminated (may be null).
     Ask evaluate(GVariant* connection, const char* settingName, const char* const* hints, guint32 flags);
 
-    // The GetSecrets reply, (a{sa{sv}}): {setting: {key: password}} and, for Enterprise, "identity". It takes over
+    // The GetSecrets reply, (a{sa{sv}}): {setting: {key: password}}, nothing else. It takes over
     // `securePassword` (gcr secure memory, NUL-terminated, `length` bytes of valid UTF-8 without NUL): the reply's string
     // is that buffer itself, zeroed and freed when the reply goes. A floating reference.
-    GVariant* secretsReply(const Ask& ask, char* securePassword, std::size_t length, const QByteArray& identity);
+    GVariant* secretsReply(const Ask& ask, char* securePassword, std::size_t length);
 
 } // namespace gf::prompter::nm
