@@ -49,7 +49,7 @@ bare_qs() {
   grep -rnIHE "([\"']?(/usr/bin/)?(qs|quickshell)[\"']?([[:space:]]*,[[:space:]]*|[[:space:]]+)[\"']?(ipc|kill|log)[\"']?([^[:alnum:]_]|$))" "$@" 2>/dev/null |
     grep -vE '^[^:]*:[0-9]*:[[:space:]]*(#|--|//|\*)' |
     grep -vE "(--pid|[\"']--pid[\"']|(-p|[\"']-p[\"'][[:space:]]*,)[[:space:]]+[\"']?/usr/share/grassfield/shell([\"' ]|$))" | grep -v shell_selector |
-    grep -vE '/packaging/session-bin/hyprland-dialog:[0-9]+:answer=\$\(timeout -k 0\.2 1 qs ipc -p "\$shell_dir" call anr report ' |
+    grep -vE '/packaging/session-bin/hyprland-dialog:[0-9]+:answer=\$\(timeout -k 1 10 qs ipc -p "\$shell_dir" call anr report ' |
     grep -vE '/packaging/bin/grassfield-security-status:[0-9]+:(state|beat)=\$\(timeout -k 0\.2 2 qs ipc \$display -p "\$path" call security (state|heartbeat) ' |
     grep -vE '/packaging/session-bin/hyprland-share-picker:[0-9]+:    command = "qs ipc -p SHELL_DIR call picker request"\.split\(\)$'
 }
@@ -72,7 +72,7 @@ for f in shell/services/X.js shell/services/Y.qml packaging/bin/z config/w.lua s
   check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/$f"
 done
 printf 'var c = ["qs", "ipc", "--pid", String(pid), "call", "a", "b"];\n// qs ipc call documented in a comment\nqs ipc -p /usr/share/grassfield/shell call a b\ncmd = ['qs', 'ipc', '--pid', 1]\n/usr/bin/qs ipc -p /usr/share/grassfield/shell call a b\n' >"$mut/ok.txt"
-printf 'answer=$(timeout -k 0.2 1 qs ipc -p "$shell_dir" call anr report "$$"\n' >"$mut/packaging/bin/anr"
+printf 'answer=$(timeout -k 1 10 qs ipc -p "$shell_dir" call anr report "$$"\n' >"$mut/packaging/bin/anr"
 desc="mutation: the stand-in's shell_dir form anywhere but the stand-in is caught"
 check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/packaging/bin/anr"
 printf 'state=$(timeout -k 0.2 2 qs ipc $display -p "$path" call security state 2>/dev/null)\n' >"$mut/packaging/bin/sec"
