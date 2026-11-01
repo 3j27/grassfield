@@ -9805,6 +9805,147 @@
     </message>
 </context>
 <context>
+    <name>SecretAgent</name>
+    <message>
+        <source>Password sent</source>
+        <translation>Mot de passe envoyé</translation>
+    </message>
+    <message>
+        <source>Request cancelled</source>
+        <translation>Demande annulée</translation>
+    </message>
+    <message>
+        <source>What you type is ignored for a moment.</source>
+        <translation>Ce que vous tapez est ignoré pendant un instant.</translation>
+    </message>
+</context>
+<context>
+    <name>SecretSheet</name>
+    <message>
+        <source>Password</source>
+        <translation>Mot de passe</translation>
+    </message>
+    <message>
+        <source>New password</source>
+        <translation>Nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Confirmation</translation>
+    </message>
+    <message>
+        <source>Verify the new password</source>
+        <translation>Confirmer le nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>Password strength: none</source>
+        <translation>Robustesse du mot de passe&#xa0;: aucune</translation>
+    </message>
+    <message>
+        <source>Password strength: weak</source>
+        <translation>Robustesse du mot de passe&#xa0;: faible</translation>
+    </message>
+    <message>
+        <source>Password strength: fair</source>
+        <translation>Robustesse du mot de passe&#xa0;: moyenne</translation>
+    </message>
+    <message>
+        <source>Password strength: strong</source>
+        <translation>Robustesse du mot de passe&#xa0;: élevée</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+</context>
+<context>
+    <name>SecretSheetModel</name>
+    <message>
+        <source>This request arrived at %1, while the screen was locked. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1 and waited while the screen saver was on. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1 et a attendu pendant que l’économiseur d’écran était affiché. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, while another one was open. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant qu’une autre était ouverte. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, right after another one. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, juste après une autre. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>Unidentified program</source>
+        <translation>Programme non identifié</translation>
+    </message>
+    <message>
+        <source>Keyring</source>
+        <translation>Trousseau</translation>
+    </message>
+    <message>
+        <source>GnuPG</source>
+        <translation>GnuPG</translation>
+    </message>
+    <message>
+        <source>SSH</source>
+        <translation>SSH</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks you to confirm</source>
+        <translation>Un programme non identifié vous demande de confirmer</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks for a new password</source>
+        <translation>Un programme non identifié demande un nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks for a password</source>
+        <translation>Un programme non identifié demande un mot de passe</translation>
+    </message>
+    <message>
+        <source>%1 asks you to confirm</source>
+        <translation>%1 vous demande de confirmer</translation>
+    </message>
+    <message>
+        <source>%1 asks for a new password</source>
+        <translation>%1 demande un nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>%1 asks for a password</source>
+        <translation>%1 demande un mot de passe</translation>
+    </message>
+    <message>
+        <source>Another program sent this message through %1. It is not verified:</source>
+        <translation>Un autre programme a envoyé ce message par %1. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>%1 sent this message:</source>
+        <translation>%1 a envoyé ce message&#xa0;:</translation>
+    </message>
+    <message>
+        <source>The program sent this message. It is not verified:</source>
+        <translation>Le programme a envoyé ce message. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>The passwords do not match. Type the new password again in both fields.</source>
+        <translation>Les mots de passe ne correspondent pas. Tapez à nouveau le nouveau mot de passe dans les deux champs.</translation>
+    </message>
+    <message>
+        <source>This password is too long.</source>
+        <translation>Ce mot de passe est trop long.</translation>
+    </message>
+</context>
+<context>
     <name>SecretsHandover</name>
     <message>
         <source>Saved passwords moved</source>
