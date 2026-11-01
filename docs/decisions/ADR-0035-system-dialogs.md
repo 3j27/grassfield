@@ -1052,7 +1052,10 @@ delegated by the owner on 2026-10-27, numbered after 6-19; the review's probes a
   read what is under `/usr` (public files), draw anything into the sheet's preview (only the user sees it), use its 10 s of CPU
   and 512 MiB, and signal itself; with Landlock ABI 1 to 5 (kernels 5.13 to 6.11) the scoping of signals and abstract sockets
   is the filter's alone (it refuses both anyway). The allow-list is measured on x86_64; on aarch64 it is built from the same
-  names untested, and a call it lacks there means "No Preview", never a wider child.
+  names untested, and a call it lacks there means "No Preview", never a wider child. Named by the counter-review of step 6b
+  (NIT): Landlock does not cover a path's metadata, so `stat`, `statx` and `faccessat` on any path the child names still answer
+  (whether a file of the user's exists, its size, times and mode; never its contents), and the child learns its own processors
+  (6-27).
 - **6-21. Where the documents wait, and how much (MAJOR 3).** Question: how is a sandboxed application kept from filling the
   portal's memory, or the disk, with documents it never lets the user print? Options: (a) keep the temporary folder and lower the
   limit per document; (b) on disk in the user's cache folder (`$XDG_CACHE_HOME/grassfield/print`, 0700, `O_TMPFILE`) with one
@@ -1076,8 +1079,14 @@ delegated by the owner on 2026-10-27, numbered after 6-19; the review's probes a
 - **6-23. A printer's own options only when changed (MINOR 5).** Question: does the job carry every option the sheet shows?
   Options: (a) every value shown; (b) only a value that differs from the default the sheet showed (the user's lpoptions, else
   the printer's). **Choice: (b)**: a default sent overrode the queue's own settings (a paper source taken from
-  `media-col-default` forced a tray); not sending it leaves the queue to apply its own default, as GTK and `lp` do. Rule applied:
-  the job carries what the user chose, nothing the printer would do anyway.
+  `media-col-default` forced a tray); not sending it leaves the queue to apply its own default. Rule applied: the job carries
+  what the user chose, nothing the printer would do anyway. **Amended by the counter-review of step 6b (MINOR 1):** the default
+  compared was the one the sheet showed, the user's lpoptions value when there is one, and libcups's `cupsCreateDestJob` does
+  not add lpoptions to a job (`lp` adds them itself; the first text's "as GTK and lp do" was wrong for lpoptions): lpoptions
+  print-quality=5 on a queue whose default is 4 showed Best and printed Normal. The option now keeps the queue's own default
+  apart (`queueDefault`: `<name>-default`, or `media-col-default`'s source and type; the first value when the queue reports
+  none and the user named none), and only a value equal to it is left out: the user's lpoptions value goes when it differs
+  (`print_cups.sh` checks it with an lpoptions file).
 - **6-24. A document on a pipe never goes on truncated (MINOR 6).** Question: what happens when a sheet does not show in time
   (RequestHost's deadline) while its document comes on a pipe? Options: (a) go to x-d-p-gtk as before; (b) go to x-d-p-gtk only
   while no byte of the pipe was read, else end with response 2. **Choice: (b)**: the reader and the forward agree once
@@ -1088,6 +1097,43 @@ delegated by the owner on 2026-10-27, numbered after 6-19; the review's probes a
   bind, saddle stitch, the corners, two staples or holes) are named in the UI language by their IPP keyword, another keyword
   keeps CUPS's name or the keyword in words; a page being drawn shows "Preparing Preview…" instead of the page before under the
   new number; the private file is read from where the application's descriptor stands (6-21).
+
+- **Fixes of the counter-review of step 6b** (opus, PASS with MINORs 1 and 2 and NITs; each decision delegated by the owner on
+  2026-10-27; 6-23 and 6-20 amended above; the counter-review's probes are tests too: `AChildWithAnotherThreadDrawsNothing`
+  and the cases added to `TheChildThatDrawsIsConfined`).
+- **6-25. Landlock on a single thread (MINOR 2).** Question: `landlock_restrict_self` confines the calling thread and the ones it
+  starts after, not one already running; how is a thread started earlier (a static initializer, a future Qt, a sanitizer's
+  runtime) kept inside? Options: (a) Landlock's TSYNC flag; (b) count the threads (`Threads:` in `/proc/self/status`, read before
+  Landlock closes `/proc`) and confine only a process of one thread. **Choice: (b)**: TSYNC is the kernel's Landlock ABI 8, after
+  the reference kernel (6.18, ABI 7); with one thread the domain covers every thread the child will ever have. A child of more
+  than one thread draws nothing (measured: the child is one thread there). Rule applied: fail closed. seccomp's TSYNC covers
+  every thread already.
+- **6-26. What a call the allow-list does not hold answers (NIT).** Options: (a) EPERM; (b) ENOSYS, as a call this kernel lacks.
+  **Choice: (b)**: glibc and Qt fall back to an older call only on ENOSYS (`clone3` to `clone`, as the list already did for it),
+  so a newer library that tries a newer call still draws, through a call the list holds; both refuse the same. A listed call
+  with an argument the list refuses (another process's id, a lock, a namespace flag) still answers EPERM. Rule applied: the
+  same refusals, the fewest failures that are not refusals.
+- **6-27. `sched_getaffinity` (NIT).** Options: (a) any task, read only (8deaa800); (b) itself only (0 or its own id), any task
+  only in a sanitizer build. **Choice: (b)**: another task's mask would tell that the task exists, and on which processors it
+  runs; only AddressSanitizer asks it with a thread's own id (`pthread_getattr_np`), which no filter can tell from another
+  process's. Rule applied: nothing about another process.
+- **6-28. A document sent first: printable once kept; over the budget, to x-d-p-gtk (NITs).** Questions: Print waited for the
+  first preview pass, which queues behind other sheets' children (one at a time, up to about 11 s each); and a full budget
+  (6-21) ended every other application's print with 2 while one application held it. Options: (a) as 6-21 had them; (b) the
+  sheet may print, save or open the document as soon as it is kept and valid (`documentRead`), its page count and first page's
+  size coming apart (`documentReady`; the document's paper suggested to the sheet when it comes after the printer's options,
+  `documentPaper`, taken unless the user chose a paper); and a document refused for the budget goes to x-d-p-gtk as it came when
+  it is a file read in place (its position untouched: 6-24's rule), ending with 2 only when it came on a pipe that was read.
+  **Choice: (b)**. Rule applied: the preview is a help, never a gate; nothing that printed before step 6b stops printing because
+  another application holds the room.
+- **6-29. Open in Preview's name and `$` (NIT).** The dollar sign is replaced (by the fullwidth ＄) in every name the copy may take,
+  before the 255-byte cap, so the name never grows past it after the cap; the replacement holds whatever starts Preview
+  (`systemd-run` with or without `--expand-environment=no`, and uwsm's own `systemd-run` when it starts applications as
+  services, `UWSM_APP_UNIT_TYPE=service`). Options: (a) replace only where systemd-run lacks the flag (8deaa800); (b) always.
+  **Choice: (b)**. Rule applied: never hand a launcher a string it may expand.
+- **6-30. Old copies when the portal starts (NIT).** Options: (a) at the next Open in Preview only; (b) also when grassfield-portal
+  starts (off its GUI thread). **Choice: (b)**: a copy no longer waits for another print to go. Rule applied: nothing an
+  application sent stays longer than a day.
 
 ### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
 Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland from the portal
