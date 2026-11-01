@@ -862,7 +862,10 @@ int main(int argc, char **argv)
         QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
         qputenv(name, dir.toLocal8Bit());
     }
-    for (const char *name : {"DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "QT_QPA_PLATFORMTHEME", "QT_IM_MODULE", "QT_IM_MODULES"})
+    // GRASSFIELD_SESSION too: a terminal of the session sets it, and apps then start through uwsm-app, which cannot reach its
+    // daemon from this scratch runtime folder (integrator review of #97: "Search the Store" failed from a session terminal).
+    for (const char *name : {"DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "QT_QPA_PLATFORMTHEME", "QT_IM_MODULE", "QT_IM_MODULES",
+                             "GRASSFIELD_SESSION"})
         qunsetenv(name);
     qputenv("QT_QPA_PLATFORM", "offscreen");
     s_scratch = &scratch;
