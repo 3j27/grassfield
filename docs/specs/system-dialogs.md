@@ -492,9 +492,10 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   shows the server sheet: "Enter your name and password for the server “%1”." (a host name only, 9-42), who asked from the
   caller's credentials ("Requested by KIO for an app" for KIO's worker, an app's name, or an unidentified program and its
   executable, 9-43), the realm framed as the server's unverified words, the name field (read-only or absent as the caller
-  says), the password field, Remember this password (offered when the caller offers it; off at first, on when the keyring
-  already holds one, 9-41), a line under it when the keyring that would keep it has no password ("Your keyring has no
-  password: a password remembered here is stored unencrypted on this computer.", known only for gnome-keyring, 9-45),
+  says; a field of its own, unlike a network's read-only username), the password field (no Show password), Remember this
+  password (offered when the caller offers it; off at first, on when the keyring already holds one, 9-41), a line under it
+  when the keyring that would keep it has no password ("Your keyring has no password: a password remembered here is stored
+  unencrypted on this computer.", known only for gnome-keyring, 9-45),
   Cancel / Connect (a password, and a name when asked, 9-47); after a failed login "The name or password was not accepted.
   Try again." (the worker's own message never shown, 9-40); always held until a click past the guard (9-38). Remembered
   passwords go to the Secret Service through libsecret (schema `org.grassfield.NetworkPassword`, 9-44), never through
@@ -600,7 +601,8 @@ Shell to bridge (at most 16 KiB per line):
   `kio`, Remember this password, only when offered); `identity` only for a `kio` request of `nameMode` "edit" answered `ok`
   (not empty, at most 1024 bytes), never for `nm` (NetworkManager keeps only secrets: an `nm` answer with a name cancels its
   request). `refused` is the shell's own refusal (beyond its bound of 8, or without a queue) and carries nothing: gcr gets
-  "cancelled", NetworkManager `NoSecrets`, never the user's `UserCanceled` (opus review of step 9c). A `kio` cancellation
+  "cancelled", NetworkManager `NoSecrets`, never the user's `UserCanceled` (opus review of step 9c), KIO's client its
+  AuthInfo unmodified with no cancelled entry kept (only the user's Cancel leaves one; ADR-0035 9-37). A `kio` cancellation
   carries nothing. An `nm` or `kio` answer that breaks these rules cancels its request (NetworkManager gets
   `NoSecrets`; KIO's client its AuthInfo unmodified).
 

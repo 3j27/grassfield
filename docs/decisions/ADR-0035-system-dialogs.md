@@ -1711,7 +1711,7 @@ none widens a rule of Q12's text).
   shown, no mouse selection (`selectByMouse` false), Copy, Cut, Select All and Shift selection keys stop at the field, any
   selection is dropped, and a selection made while hidden goes as the text shows; the secret sheet's password field sets
   it false. `TextInput` has no context menu or drag. Tests: `tests/security/tst_passwordfield.qml` (from the reviewer's
-  probe: nothing reaches the clipboard, shown or hidden; the default unchanged), `secret_sheets.sh` test_26; mutants
+  probe: nothing reaches the clipboard, shown or hidden; the default unchanged), `secret_sheets.sh` test_33; mutants
   `shown-password-copyable`, `password-field-guard-off`.
 - **9-35. The secret on the bridge's side.** **Choice:** the password is decoded from the shell's line straight into gcr's
   secure memory, and the `GetSecrets` reply's string is that buffer itself (`g_variant_new_from_data`, zeroed and freed when
@@ -1807,7 +1807,13 @@ none widens a rule of Q12's text).
   The delay was found by `kio_passwd.sh`: a client that reads its result and the name's departure in the same turn of its
   event loop takes the departure, the later `exit()` of the two, for the server's death (`KIO::ERR_PASSWD_SERVER`). A caller
   that leaves the bus loses its requests (withdrawn from the shell, "cancel"). Rule applied: fail closed, never a client
-  left hanging.
+  left hanging. **Amended at the merge of step 9c's review fixes.** The shell's own refusal of a request (the answer result
+  `refused`, beyond its bound: 9-31 amended) ends a KIO query the same way: "nothing" (the AuthInfo unmodified, the worker
+  reports a cancelled login), and no cancelled entry, which only the user's Cancel leaves (9-39): with one, the server's other
+  queries would be answered "nothing" without a sheet for a Cancel the user never gave. A refusal carries nothing; one with a
+  password, a name or a choice is a wrong answer (cancelled). Tests: `kio_passwd.sh` 13 (two queries of one server, the first
+  refused: the second gets a sheet; a refusal carrying a password ends with nothing), mutant `refusal-as-cancel`;
+  `secret_sheets.sh` test_34 and the fake bridge's bound scenario (a kio request past the bound is `refused`).
 - **9-38. Does a KIO request take the keyboard when it arrives?** A KIO worker asks when it decides: a job any program of the
   user can start (for a server of its own choosing), Files' background listings, a KF6 app's autosave to a remote URL; what
   reaches the fields goes to that worker. Options: (a) gcr's rule (the keyboard at once unless held for another reason);
@@ -1892,7 +1898,17 @@ none widens a rule of Q12's text).
   carries none: the caller's stays), `hide-username-line` shows no name field; the `anonymous` extra field is answered false
   (a name and a password are not an anonymous login, `:920-922`), `domain` goes back as the caller sent it. An account with
   an empty password cannot be entered (KIO's workers try anonymous and guest logins themselves first, `ftp.cpp:539-552`).
-  Rule applied: 9-24 (no answer from a stray Return), macOS's sheet (no domain field, no anonymous option).
+  Rule applied: 9-24 (no answer from a stray Return), macOS's sheet (no domain field, no anonymous option). **Amended at the
+  merge of step 9c's review fixes.** 9c made a network's username read-only text (`SecretSheetModel.identity`, "Username:
+  %1"), since NetworkManager keeps only secrets from a reply, and an `nm` answer with a name is cancelled (9-33 amended).
+  KIO's client does take the name back from the reply (the result's AuthInfo; `kio_passwd.sh` 14: a name changed in the
+  sheet reaches the client and its URL), so the server's name stays an editable field, now its own
+  (`SecretSheetModel.loginName`, `asksName`, `nameReadOnly`; `nameField`, `secretName`), and an answer's `identity` is
+  accepted for a `kio` request of `nameMode` "edit" only. The server's password field has no Show password (9-34: a
+  network's only) and is the sheet's one password field, which carries 9c's `copyable: false`: were it ever shown, it would
+  not be copyable either. Tests: `tst_secretsheetmodel.qml` and
+  `secret_sheets.sh` (each sheet without the other's name control), `tst_prompter.qml` (a kio answer carries the name, an
+  nm answer never), `nm_agent.sh` (an nm answer with a name is cancelled), `kio_passwd.sh` 13 (a name where none is asked).
 - **9-48. Calls while no shell draws `kio`.** **Choice:** answered as if nothing were known (checks and queries "nothing",
   addAuthInfo and removeAuthInfo ignored); the session cache stays for the bridge's life, as kpasswdserver's for kiod6's.
   Rule applied: fail closed; a credential is never handed out while nothing could have asked the user for it.
