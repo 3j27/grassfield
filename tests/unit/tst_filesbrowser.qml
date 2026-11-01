@@ -493,6 +493,9 @@ TestCase {
         tryVerify(() => over.visible, 1000);
         test.giveKeys(over);
         compare(files.lastActiveWindow, over);
+        // The keyboard given back to the browser window goes on to the panel over it (integrator nested pass of step 5c, NIT).
+        test.giveKeys(browser);
+        tryCompare(files, "lastActiveWindow", over, 2000, "the panel has the keyboard again");
         browser.bannerText = "";
         fakeApp.operationFailed("The application is no longer installed.");
         compare(browser.bannerText, "The application is no longer installed.");

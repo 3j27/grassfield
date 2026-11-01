@@ -108,6 +108,20 @@ TestCase {
         return answer(state, {toolkit: {record: true, packages: [{name: "qt6-base", installed: "6.12.0-1", installedAt: at, built: "6.11.2-1", moved: moved}]}});
     }
 
+    // U33 with U31: the end of an Update Now run that asks for a restart (or a log out) covers the toolkit's log out in this
+    // session: its notice is not posted after it, in this session only (the integrator's review of b6fdedf).
+    function test_aRunsRestartCoversTheToolkitsLogOut() {
+        const start = Logic.timeOf("2026-10-28T10:00:00Z");
+        const a = toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", true);
+        compare(Logic.news(Logic.normalize(null), a, start).map(n => n.kind), ["toolkit"], "without a run's end, the toolkit is announced");
+        const covered = Logic.withToolkitCovered(Logic.normalize(null), start);
+        compare(covered.announced, ["toolkit " + start]);
+        compare(Logic.news(covered, a, start).map(n => n.kind), [], "after a run's restart: nothing more to post");
+        verify(Logic.toolkitLogout(a, start), "the log out stays due for the pane's row");
+        compare(Logic.withToolkitCovered(covered, start).announced, ["toolkit " + start], "marked once");
+        compare(Logic.news(covered, a, start + 1).map(n => n.kind), ["toolkit"], "another session is not covered");
+    }
+
     function test_aToolkitReplacedUnderTheSessionAsksForALogOutOnce() {
         const start = Logic.timeOf("2026-10-28T10:00:00Z");
         const signature = "ab12cd_" + Math.floor(start / 1000) + "_42";
@@ -382,6 +396,30 @@ TestCase {
         compare(Logic.percentOf("installing", 10, 10), 95);
         compare(Logic.percentOf("finishing", 0, 0), 95);
         compare(Logic.percentOf("configuring", 0, 0), 97);
+    }
+
+    // The notice the end of a run deserves (U33), by its outcome.
+    function test_runNotice() {
+        const done = (result, extra) => Logic.parseRun(JSON.stringify(Object.assign({version: 1, op: "0123456789abcdef0123456789abcdef", pid: 1,
+            startTime: "1", phase: "done", result: result, restart: "", deferred: [], startedAt: 1, finishedAt: 2}, extra || {})));
+        compare(Logic.runNotice(done("done", {restart: "restart"})), "restart");
+        compare(Logic.runNotice(done("done", {restart: "logout"})), "logout");
+        compare(Logic.runNotice(done("done", {deferred: ["migrations", "aur"]})), "migrations");
+        compare(Logic.runNotice(done("done", {deferred: ["aur"]})), "aur", "the pane says the AUR's apps wait for Omarchy's terminal");
+        compare(Logic.runNotice(done("done")), "installed");
+        compare(Logic.runNotice(done("done", {restart: "restart", deferred: ["migrations", "aur"]})), "restart", "what finishes the update first");
+        compare(Logic.runNotice(done("bootimage", {restart: "restart"})), "bootimage", "never a restart after a failed startup image");
+        compare(Logic.runNotice(done("incompatible")), "incompatible");
+        compare(Logic.runNotice(done("terminal")), "terminal");
+        compare(Logic.runNotice(done("stalelock")), "terminal");
+        compare(Logic.runNotice(done("failed-partial")), "stopped");
+        for (const r of ["failed", "space", "power", "busy"])
+            compare(Logic.runNotice(done(r)), "failed", r);
+        for (const r of ["up-to-date", "cancelled", "denied"])
+            compare(Logic.runNotice(done(r)), "", r);
+        compare(Logic.runNotice(null), "");
+        compare(Logic.runNotice(Logic.parseRun(JSON.stringify({version: 1, op: "0123456789abcdef0123456789abcdef", pid: 1, startTime: "1",
+            phase: "configuring", result: "", restart: "", deferred: [], startedAt: 1, finishedAt: 0}))), "", "a run going on");
     }
 
     // What the pane shows of a run.
