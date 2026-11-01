@@ -31,6 +31,8 @@ add_library(grassfield-files-core STATIC
     ${GF_FILES_SRC}/taglogic.cpp ${GF_FILES_SRC}/taglogic.h
     ${GF_FILES_SRC}/tagstore.cpp ${GF_FILES_SRC}/tagstore.h
     ${GF_FILES_SRC}/tagsearch.cpp ${GF_FILES_SRC}/tagsearch.h
+    ${GF_FILES_SRC}/searchlogic.cpp ${GF_FILES_SRC}/searchlogic.h
+    ${GF_FILES_SRC}/filesearch.cpp ${GF_FILES_SRC}/filesearch.h
     ${GF_FILES_SRC}/applicationslogic.cpp ${GF_FILES_SRC}/applicationslogic.h
     ${GF_FILES_SRC}/appicons.cpp ${GF_FILES_SRC}/appicons.h
     ${GF_FILES_SRC}/folderstylelogic.cpp ${GF_FILES_SRC}/folderstylelogic.h

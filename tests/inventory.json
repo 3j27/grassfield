@@ -226,6 +226,7 @@
  {"path": "tests/unit/files/tst_previewqueue.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_tags.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_tagsearch.cpp", "layer": "logic"},
+ {"path": "tests/unit/files/tst_search.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_launchguard.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_kioprompts.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_kiodialogs.cpp", "layer": "logic"},
