@@ -141,7 +141,13 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   shows no preview there (a place on the frame `tile` applies, a half beside a neighbour included: `unfitPlaces`),
   an arrangement's fill gives each remaining zone the topmost window that fits it (a zone no window
   fits stays empty) and the suggestion offers only windows that fit. Fill and Center are always offered. The make-room
-  above now serves windows already placed whose work area shrinks (the margins switch, the Dock).
+  above now serves windows already placed whose work area shrinks (the margins switch, the Dock). The shell as built
+  (review of D69): greyed, never hidden, as macOS greys a tile it cannot make. The popover reads the event's lists
+  (WindowTiling.parseHover `fit`): a place by `unfitPlaces`, an arrangement by its first zone (the window's own) in
+  `unfitZones`, a Layouts zone by itself (TileGlyph `disabledZones`: fainter, no pointer, no press, no number key), a layout
+  none of whose zones fits greyed whole; the Window menu reads the reply's per-window lists when it opens (TilingLink
+  `unfitZones`, Compositor.fitOf) and greys those Halves, Quarters and Arrange items, their key texts kept; the keys
+  themselves reach the plugin, which refuses them.
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up

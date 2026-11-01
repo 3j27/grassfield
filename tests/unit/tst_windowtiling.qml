@@ -489,6 +489,57 @@ TestCase {
         verify(WindowTiling.fitsHalf(["a1"], ""), "no window");
     }
 
+    // ADR-0036 D69 (capture defect of 2026-10-30): the tile-hover event carries the zones and the places the window does not
+    // fit; the popover greys them. An older plugin, leave, and any malformed list give nothing greyed.
+    function test_parseHoverReadsWhatTheWindowDoesNotFit() {
+        const open = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true,'
+            + '"unfitZones":["0,0,6,6","6,0,6,6",7,""],"unfitPlaces":["top-left","left",null]}');
+        compare(JSON.stringify(open.fit), JSON.stringify({zones: ["0,0,6,6", "6,0,6,6"], places: ["top-left", "left"]}), "strings only");
+        const older = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"enter","x":0,"y":0,"w":14,"h":14,"tileable":true}');
+        compare(JSON.stringify(older.fit), JSON.stringify({zones: [], places: []}), "an older plugin: everything offered");
+        const leave = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"leave","unfitZones":["0,0,6,6"]}');
+        compare(JSON.stringify(leave.fit), JSON.stringify({zones: [], places: []}), "leave carries nothing");
+        const odd = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"unfitZones":"0,0,6,6","unfitPlaces":{"a":1}}');
+        compare(JSON.stringify(odd.fit), JSON.stringify({zones: [], places: []}), "not lists");
+        const many = [];
+        for (let i = 0; i < 100; ++i)
+            many.push("0,0," + i + ",6");
+        compare(WindowTiling.fitNames(many).length, WindowTiling.kMaxFitNames, "bounded");
+        compare(WindowTiling.fitNames(["x".repeat(WindowTiling.kMaxFitName + 1), "left"]).join(), "left", "an overlong name left out");
+    }
+
+    // D69: a place is greyed by the places list, an arrangement or a Layouts zone by the zones list (by its twelfths, as the
+    // glyph tokens hold them); Fill and Center are always offered; nothing known: everything offered.
+    function test_placesAndZonesFit() {
+        const fit = {zones: ["0,0,6,6", "0,0,12,6"], places: ["top-left", "left"]};
+        compare(WindowTiling.zoneKey([6, 0, 6, 12]), "6,0,6,12");
+        compare(WindowTiling.zoneKey("0,0,6,6"), "", "not a zone");
+        verify(!WindowTiling.placeFits(fit, "top-left"));
+        verify(!WindowTiling.placeFits(fit, "left"), "a half beside a neighbour, listed apart from its zone");
+        verify(WindowTiling.placeFits(fit, "right"));
+        verify(WindowTiling.placeFits({zones: [], places: ["fill", "center"]}, "fill"), "Fill is always offered");
+        verify(WindowTiling.placeFits({zones: [], places: ["center"]}, "center"), "Center too");
+        verify(WindowTiling.placeFits(null, "top-left"), "not known: offered (the plugin still refuses)");
+        verify(!WindowTiling.zoneFits(fit, [0, 0, 6, 6]), "the quarter zone");
+        verify(WindowTiling.zoneFits(fit, [0, 0, 6, 12]), "the half zone fits although the Left place does not");
+        verify(WindowTiling.zoneFits(null, [0, 0, 6, 6]));
+        verify(WindowTiling.zoneFits(fit, null), "no zone");
+    }
+
+    // gfc1-reply: the reply's unfitZones, per window, for the Window menu.
+    function test_parseUnfitZonesReadsEachWindow() {
+        const reply = '{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"unfit":[],"fixed":[],'
+            + '"unfitZones":[{"address":"A1","zones":["0,0,6,6"],"places":["top-left"]},{"address":"xyz","zones":["0,0,6,6"]},7,{"address":"0xbeef","zones":"no"}],"suggestion":null}';
+        const all = WindowTiling.parseUnfitZones(reply);
+        compare(JSON.stringify(all), JSON.stringify({a1: {zones: ["0,0,6,6"], places: ["top-left"]}, beef: {zones: [], places: []}}), "a malformed entry or list left out");
+        compare(JSON.stringify(WindowTiling.fitOf(all, "0xA1")), JSON.stringify({zones: ["0,0,6,6"], places: ["top-left"]}), "any address form");
+        compare(JSON.stringify(WindowTiling.fitOf(all, "b2")), JSON.stringify({zones: [], places: []}), "not listed: it fits everything");
+        compare(JSON.stringify(WindowTiling.fitOf(null, "a1")), JSON.stringify({zones: [], places: []}), "not known");
+        compare(JSON.stringify(WindowTiling.parseUnfitZones('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"suggestion":null}')), "{}", "an older plugin lists none");
+        for (const bad of ["", "not json", "null", '{"v":"gfc/2","type":"tiling","unfitZones":[]}', '{"v":"gfc/1","type":"tile-hover","unfitZones":[]}'])
+            compare(WindowTiling.parseUnfitZones(bad), null, bad);
+    }
+
     // ADR-0040 step 1b (nested pass of 85c2c10, scenario 6): the windows of fixed size, whose zoom light is disabled.
     function test_parseFixedReadsTheWindowsOfFixedSize() {
         compare(JSON.stringify(WindowTiling.parseFixed('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"unfit":[],"fixed":["A1","0xbeef","xyz",7],"suggestion":null}')),

@@ -28,6 +28,10 @@ Singleton {
     // The windows of fixed size (WindowTiling.parseFixed: the Window menu greys their Zoom, Enter Full Screen and tiling items,
     // ADR-0040 step 1b); [] without one, a malformed reply or window-tiling. Read again when the Window menu opens.
     property var fixed: []
+    // The zones and the places each window does not fit (WindowTiling.parseUnfitZones, ADR-0036 D69: the Window menu greys
+    // those Halves, Quarters and Arrange items), keyed by address; {} without one, a malformed reply or window-tiling. Read
+    // again when the Window menu opens.
+    property var unfitZones: ({})
     // The generation whose suggestion the fetch waits for (-1: none).
     property real wantedGen: -1
     // A suggestion asked for is on its way (from the notice of its arrangement until its reply is read or the deadline passes):
@@ -115,10 +119,12 @@ Singleton {
         }
 
         function onCanTileChanged(): void {
-            if (Compositor.canTile)
+            if (Compositor.canTile) {
                 root.fetch();
-            else
+            } else {
                 root.fixed = [];
+                root.unfitZones = {};
+            }
         }
     }
 
@@ -160,6 +166,9 @@ Singleton {
                 const fixed = Compositor.canTile ? WindowTiling.parseFixed(text) : null;
                 if (fixed !== null)
                     root.fixed = fixed;
+                const unfitZones = Compositor.canTile ? WindowTiling.parseUnfitZones(text) : null;
+                if (unfitZones !== null)
+                    root.unfitZones = unfitZones;
                 if (splits !== null)
                     root.retried = false;
                 if (adopted !== null) {

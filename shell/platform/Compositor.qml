@@ -649,6 +649,12 @@ Singleton {
         return WindowTiling.isFixed(TilingLink.fixed, addressOf(toplevel));
     }
 
+    // The zones and the places the window does not fit, {zones, places} (ADR-0036 D69; from the plugin's last reply: not known
+    // yet, nothing is greyed and the plugin still refuses what does not fit).
+    function fitOf(toplevel: var): var {
+        return WindowTiling.fitOf(TilingLink.unfitZones, addressOf(toplevel));
+    }
+
     // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.
     function splitShown(screenName: string): bool {
         const mon = monitorByName(screenName);
