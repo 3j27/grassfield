@@ -16,10 +16,12 @@ namespace gf::prompter {
         constexpr int kStepTimeoutMs  = 5000; // a keychain step that does not answer: the sheet goes without it
         constexpr int kPerCaller      = 8;    // open requests of one caller connection
         constexpr int kOpenRequests   = 32;   // open requests in all
-        constexpr int kStoresInFlight = 8;
+        constexpr int kStoresInFlight = 8;    // stores holding a place
+        constexpr int kStoresAlive    = 32;   // stores alive, holding a place or not
         constexpr int kReleaseDelayMs = 1000; // between the last answers and the name's release (decision 9-37)
         constexpr int kKiod6SettleMs  = 2000; // after kiod6 appears, before the bridge looks whether it took the name
         constexpr char kKiod6Name[]   = "org.kde.kiod6";
+        constexpr char kSecretsName[] = "org.freedesktop.secrets";
 
         // KIO v6.31.0's org.kde.KPasswdServer (src/core/org.kde.KPasswdServer.xml) without its LEGACY "ay" methods, which KF6's
         // client never calls: GDBus checks every call's arguments against it (anything else: UnknownMethod or InvalidArgs).
@@ -140,6 +142,18 @@ namespace gf::prompter {
             g_source_remove(m_releaseSource);
         if (m_repairSource)
             g_source_remove(m_repairSource);
+        // Keychain calls are left to the process's end, never cancelled: a cancelled call dismisses gnome-keyring's prompt
+        // (decision 9-50).
+        for (Store* store : std::as_const(m_stores)) {
+            if (store->timer)
+                g_source_remove(store->timer);
+            g_object_unref(store->cancellable);
+            delete store;
+        }
+        m_stores.clear();
+        for (const Unlock& unlock : std::as_const(m_unlocks))
+            g_object_unref(unlock.cancellable);
+        m_unlocks.clear();
         for (const guint id : std::as_const(m_stepTimers))
             g_source_remove(id);
         m_stepTimers.clear();
@@ -395,6 +409,8 @@ namespace gf::prompter {
             self->callerGone(QString::fromUtf8(name));
         else if (g_strcmp0(name, kKiod6Name) == 0)
             self->kiod6Changed(newOwner[0] != '\0');
+        else if (g_strcmp0(name, kSecretsName) == 0 && oldOwner[0])
+            self->secretsOwnerLeft();
     }
 
     // --- calls ------------------------------------------------------------------------------------------------------------
@@ -969,11 +985,15 @@ namespace gf::prompter {
         r->stage       = KioRequest::Stage::Preparing;
         r->cancellable = g_cancellable_new();
         // Unlocking the keyring when an item is there: gnome-keyring asks through gcr's prompter, this bridge, and its sheet
-        // takes its turn in the shell's queue; nothing here waits for it.
-        GHashTable* attributes = attributeTable(kio::searchAttributes(r->key, r->info));
-        auto*       call       = new Call{m_alive, this, r, {}, 0};
-        secret_password_searchv(schema(), attributes, static_cast<SecretSearchFlags>(SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS), r->cancellable, onLookup,
-                                call);
+        // takes its turn in the shell's queue; nothing here waits for it. This search may hold an unlock prompt: it has a
+        // cancellable of its own, which the request's end leaves alone (its result is dropped) and only the Secret Service's
+        // departure cancels (decision 9-50).
+        GHashTable*   attributes = attributeTable(kio::searchAttributes(r->key, r->info));
+        const quint64 id         = ++m_nextUnlock;
+        GCancellable* unlock     = g_cancellable_new();
+        m_unlocks.insert(id, Unlock{unlock, r});
+        auto* call = new Call{m_alive, this, r, {}, id};
+        secret_password_searchv(schema(), attributes, static_cast<SecretSearchFlags>(SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS), unlock, onLookup, call);
         g_hash_table_unref(attributes);
     }
 
@@ -983,6 +1003,10 @@ namespace gf::prompter {
         GList*        items = secret_password_search_finish(result, &error);
         KioServer*    self  = call->live();
         const Request r     = call->request.lock();
+        if (self) {
+            if (const Unlock unlock = self->m_unlocks.take(call->generation); unlock.cancellable)
+                g_object_unref(unlock.cancellable);
+        }
         if (self && r && r->stage == KioRequest::Stage::Preparing) {
             if (!items) {
                 kio::AuthInfo info = r->info;
@@ -1033,40 +1057,144 @@ namespace gf::prompter {
 
     // --- the keychain -----------------------------------------------------------------------------------------------------
 
-    void KioServer::store(const QString& key, const kio::AuthInfo& info) {
+    bool KioServer::store(const QString& key, const kio::AuthInfo& info) {
         if (key.isEmpty() || info.password.empty())
-            return;
-        if (m_storesInFlight >= kStoresInFlight) {
-            log(QStringLiteral("a password to remember was dropped: %1 stores are in flight").arg(kStoresInFlight));
-            return;
+            return false;
+        const QString scheme = flatten(info.parsed.scheme(), 16);
+        if (m_storesInFlight >= kStoresInFlight || m_stores.size() >= kStoresAlive) {
+            log(QStringLiteral("a password (%1) to remember was dropped: %2 stores hold a place, %3 are alive (at most %4 and %5)")
+                    .arg(scheme)
+                    .arg(m_storesInFlight)
+                    .arg(m_stores.size())
+                    .arg(kStoresInFlight)
+                    .arg(kStoresAlive));
+            return false;
         }
         GHashTable*   attributes = attributeTable(kio::storeAttributes(key, info));
         const QString label      = kio::itemLabel(info);
         char*         secret     = info.password.copyOut();
         // The value's bytes are that gcr secure copy, zeroed and freed with the value.
-        SecretValue* value = secret_value_new_full(secret, static_cast<gssize>(info.password.size()), "text/plain", kio::wipeAndFree);
+        SecretValue*  value = secret_value_new_full(secret, static_cast<gssize>(info.password.size()), "text/plain", kio::wipeAndFree);
+        auto*         store = new Store;
+        store->scheme       = scheme;
+        store->key          = key;
+        store->entry.url        = info.url;
+        store->entry.parsed     = info.parsed;
+        store->entry.username   = info.username;
+        store->entry.realm      = info.realm;
+        store->entry.verifyPath = info.verifyPath;
+        store->seqNr            = m_seqNr;
+        store->secretsGen       = m_secretsGen;
+        store->cancellable      = g_cancellable_new();
+        const quint64 id        = ++m_nextStore;
+        m_stores.insert(id, store);
         ++m_storesInFlight;
-        auto* call = new Call{m_alive, this, {}, flatten(info.parsed.scheme(), 16), 0};
-        // Asynchronous, on this main context: a locked keyring's prompt comes back through this bridge (SC9c).
-        secret_password_storev_binary(schema(), attributes, SECRET_COLLECTION_DEFAULT, label.toUtf8().constData(), value, m_cancel, onStored, call);
+        const int limit = m_options.storeTimeoutMs > 0 ? m_options.storeTimeoutMs : kStoreTimeoutMs;
+        store->timer    = g_timeout_add_full(G_PRIORITY_DEFAULT, static_cast<guint>(limit), onStoreTimeout, new Call{m_alive, this, {}, {}, id},
+                                             [](gpointer p) { delete static_cast<Call*>(p); });
+        // Asynchronous, on this main context: a locked keyring's prompt comes back through this bridge (SC9c). Its cancellable
+        // is cancelled only when the Secret Service leaves the bus (decision 9-50).
+        secret_password_storev_binary(schema(), attributes, SECRET_COLLECTION_DEFAULT, label.toUtf8().constData(), value, store->cancellable, onStored,
+                                      new Call{m_alive, this, {}, {}, id});
         secret_value_unref(value);
         g_hash_table_unref(attributes);
-        log(QStringLiteral("remembering a password (%1) in the Secret Service, in the background").arg(call->text));
+        log(QStringLiteral("remembering a password (%1) in the Secret Service, in the background").arg(scheme));
+        return true;
     }
 
     void KioServer::onStored(GObject* /*source*/, GAsyncResult* result, gpointer data) {
         auto*      call  = static_cast<Call*>(data);
         GError*    error = nullptr;
         const bool ok    = secret_password_store_finish(result, &error);
-        if (KioServer* self = call->live()) {
-            --self->m_storesInFlight;
-            if (ok)
-                log(QStringLiteral("a password (%1) is remembered in the Secret Service").arg(call->text));
-            else
-                log(QStringLiteral("a password (%1) could not be remembered: %2").arg(call->text, flatten(QString::fromUtf8(error ? error->message : ""), 256)));
+        KioServer* self  = call->live();
+        if (Store* store = self ? self->m_stores.take(call->generation) : nullptr) {
+            if (store->holdsPlace)
+                --self->m_storesInFlight;
+            const QString late = store->holdsPlace ? QString() : QStringLiteral(" (after its place was freed)");
+            if (ok) {
+                log(QStringLiteral("a password (%1) is remembered in the Secret Service%2").arg(store->scheme, late));
+            } else {
+                // As kpasswdserver when its wallet cannot take one: kept in memory for the session (kpasswdserver.cpp:427-436).
+                kio::CacheEntry* entry = self->m_cache.find(store->key, store->entry);
+                const bool       kept  = entry && entry->seqNr == store->seqNr && !entry->canceled;
+                if (kept)
+                    self->m_cache.touch(entry, 0, true);
+                log(QStringLiteral("a password (%1) could not be remembered%2: %3%4")
+                        .arg(store->scheme, late, flatten(QString::fromUtf8(error ? error->message : ""), 256),
+                             kept ? QStringLiteral("; kept in the session's cache for the session") : QString()));
+            }
+            if (store->timer)
+                g_source_remove(store->timer);
+            g_object_unref(store->cancellable);
+            delete store;
         }
         g_clear_error(&error);
         delete call;
+    }
+
+    gboolean KioServer::onStoreTimeout(gpointer data) {
+        auto* call = static_cast<Call*>(data);
+        if (KioServer* self = call->live()) {
+            if (Store* store = self->m_stores.value(call->generation)) {
+                store->timer = 0;
+                if (store->holdsPlace) {
+                    // Not cancelled: it may hold gnome-keyring's unlock prompt (decision 9-50). Its place goes to the next store.
+                    store->holdsPlace = false;
+                    --self->m_storesInFlight;
+                    const int limit = self->m_options.storeTimeoutMs > 0 ? self->m_options.storeTimeoutMs : kStoreTimeoutMs;
+                    log(QStringLiteral("a password (%1) is not remembered yet: no answer from the Secret Service within %2 s (an unlock prompt "
+                                       "waiting?); its place is freed, and the Secret Service's answer will be logged")
+                            .arg(store->scheme, QString::number(limit / 1000.0)));
+                }
+            }
+        }
+        return G_SOURCE_REMOVE;
+    }
+
+    void KioServer::secretsOwnerLeft() {
+        const quint64 gen = m_secretsGen++;
+        // Nothing runs the prompts of the stores and unlocking searches sent to it any more, and libsecret's calls wait for
+        // its answer for ever, cancelled or not (kio_passwd.sh 21): they end here, their places and requests freed; a late
+        // callback finds nothing. Cancelling them dismisses nothing that runs.
+        QList<GCancellable*> doomed;
+        QList<Request>       checks;
+        int                  stores = 0;
+        for (auto it = m_stores.begin(); it != m_stores.end();) {
+            Store* store = it.value();
+            if (store->secretsGen != gen) {
+                ++it;
+                continue;
+            }
+            if (store->holdsPlace)
+                --m_storesInFlight;
+            if (store->timer)
+                g_source_remove(store->timer);
+            log(QStringLiteral("a password (%1) could not be remembered: the Secret Service left the bus").arg(store->scheme));
+            doomed.append(store->cancellable); // its reference
+            delete store;
+            it = m_stores.erase(it);
+            ++stores;
+        }
+        for (const Unlock& unlock : std::as_const(m_unlocks)) {
+            doomed.append(unlock.cancellable);
+            if (const Request r = unlock.request.lock(); r && r->stage == KioRequest::Stage::Preparing)
+                checks.append(r);
+        }
+        m_unlocks.clear();
+        if (stores || !checks.isEmpty())
+            log(QStringLiteral("the Secret Service left the bus: %1 store(s) and %2 check(s) waiting on it ended").arg(stores).arg(checks.size()));
+        for (const Request& r : std::as_const(checks)) {
+            kio::AuthInfo info = r->info;
+            info.modified      = false;
+            finishCheck(r, info);
+        }
+        for (GCancellable* cancellable : std::as_const(doomed)) {
+            g_cancellable_cancel(cancellable);
+            g_object_unref(cancellable);
+        }
+        // libsecret's shared service keeps the session it opened with the Secret Service that left: every later call would
+        // fail ("The session wrapping the secret does not exist"). Dropped, the next call opens one with the new owner.
+        secret_service_disconnect();
     }
 
     // --- results and ends -------------------------------------------------------------------------------------------------

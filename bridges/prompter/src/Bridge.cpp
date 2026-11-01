@@ -124,7 +124,7 @@ namespace gf::prompter {
             }
         }
         // KIO's network passwords (step 9e): without it, KIO's clients reach kiod6 by D-Bus activation, as before.
-        m_kio = std::make_unique<KioServer>(m_bus, this, KioServer::Options{m_options.uid, m_options.keyringDirectory});
+        m_kio = std::make_unique<KioServer>(m_bus, this, KioServer::Options{m_options.uid, m_options.keyringDirectory, m_options.kioStoreTimeoutMs});
         if (QString kioError; !m_kio->start(&kioError)) {
             log(QStringLiteral("no KIO password server: %1").arg(kioError));
             m_kio.reset();

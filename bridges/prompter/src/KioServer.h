@@ -17,7 +17,6 @@
 //   later, and D-Bus activation for it would time out (25 s). So the name is released only while kiod6 is not running;
 //   else the bridge keeps it, answering "nothing" at once, until kiod6 leaves the bus; and a bridge that finds kiod6
 //   running without the name takes it, kKiod6SettleMs after kiod6 appeared (the security review of step 9e, MINOR-1).
-
 // - The object stays exported for the bridge's life; a call that reaches it while no shell draws "kio" is answered as if
 //   nothing were known: no cache read, no sheet, nothing stored.
 // - Results go to the caller only: each result signal is addressed to the unique name that asked
@@ -35,12 +34,20 @@
 //   in the background, only when keepPassword says the user chose "Remember this password" (decision 9-41); a check looks a
 //   remembered password up (unlocking the keyring when an item is there: its prompt takes its turn in the shell's queue); a
 //   query looks one up without unlocking, to tick "Remember this password" and fill the name.
+// - A call that may hold one of gnome-keyring's unlock prompts (a store, a check's unlocking search) is never cancelled
+//   while the Secret Service that holds it runs: a cancelled libsecret call dismisses its prompt, and gnome-keyring 51.1
+//   aborts on the dismissal of an unlock prompt queued behind another one being shown (gkd-secret-unlock.c:244, the
+//   g_assert of perform_next_unlock) and loses the next one when the shown one is dismissed (decision 9-50). A store holds
+//   one of kStoresInFlight places for at most kStoreTimeoutMs, then goes on without it (its outcome logged when it comes);
+//   when the Secret Service leaves the bus, its stores and searches end at once, and libsecret's shared service (whose
+//   session belonged to the one that left) is dropped.
 // - Who asks is resolved from the caller's bus credentials (Identity.h): a KIO worker (/usr/lib/kf6/kioworker, which runs
 //   whatever worker plugin it is given) is the role "kio", whose text is another program's; else an app or "Unidentified
 //   program". The server's name is a field of Grassfield's sentence, a host name only (KioAuth.h serverLabel).
 // - Bounds: at most 8 requests (checks and queries) open per caller connection and 32 in all, beyond which a request is
 //   answered "nothing" at once; a query shares the shell's bound of 8 with gcr's and NetworkManager's requests; at most 8
-//   stores in flight; the cache's entries (KioAuth.h). No time limit on a sheet (KIO's client has none either).
+//   stores holding a place and 32 alive; the cache's entries (KioAuth.h). No time limit on a sheet (KIO's client has none
+//   either).
 // - Nothing secret is logged: request ids, kinds, servers, roles, refusals and why.
 
 #include "Identity.h"
@@ -108,7 +115,10 @@ namespace gf::prompter {
         struct Options {
             uid_t   uid = 0;
             QString keyringDirectory; // gnome-keyring's (KioAuth.h keyringDirectory)
+            int     storeTimeoutMs = 0; // how long a store holds its place; 0: kStoreTimeoutMs (tests set less)
         };
+
+        static constexpr int kStoreTimeoutMs = 120000;
 
         KioServer(GDBusConnection* bus, Sink* sink, Options options);
         ~KioServer();
@@ -137,6 +147,22 @@ namespace gf::prompter {
       private:
         using Request = std::shared_ptr<KioRequest>;
         struct Call;
+        // A password on its way to the keychain.
+        struct Store {
+            QString       scheme;
+            QString       key;
+            kio::AuthInfo entry; // finds its cache entry again (no password)
+            qint64        seqNr       = 0;
+            quint64       secretsGen  = 0; // the Secret Service's owner it was sent to (m_secretsGen)
+            GCancellable* cancellable = nullptr;
+            guint         timer       = 0;
+            bool          holdsPlace  = true;
+        };
+        // A check's unlocking search in flight (it may hold an unlock prompt).
+        struct Unlock {
+            GCancellable*             cancellable = nullptr;
+            std::weak_ptr<KioRequest> request;
+        };
 
         static void onMethodCall(GDBusConnection* bus, const gchar* sender, const gchar* path, const gchar* iface, const gchar* method,
                                  GVariant* parameters, GDBusMethodInvocation* invocation, gpointer self);
@@ -158,6 +184,7 @@ namespace gf::prompter {
         static gboolean onProcess(gpointer self);
         static gboolean onRelease(gpointer data);
         static gboolean onRepair(gpointer data);
+        static gboolean onStoreTimeout(gpointer data);
         static gboolean onStepTimeout(gpointer data);
 
         void check(GDBusMethodInvocation* invocation, GVariant* parameters, const QString& sender);
@@ -177,7 +204,11 @@ namespace gf::prompter {
         void respond(const Request& request);
         void finishCheck(const Request& request, const kio::AuthInfo& info);
         void lookup(const Request& request);
-        void store(const QString& key, const kio::AuthInfo& info);
+        // True when the store went (false: dropped at the bound, or nothing to store).
+        bool store(const QString& key, const kio::AuthInfo& info);
+        // The Secret Service's owner left: the stores and searches sent to it end now (libsecret's calls would wait for its
+        // answer for ever, cancelled or not).
+        void secretsOwnerLeft();
         bool hasPendingQuery(const QString& key, const kio::AuthInfo& info) const;
         void emitResult(const char* signal, const QString& destination, qint64 requestId, const kio::AuthInfo& info);
         void endAll(const QString& why);
@@ -199,7 +230,7 @@ namespace gf::prompter {
         Sink*                  m_sink;
         Options                m_options;
         std::shared_ptr<bool>  m_alive; // async callbacks hold a weak reference: nothing runs on a server that went
-        GCancellable*          m_cancel = nullptr; // the stores and the name's calls, cancelled when the server goes
+        GCancellable*          m_cancel = nullptr; // the name's calls, cancelled when the server goes (never a keychain call)
         guint                  m_objectId = 0;
         guint                  m_ownersSub = 0;
         guint                  m_acquiredSub = 0;
@@ -214,7 +245,12 @@ namespace gf::prompter {
         guint                  m_releaseSource = 0;
         qint64                 m_nextRequestId = 0; // kpasswdserver.cpp:46-50 counts from 0
         qint64                 m_seqNr = 0;
-        int                    m_storesInFlight = 0;
+        int                    m_storesInFlight = 0; // stores holding a place
+        quint64                m_nextStore = 0;
+        quint64                m_secretsGen = 0;
+        QHash<quint64, Store*> m_stores; // every store alive
+        quint64                m_nextUnlock = 0;
+        QHash<quint64, Unlock> m_unlocks; // checks' unlocking searches in flight (their request ended or not)
         kio::Cache             m_cache;
         QList<Request>         m_requests; // every open request
         QList<Request>         m_pending;  // queries not taken yet, in arrival order (m_authPending)

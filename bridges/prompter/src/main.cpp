@@ -2,12 +2,14 @@
 // grassfield-prompter: gcr's system prompter for the Grassfield session; the shell draws the prompts (ADR-0035 D-9, owner
 // decision Q1 = S2; docs/specs/system-dialogs.md section 5).
 //
-// Usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--version]
+// Usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--kio-store-timeout-ms N] [--version]
 //   --peer-unit UNIT   the systemd unit whose process may connect as the shell (default grassfield-shell.service); set by
 //                      grassfield-prompter.service. Only an argument: no environment variable changes it.
 //   --socket PATH      the socket (default $XDG_RUNTIME_DIR/grassfield/prompter.sock); required in a development run
 //   --nm-timeout-ms N  development runs only (the tests): how long a NetworkManager request waits for its answer
 //                      (default 110000, under NetworkManager's own 120 s)
+//   --kio-store-timeout-ms N  development runs only (the tests): how long a KIO password on its way to the keychain holds
+//                      one of the stores' places (default 120000)
 // KIO's password server (step 9e) is on the session bus; the Secret Service it remembers passwords in is reached through
 // libsecret's own connection to that bus.
 // The system bus (the NetworkManager secret agent, step 9c): in the session always unix:path=/run/dbus/system_bus_socket,
@@ -114,6 +116,7 @@ int main(int argc, char** argv) {
     QString           socketArgument;
     QString           peerUnit    = QStringLiteral("grassfield-shell.service");
     int               nmTimeoutMs = 0; // 0: the default
+    int               storeTimeoutMs = 0; // 0: the default
     const QStringList args     = QCoreApplication::arguments();
     for (qsizetype i = 1; i < args.size(); ++i) {
         if (args.at(i) == QLatin1String("--version")) {
@@ -137,7 +140,16 @@ int main(int argc, char** argv) {
             }
             continue;
         }
-        std::fprintf(stderr, "usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--version]\n");
+        if (args.at(i) == QLatin1String("--kio-store-timeout-ms") && i + 1 < args.size()) {
+            bool ok        = false;
+            storeTimeoutMs = args.at(++i).toInt(&ok);
+            if (!ok || storeTimeoutMs < 100 || storeTimeoutMs > KioServer::kStoreTimeoutMs) {
+                std::fprintf(stderr, "grassfield-prompter: --kio-store-timeout-ms takes 100 to %d\n", KioServer::kStoreTimeoutMs);
+                return 2;
+            }
+            continue;
+        }
+        std::fprintf(stderr, "usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--kio-store-timeout-ms N] [--version]\n");
         return 2;
     }
 
@@ -157,6 +169,8 @@ int main(int argc, char** argv) {
         return refuse(QStringLiteral("--peer-unit %1 is not a systemd service name").arg(peerUnit));
     if (nmTimeoutMs && !dev)
         return refuse(QStringLiteral("--nm-timeout-ms is for development runs only"));
+    if (storeTimeoutMs && !dev)
+        return refuse(QStringLiteral("--kio-store-timeout-ms is for development runs only"));
     // The system bus of the NetworkManager agent: the real one in the session, only a private test bus in a development run.
     QString systemAddress;
     if (dev) {
@@ -224,6 +238,7 @@ int main(int argc, char** argv) {
     options.keyringDirectory = kio::keyringDirectory(qEnvironmentVariable("XDG_DATA_HOME"), QString::fromUtf8(g_get_home_dir()));
     if (nmTimeoutMs)
         options.nmTimeoutMs = nmTimeoutMs;
+    options.kioStoreTimeoutMs = storeTimeoutMs;
     int rc = 0;
     {
         Bridge  bridge(bus, options);
