@@ -14,8 +14,10 @@
 #    outside the base: "other"), DisplayPinCode (answered at once, the PIN shown), DisplayPasskey (its "entered" sent as
 #    progress, the sheet withdrawn once the device is paired; the user's Cancel asks bluetoothd to CancelPairing)
 #  4 the device's name: plain (a line feed and a direction override flattened), the address when it has no name
-#  5 the user's Cancel of a code or a confirmation: Canceled; bluetoothd's Cancel withdraws the sheet (shown or a code
-#    shown), its call answered Canceled; Release is answered
+#  5 the user's Cancel of a code or a confirmation: Canceled; bluetoothd's Cancel withdraws the request waiting for its
+#    reply, its call answered Canceled, and never a code shown for another device (opus review of step 10, MINOR); a code
+#    shown also goes when its device disconnects or is removed; one code shown at a time: a new one withdraws the one
+#    before (decision 10-16)
 #  6 a caller that is not the owner of org.bluez gets Rejected and the shell sees nothing; its Cancel cancels nothing
 #  7 arguments checked: a path outside /org/bluez's devices, a passkey over 999999, a UUID that is not one, a PIN to show
 #    that is not letters and digits: Rejected, no sheet
@@ -24,9 +26,10 @@
 #  9 the bound of 8 is shared with gcr's requests: four gcr prompts and four pairing steps outstanding, the next one
 #    Rejected at once
 # 10 Settings' Pair() (an application without an agent of its own) reaches the bridge's sheet as the default agent
-# 11 the shell goes with a request outstanding: Rejected, the agent unregisters (bluetoothd's Release answered); it comes
-#    back: registered again
-# 12 bluetoothd restarts with a request outstanding: the shell gets "cancel"; the new one gets RegisterAgent
+# 11 the shell goes with a request outstanding: Rejected, the agent unregisters (no Release follows, as in BlueZ 5.87); it
+#    comes back: registered again
+# 12 bluetoothd stops (its Release answered) and restarts with a request outstanding: the shell gets "cancel"; the new one
+#    gets RegisterAgent
 # 13 a request (and a code shown) past the answer's time (a bridge run with --bt-timeout-ms): withdrawn, Rejected
 # 14 no test code, and no sanitizer report (GRASSFIELD_PROMPTER built with build-direct.sh --asan), in the bridge's output
 # Needs g++ with the Qt 6 Core and gcr-4 headers (or GRASSFIELD_PROMPTER: a built bridge), dbus-daemon, dbus-send, python3
@@ -263,7 +266,7 @@ scenario_body() {
   desc="...and a late DisplayPasskey of that ended code shows it again as a new request, never as progress of the old one"
   check bash -c '! grep -q "{\"entered\":4,\"id\":\"$2\"" "$1"' _ "$d/s.shell" "$cid"
   cid=$(last_id s)
-  say bz "cancel"
+  say bz "paired AA_BB_CC_DD_EE_02"
   wait_until 10 cancelled s "$cid"
 
   # --- 4 the device's name ------------------------------------------------------------------------------------------------
@@ -307,9 +310,50 @@ scenario_body() {
   say s "confirm $cid ok"
   desc="...and a late answer is ignored"
   check wait_until 5 grep -q "answer to $cid ignored: not outstanding" "$d/main.log"
-  say bz "release"
-  desc="Release is answered (the agent stays registered: it may be the echo of an earlier UnregisterAgent)"
-  check wait_until 5 grep -q "Release from bluetoothd" "$d/main.log"
+  # bluetoothd's Cancel ends the call waiting for its reply, never a code shown for another device.
+  say bz "device AA_BB_CC_DD_EE_09 alias=Remote"
+  n=$(prompts s)
+  say bz "display-passkey AA_BB_CC_DD_EE_09 314159 0"
+  next_prompt s "$n"
+  local shown
+  shown=$(last_id s)
+  n=$(prompts s)
+  say bz "confirm h1 AA_BB_CC_DD_EE_01 5"
+  next_prompt s "$n"
+  cid=$(last_id s)
+  say bz "cancel"
+  wait_until 10 grep -qx "h1 error org.bluez.Error.Canceled" "$d/bz.bz"
+  sleep 0.5
+  desc="bluetoothd's Cancel (for device 01's confirmation) withdraws that request only: the code shown for device 09 stays"
+  check bash -c 'grep -q "{\"id\":\"$2\",\"type\":\"cancel\"}" "$1" && ! grep -q "{\"id\":\"$3\",\"type\":\"cancel\"}" "$1"' _ "$d/s.shell" "$cid" "$shown"
+  say bz "connected AA_BB_CC_DD_EE_09 false"
+  desc="...that code goes when its device disconnects"
+  check wait_until 10 cancelled s "$shown"
+  say bz "connected AA_BB_CC_DD_EE_09 true"
+  n=$(prompts s)
+  say bz "display-pin z1 AA_BB_CC_DD_EE_09 271828"
+  next_prompt s "$n"
+  shown=$(last_id s)
+  say bz "remove AA_BB_CC_DD_EE_09"
+  desc="a code shown goes when its device is removed (InterfacesRemoved)"
+  check wait_until 10 cancelled s "$shown"
+  n=$(prompts s)
+  say bz "display-passkey AA_BB_CC_DD_EE_01 161803 0"
+  next_prompt s "$n"
+  local first second
+  first=$(last_id s)
+  n=$(prompts s)
+  say bz "display-pin z2 AA_BB_CC_DD_EE_02 577215"
+  next_prompt s "$n"
+  second=$(last_id s)
+  n=$(prompts s)
+  say bz "display-passkey AA_BB_CC_DD_EE_03 141421 0"
+  next_prompt s "$n"
+  desc="one code shown at a time: each new one (another device) withdraws the one before"
+  check wait_until 10 bash -c 'grep -q "{\"id\":\"$2\",\"type\":\"cancel\"}" "$1" && grep -q "{\"id\":\"$3\",\"type\":\"cancel\"}" "$1"' _ "$d/s.shell" "$first" "$second"
+  shown=$(last_id s)
+  say bz "paired AA_BB_CC_DD_EE_03"
+  wait_until 10 cancelled s "$shown"
 
   # --- 6 a caller that is not bluetoothd ----------------------------------------------------------------------------------
   bz_up att --attacker
@@ -425,8 +469,8 @@ scenario_body() {
   say s close
   desc="the shell goes with a request outstanding: Rejected"
   check wait_until 10 grep -qx "g1 error org.bluez.Error.Rejected" "$d/bz.bz"
-  desc="...the agent unregisters from bluetoothd, which sends it Release"
-  check wait_until 10 bash -c 'grep -qx "#unregister $2 /org/grassfield/prompter/BluetoothAgent" "$1" && grep -qx "#release-sent $2" "$1"' _ "$d/bz.bz" "$agent_name"
+  desc="...the agent unregisters from bluetoothd (which sends no Release for it, as BlueZ 5.87)"
+  check wait_until 10 bash -c 'grep -qx "#unregister $2 /org/grassfield/prompter/BluetoothAgent" "$1" && ! grep -q "^#release-sent" "$1" && ! grep -q "Release from bluetoothd" "$3"' _ "$d/bz.bz" "$agent_name" "$d/main.log"
   say bz "target $agent_name"
   say bz "authorize g2 AA_BB_CC_DD_EE_01"
   desc="a call that still reaches the unregistered agent meanwhile: Rejected"
@@ -442,6 +486,9 @@ scenario_body() {
   say bz "confirm r1 AA_BB_CC_DD_EE_01 8"
   next_prompt s2 "$n"
   cid=$(last_id s2)
+  say bz release
+  desc="a stopping bluetoothd's Release is answered"
+  check wait_until 5 grep -q "Release from bluetoothd" "$d/main.log"
   say bz quit
   desc="bluetoothd leaves with a request outstanding: the shell gets \"cancel $cid\""
   check wait_until 10 cancelled s2 "$cid"
@@ -479,7 +526,7 @@ scenario_body() {
 
   # --- 14 nothing secret in the journal -----------------------------------------------------------------------------------
   desc="no test code in the bridge's output"
-  check bash -c '! grep -q -e 12ab34 -e 012345 -e 482913 -e 000042 -e 654321 -e 246802 -e 135790 -e 000007 -e 000123 -e 12-34 "$1" "$2"' _ "$d/main.log" "$d/short.log"
+  check bash -c '! grep -q -e 12ab34 -e 012345 -e 482913 -e 000042 -e 654321 -e 246802 -e 135790 -e 000007 -e 000123 -e 12-34 -e 314159 -e 271828 -e 161803 -e 577215 -e 141421 "$1" "$2"' _ "$d/main.log" "$d/short.log"
   desc="no sanitizer report in the bridge's output (a bridge built with build-direct.sh --asan)"
   check bash -c '! grep -q -e "AddressSanitizer" -e "runtime error:" "$1" "$2"' _ "$d/main.log" "$d/short.log"
   return $fail
@@ -535,7 +582,11 @@ passkey-not-zero-padded#BtPairing.cpp#        return QStringLiteral("%1").arg(pa
 path-not-checked#BtPairing.cpp#        if (!path)\n            return false;\n        constexpr char head[]#        if (path)\n            return true;\n        constexpr char head[]
 passkey-answer-length-not-checked#BtPairing.cpp#        if (!text || length != static_cast<std::size_t>(kDigits))#        if (!text || length < 1 || length > static_cast<std::size_t>(kDigits))
 pin-answer-not-checked#BtPairing.cpp#            if (!isAlnum(text[i]))\n                return false;#            ;
-bluez-cancel-ignored#BtAgent.cpp#            endAll(bt::kErrorCanceled, QStringLiteral("bluetoothd cancelled it"), true);#            ;
+bluez-cancel-ignored#BtAgent.cpp#            endPending(bt::kErrorCanceled, QStringLiteral("bluetoothd cancelled it"));#            ;
+cancel-ends-codes-shown (opus review of step 10, MINOR)#BtAgent.cpp#            endPending(bt::kErrorCanceled, QStringLiteral("bluetoothd cancelled it"));#            endAll(bt::kErrorCanceled, QStringLiteral("bluetoothd cancelled it"), true);
+code-kept-when-disconnected (decision 10-16)#BtAgent.cpp#        const bool gone = device && g_variant_lookup(changed, "Connected", "b", &connected) && !connected;#        const bool gone = false;
+code-kept-when-removed (decision 10-16)#BtAgent.cpp#                agent->endWith(r, nullptr, QStringLiteral("the device was removed"), true);#                ;
+codes-not-capped (decision 10-16)#BtAgent.cpp#            if (!request->ended && bt::isDisplay(request->mode))\n                endWith(request, nullptr, why, true);#            if (false)\n                endWith(request, nullptr, why, true);
 display-not-withdrawn-when-paired#BtAgent.cpp#                agent->endWith(r, nullptr, QStringLiteral("the device is paired"), true);#                ;
 no-progress#BtAgent.cpp#                        m_sink->progressBt(r->id, digits); // may end it (the shell lost while sending)#                        ;
 no-timeout#BtAgent.cpp#        request->timeout = g_timeout_add(static_cast<guint>(m_timeoutMs), onTimeout, request.get());#        request->timeout = 0;

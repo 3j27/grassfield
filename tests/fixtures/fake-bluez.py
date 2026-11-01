@@ -6,10 +6,12 @@
 Without --attacker it owns org.bluez and serves, as BlueZ 5.87 does (src/agent.c, read as data):
 - org.bluez.AgentManager1 at /org/bluez: RegisterAgent(o, s) (one agent per connection: AlreadyExists; a capability of
   the documented list, else InvalidArguments; the first agent becomes the default, later ones queue behind it),
-  UnregisterAgent(o) (DoesNotExist unless the sender's own path; then Release is sent to it, as agent_destroy does),
+  UnregisterAgent(o) (DoesNotExist unless the sender's own path; no Release follows: agent_disconnect clears the watch
+  agent_destroy releases on, agent.c:174-188, 930-945; bluetoothd sends Release only as it stops, the `release` command),
   RequestDefaultAgent(o) (the last agent to ask is the default); an agent whose connection leaves the bus is forgotten.
 - org.bluez.Device1 objects at /org/bluez/hci0/dev_<ID> (the `device` command): Alias, Name, Address, Icon, Paired,
-  Bonded through org.freedesktop.DBus.Properties (GetAll, Get) and PropertiesChanged; Pair() asks the caller's agent, else
+  Bonded, Connected through org.freedesktop.DBus.Properties (GetAll, Get) and PropertiesChanged, InterfacesRemoved on "/"
+  when one goes (the `remove` command, as bluetoothd's object manager); Pair() asks the caller's agent, else
   the default one (device.c pair_device), the way the next `pairmode` says; CancelPairing() is logged.
 With --attacker it owns nothing and calls the agent named by `target` all the same (a caller that is not bluetoothd).
 Both read commands from FIFO (one per line, shell-quoted) and write what happens to FILE, one line each, flushed:
@@ -22,13 +24,15 @@ Both read commands from FIFO (one per line, shell-quoted) and write what happens
     (DEV: a device ID, or a whole object path when it starts with "/"); each call logs "TAG ok [value]" or
     "TAG error <D-Bus error name>"
   paired ID                                                    Paired and Bonded become true (PropertiesChanged)
+  connected ID true|false                                      Connected changes (PropertiesChanged)
+  remove ID                                                    the device object goes (InterfacesRemoved on "/")
   pairmode MODE [PASSKEY]                                      how the next Pair() goes: confirm, passkey, display-passkey
                                                                (then waits for `paired`), justworks
   target NAME|-                                                call the agent of connection NAME (always so with
                                                                --attacker); "-": the default agent again
   quit                                                         leaves the bus
 Log lines: "#owned", "#ready <unique name>", "#register <sender> <path> <capability>", "#default <sender> <path>",
-"#unregister <sender> <path>", "#release-sent <sender>", "#agent-gone <sender>", "#pair <ID> <agent sender|no-agent>
+"#unregister <sender> <path>", "#release-sent <sender>" (the `release` command), "#agent-gone <sender>", "#pair <ID> <agent sender|no-agent>
 <mode>", "#pair-done <ID> ok|<error>", "#cancelpairing <ID> <sender>".
 Refuses any bus that is not under GF_TEST_BUS_DIR (the rule of the tests' fakes). Test data only. Run it with python3 -I.
 """
@@ -61,6 +65,7 @@ DEVICE_XML = """<node><interface name="org.bluez.Device1">
 <property name="Icon" type="s" access="read"/>
 <property name="Paired" type="b" access="read"/>
 <property name="Bonded" type="b" access="read"/>
+<property name="Connected" type="b" access="read"/>
 </interface></node>"""
 
 
@@ -127,8 +132,6 @@ def main():
             else:
                 forget(sender)
                 log.write("#unregister %s %s\n" % (sender, agent_path))
-                no_reply_call(sender, agent_path, "Release", None)
-                log.write("#release-sent %s\n" % sender)
             invocation.return_value(None)
 
     # --- Device1 --------------------------------------------------------------------------------------------------------
@@ -138,7 +141,7 @@ def main():
     def get_property(conn, sender, path, iface, prop):
         dev = path.rsplit("dev_", 1)[1]
         p = devices[dev]
-        return GLib.Variant("b" if prop in ("Paired", "Bonded") else "s", p[prop])
+        return GLib.Variant("b" if prop in ("Paired", "Bonded", "Connected") else "s", p[prop])
 
     def changed(dev, props):
         bus.emit_signal(None, path_of(dev), "org.freedesktop.DBus.Properties", "PropertiesChanged",
@@ -239,7 +242,7 @@ def main():
             opts = dict(w.split("=", 1) for w in rest[1:])
             addr = dev.replace("_", ":")
             p = devices.setdefault(dev, {"Address": addr, "Name": "", "Alias": addr.replace(":", "-"), "Icon": "",
-                                         "Paired": False, "Bonded": False})
+                                         "Paired": False, "Bonded": False, "Connected": True})
             if "name" in opts:
                 p["Name"] = opts["name"]
             if "alias" in opts:
@@ -270,6 +273,10 @@ def main():
             dest, agent_path = agent_for(None)
             if dest:
                 no_reply_call(dest, agent_path, "Cancel" if op == "cancel" else "Release", None)
+                if op == "release":
+                    # A stopping bluetoothd releases its agents and forgets them (btd_agent_cleanup).
+                    forget(dest)
+                    log.write("#release-sent %s\n" % dest)
         elif op == "paired":
             dev = rest[0]
             devices[dev]["Paired"] = devices[dev]["Bonded"] = True
@@ -278,6 +285,17 @@ def main():
             if inv is not None:
                 log.write("#pair-done %s ok\n" % dev)
                 inv.return_value(None)
+        elif op == "connected":
+            dev = rest[0]
+            devices[dev]["Connected"] = rest[1] == "true"
+            changed(dev, {"Connected": devices[dev]["Connected"]})
+        elif op == "remove":
+            dev = rest[0]
+            if dev in registered:
+                bus.unregister_object(registered.pop(dev))
+            devices.pop(dev, None)
+            bus.emit_signal(None, "/", "org.freedesktop.DBus.ObjectManager", "InterfacesRemoved",
+                            GLib.Variant("(oas)", (path_of(dev), ["org.freedesktop.DBus.Properties", "org.bluez.Device1"])))
         elif op == "pairmode":
             pairing["mode"] = rest[0]
             if len(rest) > 1:
