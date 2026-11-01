@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Direct build of grassfield-prompter with g++ + pkg-config (same sources and flags as CMakeLists.txt).
-# Output: .dev/build/grassfield-prompter (or --out DIR)
-# Usage: bridges/prompter/build-direct.sh [--out DIR]            the bridge
+# Direct build of grassfield-prompter and grassfield-askpass with g++ + pkg-config (same sources and flags as CMakeLists.txt).
+# Output: .dev/build/grassfield-prompter and .dev/build/grassfield-askpass (or --out DIR)
+# Usage: bridges/prompter/build-direct.sh [--out DIR]            the bridge and the askpass helper
 #        bridges/prompter/build-direct.sh --tests [--asan]      the unit tests: .dev/build/prompter-unit-tests[-asan] (gtest;
 #                                                                --asan: -fsanitize=address,undefined)
 set -euo pipefail
@@ -25,7 +25,7 @@ mkdir -p "$out"
 cxxflags=(-std=c++20 -O2 -g -Wall -Wextra -Wno-sfinae-incomplete -fPIC -DGCR_API_SUBJECT_TO_CHANGE -DQT_NO_KEYWORDS
   "-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <"$root/VERSION")\"") # VERSION: the one version source
 logic=("$here/src/Text.cpp" "$here/src/Protocol.cpp" "$here/src/Requests.cpp" "$here/src/Peer.cpp" "$here/src/Identity.cpp"
-  "$here/src/Filter.cpp" "$here/src/Prompt.cpp")
+  "$here/src/Filter.cpp" "$here/src/Prompt.cpp" "$here/src/Askpass.cpp")
 pkgs=(Qt6Core gcr-4 gio-unix-2.0)
 
 if ((tests)); then
@@ -50,3 +50,9 @@ g++ "${cxxflags[@]}" -I"$here/src" -I"$root/apps" $(pkg-config --cflags "${pkgs[
   $(pkg-config --libs "${pkgs[@]}") \
   -o "$out/grassfield-prompter"
 echo "built $out/grassfield-prompter"
+# shellcheck disable=SC2046
+g++ "${cxxflags[@]}" -I"$here/src" -I"$root/ui/i18n" $(pkg-config --cflags "${pkgs[@]}") \
+  "$here/src/askpass.cpp" "$here/src/Askpass.cpp" "$here/src/Text.cpp" \
+  $(pkg-config --libs "${pkgs[@]}") \
+  -o "$out/grassfield-askpass"
+echo "built $out/grassfield-askpass"

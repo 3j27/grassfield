@@ -235,6 +235,9 @@ namespace gf::prompter {
             {QStringLiteral("/usr/bin/pinentry-gnome3"), QStringLiteral("gnupg")},
             {QStringLiteral("/usr/bin/gpg-agent"), QStringLiteral("gnupg")},
             {QStringLiteral("/usr/lib/gcr-ssh-agent"), QStringLiteral("ssh")},
+            // udiskie's password command in grassfield-automount.service (step 9c): any program of the user can run it with a
+            // disk name of its own, so its text is another program's too (onBehalf).
+            {QStringLiteral("/usr/lib/grassfield/grassfield-askpass"), QStringLiteral("disk")},
         };
         return known;
     }

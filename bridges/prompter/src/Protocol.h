@@ -7,7 +7,7 @@
 //   {"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}
 //   {"type":"name","state":"released"|"queued"|"owned"}
 //   {"type":"prompt","id":"p<N>","kind":"password"|"confirm",
-//    "requester":{"role":"app"|"keyring"|"gnupg"|"ssh"|"unidentified","name":"...","desktopId":"...","icon":"...","path":"...",
+//    "requester":{"role":"app"|"keyring"|"gnupg"|"ssh"|"disk"|"unidentified","name":"...","desktopId":"...","icon":"...","path":"...",
 //                 "identified":true|false,"onBehalf":true|false},
 //    "texts":{"title":"...","message":"...","description":"...","warning":"...","continue":"...","cancel":"..."},
 //    "choice":{"label":"...","chosen":true|false}|null,"passwordNew":true|false,"strength":true|false}
@@ -113,7 +113,7 @@ namespace gf::prompter {
     // --- bridge -> shell ---------------------------------------------------------------------------------------------
 
     struct RequesterView {
-        QString role = QStringLiteral("unidentified"); // app, keyring, gnupg, ssh, unidentified
+        QString role = QStringLiteral("unidentified"); // app, keyring, gnupg, ssh, disk (step 9c), unidentified
         QString name;
         QString desktopId;
         QString icon;

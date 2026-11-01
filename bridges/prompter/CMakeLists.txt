@@ -23,7 +23,8 @@ set(PROMPTER_LOGIC
     src/Peer.cpp src/Peer.h
     src/Identity.cpp src/Identity.h
     src/Filter.cpp src/Filter.h
-    src/Prompt.cpp src/Prompt.h)
+    src/Prompt.cpp src/Prompt.h
+    src/Askpass.cpp src/Askpass.h)
 
 add_executable(grassfield-prompter
     src/main.cpp
@@ -34,7 +35,13 @@ add_executable(grassfield-prompter
 target_include_directories(grassfield-prompter PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR}/../../apps)
 target_link_libraries(grassfield-prompter PRIVATE Qt6::Core PkgConfig::GCR)
 
-install(TARGETS grassfield-prompter RUNTIME DESTINATION lib/grassfield)
+# grassfield-askpass (step 9c): udiskie's password command, a gcr client (grassfield-automount.service). Qt Core for its
+# French message (ui/i18n/translationloader.h, the system catalog), libgcr-4 for the prompt; no C source of its own.
+add_executable(grassfield-askpass src/askpass.cpp src/Askpass.cpp src/Askpass.h src/Text.cpp src/Text.h)
+target_include_directories(grassfield-askpass PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
+target_link_libraries(grassfield-askpass PRIVATE Qt6::Core PkgConfig::GCR)
+
+install(TARGETS grassfield-prompter grassfield-askpass RUNTIME DESTINATION lib/grassfield)
 install(FILES ../../packaging/systemd/grassfield-prompter.service DESTINATION lib/systemd/user)
 
 # Unit tests of the pure logic and of the GcrPrompt object (gtest), also built by build-direct.sh --tests and run by
