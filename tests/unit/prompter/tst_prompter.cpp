@@ -891,9 +891,12 @@ TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {
     ASSERT_GT(child, 0);
     const int pidfd = pidfdOpen(child);
     ASSERT_GE(pidfd, 0);
-    ExeFacts running;
-    for (int i = 0; i < 100 && running.path != QLatin1String("/usr/bin/sleep"); ++i) {
-        running = exeFactsOfPidfd(pidfd); // until the child has exec'd
+    // Until the child's exec has finished: the kernel names the new program before it maps it, and the old address space
+    // goes in between (slow for a parent built with ASan), so the name alone does not mean the mappings are there yet.
+    const CodeMapping sleepFile = fileMapping(QStringLiteral("/usr/bin/sleep"), selfMountDevices());
+    ExeFacts          running;
+    for (int i = 0; i < 300 && !(running.path == QLatin1String("/usr/bin/sleep") && running.code.contains(sleepFile) && running.code.size() >= 2); ++i) {
+        running = exeFactsOfPidfd(pidfd);
         ::usleep(10000);
     }
     EXPECT_EQ(running.path, QStringLiteral("/usr/bin/sleep"));
@@ -901,7 +904,7 @@ TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {
     EXPECT_FALSE(running.traced);
     EXPECT_TRUE(running.codeKnown);
     EXPECT_TRUE(running.sameNamespaces);
-    EXPECT_TRUE(running.code.contains(fileMapping(QStringLiteral("/usr/bin/sleep"), selfMountDevices())));
+    EXPECT_TRUE(running.code.contains(sleepFile));
     EXPECT_GE(running.code.size(), 2); // the program and at least the C library
     if (rootOwnsSystemFiles()) {
         running.sameUser = true;
