@@ -426,6 +426,7 @@
  {"path": "tests/security/kwallet_secret_service.sh", "layer": "headless"},
  {"path": "tests/security/prompter_bridge.sh", "layer": "headless"},
  {"path": "tests/shell/bindings_forward.sh", "layer": "logic"},
+ {"path": "tests/compositor/size_keys.sh", "layer": "logic"},
  {"path": "tests/shell/session_services.sh", "layer": "logic"},
  {"path": "tests/shell/capture.sh", "layer": "logic"},
  {"path": "tests/shell/crash_watch.sh", "layer": "logic"},

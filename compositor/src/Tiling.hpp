@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace gf::tiler {
 
@@ -92,9 +93,25 @@ namespace gf::tiler {
     // nested pass of 85c2c10); the reply's "fixed" lists it.
     bool fixedSize(const PHLWINDOW& w);
 
+    // hl.plugin.grassfield.window_size(mode), the Full Screen and Zoom keys (core sizeKeyActs): whether Hyprland's own
+    // fullscreen dispatcher in that mode may act on the focused window now. False for a window of fixed size that is not
+    // in that mode (the Window menu greys Enter Full Screen and Zoom for it); true with no focused window (Hyprland's
+    // dispatcher then does nothing itself).
+    bool sizeKeyActs(tiling::SizeMode mode);
+
     // `w` can be tiled now and fits either half of its output's Split View (TL33, TL8): the tile-hover event's "splittable" (the
     // popover greys Left and Right of Screen otherwise; split refuses it).
     bool splittable(const PHLWINDOW& w);
+
+    // The zones (core zoneName) `w` does not fit on its output's Desktop (core unfitZones, ADR-0036 D69): the tile-hover
+    // event's "unfitZones" (the popover greys those places, arrangements and Layouts zones; tile, arrange and a drag's preview
+    // refuse them). Empty for a window on no output.
+    std::vector<std::string> unfitZones(const PHLWINDOW& w);
+
+    // The places (core nameOf) `w` does not fit on its output's Desktop, each on the frame tile() would give it (core
+    // unfitPlaces over placeStartFrame: a half beside a tiled neighbour is the rest beside it, TL7): the tile-hover event's
+    // "unfitPlaces" (the popover and the Window menu grey those places). Empty for a window on no output.
+    std::vector<std::string> unfitPlaces(const PHLWINDOW& w);
 
     // hl.plugin.grassfield.move_to(address, output) (TL23, TL26): `w` onto another output: a tiled window into the same place,
     // zone or sides there, any other at the same relative place (core moveToArea); it takes that output's Desktop. Untrusted:
@@ -169,8 +186,9 @@ namespace gf::tiler {
     void tileRequest(std::string_view address, std::string_view place);
 
     // hl.plugin.grassfield.arrange(json) (core parseArrange): a layout of the catalogue filled with the given windows, then
-    // with the next tileable windows in stacking order (TL6). Untrusted; a refused request posts reason "invalid" (or
-    // "locked") and changes nothing.
+    // with the next tileable windows in stacking order (TL6) that fit their zone (D69: each zone takes the topmost one that
+    // fits it). A given window that does not fit its zone is refused. Untrusted; a refused request posts reason "invalid"
+    // (or "locked") and changes nothing.
     void arrangeRequest(std::string_view json);
 
     // The margins setting changed: every tiled window is placed again from its zone (TL2).

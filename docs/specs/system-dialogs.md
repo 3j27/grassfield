@@ -347,7 +347,8 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 ### Acceptance criteria
 - A-NR1 (L0, `tests/shell/hyprland_dialog.sh`) the stand-in with fake `qs`, `hyprctl` and stock dialog: en and fr texts
   parsed, titles with " - ", a leading "-" or a newline, a class with " - "; ambiguous (two processes, an app named to
-  match another split), other-locale, malformed, refused, unanswered (1-s deadline) calls exec the stock dialog with the
+  match another split), other-locale, malformed, refused, unanswered (10-s deadline, ADR-0035 decision 3-16: a slow shell
+  under load is waited for, no shell ends the call at once) calls exec the stock dialog with the
   same pid and arguments; spawned by a double fork as Hyprland spawns it, the pipe stays open after "ok" and ends when the
   stand-in is killed; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
   the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals, a rename that lifts an

@@ -72,11 +72,25 @@ local function in_switcher_else(request, otherwise)
   end
 end
 
+-- Full Screen and Zoom keys, as the Window menu has them (ADR-0040 step 1b's review): a window of fixed size is left alone
+-- (only Exit Full Screen and Unzoom act on it). The compositor plugin decides at each press: hl.plugin.grassfield.window_size
+-- returns Hyprland's own dispatcher, or a no-op for such a window. Without the plugin (or if it fails), Hyprland's dispatcher
+-- as before (gate C2).
+local function window_size(mode)
+  local plain = hl.dsp.window.fullscreen({ mode = mode })
+  return function()
+    local ok, decided = pcall(function()
+      return hl.plugin.grassfield.window_size(mode)
+    end)
+    hl.dispatch((ok and decided) or plain)
+  end
+end
+
 -- Windows
 bind("SUPER + Q", "Close window", in_switcher_else("quit", hl.dsp.window.close()))
 bind("SUPER + W", "Close window", hl.dsp.window.close())
-bind("SUPER + CTRL + F", "Full screen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
-bind("SUPER + ALT + F", "Zoom (fill the screen)", hl.dsp.window.fullscreen({ mode = "maximized" }))
+bind("SUPER + CTRL + F", "Full screen", window_size("fullscreen"))
+bind("SUPER + ALT + F", "Zoom (fill the screen)", window_size("maximized"))
 -- Window tiling (macOS 15+ Globe+Ctrl+arrows; Super plays Command here): halves, and back to the size from before. The
 -- compositor plugin places the window (window-tiling); the Window menu's Move & Resize shows the same keys
 -- (docs/specs/tiling.md TL26). The quarters are bound by key position (code: keycodes 30, 31, 44 and 45: U, I, J and K, in
