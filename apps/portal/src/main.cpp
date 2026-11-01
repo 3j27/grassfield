@@ -1,6 +1,7 @@
-// grassfield-portal (ADR-0035 D-4, D-5; steps 4b, 5a and 5b): the Open and Save panels, the Choose Application panel and the
-// permission alerts of the Grassfield session, served to xdg-desktop-portal as org.freedesktop.impl.portal.FileChooser,
-// org.freedesktop.impl.portal.AppChooser and org.freedesktop.impl.portal.Access under
+// grassfield-portal (ADR-0035 D-4, D-5, D-7; steps 4b, 5a, 5b and 6a): the Open and Save panels, the Choose Application panel,
+// the permission alerts and the print sheet of the Grassfield session, served to xdg-desktop-portal as
+// org.freedesktop.impl.portal.FileChooser, org.freedesktop.impl.portal.AppChooser, org.freedesktop.impl.portal.Access and
+// org.freedesktop.impl.portal.Print under
 // org.freedesktop.impl.portal.desktop.grassfield. Started by D-Bus activation (grassfield-portal.service), it quits 60 s after
 // its last request. The panels are the Files browser: this binary links the Files library (apps/files/files-core.cmake) and
 // loads Files' QML (FilePanels.qml), so a panel has the sidebar, views, path pop-up, search, Quick Look and KIO sheets of
@@ -14,6 +15,8 @@
 #include "filesapp.h"
 #include "imageproviders.h"
 #include "panelstate.h"
+#include "print.h"
+#include "printsystem.h"
 #include "runmode.h"
 #include "testbus.h"
 #include "translationloader.h"
@@ -111,21 +114,34 @@ int main(int argc, char *argv[])
     grassfield::portal::AppChooser::Options appOptions;
     appOptions.uiDeadlineMs = options.uiDeadlineMs;
     appOptions.idleQuitMs = options.idleQuitMs;
+    grassfield::portal::Print::Options printOptions;
+    printOptions.uiDeadlineMs = options.uiDeadlineMs;
+    printOptions.idleQuitMs = options.idleQuitMs;
+    // Dev plumbing: how Add Printer… opens Settings (the shell's own GRASSFIELD_SETTINGS_CMD).
+    if (const QString settings = runmode::devValue("SETTINGS_CMD"); !settings.isEmpty())
+        printOptions.addPrinterCommand = settings.split(QLatin1Char(' '), Qt::SkipEmptyParts) << QStringLiteral("--section=printers");
     const QString serviceName = QStringLiteral("org.freedesktop.impl.portal.desktop.grassfield");
-    // Access and AppChooser first: they outlive FileChooser and the adaptors FileChooser's object owns.
+    // Access, AppChooser and Print first: they outlive FileChooser and the adaptors FileChooser's object owns; the printers'
+    // system before Print, which asks it.
     grassfield::portal::Access access(bus, accessOptions);
     grassfield::portal::AppChooser appChooser(bus, appOptions);
+    grassfield::portal::CupsPrintSystem printSystem;
+    grassfield::portal::Print print(bus, &printSystem, printOptions);
+    // Save as PDF calls this process's FileChooser from a second connection (a call on the service's own one is answered in
+    // place, without the panel's delayed reply).
+    print.setPanelBus(QDBusConnection::connectToBus(QDBusConnection::SessionBus, QStringLiteral("grassfield-portal-panels")));
     grassfield::portal::FileChooser chooser(bus, options);
     new grassfield::portal::FileChooserAdaptor(&chooser);
     // The interfaces live on the one exported object (FileChooser's).
     new grassfield::portal::AccessAdaptor(&chooser, &access);
     new grassfield::portal::AppChooserAdaptor(&chooser, &appChooser);
+    new grassfield::portal::PrintAdaptor(&chooser, &print);
     // Idle once every interface has had no request for the idle time (each one's idle() asks): the name goes first, so a
     // call on its way starts a new instance (D-Bus activation) instead of reaching one that is quitting; a call that reached
     // this one before (it comes ahead of ReleaseName's reply) is served, the name taken back. Under systemd the unit
     // (Type=dbus) stops once the name goes, which takes such a call with it: response 2, the window a few microseconds every
     // idle period (review of step 4b, MINOR 6).
-    const QList<const grassfield::portal::RequestHost *> hosts{&chooser, &access, &appChooser};
+    const QList<const grassfield::portal::RequestHost *> hosts{&chooser, &access, &appChooser, &print};
     const auto quietLongEnough = [&]() { return grassfield::portal::RequestHost::quiet(hosts, options.idleQuitMs); };
     const auto quitWhenIdle = [&]() {
         if (!quietLongEnough())
@@ -141,6 +157,7 @@ int main(int argc, char *argv[])
     QObject::connect(&chooser, &grassfield::portal::FileChooser::idle, app.get(), quitWhenIdle);
     QObject::connect(&access, &grassfield::portal::Access::idle, app.get(), quitWhenIdle);
     QObject::connect(&appChooser, &grassfield::portal::AppChooser::idle, app.get(), quitWhenIdle);
+    QObject::connect(&print, &grassfield::portal::Print::idle, app.get(), quitWhenIdle);
 
     // Each interface's UI is made at its first request (the frontend starts every backend when it starts; an idle start costs
     // no QML): one engine, made with the first of them; the panels' root (with the Files backend) and the alerts' root are
@@ -188,8 +205,8 @@ int main(int argc, char *argv[])
         return true;
     };
     if (gui) {
-        // The panels' root serves FileChooser and AppChooser (Choose Application is an Open panel): made once, at the first
-        // request of either.
+        // The panels' root serves FileChooser, AppChooser (Choose Application is an Open panel) and Print (its Save as PDF is
+        // a Save panel): made once, at the first request of any.
         const auto loadPanels = [&]() -> bool {
             if (!panelsLoaded) {
                 makeEngine();
@@ -197,12 +214,14 @@ int main(int argc, char *argv[])
                 panelsLoaded = loadRoot(QStringLiteral("FilePanels.qml"), {{QStringLiteral("app"), QVariant::fromValue(files.get())},
                                                                           {QStringLiteral("host"), QVariant::fromValue(&chooser)},
                                                                           {QStringLiteral("appHost"), QVariant::fromValue(&appChooser)},
+                                                                          {QStringLiteral("printHost"), QVariant::fromValue(&print)},
                                                                           {QStringLiteral("testAnswer"), testAnswer}});
             }
             return *panelsLoaded;
         };
         chooser.setUiLoader(loadPanels);
         appChooser.setUiLoader(loadPanels);
+        print.setUiLoader(loadPanels);
         access.setUiLoader([&]() -> bool {
             makeEngine();
             return loadRoot(QStringLiteral("AccessAlerts.qml"), {{QStringLiteral("host"), QVariant::fromValue(&access)},

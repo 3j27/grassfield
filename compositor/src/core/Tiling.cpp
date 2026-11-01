@@ -1356,6 +1356,25 @@ namespace gf::tiling {
         return std::nullopt;
     }
 
+    std::optional<Unsplit> unsplitHow(std::string_view text) {
+        if (text.empty() || text == "desktop")
+            return Unsplit::Desktop;
+        if (text == "fullscreen")
+            return Unsplit::Fullscreen;
+        if (text == "replace")
+            return Unsplit::Replace;
+        return std::nullopt;
+    }
+
+    std::optional<Suggestion> withoutWindow(std::optional<Suggestion> sg, uint64_t window) {
+        if (!sg)
+            return std::nullopt;
+        std::erase(sg->windows, window);
+        if (sg->windows.empty())
+            return std::nullopt;
+        return sg;
+    }
+
     const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace) {
         const auto it = std::ranges::find(splits, workspace, &SplitDesk::workspace);
         return it == splits.end() ? nullptr : &*it;

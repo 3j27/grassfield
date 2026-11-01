@@ -94,10 +94,16 @@ function splitCall(address, side) {
     return guardedPluginCall("split", ["\"0x" + hex + "\"", "\"" + side + "\""]);
 }
 
-// hl.plugin.grassfield.unsplit(address) (capability "tiling-split", TL33): Exit Full Screen of a window of a Split View Desktop.
-function unsplitCall(address) {
+// hl.plugin.grassfield.unsplit(address[, how]) (capability "tiling-split", TL33): a window of a Split View Desktop leaves it.
+// `how` (step 6d, capability "tiling-split-rows", ADR-0036 D71): "" or "desktop" Exit Full Screen / Move Window to Desktop (no
+// second argument, as before), "fullscreen" Make Window Full Screen, "replace" Replace Tiled Window. "" when the address or
+// `how` is invalid.
+function unsplitCall(address, how) {
     const hex = normalizeAddress(address);
-    return hex === "" ? "" : guardedPluginCall("unsplit", ["\"0x" + hex + "\""]);
+    const way = how === undefined || how === "desktop" ? "" : how;
+    if (hex === "" || (way !== "" && way !== "fullscreen" && way !== "replace"))
+        return "";
+    return guardedPluginCall("unsplit", way === "" ? ["\"0x" + hex + "\""] : ["\"0x" + hex + "\"", "\"" + way + "\""]);
 }
 
 // hl.plugin.grassfield.tile_popover(address) (capability "tile-hover", TL26): the plugin posts the tile-hover "open" event of

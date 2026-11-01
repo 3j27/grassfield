@@ -250,7 +250,9 @@ package_grassfield-desktop() {
   # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons grassfield-wallpapers networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  # libcups: grassfield-portal's print sheet asks CUPS for the printers and sends the jobs (ADR-0035 D-7, owner decision Q6);
+  # already there with qt6-base and gtk3, declared since the backend links it.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons grassfield-wallpapers networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
@@ -339,6 +341,12 @@ package_grassfield-desktop() {
     "$root/packaging/pacman/grassfield-update-helper" "$root/packaging/pacman/grassfield-channel-scriptlet"
   install -m644 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel.sh"
   install -Dm644 "$root/packaging/pacman/org.grassfield.packages.policy" "$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
+  # Owner decision SU-M2 (ADR-0033 s5; OPUS SECURITY REVIEW): the sudo of Omarchy's migrations that grassfield-update-helper
+  # runs, alone in its folder (the first of their PATH), the polkit rule that lets their unit alone start root units, and
+  # that unit's primary group (no member; pacman's sysusers hook creates it).
+  install -Dm755 "$root/packaging/pacman/grassfield-update-sudo" "$pkgdir/usr/lib/grassfield/update-sudo/sudo"
+  install -Dm644 "$root/packaging/pacman/49-grassfield-update.rules" "$pkgdir/usr/share/polkit-1/rules.d/49-grassfield-update.rules"
+  install -Dm644 "$root/packaging/pacman/grassfield-update.sysusers" "$pkgdir/usr/lib/sysusers.d/grassfield-update.conf"
   install -Dm644 -t "$pkgdir/usr/share/grassfield/pacman/" "$srcdir/pacman/repository.conf" "$srcdir/pacman/grassfield-stable.conf" \
     "$srcdir/pacman/grassfield-beta.conf" "$srcdir/pacman/grassfield-signing-key.asc"
   install -Dm755 "$root/packaging/pacman/pre-refresh-pacman" "$pkgdir/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman"

@@ -276,6 +276,30 @@ TestCase {
         listing.isApplications = false;
     }
 
+    // In the list view too, a name that starts with a right-to-left letter keeps to the left edge (integrator nested pass of
+    // step 5c, NIT).
+    function test_aRightToLeftNameStartsAtTheLeftInTheList() {
+        listing.groupBy = 0;
+        fill(1, 2);
+        listing.groups = [];
+        listing.setProperty(0, "name", "\u05e9\u05dc\u05d5\u05dd.txt");
+        const list = createTemporaryObject(listComponent, test);
+        verify(list !== null);
+        waitForRendering(list);
+        const stack = [list];
+        let label = null;
+        while (stack.length && !label) {
+            const it = stack.pop();
+            if (it.effectiveHorizontalAlignment !== undefined && String(it.text).indexOf("\u05e9") >= 0 && it.visible)
+                label = it;
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        verify(label !== null, "the name's label");
+        compare(label.effectiveHorizontalAlignment, Text.AlignLeft);
+        listing.groupBy = 1;
+    }
+
     // The same for the list view: its rows drag in a folder of files and not out of Applications.
     function test_nothingIsDraggedOutOfApplicationsInTheList() {
         listing.groupBy = 0;
