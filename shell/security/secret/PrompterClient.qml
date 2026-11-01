@@ -184,7 +184,11 @@ Scope {
                 root.ended(priv.closing ? "closed by the shell" : "closed by the bridge");
             }
         }
+        // Socket.error carries a QLocalSocket::LocalSocketError, a type Qt 6.11's qmllint does not know (signal-handler-parameters
+        // on the owner's toolchain; the integrator's review of PR #95, gate Q1). The handler reads no parameter.
+        // qmllint disable signal-handler-parameters
         onError: Qt.callLater(root.socketFailed)
+        // qmllint enable signal-handler-parameters
     }
 
     Timer {
