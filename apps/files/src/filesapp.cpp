@@ -1674,7 +1674,10 @@ void FilesApp::publishJobs()
             if (p.speed > 0 && p.total > p.processed) {
                 const qulonglong seconds = (p.total - p.processed) / p.speed;
                 detail += QStringLiteral(" – ")
-                          + (seconds < 60 ? tr("About %n seconds", nullptr, int(std::max<qulonglong>(seconds, 1))) : tr("About %n minutes", nullptr, int(seconds / 60 + 1)));
+                          + (seconds < 2    ? tr("About 1 second")
+                             : seconds < 60 ? tr("About %1 seconds").arg(seconds)
+                             : seconds < 120 ? tr("About 1 minute")
+                                             : tr("About %1 minutes").arg(seconds / 60 + 1));
             }
         }
         const int percent = p.total > 0 ? int(qMin<qulonglong>(100, p.processed * 100 / p.total)) : p.percent;
