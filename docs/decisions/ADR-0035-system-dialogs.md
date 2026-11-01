@@ -772,32 +772,40 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
      stand-in's end closes (the stand-in timed out, or xdph ended).
   4. Connected, the shell writes `<id> wait` every 5 s while its panel is open, then one answer line, `<id> <selection>` or
      `<id> cancel`, and closes. The stand-in waits for the user with no overall deadline (the choice may take minutes, as with
-     the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without any line** (the
+     the stock picker), but end of file without an answer (the shell crashed or restarted) or **15 s without a line of that request** (the
      shell hangs: `grassfield-shell.service` restarts a crashed shell, `Restart=always`, but has no watchdog for a hung one,
-     `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 3 s
-     after the request when the shell dies before connecting, and at most 15 s after the shell's last line when it hangs.
+     `packaging/systemd/grassfield-shell.service:52-53`) means "cancelled". Without a user's answer, xdph is freed at most 4 s
+     after the request when the shell dies before connecting (1 s for the lock's `hyprctl`, 1 s for the shell's answer, 2 s
+     for the connection; review of step 7a, NIT), and at most 15 s after the shell's last line when it hangs.
   5. The stand-in checks the answer before printing it: the id; the grammar; a `window:` handle that is in
      `XDPH_WINDOW_SHARING_LIST`; a `screen:` or `region:` output that Hyprland lists (`hyprctl -j monitors`), with the region
      inside that output's logical size. Anything else prints nothing (cancelled), never a guess.
   6. No answer to step 2 (the shell is absent) and the session is not locked → the stand-in **removes the socket file first**
-     (a late `accepted` then finds nothing to connect to and shows no panel), then execs the stock binary named (absolute path,
-     same arguments and environment).
+     (a late `accepted` then finds nothing to connect to and shows no panel), checks the lock again (a restarting shell
+     restores it), then execs the stock binary named (absolute path, same arguments and environment, SIGPIPE at its default).
 - **While the session is locked** (owner decision Q15, 2026-10-27: cancel): the request is cancelled at once and no picker
   shows, neither the Grassfield one nor the stock one, so no key typed around an unlock can reach a picker. The stand-in checks
-  the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on every monitor, or grassfield-shell's
-  crash-recovery marker says "locked" (the test of `packaging/shims/omarchy-shell:64-74`). **Every error counts as locked**
+  the lock itself before asking the shell: Hyprland's `solitaryBlockedBy` contains `LOCK` on any monitor (the shell's own
+  reading, `LockMachine.compositorLockStateLazy`; counter-review of step 7a, MINOR 1: "every monitor", the omarchy-shell
+  shim's test of a secure lock, was the open way for this check), or grassfield-shell's
+  crash-recovery marker is not "unlocked" in the shell's own reading of it (`shell/security/LockMachine.js`: `unlocked` or
+  `unlocked sleeps=<n>`, and a count of suspends that is not the machine's now counts as a sleep no shell locked for,
+  `sleptSince`; the review of step 7a, BLOCKER 1: the stand-in first read `unlocked sleeps=<n>` as locked, which the shell
+  writes after every unlock on a machine that sleeps). **Every error counts as locked**
   (counter-review of PR #13, minor; the shim reports "not secure" when `hyprctl` fails): `hyprctl` failing or not answering
   within 1 s, output that is not the expected JSON, no monitor listed, a marker file that exists but cannot be read. The shell
   answers `locked` from `SessionState.refuses("picker")`. A cancelled request also frees xdph.
 - The shell's picker: a panel on the active display with "Entire Screen" (one live thumbnail per display, from the
   ScreencopyView already used by the Overview), "Window" (live thumbnails of the listed windows, by app, with their titles)
-  and "Selection" (a crosshair, D-10), "Remember this choice" **unticked every time, whatever `--allow-token` says** (owner
+  and "Selection" (a crosshair, D-10; step 7b draws the area on the display's live preview in the panel instead, decision
+  7-10), "Remember this choice" **unticked every time, whatever `--allow-token` says** (owner
   decision Q14, 2026-10-27; Omarchy's `xdph.conf` sets `allow_token_by_default = true`, which would tick it), Cancel / Share.
   Windows that hide themselves from capture (`no_screen_share`, `config/hypr/grassfield/privacy.lua`) are listed but greyed
   with "This window can't be shared".
 - The picker cannot name the app that asks: xdph receives the app id but passes the picker only `--allow-token` and the window
   list (`ScreencopyShared.cpp:42-62`). The panel says "An app wants to share your screen." (known limitation).
-- While a share runs, the menu bar shows the screen-recording indicator (Hyprland's `screencast` event,
+- While a share runs, the menu bar shows the screen-recording indicator (step 7b follows xdph's PipeWire streams instead of
+  this event, which every capture raises, the shell's own thumbnails too: decision 7-9) (Hyprland's `screencast` event,
   `src/managers/screenshare/ScreenshareSession.cpp:140-147`). The event names only the source (a display or a window), not
   the app (review of PR #13, minor), so the indicator's menu says what is shared, not by whom; stopping belongs to the app.
 - A user `xdph.conf` that names another picker (another name, an absolute path) is not intercepted (known limitation; the
@@ -807,6 +815,141 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   else (tests feed the stand-in's output to a copy of xdph's parser, with one and two displays for `region:` coordinates);
   every wait on the shell is bounded (tests: `accepted` and no connection, a late `accepted` after the fallback, a shell that
   stops writing, `hyprctl` failing).
+
+**Delivered in step 7a (the picker: Entire Screen and Window).**
+- **The stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` is a Python program run with `python3 -I`, standard library only. In order, it:
+    - checks the lock, where every doubt counts as locked;
+    - reads xdph's window list;
+    - makes the one-time socket;
+    - asks the shell under 1 s with `qs ipc -p /usr/share/grassfield/shell call picker request <id> <socket>`;
+    - after `accepted`, waits 2 s for the connection, then 15 s at most between the shell's lines;
+    - sends the window list first;
+    - checks the answer and prints xdph's line.
+  - Without the shell it removes the socket file and then `exec`s `/usr/bin/<name>` with the same arguments.
+  - `hyprland-preview-share-picker` (Omarchy's name, from its `xdph.conf`) runs the same program with `--stock-name`. That option takes only the two picker names.
+  - `env-grassfield` puts `/usr/lib/grassfield/session-bin` first in the systemd user manager's PATH, where xdph runs (decision 3-9).
+- **The shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, and the dev hooks `status` and `choose`), the Quickshell `Socket` client, the `wait` lines, and cancelling on lock, on another popup and when the stand-in's end closes.
+    - One `Socket` per request, made by `request` and destroyed when the request ends, whatever ends it (review of PR #83, MAJOR 2): on Quickshell 0.3.1 a `Socket` whose connection failed once never connects again, so the first build's one long-lived `Socket` refused every request after a stand-in that gave up. Its error is judged after Quickshell's own handler has returned (`tests/ci/socket_errors.py`).
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`, a `Dialog` sheet with Entire Screen and Window as a `SegmentedControl` and a grid of live `ScreencopyView` thumbnails.
+  - Tokens `panel.sharePicker*`.
+- **Tests:**
+  - `tests/shell/share_picker.sh`: the stand-in against a fake shell, a fake `hyprctl` and fake stock pickers, its output read by a copy of xdph 1.4.1's parser (A-SP1 to A-SP3).
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under the real Quickshell, offscreen.
+  - `tests/unit/tst_sharepicker.qml`: the decisions in `SharePicker.js`.
+  - `tests/shell/shell_unit.sh`: the stand-in's `qs ipc` line and its dev gate.
+  - `tests/shell/share_picker_nested.sh` (nested): it never reaches the live shell (review of PR #83, MINOR 3: an inherited `GRASSFIELD_SESSION=1` made the stand-in ask `/usr/share/grassfield/shell`, the owner's shell, and two stock pickers opened on the nested display). It drops every `GRASSFIELD_*` and `QS_*` variable, gives the stand-in only `GRASSFIELD_DEV=1` and this tree's `GRASSFIELD_SHELL_DIR`, refuses to run (exit 2) unless the one Quickshell instance of that directory is this tree's nested shell, and runs a copy of the stand-in whose stock picker only records that it ran.
+
+Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user):
+- **7-1. Two pull requests.**
+  - Question: deliver D-6 in one pull request, or split it?
+  - Options: (a) one; (b) **7a**, the stand-ins, the channel, the lock and the panel with Entire Screen and Window; then **7b**, Selection (a crosshair, which D-10's screenshots need too; 7-10 drew it on the panel's preview instead) and the menu bar's recording indicator. Both in pull request #83: the owner asked on 2026-10-31 for 7b in the same pull request while the integrator was away.
+  - **Choice: (b).**
+  - Rule applied: the channel, the part that touches security, is reviewed on its own in the smallest change. The system picker leads with the screen and the window. Selection waits for the crosshair that steps 7b and 8 share. Until 7b no region is offered, though the stand-in already checks a `region:` answer (SP3).
+- **7-2. How the window list reaches the shell.**
+  - Question: xdph gives the stand-in the window list in its environment; how does the list reach the shell?
+  - Options:
+    - (a) in the IPC call's arguments: any local user can read a process's command line in `/proc`, so the titles would leak;
+    - (b) in the environment: the shell does not get the stand-in's environment;
+    - (c) as the stand-in's first line on the one-time socket, which only this user can open.
+  - **Choice: (c).**
+  - Rule applied: no title leaves this user's processes. The shell keeps at most 256 windows, each with its handle, app id, title (capped at 256 characters) and Hyprland address (in hex, for the thumbnail).
+- **7-3. What is selected when the panel opens.**
+  - Options: (a) the first display, so that Return shares it at once; (b) nothing, with Share dimmed until a tile is chosen.
+  - **Choice: (b).**
+  - Rule applied: the system picker shares nothing until something is picked, and a stray Return must never share the screen. Arrows select from the first tile.
+- **7-4. Windows that hide themselves from capture** (`no_screen_share`, greyed with "This window can't be shared" in D-6).
+  - Options: (a) read `privacy.lua`'s rules in the shell, a second copy of them; (b) leave the greying to 7b, after checking what Hyprland 0.56 reports for a client with that rule.
+  - **Choice: (b).**
+  - Rule applied: no second copy of a privacy rule. Hyprland already leaves such a window out of every capture, xdph's stream included, so sharing it shows nothing of it. A known gap of 7a.
+- **7-5. Another popup in the panel's place.** The Overlay draws one popup at a time; a menu bar click or a click outside closes the open one.
+  - Options: (a) bring the panel back afterwards; (b) cancel.
+  - **Choice: (b).**
+  - Rule applied: one deterministic outcome, and the app can ask again. Nothing is shared without a pick.
+- **7-6. A channel that cannot be made** (no private `$XDG_RUNTIME_DIR/grassfield/picker`: one others can read, a link, or not ours).
+  - Options: (a) cancel; (b) the stock picker.
+  - **Choice: (b).**
+  - Rule applied: the share still works, and the shell was never asked, so two pickers never show.
+- **7-7. Who may answer on the socket.**
+  - Options: (a) check the connecting process with `SO_PEERCRED` and its executable (Quickshell's install path); (b) rely on the
+    channel's place: a 0600 socket in a 0700 directory of this user and a random name. The id and the socket's path are in
+    `qs ipc`'s command line, which other users can read, but they cannot reach the directory.
+  - **Choice: (b).**
+  - Rule applied: only this user's processes can reach the socket. Such a process can already drive the shell's IPC and xdph
+    itself, so a check by executable path would add a dependency on where Quickshell is installed and no boundary. A Flatpak
+    app sees neither the host's `/proc` nor `$XDG_RUNTIME_DIR/grassfield`.
+- **7-8. Keys and clicks as the panel appears** (counter-review of step 7a, MINOR 2: an arrow then Return typed for a
+  terminal as the panel appeared shared the first display, since an arrow selects the first tile).
+  - Options: (a) arrows select nothing until a click; (b) the access alert's rule (D-5, `AccessAlert.qml`): nothing answers
+    keys or clicks until `panel.alertArmMs` after the panel showed or after the last key pressed meanwhile.
+  - **Choice: (b).**
+  - Rule applied: one rule for every Grassfield surface that asks the user to grant something; keys typed on for another
+    window never arm it. Esc and Cancel always cancel (cancelling shares nothing).
+
+**Delivered in step 7b (Selection, windows that hide from capture, the indicator), in the same pull request as 7a.**
+- **Selection:** `SharePickerPanel.qml` gains a third tab, Selection (Cmd-3).
+  - It shows the chosen display's live preview, with a display chooser when there are several.
+  - A drag on the preview marks an area, at least `panel.sharePickerMinArea` either way.
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels (`SharePicker.js` `regionFor`, `regionKey`, `parseRegion`).
+  - The shell refuses an area past its display; the stand-in checks it again (SP3).
+- **Windows that hide from capture:**
+  - When the panel opens, the shell asks `hyprctl -j getprop address:0x<address> no_screen_share` for each listed window with an address, 16 at a time (Hyprland's socket keeps a backlog of 10), 1 s each at most, each answer on its own line after its address (`blockedHandles`, which matches answers by address, so one meant for another request marks none). A newer request's query waits for the last one to end; the last one's answers are never taken as its own.
+  - Such a window is greyed with "This window can't be shared" and is never answered: no window is answered at all until Hyprland's answers have come (review of step 7b, MINOR 1 and 3).
+- **The indicator:** a status item in the menu bar (`menubar-screenshare`, glyph `screen-share`, popup kind `screenshare`, `ScreenShareMenu.qml`).
+  - It shows while xdph has a stream (`sharingStreams`: video nodes whose `node.name` is xdph's program name, `xdg-desktop-portal-hyprland`) and never gives way when the status area is crowded.
+  - Its menu has one row per stream. A row is named by the choice the picker answered within the last 3 s only when that stream is the one new stream and that choice the one waiting (`streamLabels`, best effort: 7-12); otherwise "Screen or window" (a share restored with a token, or two at once: review of step 7b, MINOR 2). Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) it stays in view on its own piece of the band's glass at the bar's right end, in the bar's own window, and takes no click (7-14).
+- **Tests:**
+  - `tst_sharepicker.qml`: the area, the hidden windows, the streams and their labels.
+  - `share_picker_ipc.sh`, cases 9-12:
+    - an area answered and one past its display refused;
+    - a window that hides from capture never answered (a fake getprop);
+    - a request shown while the last one's query is held (gate files): no window answered while its own answers are not in, not even when the last one's arrive, then its own query runs and its windows are answered;
+    - with a private PipeWire, a node named as xdph names its streams counted and labelled, then gone.
+  - `share_picker_nested.sh`, check 5: an area of the nested display.
+  - `tst_barhide.qml`: the indicator's piece while the bar is away (7-14).
+
+Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no technical step for the user; 7-12 and 7-13 after its counter-review, 7-14 after the integrator's review of PR #83):
+- **7-9. What lights the screen-sharing indicator.**
+  - Question: D-6 named Hyprland's `screencast` event. Hyprland 0.56.2 raises it for every capture protocol (`ScreenshareFrame.cpp:170`, through `ImageCopyCapture`, `Screencopy` and `ToplevelExport`), so the shell's own thumbnails raise it too: the Overview, the Dock's previews, and this picker's own thumbnails.
+  - Options:
+    - (a) the event, minus the shell's own captures (every capturing surface would have to declare itself);
+    - (b) xdph's PipeWire streams, which exist only while an app shares through the portal. xdph 1.4.1 names each stream `xdph-streaming-<random>` (`src/portals/Screencopy.cpp:1015-1017`), but PipeWire keeps that name in `media.name`, which a node's registry entry does not carry, and gives the node xdph's program name, `xdg-desktop-portal-hyprland` (review of step 7b, BLOCKER 1: the first build looked for `xdph-streaming-` in the node's name and never lit; measured with a stream made as xdph makes it, `tests/shell/share_picker_ipc.d/fake-xdph-stream.c`). Quickshell's PipeWire service lists the nodes with their names and types;
+    - (c) a compositor plugin hook that reports the client.
+  - **Choice: (b).**
+  - Rule applied: the indicator must never light for the system's own previews, and it must light for every app that shares through the portal. A recorder that captures without the portal (wf-recorder, OBS's Wayland capture) is not shown: a known limitation, which (c) could close later. Any PipeWire client can name a video node after xdph and light the indicator with nothing shared (no exposure; a known limitation).
+- **7-10. Where the area is chosen.**
+  - Options: (a) a full-screen crosshair over the displays, as screenshots will have (D-10, step 8); (b) dragging on the chosen display's live preview inside the panel.
+  - **Choice: (b).**
+  - Rule applied:
+    - one surface and one keyboard grab, with no second exclusive layer over the panel;
+    - the area is relative to its display, as xdph wants it;
+    - the system picker shares a screen or a window, not an area, so this tab is Grassfield's extra and stays inside the panel.
+    - The cost is precision: a preview pixel is about 3 logical pixels of a 1920-pixel display.
+- **7-11. How a window that hides from capture is known.**
+  - Options: (a) read `config/hypr/grassfield/privacy.lua`'s rules in the shell (7-4's second copy); (b) ask Hyprland for each listed window's effective rule (`getprop … no_screen_share`, `HyprCtl.cpp:1621`).
+  - **Choice: (b).**
+  - Rule applied: Hyprland's own answer, whatever rule set it, with no second copy of a privacy rule. An answer that does not read (a window gone, an older Hyprland) leaves the window ungreyed: Hyprland still leaves it out of every capture.
+- **7-12. How sure the indicator's labels are** (counter-review of step 7b, MINOR A).
+  - Question: the portal does not tell the shell which app a stream belongs to. An app the picker answered "Window: Notes" may not have started its stream yet when another app restores an entire-screen share with its token (no picker): that stream is then the one new stream, with one choice waiting, and took "Window: Notes" within the first build's 10 s.
+  - Options: (a) labels only for screens (a window or an area named nowhere); (b) a short window, 3 s (an app starts its stream as soon as the portal answers it), and the label called best effort; (c) no labels, "Screen or window" for every row.
+  - **Choice: (b).**
+  - Rule applied: the macOS menu names what is shared; the wrong case needs two apps within 3 s, one of them restoring a share without asking. (c) would lose the name in every ordinary share to avoid that rare one. The spec and the code say best effort, not certain.
+- **7-13. A windows' query that cannot run** (counter-review of step 7b, NIT 3).
+  - Question: if `sh` cannot start, Quickshell only stops the query; the Window tab would never enable Share, with no hint.
+  - Options: (a) keep refusing every window; (b) treat it as an answer that does not read: no window greyed, a warning in the shell's log.
+  - **Choice: (b).**
+  - Rule applied: 7-11's rule for an unreadable answer; Hyprland still blacks out a window that hides from capture in every capture, so nothing it hides is shared.
+- **7-14. The indicator over a full-screen window** (integrator's review of PR #83, MINOR 2; delegated by the owner on 2026-10-27).
+  - Question: the indicator is a status item of the menu bar, and the bar slides away over a full-screen window (the default, "In Full Screen Only") and on the desktop with "Always" or "On Desktop Only": an app that shares the screen in full screen hid the indicator with the bar. macOS keeps its privacy indicator in view while the menu bar is hidden.
+  - Options:
+    - (a) keep the whole bar in view while a share runs (it covers the top of the full-screen window, which macOS never does);
+    - (b) the indicator alone stays: its glyph on its own capsule of the band's glass at the bar's right inset, in the bar's own window (mapped for the whole session, on the overlay layer over a full-screen window, its content slid away), coming as the bar leaves and going as it comes back with its status item (`BarHide.pinnedIndicatorOpacity`); its blur is the bar's `BackgroundEffect` region; no new surface, no compositor or `config/hypr` change;
+    - (c) leave it, a known limitation with a follow-up.
+  - **Choice: (b).**
+  - Rule applied: macOS first, a privacy indicator stays visible whatever hides the menu bar; within the shell's existing surfaces and Hyprland's rules. The capsule takes no click: the bar's edge strip still brings the bar, and the status item with its menu, back.
+  - Cost: it sits at the bar's right inset, not where the status item sits in the bar; it is drawn on the display, so a share of that display shows it (as it shows the menu bar on the desktop). Its look in nested is not yet verified.
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.

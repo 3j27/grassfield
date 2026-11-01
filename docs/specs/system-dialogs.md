@@ -282,8 +282,10 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   `screen:`/`region:` output listed by `hyprctl -j monitors`, a region inside that output's logical size. Anything else prints
   nothing.
 - SP4 one picker at a time: a request while a picker is open gets `busy` (cancelled).
-- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on every monitor, or
-  the shell's crash-recovery marker, the test of `packaging/shims/omarchy-shell:64-74`) and the shell answers `locked`; either
+- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on any monitor, or
+  the shell's crash-recovery marker read as the shell reads it, `shell/security/LockMachine.js`: only `unlocked` or
+  `unlocked sleeps=<n>` is unlocked, and only while `<n>` is the machine's count of suspends or that count cannot be read) and
+  the shell answers `locked`; either
   way the request is cancelled and no picker shows, Grassfield's or stock. Every error counts as locked: `hyprctl` failing or
   silent for 1 s, output that is not the expected JSON, no monitor, a marker file that exists but cannot be read.
 - SP6 the panel: tabs "Entire Screen" (one live thumbnail per display, the display's name), "Window" (live thumbnails of the
@@ -292,8 +294,9 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   picker cannot know which app); "Remember this choice" unticked at every opening, whatever `--allow-token` says (owner
   decision Q14); Cancel / Share (default once something is selected); double-click shares at once.
 - SP7 keyboard: arrows move in the grid, Return shares, Esc cancels, Cmd-1/2/3 switch tabs.
-- SP8 the recording indicator in the menu bar while Hyprland reports an active screencast; its menu says what is shared (a
-  display or a window), not which app shares it (Hyprland's events carry only the source).
+- SP8 the recording indicator in the menu bar while an app shares through the portal (xdph's PipeWire streams, ADR-0035 7-9:
+  Hyprland's screencast event comes from every capture, the shell's thumbnails too); its menu says what is shared (the
+  picker's choice for that stream when it made one), not which app shares it.
 - SP9 no acknowledgement within 1 s and the session not locked: the stand-in removes the socket file, then execs the stock
   picker (a late `accepted` finds no socket and shows nothing).
 
@@ -313,10 +316,67 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   that display).
 - A-SP6 (L1) shell stopped, session unlocked: the stock picker opens.
 
+### Built in step 7a (ADR-0035 7-1 to 7-8)
+- **Stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` (`python3 -I`) and `hyprland-preview-share-picker`, Omarchy's name, which runs it with `--stock-name`.
+  - `env-grassfield` puts that directory first in the systemd user manager's PATH, where xdph runs.
+- **Shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, plus the dev hooks `status` and `choose`).
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`.
+- **The channel as built (SP2, SP2b):**
+  - The stand-in's first line on the socket is `<id> list <json>`: xdph's windows as `{handle, class, title, address}`. The address is Hyprland's, in hex, or `""`. The titles never go into a command line (7-2).
+  - The shell opens the panel when that line arrives, at most 2 s after `accepted`; otherwise it closes the connection and shows nothing.
+  - The shell's answer is `<id> <flags>/screen:<output>` or `<id> <flags>/window:<handle>`.
+  - Lines with another id are ignored. A line longer than 4096 bytes, or one that is not ASCII, cancels.
+  - `request` answers `refused` to an id that is not 128-bit lowercase hex, or a socket that is not `<128-bit hex>.sock` directly in `$XDG_RUNTIME_DIR/grassfield/picker/`. The stand-in, which always uses that form, then treats it like a missing shell.
+- **The panel (SP6, SP7):**
+  - "Share Your Screen", "An app wants to share your screen. Choose what it can see.", and Entire Screen / Window as a segmented control.
+  - A grid of live thumbnails, three to a row, two rows before it scrolls.
+  - Windows are grouped by app name, then sorted by title. A window without an address, or one the shell does not know, shows its app's icon.
+  - Remember this choice is unticked at every opening.
+  - Cancel and Share. Share is dimmed until a tile is chosen; nothing is selected at first (7-3).
+  - Arrows move in the grid, Return shares, Esc cancels, Cmd-1 and Cmd-2 switch the tabs, and a double-click shares.
+  - Nothing answers keys or clicks for `panel.alertArmMs` after the panel shows, or after the last key pressed meanwhile (7-8);
+    Esc and Cancel always cancel.
+- **Cancelled:**
+  - when another popup takes the panel's place or a click lands outside it (7-5);
+  - when the session locks;
+  - when the stand-in's end closes (it gave up, or xdph ended: the stand-in notices xdph's end of stdout closing).
+- **Not in 7a:** Selection, the recording indicator and the greying of protected windows came in step 7b, below.
+- **Tests:**
+  - `tests/shell/share_picker.sh`: A-SP1, A-SP2, A-SP2b and A-SP3 against fakes, with a copy of xdph 1.4.1's parser.
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms; case 13: a failed connection (no socket file, a refused one, a stand-in that gave up because the shell's answer took over 1 s) does not stop the next request from showing its panel, and no request's socket is left once it ended; cases 1 and 2: the panel (loaded as the Overlay loads it) opens with Remember this choice unticked and unarmed, and is armed after `panel.alertArmMs` with Remember still unticked, though xdph passed `--allow-token` (review of PR #83, MINOR 1).
+  - `tests/unit/tst_sharepicker.qml`.
+  - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
+
+### Built in step 7b (ADR-0035 7-9 to 7-14)
+- **Selection (SP6):** a third tab (Cmd-3).
+  - The chosen display's live preview, with a display chooser when there are several; a drag on it marks the area.
+  - The area must be at least `panel.sharePickerMinArea` either way, and its size shows under the preview ("640 × 360 on DP-1").
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels. An area past the display is never answered, by the shell or by the stand-in.
+- **Windows that hide from capture (SP6):** Hyprland's effective `no_screen_share`, asked with `hyprctl -j getprop` for every listed window when the panel opens (16 at a time, 1 s each at most). Such a window is greyed with "This window can't be shared" and never answered; no window is answered before Hyprland's answers have come. A query that cannot run greys none (Hyprland still blacks such a window out: 7-13).
+- **The recording indicator (SP8):** a status item, `screen-share`, while xdph has a stream (a PipeWire video node named `xdg-desktop-portal-hyprland`); it never gives way when the status area is crowded.
+  - Its menu has one row per share, named by what the picker chose for it ("Entire screen: DP-1", "Window: …", "Part of DP-1"), best effort: one new stream and one choice answered in the last 3 s. Otherwise "Screen or window" (a share an app restored with its token, or two at once).
+  - Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) the indicator stays in view: its glyph on its own capsule of the band's glass at the bar's right inset, coming as the bar leaves and going as it comes back (7-14). It takes no click; the top edge brings the bar back.
+- **Tests:**
+  - `tst_sharepicker.qml`.
+  - `share_picker_ipc.sh`, cases 9-12 (11 with a private PipeWire and a stream made as xdph makes it, `share_picker_ipc.d/fake-xdph-stream.c`; 12 with the getprop answers held by gate files).
+  - `share_picker_nested.sh`, check 5.
+  - `tst_barhide.qml`: the indicator while the bar is away (7-14).
+  - The indicator in a real share (Chromium) is the integrator's.
+
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
-3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
-requesting app.
+4 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
+requesting app. A shell that hangs with its panel open leaves the panel drawn: the stand-in gives up after 15 s, and if the
+app asks again the stock picker opens beside the frozen panel (only the stock picker can answer). The indicator shows shares
+made through the portal only: a recorder that captures without it (wf-recorder, OBS's own Wayland capture) is not shown
+(7-9), and any PipeWire client can light it by naming a video node after xdph (nothing is shared then). An area is drawn on a
+preview: about 3 logical pixels of a 1920-pixel display per preview pixel (7-10). A row of the indicator's menu can name another
+app's choice when an app restores a share with its token within 3 s of the picker answering a different app that has not
+started its stream yet (7-12). While the bar is away the indicator's capsule is drawn on the display, so a share of that
+display shows it (7-14).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 

@@ -544,10 +544,11 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing NotResponding
-    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing TilingHover makes it listen
+    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3), SharePicker its target "picker" for the
+    // screen-sharing picker's stand-in (D-6); referencing TilingHover makes it listen
     // to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22); referencing TilingSuggest makes it
     // listen to the suggestions that follow a layout or an arrangement (TL28); referencing SoftwareUpdate starts its automatic
     // checks and registers its IPC target "update" (ADR-0033 d.7); referencing ActivityLink registers its IPC target "activity"
     // and writes Activity Monitor's projection while the app's window is open (ADR-0038 AM60, AM61).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder")
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "share picker", SharePicker.current === null ? "idle" : "open", "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder")
 }
