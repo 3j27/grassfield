@@ -102,6 +102,81 @@ TestCase {
         compare(many.announced[31], "omarchy 4.0.39-1");
     }
 
+    // ADR-0041 step 2b (U31): a toolkit package replaced under the running session asks for a log out, once per session,
+    // through a restart of the shell; the session's start is Hyprland's.
+    function toolkitAnswer(state, at, moved) {
+        return answer(state, {toolkit: {record: true, packages: [{name: "qt6-base", installed: "6.12.0-1", installedAt: at, built: "6.11.2-1", moved: moved}]}});
+    }
+
+    function test_aToolkitReplacedUnderTheSessionAsksForALogOutOnce() {
+        const start = Logic.timeOf("2026-10-28T10:00:00Z");
+        const signature = "ab12cd_" + Math.floor(start / 1000) + "_42";
+        compare(Logic.sessionStart(signature, start + 60000), start, "the session's start from the instance signature, before the shell's own");
+        compare(Logic.sessionStart(signature, start - 60000), start - 60000, "never later than the shell's start (a later signature would hide installs)");
+        compare(Logic.sessionStart("", 5), 5, "the shell's own start without a signature");
+        compare(Logic.sessionStart(undefined, 5), 5);
+        compare(Logic.sessionStart("junk", 5), 5);
+        compare(Logic.sessionStart("ab_0_1", 5), 5, "a zero time is no time");
+        const a = toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", true);
+        verify(Logic.toolkitLogout(a, start), "installed after the session started");
+        verify(!Logic.toolkitLogout(a, Logic.timeOf("2026-10-28T12:00:00Z")), "installed before: the session already runs on it");
+        // An unreadable install time (a pacman database outside its default path): asked once, then recorded, so the next
+        // session does not ask again for the same installed version (the review of e03013d, minor).
+        const unknown = toolkitAnswer("failed", null, false);
+        verify(Logic.toolkitLogout(unknown, start, {}), "an unreadable time counts as this session once, whatever the record says");
+        const asked = Logic.withToolkitAsked(Logic.normalize(null), Logic.toolkitReplaced(unknown, start, {}));
+        compare(Logic.toolkitAsked(asked), {"qt6-base": "6.12.0-1"}, "...and the installed version is recorded as asked for");
+        verify(!Logic.toolkitLogout(unknown, start, Logic.toolkitAsked(asked)), "the same installed version asks no more");
+        verify(Logic.toolkitLogout(answer("failed", {toolkit: {record: true, packages: [{name: "qt6-base", installed: "6.12.1-1", installedAt: null, built: "6.11.2-1", moved: true}]}}), start, Logic.toolkitAsked(asked)), "another version asks again");
+        compare(Logic.toolkitAsked(Logic.combine(asked, answer("up-to-date"))), {"qt6-base": "6.12.0-1"}, "kept through an answer");
+        compare(Logic.toolkitAsked(Logic.withToolkitAsked(asked, Logic.toolkitReplaced(a, start, {}))), {"qt6-base": "6.12.0-1"}, "a readable time records nothing");
+        compare(Logic.toolkitAsked({toolkitAsked: {a: 1, b: "x"}}), {b: "x"}, "strings only");
+        // A shell restarted in the same session after the log out was asked on an unreadable time: the file's flag and the
+        // announcement marked with this session's start keep it due; another session's flag is stale.
+        let due = Logic.withLogoutPending(Logic.withAnnounced(Logic.combine(asked, unknown), [{id: "toolkit " + start}]), false, true);
+        verify(!Logic.toolkitLogout(due, start, Logic.toolkitAsked(due)), "the versions asked for say nothing more...");
+        verify(Logic.toolkitDueFromFile(due, start), "...but the file says the log out was found due in this session");
+        verify(!Logic.toolkitDueFromFile(due, start + 1), "another session's flag is stale");
+        verify(!Logic.toolkitDueFromFile(Logic.withLogoutPending(due, true, false), start), "no flag, nothing due");
+        verify(Logic.toolkitLogout(toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", false), start), "a pkgrel rebuild replaces the file too: a log out, without a move");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: {record: false, packages: []}}), start), "nothing listed");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: null}), start), "no list");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: {packages: "junk"}}), start), "not a list");
+        verify(!Logic.toolkitLogout(answer("up-to-date", {toolkit: {packages: [{installed: 5}, "x", null]}}), start), "not entries");
+        compare(Logic.toolkitMoved(a).length, 1, "the moved list is for the log line");
+        compare(Logic.toolkitMoved(toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", false)).length, 0);
+        // The crash-restart scenario (the review of 9043ac4, major 2): log in 09:00, the upgrade at 10:00, the shell
+        // crashes and is restarted at 10:05: it reads the session's start from the signature, not its own.
+        const login = Logic.timeOf("2026-10-28T09:00:00Z");
+        const restarted = Logic.timeOf("2026-10-28T10:05:00Z");
+        const upgrade = toolkitAnswer("up-to-date", "2026-10-28T10:00:00Z", true);
+        verify(Logic.toolkitLogout(upgrade, Logic.sessionStart("ab12cd_" + Math.floor(login / 1000) + "_1", restarted)), "after the restart the upgrade still asks for a log out");
+        verify(!Logic.toolkitLogout(upgrade, restarted), "the shell's own start would have hidden it");
+        let items = Logic.news(Logic.normalize(null), a, start);
+        compare(items.length, 1);
+        compare(items[0].kind, "toolkit");
+        compare(items[0].id, "toolkit " + start, "once per session: the id is the session's start, whatever the versions");
+        let f = Logic.withAnnounced(Logic.combine(Logic.normalize(null), a), items);
+        compare(Logic.news(f, a, start), [], "announced once");
+        compare(Logic.news(f, toolkitAnswer("up-to-date", "2026-10-28T11:30:00Z", true), start), [], "a later update in the same session announces nothing more");
+        compare(Logic.toolkitPackages(f).length, 1, "the file keeps the list");
+        f = Logic.withLogoutPending(f, true, true);
+        compare(f.logoutPending, true);
+        compare(f.toolkitLogout, true, "two flags: Grassfield's own log out and the toolkit's");
+        f = Logic.combine(f, answer("update-running"));
+        compare(Logic.toolkitPackages(f).length, 1, "an answer without the list (update-running) keeps the file's");
+        compare(f.toolkitLogout, true, "and the flags");
+        verify(Logic.toolkitLogout(f, start, Logic.toolkitAsked(f)), "a restarted shell re-reads the log out from the file");
+        f = Logic.withLogoutPending(f, false, true);
+        compare(f.logoutPending, undefined, "the toolkit's alone: the pane's generic title");
+        compare(f.toolkitLogout, true);
+        f = Logic.withLogoutPending(f, true, false);
+        compare(f.logoutPending, true, "Grassfield's own alone");
+        compare(f.toolkitLogout, undefined);
+        compare(Logic.news(Logic.normalize(null), a, Logic.timeOf("2026-10-28T12:00:00Z")), [], "nothing to announce when it was installed before the session");
+        compare(Logic.news(Logic.normalize(null), available("1.0.1-1"), start).map(n => n.kind), ["grassfield"], "an answer without the list announces as before");
+    }
+
     function test_eachNewReleaseIsAnnouncedOnce() {
         let f = Logic.normalize(null);
         let items = Logic.news(f, available("1.0.1-1", "4.0.6-1"));
