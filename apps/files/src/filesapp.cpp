@@ -8,6 +8,7 @@
 #include "filelogic.h"
 #include "launchguard.h"
 #include "navlogic.h"
+#include "permissionlogic.h"
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "imagerotate.h"
@@ -43,6 +44,12 @@
 #include <QWindow>
 
 #include <memory>
+
+#include <fcntl.h>
+#include <grp.h>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <KApplicationTrader>
 #include <KDirNotify>
@@ -1450,6 +1457,181 @@ void FilesApp::cancelArchives()
         if (job)
             job->cancel();
     }
+}
+
+namespace
+{
+QString userName(uid_t uid)
+{
+    const passwd *pw = getpwuid(uid);
+    return pw ? QString::fromLocal8Bit(pw->pw_name) : QString::number(uid);
+}
+
+QString groupName(gid_t gid)
+{
+    const group *gr = getgrgid(gid);
+    return gr ? QString::fromLocal8Bit(gr->gr_name) : QString::number(gid);
+}
+
+// The groups the user belongs to (by name), the item's group first when it is one of them.
+QStringList userGroups()
+{
+    QStringList out;
+    const int n = getgroups(0, nullptr);
+    std::vector<gid_t> ids(std::max(n, 0));
+    if (n > 0 && getgroups(n, ids.data()) == n) {
+        for (gid_t id : ids)
+            out << groupName(id);
+    }
+    const QString primary = groupName(getegid());
+    if (!out.contains(primary))
+        out.prepend(primary);
+    out.removeDuplicates();
+    return out;
+}
+
+bool systemPath(const QString &path)
+{
+    for (const char *root : {"/proc", "/sys", "/dev"}) {
+        const QString r = QString::fromLatin1(root);
+        if (path == r || path.startsWith(r + QLatin1Char('/')))
+            return true;
+    }
+    return false;
+}
+
+// The item pinned (O_PATH | O_NOFOLLOW): -1 when it is gone, a link, or no folder or regular file.
+int pinItem(const QString &path, struct stat *st)
+{
+    const int fd = ::open(QFile::encodeName(path).constData(), O_PATH | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0)
+        return -1;
+    if (::fstat(fd, st) != 0 || !(S_ISDIR(st->st_mode) || S_ISREG(st->st_mode))) {
+        ::close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+QByteArray procName(int fd)
+{
+    return QByteArrayLiteral("/proc/self/fd/") + QByteArray::number(fd);
+}
+} // namespace
+
+QVariantMap FilesApp::permissionsOf(const QUrl &url) const
+{
+    if (!url.isLocalFile())
+        return {{QStringLiteral("valid"), false}};
+    const QString path = url.toLocalFile();
+    struct stat st{};
+    if (::lstat(QFile::encodeName(path).constData(), &st) != 0)
+        return {{QStringLiteral("valid"), false}};
+    const unsigned mode = st.st_mode & 07777;
+    const bool isDir = S_ISDIR(st.st_mode);
+    QString reason;
+    if (S_ISLNK(st.st_mode))
+        reason = tr("An alias (a symbolic link) keeps its own permissions: change the original item’s.");
+    else if (systemPath(path))
+        reason = tr("System items can’t be changed here.");
+    else if (!isDir && !S_ISREG(st.st_mode))
+        reason = tr("Only files and folders can be changed here.");
+    else if (st.st_uid != geteuid())
+        reason = tr("You can only change the permissions of items you own. Changing others’ items needs an administrator, which Files doesn’t offer yet.");
+    QVariantList access;
+    for (int who = 0; who < 3; ++who)
+        access << int(PermissionLogic::accessOf(mode, PermissionLogic::Who(who)));
+    return {{QStringLiteral("valid"), true},
+            {QStringLiteral("mode"), int(mode)},
+            {QStringLiteral("modeText"), PermissionLogic::modeText(mode)},
+            {QStringLiteral("owner"), userName(st.st_uid)},
+            {QStringLiteral("group"), groupName(st.st_gid)},
+            {QStringLiteral("ownedByMe"), st.st_uid == geteuid()},
+            {QStringLiteral("isDir"), isDir},
+            {QStringLiteral("editable"), reason.isEmpty()},
+            {QStringLiteral("reason"), reason},
+            {QStringLiteral("groups"), reason.isEmpty() ? userGroups() : QStringList()},
+            {QStringLiteral("access"), access}};
+}
+
+void FilesApp::setAccess(const QUrl &url, int who, int access)
+{
+    if (!permissionsOf(url).value(QStringLiteral("editable")).toBool() || who < 0 || who > 2 || access < 0 || access > 3)
+        return;
+    struct stat st{};
+    const int fd = pinItem(url.toLocalFile(), &st);
+    if (fd < 0 || st.st_uid != geteuid()) {
+        if (fd >= 0)
+            ::close(fd);
+        emit operationFailed(tr("The permissions of “%1” couldn’t be changed.").arg(FileLogic::displayName(url.fileName())));
+        emit permissionsChanged(url);
+        return;
+    }
+    const unsigned mode = PermissionLogic::withAccess(st.st_mode & 07777, PermissionLogic::Who(who), PermissionLogic::Access(access), S_ISDIR(st.st_mode));
+    const int rc = ::chmod(procName(fd).constData(), mode);
+    const int error = errno;
+    ::close(fd);
+    if (rc != 0)
+        emit operationFailed(tr("The permissions of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(url.fileName()), QString::fromLocal8Bit(strerror(error))));
+    org::kde::KDirNotify::emitFilesChanged({url});
+    emit permissionsChanged(url);
+}
+
+void FilesApp::setGroup(const QUrl &url, const QString &groupNameText)
+{
+    if (!permissionsOf(url).value(QStringLiteral("editable")).toBool() || !userGroups().contains(groupNameText))
+        return;
+    const group *gr = getgrnam(QFile::encodeName(groupNameText).constData());
+    if (!gr)
+        return;
+    const gid_t gid = gr->gr_gid;
+    struct stat st{};
+    const int fd = pinItem(url.toLocalFile(), &st);
+    if (fd < 0 || st.st_uid != geteuid()) {
+        if (fd >= 0)
+            ::close(fd);
+        emit permissionsChanged(url);
+        return;
+    }
+    // The owner stays (-1); a user may give their item to a group they belong to.
+    const int rc = ::chown(procName(fd).constData(), uid_t(-1), gid);
+    const int error = errno;
+    ::close(fd);
+    if (rc != 0)
+        emit operationFailed(tr("The group of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(url.fileName()), QString::fromLocal8Bit(strerror(error))));
+    org::kde::KDirNotify::emitFilesChanged({url});
+    emit permissionsChanged(url);
+}
+
+void FilesApp::applyToEnclosed(const QUrl &url)
+{
+    const QVariantMap p = permissionsOf(url);
+    if (!p.value(QStringLiteral("editable")).toBool() || !p.value(QStringLiteral("isDir")).toBool())
+        return;
+    const QVariantList access = p.value(QStringLiteral("access")).toList();
+    const QString ops = PermissionLogic::recursiveOperators(PermissionLogic::Access(access.value(0).toInt()), PermissionLogic::Access(access.value(1).toInt()),
+                                                            PermissionLogic::Access(access.value(2).toInt()));
+    // The system's chmod (ADR-0028 probe 12): it never follows the links it meets inside the folder; the folder itself was
+    // checked above to be no link. The user's own rights only: items of others fail and are reported.
+    auto *process = new QProcess(this);
+    process->setProgram(QStringLiteral("/usr/bin/chmod"));
+    process->setArguments({QStringLiteral("-R"), QStringLiteral("--"), ops, url.toLocalFile()});
+    process->setStandardInputFile(QProcess::nullDevice());
+    process->setStandardOutputFile(QProcess::nullDevice());
+    connect(process, &QProcess::finished, this, [this, process, url](int code, QProcess::ExitStatus status) {
+        if (status != QProcess::NormalExit || code != 0)
+            emit operationFailed(tr("Some items in “%1” weren’t changed: they belong to someone else or can’t be changed.").arg(FileLogic::displayName(url.fileName())));
+        org::kde::KDirNotify::emitFilesChanged({url});
+        emit permissionsChanged(url);
+        process->deleteLater();
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            emit operationFailed(tr("The permissions couldn’t be changed: chmod can’t be started."));
+            process->deleteLater();
+        }
+    });
+    process->start();
 }
 
 void FilesApp::makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback)

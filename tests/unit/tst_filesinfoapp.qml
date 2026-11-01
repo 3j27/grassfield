@@ -39,6 +39,11 @@ TestCase {
         function applicationsCount(): int {
             return 63;
         }
+        // Get Info's Sharing & Permissions (ADR-0028): nothing to edit here.
+        signal permissionsChanged(url url)
+        function permissionsOf(target: url): var {
+            return {valid: false};
+        }
         function directorySize(url: url, done: var): void {
         }
         function formatSize(bytes: real): string {

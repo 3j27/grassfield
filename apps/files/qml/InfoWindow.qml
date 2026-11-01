@@ -3,8 +3,9 @@ import QtQuick
 import Grassfield.Ui
 import "TagColors.js" as TagColors
 
-// Get Info: kind, size (folders are measured with KIO::directorySize), location, dates and the
-// owner, group and permissions (read only in v1).
+// Get Info: kind, size (folders are measured with KIO::directorySize), location, dates, and Sharing & Permissions: the
+// owner, the group and everyone with the Finder's privilege pop-ups, editable for the user's own items (ADR-0028 option
+// 1), the reason shown beside the padlock otherwise.
 Window {
     id: root
 
@@ -103,11 +104,23 @@ Window {
         {label: qsTr("Opened:"), value: root.info.accessed},
         {label: qsTr("Link to:"), value: root.info.linkDest},
         {header: qsTr("Sharing & Permissions")},
-        {label: qsTr("Owner:"), value: root.info.owner},
-        {label: qsTr("Group:"), value: root.info.group},
-        {label: qsTr("Permissions:"), value: root.info.permissions},
         {label: qsTr("You can:"), value: root.info.writable ? qsTr("Read & Write") : root.info.readable ? qsTr("Read only") : qsTr("No Access")}
     ]
+
+    // The item's owner, group and privileges, read again after each change (what the system reports).
+    property var permissions: root.isApplication ? ({valid: false}) : root.app.permissionsOf(root.info.url)
+    readonly property bool permissionsShown: !root.isApplication && root.permissions.valid === true
+    readonly property var accessChoices: [
+        {id: "3", text: qsTr("Read & Write")}, {id: "1", text: qsTr("Read only")}, {id: "2", text: qsTr("Write only")}, {id: "0", text: qsTr("No Access")}
+    ]
+
+    Connections {
+        target: root.app
+        function onPermissionsChanged(url: url): void {
+            if (root.app.sameUrl(url, root.info.url))
+                root.permissions = root.app.permissionsOf(root.info.url);
+        }
+    }
 
     // ADR-0015: the window draws its own chrome (the titlebar style of grassfield-ui); the apps' tagger
     // (apps/windowchrome.h) names its role for the compositor, whose plugin then draws no titlebar on it.
@@ -285,6 +298,116 @@ Window {
                     }
                 }
             }
+
+            // Sharing & Permissions (Finder): Name and Privilege, one row each for the owner, the group and everyone.
+            Column {
+                visible: root.permissionsShown
+                width: content.width
+                spacing: Tokens.spacingXs
+                Accessible.role: Accessible.Table
+                Accessible.name: qsTr("Sharing & Permissions")
+
+                Repeater {
+                    model: root.permissionsShown ? [
+                        {who: 0, name: root.permissions.ownedByMe ? qsTr("%1 (Me)").arg(root.permissions.owner) : root.permissions.owner},
+                        {who: 1, name: root.permissions.group},
+                        {who: 2, name: qsTr("everyone")}
+                    ] : []
+
+                    delegate: Item {
+                        id: permissionRow
+                        required property var modelData
+                        width: content.width
+                        height: privilege.implicitHeight
+                        Accessible.role: Accessible.Row
+                        Accessible.name: permissionRow.modelData.name
+
+                        // The group's own pop-up: the user's groups (the item can be given to any of them).
+                        ComboBox {
+                            id: groupChoice
+                            visible: permissionRow.modelData.who === 1 && root.permissions.editable && root.permissions.groups.length > 1
+                            width: Tokens.filesInfoLabelWidth + Tokens.spacingLg
+                            anchors.verticalCenter: parent.verticalCenter
+                            accessibleName: qsTr("Group")
+                            model: visible ? root.permissions.groups.map(g => ({id: g, text: g})) : []
+                            value: root.permissions.group
+                            onPicked: id => root.app.setGroup(root.info.url, id)
+                        }
+
+                        Text {
+                            textFormat: Text.PlainText
+                            visible: !groupChoice.visible
+                            width: Tokens.filesInfoLabelWidth + Tokens.spacingLg
+                            anchors.verticalCenter: parent.verticalCenter
+                            elide: Text.ElideRight
+                            text: permissionRow.modelData.name
+                            color: Appearance.colors.text
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyCaptionSize
+                        }
+
+                        ComboBox {
+                            id: privilege
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            enabled: root.permissions.editable
+                            accessibleName: qsTr("Privilege of %1").arg(permissionRow.modelData.name)
+                            model: root.accessChoices
+                            value: String(root.permissions.access[permissionRow.modelData.who])
+                            onPicked: id => root.app.setAccess(root.info.url, permissionRow.modelData.who, parseInt(id))
+                        }
+                    }
+                }
+
+                // The padlock: closed with the reason when the item can't be changed here.
+                Row {
+                    visible: !root.permissions.editable
+                    width: content.width
+                    spacing: Tokens.spacingSm
+
+                    Icon {
+                        name: "lock"
+                        size: Tokens.menuIconSize
+                        color: Appearance.colors.textSecondary
+                    }
+
+                    Text {
+                        textFormat: Text.PlainText
+                        width: parent.width - Tokens.menuIconSize - Tokens.spacingSm
+                        text: root.permissions.reason || ""
+                        wrapMode: Text.Wrap
+                        color: Appearance.colors.textSecondary
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyCaptionSize
+                    }
+                }
+
+                Text {
+                    textFormat: Text.PlainText
+                    text: root.permissions.modeText || ""
+                    color: Appearance.colors.textSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
+                    Accessible.name: qsTr("Mode %1").arg(text)
+                }
+
+                Button {
+                    visible: root.permissions.editable && root.permissions.isDir
+                    text: qsTr("Apply to enclosed items…")
+                    onClicked: applySheet.open()
+                }
+            }
+        }
+    }
+
+    Sheet {
+        id: applySheet
+        title: qsTr("Apply these permissions to the items in “%1”?").arg(DisplayName.text(root.info.name))
+        message: qsTr("The privileges of the owner, the group and everyone are given to everything in the folder. Folders, and files some class can already run, can be opened or run by those who can read them. Items that belong to someone else stay as they are.")
+        confirmText: qsTr("OK")
+        confirmHandler: () => {
+            root.app.applyToEnclosed(root.info.url);
+            return "";
         }
     }
 }

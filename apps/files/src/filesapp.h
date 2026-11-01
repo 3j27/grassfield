@@ -276,6 +276,18 @@ public:
     Q_INVOKABLE void compress(const QList<QUrl> &urls, QObject *folder);
     Q_INVOKABLE void expand(const QUrl &archive, QObject *folder);
     Q_INVOKABLE void cancelArchives();
+    // Get Info's Sharing & Permissions (ADR-0028 option 1: the user's own items, no privilege). permissionsOf gives
+    // {valid, mode, modeText, owner, group, isDir, editable, reason, groups (the user's groups), access: [owner, group,
+    // others] (PermissionLogic::Access)}. A symbolic link, an item off the local disks or under /proc, /sys or /dev, and an
+    // item someone else owns are shown and not editable, `reason` says why (the administrator path waits for its review).
+    // Changes go through the item pinned by an O_PATH descriptor (its /proc/self/fd entry), never a path looked up again;
+    // permissionsChanged(url) then asks the window to read the item again (what the system reports, not what was asked).
+    Q_INVOKABLE QVariantMap permissionsOf(const QUrl &url) const;
+    Q_INVOKABLE void setAccess(const QUrl &url, int who, int access);
+    Q_INVOKABLE void setGroup(const QUrl &url, const QString &group);
+    // Apply to enclosed items (confirmed by the window): the folder's privileges to everything in it, with chmod's + and -
+    // operators (ADR-0028 probe 12: special bits kept); items of other users are left as they are and counted.
+    Q_INVOKABLE void applyToEnclosed(const QUrl &url);
     Q_INVOKABLE void duplicate(const QList<QUrl> &urls, QObject *folder);
     // Drag and drop: move on the same filesystem, copy across filesystems or with Ctrl/Alt held.
     Q_INVOKABLE void drop(const QList<QUrl> &urls, const QUrl &destination, QObject *folder);
@@ -427,6 +439,7 @@ signals:
     void folderCompletions(const QString &text, const QVariantList &matches);
     void recentFoldersChanged();
     void serversChanged();
+    void permissionsChanged(const QUrl &url);
 
 protected:
     // Remembers the last drag move over each window (refreshDrag).

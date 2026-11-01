@@ -247,6 +247,11 @@ TestCase {
         }
         function applyFolderStyle(urls: var, color: string, glyph: string): void {
         }
+        // Get Info's Sharing & Permissions (ADR-0028): nothing to edit here.
+        signal permissionsChanged(url url)
+        function permissionsOf(target: url): var {
+            return {valid: false};
+        }
         function directorySize(target: url, done: var): void {
         }
         // Applications that open the selection (Open With's list).

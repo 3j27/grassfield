@@ -45,7 +45,11 @@ Option 1 now, option 2 behind the review, with these rules:
   Write, Read only, Write only, No Access), the padlock, and "Apply to enclosed items…" (confirmed). Execute bits keep
   their state on files; on folders "Read" maps to r-x (macOS lists folder access, not execute). Special bits (setuid,
   setgid, sticky) are shown and never changed by the popup; the editor refuses to add setuid or setgid.
-- Unprivileged path: `KIO::chmod` / `KIO::chown` jobs; errors in the window's banner.
+- Unprivileged path (applied, Files PR 3–5 combined): the item is pinned as below (`O_PATH | O_NOFOLLOW`, `fstat`: a
+  folder or a regular file the user owns) and changed with `chmod(2)` / `chown(2)` on its `/proc/self/fd/<n>` entry,
+  rather than a KIO job that looks the path up again; "Apply to enclosed items…" runs `/usr/bin/chmod -R -- OPS <folder>`
+  as the user (the `+`/`-` operators below, probe 12; the folder checked to be no link). Errors in the window's banner;
+  the window reads the item again afterwards. An item the user does not own shows the closed padlock and its reason.
 - Privileged path (after the review): the padlock opens one polkit prompt per `pkexec` call, with one `--` before the
   operands, absolute program paths and no shell. Each command is proven by a probe below.
   - Pinning: Files opens the item with `O_PATH | O_NOFOLLOW | O_CLOEXEC`, checks the descriptor (`fstat`: the device

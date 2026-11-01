@@ -36,6 +36,7 @@ add_library(grassfield-files-core STATIC
     ${GF_FILES_SRC}/renamelogic.cpp ${GF_FILES_SRC}/renamelogic.h
     ${GF_FILES_SRC}/archivelogic.cpp ${GF_FILES_SRC}/archivelogic.h
     ${GF_FILES_SRC}/archivejob.cpp ${GF_FILES_SRC}/archivejob.h
+    ${GF_FILES_SRC}/permissionlogic.cpp ${GF_FILES_SRC}/permissionlogic.h
     ${GF_FILES_SRC}/filesearch.cpp ${GF_FILES_SRC}/filesearch.h
     ${GF_FILES_SRC}/savedsearches.cpp ${GF_FILES_SRC}/savedsearches.h
     ${GF_FILES_SRC}/applicationslogic.cpp ${GF_FILES_SRC}/applicationslogic.h
