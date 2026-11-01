@@ -28,7 +28,7 @@
 #    back: registered again
 # 12 bluetoothd restarts with a request outstanding: the shell gets "cancel"; the new one gets RegisterAgent
 # 13 a request (and a code shown) past the answer's time (a bridge run with --bt-timeout-ms): withdrawn, Rejected
-# 14 no test code in the bridge's output
+# 14 no test code, and no sanitizer report (GRASSFIELD_PROMPTER built with build-direct.sh --asan), in the bridge's output
 # Needs g++ with the Qt 6 Core and gcr-4 headers (or GRASSFIELD_PROMPTER: a built bridge), dbus-daemon, dbus-send, python3
 # with PyGObject (Gio, and Gcr 4 for 9); SKIPs without them, when libdbus cannot reach the buses, and when this process has
 # no cgroup of its own to stand for the shell's unit.
@@ -480,6 +480,8 @@ scenario_body() {
   # --- 14 nothing secret in the journal -----------------------------------------------------------------------------------
   desc="no test code in the bridge's output"
   check bash -c '! grep -q -e 12ab34 -e 012345 -e 482913 -e 000042 -e 654321 -e 246802 -e 135790 -e 000007 -e 000123 -e 12-34 "$1" "$2"' _ "$d/main.log" "$d/short.log"
+  desc="no sanitizer report in the bridge's output (a bridge built with build-direct.sh --asan)"
+  check bash -c '! grep -q -e "AddressSanitizer" -e "runtime error:" "$1" "$2"' _ "$d/main.log" "$d/short.log"
   return $fail
 }
 
