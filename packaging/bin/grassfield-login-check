@@ -85,5 +85,25 @@ else
   warn "theme '$theme' selects sessions in a way Grassfield does not know; check that the login screen reaches Grassfield (grassfield-login get)"
 fi
 
+# 4. Bluetooth (ADR-0035 decision 10-15). In the Grassfield session the shell's pairing sheet is bluetoothd's only agent, and
+# while the shell is not connected there is none: BlueZ then keeps the adapter non-bondable, so nothing pairs without
+# asking. AlwaysPairable=true in bluetoothd's configuration keeps it bondable with no agent, and the kernel then accepts an
+# incoming "Just Works" pairing by itself. BlueZ 5.87 reads one file, main.conf in its configuration directory
+# (/etc/bluetooth, its unit's ConfigurationDirectory=; no drop-in directory), as GLib's key file: the last value of the key
+# in [General] counts, "true" or "1" is true. Read only: Grassfield never changes that file.
+btconf=$root/etc/bluetooth/main.conf
+if [ -r "$btconf" ]; then
+  pairable=$(awk '
+    /^[ \t]*\[/ { group = $0; sub(/^[ \t]*\[/, "", group); sub(/\][ \t\r]*$/, "", group); next }
+    group == "General" && /^[ \t]*AlwaysPairable[ \t]*=/ { v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); value = v }
+    END { print value }' "$btconf")
+  case $pairable in
+    true | 1) warn "/etc/bluetooth/main.conf sets AlwaysPairable=$pairable: while Grassfield's shell is not running, this computer accepts Bluetooth pairing requests that need no code without asking (BlueZ's default, false, refuses them)" ;;
+    *) ok "Bluetooth: AlwaysPairable is not set (BlueZ refuses to pair without an agent to ask)" ;;
+  esac
+else
+  ok "Bluetooth: no /etc/bluetooth/main.conf (BlueZ's defaults: no pairing without an agent to ask)"
+fi
+
 [ "$warned" = 1 ] && [ "${1:-}" = --strict ] && exit 1
 exit 0
