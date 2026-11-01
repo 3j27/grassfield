@@ -433,7 +433,7 @@ FocusScope {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         visible: strip.count === 0 && root.model && !root.model.loading
-        text: root.tab.searchText !== "" ? qsTr("No Results") : root.model && root.model.error !== "" ? root.model.error : qsTr("This folder is empty.")
+        text: root.tab.searchText !== "" || (root.model && root.model.isFileSearch && root.model.error === "") ? qsTr("No Results") : root.model && root.model.error !== "" ? root.model.error : qsTr("This folder is empty.")
         wrapMode: Text.Wrap
         color: Appearance.colors.textSecondary
         font.family: Appearance.fontFamily

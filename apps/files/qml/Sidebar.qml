@@ -18,7 +18,22 @@ FocusScope {
     readonly property var places: root.app.places
     // The tab browses for an Open or Save panel (grassfield-portal, ADR-0035 D-4).
     readonly property bool choosing: !!(root.tab && root.tab.chooser)
-    readonly property int currentRow: root.tab ? root.places.rowForUrl(root.tab.url) : -1
+    // Counted up when the places change (a saved search added while it is shown), so the current row is looked up again.
+    property int placesRevision: 0
+    readonly property int currentRow: root.tab && root.placesRevision >= 0 ? root.places.rowForUrl(root.tab.url) : -1
+
+    Connections {
+        target: root.places
+        function onModelReset(): void {
+            root.placesRevision += 1;
+        }
+        function onRowsInserted(): void {
+            root.placesRevision += 1;
+        }
+        function onRowsRemoved(): void {
+            root.placesRevision += 1;
+        }
+    }
     property int keyRow: -1
     // Space kept free at the top for the window lights (the toolbar drawn over it, ADR-0015).
     property real topInset: 0
@@ -306,8 +321,8 @@ FocusScope {
             id: drop
             anchors.fill: parent
             // Network and Recents take no drop (Recents is a list, not a place: Finder; it does not spring open either), nor a
-            // tag in a panel.
-            enabled: entry.mounted && entry.kind !== "network" && entry.kind !== "recents" && !(entry.isTag && root.choosing)
+            // tag in a panel, nor a saved search (a list of items from several folders).
+            enabled: entry.mounted && entry.kind !== "network" && entry.kind !== "recents" && entry.kind !== "savedSearch" && !(entry.isTag && root.choosing)
             keys: ["text/uri-list"]
             // A place rested on during a drag opens in the tab (spring-loaded); a tag does not.
             onEntered: {
@@ -343,6 +358,19 @@ FocusScope {
                     if (entry.isTag) {
                         const p = mouse.mapToItem(null, event.x, event.y);
                         root.openTagMenu(entry.tag, p.x, p.y);
+                    } else if (entry.kind === "savedSearch" && !root.choosing) {
+                        // A saved search (Place.tag holds its file): Remove from Sidebar keeps it; Delete removes it.
+                        const p = mouse.mapToItem(null, event.x, event.y);
+                        root.tab.win.menuLayer.open([{id: "open", text: qsTr("Open")}, {separator: true},
+                                                     {id: "unlist", text: qsTr("Remove from Sidebar")},
+                                                     {id: "delete", text: qsTr("Delete Saved Search")}], p.x, p.y, id => {
+                            if (id === "open")
+                                root.openEntry(entry);
+                            else if (id === "unlist")
+                                root.app.setSavedSearchInSidebar(entry.tag, false);
+                            else if (id === "delete")
+                                root.app.removeSavedSearch(entry.tag);
+                        }, list, false);
                     } else if (entry.ejectable && !entry.busy) {
                         // A removable volume: Eject (the same action as the button on the row).
                         const p = mouse.mapToItem(null, event.x, event.y);

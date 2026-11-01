@@ -2475,6 +2475,32 @@ QtObject {
     readonly property int filesToolbarTitleMinWidth: 120
     // macOS 27 Finder: the up and down chevrons' marks centred 3 above and below the middle [ref: docs/specs/files.md § Views and selection]
     readonly property int filesViewPopupChevronOffset: 3
+    // macOS 27 Finder-Search: the scope bar from the toolbar to its hairline, 64 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeBarHeight: 32
+    // macOS 27 Finder-Search: the This Mac pill and the Save and + buttons, 40 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopePillHeight: 20
+    // macOS 27 Finder-Search: the pill's text 26 to 29 px inside its edges at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopePillPadding: 13
+    // macOS 27 Finder-Search: the pill's and buttons' corners round over 6 to 7 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property real filesScopePillRadius: 3.5
+    // macOS 27 Finder-Search: "Search:" to the first pill and pill to pill, 16 px at 2x (+-1) [ref: docs/specs/files.md § Search]
+    readonly property int filesScopePillGap: 8
+    // macOS 27 Finder-Search: the chosen pill 223 on the white window (the text colour at 12.5%) [ref: docs/specs/files.md § Search]
+    readonly property real filesScopePillOpacity: 0.125
+    // macOS 27 Finder-Search: Save is its text and 24.5 px each side at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeButtonPadding: 12
+    // macOS 27 Finder-Search: the + button, 64 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeAddWidth: 32
+    // macOS 27 Finder-Search: Save to +, 4 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeButtonGap: 2
+    // macOS 27 Finder-Search: + to the window edge, 20 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeTrailingInset: 10
+    // estimate: a filter row as tall as the scope bar (no capture of the Finder's + rows) [ref: docs/specs/files.md § Search]
+    readonly property int filesCriteriaRowHeight: 32
+    // estimate: the text and number fields of a filter row (no capture of the Finder's + rows) [ref: docs/specs/files.md § Search]
+    readonly property int filesCriteriaValueWidth: 160
+    // estimate: ms typing rests before the search starts again (the Finder searches as one types) [ref: docs/specs/files.md § Search]
+    readonly property int filesSearchDelay: 250
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

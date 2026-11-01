@@ -108,6 +108,9 @@ QString contentsText(const Query &query);
 QString nameTerm(const Query &query);
 // Whether a row needs the candidate's lstat, type or tags (a text-only search does not).
 bool needsFacts(const Query &query);
+// Whether the search asks for anything: text, or a complete row. A new smart folder asks for nothing and lists nothing
+// (the Finder's empty New Smart Folder), rather than every file of the scope.
+bool hasTerms(const Query &query);
 
 // Saved searches (one JSON file each, ADR-0027): {"version":1,"name":…,"scope":"computer"|<folder URL>,"query":…,
 // "filters":[{"attribute":…,"op":…,"value":…,"unit":…}],"sidebar":bool}.

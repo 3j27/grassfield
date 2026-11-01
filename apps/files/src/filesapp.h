@@ -311,6 +311,11 @@ public:
     Q_INVOKABLE QVariantList searchKinds() const;
     // A new row for an attribute: its first operator and a usable value (Kind: any; dates: within the last 7 days).
     Q_INVOKABLE QVariantMap searchCriterion(const QString &attribute) const;
+    // A date row's value is an ISO day ("2026-10-31"); the field shows it in the locale's short format and reads it back
+    // from that format or ISO ("" when it is no date).
+    Q_INVOKABLE QString searchDateText(const QString &iso) const;
+    Q_INVOKABLE QString searchDateValue(const QString &text) const;
+    Q_INVOKABLE QString searchToday() const;
     // Saved searches (the Finder's smart folders): [{name, url, sidebar, file}] by name.
     Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
     QVariantList savedSearches() const;

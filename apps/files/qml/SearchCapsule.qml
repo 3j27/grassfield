@@ -1,8 +1,9 @@
 import QtQuick
 import Grassfield.Ui
 
-// The search field of a Files toolbar (it filters the shown folder): a 36-pt circle that expands to a capsule while it has the
-// focus or text (macOS). The browser window's and the Open and Save panels' (FilePanel.qml).
+// The search field of a Files toolbar: a 36-pt circle that expands to a capsule while it has the focus or text (macOS).
+// The browser window's searches (ADR-0027: BrowserTab.setSearch shows a search location); the Open and Save panels'
+// (FilePanel.qml) filters the shown folder.
 Rectangle {
     id: root
 
@@ -11,12 +12,14 @@ Rectangle {
 
     // Open: it has the focus or text.
     readonly property bool expanded: search.activeFocus || search.text !== ""
+    // Its width when open (the browser window widens it while a search is shown: FP-22).
+    property real expandedWidth: Tokens.filesSearchWidth
 
     function focusField(): void {
         search.forceActiveFocus();
     }
 
-    width: expanded ? Tokens.filesSearchWidth : Tokens.filesToolbarCapsule
+    width: expanded ? root.expandedWidth : Tokens.filesToolbarCapsule
     height: Tokens.filesToolbarCapsule
     radius: height / 2
     color: Appearance.buttonFill
@@ -53,8 +56,8 @@ Rectangle {
         TextCursor {}
         anchors.left: searchIcon.right
         anchors.leftMargin: Tokens.spacingXs
-        anchors.right: parent.right
-        anchors.rightMargin: Tokens.spacingSm
+        anchors.right: clearButton.visible ? clearButton.left : parent.right
+        anchors.rightMargin: clearButton.visible ? 0 : Tokens.spacingSm
         anchors.verticalCenter: parent.verticalCenter
         clip: true
         opacity: root.expanded ? 1 : 0
@@ -67,7 +70,7 @@ Rectangle {
         text: root.tab ? root.tab.searchText : ""
         onTextEdited: root.tab.setSearch(text)
         Accessible.role: Accessible.EditableText
-        Accessible.name: qsTr("Search in this folder")
+        Accessible.name: root.tab && root.tab.chooser ? qsTr("Search in this folder") : qsTr("Search")
         Accessible.searchEdit: true
 
         Keys.onPressed: event => {
@@ -76,6 +79,8 @@ Rectangle {
                 root.tab.focusView();
                 event.accepted = true;
             } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                if (!root.tab.chooser)
+                    root.tab.flushSearch();
                 if (root.tab.activeFolder.count > 0 && root.tab.activeFolder.selectedCount === 0)
                     root.tab.activeFolder.select(0, 0);
                 root.tab.focusView();
@@ -90,6 +95,30 @@ Rectangle {
             text: qsTr("Search")
             color: Appearance.colors.textSecondary
             font: search.font
+        }
+    }
+
+    // Clears the field (and ends a typed search), as the shared SearchField's clear button.
+    MouseArea {
+        id: clearButton
+        visible: root.expanded && search.text !== ""
+        width: Tokens.menuIconSize + Tokens.spacingSm
+        height: parent.height
+        anchors.right: parent.right
+        anchors.rightMargin: Tokens.spacingXs
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Clear search")
+        Accessible.onPressAction: root.tab.setSearch("")
+        onClicked: {
+            root.tab.setSearch("");
+            search.forceActiveFocus();
+        }
+
+        Icon {
+            anchors.centerIn: parent
+            name: "close-glyph"
+            size: Tokens.menuIconSize - Tokens.spacingXs
+            color: Appearance.colors.textSecondary
         }
     }
 }

@@ -1,5 +1,7 @@
 #include "searchlogic.h"
 
+#include <algorithm>
+
 #include <QJsonArray>
 #include <QUrlQuery>
 
@@ -392,6 +394,13 @@ bool needsFacts(const Query &query)
             return true;
     }
     return false;
+}
+
+bool hasTerms(const Query &query)
+{
+    if (!query.text.trimmed().isEmpty())
+        return true;
+    return std::any_of(query.criteria.cbegin(), query.criteria.cend(), [](const Criterion &c) { return isComplete(c); });
 }
 
 QJsonObject toJson(const Saved &saved)

@@ -221,6 +221,16 @@ TEST(SearchCriteria, TextAndTerms)
     EXPECT_EQ(nameTerm(q), QStringLiteral("notes"));
     q.criteria.append({Attribute::Size, Op::Greater, QStringLiteral("1"), QStringLiteral("MB")});
     EXPECT_TRUE(needsFacts(q));
+
+    // A new smart folder (no text, no complete row) asks for nothing.
+    Query empty;
+    EXPECT_FALSE(hasTerms(empty));
+    empty.text = QStringLiteral("  ");
+    empty.criteria = {{Attribute::Name, Op::Contains, QString(), {}}};
+    EXPECT_FALSE(hasTerms(empty)) << "blank text and an unfinished row";
+    empty.criteria.append({Attribute::Kind, Op::Is, QStringLiteral("pdf"), {}});
+    EXPECT_TRUE(hasTerms(empty));
+    EXPECT_TRUE(hasTerms(q));
 }
 
 TEST(SavedSearch, JsonRoundTripAndRefusals)

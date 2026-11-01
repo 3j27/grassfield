@@ -1720,6 +1720,12 @@ void FolderModel::startFileSearch()
         emit loadingChanged();
         return;
     }
+    if (!SearchLogic::hasTerms(*query)) {
+        // Nothing asked yet (a new smart folder, a cleared field with no rows): nothing listed.
+        m_loading = false;
+        emit loadingChanged();
+        return;
+    }
     const QUrl base = searchBase();
     if (!QFileInfo(base.toLocalFile()).isDir()) {
         setError(tr("The folder of this search can't be found."));

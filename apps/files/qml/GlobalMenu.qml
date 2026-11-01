@@ -108,6 +108,13 @@ Platform.MenuBar {
             enabled: bar.keysHere && bar.writable && !bar.inTrash
             onTriggered: bar.tab.newFolder()
         }
+        // A smart folder: an empty search in a new window, its rules added with + (ADR-0027).
+        Platform.MenuItem {
+            text: qsTr("New Smart Folder")
+            shortcut: "Ctrl+Alt+N"
+            enabled: bar.keysHere
+            onTriggered: bar.win.newSmartFolder()
+        }
         Platform.MenuItem {
             text: qsTr("New Tab")
             shortcut: "Ctrl+T"

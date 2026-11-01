@@ -239,6 +239,11 @@ Window {
         goSheet.open();
     }
 
+    // File > New Smart Folder (Finder): a new window on an empty search of this computer, the + ready for its rules.
+    function newSmartFolder(): void {
+        win.manager.newWindow(win.app.searchUrl({text: "", folder: "", criteria: []}), null);
+    }
+
     function focusSearch(): void {
         searchCapsule.focusField();
     }
@@ -455,6 +460,12 @@ Window {
         sequence: "Ctrl+Shift+Z"
         enabled: !win.childIsKey && win.app.canRedo
         onActivated: win.app.redo()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+N"
+        enabled: !win.childIsKey
+        onActivated: win.newSmartFolder()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -742,11 +753,20 @@ Window {
                     }
                 }
 
-                // Search field (filters the current folder).
+                // Search field (ADR-0027): while a search is shown it takes the toolbar's free width, the title keeping its
+                // own (Finder-Search, FP-22).
                 SearchCapsule {
                     id: searchCapsule
                     anchors.verticalCenter: parent.verticalCenter
                     tab: win.tab
+                    expandedWidth: {
+                        if (!win.tab || !win.tab.fileSearch)
+                            return Tokens.filesSearchWidth;
+                        const others = Tokens.filesViewPopupWidth + Tokens.filesGroupButtonWidth + actionButton.width + 3 * Tokens.spacingSm;
+                        const title = Math.min(titleMetrics.advanceWidth, Math.max(Tokens.filesToolbarTitleMinWidth, toolbar.width / 3));
+                        const room = toolbar.width - toolbar.titleStart - title - Tokens.windowItemsGap - others - Tokens.windowItemsInset;
+                        return Math.max(Tokens.filesSearchWidth, Math.floor(room));
+                    }
                 }
             }
         }
@@ -766,14 +786,26 @@ Window {
             anchors.top: tabBar.bottom
             width: parent.width
             height: Tokens.appsBorderWidth
-            opacity: win.tabBarVisible || (win.tab !== null && win.tab.scrolled) ? 1 : 0
+            // A search's scope bar draws its own hairline below; none between it and the toolbar (Finder-Search).
+            opacity: win.tabBarVisible || (win.tab !== null && win.tab.scrolled && !scopeBar.visible) ? 1 : 0
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        }
+
+        // A search location's scope and filter rows (ADR-0027).
+        ScopeBar {
+            id: scopeBar
+            anchors.top: toolbarRule.bottom
+            width: parent.width
+            height: implicitHeight
+            app: win.app
+            tab: win.tab
+            onSaveRequested: win.openSaveSearch()
         }
 
         // Error banner
         Rectangle {
             id: banner
-            anchors.top: toolbarRule.bottom
+            anchors.top: scopeBar.bottom
             anchors.topMargin: visible ? Tokens.spacingSm : 0
             x: Tokens.spacingMd
             width: parent.width - 2 * Tokens.spacingMd
@@ -836,7 +868,8 @@ Window {
         PathBar {
             id: pathBar
             anchors.bottom: statusBar.top
-            visible: win.app.pathBarShown
+            // A search shows the selected result's path (Finder-Search, FP-74) whatever View > Show Path Bar says.
+            visible: win.app.pathBarShown || (win.tab !== null && win.tab.fileSearch)
             width: parent.width
             height: visible ? Tokens.filesPathBarHeight : 0
             tab: win.tab
@@ -880,9 +913,13 @@ Window {
                         return f.isSearch ? qsTr("Searching…") : qsTr("Loading…");
                     const total = f.count === 1 ? qsTr("1 item") : qsTr("%1 items").arg(f.count);
                     const items = f.selectedCount > 0 ? qsTr("%1 of %2 selected").arg(f.selectedCount).arg(total) : total;
-                    // A tag search: still running, or stopped by its bounds (TagSearch) before the whole folder was seen.
+                    // A search: still running, or stopped by its bounds (TagSearch, FileSearch) before it saw everything.
                     if (f.isSearch && f.loading)
                         return qsTr("%1, searching…").arg(items);
+                    if (f.isFileSearch && f.searchContentsUnavailable)
+                        return qsTr("Contents can’t be searched: the search index (localsearch) isn’t available.");
+                    if (f.isFileSearch && f.searchLimited)
+                        return qsTr("%1 (the search stopped early: add words or rules to narrow it)").arg(items);
                     if (f.isSearch && f.searchLimited)
                         return qsTr("%1 (the search stopped early: the folder holds too many items)").arg(items);
                     return f.freeSpace >= 0 ? qsTr("%1, %2 available").arg(items).arg(win.app.formatSize(f.freeSpace)) : items;
@@ -911,12 +948,50 @@ Window {
         destructive: true
     }
 
+    // Save (the scope bar): a name and Add To Sidebar (the Finder's Save sheet; its Where pop-up has one place here, the
+    // saved searches folder, so it is not shown). A name in use asks once; saving it again replaces that search.
+    function openSaveSearch(): void {
+        if (!win.tab || !win.tab.fileSearch)
+            return;
+        saveSheet.replacing = "";
+        saveSheet.setField(win.tab.savedSearch ? win.tab.savedSearch.name : (win.tab.searchText.trim() !== "" ? win.tab.searchText.trim() : qsTr("Untitled Search")));
+        sidebarCheck.checked = win.tab.savedSearch ? win.tab.savedSearch.sidebar : true;
+        saveSheet.open();
+    }
+
+    Sheet {
+        id: saveSheet
+        property string replacing: ""
+        title: qsTr("Save Search")
+        withField: true
+        placeholder: qsTr("Name")
+        confirmText: qsTr("Save")
+        focusBack: win.tab ? win.tab.view : null
+        confirmHandler: text => {
+            const name = text.trim();
+            if (name === "")
+                return qsTr("A saved search needs a name.");
+            const own = win.tab.savedSearch && win.tab.savedSearch.name === name;
+            if (!own && win.app.hasSavedSearch(name) && saveSheet.replacing !== name) {
+                saveSheet.replacing = name;
+                return qsTr("A saved search named “%1” already exists. Save again to replace it.").arg(name);
+            }
+            return win.app.saveSearch(name, win.tab.url, sidebarCheck.checked);
+        }
+
+        CheckBox {
+            id: sidebarCheck
+            text: qsTr("Add To Sidebar")
+            accessibleName: text
+        }
+    }
+
     // KIO's questions (a name that exists, a certificate…), in the window Main.qml places them in. One sheet at a time, as
     // AppKit queues a window's sheets and holds them while a menu is open: a question waits while Go to Folder, a
     // confirmation or a menu is open, and comes after.
     KioSheets {
         prompts: win.app.prompts ?? null
-        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !menuLayer.visible
+        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !menuLayer.visible
         focusBack: win.tab ? win.tab.view : null
     }
 

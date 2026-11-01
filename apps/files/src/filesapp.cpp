@@ -18,6 +18,7 @@
 
 #include <QClipboard>
 #include <QDateTime>
+#include <QLocale>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -1923,6 +1924,29 @@ QVariantMap FilesApp::searchCriterion(const QString &attribute) const
         break;
     }
     return {{QStringLiteral("attribute"), attribute}, {QStringLiteral("op"), SearchLogic::opKey(op)}, {QStringLiteral("value"), value}, {QStringLiteral("unit"), unit}};
+}
+
+QString FilesApp::searchDateText(const QString &iso) const
+{
+    const QDate day = QDate::fromString(iso.trimmed(), Qt::ISODate);
+    return day.isValid() ? QLocale().toString(day, QLocale::ShortFormat) : QString();
+}
+
+QString FilesApp::searchDateValue(const QString &text) const
+{
+    const QString t = text.trimmed();
+    QDate day = QLocale().toDate(t, QLocale::ShortFormat);
+    if (!day.isValid())
+        day = QDate::fromString(t, Qt::ISODate);
+    // A two-digit year reads as this century (Qt reads "31/10/26" as 1926).
+    if (day.isValid() && day.year() < 1970 && !t.contains(QString::number(day.year())))
+        day = day.addYears(100);
+    return day.isValid() ? day.toString(Qt::ISODate) : QString();
+}
+
+QString FilesApp::searchToday() const
+{
+    return QDate::currentDate().toString(Qt::ISODate);
 }
 
 QVariantList FilesApp::savedSearches() const

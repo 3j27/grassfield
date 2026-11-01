@@ -38,7 +38,11 @@ FocusScope {
     onGroupsShownChanged: root.applyGroups()
     // FolderModel listing `url` (icon and list views; the column view keeps one per column).
     property var folder: null
+    // The search field's text: a search location's text (ADR-0027) in Files; the shown folder's filter in a panel.
     property string searchText: ""
+    // The folder a search typed in the field started from: its "folder" scope, and where clearing the field goes back to
+    // ("" for a search opened otherwise: a saved search, New Smart Folder, history).
+    property url searchOrigin
     // Inline rename target: an item of `renameModel` (a url survives re-sorting). Kept in a url-typed
     // property so it stringifies like the delegates' url roles (percent-encoded).
     property url renameTarget
@@ -54,7 +58,21 @@ FocusScope {
     readonly property bool canBack: root.historyIndex > 0
     readonly property bool canForward: root.historyIndex >= 0 && root.historyIndex < root.history.length - 1
     readonly property var segments: root.app.pathSegments(root.url)
-    readonly property string title: root.segments.length > 0 ? DisplayName.text(root.segments[root.segments.length - 1].label) : ""
+    // A search location (ADR-0027) and what it asks for ({valid, text, folder, criteria}).
+    readonly property bool fileSearch: root.app.isFileSearch(root.url)
+    readonly property var searchQuery: root.fileSearch ? root.app.searchQuery(root.url) : ({valid: false})
+    // The saved search shown (its entry in FilesApp.savedSearches), or null.
+    readonly property var savedSearch: {
+        if (!root.fileSearch)
+            return null;
+        const saved = root.app.savedSearches;
+        for (let i = 0; i < saved.length; i++) {
+            if (root.app.sameUrl(saved[i].url, root.url))
+                return saved[i];
+        }
+        return null;
+    }
+    readonly property string title: root.savedSearch ? root.savedSearch.name : root.segments.length > 0 ? DisplayName.text(root.segments[root.segments.length - 1].label) : ""
     readonly property bool isTrash: String(root.url).startsWith("trash:")
     // The Applications location: read-only, opening starts the application.
     readonly property bool isApplications: String(root.url).startsWith("grassfield-apps:")
@@ -141,8 +159,17 @@ FocusScope {
         if (!root.springing)
             root.springOrigin = "";
         root.renameModel = null;
-        if (root.searchText !== "")
-            root.setSearch("");
+        searchTimer.stop();
+        if (root.chooser) {
+            if (root.searchText !== "")
+                root.setSearch("");
+        } else if (root.app.isFileSearch(target)) {
+            // The field shows the search's own text (back and forward through searches, a saved search).
+            root.searchText = root.app.searchQuery(target).text || "";
+        } else {
+            root.searchText = "";
+            root.searchOrigin = "";
+        }
         root.applyFolderView(target);
         root.url = target;
         root.folder.url = target;
@@ -267,9 +294,138 @@ FocusScope {
             root.app.previewPane = !root.app.previewPane;
     }
 
+    // The search field (SearchCapsule). A panel filters the shown folder by name. Files searches (ADR-0027, Finder-Search):
+    // typing shows a search location, This Computer by default, once typing rests (Tokens.filesSearchDelay); each new
+    // text replaces the search in the history rather than adding to it. Emptying the field goes back to the folder the
+    // search started from, unless the search has rows of its own (or is a saved search, a smart folder).
     function setSearch(text: string): void {
         root.searchText = text;
-        root.folder.filterText = text;
+        if (root.chooser) {
+            root.folder.filterText = text;
+            return;
+        }
+        if (text === "") {
+            searchTimer.stop();
+            root.applySearch();
+        } else {
+            searchTimer.restart();
+        }
+    }
+
+    // Return in the field: the search typed so far starts now.
+    function flushSearch(): void {
+        if (searchTimer.running) {
+            searchTimer.stop();
+            root.applySearch();
+        }
+    }
+
+    Timer {
+        id: searchTimer
+        interval: Tokens.filesSearchDelay
+        onTriggered: root.applySearch()
+    }
+
+    function applySearch(): void {
+        const q = root.searchQuery.valid ? root.searchQuery : null;
+        const criteria = q ? q.criteria : [];
+        if (root.searchText.trim() === "" && criteria.length === 0 && String(root.searchOrigin) !== "") {
+            root.endSearch();
+            return;
+        }
+        if (!q && root.searchText.trim() === "")
+            return;
+        root.showSearch({text: root.searchText, folder: q ? q.folder : "", criteria: criteria});
+    }
+
+    // Shows `query` ({text, folder, criteria}): in place of the shown search, or as a new location after a folder.
+    function showSearch(query: var): void {
+        const target = root.app.searchUrl(query);
+        if (root.fileSearch) {
+            root.replaceLocation(target);
+            return;
+        }
+        const origin = root.url;
+        root.navigate(target, true);
+        root.searchOrigin = origin;
+    }
+
+    // Shows `target` in place of the current history entry (a search refined as one types).
+    function replaceLocation(target: url): void {
+        const origin = root.searchOrigin;
+        const text = root.searchText;
+        root.navigate(target, false);
+        root.searchOrigin = origin;
+        root.searchText = text;
+        if (root.historyIndex >= 0) {
+            const h = root.history.slice();
+            h[root.historyIndex] = target;
+            root.history = h;
+        }
+    }
+
+    // Leaves a typed search for the folder it started from (Esc, the field emptied): back in the history when the search
+    // came right after it, so the forward list stays as it was.
+    function endSearch(): void {
+        const origin = root.searchOrigin;
+        if (String(origin) === "")
+            return;
+        if (root.canBack && root.app.sameUrl(root.history[root.historyIndex - 1], origin)) {
+            root.historyIndex -= 1;
+            root.history = root.history.slice(0, root.historyIndex + 1);
+            root.navigate(origin, false);
+        } else {
+            root.replaceLocation(origin);
+        }
+    }
+
+    // The scope bar: "" searches This Computer, a folder URL searches that folder and below.
+    function setSearchScope(folder: var): void {
+        const q = root.searchQuery;
+        if (!q.valid)
+            return;
+        root.showSearch({text: root.searchText, folder: folder, criteria: q.criteria});
+    }
+
+    // The folder the scope bar offers beside This Computer: the search's own, else the folder it started from.
+    readonly property url searchScopeFolder: {
+        if (!root.searchQuery.valid)
+            return "";
+        if (String(root.searchQuery.folder) !== "")
+            return root.searchQuery.folder;
+        return String(root.searchOrigin).startsWith("file:") ? root.searchOrigin : "";
+    }
+
+    // The + and - of the filter rows: a row added below `index` (-1: first), a row removed, a row changed.
+    function addCriterion(index: int): void {
+        const q = root.searchQuery;
+        if (!q.valid)
+            return;
+        const rows = q.criteria.slice();
+        rows.splice(index + 1, 0, root.app.searchCriterion("kind"));
+        root.showSearch({text: root.searchText, folder: q.folder, criteria: rows});
+    }
+
+    function removeCriterion(index: int): void {
+        const q = root.searchQuery;
+        if (!q.valid)
+            return;
+        const rows = q.criteria.slice();
+        rows.splice(index, 1);
+        if (rows.length === 0 && root.searchText.trim() === "" && String(root.searchOrigin) !== "") {
+            root.endSearch();
+            return;
+        }
+        root.showSearch({text: root.searchText, folder: q.folder, criteria: rows});
+    }
+
+    function setCriterion(index: int, row: var): void {
+        const q = root.searchQuery;
+        if (!q.valid || index < 0 || index >= q.criteria.length)
+            return;
+        const rows = q.criteria.slice();
+        rows[index] = row;
+        root.showSearch({text: root.searchText, folder: q.folder, criteria: rows});
     }
 
     // Header click in the list view, or a Sort By menu choice.
@@ -535,7 +691,9 @@ FocusScope {
         if (urls.length === 0)
             return;
         const target = urls[0];
-        root.setSearch("");
+        // A panel's filter hides the rest of the folder; a search location is left below.
+        if (root.chooser && root.searchText !== "")
+            root.setSearch("");
         // A tag search lists items of several folders: open the item's own folder, with the item selected.
         if (root.folder.isSearch) {
             const s = String(target);
@@ -677,8 +835,10 @@ FocusScope {
             }
             return;
         case Qt.Key_Escape:
-            if (root.searchText !== "")
+            if (root.searchText !== "" && root.chooser)
                 root.setSearch("");
+            else if (root.fileSearch && String(root.searchOrigin) !== "")
+                root.endSearch();
             else if (root.chooser)
                 root.chooser.cancel();
             else
@@ -800,7 +960,7 @@ FocusScope {
         // Colour tags (macOS: a row of colour dots under the edit items).
         items.push({separator: true});
         items.push(root.tagRow(model));
-        if (root.searchText !== "" || model.isSearch) {
+        if ((root.chooser && root.searchText !== "") || model.isSearch) {
             items.push({separator: true});
             items.push({id: "enclosing", text: qsTr("Show in Enclosing Folder")});
         }
@@ -893,7 +1053,7 @@ FocusScope {
             const name = rows.length > 0 ? DisplayName.text(model.nameAt(rows[0])) : "";
             if (rows.length > 0)
                 items.push({id: "glance", text: rows.length === 1 ? qsTr("Glance at “%1”").arg(name) : qsTr("Glance at %1 Items").arg(rows.length), shortcut: qsTr("Space")});
-            if (root.searchText !== "" || model.isSearch)
+            if ((root.chooser && root.searchText !== "") || model.isSearch)
                 items.push({id: "enclosing", text: qsTr("Show in Enclosing Folder")});
             if (items.length > 0)
                 items.push({separator: true});
