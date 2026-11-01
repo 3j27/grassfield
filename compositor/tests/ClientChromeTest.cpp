@@ -261,7 +261,70 @@ TEST(ClientChromeSplitTitlebar, EachHalfRevealsItsOwnBar) {
     in.inSpan   = true;
     EXPECT_TRUE(nextRevealed(true, in)) << "revealed, the pointer on it";
     in.inSpan = false;
+    EXPECT_TRUE(nextRevealed(true, in)) << "in the gap between the halves: still its bar";
+    in.overOther = true;
     EXPECT_FALSE(nextRevealed(true, in)) << "the pointer went across to the other half: it goes";
+    in.pointerY = 0.0;
+    EXPECT_FALSE(nextRevealed(false, in)) << "over the other half at the top edge: that half's bar, not this one";
+}
+
+namespace {
+    // Two members side by side (the review of #99: an 8 px gap between the halves), the pointer walked along the band from
+    // `from` to `to` in `step` px: at every step exactly one bar is revealed, the left one until the pointer is over the
+    // right half, the right one from there. Both bars' states come from nextRevealed, each motion seeing the other's state
+    // before it (updateReveal's handOver).
+    void walkTheGap(double from, double to, double step) {
+        constexpr double kLeftEnd = 956.0, kRightStart = 964.0, kWidth = 1920.0, kBarTop = 24.0;
+        bool             left = false, right = false;
+        const auto       input = [&](double x, bool inOwn, bool overOther, bool otherRevealed) {
+            return RevealInput{.revealable = true, .onMonitor = true, .pointerY = 20.0, .barTop = kBarTop, .pressing = false, .inSpan = inOwn,
+                               .handOver = otherRevealed, .overOther = overOther};
+        };
+        // Revealed first over the left half, at the top edge.
+        left = nextRevealed(left, RevealInput{.revealable = true, .onMonitor = true, .pointerY = 0.0, .barTop = kBarTop, .pressing = false, .inSpan = true});
+        ASSERT_TRUE(left);
+        const int steps = static_cast<int>((to - from) / step);
+        for (int i = 0; i <= steps; ++i) {
+            const double x = from + (i * step);
+            const bool inLeft  = x >= 0 && x < kLeftEnd;
+            const bool inRight = x >= kRightStart && x < kWidth;
+            const bool l = nextRevealed(left, input(x, inLeft, inRight, right));
+            const bool r = nextRevealed(right, input(x, inRight, inLeft, left));
+            left  = l;
+            right = r;
+            EXPECT_EQ(left, x < kRightStart) << "the left bar at x " << x;
+            EXPECT_EQ(right, x >= kRightStart) << "the right bar at x " << x;
+        }
+    }
+} // namespace
+
+TEST(ClientChromeSplitTitlebar, TheBarIsHandedOverAcrossTheGapInSmallSteps) {
+    walkTheGap(900.0, 1020.0, 4.0);
+    walkTheGap(900.0, 1020.0, 12.0);
+    walkTheGap(950.0, 970.0, 1.0);
+    walkTheGap(940.0, 980.0, 40.0); // one jump over the gap, as before
+}
+
+TEST(ClientChromeSplitTitlebar, AndBackTheOtherWay) {
+    // Revealed over the right half, walked left in small steps: the right bar until the pointer is over the left half.
+    constexpr double kLeftEnd = 956.0, kRightStart = 964.0, kBarTop = 24.0;
+    bool             left = false;
+    bool             right = nextRevealed(false, RevealInput{.revealable = true, .onMonitor = true, .pointerY = 0.0, .barTop = kBarTop, .pressing = false});
+    for (int i = 0; i <= 25; ++i) {
+        const double x       = 1000.0 - (i * 4.0); // 1000 down to 900
+        const bool   inLeft  = x < kLeftEnd;
+        const bool inRight = x >= kRightStart;
+        const auto in      = [&](bool own, bool other, bool otherRevealed) {
+            return RevealInput{.revealable = true, .onMonitor = true, .pointerY = 20.0, .barTop = kBarTop, .pressing = false, .inSpan = own,
+                               .handOver = otherRevealed, .overOther = other};
+        };
+        const bool l = nextRevealed(left, in(inLeft, inRight, right));
+        const bool r = nextRevealed(right, in(inRight, inLeft, left));
+        left  = l;
+        right = r;
+        EXPECT_EQ(right, x >= kLeftEnd) << "the right bar at x " << x;
+        EXPECT_EQ(left, x < kLeftEnd) << "the left bar at x " << x;
+    }
 }
 
 TEST(ClientChromeSplitTitlebar, TheOtherHalfsBarComesAcrossTheBand) {

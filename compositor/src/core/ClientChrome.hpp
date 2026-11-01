@@ -123,10 +123,13 @@ namespace gf::chrome {
         bool   pressing   = false; // a press on a revealed bar is not released yet (a light decided at its release, a member's drag)
         bool   inSpan     = true;  // the pointer is within the window's width (a Split View member: its half; full screen: the monitor)
         bool   handOver   = false; // another bar is revealed on this monitor (the other half's): within the band this one comes
+        bool   overOther  = false; // the pointer is over the other half of its Split View (that member's width; never in full screen)
     };
 
     // Whether the titlebar is revealed after a pointer motion (or a change of the window), from whether it was. While a
-    // press on a revealed bar lasts, that bar stays and no other comes.
+    // press on a revealed bar lasts, that bar stays and no other comes. A revealed member's bar stays until the pointer is
+    // over the other half: the gap between the halves is its own (the review of #99: walked in small steps, the bar was
+    // lost in the gap and the other never came).
     bool nextRevealed(bool revealed, const RevealInput& in);
 
     // Whether a light of a full-screen window's titlebar can be used (minimize cannot).

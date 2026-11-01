@@ -11,6 +11,7 @@
 #include <hyprland/src/render/decorations/IHyprWindowDecoration.hpp>
 
 #include <array>
+#include <optional>
 #include <string>
 
 namespace Render {
@@ -138,6 +139,9 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // titlebar.
     bool revealable() const;
     void damageRevealed();
+    // A member's drag by its revealed bar ends (D75): where its bar hung above the window is drawn again, the gesture goes and
+    // the member is dropped at `at` (gf::tiler::memberDrop: over the other half they swap; nullopt: back in its half).
+    static void endRevealedDrag(std::optional<Vector2D> at);
     // Background, lights, glyphs and title on `bar` (monitor-local logical coordinates); `fullscreen`: a revealed bar.
     void drawBar(const PHLWINDOW& w, const CBox& bar, float scale, double rounding, float power, float alpha, bool hovered, bool fullscreen);
     bool onButtonPress(const Vector2D& coords, const IPointer::SButtonEvent& e);

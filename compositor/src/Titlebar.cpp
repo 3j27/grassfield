@@ -87,7 +87,7 @@ namespace {
         bool                      member     = false; // a Split View member (TL33, step 6b): swapped or back in its half at the end
         bool                      revealed   = false; // that member's drag started on its revealed bar (step 6e, D75): its press and
                                                       // release are cancelled on the bus (revealPresses), not tracked by `presses`
-        double                    barOffset  = 0.0;   // the revealed bar's top below the surface's top at the press: the bar moves with it
+        double                    barOffset  = 0.0;   // the revealed bar's top relative to the surface's top once it moves (above it)
         std::vector<WP<IPointer>> devices;  // pointer devices present at the press
     };
 
@@ -806,10 +806,24 @@ CBox CGrassfieldTitlebar::revealBox() const {
     if (!w || !mon)
         return {};
     const CBox surface = w->getWindowMainSurfaceBox(); // the monitor's box in full screen, its half for a Split View member
-    // A member dragged by this bar (D75): the bar moves with the window, at the place under the menu bar it had at the press.
-    if (const auto& grab = pointerInput().grab; grab.revealed && grab.deco == this)
+    // A member dragged by this bar (D75), once it moves: the bar above the window (the window's content below it, as any
+    // window dragged by its titlebar; the review of #99: 24 px of content showed above the bar).
+    if (const auto& grab = pointerInput().grab; grab.revealed && grab.moved && grab.deco == this)
         return CBox{surface.x, surface.y + grab.barOffset, surface.w, theme::kTitlebarHeight};
     return CBox{surface.x, mon->m_position.y + menubarInset(mon), surface.w, theme::kTitlebarHeight};
+}
+
+void CGrassfieldTitlebar::endRevealedDrag(std::optional<Vector2D> at) {
+    auto& input = pointerInput();
+    if (!input.grab.revealed)
+        return;
+    auto* deco = isLive(input.grab.deco) ? input.grab.deco : nullptr;
+    if (deco)
+        deco->damageRevealed(); // where the bar hung above the window
+    SPointerGrab grab = std::exchange(input.grab, {});
+    gf::tiler::memberDrop(grab.window.lock(), at);
+    if (deco)
+        deco->damageRevealed(); // where it is again
 }
 
 void CGrassfieldTitlebar::refreshWindow(const PHLWINDOW& w) {
@@ -1265,8 +1279,7 @@ void CGrassfieldTitlebar::onGlobalMouseButton(const IPointer::SButtonEvent& e) {
             // wherever Hyprland sends it).
             if (input.grab.revealed) {
                 gf::logRequest(Log::INFO, "revealed titlebar: a Split View window's drag ended by another press: back in its half");
-                gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt);
-                input.grab = {};
+                endRevealedDrag(std::nullopt);
             }
             return;
         }
@@ -1342,8 +1355,7 @@ void CGrassfieldTitlebar::onGlobalMouseMove() {
                                intact ? "its press is over" : "a pointer device went away");
                 if (!intact)
                     input.revealPresses.reset();
-                gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt);
-                input.grab = {};
+                endRevealedDrag(std::nullopt);
                 return;
             }
             auto* deco = isLive(input.grab.deco) ? input.grab.deco : nullptr;
@@ -1387,10 +1399,8 @@ void CGrassfieldTitlebar::onSessionLock(bool locked) {
         auto& input = pointerInput();
         // A member's drag by its revealed bar ends at the lock (D75): back in its half, nothing moves behind the lock screen.
         // Its release, still owed, is cancelled when it comes (revealPresses), as its press was.
-        if (locked && input.grab.revealed) {
-            gf::tiler::memberDrop(input.grab.window.lock(), std::nullopt);
-            input.grab = {};
-        }
+        if (locked && input.grab.revealed)
+            endRevealedDrag(std::nullopt);
         postHover(input.zoomHover.update(std::nullopt, nowMs()), nullptr, CBox{});
         if (!locked)
             armZoomTimer(0);
@@ -1444,6 +1454,30 @@ void CGrassfieldTitlebar::updateReveal() {
         if (const auto mon = w ? w->m_monitor.lock() : nullptr)
             withBar.push_back(mon);
     }
+    // The Split View members on visible Desktops, read once and only when a bar may change (not on every motion): their
+    // halves (the pointer over the other half hands the bar over, D74) and which of them are zoomed or in full screen (they
+    // cover the other member, whose bar then never comes).
+    struct SMember {
+        const CGrassfieldTitlebar*  deco = nullptr;
+        PHLWORKSPACE                workspace;
+        Fullscreen::eFullscreenMode mode  = Fullscreen::FSMODE_NONE;
+        double                      left  = 0.0;
+        double                      right = 0.0;
+    };
+    std::optional<std::vector<SMember>> members;
+    const auto                          halves = [&members]() -> const std::vector<SMember>& {
+        if (!members) {
+            members.emplace();
+            for (const auto* d : gf::state().titlebars) {
+                const auto mw = d->window();
+                if (!mw || !mw->m_isMapped || !mw->m_workspace || !mw->m_workspace->isVisible() || !gf::tiler::inSplit(mw))
+                    continue;
+                const CBox surface = mw->getWindowMainSurfaceBox();
+                members->push_back(SMember{.deco = d, .workspace = mw->m_workspace, .mode = fullscreenMode(mw), .left = surface.x, .right = surface.x + surface.w});
+            }
+        }
+        return *members;
+    };
     for (auto* deco : gf::state().titlebars) {
         gf::chrome::RevealInput in;
         const auto              w   = deco->window();
@@ -1460,10 +1494,22 @@ void CGrassfieldTitlebar::updateReveal() {
         in.revealable = deco->revealable();
         if (!in.revealable && !deco->m_revealed)
             continue;
-        // A Split View member's bar is its half's alone (D74); a full-screen window's spans its monitor.
-        if (in.revealable && fullscreenMode(w) != Fullscreen::FSMODE_FULLSCREEN && gf::tiler::inSplit(w)) {
+        // A Split View member's bar is its half's alone (D74), and stays across the gap until the pointer is over the other
+        // half; a full-screen window's spans its monitor. A member covered by its other member (zoomed or in full screen)
+        // shows none.
+        if (const auto mode = w ? fullscreenMode(w) : Fullscreen::FSMODE_NONE; in.revealable && mode != Fullscreen::FSMODE_FULLSCREEN && gf::tiler::inSplit(w)) {
             const CBox surface = w->getWindowMainSurfaceBox();
             in.inSpan          = pos.x >= surface.x && pos.x < surface.x + surface.w;
+            if (mode == Fullscreen::FSMODE_NONE) {
+                for (const auto& other : halves()) {
+                    if (other.deco == deco || other.workspace != w->m_workspace)
+                        continue;
+                    if (other.mode != Fullscreen::FSMODE_NONE)
+                        in.revealable = false;
+                    else if (pos.x >= other.left && pos.x < other.right)
+                        in.overOther = true;
+                }
+            }
         }
         in.barTop       = menubarInset(mon);
         in.pressing     = pressing;
@@ -1475,8 +1521,11 @@ void CGrassfieldTitlebar::updateReveal() {
         deco->damageRevealed(); // where it is
         changed = true;
         if (!sessionLocked()) {
-            if (gf::tiler::inSplit(w)) // which half's bar (tests/compositor/tiling.sh split-titles reads it)
-                gf::logRequest(Log::DEBUG, "titlebar of Split View window {:x} {}", addressOf(w), next ? "revealed" : "away");
+            // Which half's bar, numbered (tests/compositor/tiling.sh split-titles waits for a number past the one it read in
+            // Hyprland's in-memory log before the motion: the log file is buffered, the review of #99).
+            static uint64_t splitReveals = 0;
+            if (gf::tiler::inSplit(w))
+                gf::logRequest(Log::DEBUG, "titlebar of Split View window {:x} {} (reveal {})", addressOf(w), next ? "revealed" : "away", ++splitReveals);
             else
                 gf::logRequest(Log::DEBUG, "titlebar of a full-screen window {}", next ? "revealed" : "away");
         }
@@ -1536,11 +1585,13 @@ bool CGrassfieldTitlebar::onRevealedBarButton(const IPointer::SButtonEvent& e) {
             // A member's drag by this bar (D75) ends at the release of its button: over the other half the two swap halves
             // (memberDrop), anywhere else or without a move it goes back in its half.
             if (input.grab.revealed && e.button == BTN_LEFT) {
-                SPointerGrab grab = std::exchange(input.grab, {});
-                updateMove(grab); // its final place at the release point
-                const auto at = grab.moved ? std::optional<Vector2D>{g_pInputManager ? g_pInputManager->getMouseCoordsInternal() : grab.pressPos} : std::nullopt;
-                gf::logRequest(Log::INFO, "revealed titlebar: a Split View window's drag released {}", grab.moved ? "after a move" : "without a move");
-                gf::tiler::memberDrop(grab.window.lock(), at);
+                if (isLive(input.grab.deco))
+                    input.grab.deco->damageRevealed(); // where the bar was at the last motion
+                updateMove(input.grab);                // its final place at the release point
+                const bool moved = input.grab.moved;
+                const auto at    = moved ? std::optional<Vector2D>{g_pInputManager ? g_pInputManager->getMouseCoordsInternal() : input.grab.pressPos} : std::nullopt;
+                gf::logRequest(Log::INFO, "revealed titlebar: a Split View window's drag released {}", moved ? "after a move" : "without a move");
+                endRevealedDrag(at);
             }
             updateReveal(); // the pointer may have left the bar during the press
             return;
@@ -1597,17 +1648,19 @@ bool CGrassfieldTitlebar::onRevealedBarButton(const IPointer::SButtonEvent& e) {
                 break;
             case gf::chrome::RevealedPress::MemberDrag: {
                 // TL33, step 6e (D75, D59): the window follows the pointer with its bar until the release (or another press).
-                const CBox surface   = w->getWindowMainSurfaceBox();
+                // Once it moves, its surface hangs below the bar, which stays under the pointer where it was pressed: the
+                // move starts from the box whose top is the bar's bottom (updateMove never takes it higher).
                 input.grab           = {};
                 input.grab.deco      = deco;
                 input.grab.dragging  = true;
                 input.grab.member    = true;
                 input.grab.revealed  = true;
-                input.grab.barOffset = bar.y - surface.y;
+                input.grab.barOffset = -theme::kTitlebarHeight;
                 input.grab.window    = w;
                 input.grab.pressPos  = pos;
                 input.grab.startBox  = target->position();
                 input.grab.pressBox  = input.grab.startBox;
+                input.grab.startBox.y = bar.y + theme::kTitlebarHeight;
                 input.grab.devices   = pointerDevices();
                 gf::tiler::memberDragBegin(w);
                 gf::logRequest(Log::INFO, "revealed titlebar: a Split View window's drag begins");

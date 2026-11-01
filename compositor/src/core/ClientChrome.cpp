@@ -63,12 +63,12 @@ namespace gf::chrome {
             return false;
         if (in.pressing)
             return revealed; // a press on a light is decided at its release, over the bar; a member's drag holds its bar
-        if (!in.onMonitor || !in.inSpan || in.pointerY < 0.0)
+        if (!in.onMonitor || in.pointerY < 0.0)
             return false;
         const bool onBand = in.pointerY < in.barTop + theme::kTitlebarHeight + kRevealSlack;
-        if (!revealed)
-            return in.pointerY <= kRevealEdge || (in.handOver && onBand);
-        return onBand;
+        if (revealed)
+            return onBand && !in.overOther; // across the gap between the halves too, until the other half
+        return in.inSpan && (in.pointerY <= kRevealEdge || (in.handOver && onBand));
     }
 
     bool lightAvailableInFullscreen(titlebar::Button button) {
