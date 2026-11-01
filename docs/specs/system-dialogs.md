@@ -464,16 +464,18 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   of its own (SC3b).
 - SC8 NetworkManager (built in step 9c: `bridges/prompter/src/NmAgent.{h,cpp}`, `NmSecrets.{h,cpp}`, decisions 9-27 to 9-35):
   the bridge's secret agent answers `GetSecrets` for `802-11-wireless-security` (WPA/WPA2 `psk`, WPA3 `psk`, WEP
-  `wep-key<wep-tx-keyidx>`) and `802-1x` (identity and password, an EAP method that takes them) of a Wi-Fi connection, when
+  `wep-key<wep-tx-keyidx>`) and `802-1x` (the password, an EAP method that takes a name and a password, the connection's
+  username shown read-only: NetworkManager keeps only secrets from an agent's reply, opus review of step 9c) of a Wi-Fi connection, when
   the flags allow interaction, with the sheet's Wi-Fi alert ("The Wi-Fi network “%1” requires a WPA2 password." / "… a WPA3
-  password." / "… a WEP password." / "… requires WPA2 enterprise credentials.", "Requested by NetworkManager", the username for
-  enterprise, Show password, Cancel / Join), always held until a click past the guard (9-28); Join answers the secrets, Cancel
+  password." / "… a WEP password." / "… requires WPA2 enterprise credentials.", "Requested by NetworkManager", "Username: …"
+  for enterprise (read-only), Show password (never selectable or copyable, 9-34), Cancel / Join), always held until a click
+  past the guard (9-28); Join answers the secrets, Cancel
   `UserCanceled`; `CancelGetSecrets` closes it (shown or queued, `AgentCanceled`); a request unanswered after 110 s is
   withdrawn (`NoSecrets`, NetworkManager stops waiting at 120 s); `SaveSecrets` is refused (`Failed`: nothing is stored in
   Grassfield, so NetworkManager asks another agent) and `DeleteSecrets` succeeds; NetworkManager keeps system-owned secrets as
   the connection says. It accepts calls only from the current owner of `org.freedesktop.NetworkManager` on the system bus,
   asked when each call arrives; other callers get `PermissionDenied` and no sheet. Without interaction allowed, for VPN, wired
-  802.1X, EAP-TLS, LEAP, OWE: `NoSecrets` without a sheet. VPN: NetworkManager shows no VPN dialog itself (an agent like
+  802.1X, EAP-TLS, LEAP, OWE, an enterprise connection without a stored username: `NoSecrets` without a sheet. VPN: NetworkManager shows no VPN dialog itself (an agent like
   nm-applet runs the VPN plugin's auth dialog, which this one does not), so a VPN that needs secrets at connect time fails,
   as it does today.
 - SC9 KIO network passwords (ADR-0035 D-12 b): the bridge owns `org.kde.kpasswdserver6` at `/modules/kpasswdserver`
@@ -549,7 +551,8 @@ Bridge to shell:
   `org.freedesktop.NetworkManager` on the system bus, so it carries no requester object (the shell draws its own row:
   "Wi-Fi", "Requested by NetworkManager"); `ssid` the connection's SSID, plain, at most 64 UTF-16 code units, never empty,
   shown only as a quoted field of the sheet's sentence; `security` WPA/WPA2 Personal, WPA3 Personal, WEP or WPA2 Enterprise;
-  `identity` the connection's own identity for `enterprise` (the username field's first text), empty otherwise.
+  `identity` the connection's own username for `enterprise`, never empty there (a connection without one is not asked),
+  shown read-only (NetworkManager keeps only secrets from an agent's reply), empty otherwise.
 - `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, NetworkManager
   cancelled it or left the bus, its answer's time ran out, or the bridge cancelled it after a wrong answer): the shell removes
   its sheet, shown or still queued, and does not answer it.
@@ -560,11 +563,12 @@ Shell to bridge (at most 16 KiB per line):
 - `{"v":"prompter/1","type":"hello","shell":"<version>","kinds":[...]}`: the first line, once; `kinds` lists what the
   shell draws. The bridge asks for the name only after it, and sends only requests of a listed kind (another kind is
   answered "cancelled" to its caller without reaching the shell).
-- `{"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false,"identity":"..."}`: `password`
+- `{"type":"answer","id":"p<N>","result":"ok"|"cancel"|"refused","password":"...","choice":true|false}`: `password`
   only for a `password` or `nm` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password
-  for gcr, never for `nm`); `choice` only when the prompt had a check box (never for `nm`); `identity` only for an `nm`
-  request of security `enterprise` answered `ok` (not empty, at most 1024 bytes). An `nm` answer that breaks these rules
-  cancels its request (NetworkManager gets `NoSecrets`).
+  for gcr, never for `nm`); `choice` only when the prompt had a check box (never for `nm`); `refused` is the shell's own
+  refusal (beyond its bound of 8, or without a queue): gcr gets "cancelled", NetworkManager `NoSecrets`, never the user's
+  `UserCanceled` (opus review of step 9c). The bridge parses an `identity` (at most 1024 bytes) but no kind accepts one: an
+  `nm` answer with it, or that breaks the other rules, cancels its request (NetworkManager gets `NoSecrets`).
 
 The shell's reading (step 9b, decision 9-20; `shell/security/secret/Prompter.js`): exactly these messages with exactly
 these keys and types, texts within the caps above, a requester consistent with its role, only the kinds of its hello;
@@ -738,7 +742,12 @@ are agent-owned (`psk-flags=1`, as some editors make them) is asked for its pass
 `SaveSecrets` is refused so that another agent may store them; system-owned secrets the agent returns are kept by
 NetworkManager only when the user has its `settings.modify.system` (or `modify.own`) permission without authentication
 (NetworkManager discards them otherwise and the connection fails: NOT VERIFIED on the owner's polkit rules); VPN, wired
-802.1X, EAP-TLS (a certificate's password), LEAP and a PIN are not asked (`NoSecrets`); an SSID is shown as the connection
+802.1X, EAP-TLS (a certificate's password), LEAP and a PIN are not asked (`NoSecrets`); an enterprise network's username
+cannot be changed from the sheet (NetworkManager keeps only secrets from an agent's reply: it is changed where the connection
+is edited, as on GNOME; a connection without one is not asked); NetworkManager sends the connection's current system-owned
+secrets (the old password of a network asked again) inside `GetSecrets`' connection argument to a user with the modify
+permission, and that copy stays in GDBus's buffers of the call until it is answered (never read, forwarded or logged by
+the bridge); an SSID is shown as the connection
 holds it, flattened, so two networks with look-alike names look alike (macOS shows the name too); a WPA2 password of 64
 characters that are not hexadecimal is refused by NetworkManager, not by the sheet; NetworkManager stops waiting at 120 s,
 so a Wi-Fi sheet left unanswered is withdrawn at 110 s; GDBus marshals a copy of a Wi-Fi secret into the reply it writes and
