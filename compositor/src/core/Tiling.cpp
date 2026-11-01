@@ -1366,13 +1366,15 @@ namespace gf::tiling {
         return std::nullopt;
     }
 
-    std::optional<Suggestion> withoutWindow(std::optional<Suggestion> sg, uint64_t window) {
-        if (!sg)
-            return std::nullopt;
-        std::erase(sg->windows, window);
-        if (sg->windows.empty())
-            return std::nullopt;
-        return sg;
+    std::vector<uint64_t> offerWindows(std::span<const uint64_t> candidates, uint64_t exclude) {
+        std::vector<uint64_t> out;
+        for (const auto id : candidates) {
+            if (out.size() >= kMaxSuggested)
+                break;
+            if (id != exclude && std::ranges::find(out, id) == out.end())
+                out.push_back(id);
+        }
+        return out;
     }
 
     const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace) {

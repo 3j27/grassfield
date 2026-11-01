@@ -615,7 +615,7 @@ namespace gf::tiler {
         // windows that can take them (D26): the tileable windows of that output's Desktop in the active stage, top first, then
         // the windows minimized from that output, the latest first; never one that holds a zone of that layout already.
         // nullopt when no zone is empty or no window fits (nothing is shown then).
-        std::optional<tiling::Suggestion> suggestionFor(uint64_t askerId, const PHLMONITOR& m) {
+        std::optional<tiling::Suggestion> suggestionFor(uint64_t askerId, const PHLMONITOR& m, uint64_t exclude = 0) {
             const auto& s      = st();
             const auto* asker  = s.book.find(askerId);
             const auto* layout = asker ? tiling::layoutById(asker->where.layout) : nullptr;
@@ -639,17 +639,18 @@ namespace gf::tiler {
             const auto&   all   = Desktop::windowState()->windows(); // bottom to top
             // A Split View's other half takes only a window that fits it (TL8; nested pass of 1ee992e, MAJOR C: no overlap).
             const auto fits = [&](const PHLWINDOW& w) { return !split || tiling::fitsFrame(constraintsOf(w), sg.frames.front()); };
-            for (auto it = all.rbegin(); it != all.rend() && sg.windows.size() < tiling::kMaxSuggested; ++it) {
+            std::vector<uint64_t> candidates;
+            for (auto it = all.rbegin(); it != all.rend(); ++it) {
                 const auto& w = *it;
                 if (w && w->m_workspace && w->m_workspace->m_id == from && placeable(w) && monitorOf(w) == m && !inLayout(idOf(w)) && fits(w))
-                    sg.windows.push_back(idOf(w));
+                    candidates.push_back(idOf(w));
             }
             for (const auto id : gf::minimizer::minimizedFrom(m->m_name)) {
-                if (sg.windows.size() >= tiling::kMaxSuggested)
-                    break;
                 if (const auto w = windowById(id); tileableKind(w) && !inLayout(id) && fits(w))
-                    sg.windows.push_back(id);
+                    candidates.push_back(id);
             }
+            // Capped after `exclude` is left out (core offerWindows; the follow-up of #78: Replace offered 11 of 12 or more).
+            sg.windows = tiling::offerWindows(candidates, exclude);
             if (sg.windows.empty())
                 return std::nullopt;
             return sg;
@@ -2138,7 +2139,7 @@ namespace gf::tiler {
                 // the Desktop the Split View came from but the one replaced; nothing to offer: it fills alone (D43).
                 const auto m = replace && d->members.size() == 1 ? splitMonitor(*d) : nullptr;
                 if (m && m->m_activeWorkspace && m->m_activeWorkspace->m_id == d->workspace) {
-                    s.suggestion = tiling::withoutWindow(suggestionFor(d->members.front(), m), idOf(w));
+                    s.suggestion = suggestionFor(d->members.front(), m, idOf(w));
                     d->waiting   = s.suggestion.has_value();
                     waits        = d->waiting;
                 }

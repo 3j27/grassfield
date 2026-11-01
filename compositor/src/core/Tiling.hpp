@@ -647,9 +647,10 @@ namespace gf::tiling {
     };
     std::optional<Unsplit> unsplitHow(std::string_view text);
 
-    // A Replace Tiled Window's suggestion: `sg` without the window it replaced (it went back to the Desktop the picker offers
-    // windows from); nullopt when no window is left to offer (the other member then fills alone, D43).
-    std::optional<Suggestion> withoutWindow(std::optional<Suggestion> sg, uint64_t window);
+    // The windows a suggestion offers (TL28, D26): `candidates` in their order (top first, then the minimized ones), each once,
+    // never `exclude` (Replace Tiled Window's window, back on the Desktop the picker offers windows from: D71; 0 excludes
+    // none), at most kMaxSuggested: the cap counts after the exclusion (the follow-up of #78: 11 offered with 12 or more).
+    std::vector<uint64_t> offerWindows(std::span<const uint64_t> candidates, uint64_t exclude);
 
     // The Split View Desktop `workspace` is, or nullptr.
     const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace);
