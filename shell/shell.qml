@@ -267,23 +267,32 @@ ShellRoot {
             degradedNoticeKey = Notifications.postInternal(qsTr("Updating the compositor extension"), qsTr("Grassfield was updated, and its compositor extension is being updated in the background. Window titlebars and minimize come back once it is done, or after the next login."));
             break;
         case "stale-manual":
-            degradedNoticeKey = Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Run grassfield-compositor-rebuild in a terminal to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then."));
+            // ADR-0041 step 2d (SP-6): no command to type; a click runs the rebuild the opt-in setting would have run.
+            degradedNoticeKey = Notifications.postInternalAction(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Click to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then."), () => root.startExtensionRebuild("the notice"));
             break;
         case "mismatch-rebuilding":
             degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.").arg(hyprlandName()));
             break;
         case "mismatch-manual":
-            degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.").arg(hyprlandName()));
+            degradedNoticeKey = Notifications.postInternalAction(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet, so window titlebars and minimize are unavailable. Click to build it, then log out and back in.").arg(hyprlandName()), () => root.startExtensionRebuild("the notice"));
             break;
         default:
             degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
             return;
         }
-        if (rebuild) {
-            extensionRebuildTried = true;
-            console.info("grassfield: compositor extension rebuild started");
-            extensionSession.running = true;
-        }
+        if (rebuild)
+            startExtensionRebuild("the setting");
+    }
+
+    // The background rebuild (`--session`, as the user): started once per shell run by the opt-in setting, or by a click on
+    // a manual degraded notice (ADR-0041 step 2d). A second click while it runs, or after it ran, starts nothing: the
+    // result notice already said what is next.
+    function startExtensionRebuild(why: string): void {
+        if (extensionSession.running || extensionRebuildTried)
+            return;
+        extensionRebuildTried = true;
+        console.info("grassfield: compositor extension rebuild started (" + why + ")");
+        extensionSession.running = true;
     }
 
     // The notice for the --session answer.
