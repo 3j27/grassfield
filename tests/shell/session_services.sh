@@ -121,6 +121,12 @@ desc="grassfield-prompter.service: the shell's unit is an argument (--peer-unit 
 check bash -c 'grep -qx "ExecStart=/usr/lib/grassfield/grassfield-prompter --peer-unit grassfield-shell.service" "$1" && grep -qx "RuntimeDirectory=grassfield" "$1" && grep -qx "RuntimeDirectoryPreserve=yes" "$1" && grep -qx "UMask=0077" "$1" && ! grep -q "^\[Install\]" "$1" && ! grep -q "^Environment=" "$1"' _ "$u"
 desc="grassfield-prompter: installed where its unit runs it, built, tested and packaged by the PKGBUILD, which declares gcr-4 and libsecret (step 9e)"
 check bash -c 'grep -q "RUNTIME DESTINATION lib/grassfield" "$1" && grep -q "packaging/systemd/grassfield-prompter.service DESTINATION lib/systemd/user" "$1" && grep -q "cmake --install \"\$srcdir/prompter-build\"" "$2" && grep -q "\"\$srcdir/prompter-build/prompter-unit-tests\"" "$2" && grep -qE "^  depends=\(.* gcr-4 libsecret\)" "$2" && grep -qE "^ +quickshell gcr-4 libsecret\)" "$2"' _ "$root/bridges/prompter/CMakeLists.txt" "$pk/arch/PKGBUILD"
+# ADR-0035 decision 10-1 (opus review of step 10, MAJOR): Omarchy's bt-agent never runs beside the bridge's pairing agent.
+# Its drop-in skips it in this session and stops it with the session that started it (Omarchy's unit has no PartOf=, and
+# the user manager can outlive a logout); the bridge's unit stops one still running before it starts, one way only
+# (Conflicts= would let any start of bt-agent in this session stop the bridge, although bt-agent's condition then skips it).
+desc="the bt-agent drop-in skips it in this session and stops it with the session; grassfield-prompter.service stops a leftover one first, without Conflicts="
+check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "ExecStartPre=-/usr/bin/systemctl --user stop bt-agent.service" "$2" && ! grep -q "^Conflicts=" "$2"' _ "$pk/systemd/bt-agent.service.d/10-grassfield.conf" "$u"
 # udiskie's password command (ADR-0035 D-9, step 9c): grassfield-askpass, built and installed with the bridge, where the
 # automount unit runs it, the disk's name one argument of udiskie's own formatting.
 desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
