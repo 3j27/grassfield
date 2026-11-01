@@ -151,17 +151,17 @@ which edits that ADR and the app, merges; until then it lives here. State on mai
 
 | Rule | Where it comes from | State |
 |---|---|---|
-| The window's neutrals and secondary colour (`Appearance.windowSecondary`), never the glass `colors.textSecondary` | Q3, step 9; G13 | three uses left: `Main.qml:198`, `ProcessList.qml:113, :127` (after #86) |
+| The window's neutrals and secondary colour (`Appearance.windowSecondary`), never the glass `colors.textSecondary` | Q3, step 9; G13 | done after #86 merged: the seventeen uses of its windows (Main, ProcessList, Inspect, Performance, CPU and App History) |
 | The shared toolbar: `UnifiedToolbar`, `RimmedCapsule` on `toolbar.*`, `SearchField` 28 with its clear button | step 14; G16 | done |
 | Icon-only toolbar buttons name themselves (`ToolButton.tooltip`), unless the window's own tooltip says more | step 14 | done (Quit Process and the action button carry AM3's richer tooltip) |
 | Increase Contrast and Text size read from `accessibility.*` and bound to `Appearance` | Q7, step 18; G12 | done |
 | Static text rendered natively | Q5, step 19; G21 | done |
 | A window that is not key: the toolbar title and glyphs dim, the selection turns neutral | step 17; G18 | done (`UnifiedToolbar`; the list's selection is emphasized only while the list has the focus) |
 | One focus ring, outside the shape, for the keyboard only (`FocusRing`, `KeyFocus`) | step 7; G7 | the shared controls only; check each new focusable item |
-| One menu host (`MenuPopup` of `Grassfield.Ui`) | step 24 | its own identical copy: delete `apps/activity/qml/MenuPopup.qml` after #86 |
+| One menu host (`MenuPopup` of `Grassfield.Ui`) | step 24 | done after #86 merged: its own copy is deleted |
 | One indeterminate and one determinate indicator (`Spinner`, `ProgressRing`, `ProgressBar`) | D4, steps 23 and 24 | none needed yet |
 | Hairlines are one point through `apps.borderWidth` | D5 | done |
-| An empty list says so (centred, secondary, inside the list) | step 15 | to add with the search's "no results" |
+| An empty list says so (centred, secondary, inside the list) | step 15 | done after #86 merged: a search that matches no process says "No Results" in the list |
 | Motion on the roles' curves (`Appearance.curve`, `curveEnter`, `curveExit`) and crossfades under Reduce Motion | Q6, D2, steps 5 and 20 | no motion of its own yet |
 | Tokens only, no literal; A2 for every new text role | master-prompt 5.5; G24 | `just check-literals`, `check-contrast` hold |
 

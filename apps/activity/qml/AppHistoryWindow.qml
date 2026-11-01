@@ -91,7 +91,7 @@ Window {
             textFormat: Text.PlainText
             elide: Text.ElideRight
             text: root.history.caption
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
         }
@@ -105,7 +105,7 @@ Window {
         visible: root.history.unavailable
         textFormat: Text.PlainText
         text: qsTr("Usage history isn't available.")
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
     }
@@ -157,7 +157,7 @@ Window {
                     horizontalAlignment: column.modelData.numeric ? Text.AlignRight : Text.AlignLeft
                     text: column.modelData.title
                     elide: Text.ElideRight
-                    color: column.active ? Appearance.colors.text : Appearance.colors.textSecondary
+                    color: column.active ? Appearance.colors.text : Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                     font.weight: column.active ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
@@ -171,7 +171,7 @@ Window {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "chevron-down"
                     size: Tokens.activityChevronSize
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     rotation: root.history.sortDescending ? 0 : 180
                 }
 

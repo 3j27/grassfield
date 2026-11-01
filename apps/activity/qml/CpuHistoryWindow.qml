@@ -69,7 +69,7 @@ Window {
         visible: root.gpu && root.graphs.length === 0
         textFormat: Text.PlainText
         text: qsTr("No app is using a GPU.")
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
     }
@@ -115,7 +115,7 @@ Window {
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
                         text: root.gpu ? tile.modelData.title : ""
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
                     }

@@ -9220,6 +9220,10 @@
         <translation>Colonnes</translation>
     </message>
     <message>
+        <source>No Results</source>
+        <translation>Aucun résultat</translation>
+    </message>
+    <message>
         <source>Processes</source>
         <translation>Processus</translation>
     </message>

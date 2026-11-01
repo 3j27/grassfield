@@ -88,6 +88,22 @@ TestCase {
         verify(t.backend.calls.indexOf("sortBy:pid") >= 0);
     }
 
+    // A search that matches nothing says so in the list (ADR-0039 step 27's checklist); an empty list without a search says
+    // nothing.
+    function test_aSearchWithoutResultsSaysSo() {
+        const t = make();
+        const note = findAll(t.win.contentItem, i => i.objectName === "noResults")[0];
+        verify(note);
+        verify(!note.visible, "rows shown: no note");
+        t.backend.table = t.backend.makeTable([]);
+        t.backend.search = "zzz";
+        tryVerify(() => note.visible, 1000, "no row for the search: the note");
+        compare(note.text, "No Results");
+        verify(Qt.colorEqual(note.color, Appearance.windowSecondary));
+        t.backend.search = "";
+        verify(!note.visible, "no search: no note");
+    }
+
     // AM3: every toolbar control has a tooltip, under it.
     function test_toolbarTooltips() {
         const t = make();

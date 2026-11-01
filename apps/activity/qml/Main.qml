@@ -367,7 +367,7 @@ Window {
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 text: root.backend.viewTitle
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 Accessible.role: Accessible.StaticText
