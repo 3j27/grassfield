@@ -446,6 +446,86 @@ of the session, never in a terminal.
   the integrator for the rest; two pull requests at least (2b and 2d need no owner answer, 2a waits for SQ-3 and the
   repository).
 
+### Step 2b as built, first slice (2026-10-31, the branch of the stability lane; the toolkit as installed and the log out)
+- `grassfield-update-check` lists, before every other step and in every state it answers (repair, not-set-up, failed,
+  up-to-date, available, blocking), the toolkit as installed (`toolkit`, U31): each tracked package pacman names
+  (`qt6-base`, `quickshell`, `hyprland`, `aquamarine`, `kcoreaddons`, the helper's `GU_TRACKED`) with its version, the
+  time pacman installed it (`/var/lib/pacman/local/<name>-<version>/desc`, `%INSTALLDATE%`, readable by every user; a
+  name or version outside pacman's grammar is never looked up, a time outside a four-digit year reads as unknown), the
+  version this Grassfield was built with (`/usr/share/grassfield/BUILD-DEPS`, the helper's grammar line by line) and
+  whether it moved away from that record by U27's rule (the helper's `compare_key`: Quickshell whole, the others
+  epoch:major.minor, never the pkgrel; `null` without a record, `true` when the record does not name the package, as the
+  helper refuses then: fail safe). `docs/specs/updates.md` U31 and the output contract.
+- The shell (`SoftwareUpdateLogic`, pure): a package installed at or after the session's start, or at a time the checker
+  could not read (the safe side), means the running session loaded a file that was replaced under it, whatever the
+  record says (a pkgrel rebuild replaces the file too). The session's start is Hyprland's, read from
+  `HYPRLAND_INSTANCE_SIGNATURE` (`<hash>_<unix seconds>_<n>`), the same across a restart of the shell; the shell's own
+  start without a signature. The service sets `toolkitLogout` (due until the session ends; re-read from the file at
+  load, so a shell restarted after the upgrade finds it due again) and writes U14's `logoutPending` with its reason
+  (`toolkitLogout`) to `software-update.json`; `news()` announces it once per session (the id carries the session's
+  start; the `announced` list survives a restart); `shell.qml` posts "Log out to finish updating" with "Some updates
+  finish when you log out. Log out and back in to use them." (no package name in a sentence, the integrator's decision:
+  macOS never names libraries in an update notice; the journal names them), opening Software Update. The pane's U14 row
+  shows as for GF-083's own update, with the subtitle "Some of the update is used only after you log in again." when the
+  file says the log out is for the toolkit. A package installed before the session started asks for nothing: the
+  session already runs on it. An answer given before the checker ran (`update-running`, `busy`) or by no checker keeps
+  the file's list, so the pane's sentence does not fall back meanwhile.
+- Which checks see a replaced package: the scheduled ones (U7), the check `omarchy update` asks for at its end (U9) and
+  Update Now's own; a `pacman -Syu` typed in a terminal is seen by the next scheduled check or at the next login. Not in
+  this slice: the watch of `/var/lib/pacman/local` (the shell has no directory watcher: a user `.path` unit on it,
+  `PathModified=`, asking the shell for a check, is the second slice), the bounded wait of `SessionConfig.qml` and
+  `Displays.qml` while `db.lck` exists (I-2's residual), and the compositor rebuild's opt-in reading the same list at
+  login.
+- Tests: `tests/shell/update_check.sh` (no record, all matching, pkgrel and patch levels alone, Qt and Quickshell moved
+  with their install times, an epoch, times outside a four-digit year, a garbled record line and a package the record
+  does not name read as moved with built null, a package pacman does not list absent, the field in a repair and in a
+  failed answer); `tests/fuzz/fuzz_helpers.py` update-check gains a round over the record (present or absent), the
+  local database entry and pacman's answers; `tests/unit/tst_softwareupdate.qml`
+  `test_aToolkitReplacedUnderTheSessionAsksForALogOutOnce` (the session's start from the signature and without one,
+  installed after, before, an unreadable time, a pkgrel rebuild, no list, junk, the crash-restart scenario, once per
+  session, the flags and the list kept through an `update-running` answer); `tests/shell/software_update_service.sh`:
+  the probe's steps t1-t3 (before the session: nothing; after: announced once as toolkit, the log out written with its
+  reason; a later update: nothing more, still due) and `restart.qml` (a shell restarted with the session's signature
+  and the stored file finds the log out due again and announces nothing more).
+- Review round 1 (2026-10-31, the integrator's opus review of 9043ac4: FAIL, two majors): the French catalog was stale
+  for the two new sentences (I1); the session's start was the shell's, so a shell crashed and restarted after the
+  upgrade dated the upgrade before its own start and asked for nothing while the compositor kept running on the
+  replaced libraries, and its first save erased the row an earlier shell wrote; a stale record would have announced
+  again at every later update of a moved package while a pkgrel rebuild set nothing; no probe step drove the toolkit
+  path through the service; the notice named libraries. Each is in the design above (the session's start from the
+  signature, the log out from install times whatever the record says, once per session, the generic sentences in
+  English and French, the probe steps and the restart probe); the nits too (the four-digit year, the file's list kept
+  through an `update-running` answer, a record that does not name a package reads as moved).
+- Evidence (this container; no Qt, no Quickshell): `tests/shell/update_check.sh` PASS, exit 0 (the lock and waiter
+  cases skipped as root); the update-check fuzz round at 5000 and 20 000 iterations, no finding; `helpers_fuzz.sh`
+  PASS; `python3 -I scripts/dev/check-i18n.py --no-lupdate` ok (the catalog's two entries were added by hand, next to
+  their neighbours: `lupdate` is not installed here); `python3 -I tests/ci/inventory.py` ok; `git diff --check` clean;
+  qmllint 6.4 parses the seven QML files, the JS parses. NOT VERIFIED here: `i18n-update.sh --check` (lupdate),
+  `tst_softwareupdate.qml` (QtTest), `tests/shell/software_update_service.sh` (offscreen Quickshell: the probe's steps
+  t1-t3 and `restart.qml`), the notice and the pane's row (nested), the list on a real system
+  (`grassfield-update-check | jq .toolkit`).
+- Review round 2 (2026-10-31, the integrator's review of e03013d: FAIL, two new majors): the docs commit of round 1
+  had replaced everything between the Step 2b section and "Delivery order" (Steps 3-8 and "Step 5 as built, first
+  part" were gone from this file; restored from main, this section inserted before Step 3); the probe's steps t1-t3
+  read the state file before the service had saved it (`toolkit` undefined): each step now waits for the saved list to
+  carry its answer's install time (and, at t2, the flag). Minor: an unreadable install time counted as "this session"
+  at every start, so a pacman database outside its default path asked at every session: the file now records the
+  installed versions a log out was asked for on an unreadable time (`toolkitAsked`), and asks again only for another
+  version. Nits: the signature's time is clamped to the shell's start (a later one would hide installs); the service
+  saves once after adopting the file at load, so a previous session's flag does not stay on disk until the next check;
+  GF-083's `logoutPending` and the toolkit's `toolkitLogout` are separate flags in the file, so the pane's title says
+  "Log out to finish updating Grassfield" only when Grassfield itself was updated and "Log out to finish updating" when
+  only the system libraries were (with the French entries).
+- Review round 3 (2026-11-01, the integrator's review of f8b0916: FAIL, one blocker): the probe's step k took its
+  baseline of checker runs from a stale reading (the t-steps read the calls log no more, and the first reload after
+  them returned the content before their three runs), so k counted their runs as its own; the baseline is now taken
+  once two reads of the log agree. Nit: a shell restarted in the same session after a log out asked on an unreadable
+  install time dropped the flag (the versions were recorded as asked for): the file's flag, with the announcement
+  marked with this session's start, keeps it due (`toolkitDueFromFile`); another session's flag is stale. A Settings
+  unit case covers the toolkit-only title. The integrator runs the offscreen and unit suites (none here).
+- Review: the checker reads two more world-readable files and runs `pacman -Q` five times more; nothing runs as root;
+  nothing under `shell/security/` changes.
+
 ### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
 Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.
 - `tests/integration/chaos.sh` (nested, bare): for each row of audit section 1.1 that the nested session can run (the
