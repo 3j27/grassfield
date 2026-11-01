@@ -6,7 +6,8 @@
 //
 // - Registration follows the shell: AgentManager1.RegisterAgent(path, "KeyboardDisplay") then RequestDefaultAgent while a
 //   shell that draws "bluetooth" is connected (setWanted), UnregisterAgent when it goes; registered again when bluetoothd
-//   comes back on the bus (a restarted bluetoothd has forgotten its agents). Release is answered and changes nothing else. Without a shell bluetoothd has no agent: it
+//   comes back on the bus (a restarted bluetoothd has forgotten its agents). Release (sent only by a bluetoothd that stops)
+//   is answered and changes nothing else. Without a shell bluetoothd has no agent: it
 //   makes the adapter non-bondable and refuses every step that needs one (ADR-0035 decision 10-1). The object stays
 //   registered on the connection for the bridge's life; a call that reaches it while no shell draws the sheet gets
 //   Rejected.
@@ -18,10 +19,12 @@
 //   confirmation; org.bluez.Error.Rejected for Decline, and on every other end (the shell gone or refusing, a wrong answer,
 //   the bound of 8 requests, bluetoothd leaving the bus, its Cancel or Release, the answer's time running out).
 // - A code shown on the screen (DisplayPinCode, answered at once so that bluetoothd hands the PIN to the controller,
-//   device.c:7609-7618; DisplayPasskey, which expects no reply) stays until bluetoothd's Cancel or departure, the device
-//   reported paired (PropertiesChanged of its Device1 from bluetoothd), another code for that device, the user's Cancel
-//   (which asks bluetoothd to stop the pairing: Device1.CancelPairing), or the answer's time; each DisplayPasskey of the same
-//   code updates how many digits were typed (`entered`), sent to the shell without touching the sheet's keyboard.
+//   device.c:7609-7618; DisplayPasskey, which expects no reply) stays until bluetoothd's departure, the device reported
+//   paired or disconnected (PropertiesChanged of its Device1 from bluetoothd), the device removed (InterfacesRemoved),
+//   another code shown (one at a time), the user's Cancel (which asks bluetoothd to stop the pairing:
+//   Device1.CancelPairing), or the answer's time; bluetoothd's Cancel ends only the calls waiting for a reply. Each
+//   DisplayPasskey of the same code updates how many digits were typed (`entered`), sent to the shell without touching the
+//   sheet's keyboard.
 // - Nothing secret or remote-controlled is logged: the journal gets request ids, modes, addresses, refusals and why.
 
 #include "BtPairing.h"
@@ -54,7 +57,8 @@ namespace gf::prompter {
         bt::DeviceView         device;
         QString                id;           // the shell's request id; empty until the bridge sent it
         guint                  timeout   = 0; // the answer's time (a GLib source)
-        guint                  pairedSub = 0; // a code shown: PropertiesChanged of the device
+        guint                  pairedSub  = 0; // a code shown: PropertiesChanged of the device
+        guint                  removedSub = 0; // a code shown: InterfacesRemoved of bluetoothd's objects
         bool                   ended     = false;
     };
 
@@ -114,6 +118,8 @@ namespace gf::prompter {
         static void     onDeviceProperties(GObject* source, GAsyncResult* result, gpointer data);
         static void     onDeviceChanged(GDBusConnection* bus, const gchar* sender, const gchar* path, const gchar* iface,
                                         const gchar* signal, GVariant* parameters, gpointer self);
+        static void     onDeviceRemoved(GDBusConnection* bus, const gchar* sender, const gchar* path, const gchar* iface,
+                                        const gchar* signal, GVariant* parameters, gpointer self);
         static void     onCancelPairingReply(GObject* source, GAsyncResult* result, gpointer data);
         static gboolean onTimeout(gpointer data);
 
@@ -132,6 +138,10 @@ namespace gf::prompter {
         // still holds it and is told "cancel".
         void    endWith(const Request& request, const char* errorName, const QString& why, bool tellShell);
         void    endAll(const char* errorName, const QString& why, bool tellShell);
+        // bluetoothd's Cancel: the calls still waiting for their reply (never a code shown).
+        void    endPending(const char* errorName, const QString& why);
+        // Every code shown (one at a time: a new one ends the one before).
+        void    endCodesShown(const QString& why);
         void    finish(const Request& request); // the common part of every end: out of the list, timers and watches gone
 
         GDBusConnection* m_bus = nullptr;

@@ -315,22 +315,23 @@ namespace gf::prompter {
 
     void BtAgent::dispatch(const QString& method, GVariant* parameters, GDBusMethodInvocation* invocation) {
         if (method == QLatin1String("Release")) {
-            // bluetoothd unregistered the agent: after the bridge's own UnregisterAgent, when its connection ends, or as
-            // bluetoothd stops (agent.c agent_destroy and btd_agent_cleanup, :930-945, :1054-1061), and it cancels a
-            // pending request first (agent_release -> agent_cancel, :75-92). Nothing else to do: a stopping bluetoothd
-            // leaves the bus, which ends every request; and this Release may be the late echo of an UnregisterAgent that a
-            // newer RegisterAgent followed (the shell went and came back), so it changes no registration state.
+            // bluetoothd releases its agents only as it stops (btd_agent_cleanup -> agent_destroy -> agent_release, agent.c
+            // :1054-1061, :930-945), a pending request cancelled first (agent_release -> agent_cancel, :75-92); never after an
+            // UnregisterAgent or a closed connection, whose agent_disconnect clears the watch agent_destroy releases on
+            // (:174-188). Nothing else to do: a stopping bluetoothd leaves the bus, which ends every request, and the agent
+            // registers again with the next bluetoothd. A Release from anyone else never gets here (the sender check).
             g_dbus_method_invocation_return_value(invocation, nullptr);
             log(QStringLiteral("Release from bluetoothd"));
             return;
         }
         if (method == QLatin1String("Cancel")) {
-            // "The agent request failed before a reply was returned" (org.bluez.Agent.rst): bluetoothd has given up whatever
-            // it asked (it holds one request per agent, agent.c), and a code still shown belongs to a pairing it ended.
+            // "The agent request failed before a reply was returned" (org.bluez.Agent.rst): bluetoothd sends it only for its
+            // one request still waiting for a reply (agent_cancel needs agent->request->call, agent.c:307-321; one request
+            // per agent, :407-428, :551-552), so it ends only the calls not answered yet. A code shown has had its reply
+            // (or wants none) and belongs to a pairing of its own: it ends on its own signs (ADR-0035 decision 10-16; opus
+            // review of step 10, MINOR: a Cancel for one device's confirmation withdrew another device's code).
             g_dbus_method_invocation_return_value(invocation, nullptr);
-            if (m_requests.isEmpty())
-                log(QStringLiteral("Cancel from bluetoothd: no request outstanding"));
-            endAll(bt::kErrorCanceled, QStringLiteral("bluetoothd cancelled it"), true);
+            endPending(bt::kErrorCanceled, QStringLiteral("bluetoothd cancelled it"));
             return;
         }
         // Copies: a call answered at once (DisplayPinCode, DisplayPasskey) frees its parameters with it.
@@ -390,10 +391,7 @@ namespace gf::prompter {
             // Answered at once: bluetoothd hands the PIN to the controller when this call returns (device.c:7609-7618);
             // the sheet shows it until the pairing ends.
             g_dbus_method_invocation_return_value(invocation, nullptr);
-            for (const Request& r : QList<Request>(m_requests)) {
-                if (!r->ended && bt::isDisplay(r->mode) && r->path == devicePath)
-                    endWith(r, nullptr, QStringLiteral("another code for that device"), true);
-            }
+            endCodesShown(QStringLiteral("another code shown"));
             begin(bt::Mode::DisplayPin, devicePath, owner, address, nullptr, code, 0);
         } else if (method == QLatin1String("DisplayPasskey")) {
             guint32 passkey = 0;
@@ -417,9 +415,7 @@ namespace gf::prompter {
         const int digits = std::min<int>(entered, bt::kDigits);
         // The same code for the same device: only how many digits were typed changed (BlueZ calls again for each one).
         for (const Request& r : QList<Request>(m_requests)) {
-            if (r->ended || !bt::isDisplay(r->mode) || r->path != path)
-                continue;
-            if (r->mode == bt::Mode::DisplayPasskey && r->code == code) {
+            if (!r->ended && r->mode == bt::Mode::DisplayPasskey && r->path == path && r->code == code) {
                 if (digits != r->entered) {
                     r->entered = digits;
                     if (!r->id.isEmpty())
@@ -427,8 +423,8 @@ namespace gf::prompter {
                 }
                 return;
             }
-            endWith(r, nullptr, QStringLiteral("another code for that device"), true);
         }
+        endCodesShown(QStringLiteral("another code shown"));
         begin(bt::Mode::DisplayPasskey, path, owner, address, nullptr, code, digits);
     }
 
@@ -490,10 +486,14 @@ namespace gf::prompter {
         request->id      = id;
         request->timeout = g_timeout_add(static_cast<guint>(m_timeoutMs), onTimeout, request.get());
         if (bt::isDisplay(request->mode)) {
-            // A code shown goes once the device is paired: bluetoothd sends no Cancel for it (BtPairing.h).
-            request->pairedSub = g_dbus_connection_signal_subscribe(m_bus, request->owner.constData(), "org.freedesktop.DBus.Properties",
-                                                                    "PropertiesChanged", request->path.constData(), bt::kDeviceIface,
-                                                                    G_DBUS_SIGNAL_FLAGS_NONE, onDeviceChanged, this, nullptr);
+            // A code shown goes once the pairing is over, which bluetoothd never says with a Cancel (BtPairing.h): the device
+            // paired, its link down, or the device gone (decision 10-16).
+            request->pairedSub  = g_dbus_connection_signal_subscribe(m_bus, request->owner.constData(), "org.freedesktop.DBus.Properties",
+                                                                     "PropertiesChanged", request->path.constData(), bt::kDeviceIface,
+                                                                     G_DBUS_SIGNAL_FLAGS_NONE, onDeviceChanged, this, nullptr);
+            request->removedSub = g_dbus_connection_signal_subscribe(m_bus, request->owner.constData(), "org.freedesktop.DBus.ObjectManager",
+                                                                     "InterfacesRemoved", "/", nullptr, G_DBUS_SIGNAL_FLAGS_NONE, onDeviceRemoved,
+                                                                     this, nullptr);
         }
         log(QStringLiteral("request %1: bluetooth (%2) for %3").arg(id, bt::modeName(request->mode), request->device.address));
     }
@@ -505,18 +505,42 @@ namespace gf::prompter {
             return;
         const gchar* iface = nullptr;
         g_variant_get_child(parameters, 0, "&s", &iface);
-        GVariant* changed = g_variant_get_child_value(parameters, 1);
-        gboolean  paired  = FALSE;
-        gboolean bonded = FALSE;
-        const bool done = g_strcmp0(iface, bt::kDeviceIface) == 0
-                          && ((g_variant_lookup(changed, "Paired", "b", &paired) && paired) || (g_variant_lookup(changed, "Bonded", "b", &bonded) && bonded));
+        GVariant*  changed   = g_variant_get_child_value(parameters, 1);
+        gboolean   paired    = FALSE;
+        gboolean   bonded    = FALSE;
+        gboolean   connected = TRUE;
+        const bool device    = g_strcmp0(iface, bt::kDeviceIface) == 0;
+        const bool done      = device && ((g_variant_lookup(changed, "Paired", "b", &paired) && paired) || (g_variant_lookup(changed, "Bonded", "b", &bonded) && bonded));
+        // The pairing's link went down: the device gave up (a failed or abandoned incoming pairing gets no Cancel either).
+        const bool gone = device && g_variant_lookup(changed, "Connected", "b", &connected) && !connected;
         g_variant_unref(changed);
-        if (!done)
+        if (!done && !gone)
             return;
         // Only from the owner whose call showed the code (GDBus matched it; checked again).
         for (const Request& r : QList<Request>(agent->m_requests)) {
             if (!r->ended && bt::isDisplay(r->mode) && r->path == path && r->owner == sender)
-                agent->endWith(r, nullptr, QStringLiteral("the device is paired"), true);
+                agent->endWith(r, nullptr, done ? QStringLiteral("the device is paired") : QStringLiteral("the device disconnected"), true);
+        }
+    }
+
+    void BtAgent::onDeviceRemoved(GDBusConnection* /*bus*/, const gchar* sender, const gchar* /*path*/, const gchar* /*iface*/, const gchar* /*signal*/,
+                                  GVariant* parameters, gpointer self) {
+        auto* agent = static_cast<BtAgent*>(self);
+        if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(oas)")))
+            return;
+        const gchar*  object     = nullptr;
+        const gchar** interfaces = nullptr;
+        g_variant_get(parameters, "(&o^a&s)", &object, &interfaces);
+        bool device = false;
+        for (const gchar** i = interfaces; i && *i; ++i)
+            device = device || g_strcmp0(*i, bt::kDeviceIface) == 0;
+        g_free(interfaces);
+        if (!device)
+            return;
+        // The device object went (a temporary device bluetoothd forgot): its pairing is over.
+        for (const Request& r : QList<Request>(agent->m_requests)) {
+            if (!r->ended && bt::isDisplay(r->mode) && r->path == object && r->owner == sender)
+                agent->endWith(r, nullptr, QStringLiteral("the device was removed"), true);
         }
     }
 
@@ -563,6 +587,10 @@ namespace gf::prompter {
             g_dbus_connection_signal_unsubscribe(m_bus, request->pairedSub);
             request->pairedSub = 0;
         }
+        if (request->removedSub) {
+            g_dbus_connection_signal_unsubscribe(m_bus, request->removedSub);
+            request->removedSub = 0;
+        }
     }
 
     void BtAgent::endWith(const Request& request, const char* errorName, const QString& why, bool tellShell) {
@@ -580,6 +608,29 @@ namespace gf::prompter {
         // Last: the shell's side can call back into the agent (a write error ends the shell, which refuses its requests).
         if (tellShell && !request->id.isEmpty())
             m_sink->withdrawBt(request->id);
+    }
+
+    void BtAgent::endPending(const char* errorName, const QString& why) {
+        const QList<Request> all = m_requests;
+        int                  n   = 0;
+        for (const Request& request : all) {
+            if (!request->ended && request->invocation) {
+                endWith(request, errorName, why, true);
+                ++n;
+            }
+        }
+        if (n == 0)
+            log(QStringLiteral("Cancel from bluetoothd: no call waiting for its reply"));
+    }
+
+    void BtAgent::endCodesShown(const QString& why) {
+        // At most one code shown at a time (decision 10-16): the newest is the pairing bluetoothd is doing now, and a device
+        // that keeps starting pairings (a new address each time) can hold one place of the shared bound, never more.
+        const QList<Request> all = m_requests;
+        for (const Request& request : all) {
+            if (!request->ended && bt::isDisplay(request->mode))
+                endWith(request, nullptr, why, true);
+        }
     }
 
     void BtAgent::endAll(const char* errorName, const QString& why, bool tellShell) {

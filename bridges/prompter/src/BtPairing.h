@@ -45,8 +45,9 @@ namespace gf::prompter::bt {
     // bluetoothd stops waiting after 60 s (agent.c:40) and, for a PIN or a passkey, never says so (pincode_reply and
     // passkey_reply have no time-out branch, agent.c:455-512, 570-610): a request still open after this long is withdrawn
     // from the sheet and answered Rejected, so nothing typed later is lost silently. A code shown on the screen
-    // (DisplayPasskey, DisplayPinCode) is withdrawn after the same time: bluetoothd sends no Cancel for it once the call
-    // has no reply pending (agent_cancel needs agent->request, agent.c:307-321).
+    // (DisplayPasskey, DisplayPinCode) is withdrawn after the same time at the latest: bluetoothd sends no Cancel for it once
+    // the call has no reply pending (agent_cancel needs agent->request, agent.c:307-321); it goes sooner when the device is
+    // paired, disconnects or is removed, or another code is shown (BtAgent.h; ADR-0035 decision 10-16).
     inline constexpr int kAnswerTimeoutMs = 55000;
 
     inline constexpr int kNameCap = 64; // UTF-16 code units of the device's name (a Bluetooth name is at most 248 bytes)
