@@ -1199,6 +1199,15 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   9-14); `SO_PEERPIDFD`'s EINVAL refuses the peer (MINOR-3, 9-7); only slices between the user's manager and the shell's
   unit (NIT-1, 9-7); at most 8 open prompts per connection and refusals logged once per 10 s (NIT-2, 9-11); a malformed
   `PerformPrompt` answered InvalidArgs (NIT-3, 9-6); gcr-ssh-agent shown as "ssh" (NIT-4, 9-4).
+- **The opus counter-review of step 9a: PASS**, with three minors and two nits, fixed before step 9b connects a shell; the
+  protocol `prompter/1` is unchanged: a long-lived client whose prompts the shell's departures left open is no longer
+  locked out (MINOR-A: 9-3, 9-11); an interface-less `StopPrompting` no longer lowers a count gcr never lowered (MINOR-B:
+  9-11); an app's mapped code is compared by device and inode with the file its path names, and only for a process in the
+  bridge's own mount and user namespaces (MINOR-C: 9-14); the count of refused connections is written when its window
+  ends, and the queued owner's line reads only its executable (NITs: 9-10, 9-11). Tests after it: 45 unit cases, 54
+  checks in `tests/security/prompter_bridge.sh`, with the reviewer's probes turned into tests (a long-lived client across
+  eight shell departures, seventy interface-less rounds, a file bind-mounted over a trusted path in another namespace,
+  thousands of mappings with an untrusted one last, a peer that exited and was reaped).
 - **What 9a changes for the user: nothing.** No shell connects before step 9b, and without a connected shell the bridge
   never asks for the name: every prompt is the stock gcr-prompter's, as before.
 
@@ -1224,6 +1233,11 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   shell a request is answered "cancelled" at once; unregistering while a prompt is in flight would race libgcr's own
   clean-up (an answer arriving after it would be sent on a cleared connection). Releasing the name is enough: libgcr's
   clients watch the prompter's name and cancel when its owner goes (`gcr/gcr-system-prompt.c` `on_prompter_vanished`).
+  **Amended after the opus counter-review of step 9a (MINOR-A):** such a client also forgets its prompt without ever
+  stopping it (`gcr-system-prompt.c:472-475, 786-799`), so gcr kept it until the client left the bus, and a long-lived
+  client (gnome-keyring-daemon) was locked out after eight departures of the shell. When the shell goes, the bridge now
+  closes every open prompt (`gcr_prompt_close`, the interface's own way to say a prompt closed): gcr ends each one, tells
+  its caller `PromptDone` and drops it, without unregistering anything (journal: "N open gcr prompt(s) closed").
 - **9-4. Which requesters are named?** Options: (a) the rule of the step's brief: a desktop entry of the same executable,
   "Keyring" for gnome-keyring, "GnuPG" for gpg-agent and pinentry, anything else "Unidentified program" with the path;
   (b) also a trusted executable's own file name. **Choice: (a)**, with the entry rule made strict: the entry's `Exec` is
@@ -1290,6 +1304,8 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
 - **9-10. The name's state.** **Choice:** the bridge tells the shell "released", "queued" or "owned" after its hello and
   at every change, and writes who holds the name when it is queued (the owner's executable, from its pidfd). Rule applied:
   a desktop that cannot show a prompt must be diagnosable without a technical step for the user (the journal says it).
+  **Amended after the opus counter-review of step 9a (NIT):** for that line the bridge reads the owner's executable only,
+  not its namespaces, tracer and mappings.
 - **9-11. Limits.** **Choice:** 8 requests outstanding (D-9); 64 gcr prompts open at once (beyond, a new one answers
   "cancelled"); a password of at most 4096 bytes after decoding, never cut; shell lines of at most 16 KiB; caller strings
   over 16 KiB dropped by the filter; texts capped in UTF-16 code units, the ellipsis included: title 128, message 256,
@@ -1301,7 +1317,17 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   that) and answers a ninth `BeginPrompting` of one connection `org.freedesktop.DBus.Error.LimitsExceeded` before gcr sees
   it; 64 stays the global bound; refused connections are written once per 10 s with the count of those not written. A
   prompt stays open until its caller stops prompting or leaves the bus (gcr's design), counting against that caller
-  only.
+  only. **Amended after the opus counter-review of step 9a.** MINOR-A: a count was released only by a `StopPrompting` or
+  by the connection leaving, and gcr's clients send no `StopPrompting` when the prompter's name goes, so a long-lived
+  client was locked out for the session after eight shell departures. MINOR-B: the filter counted a `StopPrompting`
+  whatever its interface field said, while GDBus answers an interface-less call `UnknownMethod` and gcr never sees it, so
+  one connection could fill the 64-prompt pool. Now the count follows what gcr itself holds, from messages no caller can
+  forge: a `BeginPrompting` counts only with the prompter's interface named exactly; a prompt stops counting when gcr sends
+  its caller `PromptDone` (an outgoing message: after a `StopPrompting`, after the bridge closes the prompt), when the
+  caller answers gcr's `PromptReady` with an error (gcr then drops the prompt without `PromptDone`; the filter keeps the
+  serials of unanswered `PromptReady` calls, at most 4096), when the caller leaves the bus, and every count goes when the
+  prompter's name leaves the bridge. A `StopPrompting` itself counts for nothing. NIT: the count of the refusals not
+  written is written when the 10-s window ends, even when no refusal follows.
 - **9-12. The password's strength reported to the caller.** Options: (a) a score; (b) 0 for an empty password, 1
   otherwise, as gcr's own dialog does (gnome-keyring reads it to ask about storing passwords unencrypted). **Choice:
   (b).** The meter the user sees is the shell's (step 9b). Rule applied: gcr's contract as its own prompter keeps it.
@@ -1327,6 +1353,21 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   limitations: the fork-and-exec of a trusted program after connecting, an ancestor's `ptrace` that detached, and
   everything a program can make the on-behalf roles say; the row names the program that opened the connection, and step
   9b shows the caller's text under an on-behalf row as unverified text from another program.
+  **Amended after the opus counter-review of step 9a (MINOR-C).** The check trusted the paths `/proc/<pid>/maps` names,
+  and a process in a user and mount namespace of its own (`unshare -Urm`) can bind-mount a file of its own over a trusted
+  path: its mapping then shows the trusted path with the user's file's device and inode. Options: (a) compare each
+  mapping's device and inode with `stat` of its path; (b) compare them with the file the path names in the bridge's
+  mount namespace, the device taken from the path's mount (`statx`'s mount id looked up in `/proc/self/mountinfo`), and
+  lend an app's row only to a process that shares the bridge's mount and user namespaces; (c) refuse other namespaces
+  only. **Choice: (b).** Rule applied: identity from what the kernel says, never from a name. `stat`'s `st_dev` is not
+  what `/proc/<pid>/maps` shows on btrfs, the file system of Omarchy's installation (the maps line carries the inode's
+  superblock device, btrfs's `stat` a device of each subvolume: UNVERIFIED here, there is no btrfs file system in the
+  container), so (a) would leave every app unidentified there; the mount's device is
+  the superblock's on every file system (checked here on the container's overlayfs: maps `00:29`, mountinfo `0:41`, the
+  same device, and the same inode); the namespace rule stops the forge at its root, since an unprivileged process can
+  bind-mount only in namespaces of its own. What remains, in the spec's known limitations: a trusted app running code of
+  the user's through its own scripting maps no untrusted file (`emacs --batch -l`, `nvim -l`, an app's plugin
+  interpreter) and still gets the app's row.
 
 ### D-10. What Omarchy still shows (category D; O1–O11)
 - **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):
