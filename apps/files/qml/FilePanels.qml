@@ -15,7 +15,7 @@ QtObject {
     required property var host
     // AppChooser (apps/portal/src/appchooser.h): its panels are kept in `panels` under "app:<id>" (its request ids are its own).
     property var appHost: null
-    // Print (apps/portal/src/print.h; ADR-0035 D-7, step 6a): its print sheets (PrintSheet.qml), by its request ids.
+    // Print (apps/portal/src/print.h; ADR-0035 D-7, steps 6a and 6b): its print sheets (PrintSheet.qml), by its request ids.
     property var printHost: null
     property var sheets: ({})
     // Dev plumbing (GRASSFIELD_PORTAL_TEST_ANSWER, dev sessions only): "accept" or "cancel" answers each panel once it has
@@ -77,6 +77,10 @@ QtObject {
             root.openSheet(id, sheet);
         }
         function onClosed(id: int): void {
+            root.dismissSheet(id);
+        }
+        // A document's job is being sent (step 6b): the sheet goes now, the request when the job is sent.
+        function onDismissed(id: int): void {
             root.dismissSheet(id);
         }
     }

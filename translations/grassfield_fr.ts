@@ -7311,6 +7311,10 @@
         <translation>Fenêtre</translation>
     </message>
     <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
         <source>Now Playing: %1</source>
         <translation>En cours de lecture : %1</translation>
     </message>
@@ -8600,8 +8604,124 @@
 <context>
     <name>PrintSheet</name>
     <message>
+        <source>Media &amp; Quality</source>
+        <translation>Support et qualité</translation>
+    </message>
+    <message>
+        <source>Printer Options</source>
+        <translation>Options de l’imprimante</translation>
+    </message>
+    <message>
         <source>Print</source>
         <translation>Imprimer</translation>
+    </message>
+    <message>
+        <source>Feed From:</source>
+        <translation>Alimentation&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Media Type:</source>
+        <translation>Type de support&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Quality:</source>
+        <translation>Qualité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Output Bin:</source>
+        <translation>Bac de sortie&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Finishing:</source>
+        <translation>Finition&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Feed From</source>
+        <translation>Alimentation</translation>
+    </message>
+    <message>
+        <source>Media Type</source>
+        <translation>Type de support</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>Qualité</translation>
+    </message>
+    <message>
+        <source>Output Bin</source>
+        <translation>Bac de sortie</translation>
+    </message>
+    <message>
+        <source>Finishing</source>
+        <translation>Finition</translation>
+    </message>
+    <message>
+        <source>Draft</source>
+        <translation>Brouillon</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Best</source>
+        <translation>Optimale</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Staple</source>
+        <translation>Agrafe</translation>
+    </message>
+    <message>
+        <source>Punch</source>
+        <translation>Perforation</translation>
+    </message>
+    <message>
+        <source>Fold</source>
+        <translation>Pliage</translation>
+    </message>
+    <message>
+        <source>Bind</source>
+        <translation>Reliure</translation>
+    </message>
+    <message>
+        <source>Saddle Stitch</source>
+        <translation>Piqûre à cheval</translation>
+    </message>
+    <message>
+        <source>Staple Top Left</source>
+        <translation>Agrafe en haut à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Left</source>
+        <translation>Agrafe en bas à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Top Right</source>
+        <translation>Agrafe en haut à droite</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Right</source>
+        <translation>Agrafe en bas à droite</translation>
+    </message>
+    <message>
+        <source>Two Staples Left</source>
+        <translation>Deux agrafes à gauche</translation>
+    </message>
+    <message>
+        <source>Two Staples Top</source>
+        <translation>Deux agrafes en haut</translation>
+    </message>
+    <message>
+        <source>Two Holes Left</source>
+        <translation>Deux trous à gauche</translation>
+    </message>
+    <message>
+        <source>Two Holes Top</source>
+        <translation>Deux trous en haut</translation>
     </message>
     <message>
         <source>Untitled</source>
@@ -8610,6 +8730,30 @@
     <message>
         <source>Save as PDF</source>
         <translation>Enregistrer au format PDF</translation>
+    </message>
+    <message>
+        <source>Page %1 of %2</source>
+        <translation>Page %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Preparing Preview…</source>
+        <translation>Préparation de l’aperçu…</translation>
+    </message>
+    <message>
+        <source>No Preview</source>
+        <translation>Aucun aperçu</translation>
+    </message>
+    <message>
+        <source>Previous Page</source>
+        <translation>Page précédente</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Next Page</source>
+        <translation>Page suivante</translation>
     </message>
     <message>
         <source>Printer:</source>
@@ -8634,6 +8778,22 @@
     <message>
         <source>Add Printer…</source>
         <translation>Ajouter une imprimante…</translation>
+    </message>
+    <message>
+        <source>Presets:</source>
+        <translation>Préréglages&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Presets</source>
+        <translation>Préréglages</translation>
+    </message>
+    <message>
+        <source>Default Settings</source>
+        <translation>Réglages par défaut</translation>
+    </message>
+    <message>
+        <source>Last Used Settings</source>
+        <translation>Derniers réglages utilisés</translation>
     </message>
     <message>
         <source>Copies:</source>
@@ -8744,8 +8904,16 @@
         <translation>Noir et blanc</translation>
     </message>
     <message>
+        <source>PDF</source>
+        <translation>PDF</translation>
+    </message>
+    <message>
         <source>Save as PDF…</source>
         <translation>Enregistrer au format PDF…</translation>
+    </message>
+    <message>
+        <source>Open in Preview</source>
+        <translation>Ouvrir dans la Visionneuse</translation>
     </message>
     <message>
         <source>Click the panel to use the keyboard in it.</source>
@@ -9519,6 +9687,37 @@
     <message>
         <source>Choose a folder of pictures</source>
         <translation>Choisir un dossier d’images</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenShareMenu</name>
+    <message>
+        <source>Screen or window</source>
+        <translation>Écran ou fenêtre</translation>
+    </message>
+    <message>
+        <source>Window: %1</source>
+        <translation>Fenêtre&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>A window</source>
+        <translation>Une fenêtre</translation>
+    </message>
+    <message>
+        <source>Part of %1</source>
+        <translation>Une partie de %1</translation>
+    </message>
+    <message>
+        <source>Entire screen: %1</source>
+        <translation>Écran entier&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
+        <source>To stop sharing, use the app that shares.</source>
+        <translation>Pour arrêter le partage, utilisez l’app qui partage.</translation>
     </message>
 </context>
 <context>
@@ -10763,6 +10962,89 @@
     <message>
         <source>This setting could not be saved (%1).</source>
         <translation>Ce réglage n&apos;a pas pu être enregistré (%1).</translation>
+    </message>
+</context>
+<context>
+    <name>SharePickerPanel</name>
+    <message>
+        <source>Share Your Screen</source>
+        <translation>Partager votre écran</translation>
+    </message>
+    <message>
+        <source>An app wants to share your screen. Choose what it can see.</source>
+        <translation>Une app souhaite partager votre écran. Choisissez ce qu’elle peut voir.</translation>
+    </message>
+    <message>
+        <source>What to share</source>
+        <translation>Élément à partager</translation>
+    </message>
+    <message>
+        <source>Entire Screen</source>
+        <translation>Écran entier</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>Fenêtre</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>Sélection</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+    <message>
+        <source>Windows</source>
+        <translation>Fenêtres</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
+    <message>
+        <source>%1, %2, can&apos;t be shared</source>
+        <translation>%1, %2, ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>This window can&apos;t be shared</source>
+        <translation>Cette fenêtre ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>Area to share</source>
+        <translation>Zone à partager</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Écran</translation>
+    </message>
+    <message>
+        <source>%1 × %2 on %3</source>
+        <translation>%1 × %2 sur %3</translation>
+    </message>
+    <message>
+        <source>Drag over the display to choose the area to share.</source>
+        <translation>Faites glisser sur l’écran pour choisir la zone à partager.</translation>
+    </message>
+    <message>
+        <source>No display can be shared.</source>
+        <translation>Aucun écran ne peut être partagé.</translation>
+    </message>
+    <message>
+        <source>No window can be shared.</source>
+        <translation>Aucune fenêtre ne peut être partagée.</translation>
+    </message>
+    <message>
+        <source>Remember this choice</source>
+        <translation>Mémoriser ce choix</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Share</source>
+        <translation>Partager</translation>
     </message>
 </context>
 <context>

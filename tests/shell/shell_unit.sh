@@ -41,15 +41,17 @@ desc="a comment naming the old form and a -p start are not flagged"
 check bash -c '[ -z "$(named_qs "$1")" ]' _ "$mut/n4"
 # bare_qs DIR...: qs/quickshell ipc|kill|log callers (any quoting, /usr/bin/ prefix) that do not select the instance by pid
 # (--pid), by the system path (-p /usr/share/grassfield/shell), through bindings.lua's shell_selector (itself checked below)
-# or through the hyprland-dialog stand-in's shell_dir (ADR-0035 D-3; checked below too), or grassfield-security-status's
-# path, the security unit's own system path (ADR-0041 S1; checked below too).
+# or through the hyprland-dialog stand-in's shell_dir (ADR-0035 D-3), the screen-sharing picker stand-in's SHELL_DIR
+# template (D-6), or grassfield-security-status's path, the security unit's own system path (ADR-0041 S1); all checked
+# below too.
 # Comment lines are skipped. A -p with any other path, a -c name, or no selector is reported.
 bare_qs() {
   grep -rnIHE "([\"']?(/usr/bin/)?(qs|quickshell)[\"']?([[:space:]]*,[[:space:]]*|[[:space:]]+)[\"']?(ipc|kill|log)[\"']?([^[:alnum:]_]|$))" "$@" 2>/dev/null |
     grep -vE '^[^:]*:[0-9]*:[[:space:]]*(#|--|//|\*)' |
     grep -vE "(--pid|[\"']--pid[\"']|(-p|[\"']-p[\"'][[:space:]]*,)[[:space:]]+[\"']?/usr/share/grassfield/shell([\"' ]|$))" | grep -v shell_selector |
-    grep -vE '/packaging/session-bin/hyprland-dialog:[0-9]+:answer=\$\(timeout -k 0\.2 1 qs ipc -p "\$shell_dir" call anr report ' |
-    grep -vE '/packaging/bin/grassfield-security-status:[0-9]+:(state|beat)=\$\(timeout -k 0\.2 2 qs ipc \$display -p "\$path" call security (state|heartbeat) '
+    grep -vE '/packaging/session-bin/hyprland-dialog:[0-9]+:answer=\$\(timeout -k 1 10 qs ipc -p "\$shell_dir" call anr report ' |
+    grep -vE '/packaging/bin/grassfield-security-status:[0-9]+:(state|beat)=\$\(timeout -k 0\.2 2 qs ipc \$display -p "\$path" call security (state|heartbeat) ' |
+    grep -vE '/packaging/session-bin/hyprland-share-picker:[0-9]+:    command = "qs ipc -p SHELL_DIR call picker request"\.split\(\)$'
 }
 export -f bare_qs
 desc="every shipped qs ipc/kill/log caller (the whole of apps, bridges, packaging, config, shell and ui) selects an instance by the system path (-p) or by pid (--pid), never by name or bare"
@@ -70,7 +72,7 @@ for f in shell/services/X.js shell/services/Y.qml packaging/bin/z config/w.lua s
   check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/$f"
 done
 printf 'var c = ["qs", "ipc", "--pid", String(pid), "call", "a", "b"];\n// qs ipc call documented in a comment\nqs ipc -p /usr/share/grassfield/shell call a b\ncmd = ['qs', 'ipc', '--pid', 1]\n/usr/bin/qs ipc -p /usr/share/grassfield/shell call a b\n' >"$mut/ok.txt"
-printf 'answer=$(timeout -k 0.2 1 qs ipc -p "$shell_dir" call anr report "$$"\n' >"$mut/packaging/bin/anr"
+printf 'answer=$(timeout -k 1 10 qs ipc -p "$shell_dir" call anr report "$$"\n' >"$mut/packaging/bin/anr"
 desc="mutation: the stand-in's shell_dir form anywhere but the stand-in is caught"
 check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/packaging/bin/anr"
 printf 'state=$(timeout -k 0.2 2 qs ipc $display -p "$path" call security state 2>/dev/null)\n' >"$mut/packaging/bin/sec"
@@ -85,6 +87,14 @@ check bash -c 'grep -q "ipc -p $1" "$2/packaging/bin/grassfield-lid" "$2/packagi
 desc="the hyprland-dialog stand-in's shell_dir is the system path, replaced by GRASSFIELD_SHELL_DIR only inside its dev-session gate (tests/shell/hyprland_dialog.sh runs both)"
 check bash -c 'f=$1; [[ $(grep -c "shell_dir=" "$f") == 2 ]] && grep -qx "shell_dir=/usr/share/grassfield/shell" "$f" &&
   [[ $(grep -B1 -x "  shell_dir=\$GRASSFIELD_SHELL_DIR" "$f" | head -1) == "if [ \"\${GRASSFIELD_DEV:-}\" = 1 ] && [ \"\${GRASSFIELD_SESSION:-}\" != 1 ] && [ -n \"\${GRASSFIELD_SHELL_DIR:-}\" ]; then" ]]' _ "$root/packaging/session-bin/hyprland-dialog"
+desc="the screen-sharing picker stand-in's SHELL_DIR is the system path, its template's only replacement is shell_dir(), which returns GRASSFIELD_SHELL_DIR only inside the dev-session gate (tests/shell/share_picker.sh runs both)"
+check bash -c 'f=$1; grep -qx "SHELL_DIR = \"/usr/share/grassfield/shell\"" "$f" && [[ $(grep -c "GRASSFIELD_SHELL_DIR" "$f") == 3 ]] &&
+  grep -qx "    if env.get(\"GRASSFIELD_DEV\") == \"1\" and env.get(\"GRASSFIELD_SESSION\") != \"1\" and env.get(\"GRASSFIELD_SHELL_DIR\"):" "$f" &&
+  [[ $(grep -A1 -x "    if env.get(\"GRASSFIELD_DEV\") == \"1\" and env.get(\"GRASSFIELD_SESSION\") != \"1\" and env.get(\"GRASSFIELD_SHELL_DIR\"):" "$f" | tail -1) == "        return env[\"GRASSFIELD_SHELL_DIR\"]" ]] &&
+  grep -qx "    argv = \[shell_dir() if a == \"SHELL_DIR\" else a for a in command\] + \[request_id, path\]" "$f"' _ "$root/packaging/session-bin/hyprland-share-picker"
+printf 'command = "qs ipc -p SHELL_DIR call picker request".split()\n' >"$mut/packaging/bin/pk"
+desc="mutation: the picker stand-in's template anywhere but the stand-in is caught"
+check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/packaging/bin/pk"
 desc="255 stays a failure (qs exits 255 on a config error and a missing path too): no SuccessExitStatus, so OnFailure= still fires; the logout case is the sleep-lock gate (tests/security/sleep_lock_units.sh)"
 check bash -c '! grep -q "^SuccessExitStatus=" "$1" && grep -q "/sleep-lock-gate" "$2/packaging/systemd/omarchy-sleep-lock.service.d/10-grassfield.conf" && grep -q "compositor is gone" "$2/packaging/systemd/sleep-lock-gate"' _ "$unit" "$root"
 desc="OnFailure=omarchy-sleep-lock.service is kept for real crashes (D-12) and the restart policy is unchanged"

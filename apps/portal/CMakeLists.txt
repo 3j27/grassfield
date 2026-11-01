@@ -12,14 +12,16 @@ set(CMAKE_AUTOMOC ON)
 # window (xdg-foreign v2); it is already a dependency of KIO's widgets.
 include(${CMAKE_CURRENT_SOURCE_DIR}/../files/files-core.cmake)
 find_package(KF6WindowSystem ${KF_MIN_VERSION} REQUIRED)
-# The print sheet (ADR-0035 D-7, step 6a) asks CUPS for the printers and sends the jobs (libcups, owner decision Q6).
+# The print sheet (ADR-0035 D-7, step 6a) asks CUPS for the printers and sends the jobs (libcups, owner decision Q6); its preview
+# of a document sent first (step 6b) is drawn by a child of this binary with Qt PDF (qt6-webengine, as Grassfield Preview).
 find_package(Cups REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Pdf)
 
 add_executable(grassfield-portal src/main.cpp src/requesthost.cpp src/requesthost.h src/filechooser.cpp src/filechooser.h
     src/access.cpp src/access.h src/appchooser.cpp src/appchooser.h src/chooserlogic.cpp src/chooserlogic.h src/panelstate.cpp
-    src/panelstate.h src/printlogic.cpp src/printlogic.h src/printsystem.cpp src/printsystem.h src/print.cpp src/print.h)
+    src/panelstate.h src/printlogic.cpp src/printlogic.h src/printsystem.cpp src/printsystem.h src/print.cpp src/print.h src/printpreview.cpp src/printpreview.h)
 target_include_directories(grassfield-portal PRIVATE src)
-target_link_libraries(grassfield-portal PRIVATE grassfield-files-core KF6::WindowSystem Cups::Cups)
+target_link_libraries(grassfield-portal PRIVATE grassfield-files-core KF6::WindowSystem Cups::Cups Qt6::Pdf)
 target_compile_definitions(grassfield-portal PRIVATE
     GRASSFIELD_FILES_QML_DIR="${CMAKE_INSTALL_PREFIX}/share/grassfield/files/qml")
 
@@ -34,9 +36,9 @@ if(GTest_FOUND)
         ../../tests/unit/portal/tst_filechooser.cpp ../../tests/unit/portal/tst_access.cpp ../../tests/unit/portal/tst_appchooser.cpp
         ../../tests/unit/portal/tst_printlogic.cpp ../../tests/unit/portal/tst_print.cpp
         src/requesthost.cpp src/filechooser.cpp src/access.cpp src/appchooser.cpp src/chooserlogic.cpp src/panelstate.cpp
-        src/printlogic.cpp src/printsystem.cpp src/print.cpp)
+        src/printlogic.cpp src/printsystem.cpp src/print.cpp src/printpreview.cpp)
     target_include_directories(portal-unit-tests PRIVATE src)
     find_package(Qt6 REQUIRED COMPONENTS Test)
-    target_link_libraries(portal-unit-tests PRIVATE grassfield-files-core KF6::WindowSystem Cups::Cups Qt6::Test GTest::gtest)
+    target_link_libraries(portal-unit-tests PRIVATE grassfield-files-core KF6::WindowSystem Cups::Cups Qt6::Pdf Qt6::Test GTest::gtest)
     add_test(NAME portal-unit-tests COMMAND portal-unit-tests)
 endif()
