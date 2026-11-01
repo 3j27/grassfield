@@ -1213,7 +1213,8 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   use-after-free (9-3); the unanswered `PromptReady` entries now go with their prompt (9-11). Tests after it: 46 unit cases,
   58 checks in `tests/security/prompter_bridge.sh`, passing with the plain bridge and with one built with ASan and UBSan;
   the reviewer's repro (a half-closed shell, a caller with eight prompts that leaves) is one of them, and it made the
-  ASan bridge crash before the fix.
+  ASan bridge crash before the fix. The opus re-check: PASS, one NIT fixed (the deferred work no longer outlives the
+  bridge, 9-3); 47 unit cases.
 - **What 9a changes for the user: nothing.** No shell connects before step 9b, and without a connected shell the bridge
   never asks for the name: every prompt is the stock gcr-prompter's, as before.
 
@@ -1260,7 +1261,11 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   checked: an answer's completion runs from the socket's notifier, never inside gcr; a cancellation's completion, the
   password's wiping and these closings and releases run in later turns; `onNewPrompt` (inside gcr's `BeginPrompting`) only
   creates and records; `submit`, `withdraw` and `forget` (inside gcr) can reach `dropClient` through `send`, which now calls
-  nothing in gcr; the name's request and release are asynchronous bus calls.
+  nothing in gcr; the name's request and release are asynchronous bus calls. **Amended after the opus re-check of step 9a
+  (NIT):** that work left for a later turn held a raw pointer to the bridge and references to prompts, and nothing
+  removed it when the bridge went; it never ran only because the bridge goes after the main loop has stopped. It is now
+  the bridge's (`PromptsLater`, `Prompt.h`): `~Bridge` detaches the prompts first, then removes whatever has not run
+  and releases its references, so no such work ever runs after the bridge, whatever the main loop does next.
 - **9-4. Which requesters are named?** Options: (a) the rule of the step's brief: a desktop entry of the same executable,
   "Keyring" for gnome-keyring, "GnuPG" for gpg-agent and pinentry, anything else "Unidentified program" with the path;
   (b) also a trusted executable's own file name. **Choice: (a)**, with the entry rule made strict: the entry's `Exec` is
