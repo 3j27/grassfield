@@ -336,6 +336,7 @@ Window {
             sheet.page = 0;
             sheet.pageDrawing = pages > 0;
             sheet.requestPage();
+            sheet.testPrint();
         }
         function onPageRendered(id: int, page: int, source: string): void {
             if (id !== sheet.requestId || page !== sheet.page)
@@ -357,7 +358,8 @@ Window {
     // Dev plumbing (GRASSFIELD_PORTAL_TEST_ANSWER): "accept" prints on the chosen printer once its options are read, "cancel"
     // cancels once the sheet has drawn.
     function testPrint(): void {
-        if (sheet.manager.testAnswer !== "accept" || sheet.testAnswered || !sheet.canPrint)
+        // A document sent first: once its pages are counted too (the integration test checks the backend's child did it).
+        if (sheet.manager.testAnswer !== "accept" || sheet.testAnswered || !sheet.canPrint || (sheet.document && sheet.pages < 0))
             return;
         sheet.testAnswered = true;
         Qt.callLater(sheet.pressPrint);
