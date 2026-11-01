@@ -75,6 +75,7 @@ cairo, libxkbcommon, libinput, wayland, libxcb, pixman, libdrm, libglvnd, libstd
 | KF6 KIO, Solid, CoreAddons, Service 6.29.0 | linked by `grassfield-files` and `grassfield-portal` (the Files library) | headers: LGPL-2.0-or-later (`kio/job.h`, `kio/renamedialog.h`); "LGPL-2.0-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`kio/openurljob.h`); "LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL" (`solid/device.h`) |
 | KF6 WindowSystem 6.31.0 | linked by `grassfield-portal`: an Open or Save panel becomes the child of the application's window (xdg-foreign v2, ADR-0035 D-4); already installed as a dependency of KIO | header: LGPL-2.1-or-later (`kwindowsystem.h`) |
 | libgcr-4 4.4.1 (package gcr-4) and GLib/GIO 2.90 (package glib2) | linked by `grassfield-prompter`: gcr's system prompter protocol, its `sx-aes-1` exchange and secure memory, and GDBus (ADR-0035 D-9); gcr-4 is already installed with gnome-keyring, glib2 with qt6-base | LGPL-2.1-or-later per pacman; header: LGPL-2.1-or-later (`gcr/gcr-system-prompter.h`) |
+| libsecret 0.21.8 (package libsecret) | linked by `grassfield-prompter`: KIO's remembered network passwords stored in and read from the Secret Service, through its asynchronous calls (ADR-0035 D-12 b, step 9e); already installed with gcr-4 | LGPL-2.1-or-later per pacman; header: LGPL-2.1-or-later (`libsecret/secret-password.h`) |
 | extra-cmake-modules (build) | CMake modules | pacman "LGPL"; module headers BSD-3-Clause/BSD-2-Clause |
 | uwsm | session launcher | MIT |
 
