@@ -14,8 +14,11 @@
 #            test socket connects nowhere
 #   e2e      the real bridge (a development run on a private bus, the probe's cgroup as --peer-unit) and libgcr's client
 #            (tests/fixtures/prompter-client.py): a password typed in the shell reaches the gcr client through the sx-aes-1
-#            exchange; a confirmation; a cancellation (SKIP without dbus-daemon, PyGObject with Gcr 4, a built bridge or
-#            g++ with Qt 6 Core and gcr-4, or a cgroup of this process)
+#            exchange; a confirmation; a cancellation; step 9c: with a private "system" bus and a fake NetworkManager
+#            (tests/fixtures/fake-networkmanager.py), the shell's real client registers the agent by its hello, and a WPA2
+#            password, an enterprise name and password and a cancellation answered in the shell reach NetworkManager (SKIP
+#            without dbus-daemon, PyGObject with Gcr 4, a built bridge or g++ with Qt 6 Core and gcr-4, or a cgroup of this
+#            process)
 #
 #   tests/security/secret_bridge.sh              PASS / FAIL lines, exit 0 when all pass
 #   tests/security/secret_bridge.sh --mutants    also mutants of the client, which the fake-bridge scenarios must catch
@@ -188,13 +191,24 @@ e2e() {
     '<busconfig>' '  <type>session</type>' "  <listen>unix:path=$e/bus.sock</listen>" '  <auth>EXTERNAL</auth>' \
     "  <servicedir>$e/services</servicedir>" '  <policy context="default">' '    <allow send_destination="*" eavesdrop="true"/>' \
     '    <allow eavesdrop="true"/>' '    <allow own="*"/>' '  </policy>' '</busconfig>' >"$e/bus.conf"
+  sed -e 's#<type>session</type>#<type>system</type>#' -e "s#$e/bus.sock#$e/sys.sock#" "$e/bus.conf" >"$e/sys.conf"
   setsid env -i PATH="$PATH" HOME="$e" XDG_RUNTIME_DIR="$e/run" dbus-daemon --config-file="$e/bus.conf" --nofork --print-address=1 \
     >"$e/bus.address" 2>"$e/bus.log" </dev/null &
   bus_pid=$!
+  setsid env -i PATH="$PATH" HOME="$e" XDG_RUNTIME_DIR="$e/run" dbus-daemon --config-file="$e/sys.conf" --nofork --print-address=1 \
+    >"$e/sys.address" 2>"$e/sys.log" </dev/null &
+  sys_pid=$!
+  pids+=("$sys_pid")
   wait_until 5 test -s "$e/bus.address" || { echo "SKIP: secret bridge e2e: no private dbus-daemon"; return 0; }
-  local bus
+  wait_until 5 test -s "$e/sys.address" || { echo "SKIP: secret bridge e2e: no second private dbus-daemon"; return 0; }
+  local bus sysbus
   bus=$(head -n 1 "$e/bus.address")
-  local run_env=(env -i PATH="$PATH" HOME="$e" XDG_RUNTIME_DIR="$e/run" DBUS_SESSION_BUS_ADDRESS="$bus" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$e" LC_ALL=C.UTF-8)
+  sysbus=$(head -n 1 "$e/sys.address")
+  local run_env=(env -i PATH="$PATH" HOME="$e" XDG_RUNTIME_DIR="$e/run" DBUS_SESSION_BUS_ADDRESS="$bus" DBUS_SYSTEM_BUS_ADDRESS="$sysbus" GF_TEST_BUS=1 GF_TEST_BUS_DIR="$e" LC_ALL=C.UTF-8)
+  mkfifo "$e/nm.cmd"
+  "${run_env[@]}" python3 -I "$root/tests/fixtures/fake-networkmanager.py" --log "$e/nm.log" --commands "$e/nm.cmd" </dev/null >"$e/nm.err" 2>&1 &
+  pids+=("$!")
+  wait_until 5 grep -q '^#owned' "$e/nm.log" 2>/dev/null || { bad "e2e: the fake NetworkManager owns its name: $(cat "$e/nm.err")"; return 0; }
   local sock=$e/run/grassfield/prompter.sock
   "${run_env[@]}" GRASSFIELD_DEV=1 "$bridge" --socket "$sock" --peer-unit "$leaf" >"$e/bridge.log" 2>&1 &
   pids+=("$!")
@@ -211,10 +225,24 @@ e2e() {
   grep -q '^continue$' "$e/c2.out" && pass "e2e: a confirmation answered ok: the client continues" || bad "e2e: confirm: $(cat "$e/c2.out" | tr '\n' ' ')"
   "${run_env[@]}" timeout 20 python3 -I "$c" password --title answer-cancel >"$e/c3.out" 2>&1
   grep -q '^cancelled$' "$e/c3.out" && pass "e2e: a cancellation: the client gets no password" || bad "e2e: cancel: $(cat "$e/c3.out" | tr '\n' ' ')"
-  grep -q "request p1 answered: ok" "$e/bridge.log" && grep -q 'shell probe says hello (draws: password,confirm)' "$e/bridge.log" \
+  grep -q "request p1 answered: ok" "$e/bridge.log" && grep -q 'shell probe says hello (draws: password,confirm,nm)' "$e/bridge.log" \
     && pass "e2e: the bridge's journal: the shell's hello and its answers" || bad "e2e: bridge log: $(grep -E 'hello|answered' "$e/bridge.log" | head -3 | tr '\n' ' ')"
+  # Step 9c: NetworkManager's secrets through the shell's real client.
+  wait_until 10 grep -q '^#register .* org.grassfield.prompter$' "$e/nm.log" && pass "e2e: the shell's hello (kinds password, confirm, nm) registers the NetworkManager agent" \
+    || bad "e2e: no Register: $(cat "$e/nm.log" | tr '\n' ' ')"
+  local say_nm='printf "%s\n" "$2" >"$1"'
+  timeout 5 bash -c "$say_nm" _ "$e/nm.cmd" "get n1 802-11-wireless-security 0x1 ssid=answer-ok"
+  wait_until 15 grep -qE '^n1 secrets \{"802-11-wireless-security": \{"psk": "pw-p[0-9]+"\}\}$' "$e/nm.log" \
+    && pass "e2e: a WPA2 password answered in the shell reaches NetworkManager" || bad "e2e: WPA2: $(grep '^n1' "$e/nm.log")"
+  timeout 5 bash -c "$say_nm" _ "$e/nm.cmd" "get n2 802-1x 0x1 keymgmt=wpa-eap eap=peap identity=alice ssid=answer-ok"
+  wait_until 15 grep -qE '^n2 secrets \{"802-1x": \{"identity": "user-p[0-9]+", "password": "pw-p[0-9]+"\}\}$' "$e/nm.log" \
+    && pass "e2e: an enterprise name and password answered in the shell reach NetworkManager" || bad "e2e: enterprise: $(grep '^n2' "$e/nm.log")"
+  timeout 5 bash -c "$say_nm" _ "$e/nm.cmd" "get n3 802-11-wireless-security 0x1 ssid=answer-cancel"
+  wait_until 15 grep -qx 'n3 error org.freedesktop.NetworkManager.SecretAgent.UserCanceled' "$e/nm.log" \
+    && pass "e2e: a cancellation in the shell: UserCanceled" || bad "e2e: cancel: $(grep '^n3' "$e/nm.log")"
   grep -q "pw-p" "$e/bridge.log" "$e/probe.out" && bad "e2e: a password in an output" || pass "e2e: no password in the bridge's or the shell's output"
   stop_probe
+  wait_until 10 grep -q '^#unregister .* ok$' "$e/nm.log" && pass "e2e: the shell gone, the agent unregisters" || bad "e2e: no Unregister: $(tail -3 "$e/nm.log" | tr '\n' ' ')"
 }
 e2e
 
@@ -248,6 +276,9 @@ duplicate-id-accepted#security/secret/PrompterClient.qml#                root.fa
 no-back-off#security/secret/PrompterClient.qml#            retry.interval = Prompter.retryDelay(priv.failures);#            retry.interval = 100;
 no-hello#security/secret/PrompterClient.qml#socket.write(Prompter.helloLine(root.shellVersion)#socket.write(""
 strict-parser-off#security/secret/Prompter.js#    if (!exactKeys(m, ["type", "id", "kind", "requester", "texts", "choice", "passwordNew", "strength"]))#    if (false)
+nm-name-for-any-network#security/secret/Prompter.js#            if (security === "enterprise") {#            if (true) {
+nm-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm"];#var KINDS = ["password", "confirm"];
+nm-network-lenient#security/secret/Prompter.js#    if (n.security !== "enterprise" && n.identity !== "")#    if (false)
 EOF_MUTANTS
 fi
 
