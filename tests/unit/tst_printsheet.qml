@@ -34,7 +34,9 @@ TestCase {
         signal printerChosen(int id, string printer, var capabilities, var choices)
         signal pdfChosen(int id, string uri)
         signal pdfCancelled(int id)
+        signal documentRead(int id)
         signal documentReady(int id, int pages)
+        signal documentPaper(int id, var media)
         signal pageRendered(int id, int page, string source)
         signal dismissed(int id)
         signal closed(int id)
@@ -406,10 +408,19 @@ TestCase {
         verify(!test.control(sheet, "Scale, in per cent").visible);
         verify(test.find(sheet.contentItem, it => it.text === "Preparing Preview…" && it.visible) !== null);
         test.ready(sheet);
-        verify(!test.button(sheet, "Print").enabled, "not before the document is read");
+        verify(!test.button(sheet, "Print").enabled, "not before the document is kept");
         verify(!test.control(sheet, "PDF").enabled);
+        fakeHost.documentRead(7);
+        verify(test.button(sheet, "Print").enabled, "as soon as it is kept, before its preview (the counter-review's NIT)");
+        verify(test.control(sheet, "PDF").enabled);
+        verify(test.find(sheet.contentItem, it => it.text === "Preparing Preview…" && it.visible) !== null, "its pages not counted yet");
+        // The document's paper, found after the printer's options: taken, unless the user chose one.
+        fakeHost.documentPaper(7, test.a5);
+        compare(test.control(sheet, "Paper Size").value, "iso_a5_148x210mm");
+        test.control(sheet, "Paper Size").picked("iso_a4_210x297mm");
+        fakeHost.documentPaper(7, test.a5);
+        compare(test.control(sheet, "Paper Size").value, "iso_a4_210x297mm", "the user's own paper stays");
         fakeHost.documentReady(7, 3);
-        verify(test.button(sheet, "Print").enabled);
         compare(fakeHost.rendered.length, 1);
         compare(fakeHost.rendered[0].page, 0);
         verify(fakeHost.rendered[0].width > 0 && fakeHost.rendered[0].height > 0, "drawn for the page area's pixels");

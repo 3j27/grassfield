@@ -79,8 +79,11 @@ Window {
     }
 
     readonly property bool rangesValid: sheet.choices.pages !== "ranges" || sheet.host.tidyRanges(String(sheet.choices.ranges)) !== ""
-    // A document sent first is printed, saved or opened once it is read.
-    readonly property bool documentRead: !sheet.document || sheet.pages >= 0
+    // A document sent first is printed, saved or opened once it is kept, whatever its preview does (documentRead).
+    property bool documentKept: false
+    readonly property bool documentRead: !sheet.document || sheet.documentKept
+    // The user chose a paper: the document's own (documentPaper) no longer replaces it.
+    property bool paperPicked: false
     // Not while the printer's options are read: Return would print with none of them (review of step 6a, MINOR 4).
     readonly property bool canPrint: !sheet.answered && sheet.printer !== "" && !sheet.reading && sheet.rangesValid && sheet.documentRead
     readonly property string acceptText: sheet.request.acceptLabel ? String(sheet.request.acceptLabel) : qsTr("Print")
@@ -317,6 +320,14 @@ Window {
             sheet.answered = sheet.host.answer(sheet.requestId, 0, given);
             if (!sheet.answered)
                 sheet.host.reshow(sheet.requestId);
+        }
+        function onDocumentRead(id: int): void {
+            if (id === sheet.requestId)
+                sheet.documentKept = true;
+        }
+        function onDocumentPaper(id: int, media: var): void {
+            if (id === sheet.requestId && !sheet.paperPicked)
+                sheet.setChoice("media", media);
         }
         function onDocumentReady(id: int, pages: int): void {
             if (id !== sheet.requestId)
@@ -618,8 +629,10 @@ Window {
                     onPicked: id => {
                         const media = sheet.capabilities.media || [];
                         for (let i = 0; i < media.length; i++) {
-                            if (media[i].name === id)
+                            if (media[i].name === id) {
+                                sheet.paperPicked = true;
                                 sheet.setChoice("media", media[i]);
+                            }
                         }
                     }
                 }
