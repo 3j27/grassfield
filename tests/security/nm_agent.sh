@@ -172,7 +172,7 @@ scenario_body() {
   desc="a shell that draws \"nm\" says hello: Register(\"org.grassfield.prompter\") from the bridge's own system bus connection"
   check wait_until 5 grep -qx "#register $agent_name org.grassfield.prompter" "$d/nm.nm"
   desc="...and the bridge's hello lists nm"
-  check has s shell '"kinds":\["password","confirm","nm","kio"\]'
+  check has s shell '"kinds":\["password","confirm","nm","kio","bluetooth"\]'
 
   # --- 3 the four forms ------------------------------------------------------------------------------------------------
   local n
