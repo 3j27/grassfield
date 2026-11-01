@@ -112,7 +112,7 @@ Window {
                     Icon {
                         anchors.centerIn: parent
                         name: "close-glyph"
-                        size: parent.width - 2
+                        size: parent.width - Tokens.spacingXs
                         color: Appearance.colors.windowBackground
                     }
 

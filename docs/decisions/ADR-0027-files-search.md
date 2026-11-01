@@ -1,5 +1,5 @@
 # ADR-0027: Files search: scopes, backends and saved searches
-Status: Proposed (integrator, under owner delegation D-5); applied with Files PR 3 · Date: 2026-10-26 · Decider: integrator
+Status: Proposed (integrator, under owner delegation D-5); applied with the combined Files PR 3–5 (2026-11-01) · Date: 2026-10-26 · Decider: integrator
 
 ## Context
 - Owner goal (2026-10-26, `docs/specs/files.md` FP-71…FP-74): search as in the Finder: the scope "This Mac" or the shown
@@ -60,3 +60,14 @@ Save makes a smart folder (`.savedSearch`), optionally in the sidebar.
 - Files learns the same backend rules as the shell's Search; a later change to them changes both (this ADR).
 - Gate P4 (search latency) gets a Files measurement on the 100k-file fixture in PR 3.
 - Without localsearch or plocate, "This Computer" walks the home folder with the folder bounds and says so.
+
+## Applied (combined Files PR 3–5, 2026-11-01)
+- `searchlogic.{h,cpp}` (the location, rows, saved search JSON), `filesearch.{h,cpp}` (the chain on its own thread:
+  localsearch, then plocate, then the bounded walk: 200 000 items, 2000 results, 32 levels, 2 s per program, 8 MiB of
+  output), `savedsearches.{h,cpp}` (the store), FolderModel (the location), ScopeBar.qml (scope bar and rows).
+- Typing searches This Computer, the Finder's default; the root is the home folder (`GRASSFIELD_SEARCH_ROOT` in dev,
+  ADR-0019); a program's exit 1 with nothing on stderr is "no match", anything else falls through to the next backend.
+- Differences from the text above: a Contents row without the index says so in the status bar, not in the row; a
+  search with no text and no complete row (a new smart folder) lists nothing; results are not live (a new search shows
+  new files). Tests: `tests/unit/files/tst_search.cpp`, `tests/unit/tst_filesbrowser.qml` (`test_searchAsYouType`).
+

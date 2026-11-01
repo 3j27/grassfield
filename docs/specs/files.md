@@ -221,6 +221,14 @@ selection").
 | F4/F5/F8/F9/F10/F13 | nested screenshots: icon view with thumbnails, list sorted by date, columns, Get Info, item menu, two tabs with Trash, light icon/list, search, hidden files | L1 |
 | F11 | nested: drag of a file onto a folder moved it (sandbox), Ctrl+Z moved it back | L1 |
 | F14 | nested, private bus with the bridge: File, Edit, View, Go in the bar; File > New Folder and Edit > Undo clicked with the pointer created and removed the folder (sandbox); Open With lists the selection's applications; `tests/integration/global_menus.sh` covers the same T1 path with Preview | L1 |
+| Search (ADR-0027): location round trips, criteria on facts, saved search JSON and file names, the walk, localsearch and plocate stand-ins (root and hidden filtering, fallback, no match vs error, Contents needs the index), superseded runs, the saved searches store (0600, same name replaces), an empty smart folder asks for nothing | `tests/unit/files/tst_search.cpp` (gtest, 16 tests, sandbox under `GRASSFIELD_TEST_TMP`) | L0 |
+| Search as you type: nothing before typing rests, one history entry refined in place, emptied back to the folder | `tests/unit/tst_filesbrowser.qml` (`test_searchAsYouType`) | L0 |
+| Go menu (FP-75..77): Go to Folder targets and matches, Connect to Server addresses and refusals (no password kept, no file: or trash:), recent lists, place shortcuts | `tests/unit/files/tst_navlogic.cpp` (gtest, 4 tests) | L0 |
+| Rename N Items (FP-57): Replace, Add, Format (index, counter, date), checks before renaming | `tests/unit/files/tst_renamelogic.cpp` (gtest, 4 tests) | L0 |
+| Compress and Expand (ADR-0029): Finder names, bsdtar argv (./names, no -P), the listing's size, a password-protected archive; real round trips with bsdtar (an @name, a folder, a link kept as a link), a hostile `../` member written nowhere outside, no temporary name left, a cancel | `tests/unit/files/tst_archive.cpp` (gtest, 5 tests, sandbox under `GRASSFIELD_TEST_TMP`; skipped without bsdtar) | L0 |
+| Sharing & Permissions (ADR-0028 option 1): privileges of a mode, a change per class (folder Read is r-x, a file keeps x, special bits kept), the recursive operators, the mode text | `tests/unit/files/tst_permissionlogic.cpp` (gtest, 4 tests) | L0 |
+| Decision F-6 and FP-51: no Cut in the item menu, Move Item Here in the folder's menu acts, Empty Trash never in a dev session | `tests/unit/tst_filesbrowser.qml` (`test_moveItemHereAndNoCut`) | L0 |
+| Combined PR 3–5 in the headless session (sway, `scripts/dev/isolated.sh`, the test home only): a search of This Computer, the scope bar, a Kind row, Save into the sidebar, Go to Folder completion, Connect to Server, the item menu, Rename N Items, Compress, Get Info's privileges changed on a test file (644 → 604, then restored), the copy window during a 30 000-file copy | screenshots listed in the PR (not committed); visual NOT verified on the owner's compositor | L1 (headless) |
 | lint | `scripts/dev/qmllint.sh` (covers `apps/**`) and `check-textformat.py` | L0 |
 | F5 mount/eject, removable media | not testable without a removable device | L2 (owner) |
 
@@ -247,7 +255,18 @@ selection").
   `view/sortDescending`, `view/foldersFirst`, `view/showHidden`, `view/galleryInfo` (default true), `view/preview` (the
   preview pane beside the icon and list views, default false), `view/columnPreview` (default true), `view/pathBar` and
   `view/statusBar` (default false), `view/sidebar` (default true), `tags/known` (the sidebar's tags, stored names in display order, at most 64),
-  `tags/hidden` (tags removed from the sidebar, at most 256).
+  `tags/hidden` (tags removed from the sidebar, at most 256), `go/recentFolders` (Go > Recent Folders and Go to Folder's
+  list: local folders and servers, newest first, at most 10), `servers/recent` and `servers/favorites` (Connect to Server:
+  at most 20 each, the URL without any password, decision F-9).
+- Search location `grassfield-search:/?q=<text>&in=<local folder URL>&c=<attribute>:<op>:<unit>:<value>…` (ADR-0027;
+  Files-internal like a tag search: `in` absent searches This Computer, each `c` is a filter row, all percent-encoded).
+- Saved searches: one JSON file per search in `$XDG_DATA_HOME/grassfield/saved-searches/` (folder 0700, files 0600,
+  written atomically; ADR-0020): `{"version":1,"name":…,"scope":"computer"|<folder URL>,"query":…,"filters":[{attribute,
+  op, value, unit}],"sidebar":bool}`; at most 200 files of 64 KiB are read, a file that is not version 1 JSON is left as
+  it is and not listed.
+- External programs, never through a shell: `localsearch search -f -l N -- <term>` and `plocate -i -b -l N -- <term>`
+  (search backends, ADR-0027), `bsdtar` (Compress and Expand, ADR-0029), `xdg-terminal-exec` (New Terminal at Folder and
+  terminal applications, decision F-7), `/usr/bin/chmod -R -- <ops> <folder>` (Apply to enclosed items, ADR-0028 option 1).
 - Extended attribute `user.xdg.tags` (F16): UTF-8 tag names separated by commas, no escaping (a comma inside a tag
   becomes a space when Files writes it); colour tags under the keys Red, Orange, Yellow, Green, Blue, Purple, Gray.
 - Tag search location `grassfield-tag:/<tag>?in=<percent-encoded folder URL>` (Files-internal: history, tabs, the
@@ -328,12 +347,15 @@ installed (not built here).
 - Thumbnails come from KIO's thumbnail plugins (kio-extras, installed 2026-10-17: images, PDF, video); a type without
   a plugin keeps its MIME icon. The Network place (kio-extras smb/sftp workers) lists MTP devices and SMB shares; the
   "Apple Devices" entry is hidden (§14).
-- No sharing; search filters the current folder by name only. Recents lists what `recently-used.xbel` holds (files
+- No sharing. Search (ADR-0027) finds names through localsearch, then plocate, then a bounded walk of the home folder
+  (200 000 items, 2000 results, 32 levels); contents only where localsearch indexed them; results do not update live
+  (a file created while they are shown appears at the next search). The Open and Save panels still filter their folder
+  (F-14). Recents lists what `recently-used.xbel` holds (files
   opened by applications that write it), not every file opened; a recent file renamed while no Recents view is open
   leaves it (the list keeps the old path). Group By has no Date Added (no such time on Linux files); the grouped layouts
   have no reference capture (visual NOT verified).
-- Tags: only the seven colour tags can be set in Files (no "Tags…" editor for named tags; tags of other applications
-  are shown in Get Info and the gallery panel, kept, searchable from the sidebar and droppable onto). Tag changes are
+- Tags: colour tags from the menus and named tags from Tags… (tags of other applications are shown in Get Info and the
+  gallery panel, kept, searchable from the sidebar and droppable onto). Tag changes are
   not part of Undo. The sidebar lists the tags seen in use, not an index of the disk: a tag no longer used stays until
   Remove from Sidebar. The tag search walks one folder tree with bounds (no global search, no live query: an item
   tagged by another application while the results are open appears after Reload). A tag written by another
@@ -373,6 +395,13 @@ installed (not built here).
 - The sidebar shows "Trash full" only if the icon theme has `user-trash-full-symbolic`.
 - Accessibility tree not verified with a screen reader (no AT-SPI bus in the nested session).
 - French catalog: `translations/grassfield_fr.ts` (gate I1, `just check-i18n`).
+
+- Combined PR 3–5: an alias is a symbolic link (it breaks when the original moves; Make Alias and its undo: not in Undo);
+  Get Info changes only one's own items (ADR-0028's administrator path is not built); Open with has no per-document
+  choice (Linux associates applications with types: the pop-up stages Change All…); Connect to Server's password dialog is
+  kiod's (F-9); Compress makes zip only and Expand asks for no password (ADR-0029); the copy window shows no amounts for a
+  paste (KIO::PasteJob forwards none); Empty Trash is never run by an automated test (KIO's empty-trash job empties every
+  volume's trash).
 
 ## Finder parity matrix (step 0, 2026-10-26)
 
@@ -430,8 +459,8 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-18 | View switcher group (4 views; a single view popup ⌃ when the window is narrow) | done (PR 2: measured, 161 x 36; the pop-up while searching or where the title has no room) | Finder-Home, Finder-Search | — | — | 2 |
 | FP-19 | Group By toolbar button (grid ⌃) | done (PR 2) | Finder-Home | FolderModel sections | — | 2 |
 | FP-20 | Share button | missing | Finder-Home | — | no AirDrop or system share sheet on this system: not shown (non-goal "sharing") | never |
-| FP-21 | Tags toolbar button (tag the selection) | missing | Finder-Home | `user.xdg.tags` (F16) | — | 5 |
-| FP-22 | Search field expands to the full width while searching | partial: expands to 200 | Finder-Gallery, Finder-Search | — | — | 3 |
+| FP-21 | Tags toolbar button (tag the selection) | done (combined PR 3–5): the colour tags and Tags… from the toolbar button; glyph measured on Finder-Search (18 pt) | Finder-Home | `user.xdg.tags` (F16) | — | 5 |
+| FP-22 | Search field expands to the full width while searching | done (combined PR 3–5): the field takes the toolbar's free width while a search is shown, the title keeping its room | Finder-Gallery, Finder-Search | — | — | 3 |
 | FP-23 | View > Hide/Show Toolbar ⌥⌘T, Sidebar ⌃⌘S, Path Bar ⌥⌘P, Status Bar ⌘/ (path and status bars hidden by default) | done (PR 2) except Hide Toolbar (the toolbar holds the window controls when the sidebar is hidden) | Finder-Home (no bars), Finder-Search (path bar) | QSettings | — | 2 |
 | FP-24 | View > Customize Toolbar… | missing | none | — | — | later |
 | FP-25 | Title menu: ⌘-click or right-click on the title lists the enclosing folders | done (PR 1) | none | `pathSegments` | — | 1 |
@@ -468,45 +497,45 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
 |---|---|---|---|---|---|---|
 | FP-49 | Copy, Paste, Undo/Redo, Select All | done | — | KIO, FileUndoManager | — | — |
-| FP-50 | Move: Copy then ⌥⌘V (Move Item Here); no Cut for files | partial: Files has Cut ⌘X (KDE/GNOME cut flag) | none | `KIO::paste` | decision F-6 | 5 |
-| FP-51 | Move to Trash ⌘⌫, Put Back, Empty Trash ⇧⌘⌫ with the confirmation | partial: Empty Trash only while the Trash is shown (Finder: Finder > Empty Trash and ⇧⌘⌫ anywhere); never run by tests | Finder-Empty-Trash | KIO trash | — | 5 |
-| FP-52 | Delete Immediately ⌥⌘⌫ on any item (confirmed) | partial: in the Trash only | none | `KIO::del` | — | 5 |
+| FP-50 | Move: Copy then ⌥⌘V (Move Item Here); no Cut for files | done (combined PR 3–5): no Cut for files, Edit > Move Item Here ⌥⌘V; a cut made in another file manager still pastes as a move | none | `KIO::paste` | decision F-6 | 5 |
+| FP-51 | Move to Trash ⌘⌫, Put Back, Empty Trash ⇧⌘⌫ with the confirmation | done (combined PR 3–5): ⇧⌘⌫ from any folder, confirmed, never in a dev session; never run by tests (KIO empties the trash of every mounted volume, the owner's too) | Finder-Empty-Trash | KIO trash | — | 5 |
+| FP-52 | Delete Immediately ⌥⌘⌫ on any item (confirmed) | done (combined PR 3–5): ⌥⌘⌫ on any item, confirmed | none | `KIO::del` | — | 5 |
 | FP-53 | Duplicate ⌘D | done | — | `KIO::copyAs` | — | — |
-| FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | missing | none | symbolic link (`KIO::symlink`) | a macOS alias survives moves; a symbolic link does not | 4 |
-| FP-55 | Show Original ⌘R | missing | none | KFileItem link target | — | 4 |
+| FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | done (combined PR 3–5): ⌃⌘A makes "name alias", a symbolic link to the item's absolute path | none | symbolic link (`KIO::symlink`) | a macOS alias survives moves; a symbolic link does not | 4 |
+| FP-55 | Show Original ⌘R | done (combined PR 3–5): ⌘R on an alias selects its original (⌘R reloads otherwise; F5 always) | none | KFileItem link target | — | 4 |
 | FP-56 | Inline rename | done (Return, F2) | — | `KIO::moveAs` | — | 2 |
-| FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | missing | none | `KIO::batchRename` / moveAs per item | — | 4 |
-| FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | partial: New Folder | none | `KIO::mkdir` + move | — | 4 |
-| FP-59 | Compress (zip) and Expand (double-click an archive) | missing | none | `bsdtar` (libarchive) out of process (ADR-0029) | — | 4 |
-| FP-60 | Get Info ⌘I: General, More Info, Name & Extension, Comments, Open with + Change All…, Preview, Sharing & Permissions | partial: read-only General and permissions; tags; Customize Folder | Finder-Get-Info | KIO stat, `KIO::chmod`, `KIO::chown` | Locked: no user-level lock flag (`chattr +i` needs root, never); Stationery pad: n/a | 4 (permissions), 5 (Open with) |
-| FP-61 | Sharing & Permissions editable, the padlock for items you do not own | missing | Finder-Get-Info | unprivileged: `KIO::chmod`/`KIO::chown`; privileged: ADR-0028 (polkit) | — | 4 |
+| FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | done (combined PR 3–5): Replace Text, Add Text, Format with an example; checked before KIO renames anything (RenameLogic) | none | `KIO::batchRename` / moveAs per item | — | 4 |
+| FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | done (combined PR 3–5): ⌃⌘N moves the items into "New Folder With Items", renamed in place | none | `KIO::mkdir` + move | — | 4 |
+| FP-59 | Compress (zip) and Expand (double-click an archive) | done (combined PR 3–5): ADR-0029; opening an archive expands it next to itself | none | `bsdtar` (libarchive) out of process (ADR-0029) | — | 4 |
+| FP-60 | Get Info ⌘I: General, More Info, Name & Extension, Comments, Open with + Change All…, Preview, Sharing & Permissions | partial (combined PR 3–5): General, tags, Customize Folder, Open with + Change All…, Sharing & Permissions editable for one's own items; Comments, Name & Extension, Preview: missing | Finder-Get-Info | KIO stat, `KIO::chmod`, `KIO::chown` | Locked: no user-level lock flag (`chattr +i` needs root, never); Stationery pad: n/a | 4 (permissions), 5 (Open with) |
+| FP-61 | Sharing & Permissions editable, the padlock for items you do not own | partial (combined PR 3–5): one's own items (owner, group, everyone, the group's pop-up, Apply to enclosed items…); the padlock stays closed for other items until the owner's pkexec check and the opus review of ADR-0028's privileged path | Finder-Get-Info | unprivileged: `KIO::chmod`/`KIO::chown`; privileged: ADR-0028 (polkit) | — | 4 |
 | FP-62 | Inspector ⌥⌘I (one Info window that follows the selection) | missing | none | — | — | later |
-| FP-63 | Tags… editor: named tags, Add Tags field in Info and the preview pane | partial: the seven colour tags | Finder-Gallery, Finder-Get-Info | `user.xdg.tags` | — | 5 |
-| FP-64 | Copy as Pathname ⌥⌘C | missing | none | clipboard | — | 4 |
-| FP-65 | Open With: the list, Other…, Change All… | partial: the list | Finder-Get-Info | KApplicationTrader, `mimeapps.list` | — | 5 |
+| FP-63 | Tags… editor: named tags, Add Tags field in Info and the preview pane | done (combined PR 3–5): Tags… adds and removes named tags (a colour's name gives the colour tag); the preview pane's field (PR 2); Info keeps the colour row | Finder-Gallery, Finder-Get-Info | `user.xdg.tags` | — | 5 |
+| FP-64 | Copy as Pathname ⌥⌘C | done (combined PR 3–5): ⌥⌘C, one path per line | none | clipboard | — | 4 |
+| FP-65 | Open With: the list, Other…, Change All… | done (combined PR 3–5): Other… (the Choose Application panel, ADR-0035), Change All… in Get Info (mimeapps.list) | Finder-Get-Info | KApplicationTrader, `mimeapps.list` | — | 5 |
 | FP-66 | Drag modifiers: ⌥ copies, ⌘ moves, ⌥⌘ makes an alias | done (PR 2) | none | `FilesApp.drop` | ⌘ is Ctrl: Ctrl-drag moves, Alt-drag copies, Ctrl+Alt makes a link (PR 2) | 2 |
 | FP-67 | File-exists sheet: Keep Both / Stop / Replace, Apply to All | done (ADR-0035 step 4a): Keep Both / Skip / Stop / Replace, Merge for folders, Apply to All | Finder-Replace | KIO `AskUserActionInterface` (ADR-0022) | — | 5 |
-| FP-68 | Copy progress window (name, bar, "41.9 MB of 111.6 MB – About 10 seconds", ×) | partial: status-bar text | Finder-Copy | KJob speed and size signals | the progress pie on the destination icon: later | 5 |
+| FP-68 | Copy progress window (name, bar, "41.9 MB of 111.6 MB – About 10 seconds", ×) | done (combined PR 3–5): the copy window (measured on Finder-Copy) with the bar, amounts, time left and a stop button; a paste reports no amounts (KIO's PasteJob forwards none: its bar stays empty) | Finder-Copy | KJob speed and size signals | the progress pie on the destination icon: later | 5 |
 | FP-69 | Print ⌘P | missing | none | the default application's print | — | later |
 | FP-70 | Show Package Contents, Burn to Disc | n/a | — | — | no bundles or optical burning in scope | never |
 
 ### Search
 | # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
 |---|---|---|---|---|---|---|
-| FP-71 | Find ⌘F; title "Searching “This Mac”"; scope bar This Mac / "folder" (Grassfield says "This Computer", F-12) | partial: filters the shown folder by name | Finder-Search | ADR-0027 | — | 3 |
-| FP-72 | Filters: Kind, Last opened, Last modified, Created, Name, Contents, Size, Tags (the + rows) | missing | Finder-Search (+) | ADR-0027 | contents only where localsearch indexed them, or a bounded scan of the folder | 3 |
-| FP-73 | Saved searches (Save, a smart folder in the sidebar), New Smart Folder ⌥⌘N | missing | Finder-Search (Save) | JSON saved searches (ADR-0027) | — | 3 |
-| FP-74 | The path bar shows the selected result's path | missing (path bar shows the folder) | Finder-Search | — | — | 3 |
+| FP-71 | Find ⌘F; title "Searching “This Mac”"; scope bar This Mac / "folder" (Grassfield says "This Computer", F-12) | done (combined PR 3–5): ⌘F searches This Computer as one types (250 ms), "Searching “This Computer”", the scope bar measured on Finder-Search; the Open and Save panels still filter their folder | Finder-Search | ADR-0027 | — | 3 |
+| FP-72 | Filters: Kind, Last opened, Last modified, Created, Name, Contents, Size, Tags (the + rows) | done (combined PR 3–5): the + rows (attribute, condition, value, unit; − removes); Contents only through localsearch, said in the status bar without it | Finder-Search (+) | ADR-0027 | contents only where localsearch indexed them, or a bounded scan of the folder | 3 |
+| FP-73 | Saved searches (Save, a smart folder in the sidebar), New Smart Folder ⌥⌘N | done (combined PR 3–5): Save (name, Add To Sidebar; one place, so no Where pop-up), saved searches in Favorites (Remove from Sidebar, Delete Saved Search), File > New Smart Folder ⌥⌘N | Finder-Search (Save) | JSON saved searches (ADR-0027) | — | 3 |
+| FP-74 | The path bar shows the selected result's path | done (combined PR 3–5): the path bar shows itself while searching, with the selected result's path (nothing without a selection) | Finder-Search | — | — | 3 |
 
 ### Go menu and Linux power, the macOS way
 | # | Finder function | Files today | Reference | Linux backend | Impossible / limit | PR |
 |---|---|---|---|---|---|---|
-| FP-75 | Go menu places with Finder's shortcuts (Recents ⇧⌘F, Documents ⇧⌘O, Desktop ⇧⌘D, Downloads ⌥⌘L, Home ⇧⌘H, Computer ⇧⌘C, Network ⇧⌘K, Applications ⇧⌘A, Utilities ⇧⌘U), Recent Folders | partial: places, Recents ⇧⌘F (PR 2), Home ⇧⌘H and Applications ⇧⌘A (FP-26); the other shortcuts and Recent Folders missing | Go-Menu | — | AirDrop ⇧⌘R, iCloud ⇧⌘I, Shared ⇧⌘S: never | 4 |
-| FP-76 | Go to Folder ⇧⌘G: inline completion and a "Go to:" list of matching paths | partial: a plain field | Finder-Go-To-Folder | `KUrlCompletion`-like listing (own, async) | — | 4 |
-| FP-77 | Connect to Server ⌘K: address field with history, Favorite Servers (+, −), Browse, Connect | missing | Finder-Connect-to-Server | KIO `smb`, `sftp` (kio-extras), `ftp`, `webdav(s)` (KIO) | the password prompt is kiod's own dialog (decision F-9); other applications see the share through kio-fuse when installed, otherwise KIO hands them a temporary copy | 4 |
-| FP-78 | Show hidden files ⇧⌘. | partial: Ctrl+H | none | KDirLister | — | 4 |
-| FP-79 | Services > New Terminal at Folder | missing | Finder-Menu (Services) | `xdg-terminal-exec` (decision F-7) | the app menu's Services submenu is the shell's (F-10): the item sits in the context menu's Services submenu | 4 |
-| FP-80 | Terminal applications open (Open With nvim) | missing: KIO looks for konsole | none | `xdg-terminal-exec` (F-7) | — | 5 |
+| FP-75 | Go menu places with Finder's shortcuts (Recents ⇧⌘F, Documents ⇧⌘O, Desktop ⇧⌘D, Downloads ⌥⌘L, Home ⇧⌘H, Computer ⇧⌘C, Network ⇧⌘K, Applications ⇧⌘A, Utilities ⇧⌘U), Recent Folders | done (combined PR 3–5): Documents ⇧⌘O, Desktop ⇧⌘D, Downloads ⌥⌘L, Computer ⇧⌘C, Network ⇧⌘K, Recent Folders (10, Clear Menu); Utilities ⇧⌘U: never (the Applications location has no category folders) | Go-Menu | — | AirDrop ⇧⌘R, iCloud ⇧⌘I, Shared ⇧⌘S: never | 4 |
+| FP-76 | Go to Folder ⇧⌘G: inline completion and a "Go to:" list of matching paths | done (combined PR 3–5): the panel measured on Finder-Go-To-Folder, inline completion (Tab, →), the Go to: list listed off the GUI thread, the recent folders while empty; local folders only (a URL is typed whole) | Finder-Go-To-Folder | `KUrlCompletion`-like listing (own, async) | — | 4 |
+| FP-77 | Connect to Server ⌘K: address field with history, Favorite Servers (+, −), Browse, Connect | done (combined PR 3–5): its own window measured on Finder-Connect-to-Server (address and history, Favorite Servers + −, Browse, Connect); no ? button (no help book) | Finder-Connect-to-Server | KIO `smb`, `sftp` (kio-extras), `ftp`, `webdav(s)` (KIO) | the password prompt is kiod's own dialog (decision F-9); other applications see the share through kio-fuse when installed, otherwise KIO hands them a temporary copy | 4 |
+| FP-78 | Show hidden files ⇧⌘. | done (combined PR 3–5): ⇧⌘. (Ctrl+H stays) | none | KDirLister | — | 4 |
+| FP-79 | Services > New Terminal at Folder | done (combined PR 3–5): the context menu's Services > New Terminal at Folder | Finder-Menu (Services) | `xdg-terminal-exec` (decision F-7) | the app menu's Services submenu is the shell's (F-10): the item sits in the context menu's Services submenu | 4 |
+| FP-80 | Terminal applications open (Open With nvim) | done (combined PR 3–5): Terminal=true applications run behind xdg-terminal-exec | none | `xdg-terminal-exec` (F-7) | — | 5 |
 | FP-81 | KIO's widget dialogs replaced by Grassfield sheets: file exists, Open With chooser, undo confirmation | done (ADR-0035 step 4a) but the Open With chooser (a notice until ADR-0035 D-5) | Finder-Replace | `AskUserActionInterface`, `OpenWithHandlerInterface`, `FileUndoManager::UiInterface` | kiod's password dialog stays (F-9) | 5 |
 | FP-82 | Network browsing | partial: `remote:/` (smb, sftp) | Finder-Network | kio-extras, avahi | SMB discovery needs wsdd or avahi on the network | 4 |
 
@@ -552,7 +581,13 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 - **F-11 Bars**: the path and status bars are hidden by default, as in the Finder; View shows them. The status bar
   carries job progress and notices (a search stopped early) until the progress window exists (FP-68, PR 5): from PR 2
   to PR 5 it shows itself while a job runs or a notice is up, whatever the setting, so nothing is hidden; FP-68 then
-  takes the progress.
+  takes the progress. Combined PR 3–5: the copy window takes KIO's jobs; the status bar still shows itself for a notice and
+  while Compress or Expand runs (bsdtar's jobs are no KIO jobs).
+- **F-13 Show Original and reload** (combined PR 3–5): ⌘R is the Finder's Show Original when one alias is selected; with
+  anything else it reloads the folder, as before, and F5 always reloads (the PC habit).
+- **F-14 Search scope** (combined PR 3–5): typing in a browser window's field searches This Computer (the Finder's
+  default), a search location in the tab's history refined in place; the Open and Save panels keep filtering the shown
+  folder by name (a panel picks in one folder; a search in it later).
 - **F-12 Names**: no Apple trademark in the UI (master-prompt §14): "This Mac" is "This Computer" (« Cet ordinateur »), as
   in the system menu's About This Computer; Quick Look is Glance; Archive Utility has no name of its own (Files expands).
 

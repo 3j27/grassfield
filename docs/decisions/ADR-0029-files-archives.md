@@ -1,5 +1,5 @@
 # ADR-0029: Compress and Expand through bsdtar in a child process
-Status: Proposed (integrator, under owner delegation D-5); applied with Files PR 4 · Date: 2026-10-26 · Decider: integrator
+Status: Proposed (integrator, under owner delegation D-5); applied with the combined Files PR 3–5 (2026-11-01) · Date: 2026-10-26 · Decider: integrator
 
 ## Context
 - Owner goal (2026-10-26, `docs/specs/files.md` FP-59): Compress and Expand (zip, tar.*, 7z depending on the tools present).
@@ -43,3 +43,14 @@ Archive Utility, as described above; Compress never asks for a format.
 - Tests: the naming rules and argv builders in gtests; Compress then Expand round trips on files under `.dev` in a
   headless test, with a hostile archive (`../x`, an absolute member, a link out) that must not write outside the folder.
 - Known limitation: password-protected archives, and multi-part archives.
+
+## Applied (combined Files PR 3–5, 2026-11-01)
+- `archivelogic.{h,cpp}` (names, argv, listing) and `archivejob.{h,cpp}` (the child process) as decided; temporary names
+  `.grassfield-compress-<hex>.zip` and `.grassfield-expand-<hex>` next to the items, removed on every failure and cancel.
+- The size budget is the sum of the listing's members (stricter than "a member above the budget") against the free space
+  less 64 MiB; while bsdtar writes, the free space is read every 500 ms and the child stopped under that margin (a
+  listing can lie). A listing longer than 30 s or 16 MiB is refused.
+- Progress: the status bar ("Compressing “Archive.zip”…"); the copy window (FP-68) shows KIO's jobs only.
+- Tests: `tests/unit/files/tst_archive.cpp` (real bsdtar round trips with an `@name`, a folder and a link; a member
+  named `../payload-out` writes nothing outside; a cancel and a broken archive leave no temporary name).
+
