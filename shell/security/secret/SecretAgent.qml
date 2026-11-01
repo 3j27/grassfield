@@ -49,6 +49,8 @@ Scope {
     // a confirmation; a password sent keeps it on the sink a moment, its caller often asking again at once after a wrong
     // one). Read by arrive at the request's end.
     property string answeredId: ""
+    // The last serial number given to a request.
+    property int serial: 0
     property bool answeredKeysBack: false
 
     PrompterClient {
@@ -69,6 +71,9 @@ Scope {
             return;
         }
         request.arrivedAt = new Date();
+        // Never reused while the shell runs (the bridge's ids start again from p1 when it restarts).
+        root.serial++;
+        request.serial = root.serial;
         // Another sheet was before it (the polkit sheet, another secret request, or a sheet's linger): shown held.
         request.waited = root.queue.secretHead !== request.id;
         const all = root.requests;

@@ -55,11 +55,11 @@ QtObject {
     property bool choice: false
     // Our own message under the field (the passwords do not match, one is too long), else "".
     readonly property string error: priv.error
-    // An answer to this request went out (the sheet then takes nothing more). Read from the request object itself, never
-    // from a flag a handler resets nor from its id (a bridge that restarts counts its ids from p1 again): bindings that
-    // follow `request` see a new request as unanswered whatever order they run in.
-    readonly property bool answered: !!request && priv.answeredRequest === request
-    readonly property bool canSubmit: !!request && priv.answeredRequest !== request
+    // An answer to this request went out (the sheet then takes nothing more). Read from the request itself, never from a
+    // flag a handler resets: bindings that follow `request` see a new request as unanswered whatever order they run in. The
+    // key is its id and the agent's serial number (a bridge that restarts counts its ids from p1 again).
+    readonly property bool answered: !!request && priv.answeredKey === keyOf(request)
+    readonly property bool canSubmit: !!request && priv.answeredKey !== keyOf(request)
 
     // The same delays as the polkit sheet's (AuthDialogModel; tests/security/secret_sheets.sh checks they are equal).
     readonly property int heldGuardMs: 500
@@ -162,6 +162,11 @@ QtObject {
         return qsTr("The program sent this message. It is not verified:");
     }
 
+    // What tells one request from another: its id and the serial number the agent gave it when it arrived.
+    function keyOf(r: var): string {
+        return r ? r.id + "#" + r.serial : "";
+    }
+
     // The strength meter of a new password, from its length only (decision 9-17: the meter never reads the password itself,
     // so no copy of it is made for the meter): 0 empty, 1 weak (under 8), 2 fair (under 12), 3 strong.
     function strengthOf(length: int): int {
@@ -176,7 +181,7 @@ QtObject {
     signal answerRequested(bool ok, var password, bool choice)
 
     component Private: QtObject {
-        property var answeredRequest: null
+        property string answeredKey: ""
         property bool shown: false
         property string error: ""
     }
@@ -221,7 +226,7 @@ QtObject {
     // The agent sent the answer: nothing more is taken for this request.
     function noteAnswered(): void {
         if (request)
-            priv.answeredRequest = request;
+            priv.answeredKey = keyOf(request);
     }
 
     // A new request (or none): nothing typed or chosen carries over.
