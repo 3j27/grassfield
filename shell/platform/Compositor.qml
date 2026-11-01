@@ -624,6 +624,8 @@ Singleton {
     readonly property bool canSplit: Capabilities.has("tiling-split")
     // Step 6d (ADR-0036 D71): unsplit's Make Window Full Screen and Replace Tiled Window (a plugin before 6d would ignore them).
     readonly property bool canSplitRows: Capabilities.has("tiling-split-rows")
+    // Step 6e (ADR-0036 D73): a Split View window's titlebar is away and no strip is kept above it (the Overview's band).
+    readonly property bool splitTitlesAway: Capabilities.has("tiling-split-titles")
     // ADR-0036 D47: while Stages shows its strip the plugin refuses Left and Right of Screen; the rows are greyed.
     readonly property bool splitBlocked: root.stagesAvailable && Settings.windowsStages
 

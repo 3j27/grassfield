@@ -128,9 +128,11 @@ Variants {
         property string layoutSignature: ""
 
         // The titlebar band of a window: the plugin's strip, or none for a window that draws its own chrome while the plugin
-        // advertises that it steps aside (ClientChrome.js; the tag is Hyprland's, set by the session rule gf-client-chrome).
+        // advertises that it steps aside (ClientChrome.js; the tag is Hyprland's, set by the session rule gf-client-chrome),
+        // nor for a Split View window whose titlebar the plugin keeps away (tiling step 6e, ADR-0036 D73).
         function bandOf(w: var): real {
-            return ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.overviewWindowTitlebarHeight);
+            const away = !!w && WindowTiling.splitTitleAway(TilingLink.splits, w.address, Compositor.splitTitlesAway);
+            return ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.overviewWindowTitlebarHeight, away);
         }
 
         // Window rectangles in this window's coordinates, laid out when the window ids, rects or
