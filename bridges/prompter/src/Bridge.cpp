@@ -158,7 +158,7 @@ namespace gf::prompter {
             if (const qint64 n = m_refusals.takeSuppressed(); n > 0)
                 log(QStringLiteral("%1 more connection(s) refused in the last %2 s, not logged one by one").arg(n).arg(m_refusals.windowMs() / 1000));
         });
-                m_acceptNotifier = new QSocketNotifier(m_listenFd, QSocketNotifier::Read);
+        m_acceptNotifier = new QSocketNotifier(m_listenFd, QSocketNotifier::Read);
         QObject::connect(m_acceptNotifier, &QSocketNotifier::activated, [this] { onAcceptReady(); });
         log(QStringLiteral("listening on %1 for %2 (the name is requested once the shell says hello)").arg(flatten(path, caps::kPath), m_options.peerUnit));
         return true;
@@ -591,8 +591,9 @@ namespace gf::prompter {
             gcr_prompt_close(GCR_PROMPT(prompt));
             g_object_unref(prompt);
         }
+        // gcr disposes each prompt it ends, which takes it out of m_prompts: what is left was not ended.
         if (!open.isEmpty())
-            log(QStringLiteral("%1 open gcr prompt(s) closed: their callers saw the name go").arg(open.size()));
+            log(QStringLiteral("%1 open gcr prompt(s) closed: their callers saw the name go (%2 still open)").arg(open.size()).arg(m_prompts.size()));
     }
 
     // --- the well-known name ------------------------------------------------------------------------------------------------
