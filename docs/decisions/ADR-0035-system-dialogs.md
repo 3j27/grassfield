@@ -818,6 +818,7 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under the real Quickshell, offscreen.
   - `tests/unit/tst_sharepicker.qml`: the decisions in `SharePicker.js`.
   - `tests/shell/shell_unit.sh`: the stand-in's `qs ipc` line and its dev gate.
+  - `tests/shell/share_picker_nested.sh` (nested): it never reaches the live shell (review of PR #83, MINOR 3: an inherited `GRASSFIELD_SESSION=1` made the stand-in ask `/usr/share/grassfield/shell`, the owner's shell, and two stock pickers opened on the nested display). It drops every `GRASSFIELD_*` and `QS_*` variable, gives the stand-in only `GRASSFIELD_DEV=1` and this tree's `GRASSFIELD_SHELL_DIR`, refuses to run (exit 2) unless the one Quickshell instance of that directory is this tree's nested shell, and runs a copy of the stand-in whose stock picker only records that it ran.
 
 Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first, no technical step for the user):
 - **7-1. Two pull requests.**
