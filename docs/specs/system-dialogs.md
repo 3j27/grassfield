@@ -874,7 +874,8 @@ backend left only Qt's idiom.
 The print sheet attaches to the document's window: a preview of the pages on the left (page arrows under it), on the right
 Printer, Presets, Copies, Pages (All, From–to, Selection), then Paper Size, Orientation, Scale, Two-Sided and the printer's
 options in collapsible sections; at the bottom "PDF" (a menu: Save as PDF…, Open in Preview) and Cancel / Print (default).
-The last-used printer and settings are remembered per app.
+The last printer used is shown first; Last Used Settings, a preset of the Presets menu shared by every application, brings the
+last print's settings back (ADR-0035 6-18).
 
 ### Functional requirements
 - PR1 `PreparePrint`: the sheet without preview (the document is not sent yet), every option the destination reports through
@@ -882,7 +883,7 @@ The last-used printer and settings are remembered per app.
   for the matching `Print` call.
 - PR2 `Print` with a valid token: submits the document fd to the chosen CUPS destination with the chosen options, no UI; without
   a token: the full sheet with the preview of the document (Qt PDF for PDF, the first page of PostScript as an image when it can
-  be rendered, else "No preview").
+  be rendered, else "No preview"; step 6b sends a document that is not a PDF to x-d-p-gtk instead, ADR-0035 6-12).
 - PR3 "Save as PDF…" opens the D-4 save panel and writes the document there (PDF input) instead of printing.
 - PR4 no printer: the sheet says "No printers available" with "Add Printer…" (opens Settings > Printers).
 - PR5 never blocks: CUPS calls run off the UI thread with deadlines (a dead network printer never freezes the sheet); the UI
@@ -925,11 +926,52 @@ The last-used printer and settings are remembered per app.
   job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
 - `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
 
+### Built in step 6b (ADR-0035 6-10 to 6-30)
+- PR2 without a token done: Print with no sheet before it (libportal's callers) opens the sheet with the document's preview on
+  the left, one page at a time with "‹ 1 of N ›" and Page Up / Page Down (6-14); Orientation and Scale are not offered (the
+  document is laid out), Pages is All Pages or a range, which the printer applies (`page-ranges`), and the paper of the
+  document's first page is chosen where the printer has it (6-13). The document is kept in an unlinked private file on disk
+  (the user's cache folder), within one 2 GiB budget for every document waiting (6-11, 6-21), and its pages are drawn by a
+  confined child of grassfield-portal (Qt PDF; Landlock: reading under /usr only; a measured seccomp allow-list: no socket,
+  program, process, lock, ioctl, nor any act on another process; setsid, the locale's variables only, 512 MiB, one child at a
+  time, one thread when it confines itself; an unlisted call answers ENOSYS; raw pixels read back; no preview when the
+  confinement cannot be installed) (6-10, 6-20, 6-25 to 6-27). The sheet may print as soon as the document is kept, its preview
+  coming apart, and the document's own paper chosen with the first printer's options, or suggested when its size comes after
+  them (6-13, 6-28). Print sends the job at once from that file and the sheet goes (6-15); a document that is not a PDF goes to
+  x-d-p-gtk as it came, or fails when it came on a pipe, as does one whose sheet does not show in time once part of a pipe was
+  read (6-12, 6-24); one the full budget refuses goes to x-d-p-gtk as it came when it is a file (6-28).
+- PR3 done with macOS's "PDF" pull-down (6-16): Save as PDF… (6-3's Save panel and writer) and Open in Preview: a private copy
+  in `$XDG_CACHE_HOME/grassfield/preview` (a name within 255 bytes; the copies older than a day, or beyond 16, removed), written
+  as Save as PDF writes, opened in Preview started as the Dock starts an application (`systemd-run --expand-environment=no`)
+  (6-17, 6-22). In both flows.
+- PR1 done with the Presets (6-18): Default Settings and Last Used Settings (one for every printer, kept in grassfield-portal's
+  state when Print sends a job: two sides, colour, collation and the printer's own options, never the copies, pages, paper,
+  orientation or scale), the sheet opening on Last Used Settings when there are some; and with a printer's own options (6-19):
+  Feed From, Media Type and Quality in "Media & Quality", Output Bin and Finishing in "Printer Options", disclosure sections
+  closed at first, only what the printer reports with two values or more, its defaults first (the user's lpoptions, else the
+  queue's), each value sent as CUPS takes it, only one the printer listed and only when the queue would not apply it by itself
+  (the user's lpoptions value goes; 6-23); the standard finishings named in the UI language.
+- A-PR1 extended: `tst_printlogic.cpp` (options, page ranges, Open in Preview, presets and their JSON, file names within 255
+  bytes), `tst_print.cpp` (the confinement against the security review's probes, the child's environment and session, the
+  private file and its budget, the pages drawn by the child, a document sent first through the D-Bus interface, one that is not
+  a PDF, one on a pipe never sent on truncated, Open in Preview and its copies' bounds, Last Used Settings, a printer's
+  options), `print_cups.sh` (the scratch scheduler reports the queue's
+  own options with their names and defaults, and keeps them on the job), `tst_printsheet.qml` (the Presets, the sections, the
+  PDF pull-down, the preview and its pages). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9b (Print with
+  no token through the real frontend: the sheet, the backend's child counting the pages, the job in the scratch scheduler with
+  the document as sent). Evince or a libportal application in a nested session, and A-PR3, are the integrator's.
+
 ### Known limitations
 Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, Electron and Qt apps keep their dialogs); no
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
-Settings. Step 6a: a Print with no sheet before it gets x-d-p-gtk's dialog; no Presets; a printer's options beyond paper, two
-sides and colour (trays, quality, finishing) are its defaults. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
+Settings. Step 6b: no named presets (Save Current Settings as Preset…), no Layout (pages per sheet) or Paper Handling (page
+order, odd or even pages) sections, and a PPD's vendor options with no IPP name are not shown (the printer's defaults apply);
+a document sent first that is not a PDF gets x-d-p-gtk's dialog; the preview needs Landlock (a kernel from 5.13 with Landlock
+enabled, as Arch's is) and x86_64 or aarch64 (the allow-list is measured on x86_64 only), else it says "No Preview" and the
+document still prints; the child can still learn a path's metadata (whether a file exists, its size, times and mode; never its
+contents: Landlock does not cover stat); Open in Preview's copies stay in the user's cache folder for up to a day (16 at most), where an
+application allowed to read that folder can read them; a finishing that is neither standard nor named by CUPS is shown as its
+keyword in English words. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
 a GTK 3 application asking for n copies gets n × n (GTK renders the n copies its answer names and x-d-p-gtk's job asks for n
 again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes to the folder the Save panel's answer named as
 it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that

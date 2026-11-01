@@ -27,8 +27,8 @@ for d in KIOCore KIOGui KIOWidgets KIO KCoreAddons KService Solid KJobWidgets KW
   kf_includes+=("-I$kf/$d")
 done
 kf_libs=(-lKF6KIOCore -lKF6KIOGui -lKF6KIOWidgets -lKF6CoreAddons -lKF6Service -lKF6Solid -lKF6JobWidgets -lKF6WindowSystem)
-read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network Qt6Test wayland-client) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui)/QtGui -I/usr/include/qt6/QtCore/$(pkg-config --modversion Qt6Gui)"
-read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network wayland-client)"
+read -r -a qt_cflags <<<"$(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network Qt6Pdf Qt6Test wayland-client) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui) -I/usr/include/qt6/QtGui/$(pkg-config --modversion Qt6Gui)/QtGui -I/usr/include/qt6/QtCore/$(pkg-config --modversion Qt6Gui)"
+read -r -a qt_libs <<<"$(pkg-config --libs Qt6Widgets Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Network Qt6Pdf wayland-client)"
 moc=/usr/lib/qt6/moc
 [[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc)
 "$moc" "${kf_includes[@]}" "$here/src/requesthost.h" -o "$out/moc_portal_requesthost.cpp"
@@ -41,7 +41,7 @@ moc=/usr/lib/qt6/moc
 defs=()
 sources=("$here/src/requesthost.cpp" "$here/src/filechooser.cpp" "$here/src/access.cpp" "$here/src/appchooser.cpp"
          "$here/src/chooserlogic.cpp" "$here/src/panelstate.cpp" "$here/src/printlogic.cpp" "$here/src/printsystem.cpp"
-         "$here/src/print.cpp" "$out/moc_portal_requesthost.cpp" "$out/moc_portal_filechooser.cpp" "$out/moc_portal_access.cpp"
+         "$here/src/print.cpp" "$here/src/printpreview.cpp" "$out/moc_portal_requesthost.cpp" "$out/moc_portal_filechooser.cpp" "$out/moc_portal_access.cpp"
          "$out/moc_portal_appchooser.cpp" "$out/moc_portal_printsystem.cpp" "$out/moc_portal_print.cpp")
 target=$out/grassfield-portal
 case $mode in

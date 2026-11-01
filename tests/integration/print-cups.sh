@@ -1,7 +1,8 @@
 # The scratch CUPS scheduler of the print tests (ADR-0035 D-7), sourced by print_cups.sh and portal_filechooser.sh: a cupsd run
 # as the user with its own configuration, spool and port (never the system's scheduler), listening on a socket and on
 # localhost (a queue is reached at its URI, as in a session), with one queue, Office, the default, writing to a file through
-# tests/fixtures/print/office.ppd (A4, US Letter and A5; two sides; colour; PDF passed as it is).
+# tests/fixtures/print/office.ppd (A4, US Letter and A5; two sides; colour; its own paper source, media type, quality, output bin
+# and finishing; PDF passed as it is).
 # Needs a cupsd the user can run (GF_TEST_CUPSD; Arch's /usr/sbin/cupsd is root's only, mode 0700: a copy, in a container),
 # lpadmin, lpstat and python3; cups_ready says whether they are there. The caller sets `root`.
 cups_ready() {
