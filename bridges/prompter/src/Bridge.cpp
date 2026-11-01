@@ -11,7 +11,6 @@
 #include <QSocketNotifier>
 #include <QTimer>
 
-#include <array>
 #include <cerrno>
 #include <cstring>
 #include <string.h>
@@ -406,18 +405,17 @@ namespace gf::prompter {
     }
 
     void Bridge::onNmAnswer(const ShellLine& answer, std::string_view line, NmRequest* request) {
-        const bool enterprise = request->ask.security == nm::Security::Enterprise;
-        QString    wrong;
+        // Only the password goes back: NetworkManager keeps nothing but secrets from an agent's reply, so a name (identity)
+        // is never asked or accepted (opus review of step 9c, MAJOR; decision 9-33 amended).
+        QString wrong;
         if (answer.hasChoice)
             wrong = QStringLiteral("a choice where none was shown");
-        else if (!answer.ok && (answer.hasPassword || answer.hasIdentity))
+        else if (answer.hasIdentity)
+            wrong = QStringLiteral("a name where none is asked");
+        else if (!answer.ok && answer.hasPassword)
             wrong = QStringLiteral("a secret in a cancellation");
         else if (answer.ok && !answer.hasPassword)
             wrong = QStringLiteral("ok without a password");
-        else if (answer.ok && enterprise && !answer.hasIdentity)
-            wrong = QStringLiteral("ok without a name");
-        else if (!enterprise && answer.hasIdentity)
-            wrong = QStringLiteral("a name where none is asked");
         if (!wrong.isEmpty()) {
             log(QStringLiteral("invalid answer to %1: %2; the request is cancelled").arg(answer.id, wrong));
             cancelRequest(answer.id, true);
@@ -426,6 +424,13 @@ namespace gf::prompter {
         }
         m_pending.remove(answer.id);
         m_book.release(answer.id);
+        if (answer.refused) {
+            // The shell could not take it (its bound): no secrets, NetworkManager may ask another agent (decision 9-31).
+            log(QStringLiteral("request %1 refused by the shell").arg(answer.id));
+            if (m_nm)
+                m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("the shell could not take it"));
+            return;
+        }
         if (!answer.ok) {
             log(QStringLiteral("request %1 answered: cancel").arg(answer.id));
             if (m_nm)
@@ -435,25 +440,17 @@ namespace gf::prompter {
         // Decoded straight into gcr's secure memory; the line it came from is wiped by the caller.
         auto*      secure = static_cast<char*>(gcr_secure_memory_alloc(limits::kPassword + 1));
         const long n      = decodeJsonString(line.data() + answer.password.begin, answer.password.end - answer.password.begin, secure, limits::kPassword);
-        QByteArray identity;
-        long       named = 0;
-        if (enterprise) {
-            std::array<char, limits::kIdentity> name{};
-            named = decodeJsonString(line.data() + answer.identity.begin, answer.identity.end - answer.identity.begin, name.data(), name.size());
-            if (named > 0)
-                identity = QByteArray(name.data(), static_cast<qsizetype>(named));
-        }
-        if (n <= 0 || (enterprise && named <= 0) || !m_nm) {
+        if (n <= 0 || !m_nm) {
             explicit_bzero(secure, limits::kPassword + 1);
             gcr_secure_memory_free(secure);
-            log(QStringLiteral("answer to %1: an empty or undecodable password or name; the request is cancelled").arg(answer.id));
+            log(QStringLiteral("answer to %1: an empty or undecodable password; the request is cancelled").arg(answer.id));
             send(cancelMessage(answer.id));
             if (m_nm)
                 m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("an empty answer"));
             return;
         }
         secure[n] = '\0';
-        m_nm->answer(request, secure, static_cast<std::size_t>(n), identity);
+        m_nm->answer(request, secure, static_cast<std::size_t>(n));
     }
 
     void Bridge::cancelAll(bool tellShell) {

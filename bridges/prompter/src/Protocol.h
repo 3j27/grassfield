@@ -17,8 +17,9 @@
 //   {"type":"error","code":"<code>","message":"<text>"}
 // shell -> bridge (at most limits::kShellLine bytes per line, the newline excluded):
 //   {"v":"prompter/1","type":"hello","shell":"<version>","kinds":["password","confirm","nm"]} (first line, once)
-//   {"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false,"identity":"..."}
-//   ("identity" only for an nm request of security "enterprise" answered ok)
+//   {"type":"answer","id":"p<N>","result":"ok"|"cancel"|"refused","password":"...","choice":true|false,"identity":"..."}
+//   ("refused": the shell could not take the request (its bound); "identity" is parsed but no kind accepts it yet: an nm
+//   reply carries the password only, opus review of step 9c)
 //
 // Everything the shell sends is untrusted: a strict parser for flat objects (strings, booleans, null, arrays of strings;
 // no numbers, no nesting, no duplicate keys, valid UTF-8, no NUL), every key and type checked. The password is never
@@ -102,6 +103,7 @@ namespace gf::prompter {
         // answer
         QString     id;
         bool        ok          = false;
+        bool        refused     = false; // result "refused": the shell could not take it (ok is false)
         bool        hasPassword = false;
         JsonString  password; // raw bytes in the line; decoded length checked against limits::kPassword
         bool        hasChoice   = false;

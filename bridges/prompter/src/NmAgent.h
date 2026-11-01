@@ -73,7 +73,7 @@ namespace gf::prompter {
 
         // The bridge's answers to a request it holds no more. answer() takes over `securePassword` (gcr secure memory,
         // NUL-terminated, `length` bytes): handed to the reply, or zeroed and freed when the request is gone already.
-        void answer(NmRequest* request, char* securePassword, std::size_t length, const QByteArray& identity);
+        void answer(NmRequest* request, char* securePassword, std::size_t length);
         // Ends the request with `errorName` (nm::kErrorUserCanceled for the user's Cancel, nm::kErrorNoSecrets otherwise).
         void refuse(NmRequest* request, const char* errorName, const QString& why);
 

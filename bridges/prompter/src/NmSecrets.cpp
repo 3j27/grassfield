@@ -145,19 +145,21 @@ namespace gf::prompter::nm {
             // cannot be met with a name and a password.
             if (hints && *hints && !listHas(hints, "password") && !listHas(hints, "identity"))
                 return no(QStringLiteral("802.1X secrets other than a name and a password"));
+            a.identity = flatten(QString::fromUtf8(stringOf(s.dot1x, "identity")), kIdentityCap);
+            // The username is shown, never answered (NetworkManager drops non-secrets from a reply): without one stored
+            // with the connection the sheet could only ask for a name that would be thrown away.
+            if (a.identity.isEmpty())
+                return no(QStringLiteral("no username stored with the connection (an agent's reply cannot set one)"));
             a.security = Security::Enterprise;
             a.key      = "password";
-            a.identity = flatten(QString::fromUtf8(stringOf(s.dot1x, "identity")), kIdentityCap);
         }
         a.ask = true;
         return a;
     }
 
-    GVariant* secretsReply(const Ask& ask, char* securePassword, std::size_t length, const QByteArray& identity) {
+    GVariant* secretsReply(const Ask& ask, char* securePassword, std::size_t length) {
         GVariantBuilder inner;
         g_variant_builder_init(&inner, G_VARIANT_TYPE("a{sv}"));
-        if (ask.security == Security::Enterprise)
-            g_variant_builder_add(&inner, "{sv}", "identity", g_variant_new_string(identity.constData()));
         // No copy of the password in GLib's heap here: the string is the secure buffer, with its NUL.
         GVariant* secret = g_variant_new_from_data(G_VARIANT_TYPE_STRING, securePassword, length + 1, TRUE, wipeSecure, securePassword);
         g_variant_builder_add(&inner, "{sv}", ask.key.constData(), secret);

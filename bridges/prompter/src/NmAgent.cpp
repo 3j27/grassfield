@@ -380,7 +380,7 @@ namespace gf::prompter {
             endWith(request, errorName, why, tellShell);
     }
 
-    void NmAgent::answer(NmRequest* raw, char* securePassword, std::size_t length, const QByteArray& identity) {
+    void NmAgent::answer(NmRequest* raw, char* securePassword, std::size_t length) {
         const Request request = take(raw);
         if (!request || request->ended) {
             wipeAndFree(securePassword, length);
@@ -392,7 +392,7 @@ namespace gf::prompter {
             request->timeout = 0;
         }
         // The reply's string is the secure buffer itself (NmSecrets.h); GDBus marshals a copy into the message it writes.
-        g_dbus_method_invocation_return_value(request->invocation, nm::secretsReply(request->ask, securePassword, length, identity));
+        g_dbus_method_invocation_return_value(request->invocation, nm::secretsReply(request->ask, securePassword, length));
         request->invocation = nullptr;
         log(QStringLiteral("request %1 answered: the secret went to NetworkManager").arg(request->id));
     }
