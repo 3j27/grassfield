@@ -145,7 +145,7 @@ TEST(Flatpak, UpdateAccessAdded)
     tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
                                       "echo \"$*\" >>'" + d + "/calls'\n"
                                       "case \"$1\" in\n"
-                                      "  info) [ -e '" + d + "/unreadable' ] && exit 1; cat '" + d + "/installed' ;;\n"
+                                      "  info) cat '" + d + "/installed'; if [ -e '" + d + "/unreadable' ]; then exit 1; fi ;;\n"
                                       "  remote-info) cat '" + d + "/newer' ;;\n"
                                       "esac\n");
     const QString ref = QStringLiteral("app/org.example.Hello/x86_64/stable");
@@ -169,7 +169,7 @@ TEST(Flatpak, UpdateAccessAdded)
     EXPECT_FALSE(flatpakAccessAdded(tools, ref));
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nfilesystems=b\\qc;\n");
     EXPECT_FALSE(flatpakAccessAdded(tools, ref));
-    // The installed side unread (flatpak info fails) is unread too, whatever the newer commit reaches.
+    // The installed side unread (flatpak info fails, whatever it printed) is unread too, whatever the newer commit reaches.
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nshared=network;\n");
     ASSERT_TRUE(flatpakAccessAdded(tools, ref));
     storetest::writeFile(dir.filePath(QStringLiteral("unreadable")), "");
