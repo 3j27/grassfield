@@ -17,12 +17,10 @@ Singleton {
     // Settings > Menu Bar > Recent items (macOS: Recent documents, applications, and servers); 0 hides the submenu.
     readonly property int max: Settings.menubarRecentItems
     readonly property string home: Quickshell.env("HOME")
-    // Documents outside this root (default $HOME; tests point it at their fixtures, like Search) are not listed.
-    readonly property string filesRoot: Mode.devValue("SEARCH_ROOT") || home
-    readonly property string dataHome: {
-        const xdg = Quickshell.env("XDG_DATA_HOME");
-        return xdg ? xdg : home + "/.local/share";
-    }
+    // Documents outside this root ($HOME; in a dev session never $HOME, see Apps.searchRoot) are not listed.
+    readonly property string filesRoot: Apps.searchRoot
+    // Dev session: the dev apps-home, never the owner's recent files.
+    readonly property string dataHome: Apps.dataHome
     readonly property string stateDir: Mode.stateDir
     readonly property string statePath: stateDir + "/recent-items.json"
 
