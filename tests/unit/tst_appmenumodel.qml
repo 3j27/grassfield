@@ -340,6 +340,32 @@ TestCase {
         verify(!model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, focusedWindow: null})).find(i => i.id === "exitSplit").enabled);
     }
 
+    // Step 6d (ADR-0036 D71): with the plugin's tiling-split-rows, a Split View window's popover offers the macOS rows, and the
+    // Window menu adds Make Window Full Screen and Replace Tiled Window after Exit Full Screen; Replace only while the other half
+    // holds a window. Without the feature, Exit Full Screen alone as before.
+    function test_splitViewRows() {
+        const pop = c => model.tilingPopover(Object.assign({alt: false, tileable: true, canArrange: true, canSplit: true, fullscreen: false, inSplit: true, outputs: []}, c));
+        const rows = pop({canSplitRows: true, splitPair: true}).rows;
+        compare(rows.map(i => i.id + ":" + i.text).join(","), "exitSplit:Move Window to Desktop,splitFullscreen:Make Window Full Screen,splitReplace:Replace Tiled Window");
+        verify(rows.every(i => i.enabled), "two windows: every row");
+        const lone = pop({canSplitRows: true, splitPair: false}).rows;
+        compare(lone.map(i => i.enabled).join(","), "true,true,false", "one window: nothing to keep, Replace greyed");
+        compare(pop({canSplitRows: false, splitPair: true}).rows.map(i => i.id + ":" + i.text).join(","), "exitSplit:Exit Full Screen", "without the feature: as before");
+        compare(pop({canSplitRows: true, splitPair: true, inSplit: false, fullscreen: true}).rows.map(i => i.id).join(","), "fullscreen", "in full screen: Exit Full Screen only");
+        verify(pop({canSplitRows: true, splitPair: true}).rows.every(i => i.glyph && i.glyph.own === -1 && i.glyph.zones.length === 0), "rows without a glyph");
+        const menu = model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, canSplitRows: true, splitPair: true}));
+        const all = ids(menu);
+        compare(all.slice(all.indexOf("exitSplit"), all.indexOf("exitSplit") + 3).join(","), "exitSplit,splitFullscreen,splitReplace");
+        compare(menu.find(i => i.id === "splitFullscreen").text, "Make Window Full Screen");
+        compare(menu.find(i => i.id === "splitReplace").text, "Replace Tiled Window");
+        verify(menu.find(i => i.id === "splitFullscreen").enabled && menu.find(i => i.id === "splitReplace").enabled);
+        verify(!model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, canSplitRows: true, splitPair: false})).find(i => i.id === "splitReplace").enabled, "one window: Replace greyed");
+        const away = model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, canSplitRows: true, splitPair: true, focusedWindow: null}));
+        verify(!away.find(i => i.id === "splitFullscreen").enabled && !away.find(i => i.id === "splitReplace").enabled, "no window: greyed");
+        compare(ids(model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, splitPair: true}))).indexOf("splitReplace"), -1, "without the feature: no rows");
+        compare(ids(model.windowMenu(ctx({canTile: true, canSplit: true, canSplitRows: true, splitPair: true}))).indexOf("splitFullscreen"), -1, "not on a Split View Desktop: no rows");
+    }
+
     function test_windowCommandsAreGreyWhenTheAppIsNamedFromStagesOnly() {
         const items = model.windowMenu(ctx({displayOnly: true}));
         for (const id of ["minimize", "zoom", "fullscreen", "moveMenu"])

@@ -349,6 +349,9 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.nameWidth - icon.x - icon.width - 2 * Tokens.spacingSm - (rowDots.visible ? rowDots.width + Tokens.spacingSm : 0)
                 text: DisplayName.text(row.name)
+                // Names start at the left edge, also one that starts with a right-to-left letter (Finder; Qt aligns such a
+                // text right by itself; integrator nested pass of step 5c, NIT).
+                horizontalAlignment: Text.AlignLeft
                 elide: Text.ElideMiddle
                 color: row.foreground
                 font.family: Appearance.fontFamily

@@ -233,6 +233,17 @@ void RequestHost::present(int id, QObject *object)
     QGuiApplication::setDesktopFileName(own);
 }
 
+void RequestHost::reshow(int id)
+{
+    const auto r = m_requests.value(id);
+    if (!r || r->state == Request::State::Forwarded || !r->window)
+        return;
+    const QString own = QGuiApplication::desktopFileName();
+    QGuiApplication::setDesktopFileName(windowAppId(r->appId));
+    r->window->show();
+    QGuiApplication::setDesktopFileName(own);
+}
+
 void RequestHost::fail(int id)
 {
     if (!isOpen(id))

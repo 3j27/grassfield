@@ -1054,6 +1054,18 @@
         <translation>Déplacer vers %1</translation>
     </message>
     <message>
+        <source>Move Window to Desktop</source>
+        <translation>Placer la fenêtre sur le bureau</translation>
+    </message>
+    <message>
+        <source>Make Window Full Screen</source>
+        <translation>Mettre la fenêtre en plein écran</translation>
+    </message>
+    <message>
+        <source>Replace Tiled Window</source>
+        <translation>Remplacer la fenêtre en mosaïque</translation>
+    </message>
+    <message>
         <source>Fill &amp; Arrange</source>
         <translation>Remplir et disposer</translation>
     </message>
@@ -9050,6 +9062,165 @@
     </message>
 </context>
 <context>
+    <name>PrintSheet</name>
+    <message>
+        <source>Print</source>
+        <translation>Imprimer</translation>
+    </message>
+    <message>
+        <source>Untitled</source>
+        <translation>Sans titre</translation>
+    </message>
+    <message>
+        <source>Save as PDF</source>
+        <translation>Enregistrer au format PDF</translation>
+    </message>
+    <message>
+        <source>Printer:</source>
+        <translation>Imprimante&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Printer</source>
+        <translation>Imprimante</translation>
+    </message>
+    <message>
+        <source>Looking for printers…</source>
+        <translation>Recherche d’imprimantes…</translation>
+    </message>
+    <message>
+        <source>Printers Not Responding</source>
+        <translation>Les imprimantes ne répondent pas</translation>
+    </message>
+    <message>
+        <source>No Printers Available</source>
+        <translation>Aucune imprimante disponible</translation>
+    </message>
+    <message>
+        <source>Add Printer…</source>
+        <translation>Ajouter une imprimante…</translation>
+    </message>
+    <message>
+        <source>Copies:</source>
+        <translation>Copies&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Copies</source>
+        <translation>Copies</translation>
+    </message>
+    <message>
+        <source>Pages:</source>
+        <translation>Pages&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Pages</source>
+        <translation>Pages</translation>
+    </message>
+    <message>
+        <source>All Pages</source>
+        <translation>Toutes les pages</translation>
+    </message>
+    <message>
+        <source>Current Page</source>
+        <translation>Page actuelle</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>Sélection</translation>
+    </message>
+    <message>
+        <source>Range</source>
+        <translation>Plage</translation>
+    </message>
+    <message>
+        <source>Pages to print, for example 1-3, 5</source>
+        <translation>Pages à imprimer, par exemple 1-3, 5</translation>
+    </message>
+    <message>
+        <source>1-3, 5</source>
+        <translation>1-3, 5</translation>
+    </message>
+    <message>
+        <source>Paper Size:</source>
+        <translation>Format de papier&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Paper Size</source>
+        <translation>Format de papier</translation>
+    </message>
+    <message>
+        <source>Orientation:</source>
+        <translation>Orientation&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Orientation</source>
+        <translation>Orientation</translation>
+    </message>
+    <message>
+        <source>Portrait</source>
+        <translation>Portrait</translation>
+    </message>
+    <message>
+        <source>Landscape</source>
+        <translation>Paysage</translation>
+    </message>
+    <message>
+        <source>Scale:</source>
+        <translation>Échelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Scale, in per cent</source>
+        <translation>Échelle, en pourcentage</translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation>%</translation>
+    </message>
+    <message>
+        <source>Two-Sided:</source>
+        <translation>Recto verso&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Two-Sided</source>
+        <translation>Recto verso</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Long-Edge Binding</source>
+        <translation>Reliure bord long</translation>
+    </message>
+    <message>
+        <source>Short-Edge Binding</source>
+        <translation>Reliure bord court</translation>
+    </message>
+    <message>
+        <source>Colour:</source>
+        <translation>Couleur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Colour</source>
+        <translation>Couleur</translation>
+    </message>
+    <message>
+        <source>Black &amp; White</source>
+        <translation>Noir et blanc</translation>
+    </message>
+    <message>
+        <source>Save as PDF…</source>
+        <translation>Enregistrer au format PDF…</translation>
+    </message>
+    <message>
+        <source>Click the panel to use the keyboard in it.</source>
+        <translation>Cliquez dans la fenêtre pour y utiliser le clavier.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+</context>
+<context>
     <name>PrinterSheet</name>
     <message>
         <source>Done</source>
@@ -14166,6 +14337,74 @@
     <message>
         <source>Update Now in Software Update installs it.</source>
         <translation>Mettre à jour maintenant, dans Mise à jour de logiciels, l’installe.</translation>
+    </message>
+    <message>
+        <source>Restart to finish updating</source>
+        <translation>Redémarrez pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>The updates are installed. Restart when you&apos;re ready.</source>
+        <translation>Les mises à jour sont installées. Redémarrez quand vous le souhaitez.</translation>
+    </message>
+    <message>
+        <source>Some of Omarchy&apos;s last steps need its terminal</source>
+        <translation>Certaines des dernières étapes d’Omarchy nécessitent son terminal</translation>
+    </message>
+    <message>
+        <source>The updates are installed. Open Software Update to finish them.</source>
+        <translation>Les mises à jour sont installées. Ouvrez Mise à jour de logiciels pour les terminer.</translation>
+    </message>
+    <message>
+        <source>Updates installed</source>
+        <translation>Mises à jour installées</translation>
+    </message>
+    <message>
+        <source>Apps from the AUR are updated in Omarchy&apos;s terminal. Open Software Update to update them.</source>
+        <translation>Les apps de l’AUR sont mises à jour dans le terminal d’Omarchy. Ouvrez Mise à jour de logiciels pour les mettre à jour.</translation>
+    </message>
+    <message>
+        <source>This computer is up to date.</source>
+        <translation>Cet ordinateur est à jour.</translation>
+    </message>
+    <message>
+        <source>Don&apos;t restart this computer yet</source>
+        <translation>Ne redémarrez pas encore cet ordinateur</translation>
+    </message>
+    <message>
+        <source>The update could not prepare the computer&apos;s startup files. Open Software Update for details.</source>
+        <translation>La mise à jour n’a pas pu préparer les fichiers de démarrage de l’ordinateur. Ouvrez Mise à jour de logiciels pour en savoir plus.</translation>
+    </message>
+    <message>
+        <source>This update needs a newer version of Grassfield</source>
+        <translation>Cette mise à jour nécessite une version plus récente de Grassfield</translation>
+    </message>
+    <message>
+        <source>Software Update checks again later and tells you when it&apos;s ready.</source>
+        <translation>Mise à jour de logiciels vérifiera de nouveau plus tard et vous préviendra quand elle sera prête.</translation>
+    </message>
+    <message>
+        <source>This update needs Omarchy&apos;s terminal</source>
+        <translation>Cette mise à jour nécessite le terminal d’Omarchy</translation>
+    </message>
+    <message>
+        <source>Open Software Update to continue it in Omarchy&apos;s terminal.</source>
+        <translation>Ouvrez Mise à jour de logiciels pour la poursuivre dans le terminal d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>The update stopped before it finished</source>
+        <translation>La mise à jour s’est arrêtée avant la fin</translation>
+    </message>
+    <message>
+        <source>Open Software Update to try again.</source>
+        <translation>Ouvrez Mise à jour de logiciels pour réessayer.</translation>
+    </message>
+    <message>
+        <source>The update could not be installed</source>
+        <translation>La mise à jour n’a pas pu être installée</translation>
+    </message>
+    <message>
+        <source>Open Software Update to see why.</source>
+        <translation>Ouvrez Mise à jour de logiciels pour en connaître la raison.</translation>
     </message>
     <message>
         <source>Some updates finish when you log out. Log out and back in to use them.</source>
