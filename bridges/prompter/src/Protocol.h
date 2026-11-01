@@ -11,11 +11,14 @@
 //                 "identified":true|false,"onBehalf":true|false},
 //    "texts":{"title":"...","message":"...","description":"...","warning":"...","continue":"...","cancel":"..."},
 //    "choice":{"label":"...","chosen":true|false}|null,"passwordNew":true|false,"strength":true|false}
+//   {"type":"prompt","id":"p<N>","kind":"nm",                                     (step 9c: NetworkManager's secrets)
+//    "network":{"ssid":"...","security":"wpa"|"wpa3"|"wep"|"enterprise","identity":"..."}}
 //   {"type":"cancel","id":"p<N>"}
 //   {"type":"error","code":"<code>","message":"<text>"}
 // shell -> bridge (at most limits::kShellLine bytes per line, the newline excluded):
-//   {"v":"prompter/1","type":"hello","shell":"<version>","kinds":["password","confirm"]}     (first line, once)
-//   {"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false}
+//   {"v":"prompter/1","type":"hello","shell":"<version>","kinds":["password","confirm","nm"]} (first line, once)
+//   {"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false,"identity":"..."}
+//   ("identity" only for an nm request of security "enterprise" answered ok)
 //
 // Everything the shell sends is untrusted: a strict parser for flat objects (strings, booleans, null, arrays of strings;
 // no numbers, no nesting, no duplicate keys, valid UTF-8, no NUL), every key and type checked. The password is never
@@ -39,6 +42,7 @@ namespace gf::prompter {
     namespace limits {
         inline constexpr std::size_t kShellLine   = 16384; // bytes of one shell -> bridge line (newline excluded)
         inline constexpr std::size_t kPassword    = 4096;  // bytes of a password, UTF-8, after decoding
+        inline constexpr std::size_t kIdentity    = 1024;  // bytes of an nm answer's identity (a name), UTF-8, after decoding
         inline constexpr int         kRequests    = 8;     // secret requests outstanding at the shell (ADR-0035 D-9)
         inline constexpr int         kPrompts     = 64;    // gcr prompts open at the same time (BeginPrompting without StopPrompting)
         inline constexpr int         kPromptsPerCaller = 8; // of which one bus connection may hold (security review of step 9a, NIT-2)
@@ -102,6 +106,8 @@ namespace gf::prompter {
         JsonString  password; // raw bytes in the line; decoded length checked against limits::kPassword
         bool        hasChoice   = false;
         bool        choice      = false;
+        bool        hasIdentity = false;
+        JsonString  identity; // raw bytes in the line; decoded length checked against limits::kIdentity
     };
 
     // Parses one shell line (the newline excluded). On Invalid, out->id names the request concerned.
@@ -133,9 +139,21 @@ namespace gf::prompter {
         bool          passwordNew  = false;
     };
 
+    // A NetworkManager request (kind "nm", step 9c): the network's SSID (flattened), its security ("wpa", "wpa3", "wep",
+    // "enterprise") and, for enterprise, the connection's identity as the name field's first text. No requester object:
+    // the bridge sends this kind only for a call whose sender is the current owner of org.freedesktop.NetworkManager on
+    // the system bus, so the kind itself is the bridge's word on who asks.
+    struct NmPromptView {
+        QString id;
+        QString ssid;
+        QString security;
+        QString identity;
+    };
+
     QByteArray helloMessage(const QStringList& kinds);
     QByteArray nameMessage(const QString& state);
     QByteArray promptMessage(const PromptView& prompt);
+    QByteArray nmPromptMessage(const NmPromptView& prompt);
     QByteArray cancelMessage(const QString& id);
     QByteArray errorMessage(const QString& code, const QString& message);
 

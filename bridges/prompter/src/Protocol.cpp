@@ -476,7 +476,7 @@ namespace gf::prompter {
                 *error = QStringLiteral("answer without a usable id");
                 return ParseStatus::Malformed;
             }
-            if (!onlyKeys(members, {"type", "id", "result", "password", "choice"})) {
+            if (!onlyKeys(members, {"type", "id", "result", "password", "choice", "identity"})) {
                 *error = QStringLiteral("unknown key in answer");
                 return ParseStatus::Invalid;
             }
@@ -504,6 +504,17 @@ namespace gf::prompter {
                 }
                 out->hasChoice = true;
                 out->choice    = choice->value.boolean;
+            }
+            if (const JsonMember* identity = member(members, "identity")) {
+                if (identity->value.type != JsonValue::Type::String
+                    || decodeJsonString(text.data() + identity->value.string.begin, identity->value.string.end - identity->value.string.begin, nullptr,
+                                        limits::kIdentity)
+                        < 0) {
+                    *error = QStringLiteral("identity not a string, not valid, or over %1 bytes").arg(limits::kIdentity);
+                    return ParseStatus::Invalid;
+                }
+                out->hasIdentity = true;
+                out->identity    = identity->value.string;
             }
             return ParseStatus::Ok;
         }
@@ -553,6 +564,16 @@ namespace gf::prompter {
             {QStringLiteral("choice"), choice},
             {QStringLiteral("passwordNew"), password && p.passwordNew},
             {QStringLiteral("strength"), password && p.passwordNew},
+        });
+    }
+
+    QByteArray nmPromptMessage(const NmPromptView& p) {
+        return line({
+            {QStringLiteral("type"), QStringLiteral("prompt")},
+            {QStringLiteral("id"), p.id},
+            {QStringLiteral("kind"), QStringLiteral("nm")},
+            {QStringLiteral("network"),
+             QJsonObject{{QStringLiteral("ssid"), p.ssid}, {QStringLiteral("security"), p.security}, {QStringLiteral("identity"), p.identity}}},
         });
     }
 

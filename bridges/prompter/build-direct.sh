@@ -25,7 +25,7 @@ mkdir -p "$out"
 cxxflags=(-std=c++20 -O2 -g -Wall -Wextra -Wno-sfinae-incomplete -fPIC -DGCR_API_SUBJECT_TO_CHANGE -DQT_NO_KEYWORDS
   "-DGRASSFIELD_VERSION=\"$(tr -d "[:space:]" <"$root/VERSION")\"") # VERSION: the one version source
 logic=("$here/src/Text.cpp" "$here/src/Protocol.cpp" "$here/src/Requests.cpp" "$here/src/Peer.cpp" "$here/src/Identity.cpp"
-  "$here/src/Filter.cpp" "$here/src/Prompt.cpp" "$here/src/Askpass.cpp")
+  "$here/src/Filter.cpp" "$here/src/Prompt.cpp" "$here/src/NmSecrets.cpp" "$here/src/Askpass.cpp")
 pkgs=(Qt6Core gcr-4 gio-unix-2.0)
 
 if ((tests)); then
@@ -46,7 +46,7 @@ fi
 
 # shellcheck disable=SC2046
 g++ "${cxxflags[@]}" -I"$here/src" -I"$root/apps" $(pkg-config --cflags "${pkgs[@]}") \
-  "$here/src/main.cpp" "$here/src/Bridge.cpp" "${logic[@]}" \
+  "$here/src/main.cpp" "$here/src/Bridge.cpp" "$here/src/NmAgent.cpp" "${logic[@]}" \
   $(pkg-config --libs "${pkgs[@]}") \
   -o "$out/grassfield-prompter"
 echo "built $out/grassfield-prompter"

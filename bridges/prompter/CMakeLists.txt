@@ -24,11 +24,13 @@ set(PROMPTER_LOGIC
     src/Identity.cpp src/Identity.h
     src/Filter.cpp src/Filter.h
     src/Prompt.cpp src/Prompt.h
+    src/NmSecrets.cpp src/NmSecrets.h
     src/Askpass.cpp src/Askpass.h)
 
 add_executable(grassfield-prompter
     src/main.cpp
     src/Bridge.cpp src/Bridge.h
+    src/NmAgent.cpp src/NmAgent.h
     src/Log.h
     ${PROMPTER_LOGIC})
 # apps/runmode.h and apps/testbus.h: the run-mode rule (ADR-0019) and the private test bus, header-only, shared with the apps.

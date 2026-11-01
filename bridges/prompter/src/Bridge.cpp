@@ -11,6 +11,7 @@
 #include <QSocketNotifier>
 #include <QTimer>
 
+#include <array>
 #include <cerrno>
 #include <cstring>
 #include <string.h>
@@ -26,9 +27,12 @@ namespace gf::prompter {
         constexpr std::size_t kInCapacity = limits::kShellLine + 1; // one full line and its newline
         constexpr int         kBusTimeoutMs = 5000;
 
-        // The kinds this bridge can send in step 9a; nm, kio and bluetooth come with steps 9d, 9e and 10.
-        const QStringList& bridgeKinds() {
-            static const QStringList kinds{QStringLiteral("password"), QStringLiteral("confirm")};
+        // The kinds this bridge can send: gcr's password and confirm, and nm when its NetworkManager agent runs (step 9c);
+        // kio and bluetooth come with step 9e and step 10.
+        QStringList bridgeKinds(bool nm) {
+            QStringList kinds{QStringLiteral("password"), QStringLiteral("confirm")};
+            if (nm)
+                kinds.append(QStringLiteral("nm"));
             return kinds;
         }
 
@@ -107,6 +111,16 @@ namespace gf::prompter {
                                                            kPrompterName, G_DBUS_SIGNAL_FLAGS_NONE, onNameSignal, this, nullptr);
         m_lostSub     = g_dbus_connection_signal_subscribe(m_bus, "org.freedesktop.DBus", "org.freedesktop.DBus", "NameLost", "/org/freedesktop/DBus",
                                                            kPrompterName, G_DBUS_SIGNAL_FLAGS_NONE, onNameSignal, this, nullptr);
+        // NetworkManager's secrets (step 9c): without a system bus, or when the agent cannot start, NetworkManager has no
+        // agent, as before; gcr's prompts are not affected.
+        if (m_options.systemBus) {
+            m_nm = std::make_unique<NmAgent>(m_options.systemBus, this, m_options.nmTimeoutMs);
+            QString nmError;
+            if (!m_nm->start(&nmError)) {
+                log(QStringLiteral("no NetworkManager secret agent: %1").arg(nmError));
+                m_nm.reset();
+            }
+        }
         return listen(error);
     }
 
@@ -180,6 +194,7 @@ namespace gf::prompter {
         }
         if (m_client >= 0)
             dropClient(QStringLiteral("stopping"));
+        m_nm.reset(); // answers whatever is still pending
         if (m_listenFd >= 0) {
             delete m_acceptNotifier;
             m_acceptNotifier = nullptr;
@@ -340,8 +355,105 @@ namespace gf::prompter {
         m_book.release(id);
         if (tellShell && pending.sent && m_client >= 0)
             send(cancelMessage(id));
+        if (pending.nm) {
+            // Fail closed: NetworkManager is told there are no secrets (it may ask another agent).
+            if (m_nm)
+                m_nm->refuse(pending.nm, nm::kErrorNoSecrets, QStringLiteral("cancelled by the bridge"));
+            return;
+        }
         answerCancel(pending.prompt);
         unrefLater(pending.prompt);
+    }
+
+    // --- NetworkManager's side (step 9c) ---------------------------------------------------------------------------------
+
+    QString Bridge::submitNm(NmRequest* request) {
+        if (m_client < 0 || !m_ready) {
+            log(QStringLiteral("an nm request answered NoSecrets: no shell"));
+            return {};
+        }
+        if (!m_kinds.contains(QStringLiteral("nm"))) {
+            log(QStringLiteral("an nm request answered NoSecrets: the shell does not draw that kind"));
+            return {};
+        }
+        const QString id = m_book.reserve(request);
+        if (id.isEmpty()) {
+            log(QStringLiteral("an nm request answered NoSecrets: %1 requests are outstanding").arg(m_book.count()));
+            return {};
+        }
+        Pending pending;
+        pending.nm   = request;
+        pending.sent = true;
+        m_pending.insert(id, pending);
+        request->id = id;
+        NmPromptView view;
+        view.id       = id;
+        view.ssid     = request->ask.ssid;
+        view.security = nm::securityName(request->ask.security);
+        view.identity = request->ask.identity;
+        send(nmPromptMessage(view)); // may drop the shell, which then refuses this request too (NmAgent checks)
+        return id;
+    }
+
+    void Bridge::withdrawNm(const QString& id) {
+        const auto it = m_pending.find(id);
+        if (it == m_pending.end() || !it->nm)
+            return;
+        m_pending.erase(it);
+        m_book.release(id);
+        if (m_client >= 0)
+            send(cancelMessage(id));
+    }
+
+    void Bridge::onNmAnswer(const ShellLine& answer, std::string_view line, NmRequest* request) {
+        const bool enterprise = request->ask.security == nm::Security::Enterprise;
+        QString    wrong;
+        if (answer.hasChoice)
+            wrong = QStringLiteral("a choice where none was shown");
+        else if (!answer.ok && (answer.hasPassword || answer.hasIdentity))
+            wrong = QStringLiteral("a secret in a cancellation");
+        else if (answer.ok && !answer.hasPassword)
+            wrong = QStringLiteral("ok without a password");
+        else if (answer.ok && enterprise && !answer.hasIdentity)
+            wrong = QStringLiteral("ok without a name");
+        else if (!enterprise && answer.hasIdentity)
+            wrong = QStringLiteral("a name where none is asked");
+        if (!wrong.isEmpty()) {
+            log(QStringLiteral("invalid answer to %1: %2; the request is cancelled").arg(answer.id, wrong));
+            cancelRequest(answer.id, true);
+            protocolError(QStringLiteral("bad-answer"), wrong, false);
+            return;
+        }
+        m_pending.remove(answer.id);
+        m_book.release(answer.id);
+        if (!answer.ok) {
+            log(QStringLiteral("request %1 answered: cancel").arg(answer.id));
+            if (m_nm)
+                m_nm->refuse(request, nm::kErrorUserCanceled, QStringLiteral("the user cancelled"));
+            return;
+        }
+        // Decoded straight into gcr's secure memory; the line it came from is wiped by the caller.
+        auto*      secure = static_cast<char*>(gcr_secure_memory_alloc(limits::kPassword + 1));
+        const long n      = decodeJsonString(line.data() + answer.password.begin, answer.password.end - answer.password.begin, secure, limits::kPassword);
+        QByteArray identity;
+        long       named = 0;
+        if (enterprise) {
+            std::array<char, limits::kIdentity> name{};
+            named = decodeJsonString(line.data() + answer.identity.begin, answer.identity.end - answer.identity.begin, name.data(), name.size());
+            if (named > 0)
+                identity = QByteArray(name.data(), static_cast<qsizetype>(named));
+        }
+        if (n <= 0 || (enterprise && named <= 0) || !m_nm) {
+            explicit_bzero(secure, limits::kPassword + 1);
+            gcr_secure_memory_free(secure);
+            log(QStringLiteral("answer to %1: an empty or undecodable password or name; the request is cancelled").arg(answer.id));
+            send(cancelMessage(answer.id));
+            if (m_nm)
+                m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("an empty answer"));
+            return;
+        }
+        secure[n] = '\0';
+        m_nm->answer(request, secure, static_cast<std::size_t>(n), identity);
     }
 
     void Bridge::cancelAll(bool tellShell) {
@@ -398,7 +510,7 @@ namespace gf::prompter {
             log(QStringLiteral("shell connected (pid %1, %2)")
                     .arg(check.pid)
                     .arg(check.raceFree ? QStringLiteral("cgroup read through its pidfd") : QStringLiteral("cgroup read through SO_PEERCRED's pid")));
-            send(helloMessage(bridgeKinds()));
+            send(helloMessage(bridgeKinds(m_nm != nullptr)));
         }
     }
 
@@ -472,6 +584,8 @@ namespace gf::prompter {
             log(QStringLiteral("shell %1 says hello (draws: %2)").arg(flatten(message.shell, 64), flatten(m_kinds.join(u','), 256)));
             send(nameMessage(m_nameState));
             wantName(true);
+            if (m_nm)
+                m_nm->setWanted(m_kinds.contains(QStringLiteral("nm")));
             return;
         }
         if (!m_ready) {
@@ -489,8 +603,14 @@ namespace gf::prompter {
             return;
         }
         const Pending pending = *it;
-        QString       wrong;
-        if (pending.kind == PromptKind::Password && answer.ok && !answer.hasPassword)
+        if (pending.nm) {
+            onNmAnswer(answer, line, pending.nm);
+            return;
+        }
+        QString wrong;
+        if (answer.hasIdentity)
+            wrong = QStringLiteral("a name where none is asked");
+        else if (pending.kind == PromptKind::Password && answer.ok && !answer.hasPassword)
             wrong = QStringLiteral("ok without a password");
         else if ((pending.kind == PromptKind::Confirm || !answer.ok) && answer.hasPassword)
             wrong = QStringLiteral("a password where none is asked");
@@ -591,6 +711,9 @@ namespace gf::prompter {
         m_kinds.clear();
         cancelAll(false);
         wantName(false);
+        // NetworkManager loses its agent with the shell (step 9c): it fails with NoSecrets meanwhile, as before.
+        if (m_nm)
+            m_nm->setWanted(false);
         // gcr's clients forget a prompt without stopping it when the prompter's name goes (gcr-system-prompt.c
         // on_prompter_vanished): gcr would keep it, and the filter would count it, until the client leaves the bus. Each
         // open prompt is closed instead, so gcr ends it and tells its caller PromptDone (counter-review of step 9a,
