@@ -1542,6 +1542,142 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
   output (the dimmed backdrop), so a shared or captured output is black while a sheet is up: macOS hides its secure prompts
   from captures too. Rule applied: SC4.
 
+**Delivered in step 9c (udiskie's passphrase and NetworkManager's Wi-Fi secrets; KIO's password server is 9e).** The
+integrator's brief for this step (2026-11-01) put the NetworkManager agent, planned above as 9d, in the same step as udiskie;
+nothing else of the order changes. Built under the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment
+2026-10-31"); no new dependency (libgcr-4 and Qt Core as in 9a; no libnm: NetworkManager's agent interface is spoken with
+GDBus, the bridge's bus library since 9-5).
+- **`grassfield-askpass`** (`bridges/prompter/src/askpass.cpp`, its pure parts in `Askpass.{h,cpp}`; C++20, Qt Core for its
+  French text through `ui/i18n/translationloader.h`, libgcr-4's `GcrSystemPrompt`; no C source of its own), built and
+  installed as `/usr/lib/grassfield/grassfield-askpass` by the bridge's CMake project (`build-direct.sh` builds it too).
+  `grassfield-automount.service` runs udiskie with D-9's line, `--password-prompt "/usr/lib/grassfield/grassfield-askpass
+  udiskie {device_presentation}"` (udiskie 2.7.0 splits the line, then formats each argument: the disk's name stays one
+  argument). It opens a gcr prompt (`gcr_system_prompt_open`: grassfield-prompter while the shell is connected, else the
+  stock gcr-prompter by D-Bus activation), its text "Encrypted Disk" / "Enter a password to unlock the disk “%1”." with the
+  disk's name flattened (caller text), and writes the passphrase and a newline on standard output straight from gcr's secure
+  memory (9-25). The bridge names it by its root-owned path: role `disk`, shown "Disks", its text another program's (9-26).
+- **The NetworkManager secret agent** (`bridges/prompter/src/NmAgent.{h,cpp}`, the pure rules in `NmSecrets.{h,cpp}`):
+  `org.freedesktop.NetworkManager.SecretAgent` at `/org/freedesktop/NetworkManager/SecretAgent` on the bridge's own system
+  bus connection, registered with NetworkManager (`AgentManager.Register("org.grassfield.prompter")`) only while a shell that
+  draws kind `nm` is connected (9-27); every call answered only when its sender is the current owner of
+  `org.freedesktop.NetworkManager`, asked from the bus when the call arrives, else `PermissionDenied` and nothing shown
+  (9-29); `GetSecrets` for WPA/WPA2 and WPA3 Personal (`psk`), WEP (the key of `wep-tx-keyidx`) and WPA2 Enterprise
+  (`identity` and `password`) of a Wi-Fi connection, only when the flags allow interaction; everything else `NoSecrets`
+  without a sheet, VPN included (9-30); `UserCanceled`, `AgentCanceled` and `NoSecrets` as NetworkManager reads them, and a
+  request withdrawn after 110 s (9-31); `SaveSecrets` refused and `DeleteSecrets` answered (9-32). Its requests share the
+  bridge's ids and its bound of 8 with gcr's.
+- **prompter/1** (spec section 5, "prompter/1 protocol"): the kind `nm` (`{"type":"prompt","id":…,"kind":"nm","network":
+  {"ssid","security","identity"}}`), an answer's `identity`, the requester role `disk` (9-33). The bridge's hello lists `nm`
+  only when its agent runs.
+- **The shell** (`shell/security/secret/`): `Prompter.js` reads the nm kind strictly and gives it the shell's own requester
+  row (role `network`); `SecretSheet` draws the macOS Wi-Fi alert ("The Wi-Fi network “%1” requires a WPA2 password." and its
+  WPA3, WEP and enterprise variants, "Requested by NetworkManager", the username field for enterprise, Show password, Cancel /
+  Join, Join only for a password of an acceptable length); `SecretAgent` holds every nm request until a click past the guard
+  (9-28); Show password shows the characters in that field only and is unchecked again for each request and whenever the
+  fields are emptied (9-34). The hold, queue and linger rules of 9b apply unchanged (a password sent lingers). French
+  catalog: 18 strings (`scripts/dev/i18n-update.sh` now reads `bridges/` too, for the helper's).
+- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (57 cases, plain and under ASan and UBSan: the nm kind's message, an
+  answer's identity, every GetSecrets decision, the reply built on the secure buffer, the disk name, the helper's writes,
+  the disk role); `tests/security/tst_prompter.qml` (68), `tst_secretsheetmodel.qml` (28); `tests/security/nm_agent.sh` (39
+  checks on two private buses with a fake NetworkManager and a fake attacker; `--mutants`: 11, all caught);
+  `tests/security/askpass.sh` (12 checks against the real bridge and a fake shell, and with no bridge against a stand-in the
+  bus activates; `--mutants`: 4, all caught); `tests/security/secret_sheets.sh` (the Wi-Fi alert in the real agent and
+  queue: 55 results with the model's test, 16 static checks; `--mutants`: 32, all caught); `tests/security/secret_bridge.sh`
+  (53 checks: the nm kind through the shell's real client against the fake bridge, and the real bridge with a fake
+  NetworkManager end to end; `--mutants`: 10, all caught); `tests/shell/session_services.sh` checks the unit's line and the
+  helper's installation. `prompter_bridge.sh` (58), `nm_agent.sh` and `askpass.sh` also pass with the bridge and the
+  helper built with ASan and UBSan; `askpass.sh` shows the role `disk` with the helper installed root-owned at its path
+  (a container, never the owner's machine). Nested and visual: NOT VERIFIED; a real NetworkManager, a real udiskie with a LUKS disk and the
+  helper inside udiskie's sandbox: NOT VERIFIED (owner L2, spec A-SC7).
+- **What 9c changes for the user**: an encrypted removable disk asks for its password in Grassfield's sheet instead of
+  udiskie's GTK dialog; a known Wi-Fi network whose password changed asks in Grassfield's Wi-Fi alert instead of failing
+  silently (NetworkManager had no agent in the session).
+
+**Decisions of step 9c** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user;
+none widens a rule of Q12's text).
+- **9-25. How does the udiskie helper ask, and what does udiskie get?** udiskie 2.7.0 (`prompt.py` DeviceCommand, read as
+  data) runs the command with its standard output captured, treats any status but 0 as a cancellation, and gives udisks the
+  output with one final newline removed as the key. Options: (a) a gcr client that writes the passphrase and a newline and
+  exits 0, 1 when cancelled; (b) asking the bridge's socket directly. **Choice: (a)**, as D-9 says: it works with the stock
+  gcr-prompter while the shell is not connected. Exit status: 0 the passphrase written; 1 cancelled or ended without an
+  answer; 2 wrong arguments or standard output a terminal (refused before asking: a passphrase never goes to a terminal);
+  3 no prompt (no session bus, gcr failed). The passphrase is never in the arguments, the environment or a log; it is
+  written with `write(2)` straight from the prompt's secure memory; no core file (`RLIMIT_CORE` 0 from the start); the
+  process turns non-dumpable once the passphrase is there, not before, because the bridge reads `/proc/<pid>/exe` of its
+  caller to name it and a non-dumpable process of the user hides that from it. No "Remember this password" check box (the
+  first text of SC7): udiskie's command interface cannot carry a choice back (its cache hint comes from its own
+  configuration only). Rule applied: D-9 (the same sheet, or gcr-prompter when the bridge is down), fail closed (every error
+  leaves the disk locked).
+- **9-26. Who does the helper's sheet name?** Options: (a) nothing new: the helper shows as "Unidentified program" with its
+  path; (b) a known caller of the bridge, `/usr/lib/grassfield/grassfield-askpass` → role `disk`, shown "Disks", on someone's
+  behalf like Keyring, GnuPG and SSH; (c) a desktop entry for it. **Choice: (b).** Rule applied: macOS names the asker; (a)
+  would teach users to answer an "unidentified" warning on every disk; (c) cannot work, an app's row needs the bridge's
+  namespaces and udiskie's unit runs in its own (`ProtectSystem=strict` makes systemd add `PrivateUsers=self`). Any program of
+  the user can run the helper with a disk name of its own, so the text under the row is shown as another program's
+  unverified text (SC3b), as for GnuPG (9-4, 9-14). The role is a new value of an existing field within `prompter/1`: bridge
+  and shell ship in one package, and a shell that did not know it would close the connection (fail closed, 9-20).
+- **9-27. When is the NetworkManager agent registered, and on which bus?** Options: (a) for the bridge's whole life; (b) while
+  a shell that draws kind `nm` is connected, unregistered when it goes, registered again when NetworkManager comes back on
+  the bus. **Choice: (b)** (D-9: "when the shell is not connected the agent unregisters"); the object stays exported for the
+  bridge's life (as gcr's, 9-3), and a call that reaches it unregistered gets `NoSecrets`. The system bus: in the session
+  always `unix:path=/run/dbus/system_bus_socket` (the D-Bus specification's), whatever `DBUS_SYSTEM_BUS_ADDRESS` says; in a
+  development run only that variable when it names a private test bus under `GF_TEST_BUS_DIR` (refused otherwise, and refused
+  when `org.freedesktop.systemd1` is on it), none without it; no system bus or no NetworkManager: no agent, gcr's prompts
+  unchanged. GDBus, not QtDBus as D-9's first text said: the bridge has no QtDBus since 9-5. Rule applied: D-9, ADR-0019 (a
+  development run never reaches the real buses).
+- **9-28. Does a NetworkManager request take the keyboard when it arrives?** Question: NetworkManager asks when it decides (a
+  known network in range whose password changed, an activation any program of the user can start through D-Bus), and what
+  reaches the field may be stored with the connection. Options: (a) gcr's rule (the keyboard at once unless held for another
+  reason); (b) always held, as a confirmation (9-23); (c) held unless the flags say `USER_REQUESTED`. **Choice: (b).** Rule
+  applied: R12 (nothing typed for something else reaches a sheet), 9-23's reviewed hold reused with its own notice ("Click the
+  alert to type the password: nothing typed elsewhere goes into it."); (c) proves nothing, any program of the user can
+  activate a connection. Cost: one click before typing.
+- **9-29. Who may call the agent?** **Choice:** a call is handled only when its sender is the unique name that owns
+  `org.freedesktop.NetworkManager` now, asked with `GetNameOwner` when the call arrives (never remembered: a name can change
+  hands); any other caller, and any call while the name has no owner, gets
+  `org.freedesktop.NetworkManager.SecretAgent.PermissionDenied`, nothing reaches the shell, and the refusal is logged once per
+  10 s. This applies to all four methods (a stranger's `CancelGetSecrets` cancels nothing). The system bus's own policy
+  already lets only root send this interface (NetworkManager's `system.d` file); the check also stops other root processes and
+  a misconfigured policy. Rule applied: D-9 (review of PR #13, minor).
+- **9-30. Which secrets are asked?** **Choice:** only with interaction allowed (`ALLOW_INTERACTION` or `REQUEST_NEW`; the agent
+  stores nothing, so without interaction it has nothing to give: `NoSecrets`); only for a Wi-Fi connection with an SSID that
+  shows something; `802-11-wireless-security` with key management `wpa-psk` (shown "WPA2"), `sae` ("WPA3") or `none` (WEP,
+  the key of `wep-tx-keyidx`); `802-1x` of a WPA Enterprise network (`wpa-eap`, `wpa-eap-suite-b-192`, `ieee8021x`) whose EAP
+  methods include one that takes a name and a password (peap, ttls, pwd, fast, leap, md5), unless NetworkManager's hints ask
+  for other secrets. Everything else is `NoSecrets` without a sheet: VPN (D-9: no VPN plugin dialog runs), LEAP of the
+  wireless setting, OWE, wired 802.1X, an EAP method that needs a certificate's password, a PIN. Rule applied: D-9 (PSK, WEP,
+  identity and password), macOS's three Wi-Fi alerts; anything the sheet cannot draw faithfully is not asked.
+- **9-31. What does NetworkManager get on each end?** (NetworkManager 1.58 `nm-agent-manager.c`, read as data.) **Choice:**
+  the secrets on Join; `UserCanceled` on the user's Cancel (NetworkManager then stops asking other agents); `AgentCanceled`
+  to a call that `CancelGetSecrets` withdrew (the shell is told "cancel", shown or queued); `NoSecrets` on every other end:
+  the shell gone or never there, a wrong answer from it, the bound of 8, NetworkManager leaving the bus (its requests are
+  withdrawn from the shell), and a request unanswered after 110 s. NetworkManager stops waiting at 120 s and never tells the
+  agent (its timeout sends no `CancelGetSecrets`), so without the 110 s a password typed later would be lost silently.
+  Rule applied: fail closed (no secret invented), D-9.
+- **9-32. `SaveSecrets` and `DeleteSecrets`.** Question: the brief proposed answering both with success. NetworkManager calls
+  `SaveSecrets` with a connection's agent-owned secrets after something else changed them; on success it stops, on an error
+  it asks the next agent (`_con_save_request_done`). Options: (a) success for both; (b) `SaveSecrets` refused (`Failed`: this
+  agent stores nothing), `DeleteSecrets` success (there is nothing to delete). **Choice: (b).** Rule applied: never pretend
+  (master-prompt: no stub that pretends to work); a success would make NetworkManager believe the secrets saved and skip an
+  agent that can store them. NetworkManager keeps system-owned secrets itself as the connection says (D-9).
+- **9-33. The nm kind in prompter/1.** **Choice:** bridge to shell `{"type":"prompt","id":"p<N>","kind":"nm","network":
+  {"ssid":…,"security":"wpa"|"wpa3"|"wep"|"enterprise","identity":…}}` with no requester object: the bridge sends this kind
+  only for NetworkManager's owner, so the kind is its word on who asks, and the shell draws a fixed row ("Wi-Fi",
+  "Requested by NetworkManager"); the SSID is flattened by both sides (at most 64 UTF-16 units, an SSID being at most 32
+  bytes), never empty, shown only as a quoted field of Grassfield's sentence; `identity` is the connection's own (enterprise
+  only, the name field's first text). Shell to bridge: `password` (not empty) and, for enterprise only, `identity` (not empty,
+  at most 1024 bytes); a choice, a name where none is asked, an empty password or name cancel the request (`NoSecrets`). Join
+  takes a WPA2 password of 8 to 64 characters (NetworkManager checks the rest) and any non-empty one for the others, read as a
+  length, never as text. Rule applied: 9-9 (kinds added within `prompter/1`), R12 (the requester is never the caller's text).
+- **9-34. Show password.** **Choice:** a check box under the field (macOS's), for a network's password only; it changes the
+  field's echo (`PasswordField.reveal`), never copies the text, is logged nowhere, and is unchecked for each request and
+  whenever the fields are emptied (an attempt, a hold, the lock, the screen saver). Rule applied: macOS, SC5 (no copy made for
+  it).
+- **9-35. The secret on the bridge's side.** **Choice:** the password is decoded from the shell's line straight into gcr's
+  secure memory, and the `GetSecrets` reply's string is that buffer itself (`g_variant_new_from_data`, zeroed and freed when
+  the reply goes); GDBus marshals a copy into the message it writes and frees it unwiped (known limitation; the process is
+  not dumpable, has no core file and no swap). The username is not a secret. Rule applied: SC5, D-9.
+
 ### D-10. What Omarchy still shows (category D; O1–O11)
 - **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):
   - step "screenshots": Grassfield's bindings call a Grassfield capture script instead of `omarchy-capture-screenshot`. It keeps
@@ -2129,7 +2265,7 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   `kwalletrc` (Q17-b, step 2).
 - New services: `grassfield-portal-settings` (always on, no window) and `grassfield-portal` (panels, D-Bus activated) from
   steps 2b and 4; `grassfield-secrets-handover` (one-shot at the session's start) from step 2c; `grassfield-prompter` from step 9 (gcr prompts, KIO network passwords, NetworkManager secrets, and in step 10
-  the BlueZ agent). All gated by `GRASSFIELD_SESSION=1`, hardened, with budgets; §5.8 is answered per service in its step.
+  the BlueZ agent), with `grassfield-askpass`, udiskie's password command (step 9c, no service of its own). All gated by `GRASSFIELD_SESSION=1`, hardened, with budgets; §5.8 is answered per service in its step.
 - `grassfield-desktop` declares `gnome-keyring` (step 2a): it is the session's only Secret Service.
 - New library dependencies of Grassfield binaries: libcups (step 6, already installed with qt6-base and gtk3), libgcr-4 (step
   9, already installed with gnome-keyring) and libsecret (step 9, already installed with pinentry; counter-review of PR #13,
@@ -2142,7 +2278,8 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
 - The Grassfield session exports `GTK_USE_PORTAL=1`, adds `portals` to `GDK_DEBUG` and prepends `XDG_DATA_DIRS` and
   `XDG_CONFIG_DIRS`; the Omarchy session is unchanged (`env-grassfield` is read only for the Grassfield desktop name,
   ADR-0017).
-- New IPC targets `anr` and `picker`, the picker's one-time sockets and the prompter socket are listed in
+- New IPC targets `anr` and `picker`, the picker's one-time sockets, the prompter socket and the bridge's D-Bus objects (gcr's
+  prompter on the session bus, NetworkManager's secret agent on the system bus, step 9c) are listed in
   `docs/specs/security.md` in their steps.
 - The inventory is the checklist of the chantier: a row is closed when its step merges, with its evidence.
 - Known limitations recorded in `docs/specs/system-dialogs.md`: no true sheets (modal child windows), no wait cursor, apps
