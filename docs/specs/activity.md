@@ -282,10 +282,11 @@ items (Settings does it); a background collector; any network access.
   `pidfd_send_signal` on that same descriptor, which names one process for good: if it ended meanwhile the call fails with
   ESRCH (A2) and no other process can be hit (review of e3882de: a pidfd opened after the check left a gap). The
   descriptors are closed when the sheet closes.
-- **AM52** Quit: a process owning windows (projection) → IPC `activity quit <pid>` to the shell (AM61); `ok` → nothing more
-  (the app may ask to save); `no-windows` → `SIGTERM` through AM51's descriptor; `refused`, no answer within 1 s, or no projection
-  for a process of an app unit → the sheet stays with "The process couldn't be quit safely." and only Cancel and Force
-  Quit. A process without windows → `SIGTERM` through AM51's descriptor. A command run in a terminal (a controlling
+- **AM52** Quit: a process owning windows (projection) → IPC `activity quit <pid>` to the shell (AM61); `ok`, the process
+  gone or its windows gone from the projection → nothing more (the app may ask to save); `no-windows` → `SIGTERM` through
+  AM51's descriptor; `refused`, none of these within 10 s (`qs` starting included; ADR-0038 AD49 as amended), or no
+  projection for a process of an app unit → the sheet stays with "The process couldn't be quit safely." and only Cancel
+  and Force Quit. A process without windows → `SIGTERM` through AM51's descriptor. A command run in a terminal (a controlling
   terminal, and a parent in the same app unit: not the process that started the unit) → `SIGTERM` (ADR-0038 AD43, the
   integrator's decision on the review of 1153365).
 - **AM53** Force Quit → `SIGKILL` through AM51's descriptor. ESRCH (it ended) is silent; any other error shows "The process couldn't
