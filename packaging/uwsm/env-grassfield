@@ -9,6 +9,18 @@
 # recognise exactly that). XDG_SESSION_DESKTOP=Grassfield identifies the session; applications cannot use OnlyShowIn=Grassfield.
 # POSIX sh only (uwsm sources it with its own shell).
 
+# ADR-0035 D-6 (step 7a): xdg-desktop-portal-hyprland, which the systemd user manager starts, runs its screen-sharing picker
+# by name through PATH (`hyprland-share-picker`, or Omarchy's `hyprland-preview-share-picker` from xdph.conf); the session's
+# stand-ins come first so that the Grassfield picker shows. The directory also holds hyprland-dialog, which only Hyprland runs
+# (the compositor's PATH has the directory already, from omarchy.lua). Only when the stand-in exists, and only once; set
+# before the shims below, which then come first, as in the compositor's PATH.
+if [ -x /usr/lib/grassfield/session-bin/hyprland-share-picker ]; then
+    case ":$PATH:" in
+        *:/usr/lib/grassfield/session-bin:*) ;;
+        *) export PATH="/usr/lib/grassfield/session-bin:$PATH" ;;
+    esac
+fi
+
 # GF-032: commands that would start Omarchy's own shell next to grassfield-shell (the restart step of an Omarchy update,
 # theme and font changes) are shadowed by no-op stand-ins; this directory comes first in PATH for everything the systemd
 # user manager starts (Dock, D-Bus activation). The compositor's own children get the same PATH from omarchy.lua.

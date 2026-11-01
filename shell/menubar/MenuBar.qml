@@ -306,6 +306,9 @@ Scope {
             readonly property var battery: UPower.displayDevice
             // Now Playing (macOS: "Show When Active"): while a player has a session (playing, or paused with a track).
             readonly property bool showNowPlaying: Logic.nowPlayingShown(Settings.menubarShowNowPlaying, Media.available, Media.playing, Media.title)
+            // Screen sharing (ADR-0035 D-6, step 7b): while an app shares the screen through the portal (xdph's streams). Never
+            // optional: a privacy indicator does not give way when the status area is crowded.
+            readonly property bool showScreenShare: SharePicker.sharing
             // Crowding (macOS: status items that would collide with the menus are hidden): the status area gets the width
             // between the application menus and the right inset; optional items (third-party, Now Playing, Search) give way
             // leftmost first, never the system items, Quick Settings or the clock (StatusLogic.hiddenItems). Implicit widths
@@ -354,6 +357,8 @@ Scope {
                     list.push({key: "tray" + i, width: statusIconWidth, optional: true});
                 if (showNowPlaying)
                     list.push({key: "nowplaying", width: statusIconWidth, optional: true});
+                if (showScreenShare)
+                    list.push({key: "screenshare", width: statusIconWidth, optional: false});
                 list.push({key: "system", width: (showFocus ? dndButton.implicitWidth : 0) + (Settings.menubarShowWifi ? networkButton.implicitWidth : 0) + (Settings.menubarShowSound ? volumeButton.implicitWidth : 0) + (showBattery ? batteryButton.implicitWidth : 0), optional: false});
                 if (Settings.menubarShowSearch)
                     list.push({key: "search", width: statusIconWidth, optional: true});
@@ -450,10 +455,20 @@ Scope {
                 })
             readonly property bool away: autoHides && hideMachine.state === "hidden" && !AutoHide.forcing(hideInhibitors)
             readonly property real slideY: BarHide.slideOffset(Tokens.menubarHeight, AutoHide.ease(hideMachine.visible))
+            // The screen-sharing indicator stays in view when the bar goes (ADR-0035 7-14): over a full-screen window, or on the
+            // desktop with a bar that hides there, its own piece of the band at the bar's right end comes as the bar leaves and
+            // goes as it comes back with its status item, as macOS keeps its privacy indicator in the corner of a full-screen app.
+            readonly property real pinnedShareOpacity: BarHide.pinnedIndicatorOpacity(showScreenShare, AutoHide.ease(hideMachine.visible))
 
             // The Now Playing item went away (player closed, switched off in Settings): its open popover would act on nothing.
             onShowNowPlayingChanged: {
                 if (!showNowPlaying && isOpen("nowplaying"))
+                    Qt.callLater(Popups.close);
+            }
+
+            // The last share ended: its open menu would list nothing.
+            onShowScreenShareChanged: {
+                if (!showScreenShare && isOpen("screenshare"))
                     Qt.callLater(Popups.close);
             }
 
@@ -463,7 +478,7 @@ Scope {
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
-            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying"]
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying", "screenshare"]
             readonly property bool tracking: Popups.active && Popups.screenName === (win.screen ? win.screen.name : "") && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
@@ -567,7 +582,7 @@ Scope {
             function openFirstStatus(): void {
                 const all = win.navEntries();
                 for (let i = 0; i < all.length; i++) {
-                    if (["network", "volume", "battery", "controlcenter", "nowplaying", "tray"].indexOf(all[i].kind) >= 0) {
+                    if (["network", "volume", "battery", "controlcenter", "nowplaying", "screenshare", "tray"].indexOf(all[i].kind) >= 0) {
                         win.openEntry(all[i]);
                         return;
                     }
@@ -713,6 +728,10 @@ Scope {
                     if (win.showNowPlaying)
                         openFor("nowplaying", nowPlayingButton, "right", {});
                     break;
+                case "screenshare":
+                    if (win.showScreenShare)
+                        openFor("screenshare", screenShareButton, "right", {});
+                    break;
                 }
             }
 
@@ -737,17 +756,38 @@ Scope {
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
-            BackgroundEffect.blurRegion: win.showBackground && material.blurActive && win.hideMachine.visible > 0 ? blurRegion : null
+            // The band while any of it is in view, the indicator's piece while it shows (ADR-0035 7-14), both during the slide.
+            BackgroundEffect.blurRegion: win.bandBlurred ? (win.pinnedBlurred ? bandAndPinnedRegion : blurRegion) : (win.pinnedBlurred ? pinnedRegion : null)
             // The bar, or only the top edge strip while it is away.
             mask: Region {
                 item: hitItem
             }
             // qmllint enable missing-type
 
+            readonly property bool bandBlurred: win.showBackground && material.blurActive && win.hideMachine.visible > 0
+            readonly property bool pinnedBlurred: pinnedShare.visible && pinnedShare.blurActive
+
             Region {
                 id: blurRegion
                 item: material
                 radius: material.radius
+            }
+
+            Region {
+                id: pinnedRegion
+                item: pinnedShare
+                radius: pinnedShare.radius
+            }
+
+            Region {
+                id: bandAndPinnedRegion
+                item: material
+                radius: material.radius
+
+                Region {
+                    item: pinnedShare
+                    radius: pinnedShare.radius
+                }
             }
 
             Item {
@@ -1031,6 +1071,30 @@ Scope {
                             }
                         }
 
+                        // Screen sharing: while an app shares the screen; its menu says what is shared.
+                        BarButton {
+                            id: screenShareButton
+                            menuKind: "screenshare"
+                            objectName: "menubar-screenshare"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: win.showScreenShare
+                            accessibleName: qsTr("Screen Sharing")
+                            active: win.isOpen("screenshare")
+                            onActivated: win.popup("screenshare")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("screenshare")
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                heavy: true
+                                color: win.barText
+                                name: "screen-share"
+                            }
+                        }
+
                         // Now Playing: the active player's controls, while it has a session.
                         BarButton {
                             id: nowPlayingButton
@@ -1215,6 +1279,37 @@ Scope {
                             }
                         }
                     }
+            }
+
+            // The screen-sharing indicator while the bar is away (pinnedShareOpacity, ADR-0035 7-14): the status item's glyph on
+            // a capsule of the band's glass, where a status item's capsule sits, at the bar's right inset. Never dimmed with an
+            // inactive display's bar; it takes no input (the edge strip still brings the bar, and its status item, back).
+            Material {
+                id: pinnedShare
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.menubarInsetRight - Tokens.menubarStatusItemPadding
+                y: Tokens.menubarHoverInsetTop
+                width: win.statusIconWidth
+                height: Tokens.menubarHeight - Tokens.menubarHoverInsetTop - Tokens.menubarHoverInsetBottom
+                radius: height / 2
+                opacity: win.pinnedShareOpacity
+                visible: win.pinnedShareOpacity > 0
+                glassClass: "menu"
+                backdropRect: Qt.rect(x, y, width, height)
+                tintAlphaOverride: win.band ? win.band.alpha : -1
+                tintColor: win.band ? win.band.colors.materialTint : Appearance.colors.materialTint
+                shadowEnabled: false
+                Accessible.role: Accessible.Indicator
+                Accessible.name: qsTr("Screen Sharing")
+                Accessible.ignored: !visible
+
+                Icon {
+                    anchors.centerIn: parent
+                    size: Tokens.menubarIconSize
+                    heavy: true
+                    color: win.barText
+                    name: "screen-share"
+                }
             }
         }
     }

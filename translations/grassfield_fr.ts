@@ -5497,6 +5497,29 @@
     </message>
 </context>
 <context>
+    <name>GrassfieldAskpass</name>
+    <message>
+        <source>Enter a password to unlock the disk.</source>
+        <translation>Saisissez un mot de passe pour déverrouiller le disque.</translation>
+    </message>
+    <message>
+        <source>Enter a password to unlock the disk “%1”.</source>
+        <translation>Saisissez un mot de passe pour déverrouiller le disque «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Encrypted Disk</source>
+        <translation>Disque chiffré</translation>
+    </message>
+    <message>
+        <source>Unlock</source>
+        <translation>Déverrouiller</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+</context>
+<context>
     <name>GrassfieldJobUiDelegate</name>
     <message>
         <source>The operation can’t be completed.</source>
@@ -7300,6 +7323,10 @@
         <translation>Fenêtre</translation>
     </message>
     <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
         <source>Now Playing: %1</source>
         <translation>En cours de lecture : %1</translation>
     </message>
@@ -8633,8 +8660,124 @@
 <context>
     <name>PrintSheet</name>
     <message>
+        <source>Media &amp; Quality</source>
+        <translation>Support et qualité</translation>
+    </message>
+    <message>
+        <source>Printer Options</source>
+        <translation>Options de l’imprimante</translation>
+    </message>
+    <message>
         <source>Print</source>
         <translation>Imprimer</translation>
+    </message>
+    <message>
+        <source>Feed From:</source>
+        <translation>Alimentation&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Media Type:</source>
+        <translation>Type de support&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Quality:</source>
+        <translation>Qualité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Output Bin:</source>
+        <translation>Bac de sortie&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Finishing:</source>
+        <translation>Finition&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Feed From</source>
+        <translation>Alimentation</translation>
+    </message>
+    <message>
+        <source>Media Type</source>
+        <translation>Type de support</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>Qualité</translation>
+    </message>
+    <message>
+        <source>Output Bin</source>
+        <translation>Bac de sortie</translation>
+    </message>
+    <message>
+        <source>Finishing</source>
+        <translation>Finition</translation>
+    </message>
+    <message>
+        <source>Draft</source>
+        <translation>Brouillon</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Best</source>
+        <translation>Optimale</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Staple</source>
+        <translation>Agrafe</translation>
+    </message>
+    <message>
+        <source>Punch</source>
+        <translation>Perforation</translation>
+    </message>
+    <message>
+        <source>Fold</source>
+        <translation>Pliage</translation>
+    </message>
+    <message>
+        <source>Bind</source>
+        <translation>Reliure</translation>
+    </message>
+    <message>
+        <source>Saddle Stitch</source>
+        <translation>Piqûre à cheval</translation>
+    </message>
+    <message>
+        <source>Staple Top Left</source>
+        <translation>Agrafe en haut à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Left</source>
+        <translation>Agrafe en bas à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Top Right</source>
+        <translation>Agrafe en haut à droite</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Right</source>
+        <translation>Agrafe en bas à droite</translation>
+    </message>
+    <message>
+        <source>Two Staples Left</source>
+        <translation>Deux agrafes à gauche</translation>
+    </message>
+    <message>
+        <source>Two Staples Top</source>
+        <translation>Deux agrafes en haut</translation>
+    </message>
+    <message>
+        <source>Two Holes Left</source>
+        <translation>Deux trous à gauche</translation>
+    </message>
+    <message>
+        <source>Two Holes Top</source>
+        <translation>Deux trous en haut</translation>
     </message>
     <message>
         <source>Untitled</source>
@@ -8643,6 +8786,30 @@
     <message>
         <source>Save as PDF</source>
         <translation>Enregistrer au format PDF</translation>
+    </message>
+    <message>
+        <source>Page %1 of %2</source>
+        <translation>Page %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Preparing Preview…</source>
+        <translation>Préparation de l’aperçu…</translation>
+    </message>
+    <message>
+        <source>No Preview</source>
+        <translation>Aucun aperçu</translation>
+    </message>
+    <message>
+        <source>Previous Page</source>
+        <translation>Page précédente</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Next Page</source>
+        <translation>Page suivante</translation>
     </message>
     <message>
         <source>Printer:</source>
@@ -8667,6 +8834,22 @@
     <message>
         <source>Add Printer…</source>
         <translation>Ajouter une imprimante…</translation>
+    </message>
+    <message>
+        <source>Presets:</source>
+        <translation>Préréglages&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Presets</source>
+        <translation>Préréglages</translation>
+    </message>
+    <message>
+        <source>Default Settings</source>
+        <translation>Réglages par défaut</translation>
+    </message>
+    <message>
+        <source>Last Used Settings</source>
+        <translation>Derniers réglages utilisés</translation>
     </message>
     <message>
         <source>Copies:</source>
@@ -8777,8 +8960,16 @@
         <translation>Noir et blanc</translation>
     </message>
     <message>
+        <source>PDF</source>
+        <translation>PDF</translation>
+    </message>
+    <message>
         <source>Save as PDF…</source>
         <translation>Enregistrer au format PDF…</translation>
+    </message>
+    <message>
+        <source>Open in Preview</source>
+        <translation>Ouvrir dans la Visionneuse</translation>
     </message>
     <message>
         <source>Click the panel to use the keyboard in it.</source>
@@ -9552,6 +9743,37 @@
     <message>
         <source>Choose a folder of pictures</source>
         <translation>Choisir un dossier d’images</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenShareMenu</name>
+    <message>
+        <source>Screen or window</source>
+        <translation>Écran ou fenêtre</translation>
+    </message>
+    <message>
+        <source>Window: %1</source>
+        <translation>Fenêtre&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>A window</source>
+        <translation>Une fenêtre</translation>
+    </message>
+    <message>
+        <source>Part of %1</source>
+        <translation>Une partie de %1</translation>
+    </message>
+    <message>
+        <source>Entire screen: %1</source>
+        <translation>Écran entier&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
+        <source>To stop sharing, use the app that shares.</source>
+        <translation>Pour arrêter le partage, utilisez l’app qui partage.</translation>
     </message>
 </context>
 <context>
@@ -10346,6 +10568,199 @@
     </message>
 </context>
 <context>
+    <name>SecretAgent</name>
+    <message>
+        <source>Password sent</source>
+        <translation>Mot de passe envoyé</translation>
+    </message>
+    <message>
+        <source>Request cancelled</source>
+        <translation>Demande annulée</translation>
+    </message>
+    <message>
+        <source>What you type is ignored for a moment.</source>
+        <translation>Ce que vous tapez est ignoré pendant un instant.</translation>
+    </message>
+</context>
+<context>
+    <name>SecretSheet</name>
+    <message>
+        <source>Username: %1</source>
+        <translation>Nom d’utilisateur&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Password</source>
+        <translation>Mot de passe</translation>
+    </message>
+    <message>
+        <source>New password</source>
+        <translation>Nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Confirmation</translation>
+    </message>
+    <message>
+        <source>Verify the new password</source>
+        <translation>Confirmer le nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>Password strength: none</source>
+        <translation>Robustesse du mot de passe&#xa0;: aucune</translation>
+    </message>
+    <message>
+        <source>Password strength: weak</source>
+        <translation>Robustesse du mot de passe&#xa0;: faible</translation>
+    </message>
+    <message>
+        <source>Password strength: fair</source>
+        <translation>Robustesse du mot de passe&#xa0;: moyenne</translation>
+    </message>
+    <message>
+        <source>Password strength: strong</source>
+        <translation>Robustesse du mot de passe&#xa0;: élevée</translation>
+    </message>
+    <message>
+        <source>Show password</source>
+        <translation>Afficher le mot de passe</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Join</source>
+        <translation>Rejoindre</translation>
+    </message>
+</context>
+<context>
+    <name>SecretSheetModel</name>
+    <message>
+        <source>Requested by NetworkManager</source>
+        <translation>Demandé par NetworkManager</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, while the screen was locked. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1 and waited while the screen saver was on. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1 et a attendu pendant que l’économiseur d’écran était affiché. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, while another one was open. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, pendant qu’une autre était ouverte. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, right after another one. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, juste après une autre. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1. Click the alert to answer it: no key answers a confirmation before that.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour y répondre&#xa0;: aucune touche ne répond à une confirmation avant cela.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1. Click the alert to type the password: nothing typed elsewhere goes into it.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour saisir le mot de passe&#xa0;: rien de ce qui est tapé ailleurs n’y entre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.</source>
+        <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur l’alerte pour y répondre.</translation>
+    </message>
+    <message>
+        <source>Unidentified program</source>
+        <translation>Programme non identifié</translation>
+    </message>
+    <message>
+        <source>Keyring</source>
+        <translation>Trousseau</translation>
+    </message>
+    <message>
+        <source>GnuPG</source>
+        <translation>GnuPG</translation>
+    </message>
+    <message>
+        <source>SSH</source>
+        <translation>SSH</translation>
+    </message>
+    <message>
+        <source>Disks</source>
+        <translation>Disques</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WPA3 password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WPA3.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WEP password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WEP.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires WPA2 enterprise credentials.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite des identifiants WPA2 entreprise.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WPA2 password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WPA2.</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks you to confirm</source>
+        <translation>Un programme non identifié vous demande de confirmer</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks for a new password</source>
+        <translation>Un programme non identifié demande un nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>An unidentified program asks for a password</source>
+        <translation>Un programme non identifié demande un mot de passe</translation>
+    </message>
+    <message>
+        <source>%1 asks you to confirm</source>
+        <translation>%1 vous demande de confirmer</translation>
+    </message>
+    <message>
+        <source>%1 asks for a new password</source>
+        <translation>%1 demande un nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>%1 asks for a password</source>
+        <translation>%1 demande un mot de passe</translation>
+    </message>
+    <message>
+        <source>Another program sent this message through %1. It is not verified:</source>
+        <translation>Un autre programme a envoyé ce message par %1. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>%1 sent this message:</source>
+        <translation>%1 a envoyé ce message&#xa0;:</translation>
+    </message>
+    <message>
+        <source>The program sent this message. It is not verified:</source>
+        <translation>Le programme a envoyé ce message. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>A WPA2 password has 8 to 63 characters, or 64 hexadecimal digits.</source>
+        <translation>Un mot de passe WPA2 compte de 8 à 63 caractères, ou 64 chiffres hexadécimaux.</translation>
+    </message>
+    <message>
+        <source>The passwords do not match. Type the new password again in both fields.</source>
+        <translation>Les mots de passe ne correspondent pas. Tapez à nouveau le nouveau mot de passe dans les deux champs.</translation>
+    </message>
+    <message>
+        <source>This password is too long.</source>
+        <translation>Ce mot de passe est trop long.</translation>
+    </message>
+</context>
+<context>
     <name>SecretsHandover</name>
     <message>
         <source>Saved passwords moved</source>
@@ -10603,6 +11018,89 @@
     <message>
         <source>This setting could not be saved (%1).</source>
         <translation>Ce réglage n&apos;a pas pu être enregistré (%1).</translation>
+    </message>
+</context>
+<context>
+    <name>SharePickerPanel</name>
+    <message>
+        <source>Share Your Screen</source>
+        <translation>Partager votre écran</translation>
+    </message>
+    <message>
+        <source>An app wants to share your screen. Choose what it can see.</source>
+        <translation>Une app souhaite partager votre écran. Choisissez ce qu’elle peut voir.</translation>
+    </message>
+    <message>
+        <source>What to share</source>
+        <translation>Élément à partager</translation>
+    </message>
+    <message>
+        <source>Entire Screen</source>
+        <translation>Écran entier</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>Fenêtre</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>Sélection</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+    <message>
+        <source>Windows</source>
+        <translation>Fenêtres</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
+    <message>
+        <source>%1, %2, can&apos;t be shared</source>
+        <translation>%1, %2, ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>This window can&apos;t be shared</source>
+        <translation>Cette fenêtre ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>Area to share</source>
+        <translation>Zone à partager</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Écran</translation>
+    </message>
+    <message>
+        <source>%1 × %2 on %3</source>
+        <translation>%1 × %2 sur %3</translation>
+    </message>
+    <message>
+        <source>Drag over the display to choose the area to share.</source>
+        <translation>Faites glisser sur l’écran pour choisir la zone à partager.</translation>
+    </message>
+    <message>
+        <source>No display can be shared.</source>
+        <translation>Aucun écran ne peut être partagé.</translation>
+    </message>
+    <message>
+        <source>No window can be shared.</source>
+        <translation>Aucune fenêtre ne peut être partagée.</translation>
+    </message>
+    <message>
+        <source>Remember this choice</source>
+        <translation>Mémoriser ce choix</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Share</source>
+        <translation>Partager</translation>
     </message>
 </context>
 <context>

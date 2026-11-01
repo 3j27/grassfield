@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
+#include <string.h>
 
 namespace gf::prompter {
 
@@ -408,6 +410,25 @@ namespace gf::prompter {
         return static_cast<long>(n);
     }
 
+    std::size_t takeLines(char* buffer, std::size_t length, const std::function<bool(std::string_view line)>& handle) {
+        std::size_t start = 0;
+        while (true) {
+            const void* newline = std::memchr(buffer + start, '\n', length - start);
+            if (!newline)
+                break;
+            const std::size_t end = static_cast<std::size_t>(static_cast<const char*>(newline) - buffer);
+            if (!handle(std::string_view(buffer + start, end - start)))
+                return 0; // dropped: the buffer was wiped by whoever dropped the connection
+            explicit_bzero(buffer + start, end - start + 1);
+            start = end + 1;
+        }
+        if (start > 0) {
+            std::memmove(buffer, buffer + start, length - start);
+            explicit_bzero(buffer + (length - start), start);
+        }
+        return length - start;
+    }
+
     bool validRequestId(const QString& id) {
         if (id.size() < 2 || id.size() > 20 || id.at(0) != u'p' || id.at(1) == u'0')
             return false;
@@ -476,16 +497,18 @@ namespace gf::prompter {
                 *error = QStringLiteral("answer without a usable id");
                 return ParseStatus::Malformed;
             }
-            if (!onlyKeys(members, {"type", "id", "result", "password", "choice"})) {
+            if (!onlyKeys(members, {"type", "id", "result", "password", "choice", "identity"})) {
                 *error = QStringLiteral("unknown key in answer");
                 return ParseStatus::Invalid;
             }
             QString result;
-            if (!stringMember(text, member(members, "result"), &result) || (result != QLatin1String("ok") && result != QLatin1String("cancel"))) {
-                *error = QStringLiteral("result is neither ok nor cancel");
+            if (!stringMember(text, member(members, "result"), &result)
+                || (result != QLatin1String("ok") && result != QLatin1String("cancel") && result != QLatin1String("refused"))) {
+                *error = QStringLiteral("result is not ok, cancel or refused");
                 return ParseStatus::Invalid;
             }
-            out->ok = result == QLatin1String("ok");
+            out->ok      = result == QLatin1String("ok");
+            out->refused = result == QLatin1String("refused");
             if (const JsonMember* password = member(members, "password")) {
                 if (password->value.type != JsonValue::Type::String
                     || decodeJsonString(text.data() + password->value.string.begin, password->value.string.end - password->value.string.begin, nullptr,
@@ -504,6 +527,17 @@ namespace gf::prompter {
                 }
                 out->hasChoice = true;
                 out->choice    = choice->value.boolean;
+            }
+            if (const JsonMember* identity = member(members, "identity")) {
+                if (identity->value.type != JsonValue::Type::String
+                    || decodeJsonString(text.data() + identity->value.string.begin, identity->value.string.end - identity->value.string.begin, nullptr,
+                                        limits::kIdentity)
+                        < 0) {
+                    *error = QStringLiteral("identity not a string, not valid, or over %1 bytes").arg(limits::kIdentity);
+                    return ParseStatus::Invalid;
+                }
+                out->hasIdentity = true;
+                out->identity    = identity->value.string;
             }
             return ParseStatus::Ok;
         }
@@ -553,6 +587,16 @@ namespace gf::prompter {
             {QStringLiteral("choice"), choice},
             {QStringLiteral("passwordNew"), password && p.passwordNew},
             {QStringLiteral("strength"), password && p.passwordNew},
+        });
+    }
+
+    QByteArray nmPromptMessage(const NmPromptView& p) {
+        return line({
+            {QStringLiteral("type"), QStringLiteral("prompt")},
+            {QStringLiteral("id"), p.id},
+            {QStringLiteral("kind"), QStringLiteral("nm")},
+            {QStringLiteral("network"),
+             QJsonObject{{QStringLiteral("ssid"), p.ssid}, {QStringLiteral("security"), p.security}, {QStringLiteral("identity"), p.identity}}},
         });
     }
 

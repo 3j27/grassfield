@@ -1,0 +1,2 @@
+# Test fixtures whose bytes are their format (PDF xref lines end in spaces): not text for whitespace checks.
+tests/fixtures/print/*.pdf -whitespace -text -diff
