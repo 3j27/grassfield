@@ -140,7 +140,7 @@ def nm_prompt(n, ssid, security, identity=""):
 
 def shell_hello(c, desc):
     h = c.json()
-    check(desc, isinstance(h, dict) and h.get("v") == "prompter/1" and h.get("type") == "hello" and h.get("kinds") == ["password", "confirm", "nm"]
+    check(desc, isinstance(h, dict) and h.get("v") == "prompter/1" and h.get("type") == "hello" and h.get("kinds") == ["password", "confirm", "nm", "kio"]
           and isinstance(h.get("shell"), str) and set(h) == {"v", "type", "shell", "kinds"}, repr(h))
 
 
@@ -149,7 +149,7 @@ def scenario_client(server):
     check("the shell connects", c is not None)
     if c is None:
         return
-    shell_hello(c, "the shell's hello is the first line, prompter/1, the kinds it draws (password, confirm, nm)")
+    shell_hello(c, "the shell's hello is the first line, prompter/1, the kinds it draws (password, confirm, nm, kio)")
     hello(c)
     c.send({"type": "name", "state": "owned"})
     c.send(prompt(1, "answer-ok"))

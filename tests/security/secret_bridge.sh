@@ -16,7 +16,9 @@
 #            (tests/fixtures/prompter-client.py): a password typed in the shell reaches the gcr client through the sx-aes-1
 #            exchange; a confirmation; a cancellation; step 9c: with a private "system" bus and a fake NetworkManager
 #            (tests/fixtures/fake-networkmanager.py), the shell's real client registers the agent by its hello, and a WPA2
-#            password, an enterprise name and password and a cancellation answered in the shell reach NetworkManager (SKIP
+#            password, an enterprise name and password and a cancellation answered in the shell reach NetworkManager; step 9e:
+#            the shell's hello (kind kio) makes the bridge hold org.kde.kpasswdserver6, and a KIO query
+#            (tests/fixtures/kpasswd-peer.py) answered in the shell gets its name and password, a cancelled one nothing (SKIP
 #            without dbus-daemon, PyGObject with Gcr 4, a built bridge or g++ with Qt 6 Core and gcr-4, or a cgroup of this
 #            process)
 #
@@ -178,7 +180,7 @@ e2e() {
   python3 -I -c 'import gi; gi.require_version("Gcr", "4"); from gi.repository import Gcr' 2>/dev/null || { echo "SKIP: secret bridge e2e needs PyGObject with Gcr 4"; return 0; }
   local bridge=${GRASSFIELD_PROMPTER:-}
   if [[ -z $bridge ]]; then
-    command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 2>/dev/null || { echo "SKIP: secret bridge e2e needs g++, Qt 6 Core and gcr-4"; return 0; }
+    command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 libsecret-1 2>/dev/null || { echo "SKIP: secret bridge e2e needs g++, Qt 6 Core, gcr-4 and libsecret"; return 0; }
     bridges/prompter/build-direct.sh --out "$tmp/bin" >"$tmp/build.log" 2>&1 || { cat "$tmp/build.log"; bad "e2e: the bridge builds"; return 0; }
     bridge=$tmp/bin/grassfield-prompter
   fi
@@ -225,7 +227,7 @@ e2e() {
   grep -q '^continue$' "$e/c2.out" && pass "e2e: a confirmation answered ok: the client continues" || bad "e2e: confirm: $(cat "$e/c2.out" | tr '\n' ' ')"
   "${run_env[@]}" timeout 20 python3 -I "$c" password --title answer-cancel >"$e/c3.out" 2>&1
   grep -q '^cancelled$' "$e/c3.out" && pass "e2e: a cancellation: the client gets no password" || bad "e2e: cancel: $(cat "$e/c3.out" | tr '\n' ' ')"
-  grep -q "request p1 answered: ok" "$e/bridge.log" && grep -q 'shell probe says hello (draws: password,confirm,nm)' "$e/bridge.log" \
+  grep -q "request p1 answered: ok" "$e/bridge.log" && grep -q 'shell probe says hello (draws: password,confirm,nm,kio)' "$e/bridge.log" \
     && pass "e2e: the bridge's journal: the shell's hello and its answers" || bad "e2e: bridge log: $(grep -E 'hello|answered' "$e/bridge.log" | head -3 | tr '\n' ' ')"
   # Step 9c: NetworkManager's secrets through the shell's real client.
   wait_until 10 grep -q '^#register .* org.grassfield.prompter$' "$e/nm.log" && pass "e2e: the shell's hello (kinds password, confirm, nm) registers the NetworkManager agent" \
@@ -240,6 +242,21 @@ e2e() {
   timeout 5 bash -c "$say_nm" _ "$e/nm.cmd" "get n3 802-11-wireless-security 0x1 ssid=answer-cancel"
   wait_until 15 grep -qx 'n3 error org.freedesktop.NetworkManager.SecretAgent.UserCanceled' "$e/nm.log" \
     && pass "e2e: a cancellation in the shell: UserCanceled" || bad "e2e: cancel: $(grep '^n3' "$e/nm.log")"
+  # Step 9e: KIO's network passwords through the shell's real client.
+  wait_until 10 grep -q "org.kde.kpasswdserver6 owned" "$e/bridge.log" && pass "e2e: the shell's hello (kind kio) makes the bridge hold org.kde.kpasswdserver6" \
+    || bad "e2e: org.kde.kpasswdserver6 not held: $(grep kpasswdserver6 "$e/bridge.log" | tr '\n' ' ')"
+  mkfifo "$e/st.cmd"
+  "${run_env[@]}" python3 -I "$root/tests/fixtures/kpasswd-peer.py" stranger --log "$e/st.log" --commands "$e/st.cmd" </dev/null >"$e/st.err" 2>&1 &
+  pids+=("$!")
+  wait_until 5 grep -q '^#ready' "$e/st.log" 2>/dev/null
+  timeout 5 bash -c "$say_nm" _ "$e/st.cmd" "query sftp://answer-ok.example/"
+  wait_until 15 grep -qE '^result query [0-9]+ modified=1 user=user-p[0-9]+ password=pw-p[0-9]+$' "$e/st.log" \
+    && grep -qE 'prompted p[0-9]+ kio unidentified answer-ok.example edit off unknown' "$e/probe.out" \
+    && pass "e2e: a KIO query answered in the shell gets the name and the password typed (the real client reads the bridge's kio line)" \
+    || bad "e2e: kio: $(cat "$e/st.log" | tr '\n' ' ') $(grep 'kio' "$e/probe.out" | tr '\n' ' ')"
+  timeout 5 bash -c "$say_nm" _ "$e/st.cmd" "query sftp://answer-cancel.example/"
+  wait_until 15 grep -qE '^result query [0-9]+ modified=0 user=- password=-$' "$e/st.log" \
+    && pass "e2e: a KIO query cancelled in the shell gets nothing" || bad "e2e: kio cancel: $(cat "$e/st.log" | tr '\n' ' ')"
   grep -q "pw-p" "$e/bridge.log" "$e/probe.out" && bad "e2e: a password in an output" || pass "e2e: no password in the bridge's or the shell's output"
   stop_probe
   wait_until 10 grep -q '^#unregister .* ok$' "$e/nm.log" && pass "e2e: the shell gone, the agent unregisters" || bad "e2e: no Unregister: $(tail -3 "$e/nm.log" | tr '\n' ' ')"

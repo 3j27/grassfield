@@ -1,11 +1,13 @@
 // grassfield-prompter without a bus (bridges/prompter/src, ADR-0035 D-9): the caller's text made plain, the prompter/1 line
 // parser and messages, the bound of outstanding requests, the shell's cgroup, the socket peer check, who is trusted as a
 // requester (temporary trees stand for the system's root-owned ones), the bus filter that tells a prompt its caller, and
-// the GcrPrompt object itself (answers, withdrawals, the password wiped). The process on a private bus:
-// tests/security/prompter_bridge.sh.
+// the GcrPrompt object itself (answers, withdrawals, the password wiped); step 9e: KIO's AuthInfo on the bus, the
+// kpasswdserver session cache and its quirks, the server's name, the keyring's protection, the kio prompt. The process on a
+// private bus: tests/security/prompter_bridge.sh (KIO's: tests/security/kio_passwd.sh).
 #include "Askpass.h"
 #include "Filter.h"
 #include "Identity.h"
+#include "KioAuth.h"
 #include "NmSecrets.h"
 #include "Peer.h"
 #include "Prompt.h"
@@ -927,6 +929,13 @@ TEST_F(PrompterTrust, EntriesThatDoNotCount) {
     EXPECT_EQ(requesterFor(facts(bin(QStringLiteral("editor"))), where()).role, QStringLiteral("app"));
 }
 
+TEST(PrompterIdentityList, KiosWorkerIsTheKioRole) {
+    bool found = false;
+    for (const KnownCaller& k : knownCallers())
+        found = found || (k.path == QStringLiteral("/usr/lib/kf6/kioworker") && k.role == QStringLiteral("kio"));
+    EXPECT_TRUE(found);
+}
+
 TEST(PrompterIdentityList, TheAskpassHelperIsTheDiskRole) {
     bool found = false;
     for (const KnownCaller& k : knownCallers())
@@ -1786,4 +1795,384 @@ TEST(PrompterPrompt, LaterJobsRunOnceAndNeverAfterTheirOwner) {
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
+}
+
+// --- step 9e: KIO's password server (KioAuth.h) ---------------------------------------------------------------------------
+
+namespace {
+    // An AuthInfo as KIO marshals it (authinfo.cpp:210-217): version 1, the URL as QUrl::toString(), the strings, the four
+    // flags and the extra fields.
+    GVariant* kioAuthInfo(const char* url, const char* user, const char* password, bool keep = false, GVariant* extra = nullptr,
+                          const char* realm = "", bool verifyPath = false, bool readOnly = false) {
+        if (!extra)
+            extra = g_variant_new_array(G_VARIANT_TYPE("{s(siv)}"), nullptr, 0);
+        return g_variant_ref_sink(g_variant_new("(ysssssssssbbbb@a{s(siv)})", guchar(1), url, user, password, "prompt", "caption", "comment",
+                                                "Site:", realm, "digest", gboolean(verifyPath), gboolean(readOnly), gboolean(keep), FALSE, extra));
+    }
+
+    GVariant* extras(std::initializer_list<std::pair<const char*, GVariant*>> fields) {
+        GVariantBuilder b;
+        g_variant_builder_init(&b, G_VARIANT_TYPE("a{s(siv)}"));
+        for (const auto& [name, value] : fields)
+            g_variant_builder_add(&b, "{s(siv)}", name, "", gint32(2), value);
+        return g_variant_builder_end(&b);
+    }
+
+    kio::AuthInfo parsedInfo(GVariant* v) {
+        kio::AuthInfo info;
+        QString       why;
+        EXPECT_TRUE(kio::parseAuthInfo(v, &info, &why)) << why.toStdString();
+        g_variant_unref(v);
+        return info;
+    }
+
+    qint64 g_now = 1000;
+    qint64 fakeClock() {
+        return g_now;
+    }
+
+    kio::AuthInfo infoFor(const char* url, const char* user = "", const char* realm = "", bool keep = false) {
+        kio::AuthInfo info;
+        info.url          = QString::fromUtf8(url);
+        info.parsed       = QUrl(info.url);
+        info.username     = QString::fromUtf8(user);
+        info.password     = kio::Secret("pw", 2);
+        info.realm        = QString::fromUtf8(realm);
+        info.keepPassword = keep;
+        return info;
+    }
+} // namespace
+
+TEST(PrompterKio, AnAuthInfoIsReadAndWrittenAsKioMarshalsIt) {
+    const kio::AuthInfo info = parsedInfo(kioAuthInfo("sftp://alice@example.org:2222/home", "alice", "s3cret", true, nullptr, "Staff"));
+    EXPECT_EQ(info.url, QStringLiteral("sftp://alice@example.org:2222/home"));
+    EXPECT_EQ(info.parsed.host(), QStringLiteral("example.org"));
+    EXPECT_EQ(info.username, QStringLiteral("alice"));
+    EXPECT_EQ(std::string(info.password.data(), info.password.size()), "s3cret");
+    EXPECT_EQ(info.commentLabel, QStringLiteral("Site:"));
+    EXPECT_EQ(info.realm, QStringLiteral("Staff"));
+    EXPECT_TRUE(info.keepPassword);
+    EXPECT_FALSE(info.modified);
+    kio::AuthInfo answered = info;
+    answered.modified      = true;
+    GVariant* out          = g_variant_ref_sink(kio::authInfoVariant(answered));
+    EXPECT_STREQ(g_variant_get_type_string(out), "(ysssssssssbbbba{s(siv)})");
+    guchar       version  = 0;
+    const gchar *url = nullptr, *user = nullptr, *password = nullptr, *prompt = nullptr, *caption = nullptr, *comment = nullptr, *label = nullptr,
+                *realm = nullptr, *digest = nullptr;
+    gboolean   verifyPath = TRUE, readOnly = TRUE, keep = FALSE, modified = FALSE;
+    GVariant*  extra      = nullptr;
+    g_variant_get(out, "(y&s&s&s&s&s&s&s&s&sbbbb@a{s(siv)})", &version, &url, &user, &password, &prompt, &caption, &comment, &label, &realm, &digest,
+                  &verifyPath, &readOnly, &keep, &modified, &extra);
+    EXPECT_EQ(version, 1);
+    EXPECT_STREQ(url, "sftp://alice@example.org:2222/home");
+    EXPECT_STREQ(user, "alice");
+    EXPECT_STREQ(password, "s3cret");
+    EXPECT_STREQ(prompt, "prompt");
+    EXPECT_STREQ(caption, "caption");
+    EXPECT_STREQ(comment, "comment");
+    EXPECT_STREQ(label, "Site:");
+    EXPECT_STREQ(realm, "Staff");
+    EXPECT_STREQ(digest, "digest");
+    EXPECT_FALSE(verifyPath);
+    EXPECT_FALSE(readOnly);
+    EXPECT_TRUE(keep);
+    EXPECT_TRUE(modified);
+    EXPECT_EQ(g_variant_n_children(extra), 0u);
+    g_variant_unref(extra);
+    g_variant_unref(out);
+}
+
+TEST(PrompterKio, AnAuthInfoOverItsBoundsIsRefused) {
+    QString       why;
+    kio::AuthInfo info;
+    const std::string longUrl = "sftp://example.org/" + std::string(kio::kUrlBytes, 'a');
+    GVariant*         v       = kioAuthInfo(longUrl.c_str(), "", "");
+    EXPECT_FALSE(kio::parseAuthInfo(v, &info, &why));
+    g_variant_unref(v);
+    const std::string longName(limits::kIdentity + 1, 'n');
+    v = kioAuthInfo("sftp://h/", longName.c_str(), "");
+    EXPECT_FALSE(kio::parseAuthInfo(v, &info, &why));
+    g_variant_unref(v);
+    const std::string longPassword(limits::kPassword + 1, 'p');
+    v = kioAuthInfo("sftp://h/", "", longPassword.c_str());
+    EXPECT_FALSE(kio::parseAuthInfo(v, &info, &why));
+    g_variant_unref(v);
+    GVariantBuilder b;
+    g_variant_builder_init(&b, G_VARIANT_TYPE("a{s(siv)}"));
+    for (int i = 0; i <= static_cast<int>(kio::kExtraFields); ++i)
+        g_variant_builder_add(&b, "{s(siv)}", QByteArray::number(i).constData(), "", gint32(0), g_variant_new_boolean(TRUE));
+    v = kioAuthInfo("sftp://h/", "", "", false, g_variant_builder_end(&b));
+    EXPECT_FALSE(kio::parseAuthInfo(v, &info, &why)) << "17 extra fields";
+    g_variant_unref(v);
+    const std::string bigValue(kio::kExtraEntryBytes, 'v');
+    v = kioAuthInfo("sftp://h/", "", "", false, extras({{"domain", g_variant_new_string(bigValue.c_str())}}));
+    EXPECT_FALSE(kio::parseAuthInfo(v, &info, &why)) << "an extra field over its bound";
+    g_variant_unref(v);
+    GVariant* other = g_variant_ref_sink(g_variant_new("(s)", "x"));
+    EXPECT_FALSE(kio::parseAuthInfo(other, &info, &why));
+    g_variant_unref(other);
+    // At the bounds: accepted.
+    const std::string urlAtBound = "s://h/" + std::string(kio::kUrlBytes - 6, 'a');
+    v                            = kioAuthInfo(urlAtBound.c_str(), "", std::string(limits::kPassword, 'p').c_str());
+    EXPECT_TRUE(kio::parseAuthInfo(v, &info, &why)) << why.toStdString();
+    g_variant_unref(v);
+}
+
+TEST(PrompterKio, ExtraFieldsAreBooleansAndTheAnonymousOneIsTurnedOff) {
+    kio::AuthInfo info = parsedInfo(kioAuthInfo("ftp://h/", "", "", false,
+                                                extras({{"anonymous", g_variant_new_boolean(TRUE)}, {"domain", g_variant_new_string("WORKGROUP")},
+                                                        {"skip-caching-on-query", g_variant_new_boolean(TRUE)}, {"hide-username-line", g_variant_new_string("true")}})));
+    bool present = false;
+    EXPECT_TRUE(kio::extraBool(info, kio::kExtraAnonymous, &present));
+    EXPECT_TRUE(present);
+    EXPECT_TRUE(kio::extraBool(info, kio::kExtraSkipCaching));
+    EXPECT_FALSE(kio::extraBool(info, kio::kExtraHideUsername, &present)) << "a string is not a boolean";
+    EXPECT_TRUE(present);
+    EXPECT_FALSE(kio::extraBool(info, kio::kExtraBypassCache, &present));
+    EXPECT_FALSE(present);
+    kio::setExtraBool(&info, kio::kExtraAnonymous, false);
+    EXPECT_FALSE(kio::extraBool(info, kio::kExtraAnonymous, &present));
+    EXPECT_TRUE(present);
+    kio::setExtraBool(&info, kio::kExtraBypassCache, true); // absent: nothing added
+    EXPECT_FALSE(kio::extraBool(info, kio::kExtraBypassCache, &present));
+    EXPECT_FALSE(present);
+    // The other fields, their titles and flags, unchanged.
+    GVariant* domain = g_variant_lookup_value(info.extra.get(), "domain", G_VARIANT_TYPE("(siv)"));
+    ASSERT_NE(domain, nullptr);
+    const gchar* title = nullptr;
+    gint32       flags = 0;
+    GVariant*    value = nullptr;
+    g_variant_get(domain, "(&siv)", &title, &flags, &value);
+    EXPECT_EQ(flags, 2);
+    EXPECT_STREQ(g_variant_get_string(value, nullptr), "WORKGROUP");
+    g_variant_unref(value);
+    g_variant_unref(domain);
+}
+
+TEST(PrompterKio, APasswordThatIsNotValidTextNeverGoesOnTheBus) {
+    kio::AuthInfo info = infoFor("sftp://h/");
+    info.password      = kio::Secret("a\xff\xfe", 3);
+    GVariant* out      = g_variant_ref_sink(kio::authInfoVariant(info));
+    const gchar* password = nullptr;
+    g_variant_get_child(out, 3, "&s", &password);
+    EXPECT_STREQ(password, "");
+    g_variant_unref(out);
+    info.password = kio::Secret("a\0b", 3);
+    out           = g_variant_ref_sink(kio::authInfoVariant(info));
+    g_variant_get_child(out, 3, "&s", &password);
+    EXPECT_STREQ(password, "");
+    g_variant_unref(out);
+}
+
+TEST(PrompterKio, SecretsAreDeepCopiesInSecureMemory) {
+    kio::Secret a("pass", 4);
+    kio::Secret b = a;
+    EXPECT_NE(a.data(), b.data());
+    EXPECT_TRUE(a == b);
+    kio::Secret c = std::move(b);
+    EXPECT_TRUE(b.empty());
+    EXPECT_EQ(std::string(c.data(), c.size()), "pass");
+    EXPECT_TRUE(gcr_secure_memory_is_secure(const_cast<char*>(c.data())));
+    char* out = c.copyOut();
+    EXPECT_STREQ(out, "pass");
+    kio::wipeAndFree(out);
+}
+
+TEST(PrompterKio, TheCacheKeyIsKpasswdserversWithItsPortQuirk) {
+    EXPECT_EQ(kio::cacheKey(QUrl(QStringLiteral("sftp://example.org/home"))), QStringLiteral("sftp-example.org:-1"));
+    EXPECT_EQ(kio::cacheKey(QUrl(QStringLiteral("ftp://alice@Example.ORG:2121/x"))), QStringLiteral("ftp-alice@example.org:2121"));
+    EXPECT_EQ(kio::cacheKey(QUrl(QStringLiteral("smb://bob%20b@nas/share"))), QStringLiteral("smb-bob b@nas:-1"));
+    EXPECT_EQ(kio::cacheKey(QUrl(QStringLiteral("ftp://h:0/"))), QStringLiteral("ftp-h")) << "port 0: no port at all, as kpasswdserver writes it";
+    EXPECT_TRUE(kio::cacheKey(QUrl(QStringLiteral("http://exa mple.org/"))).isEmpty());
+    EXPECT_EQ(kio::directoryOf(QUrl(QStringLiteral("sftp://h/a/b/c"))), QStringLiteral("/")) << "up to the FIRST slash (kpasswdserver.cpp:678)";
+    EXPECT_EQ(kio::directoryOf(QUrl(QStringLiteral("sftp://h"))), QString());
+}
+
+TEST(PrompterKio, TheServerShownIsAHostNameOnly) {
+    EXPECT_EQ(kio::serverLabel(QUrl(QStringLiteral("sftp://alice@Example.org/home"))), QStringLiteral("example.org"));
+    EXPECT_EQ(kio::serverLabel(QUrl(QStringLiteral("ftp://127.0.0.1:2121/"))), QStringLiteral("127.0.0.1:2121"));
+    EXPECT_EQ(kio::serverLabel(QUrl(QStringLiteral("sftp://[::1]:22/"))), QStringLiteral("[::1]:22"));
+    EXPECT_EQ(kio::serverLabel(QUrl(QStringLiteral("smb://MY_NAS/share"))), QStringLiteral("my_nas"));
+    EXPECT_EQ(kio::serverLabel(QUrl(QStringLiteral("sftp://host.example./"))), QStringLiteral("host.example."));
+    // An international name in its ASCII form: never a look-alike character.
+    EXPECT_EQ(kio::serverLabel(QUrl(QStringLiteral("sftp://b\u00fccher.example/"))), QStringLiteral("xn--bcher-kva.example"));
+    EXPECT_EQ(kio::serverLabel(QUrl(QStringLiteral("sftp://\u0430pple.com/"))), QStringLiteral("xn--pple-43d.com"));
+    EXPECT_TRUE(kio::serverLabel(QUrl(QStringLiteral("smb:///"))).isEmpty());
+    EXPECT_TRUE(kio::serverLabel(QUrl(QStringLiteral("file:///etc/passwd"))).isEmpty());
+    EXPECT_TRUE(kio::serverLabel(QUrl(QStringLiteral("sftp://a..b/"))).isEmpty());
+    EXPECT_TRUE(kio::serverLabel(QUrl(QStringLiteral("sftp://[fe80::1%25eth0]/"))).isEmpty()) << "no zone index";
+    EXPECT_TRUE(kio::serverLabel(QUrl(QStringLiteral("sftp://") + QString(64, u'a') + QStringLiteral(".example/"))).isEmpty()) << "a label over 63";
+}
+
+TEST(PrompterKio, TheKeyringItemsAttributesAndLabel) {
+    const kio::AuthInfo info = infoFor("ftp://alice@example.org:2121/", "alice", "Staff");
+    const QString       key  = kio::cacheKey(info.parsed);
+    using Pairs              = QList<QPair<QString, QString>>;
+    EXPECT_EQ(kio::storeAttributes(key, info), (Pairs{{QStringLiteral("key"), QStringLiteral("ftp-alice@example.org:2121")},
+                                                      {QStringLiteral("realm"), QStringLiteral("Staff")},
+                                                      {QStringLiteral("user"), QStringLiteral("alice")},
+                                                      {QStringLiteral("protocol"), QStringLiteral("ftp")},
+                                                      {QStringLiteral("server"), QStringLiteral("example.org")},
+                                                      {QStringLiteral("port"), QStringLiteral("2121")}}));
+    EXPECT_EQ(kio::searchAttributes(key, info),
+              (Pairs{{QStringLiteral("key"), key}, {QStringLiteral("realm"), QStringLiteral("Staff")}, {QStringLiteral("user"), QStringLiteral("alice")}}));
+    EXPECT_EQ(kio::searchAttributes(key, infoFor("ftp://example.org/")), (Pairs{{QStringLiteral("key"), key}, {QStringLiteral("realm"), QString()}}))
+        << "no user: any remembered login of that key and realm";
+    EXPECT_EQ(kio::itemLabel(info), QStringLiteral("ftp://alice@example.org:2121"));
+}
+
+TEST(PrompterKio, TheKeyringsProtectionFromGnomeKeyringsFile) {
+    EXPECT_EQ(kio::protectionOfHeader(QByteArray("GnomeKeyring\n\r\0\n\0\0\0\0", 20)), kio::Protection::Protected);
+    EXPECT_EQ(kio::protectionOfHeader("[keyring]\ndisplay-name=Default keyring\n"), kio::Protection::Unprotected);
+    EXPECT_EQ(kio::protectionOfHeader("GnomeKeyring\n"), kio::Protection::Unknown);
+    EXPECT_EQ(kio::protectionOfHeader(""), kio::Protection::Unknown);
+    EXPECT_EQ(kio::protectionName(kio::Protection::Unprotected), QStringLiteral("unprotected"));
+    EXPECT_EQ(kio::collectionFileName(QStringLiteral("/org/freedesktop/secrets/collection/login")), QStringLiteral("login"));
+    EXPECT_EQ(kio::collectionFileName(QStringLiteral("/org/freedesktop/secrets/collection/Default_5fkeyring")), QStringLiteral("Default_keyring"));
+    EXPECT_TRUE(kio::collectionFileName(QStringLiteral("/org/freedesktop/secrets/collection/a_2fb")).isEmpty()) << "a slash";
+    EXPECT_TRUE(kio::collectionFileName(QStringLiteral("/org/freedesktop/secrets/collection/_2e_2e")).isEmpty()) << "..";
+    EXPECT_TRUE(kio::collectionFileName(QStringLiteral("/org/freedesktop/secrets/collection/x_zz")).isEmpty()) << "not hex";
+    EXPECT_TRUE(kio::collectionFileName(QStringLiteral("/org/freedesktop/secrets/collection/x_2")).isEmpty()) << "cut short";
+    EXPECT_TRUE(kio::collectionFileName(QStringLiteral("/org/freedesktop/secrets/aliases/default")).isEmpty());
+    EXPECT_TRUE(kio::collectionFileName(QStringLiteral("/")).isEmpty());
+    EXPECT_EQ(kio::keyringDirectory(QStringLiteral("/x/data"), QStringLiteral("/home/u")), QStringLiteral("/x/data/keyrings"));
+    EXPECT_EQ(kio::keyringDirectory(QString(), QStringLiteral("/home/u")), QStringLiteral("/home/u/.local/share/keyrings"));
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const auto write = [&](const char* name, const QByteArray& bytes) {
+        QFile f(dir.path() + u'/' + QLatin1String(name));
+        EXPECT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(bytes);
+    };
+    write("plain.keyring", "[keyring]\ndisplay-name=Default keyring\n");
+    write("login.keyring", QByteArray("GnomeKeyring\n\r\0\n\0\0", 18));
+    EXPECT_EQ(kio::fileProtection(dir.path() + QStringLiteral("/plain.keyring"), ::getuid()), kio::Protection::Unprotected);
+    EXPECT_EQ(kio::fileProtection(dir.path() + QStringLiteral("/login.keyring"), ::getuid()), kio::Protection::Protected);
+    EXPECT_EQ(kio::fileProtection(dir.path() + QStringLiteral("/login.keyring"), ::getuid() + 1), kio::Protection::Unknown) << "another owner";
+    ASSERT_EQ(::symlink("plain.keyring", QFile::encodeName(dir.path() + QStringLiteral("/link.keyring")).constData()), 0);
+    EXPECT_EQ(kio::fileProtection(dir.path() + QStringLiteral("/link.keyring"), ::getuid()), kio::Protection::Unknown) << "a symlink";
+    ASSERT_EQ(::mkfifo(QFile::encodeName(dir.path() + QStringLiteral("/fifo.keyring")).constData(), 0600), 0);
+    EXPECT_EQ(kio::fileProtection(dir.path() + QStringLiteral("/fifo.keyring"), ::getuid()), kio::Protection::Unknown) << "not a regular file";
+    EXPECT_EQ(kio::fileProtection(dir.path() + QStringLiteral("/missing.keyring"), ::getuid()), kio::Protection::Unknown);
+}
+
+TEST(PrompterKio, TheCacheFindsByRealmAndUser) {
+    g_now = 1000;
+    kio::Cache    cache(fakeClock);
+    const QString key = QStringLiteral("sftp-h:-1");
+    cache.add(key, infoFor("sftp://h/", "alice", "", true), 0, 1, false);
+    cache.add(key, infoFor("sftp://h/", "bob", "Staff", true), 0, 2, false);
+    EXPECT_EQ(cache.size(), 2);
+    kio::CacheEntry* e = cache.find(key, infoFor("sftp://h/x", "", ""));
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->info.username, QStringLiteral("alice"));
+    EXPECT_EQ(e->seqNr, 1);
+    EXPECT_EQ(cache.find(key, infoFor("sftp://h/", "bob", "")), nullptr) << "another user for that realm";
+    e = cache.find(key, infoFor("sftp://h/", "", "Staff"));
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(e->info.username, QStringLiteral("bob"));
+    EXPECT_EQ(cache.find(QStringLiteral("sftp-h:22"), infoFor("sftp://h:22/")), nullptr) << "another key";
+    // verifyPath: the directory is always "/" (kpasswdserver's quirk), so any path matches, whatever the realm.
+    kio::AuthInfo byPath = infoFor("sftp://h/elsewhere/deep", "", "Other");
+    byPath.verifyPath    = true;
+    EXPECT_NE(cache.find(key, byPath), nullptr);
+    // The same realm replaces its entry.
+    cache.add(key, infoFor("sftp://h/", "carol", "", true), 0, 3, false);
+    EXPECT_EQ(cache.size(), 2);
+    EXPECT_EQ(cache.find(key, infoFor("sftp://h/"))->info.username, QStringLiteral("carol"));
+    cache.remove(key, QStringLiteral("Staff"));
+    EXPECT_EQ(cache.size(), 1);
+}
+
+TEST(PrompterKio, HowLongAnEntryLives) {
+    g_now = 1000;
+    kio::Cache    cache(fakeClock);
+    const QString key = QStringLiteral("ftp-h:-1");
+    // Neither kept nor tied to a window: 10 s after its last use.
+    cache.add(key, infoFor("ftp://h/", "a", "plain"), 0, 1, false);
+    // Kept (keepPassword) without a window: for the session.
+    cache.add(key, infoFor("ftp://h/", "b", "kept", true), 0, 1, false);
+    // Tied to a window: until the window closes, which nothing reports in a Grassfield session.
+    cache.add(key, infoFor("ftp://h/", "c", "window"), 42, 1, false);
+    g_now = 1009;
+    kio::CacheEntry* plain = cache.find(key, infoFor("ftp://h/", "", "plain"));
+    ASSERT_NE(plain, nullptr);
+    cache.touch(plain, 0, false); // a use: 10 s more
+    g_now = 1015;
+    EXPECT_NE(cache.find(key, infoFor("ftp://h/", "", "plain")), nullptr);
+    g_now = 1020;
+    EXPECT_EQ(cache.find(key, infoFor("ftp://h/", "", "plain")), nullptr) << "expired";
+    g_now = 1000000;
+    EXPECT_NE(cache.find(key, infoFor("ftp://h/", "", "kept")), nullptr);
+    kio::CacheEntry* window = cache.find(key, infoFor("ftp://h/", "", "window"));
+    ASSERT_NE(window, nullptr);
+    EXPECT_EQ(window->expire, kio::CacheEntry::Expire::WindowClose);
+    EXPECT_EQ(window->windows, QList<qint64>{42});
+    // A cancelled entry is never kept, whatever keepPassword says.
+    cache.add(key, infoFor("ftp://h/", "d", "cancelled", true), 0, 9, true);
+    kio::CacheEntry* cancelled = cache.find(key, infoFor("ftp://h/", "", "cancelled"));
+    ASSERT_NE(cancelled, nullptr);
+    EXPECT_TRUE(cancelled->canceled);
+    EXPECT_EQ(cancelled->expire, kio::CacheEntry::Expire::Time);
+    g_now += 11;
+    EXPECT_EQ(cache.find(key, infoFor("ftp://h/", "", "cancelled")), nullptr);
+}
+
+TEST(PrompterKio, RemoveAuthInfoAndTheBound) {
+    g_now = 1000;
+    kio::Cache cache(fakeClock, 3);
+    cache.add(QStringLiteral("sftp-h:-1"), infoFor("sftp://h/", "alice", "", true), 0, 1, false);
+    cache.add(QStringLiteral("sftp-alice@h:-1"), infoFor("sftp://alice@h/", "alice", "", true), 0, 1, false);
+    cache.add(QStringLiteral("ftp-h:-1"), infoFor("ftp://h/", "alice", "", true), 0, 1, false);
+    EXPECT_EQ(cache.removeMatching(QStringLiteral("h"), QStringLiteral("sftp"), QStringLiteral("bob")), 0);
+    EXPECT_EQ(cache.removeMatching(QStringLiteral("h"), QStringLiteral("sftp"), QString()), 2) << "any user, both sftp keys";
+    EXPECT_EQ(cache.size(), 1);
+    // At the bound: expired entries go first, then the oldest.
+    cache.add(QStringLiteral("a:-1"), infoFor("a://h/", "x"), 0, 1, false); // expires at 1010
+    cache.add(QStringLiteral("b:-1"), infoFor("b://h/", "x", "", true), 0, 1, false);
+    EXPECT_EQ(cache.size(), 3);
+    g_now = 1011;
+    cache.add(QStringLiteral("c:-1"), infoFor("c://h/", "x", "", true), 0, 1, false);
+    EXPECT_EQ(cache.size(), 3);
+    EXPECT_EQ(cache.find(QStringLiteral("a:-1"), infoFor("a://h/")), nullptr);
+    cache.add(QStringLiteral("d:-1"), infoFor("d://h/", "x", "", true), 0, 1, false);
+    EXPECT_EQ(cache.size(), 3);
+    EXPECT_EQ(cache.find(QStringLiteral("ftp-h:-1"), infoFor("ftp://h/")), nullptr) << "the oldest went";
+    EXPECT_NE(cache.find(QStringLiteral("d:-1"), infoFor("d://h/")), nullptr);
+}
+
+TEST(PrompterProtocol, AKioPromptCarriesTheServerTheLoginAndTheRequester) {
+    KioPromptView v;
+    v.id                   = QStringLiteral("p9");
+    v.requester.role       = QStringLiteral("kio");
+    v.requester.path       = QStringLiteral("/usr/lib/kf6/kioworker");
+    v.requester.identified = true;
+    v.requester.onBehalf   = true;
+    v.server               = QStringLiteral("example.org:2222");
+    v.name                 = QStringLiteral("alice");
+    v.nameMode             = QStringLiteral("edit");
+    v.realm                = QStringLiteral("Staff");
+    v.retry                = true;
+    v.remember             = QStringLiteral("on");
+    v.keyring              = QStringLiteral("unprotected");
+    const QByteArray line  = kioPromptMessage(v);
+    ASSERT_TRUE(line.endsWith('\n'));
+    EXPECT_EQ(line.count('\n'), 1);
+    const QJsonObject o = QJsonDocument::fromJson(line).object();
+    EXPECT_EQ(o.keys(), (QStringList{QStringLiteral("id"), QStringLiteral("kind"), QStringLiteral("login"), QStringLiteral("requester"), QStringLiteral("server"),
+                                     QStringLiteral("type")}));
+    EXPECT_EQ(o.value(QStringLiteral("kind")).toString(), QStringLiteral("kio"));
+    EXPECT_EQ(o.value(QStringLiteral("server")).toString(), QStringLiteral("example.org:2222"));
+    const QJsonObject r = o.value(QStringLiteral("requester")).toObject();
+    EXPECT_EQ(r.keys().size(), 7);
+    EXPECT_EQ(r.value(QStringLiteral("role")).toString(), QStringLiteral("kio"));
+    EXPECT_TRUE(r.value(QStringLiteral("onBehalf")).toBool());
+    const QJsonObject l = o.value(QStringLiteral("login")).toObject();
+    EXPECT_EQ(l.keys(), (QStringList{QStringLiteral("keyring"), QStringLiteral("name"), QStringLiteral("nameMode"), QStringLiteral("realm"), QStringLiteral("remember"),
+                                     QStringLiteral("retry")}));
+    EXPECT_EQ(l.value(QStringLiteral("name")).toString(), QStringLiteral("alice"));
+    EXPECT_TRUE(l.value(QStringLiteral("retry")).toBool());
+    EXPECT_EQ(l.value(QStringLiteral("remember")).toString(), QStringLiteral("on"));
+    EXPECT_EQ(l.value(QStringLiteral("keyring")).toString(), QStringLiteral("unprotected"));
 }

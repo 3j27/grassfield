@@ -6,7 +6,8 @@ import "../../shell/security/secret"
 // requester in Grassfield's words, never the caller's text (master-prompt R12, spec SC3, SC3b); the answers it hands to the
 // agent (once, never an empty unlock password, a new password typed twice alike); the holds of the polkit sheet; step 9c:
 // the Wi-Fi alert of a NetworkManager request (its sentence, who asked, Join's length rule, the name, Show password) and the
-// disk role of grassfield-askpass.
+// disk role of grassfield-askpass; step 9e: the server sheet of a KIO request (its sentence, who asked, the realm framed as
+// unverified, the name field's modes, Remember this password and the keyring's line, retry, Connect's rule).
 TestCase {
     id: test
     name: "SecretSheetModel"
@@ -271,5 +272,119 @@ TestCase {
         verify(!m.showPassword, "a new request starts hidden");
         m.cancel();
         compare(sent, [{ok: false, password: null, choice: false}]);
+    }
+
+    // --- step 9e: KIO's server sheet ---------------------------------------------------------------------------------------
+
+    function server(login, requester, serverName) {
+        test.serial++;
+        return {
+            id: "p9",
+            serial: test.serial,
+            kind: "kio",
+            requester: Object.assign({role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: true}, requester || {}),
+            texts: {title: "", message: "", description: "", warning: "", continueLabel: "", cancelLabel: ""},
+            choice: null,
+            passwordNew: false,
+            strength: false,
+            waited: false,
+            arrivedAt: new Date(),
+            server: serverName || "example.org",
+            login: Object.assign({name: "", nameMode: "edit", realm: "", retry: false, remember: "off", keyring: "protected"}, login || {})
+        };
+    }
+
+    function test_serverSheet() {
+        const m = createTemporaryObject(modelC, test, {request: server()});
+        verify(m.server);
+        verify(m.asksPassword);
+        verify(!m.network);
+        compare(m.title, "Enter your name and password for the server “example.org”.");
+        compare(m.requesterName, "KIO");
+        compare(m.requesterDetail, "Requested by KIO for an app");
+        compare(m.glyph, "globe");
+        verify(!m.hasCallerText, "no realm: no caller text");
+        verify(m.needsIdentity);
+        verify(!m.identityReadOnly);
+        verify(m.hasChoice);
+        compare(m.choiceLabel, "Remember this password", "Grassfield's label");
+        verify(!m.choice, "off at first");
+        compare(m.keyringNotice, "");
+        compare(m.error, "");
+    }
+
+    function test_serverRequesterIsTheBridges() {
+        const app = createTemporaryObject(modelC, test, {request: server({}, {role: "app", name: "Files", icon: "system-file-manager", onBehalf: false})});
+        compare(app.requesterDetail, "Requested by Files");
+        compare(app.glyph, "apps");
+        const stranger = createTemporaryObject(modelC, test, {request: server({}, {role: "unidentified", path: "/home/u/evil", identified: false, onBehalf: false})});
+        compare(stranger.requesterDetail, "Requested by an unidentified program");
+        compare(stranger.requesterPath, "/home/u/evil");
+        compare(stranger.glyph, "exclamationmark-triangle");
+        compare(stranger.title, "Enter your name and password for the server “example.org”.", "the server stays a field of Grassfield's sentence");
+    }
+
+    function test_serverRealmIsTheServersUnverifiedText() {
+        const m = createTemporaryObject(modelC, test, {request: server({realm: "Authentication required"})});
+        verify(m.hasCallerText);
+        compare(m.callerTitle, "Authentication required");
+        compare(m.callerIntro, "The server describes this login as follows. It is not verified:");
+        compare(m.title, "Enter your name and password for the server “example.org”.", "never the realm in the title's place");
+    }
+
+    function test_serverNameModes() {
+        const m = createTemporaryObject(modelC, test, {request: server({name: "alice", nameMode: "fixed"})});
+        verify(m.needsIdentity);
+        verify(m.identityReadOnly);
+        compare(m.identity, "alice");
+        verify(m.serverReady(1, 0), "a name shown only is not typed");
+        const sent = wired(m);
+        verify(m.submit("pw", null));
+        compare(sent, [{ok: true, password: "pw", choice: false}], "no name in the answer: the caller's stays");
+        m.request = server({nameMode: "none"});
+        verify(!m.needsIdentity);
+        compare(m.title, "Enter your password for the server “example.org”.");
+        compare(m.identity, "");
+    }
+
+    function test_serverConnectRule() {
+        const m = createTemporaryObject(modelC, test, {request: server({name: "alice", remember: "on"})});
+        compare(m.identity, "alice", "the caller's name (or the keyring's) as the name's first text");
+        verify(m.choice, "Remember on: the keyring holds one already");
+        verify(!m.serverReady(0, 5), "a password is needed");
+        verify(!m.serverReady(3, 0), "a name is needed");
+        verify(m.serverReady(1, 1));
+        const sent = wired(m);
+        m.identity = "";
+        verify(!m.submit("pw", null), "no name: nothing sent");
+        verify(m.error !== "");
+        verify(!m.submit("", null), "no password: nothing sent");
+        compare(sent.length, 0);
+        m.identity = "bob";
+        m.choice = false;
+        verify(m.submit("pw", null));
+        compare(sent, [{ok: true, password: "pw", choice: false, identity: "bob"}]);
+        verify(!m.submit("pw", null), "once");
+    }
+
+    function test_serverRetryAndKeyring() {
+        const m = createTemporaryObject(modelC, test, {request: server({retry: true, keyring: "unprotected"})});
+        compare(m.error, "The name or password was not accepted. Try again.", "Grassfield's words, never the worker's");
+        compare(m.keyringNotice, "Your keyring has no password: a password remembered here is stored unencrypted on this computer.");
+        m.request = server({keyring: "unknown"});
+        compare(m.error, "");
+        compare(m.keyringNotice, "", "nothing said when it cannot be known");
+        m.request = server({remember: "none", keyring: "unknown"});
+        verify(!m.hasChoice, "Remember not offered");
+        compare(m.choiceLabel, "");
+        const sent = wired(m);
+        m.identity = "bob";
+        m.cancel();
+        compare(sent, [{ok: false, password: null, choice: false}]);
+    }
+
+    function test_serverHeldNotice() {
+        const m = createTemporaryObject(modelC, test, {request: server()});
+        verify(m.heldNotice(new Date(), "server").indexOf("Click the alert to type your name and password: nothing typed elsewhere goes into it.") >= 0);
     }
 }

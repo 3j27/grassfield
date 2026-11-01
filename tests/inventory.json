@@ -412,6 +412,7 @@
  {"path": "tests/security/secret_bridge.sh", "layer": "headless"},
  {"path": "tests/security/nm_agent.sh", "layer": "headless"},
  {"path": "tests/security/askpass.sh", "layer": "headless"},
+ {"path": "tests/security/kio_passwd.sh", "layer": "headless"},
  {"path": "tests/security/tst_prompter.qml", "layer": "headless"},
  {"path": "tests/security/tst_sheetqueue.qml", "layer": "headless"},
  {"path": "tests/security/tst_secretsheetmodel.qml", "layer": "headless"},

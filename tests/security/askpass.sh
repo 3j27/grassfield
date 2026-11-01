@@ -221,7 +221,7 @@ trap 'exit 143' TERM
 bridge=${GRASSFIELD_PROMPTER:-}
 askpass=${GRASSFIELD_ASKPASS:-}
 if [[ -z $bridge || -z $askpass ]]; then
-  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 2>/dev/null || { echo "SKIP: askpass needs g++, Qt 6 Core and gcr-4"; exit 0; }
+  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 libsecret-1 2>/dev/null || { echo "SKIP: askpass needs g++, Qt 6 Core, gcr-4 and libsecret"; exit 0; }
   "$root/bridges/prompter/build-direct.sh" --out "$tmpb/bin" >"$tmpb/build.log" 2>&1 || { cat "$tmpb/build.log"; echo "FAIL: the bridge and the helper build"; exit 1; }
   bridge=${bridge:-$tmpb/bin/grassfield-prompter}
   askpass=${askpass:-$tmpb/bin/grassfield-askpass}

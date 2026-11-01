@@ -72,7 +72,7 @@ python3 -I -c 'import gi; gi.require_version("Gcr", "4"); from gi.repository imp
   || { echo "SKIP: prompter_bridge needs PyGObject with Gcr 4"; exit 0; }
 bridge=${GRASSFIELD_PROMPTER:-}
 if [[ -z $bridge ]]; then
-  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 2>/dev/null || { echo "SKIP: prompter_bridge needs g++, Qt 6 Core and gcr-4"; exit 0; }
+  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 libsecret-1 2>/dev/null || { echo "SKIP: prompter_bridge needs g++, Qt 6 Core, gcr-4 and libsecret"; exit 0; }
   "$root/bridges/prompter/build-direct.sh" --out "$tmp/bin" >"$tmp/build.log" 2>&1 || { cat "$tmp/build.log"; echo "FAIL: the bridge builds"; exit 1; }
   bridge=$tmp/bin/grassfield-prompter
 fi

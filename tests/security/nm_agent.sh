@@ -169,7 +169,7 @@ scenario_body() {
   desc="a shell that draws \"nm\" says hello: Register(\"org.grassfield.prompter\") from the bridge's own system bus connection"
   check wait_until 5 grep -qx "#register $agent_name org.grassfield.prompter" "$d/nm.nm"
   desc="...and the bridge's hello lists nm"
-  check has s shell '"kinds":\["password","confirm","nm"\]'
+  check has s shell '"kinds":\["password","confirm","nm","kio"\]'
 
   # --- 3 the four forms ------------------------------------------------------------------------------------------------
   local n
@@ -375,7 +375,7 @@ trap 'cleanup; rm -rf "$tmpb"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 if [[ -z $bridge ]]; then
-  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 2>/dev/null || { echo "SKIP: nm_agent needs g++, Qt 6 Core and gcr-4"; exit 0; }
+  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 libsecret-1 2>/dev/null || { echo "SKIP: nm_agent needs g++, Qt 6 Core, gcr-4 and libsecret"; exit 0; }
   "$root/bridges/prompter/build-direct.sh" --out "$tmpb/bin" >"$tmpb/build.log" 2>&1 || { cat "$tmpb/build.log"; echo "FAIL: the bridge builds"; exit 1; }
   bridge=$tmpb/bin/grassfield-prompter
 fi
