@@ -348,7 +348,7 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   - `tests/unit/tst_sharepicker.qml`.
   - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
 
-### Built in step 7b (ADR-0035 7-9 to 7-13)
+### Built in step 7b (ADR-0035 7-9 to 7-14)
 - **Selection (SP6):** a third tab (Cmd-3).
   - The chosen display's live preview, with a display chooser when there are several; a drag on it marks the area.
   - The area must be at least `panel.sharePickerMinArea` either way, and its size shows under the preview ("640 × 360 on DP-1").
@@ -357,10 +357,12 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
 - **The recording indicator (SP8):** a status item, `screen-share`, while xdph has a stream (a PipeWire video node named `xdg-desktop-portal-hyprland`); it never gives way when the status area is crowded.
   - Its menu has one row per share, named by what the picker chose for it ("Entire screen: DP-1", "Window: …", "Part of DP-1"), best effort: one new stream and one choice answered in the last 3 s. Otherwise "Screen or window" (a share an app restored with its token, or two at once).
   - Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) the indicator stays in view: its glyph on its own capsule of the band's glass at the bar's right inset, coming as the bar leaves and going as it comes back (7-14). It takes no click; the top edge brings the bar back.
 - **Tests:**
   - `tst_sharepicker.qml`.
   - `share_picker_ipc.sh`, cases 9-12 (11 with a private PipeWire and a stream made as xdph makes it, `share_picker_ipc.d/fake-xdph-stream.c`; 12 with the getprop answers held by gate files).
   - `share_picker_nested.sh`, check 5.
+  - `tst_barhide.qml`: the indicator while the bar is away (7-14).
   - The indicator in a real share (Chromium) is the integrator's.
 
 ### Known limitations
@@ -372,7 +374,8 @@ made through the portal only: a recorder that captures without it (wf-recorder, 
 (7-9), and any PipeWire client can light it by naming a video node after xdph (nothing is shared then). An area is drawn on a
 preview: about 3 logical pixels of a 1920-pixel display per preview pixel (7-10). A row of the indicator's menu can name another
 app's choice when an app restores a share with its token within 3 s of the picker answering a different app that has not
-started its stream yet (7-12).
+started its stream yet (7-12). While the bar is away the indicator's capsule is drawn on the display, so a share of that
+display shows it (7-14).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 

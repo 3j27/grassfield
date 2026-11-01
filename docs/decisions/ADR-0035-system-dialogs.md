@@ -878,6 +878,7 @@ Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first
 - **The indicator:** a status item in the menu bar (`menubar-screenshare`, glyph `screen-share`, popup kind `screenshare`, `ScreenShareMenu.qml`).
   - It shows while xdph has a stream (`sharingStreams`: video nodes whose `node.name` is xdph's program name, `xdg-desktop-portal-hyprland`) and never gives way when the status area is crowded.
   - Its menu has one row per stream. A row is named by the choice the picker answered within the last 3 s only when that stream is the one new stream and that choice the one waiting (`streamLabels`, best effort: 7-12); otherwise "Screen or window" (a share restored with a token, or two at once: review of step 7b, MINOR 2). Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) it stays in view on its own piece of the band's glass at the bar's right end, in the bar's own window, and takes no click (7-14).
 - **Tests:**
   - `tst_sharepicker.qml`: the area, the hidden windows, the streams and their labels.
   - `share_picker_ipc.sh`, cases 9-12:
@@ -886,8 +887,9 @@ Decisions of step 7a. Each was delegated by the owner on 2026-10-27 (macOS first
     - a request shown while the last one's query is held (gate files): no window answered while its own answers are not in, not even when the last one's arrive, then its own query runs and its windows are answered;
     - with a private PipeWire, a node named as xdph names its streams counted and labelled, then gone.
   - `share_picker_nested.sh`, check 5: an area of the nested display.
+  - `tst_barhide.qml`: the indicator's piece while the bar is away (7-14).
 
-Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no technical step for the user; 7-12 and 7-13 after its counter-review):
+Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no technical step for the user; 7-12 and 7-13 after its counter-review, 7-14 after the integrator's review of PR #83):
 - **7-9. What lights the screen-sharing indicator.**
   - Question: D-6 named Hyprland's `screencast` event. Hyprland 0.56.2 raises it for every capture protocol (`ScreenshareFrame.cpp:170`, through `ImageCopyCapture`, `Screencopy` and `ToplevelExport`), so the shell's own thumbnails raise it too: the Overview, the Dock's previews, and this picker's own thumbnails.
   - Options:
@@ -918,6 +920,15 @@ Decisions of step 7b (delegated by the owner on 2026-10-27: macOS first, no tech
   - Options: (a) keep refusing every window; (b) treat it as an answer that does not read: no window greyed, a warning in the shell's log.
   - **Choice: (b).**
   - Rule applied: 7-11's rule for an unreadable answer; Hyprland still blacks out a window that hides from capture in every capture, so nothing it hides is shared.
+- **7-14. The indicator over a full-screen window** (integrator's review of PR #83, MINOR 2; delegated by the owner on 2026-10-27).
+  - Question: the indicator is a status item of the menu bar, and the bar slides away over a full-screen window (the default, "In Full Screen Only") and on the desktop with "Always" or "On Desktop Only": an app that shares the screen in full screen hid the indicator with the bar. macOS keeps its privacy indicator in view while the menu bar is hidden.
+  - Options:
+    - (a) keep the whole bar in view while a share runs (it covers the top of the full-screen window, which macOS never does);
+    - (b) the indicator alone stays: its glyph on its own capsule of the band's glass at the bar's right inset, in the bar's own window (mapped for the whole session, on the overlay layer over a full-screen window, its content slid away), coming as the bar leaves and going as it comes back with its status item (`BarHide.pinnedIndicatorOpacity`); its blur is the bar's `BackgroundEffect` region; no new surface, no compositor or `config/hypr` change;
+    - (c) leave it, a known limitation with a follow-up.
+  - **Choice: (b).**
+  - Rule applied: macOS first, a privacy indicator stays visible whatever hides the menu bar; within the shell's existing surfaces and Hyprland's rules. The capsule takes no click: the bar's edge strip still brings the bar, and the status item with its menu, back.
+  - Cost: it sits at the bar's right inset, not where the status item sits in the bar; it is drawn on the display, so a share of that display shows it (as it shows the menu bar on the desktop). Its look in nested is not yet verified.
 
 ### D-7. A Grassfield print sheet for portal clients (category A; P11–P13; owner decision Q6)
 - `grassfield-portal` also serves `org.freedesktop.impl.portal.Print` (`PreparePrint`, `Print`), listed before `gtk`.

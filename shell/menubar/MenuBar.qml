@@ -455,6 +455,10 @@ Scope {
                 })
             readonly property bool away: autoHides && hideMachine.state === "hidden" && !AutoHide.forcing(hideInhibitors)
             readonly property real slideY: BarHide.slideOffset(Tokens.menubarHeight, AutoHide.ease(hideMachine.visible))
+            // The screen-sharing indicator stays in view when the bar goes (ADR-0035 7-14): over a full-screen window, or on the
+            // desktop with a bar that hides there, its own piece of the band at the bar's right end comes as the bar leaves and
+            // goes as it comes back with its status item, as macOS keeps its privacy indicator in the corner of a full-screen app.
+            readonly property real pinnedShareOpacity: BarHide.pinnedIndicatorOpacity(showScreenShare, AutoHide.ease(hideMachine.visible))
 
             // The Now Playing item went away (player closed, switched off in Settings): its open popover would act on nothing.
             onShowNowPlayingChanged: {
@@ -752,17 +756,38 @@ Scope {
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
-            BackgroundEffect.blurRegion: win.showBackground && material.blurActive && win.hideMachine.visible > 0 ? blurRegion : null
+            // The band while any of it is in view, the indicator's piece while it shows (ADR-0035 7-14), both during the slide.
+            BackgroundEffect.blurRegion: win.bandBlurred ? (win.pinnedBlurred ? bandAndPinnedRegion : blurRegion) : (win.pinnedBlurred ? pinnedRegion : null)
             // The bar, or only the top edge strip while it is away.
             mask: Region {
                 item: hitItem
             }
             // qmllint enable missing-type
 
+            readonly property bool bandBlurred: win.showBackground && material.blurActive && win.hideMachine.visible > 0
+            readonly property bool pinnedBlurred: pinnedShare.visible && pinnedShare.blurActive
+
             Region {
                 id: blurRegion
                 item: material
                 radius: material.radius
+            }
+
+            Region {
+                id: pinnedRegion
+                item: pinnedShare
+                radius: pinnedShare.radius
+            }
+
+            Region {
+                id: bandAndPinnedRegion
+                item: material
+                radius: material.radius
+
+                Region {
+                    item: pinnedShare
+                    radius: pinnedShare.radius
+                }
             }
 
             Item {
@@ -1254,6 +1279,37 @@ Scope {
                             }
                         }
                     }
+            }
+
+            // The screen-sharing indicator while the bar is away (pinnedShareOpacity, ADR-0035 7-14): the status item's glyph on
+            // a capsule of the band's glass, where a status item's capsule sits, at the bar's right inset. Never dimmed with an
+            // inactive display's bar; it takes no input (the edge strip still brings the bar, and its status item, back).
+            Material {
+                id: pinnedShare
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.menubarInsetRight - Tokens.menubarStatusItemPadding
+                y: Tokens.menubarHoverInsetTop
+                width: win.statusIconWidth
+                height: Tokens.menubarHeight - Tokens.menubarHoverInsetTop - Tokens.menubarHoverInsetBottom
+                radius: height / 2
+                opacity: win.pinnedShareOpacity
+                visible: win.pinnedShareOpacity > 0
+                glassClass: "menu"
+                backdropRect: Qt.rect(x, y, width, height)
+                tintAlphaOverride: win.band ? win.band.alpha : -1
+                tintColor: win.band ? win.band.colors.materialTint : Appearance.colors.materialTint
+                shadowEnabled: false
+                Accessible.role: Accessible.Indicator
+                Accessible.name: qsTr("Screen Sharing")
+                Accessible.ignored: !visible
+
+                Icon {
+                    anchors.centerIn: parent
+                    size: Tokens.menubarIconSize
+                    heavy: true
+                    color: win.barText
+                    name: "screen-share"
+                }
             }
         }
     }

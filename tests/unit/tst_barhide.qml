@@ -128,6 +128,24 @@ TestCase {
         compare(BarHide.slideOffset(barHeight, -3), -barHeight);
     }
 
+    // ADR-0035 7-14: while an app shares the screen, its indicator stays in view as the bar goes (over a full-screen window, or on
+    // the desktop with a bar that hides there): it comes as the bar slides away and goes as the bar comes back with its status
+    // item. Without a share nothing shows, the bar in view or not.
+    function test_theSharingIndicatorStaysWhenTheBarGoes() {
+        compare(BarHide.pinnedIndicatorOpacity(true, 0), 1, "the bar away: the indicator in full");
+        compare(BarHide.pinnedIndicatorOpacity(true, 1), 0, "the bar in view: its status item instead");
+        compare(BarHide.pinnedIndicatorOpacity(true, 0.25), 0.75, "it comes as the bar leaves");
+        compare(BarHide.pinnedIndicatorOpacity(true, -2), 1);
+        compare(BarHide.pinnedIndicatorOpacity(true, 3), 0);
+        for (const v of [0, 0.5, 1])
+            compare(BarHide.pinnedIndicatorOpacity(false, v), 0, "no share at " + v);
+        // Driven as MenuBar.qml drives it: the bar hidden over a full-screen window keeps the indicator in view.
+        const m = hiddenBar();
+        compare(m.state, "hidden");
+        compare(BarHide.pinnedIndicatorOpacity(true, AutoHide.ease(m.visible)), 1);
+        compare(BarHide.pinnedIndicatorOpacity(true, AutoHide.ease(AutoHide.create().visible)), 0);
+    }
+
     // ---- the machine with the bar's inhibitors ----
 
     function test_staysInViewWhileDisabled() {
