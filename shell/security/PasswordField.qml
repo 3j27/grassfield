@@ -26,8 +26,13 @@ FocusScope {
     property bool busy: false
     // Show the typed text (PAM/polkit prompts that are not secret, e.g. a user name).
     property bool reveal: false
+    // An empty field is handed over too (a secret sheet's new password: gcr's caller then offers to store passwords
+    // unencrypted, ADR-0035 D-9). Off for the lock and the authorization sheet: an empty field sends nothing there.
+    property bool allowEmpty: false
 
     readonly property bool empty: input.length === 0
+    // How many characters are typed (a new password's strength meter reads only this, never the text).
+    readonly property int length: input.length
     // Inferred from typed letters (see LockMachine.capsLockFromKey); false until known.
     readonly property bool capsLock: priv.caps
 
@@ -57,7 +62,7 @@ FocusScope {
             return;
         const secret = input.text;
         input.clear();
-        if (secret.length > 0)
+        if (secret.length > 0 || root.allowEmpty)
             root.submitted(secret);
     }
 

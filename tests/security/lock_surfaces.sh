@@ -363,8 +363,8 @@ expect("polkit sheet: a request open when the lock engages is held",
 expect("polkit sheet: a held request is not focused when it appears", re.search(r"if\s*\(shown\s*&&\s*!root\.heldByLock\)\s*dialog\.focusField\(\)", agent) is not None)
 expect("polkit sheet: the typed text is dropped when the lock hides it", re.search(r"onShownChanged:.*?clearRequested\(\)", agent, re.S) is not None)
 
-# Review of 2dfd992: no wall clock in shell/security. Every delay is a Qt Timer (monotonic); the only Date left is the
-# arrival time the held polkit sheet prints. Any other `Date` (Date.now, new Date, Date.parse), getTime, valueOf or
+# Review of 2dfd992: no wall clock in shell/security. Every delay is a Qt Timer (monotonic); the only Dates left are the
+# arrival times the held polkit and secret sheets print. Any other `Date` (Date.now, new Date, Date.parse), getTime, valueOf or
 # performance.now in the code (comments excluded) fails.
 import os
 def nocomments(text):
@@ -374,6 +374,9 @@ allowed_dates = {
     "shell/security/lock/LockView.qml": ["WallClock {\n        id: clock\n    }"],
     "shell/security/polkit/AuthAgent.qml": ["root.requestStartedAt = dialogModel.active ? new Date() : null;"],
     "shell/security/polkit/AuthDialogModel.qml": ["Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat))"],
+    # The secret sheets (ADR-0035 D-9, step 9b): the arrival time a held secret sheet prints, stamped once and only formatted.
+    "shell/security/secret/SecretAgent.qml": ["request.arrivedAt = new Date();"],
+    "shell/security/secret/SecretSheetModel.qml": ["Qt.formatTime(new Date(arrivedAt), Qt.locale().timeFormat(Locale.ShortFormat))"],
 }
 clock_hits = []
 for base, _, files in os.walk(f"{root}/shell/security"):
