@@ -124,6 +124,8 @@
 #                  refused while locked
 #   replace-shell  (with the shell) Replace Tiled Window from a member's popover by the keys: the picker shows on the Split
 #                  View Desktop and a Return picks the first window offered
+#   overview-drop  (with the shell; step 6e, the follow-up of #78) the Overview's own drop path (dev hook overview dropProbe)
+#                  refuses a window dropped on a Split View Desktop and a member dropped on another Desktop; nothing moves
 #   gather         (without the shell too) a headless output made, the window placed on its area with GF-REF's Desktop kept,
 #                  the output removed: the plugin logs it and centres it across GF-REF's work area; again while the foreign
 #                  locker holds the lock: it stays off every output until the unlock, then comes back (review of 7096305)
@@ -2332,6 +2334,40 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
           unsplit_ipc "0x$m8"
         done
         check "split replace shell: ended" split_gone "$next8" "$home"
+        tile_ipc "$addr3" previous
+        # The follow-up of #78 (D72): the Overview's own drop path (dev hook overview dropProbe, OverviewWindow.dropWindow)
+        # refuses a window dropped on a Split View Desktop and a member dropped on another Desktop; nothing moves.
+        ov() { timeout 5 "$root/tests/visual/ipc.sh" overview "$@" 2>>"$log"; }
+        next9=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+        split_ipc "$addr3" left
+        keys -k Return
+        sleep 1.5
+        close_shell_popup "overview drop picker"
+        if [[ $(desktop_of "$addr3") == "$next9" ]]; then
+          nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
+          sleep 1
+          ov open >/dev/null
+          sleep 1.5
+          check "overview drop: a window dropped on the Split View Desktop is refused" test "$(ov dropProbe "$addr" "$next9")" = refused
+          check "overview drop: it stays on its Desktop" test "$(desktop_of "$addr")" = "$home"
+          ov close >/dev/null
+          sleep 1
+          nestctl dispatch "hl.dsp.focus({ window = 'address:$addr3' })" >>"$log" 2>&1
+          sleep 1
+          ov open >/dev/null
+          sleep 1.5
+          check "overview drop: a member dropped on another Desktop is refused" test "$(ov dropProbe "$addr3" "$home")" = refused
+          check "overview drop: it stays in its half" test "$(desktop_of "$addr3")" = "$next9"
+          ov close >/dev/null
+          sleep 1
+        else
+          check "overview drop: the Split View Desktop $next9 was made for $addr3" false
+        fi
+        close_shell_popup "overview drop end"
+        for m9 in $(tiling_state | jq -r --argjson w "$next9" '[.splits[] | select(.workspace == $w) | .windows[]][]? // empty'); do
+          unsplit_ipc "0x$m9"
+        done
+        check "overview drop: the Split View ended" split_gone "$next9" "$home"
         tile_ipc "$addr3" previous
       fi
       surfaces_state

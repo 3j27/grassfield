@@ -361,6 +361,19 @@ Variants {
                 Compositor.moveGroupToSpace(win.byKey[key].address, win.tiles[index].id); // with its tile group (TL29)
         }
 
+        // Overview.dropProbe's share (a dev-session test hook; the follow-up of #78: the drop rule had no test past
+        // WindowTiling.dropAllowed): window `address` dropped on Desktop `spaceId` through this output's own drop path. "" when
+        // this output's Overview shows neither; else "moved" or "refused" (dropAllowed), dropWindow having run either way.
+        function probeDrop(address: string, spaceId: int): string {
+            const key = Object.keys(win.byKey).find(k => WindowTiling.hexAddress(k) === WindowTiling.hexAddress(address)) ?? "";
+            const index = win.tiles.findIndex(t => !t.plus && t.id === spaceId);
+            if (key === "" || index < 0)
+                return "";
+            const allowed = win.dropAllowed(key, index);
+            win.dropWindow(key, index);
+            return allowed ? "moved" : "refused";
+        }
+
         // Used by the controller's arrow-key navigation: the window next to `key` in a direction on this output ("" none).
         function neighborOf(key: string, dir: string): string {
             const rects = placement.rects;
