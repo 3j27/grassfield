@@ -6,7 +6,8 @@ import "../../apps/files/qml" as FilesQml
 // Files' finish (ADR-0039 step 23; audit §3.19): Increase Contrast and Text size reach Files; the toolbar's capsules and search
 // are step 14's rimmed capsule, the search with the shared ring outside it and a clear button; the path bar's segments take the
 // keyboard; the window's secondary text, the Customize Folder wells, the tags ring, the loading note in the view and the
-// preview pane's actions are read in the source (their hosts need the whole FilesApp). The column headers wait for #67.
+// preview pane's actions are read in the source (their hosts need the whole FilesApp). The list's sort keeps its keyboard path
+// in View > Sort By, as macOS (the headers are no Tab stops without Full Keyboard Access).
 TestCase {
     id: tc
 
@@ -179,8 +180,9 @@ TestCase {
     }
 
     function test_theWindowsSecondaryText_data() {
-        return ["AccessAlert", "BrowserWindow", "CustomizeFolderWindow", "FilePanel", "GalleryView", "IconView", "InfoWindow", "KioSheets",
-                "PathBar", "PreviewPane", "SearchCapsule", "Sidebar", "TabBar"].map(n => ({tag: n, path: "apps/files/qml/" + n + ".qml"}));
+        // ColumnView, FileList and PrintSheet followed once #67 merged.
+        return ["AccessAlert", "BrowserWindow", "ColumnView", "CustomizeFolderWindow", "FileList", "FilePanel", "GalleryView", "IconView",
+                "InfoWindow", "KioSheets", "PathBar", "PreviewPane", "PrintSheet", "SearchCapsule", "Sidebar", "TabBar"].map(n => ({tag: n, path: "apps/files/qml/" + n + ".qml"}));
     }
 
     function test_theWindowsSecondaryText(data) {

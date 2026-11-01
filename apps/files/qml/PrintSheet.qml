@@ -438,7 +438,7 @@ Window {
                 visible: sheet.keysHeld
                 textFormat: Text.PlainText
                 text: qsTr("Click the panel to use the keyboard in it.")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
             }
