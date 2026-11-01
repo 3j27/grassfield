@@ -182,6 +182,38 @@ TestCase {
         function sameUrl(a: url, b: url): bool {
             return String(a) === String(b);
         }
+        // Search, the Go menu and the file commands (ADR-0027, FP-75..FP-79): nothing searched or remembered here.
+        property var savedSearches: []
+        property var recentFolders: []
+        signal folderCompletions(string text, var matches)
+        function isFileSearch(target: url): bool {
+            return String(target).startsWith("grassfield-search:");
+        }
+        function searchQuery(target: url): var {
+            const t = String(target);
+            if (!t.startsWith("grassfield-search:"))
+                return {valid: false};
+            return {valid: true, text: decodeURIComponent(t.substring(t.indexOf("q=") + 2)), folder: "", criteria: []};
+        }
+        function searchUrl(query: var): url {
+            return "grassfield-search:/?q=" + encodeURIComponent(query.text || "");
+        }
+        function noteFolder(target: url): void {
+        }
+        function completeFolder(text: string, base: url): void {
+        }
+        function completedText(text: string, base: url, match: string): string {
+            return text;
+        }
+        function standardFolder(which: string): url {
+            return "";
+        }
+        function placeShortcut(kind: string, target: url): string {
+            return "";
+        }
+        function linkTarget(target: url): url {
+            return "";
+        }
         function isRecents(target: url): bool {
             return false;
         }
@@ -389,6 +421,30 @@ TestCase {
 
     // Opening in the Applications location starts the application (double-click, File > Open, Ctrl+Down) and never hands the
     // virtual url to FilesApp.open; in a folder of files nothing is launched.
+    // Search as you type (ADR-0027): the search location comes once typing rests, a refinement replaces it in the history,
+    // and emptying the field goes back to the folder the search started from.
+    function test_searchAsYouType() {
+        const files = test.openFiles(false);
+        const tab = files.windows[0].tab;
+        const start = String(tab.url);
+        const depth = tab.history.length;
+        tab.setSearch("aq");
+        compare(String(tab.url), start, "nothing until typing rests");
+        tryCompare(tab, "fileSearch", true, 2000);
+        compare(tab.searchText, "aq");
+        compare(String(tab.searchOrigin), start, "the folder it started from");
+        compare(tab.history.length, depth + 1, "one entry for the search");
+        tab.setSearch("aqua");
+        tryVerify(() => String(tab.url).endsWith("q=aqua"), 2000, "refined in place");
+        compare(tab.history.length, depth + 1, "no new entry per refinement");
+        compare(tab.searchText, "aqua", "the field keeps what was typed");
+        tab.setSearch("");
+        compare(String(tab.url), start, "emptied: back to the folder");
+        verify(!tab.fileSearch);
+        compare(tab.history.length, depth, "the search left the history");
+        compare(tab.searchText, "");
+    }
+
     function test_applicationsLaunchAndFilesOpen() {
         const files = test.openFiles(false);
         const tab = files.windows[0].tab;

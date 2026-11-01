@@ -108,6 +108,12 @@ Platform.MenuBar {
             enabled: bar.keysHere && bar.writable && !bar.inTrash
             onTriggered: bar.tab.newFolder()
         }
+        Platform.MenuItem {
+            text: bar.count > 1 ? qsTr("New Folder with Selection (%1 Items)").arg(bar.count) : qsTr("New Folder with Selection")
+            shortcut: "Ctrl+Meta+N"
+            enabled: bar.keysHere && bar.writable && bar.count > 0 && !bar.inTrash && !bar.folder.isSearch
+            onTriggered: bar.tab.newFolderWithSelection()
+        }
         // A smart folder: an empty search in a new window, its rules added with + (ADR-0027).
         Platform.MenuItem {
             text: qsTr("New Smart Folder")
@@ -200,16 +206,33 @@ Platform.MenuBar {
             onTriggered: bar.tab.customizeSelection()
         }
         Platform.MenuItem {
-            text: qsTr("Rename")
-            shortcut: "F2"
-            enabled: bar.keysHere && bar.count === 1 && bar.editable
-            onTriggered: bar.tab.renameSelection()
+            text: bar.count > 1 ? qsTr("Rename %1 Items…").arg(bar.count) : qsTr("Rename")
+            shortcut: bar.count > 1 ? "" : "F2"
+            enabled: bar.keysHere && bar.count > 0 && bar.editable
+            onTriggered: bar.count > 1 ? bar.win.renameItems(bar.tab.selection(), bar.folder) : bar.tab.renameSelection()
+        }
+        Platform.MenuItem {
+            text: bar.count > 1 ? qsTr("Compress %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Compress “%1”").arg(bar.firstName) : qsTr("Compress")
+            enabled: bar.keysHere && bar.count > 0 && !bar.inTrash && bar.folder !== null && !bar.folder.isSearch && String(bar.folder.url).startsWith("file:")
+            onTriggered: bar.app.compress(bar.tab.selection(), bar.folder)
         }
         Platform.MenuItem {
             text: qsTr("Duplicate")
             shortcut: "Ctrl+D"
             enabled: bar.keysHere && bar.count > 0 && bar.writable && !bar.inTrash
             onTriggered: bar.tab.duplicateSelection()
+        }
+        Platform.MenuItem {
+            text: qsTr("Make Alias")
+            shortcut: "Ctrl+Meta+A"
+            enabled: bar.keysHere && bar.count > 0 && bar.writable && !bar.inTrash && String(bar.folder.url).startsWith("file:")
+            onTriggered: bar.app.makeAlias(bar.tab.selection(), bar.folder)
+        }
+        Platform.MenuItem {
+            text: qsTr("Show Original")
+            shortcut: "Ctrl+R"
+            enabled: bar.keysHere && bar.count === 1 && String(bar.app.linkTarget(bar.tab.selection()[0])) !== ""
+            onTriggered: bar.tab.showOriginal()
         }
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Glance at %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Glance at “%1”").arg(bar.firstName) : qsTr("Glance")
@@ -296,6 +319,13 @@ Platform.MenuBar {
             shortcut: "Ctrl+C"
             enabled: bar.keysHere && bar.count > 0
             onTriggered: bar.tab.copySelection(false)
+        }
+        // Finder's Copy as Pathname (⌥⌘C; the Finder shows it while ⌥ is held): the paths as text.
+        Platform.MenuItem {
+            text: bar.count > 1 ? qsTr("Copy %1 Items as Pathnames").arg(bar.count) : qsTr("Copy as Pathname")
+            shortcut: "Ctrl+Alt+C"
+            enabled: bar.keysHere && bar.count > 0
+            onTriggered: bar.app.copyPaths(bar.tab.selection())
         }
         Platform.MenuItem {
             text: bar.app.clipboardCount > 1 ? qsTr("Paste %1 Items").arg(bar.app.clipboardCount) : qsTr("Paste")

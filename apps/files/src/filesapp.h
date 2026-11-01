@@ -21,6 +21,7 @@
 #include "folderstylestore.h"
 #include "folderviews.h"
 #include "savedsearches.h"
+#include "archivejob.h"
 #include "tagstore.h"
 
 #include <functional>
@@ -252,6 +253,29 @@ public:
     // never from a look at the disk on the GUI thread).
     Q_INVOKABLE void makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback);
     Q_INVOKABLE void rename(const QUrl &url, const QString &newName, QObject *folder);
+
+    // File commands (docs/specs/files.md FP-54..FP-59, FP-64, FP-79). Make Alias: a symbolic link "<name> alias" next to
+    // each local item, to its absolute path (a macOS alias survives a move; a link does not: limit). Show Original: the
+    // item a local link points to (invalid when it is no link or its target is gone).
+    Q_INVOKABLE void makeAlias(const QList<QUrl> &urls, QObject *folder);
+    Q_INVOKABLE QUrl linkTarget(const QUrl &url) const;
+    // New Folder with Selection: "New Folder With Items" in `directory` (every item must be in it), the items moved into
+    // it through KIO (undoable), then the new folder renamed in place.
+    Q_INVOKABLE void newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory, QObject *folder);
+    // Copy as Pathname: the local paths, one per line, as text.
+    Q_INVOKABLE void copyPaths(const QList<QUrl> &urls);
+    // New Terminal at Folder (decision F-7): the session's terminal (xdg-terminal-exec) opened in a local folder. Nothing
+    // of the folder is run: the terminal is an application the user chose.
+    Q_INVOKABLE void openTerminal(const QUrl &folder);
+    // Rename N Items (RenameLogic): options {mode, find, replaceWith, addText, where, format, customFormat, startAt}. The
+    // preview is the new names; renameItems returns "" or why nothing was renamed.
+    Q_INVOKABLE QStringList renamePreview(const QList<QUrl> &urls, const QVariantMap &options) const;
+    Q_INVOKABLE QString renameItems(const QList<QUrl> &urls, const QVariantMap &options, QObject *folder);
+    // Compress and Expand (ADR-0029, ArchiveJob): local items of one folder into a zip there; an archive next to itself.
+    Q_INVOKABLE bool isArchive(const QUrl &url) const;
+    Q_INVOKABLE void compress(const QList<QUrl> &urls, QObject *folder);
+    Q_INVOKABLE void expand(const QUrl &archive, QObject *folder);
+    Q_INVOKABLE void cancelArchives();
     Q_INVOKABLE void duplicate(const QList<QUrl> &urls, QObject *folder);
     // Drag and drop: move on the same filesystem, copy across filesystems or with Ctrl/Alt held.
     Q_INVOKABLE void drop(const QList<QUrl> &urls, const QUrl &destination, QObject *folder);
@@ -459,6 +483,9 @@ private:
     QString m_activity;
     int m_activityPercent = -1;
     QList<QPointer<KJob>> m_jobs;
+    QList<QPointer<ArchiveJob>> m_archiveJobs;
+    void startArchiveJob(ArchiveJob *job, const QString &activity, QObject *folder);
+    void archiveActivityEnded();
     QStringList m_knownTags;
     // Tags removed from the sidebar (not listed again when seen), persisted as tags/hidden.
     QStringList m_hiddenTags;

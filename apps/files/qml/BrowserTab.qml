@@ -689,6 +689,31 @@ FocusScope {
             root.app.glance(urls);
     }
 
+    // File > Show Original (⌘R): the item a selected alias (a symbolic link) points to, selected in its folder.
+    function showOriginal(): void {
+        const urls = root.selection();
+        if (urls.length !== 1)
+            return;
+        const target = root.app.linkTarget(urls[0]);
+        if (String(target) === "") {
+            root.win.showNotice(qsTr("The original item can’t be found."));
+            return;
+        }
+        const s = String(target);
+        const parent = s.substring(0, s.lastIndexOf("/"));
+        root.navigate(Qt.url(parent === "file://" ? "file:///" : parent), true);
+        root.folder.expect(target, false);
+    }
+
+    // File > New Folder with Selection (⌃⌘N): the selected items moved into a new folder, then renamed in place.
+    function newFolderWithSelection(): void {
+        const m = root.activeFolder;
+        const urls = root.selection();
+        if (urls.length === 0 || !m || !m.writable || m.isSearch)
+            return;
+        root.app.newFolderWithItems(urls, m.url, m);
+    }
+
     function showInEnclosingFolder(): void {
         const urls = root.selection();
         if (urls.length === 0)
@@ -954,11 +979,23 @@ FocusScope {
         items.push({id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")});
         if (rows.every(r => model.isDirAt(r)))
             items.push({id: "customize", text: qsTr("Customize Folder…"), enabled: root.app.folderStyleUnavailable(model.selectedUrls()) === ""});
-        items.push({id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: count === 1 && editable});
+        // Finder's order: Rename (Rename N Items… for several), Compress, Duplicate, Make Alias, Glance.
+        if (count > 1)
+            items.push({id: "renameItems", text: qsTr("Rename %1 Items…").arg(count), enabled: editable});
+        else
+            items.push({id: "rename", text: qsTr("Rename"), shortcut: qsTr("F2"), enabled: count === 1 && editable});
+        const local = model.selectedUrls().every(u => String(u).startsWith("file:"));
+        items.push({id: "compress", text: count === 1 ? qsTr("Compress “%1”").arg(name) : qsTr("Compress %1 Items").arg(count), enabled: local && !model.isSearch});
         items.push({id: "duplicate", text: qsTr("Duplicate"), shortcut: qsTr("Ctrl+D"), enabled: model.writable});
+        items.push({id: "alias", text: qsTr("Make Alias"), shortcut: qsTr("Ctrl+Super+A"), enabled: local && model.writable});
+        if (count === 1 && String(root.app.linkTarget(model.selectedUrls()[0])) !== "")
+            items.push({id: "showOriginal", text: qsTr("Show Original"), shortcut: qsTr("Ctrl+R")});
         items.push({id: "glance", text: count === 1 ? qsTr("Glance at “%1”").arg(name) : qsTr("Glance at %1 Items").arg(count), shortcut: qsTr("Space")});
+        if (count > 1 && model.writable && !model.isSearch)
+            items.push({id: "newFolderWithItems", text: qsTr("New Folder with Selection (%1 Items)").arg(count), shortcut: qsTr("Ctrl+Super+N")});
         items.push({separator: true});
         items.push({id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")});
+        items.push({id: "copyPath", text: count === 1 ? qsTr("Copy “%1” as Pathname").arg(name) : qsTr("Copy %1 Items as Pathnames").arg(count), shortcut: qsTr("Ctrl+Alt+C")});
         items.push({id: "cut", text: qsTr("Cut"), shortcut: qsTr("Ctrl+X"), enabled: editable});
         // Colour tags (macOS: a row of colour dots under the edit items).
         items.push({separator: true});
@@ -966,6 +1003,11 @@ FocusScope {
         if ((root.chooser && root.searchText !== "") || model.isSearch) {
             items.push({separator: true});
             items.push({id: "enclosing", text: qsTr("Show in Enclosing Folder")});
+        }
+        // Services (the app menu's Services is the shell's, decision F-10): a terminal in a local folder (decision F-7).
+        if (count === 1 && model.isDirAt(first) && local) {
+            items.push({separator: true});
+            items.push({id: "services", text: qsTr("Services"), submenu: [{id: "terminal", text: qsTr("New Terminal at Folder")}]});
         }
         return items;
     }
@@ -993,6 +1035,10 @@ FocusScope {
         items.push(root.sortSubmenu());
         items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+Shift+."), checked: root.app.showHidden});
         items.push({id: "preview", text: root.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview"), shortcut: qsTr("Ctrl+Shift+P")});
+        if (String(model.url).startsWith("file:")) {
+            items.push({separator: true});
+            items.push({id: "services", text: qsTr("Services"), submenu: [{id: "terminalHere", text: qsTr("New Terminal at Folder")}]});
+        }
         return items;
     }
 
@@ -1152,6 +1198,30 @@ FocusScope {
             break;
         case "enclosing":
             root.showInEnclosingFolder();
+            break;
+        case "renameItems":
+            root.win.renameItems(model.selectedUrls(), model);
+            break;
+        case "compress":
+            root.app.compress(model.selectedUrls(), model);
+            break;
+        case "alias":
+            root.app.makeAlias(model.selectedUrls(), model);
+            break;
+        case "showOriginal":
+            root.showOriginal();
+            break;
+        case "newFolderWithItems":
+            root.newFolderWithSelection();
+            break;
+        case "copyPath":
+            root.app.copyPaths(model.selectedUrls());
+            break;
+        case "terminal":
+            root.app.openTerminal(model.selectedUrls()[0]);
+            break;
+        case "terminalHere":
+            root.app.openTerminal(model.url);
             break;
         case "hidden":
             root.app.showHidden = !root.app.showHidden;

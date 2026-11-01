@@ -551,9 +551,34 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
+        // Finder's Show Original (⌘R) when one alias is selected; otherwise Ctrl+R reloads, as F5 (the PC habit).
         sequences: ["Ctrl+R", "F5"]
         enabled: !win.childIsKey
-        onActivated: win.tab.folder.reload()
+        onActivated: {
+            const urls = win.tab.selection();
+            if (urls.length === 1 && String(win.app.linkTarget(urls[0])) !== "")
+                win.tab.showOriginal();
+            else
+                win.tab.folder.reload();
+        }
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Meta+A"
+        enabled: !win.childIsKey && win.folder !== null && win.folder.selectedCount > 0
+        onActivated: win.app.makeAlias(win.tab.selection(), win.folder)
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Meta+N"
+        enabled: !win.childIsKey
+        onActivated: win.tab.newFolderWithSelection()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+C"
+        enabled: !win.childIsKey && win.folder !== null && win.folder.selectedCount > 0
+        onActivated: win.app.copyPaths(win.tab.selection())
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -991,6 +1016,137 @@ Window {
         destructive: true
     }
 
+    // Rename N Items… (FP-57, the Finder's sheet): Replace Text, Add Text or Format, with the first new name as example.
+    property var renameUrls: []
+    property var renameModel: null
+    function renameItems(urls: var, model: var): void {
+        if (urls.length === 0)
+            return;
+        win.renameUrls = urls;
+        win.renameModel = model;
+        renameMode.value = "0";
+        renameFind.text = "";
+        renameWith.text = "";
+        renameAdd.text = "";
+        renameCustom.text = "";
+        renameStart.text = "1";
+        renameSheet.open();
+        renameFind.forceActiveFocus();
+    }
+
+    readonly property var renameOptions: ({
+        mode: parseInt(renameMode.value), find: renameFind.text, replaceWith: renameWith.text, addText: renameAdd.text,
+        where: parseInt(renameWhere.value), format: parseInt(renameFormat.value), customFormat: renameCustom.text,
+        startAt: parseInt(renameStart.text) || 0
+    })
+
+    Sheet {
+        id: renameSheet
+        title: qsTr("Rename %1 Items").arg(win.renameUrls.length)
+        confirmText: qsTr("Rename")
+        focusBack: win.tab ? win.tab.view : null
+        confirmHandler: () => win.app.renameItems(win.renameUrls, win.renameOptions, win.renameModel)
+
+        Column {
+            spacing: Tokens.spacingSm
+
+            ComboBox {
+                id: renameMode
+                accessibleName: qsTr("Rename")
+                model: [{id: "0", text: qsTr("Replace Text")}, {id: "1", text: qsTr("Add Text")}, {id: "2", text: qsTr("Format")}]
+                value: "0"
+                onPicked: id => renameMode.value = id
+            }
+
+            Row {
+                visible: renameMode.value === "0"
+                spacing: Tokens.spacingSm
+                TextField {
+                    id: renameFind
+                    width: Tokens.filesCriteriaValueWidth
+                    placeholderText: qsTr("Find")
+                    accessibleName: qsTr("Find")
+                }
+                TextField {
+                    id: renameWith
+                    width: Tokens.filesCriteriaValueWidth
+                    placeholderText: qsTr("Replace with")
+                    accessibleName: qsTr("Replace with")
+                }
+            }
+
+            Row {
+                visible: renameMode.value === "1"
+                spacing: Tokens.spacingSm
+                TextField {
+                    id: renameAdd
+                    width: Tokens.filesCriteriaValueWidth
+                    placeholderText: qsTr("Text")
+                    accessibleName: qsTr("Text to add")
+                }
+                ComboBox {
+                    id: renameWhere
+                    accessibleName: qsTr("Where")
+                    model: [{id: "0", text: qsTr("after name")}, {id: "1", text: qsTr("before name")}]
+                    value: "0"
+                    onPicked: id => renameWhere.value = id
+                }
+            }
+
+            Column {
+                visible: renameMode.value === "2"
+                spacing: Tokens.spacingSm
+                Row {
+                    spacing: Tokens.spacingSm
+                    ComboBox {
+                        id: renameFormat
+                        accessibleName: qsTr("Name Format")
+                        model: [{id: "0", text: qsTr("Name and Index")}, {id: "1", text: qsTr("Name and Counter")}, {id: "2", text: qsTr("Name and Date")}]
+                        value: "0"
+                        onPicked: id => renameFormat.value = id
+                    }
+                    ComboBox {
+                        accessibleName: qsTr("Where")
+                        model: renameWhere.model
+                        value: renameWhere.value
+                        onPicked: id => renameWhere.value = id
+                    }
+                }
+                Row {
+                    spacing: Tokens.spacingSm
+                    TextField {
+                        id: renameCustom
+                        width: Tokens.filesCriteriaValueWidth
+                        placeholderText: qsTr("Custom Format")
+                        accessibleName: qsTr("Custom Format")
+                    }
+                    TextField {
+                        id: renameStart
+                        width: Tokens.filesCriteriaValueWidth / 2
+                        visible: renameFormat.value !== "2"
+                        placeholderText: qsTr("Start at")
+                        accessibleName: qsTr("Start numbers at")
+                        inputMethodHints: Qt.ImhDigitsOnly
+                        validator: IntValidator {
+                            bottom: 0
+                        }
+                    }
+                }
+            }
+
+            Text {
+                textFormat: Text.PlainText
+                width: Tokens.filesGoPanelWidth - 2 * Tokens.spacingLg
+                elide: Text.ElideMiddle
+                readonly property var preview: renameSheet.shown ? win.app.renamePreview(win.renameUrls.slice(0, 1), win.renameOptions) : []
+                text: qsTr("Example: %1").arg(preview.length > 0 ? DisplayName.text(preview[0]) : "")
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+            }
+        }
+    }
+
     // Save (the scope bar): a name and Add To Sidebar (the Finder's Save sheet; its Where pop-up has one place here, the
     // saved searches folder, so it is not shown). A name in use asks once; saving it again replaces that search.
     function openSaveSearch(): void {
@@ -1034,7 +1190,7 @@ Window {
     // confirmation or a menu is open, and comes after.
     KioSheets {
         prompts: win.app.prompts ?? null
-        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !menuLayer.visible
+        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !renameSheet.shown && !menuLayer.visible
         focusBack: win.tab ? win.tab.view : null
     }
 

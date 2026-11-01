@@ -1,5 +1,6 @@
 #include "filesapp.h"
 #include "applicationslogic.h"
+#include "archivelogic.h"
 #include "appscope.h"
 #include "chromecaps.h"
 #include "autoappearance.h"
@@ -13,6 +14,7 @@
 #include "kioprompts.h"
 #include "placesmodel.h"
 #include "recents.h"
+#include "renamelogic.h"
 #include "searchlogic.h"
 #include "taglogic.h"
 #include "tagstore.h"
@@ -810,6 +812,16 @@ void FilesApp::open(const QList<QUrl> &urls)
         emit operationFailed(tr("“%1” was not opened: it is a program or script, and Files never runs programs from a folder. To run it on purpose, use a terminal.").arg(FileLogic::displayName(refusedName)));
     else if (refused > 1)
         emit operationFailed(tr("%1 items were not opened: Files never runs programs, scripts or app launchers from a folder.").arg(refused));
+    // An archive opens by expanding next to itself (the Finder's Archive Utility, ADR-0029); Open With still offers the
+    // applications that read it.
+    for (auto it = allowed.begin(); it != allowed.end();) {
+        if (isArchive(*it) && QFileInfo(it->toLocalFile()).isFile()) {
+            expand(*it, nullptr);
+            it = allowed.erase(it);
+        } else {
+            ++it;
+        }
+    }
     if (allowed.isEmpty() && webLinks.isEmpty())
         return;
     if (launchingBlocked()) {
@@ -1204,6 +1216,240 @@ void FilesApp::newFolder(const QUrl &directory, QObject *folder)
         if (auto *f = asFolder(target))
             f->expect(url, true);
     });
+}
+
+void FilesApp::makeAlias(const QList<QUrl> &urls, QObject *folder)
+{
+    if (refuseApplicationItems(urls))
+        return;
+    QPointer<QObject> target = folder;
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile()) {
+            emit operationFailed(tr("Aliases can only be made of items on this computer."));
+            continue;
+        }
+        const QFileInfo info(url.toLocalFile());
+        const QString dir = info.absolutePath();
+        // The Finder's "report.txt alias", "report.txt alias 2"…
+        const QString name = FileLogic::uniqueName(tr("%1 alias").arg(info.fileName()), [&dir](const QString &n) {
+            return QFileInfo::exists(dir + QLatin1Char('/') + n) || QFileInfo(dir + QLatin1Char('/') + n).isSymLink();
+        });
+        const QString link = dir + QLatin1Char('/') + name;
+        if (!QFile::link(info.absoluteFilePath(), link)) {
+            emit operationFailed(tr("The alias of “%1” couldn’t be made here.").arg(FileLogic::displayName(info.fileName())));
+            continue;
+        }
+        if (auto *f = asFolder(target))
+            f->expect(QUrl::fromLocalFile(link), false);
+    }
+}
+
+QUrl FilesApp::linkTarget(const QUrl &url) const
+{
+    if (!url.isLocalFile())
+        return {};
+    const QFileInfo info(url.toLocalFile());
+    if (!info.isSymLink())
+        return {};
+    const QString target = info.symLinkTarget();
+    return !target.isEmpty() && QFileInfo::exists(target) ? QUrl::fromLocalFile(target) : QUrl();
+}
+
+void FilesApp::newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory, QObject *folder)
+{
+    if (urls.isEmpty() || refuseApplicationItems(urls) || refuseApplicationItems({directory}))
+        return;
+    for (const QUrl &url : urls) {
+        if (!sameUrl(url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash), directory)) {
+            emit operationFailed(tr("New Folder with Selection needs items of the shown folder."));
+            return;
+        }
+    }
+    const QString name = FileLogic::uniqueName(tr("New Folder With Items"), [&directory](const QString &n) { return nameTaken(directory, n); });
+    const QUrl url = childUrl(directory, name);
+    KIO::MkdirJob *mkdir = KIO::mkdir(url);
+    attachDelegate(mkdir);
+    KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Mkdir, {}, url, mkdir);
+    QPointer<QObject> target = folder;
+    connect(mkdir, &KJob::result, this, [this, mkdir, urls, url, target] {
+        if (mkdir->error()) {
+            emit operationFailed(mkdir->errorString());
+            return;
+        }
+        if (url.isLocalFile())
+            m_folderStyles.dropEntry(url.toLocalFile());
+        KIO::CopyJob *move = KIO::move(urls, url);
+        attachDelegate(move);
+        KIO::FileUndoManager::self()->recordCopyJob(move);
+        track(move, tr("Moving…"));
+        connect(move, &KJob::result, this, [move, url, target] {
+            if (!move->error()) {
+                if (auto *f = asFolder(target))
+                    f->expect(url, true);
+            }
+        });
+    });
+}
+
+void FilesApp::copyPaths(const QList<QUrl> &urls)
+{
+    QStringList paths;
+    for (const QUrl &url : urls)
+        paths << (url.isLocalFile() ? url.toLocalFile() : url.toDisplayString(QUrl::RemovePassword | QUrl::PreferLocalFile));
+    if (!paths.isEmpty())
+        QGuiApplication::clipboard()->setText(paths.join(QLatin1Char('\n')));
+}
+
+void FilesApp::openTerminal(const QUrl &folder)
+{
+    if (!folder.isLocalFile() || !QFileInfo(folder.toLocalFile()).isDir()) {
+        emit operationFailed(tr("A terminal can only open in a folder on this computer."));
+        return;
+    }
+    if (launchingBlocked()) {
+        emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
+        return;
+    }
+    // Decision F-7: the session's terminal, never KIO's konsole lookup; the folder is only its working directory.
+    const QStringList argv = grassfield::apps::scopedCommand(QStringLiteral("xdg-terminal-exec"), {}, grassfield::apps::scopedLaunch());
+    QProcess process;
+    process.setProgram(argv.first());
+    process.setArguments(argv.mid(1));
+    process.setWorkingDirectory(folder.toLocalFile());
+    if (!process.startDetached())
+        emit operationFailed(tr("The terminal couldn’t be started (xdg-terminal-exec)."));
+}
+
+namespace
+{
+RenameLogic::Options renameOptions(const QVariantMap &map)
+{
+    RenameLogic::Options o;
+    o.mode = RenameLogic::Mode(qBound(0, map.value(QStringLiteral("mode")).toInt(), 2));
+    o.find = map.value(QStringLiteral("find")).toString();
+    o.replaceWith = map.value(QStringLiteral("replaceWith")).toString();
+    o.addText = map.value(QStringLiteral("addText")).toString();
+    o.where = RenameLogic::Where(qBound(0, map.value(QStringLiteral("where")).toInt(), 1));
+    o.format = RenameLogic::Format(qBound(0, map.value(QStringLiteral("format")).toInt(), 2));
+    o.customFormat = map.value(QStringLiteral("customFormat")).toString();
+    o.startAt = qBound(0, map.value(QStringLiteral("startAt"), 1).toInt(), 1000000000);
+    return o;
+}
+} // namespace
+
+QStringList FilesApp::renamePreview(const QList<QUrl> &urls, const QVariantMap &options) const
+{
+    QStringList names;
+    QList<bool> dirs;
+    for (const QUrl &url : urls) {
+        names << url.fileName();
+        dirs << (url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir());
+    }
+    return RenameLogic::newNames(names, dirs, renameOptions(options), QDateTime::currentDateTime());
+}
+
+QString FilesApp::renameItems(const QList<QUrl> &urls, const QVariantMap &options, QObject *folder)
+{
+    if (refuseApplicationItems(urls))
+        return tr("Applications can’t be renamed here.");
+    QStringList names;
+    QStringList folders;
+    for (const QUrl &url : urls) {
+        names << url.fileName();
+        folders << url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).toString();
+    }
+    const QStringList next = renamePreview(urls, options);
+    QString which;
+    switch (RenameLogic::check(names, next, folders, &which)) {
+    case RenameLogic::Problem::None:
+        break;
+    case RenameLogic::Problem::InvalidName:
+        return tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(FileLogic::displayName(which));
+    case RenameLogic::Problem::Duplicate:
+        return tr("Two items would both be named “%1”.").arg(FileLogic::displayName(which));
+    case RenameLogic::Problem::TakenInBatch:
+        return tr("The name “%1” is taken by another item being renamed. Rename them in two steps.").arg(FileLogic::displayName(which));
+    case RenameLogic::Problem::NothingChanges:
+        return tr("No name would change.");
+    }
+    for (int i = 0; i < urls.size(); ++i) {
+        if (next.at(i) != names.at(i))
+            rename(urls.at(i), next.at(i), folder);
+    }
+    return QString();
+}
+
+bool FilesApp::isArchive(const QUrl &url) const
+{
+    return url.isLocalFile() && ArchiveLogic::isArchive(url.fileName());
+}
+
+void FilesApp::startArchiveJob(ArchiveJob *job, const QString &activity, QObject *folder)
+{
+    m_archiveJobs.append(job);
+    m_activity = activity;
+    m_activityPercent = -1;
+    emit activityChanged();
+    QPointer<QObject> target = folder;
+    connect(job, &ArchiveJob::finished, this, [this, job, target](bool ok, const QString &error, const QString &result) {
+        if (!ok && !error.isEmpty())
+            emit operationFailed(error);
+        if (ok) {
+            if (auto *f = asFolder(target))
+                f->expect(QUrl::fromLocalFile(result), false);
+        }
+        m_archiveJobs.removeAll(job);
+        job->deleteLater();
+        archiveActivityEnded();
+    });
+    job->start();
+}
+
+void FilesApp::archiveActivityEnded()
+{
+    m_archiveJobs.removeIf([](const QPointer<ArchiveJob> &p) { return p.isNull(); });
+    if (m_jobs.isEmpty() && m_archiveJobs.isEmpty()) {
+        m_activity.clear();
+        m_activityPercent = -1;
+        emit activityChanged();
+    }
+}
+
+void FilesApp::compress(const QList<QUrl> &urls, QObject *folder)
+{
+    if (urls.isEmpty() || refuseApplicationItems(urls))
+        return;
+    const QString dir = urls.first().isLocalFile() ? QFileInfo(urls.first().toLocalFile()).absolutePath() : QString();
+    QStringList names;
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile() || QFileInfo(url.toLocalFile()).absolutePath() != dir) {
+            emit operationFailed(dir.isEmpty() || !url.isLocalFile() ? tr("Only items on this computer can be compressed.")
+                                                                    : tr("Items of several folders can’t be compressed together."));
+            return;
+        }
+        names << QFileInfo(url.toLocalFile()).fileName();
+    }
+    auto *job = ArchiveJob::compress(QStandardPaths::findExecutable(QStringLiteral("bsdtar")), dir, names, this);
+    startArchiveJob(job, tr("Compressing “%1”…").arg(FileLogic::displayName(job->subject())), folder);
+}
+
+void FilesApp::expand(const QUrl &archive, QObject *folder)
+{
+    if (!isArchive(archive) || !QFileInfo(archive.toLocalFile()).isFile()) {
+        emit operationFailed(tr("Only archives on this computer can be expanded."));
+        return;
+    }
+    auto *job = ArchiveJob::expand(QStandardPaths::findExecutable(QStringLiteral("bsdtar")), archive.toLocalFile(), this);
+    startArchiveJob(job, tr("Expanding “%1”…").arg(FileLogic::displayName(job->subject())), folder);
+}
+
+void FilesApp::cancelArchives()
+{
+    const auto jobs = m_archiveJobs;
+    for (const QPointer<ArchiveJob> &job : jobs) {
+        if (job)
+            job->cancel();
+    }
 }
 
 void FilesApp::makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback)
@@ -2295,7 +2541,7 @@ void FilesApp::track(KJob *job, const QString &activity)
             emit operationFailed(job->errorString());
         m_jobs.removeAll(job);
         m_jobs.removeIf([](const QPointer<KJob> &p) { return p.isNull(); });
-        m_activity = m_jobs.isEmpty() ? QString() : m_activity;
+        m_activity = m_jobs.isEmpty() && m_archiveJobs.isEmpty() ? QString() : m_activity;
         m_activityPercent = -1;
         emit activityChanged();
     });

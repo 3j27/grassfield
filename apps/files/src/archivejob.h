@@ -1,0 +1,67 @@
+#pragma once
+
+#include <QObject>
+#include <QPointer>
+#include <QProcess>
+#include <QString>
+#include <QStringList>
+#include <QTimer>
+
+// One Compress or Expand (ADR-0029): bsdtar in a child process (ArchiveLogic's command lines), into a hidden temporary
+// name next to the items, then renamed to the Finder's name. A cancel, a failure or a disk that fills up kills the child
+// and removes the temporary file or folder; nothing half-written is ever left under a real name. Expand first lists the
+// archive and refuses one larger than the free space less kFreeMargin, then stops the child if the free space falls
+// under the margin while it writes (a listing can lie). Messages are translated (FilesApp shows them).
+class ArchiveJob : public QObject
+{
+    Q_OBJECT
+
+public:
+    // Free space always kept on the destination's disk.
+    static constexpr qint64 kFreeMargin = qint64(64) * 1024 * 1024;
+    static constexpr int kPollMs = 500;
+    // The listing (Expand's first step) is short: an archive that takes longer to list is refused.
+    static constexpr int kListMs = 30000;
+    static constexpr qint64 kMaxListing = qint64(16) * 1024 * 1024;
+
+    enum class Kind { Compress, Expand };
+
+    // Compress `names` (items of `folder`) into a zip in `folder`; Expand `archive` next to itself. `bsdtar`: the
+    // program's path ("" when it is missing: the job fails at once with that message).
+    static ArchiveJob *compress(const QString &bsdtar, const QString &folder, const QStringList &names, QObject *parent = nullptr);
+    static ArchiveJob *expand(const QString &bsdtar, const QString &archive, QObject *parent = nullptr);
+    ~ArchiveJob() override;
+
+    void start();
+    void cancel();
+    Kind kind() const { return m_kind; }
+    // The item it names in the user's words ("Archive.zip" being made, "photos.zip" being expanded).
+    QString subject() const;
+
+signals:
+    // `error` is "" on success and on a cancel; `result` the new archive or the expanded item.
+    void finished(bool ok, const QString &error, const QString &result);
+
+private:
+    ArchiveJob(Kind kind, const QString &bsdtar, QObject *parent);
+    void run(const QStringList &args);
+    void listed();
+    void extracted();
+    void compressed();
+    void fail(const QString &error);
+    void cleanUp();
+    QString failureText(const QString &fallback) const;
+
+    Kind m_kind;
+    QString m_bsdtar;
+    QString m_folder;
+    QStringList m_names;
+    QString m_archive;
+    QString m_temp;
+    QProcess *m_process = nullptr;
+    QTimer m_poll;
+    bool m_listing = false;
+    bool m_done = false;
+    QByteArray m_output;
+    QByteArray m_errors;
+};
