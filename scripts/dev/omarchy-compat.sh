@@ -48,10 +48,11 @@ for c in omarchy-restart-shell omarchy-launch-shell; do
 done
 have "omarchy-update-restart still restarts the shell by the name omarchy-restart-shell (the stand-in is in the update's path)" has_grep omarchy-restart-shell "$omarchy/bin/omarchy-update-restart"
 have "omarchy-launch-shell is still the only command that starts the Omarchy shell (quickshell -n -p)" bash -c '[[ $(grep -Rl "quickshell -n -p" "$1/bin" 2>/dev/null | wc -l) == 1 ]] && grep -Rq "quickshell -n -p" "$1/bin/omarchy-launch-shell"' _ "$omarchy"
-for c in omarchy-capture-screenshot omarchy-capture-region omarchy-hook omarchy-powerprofiles-init omarchy-powerprofiles-set omarchy-migrate omarchy-launch-floating-terminal-with-presentation omarchy-migrate-notify; do
-  have "command $c exists (used by screenshots, hooks, power profile, migration notice)" test -x "$omarchy/bin/$c"
+# Screenshots are Grassfield's own since ADR-0035 step 8 (packaging/bin/grassfield-capture): Omarchy's capture commands are no
+# longer used.
+for c in omarchy-hook omarchy-powerprofiles-init omarchy-powerprofiles-set omarchy-migrate omarchy-launch-floating-terminal-with-presentation omarchy-migrate-notify; do
+  have "command $c exists (used by hooks, power profile, migration notice)" test -x "$omarchy/bin/$c"
 done
-have "omarchy-capture-screenshot still takes the modes fullscreen, region and smart" bash -c 'grep -q "smart" "$1" && grep -q "region" "$1" && grep -q "fullscreen" "$1"' _ "$omarchy/bin/omarchy-capture-screenshot"
 have "omarchy-migrate still has --pending (the migration notice asks it)" has_grep '--pending' "$omarchy/bin/omarchy-migrate"
 have "omarchy-hook still runs ~/.config/omarchy/hooks/<name>(.d)" has_grep 'config/omarchy/hooks' "$omarchy/bin/omarchy-hook"
 # D-12 fail-safe: Grassfield's omarchy-shell stand-in answers exactly these two calls and this status contract.

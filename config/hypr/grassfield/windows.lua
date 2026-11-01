@@ -75,3 +75,6 @@ hl.layer_rule({ name = "gf-bar-no-anim", match = { namespace = "^grassfield-(men
 hl.layer_rule({ name = "gf-wallpaper-no-anim", match = { namespace = "^grassfield-wallpaper$" }, no_anim = true })
 -- The exit cover fades itself (ADR-0040 ID-10, one owner of motion: ID-4); the compositor adds no fade in or out.
 hl.layer_rule({ name = "gf-exit-cover-no-anim", match = { namespace = "^grassfield-exit-cover$" }, no_anim = true })
+-- The screenshot crosshair (slurp's layer, namespace "selection") goes at once: grim takes the picture as slurp ends, and a
+-- fade would put slurp's veil and outline in it (ADR-0035 D-10, fourth review of step 8; Omarchy ships the same rule).
+hl.layer_rule({ name = "gf-capture-selection-no-anim", match = { namespace = "^selection$" }, no_anim = true })

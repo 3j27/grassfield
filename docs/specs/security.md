@@ -240,6 +240,14 @@ does not check its gate.
 | visual | glyphs | dev | contrast run |
 <!-- ipc-inventory:end -->
 
+### Private sockets of the security modules (not Quickshell IPC)
+Grassfield processes that serve the security modules over a Unix socket of their own, outside `qs ipc` (ADR-0035
+"Consequences": every such socket is listed here in the step that adds it).
+
+| Socket | Server | Who may connect | What it carries |
+|---|---|---|---|
+| `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600) | `grassfield-prompter` (ADR-0035 D-9, step 9a; `grassfield-prompter.service`) | one peer at a time, running as the user, whose cgroup is the unit of the bridge's `--peer-unit` (`grassfield-shell.service`, only slices above it up to the user's manager), read through `SO_PEERPIDFD` (a peer without a pidfd is refused, except on a kernel without `SO_PEERPIDFD`); a refused peer gets `refused` and is closed, the refusals logged once per 10 s | `prompter/1` (docs/specs/system-dialogs.md section 5): the bridge sends the requests of gcr callers (with the requester it resolved from their bus credentials) and their withdrawals; the shell sends its hello and its answers, a password once per answer. Nothing it accepts runs a command, unlocks, or reaches polkit; a wrong or unattributable line cancels requests, never invents an answer. No shell connects before step 9b |
+
 ## Lock coverage: restart, Omarchy's sleep-lock, failing inhibitor (GF-030, D-12)
 macOS model: the screen always locks before sleep, and the lock never silently goes away.
 - `grassfield-shell.service`: `Restart=always` (was `on-failure`: systemd does not restart a unit that exits 0 or is
