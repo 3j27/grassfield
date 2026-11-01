@@ -572,10 +572,15 @@ namespace gf::prompter {
         ++m_seqNr;
         // Remembered only when the user chose it (keepPassword): kpasswdserver stores in KWallet whatever the flag says, and
         // warns (kpasswdserver.cpp:417-425; decision 9-41).
-        if (info.keepPassword)
-            store(key, info);
-        m_cache.add(key, info, windowId, m_seqNr, false);
-        log(QStringLiteral("addAuthInfo (%1): kept for the session%2").arg(flatten(info.parsed.scheme(), 16), info.keepPassword ? QStringLiteral(" and remembered") : QString()));
+        // Once sent to the keychain, in memory only while its window lives, as kpasswdserver's after a wallet store
+        // (kpasswdserver.cpp:427-434; the security review of step 9e, NIT-2).
+        kio::AuthInfo cached = info;
+        const bool    stored = info.keepPassword && store(key, info);
+        if (stored)
+            cached.keepPassword = false;
+        m_cache.add(key, cached, windowId, m_seqNr, false);
+        log(QStringLiteral("addAuthInfo (%1): kept in the session's cache%2")
+                .arg(flatten(info.parsed.scheme(), 16), stored ? QStringLiteral(" while its window lives, and sent to the keychain") : QString()));
     }
 
     void KioServer::remove(GDBusMethodInvocation* invocation, GVariant* parameters) {
@@ -902,9 +907,12 @@ namespace gf::prompter {
                     }
                 }
             }
-            if (!kio::extraBool(info, kio::kExtraSkipCaching) && info.keepPassword)
-                store(r->key, info);
-            m_cache.add(r->key, info, r->windowId, m_seqNr, false);
+            // Once sent to the keychain, in memory only while its window lives (kpasswdserver.cpp:947-950; NIT-2). The result
+            // keeps the user's choice: the worker's own addAuthInfo stores only on it (decision 9-41).
+            kio::AuthInfo cached = info;
+            if (!kio::extraBool(info, kio::kExtraSkipCaching) && info.keepPassword && store(r->key, info))
+                cached.keepPassword = false;
+            m_cache.add(r->key, cached, r->windowId, m_seqNr, false);
         }
         info.modified = true;
         log(QStringLiteral("request %1 answered: a name and a password%2").arg(r->id, info.keepPassword ? QStringLiteral(", to be remembered") : QString()));

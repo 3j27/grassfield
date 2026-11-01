@@ -33,7 +33,9 @@
 //   makes gnome-keyring ask through gcr's prompter, which is this bridge (SC9c). addAuthInfo is answered at once and stores
 //   in the background, only when keepPassword says the user chose "Remember this password" (decision 9-41); a check looks a
 //   remembered password up (unlocking the keyring when an item is there: its prompt takes its turn in the shell's queue); a
-//   query looks one up without unlocking, to tick "Remember this password" and fill the name.
+//   query looks one up without unlocking, to tick "Remember this password" and fill the name. A password sent to the
+//   keychain stays in the session's cache only while its window lives, as kpasswdserver's after a wallet store
+//   (kpasswdserver.cpp:427-434, 947-950); for the session when the store fails.
 // - A call that may hold one of gnome-keyring's unlock prompts (a store, a check's unlocking search) is never cancelled
 //   while the Secret Service that holds it runs: a cancelled libsecret call dismisses its prompt, and gnome-keyring 51.1
 //   aborts on the dismissal of an unlock prompt queued behind another one being shown (gkd-secret-unlock.c:244, the
