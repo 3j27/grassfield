@@ -1369,12 +1369,18 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
 - **Tests.** `tests/security/tst_prompter.qml` (52: the bridge's lines read strictly, the flattening rule, the answer lines,
   the socket path rule, the back-off), `tst_sheetqueue.qml` (5), `tst_secretsheetmodel.qml` (19);
   `tests/security/secret_sheets.sh` (the real agents with their Quickshell types replaced, the real sheets and queue, real
-  keys and clicks: 18 cases, run beside the model's unit test, and 14 static checks; `--mutants`: 24 mutants, all caught);
+  keys and clicks: 20 cases after the opus review, run beside the model's unit test, and 14 static checks; `--mutants`: 27
+  mutants, all caught);
   `tests/security/secret_bridge.sh` (44 checks)
   (the real client and agent in an offscreen Quickshell against a fake bridge, and the real bridge on a private bus with
   libgcr's client: a password the shell answers reaches the gcr client through the exchange; `--mutants`: 7, all caught);
   `tests/security/screenshare_rules.sh` (the layer rules, with a mutation). Nested and visual: NOT VERIFIED (the scenario is
   in the spec's acceptance criteria, A-SC7).
+- **The opus security review of step 9b: FAIL** (one major, one minor, two nits; the polkit gate, the linger, the answer
+  rule, the parser, the phishing rules, the layer rules and the dev gating found sound), fixed on top of the step: MAJOR-1
+  (an unheld confirmation answered by one stray key) by 9-23; MINOR-1 (an empty new password sent by one stray Return) by
+  9-24; NIT-1 (a polkit request arriving during a linger keeps the earlier place) recorded in 9-15 and the spec's known
+  limitations; NIT-2 (the shell reads whatever serves the socket path) in the spec's known limitations.
 
 **Decisions of step 9b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
 - **9-15. How does the polkit sheet join the one queue?** Quickshell 0.3 hands the agent one request at a time (a new one
@@ -1392,7 +1398,12 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
   whatever order the bindings run in); `queuePresent` (the polkit sheet's place: from a request's arrival until its sheet is
   gone, the linger included; `shell.qml` binds the queue to it); the gated `flow`; the `noteEnded` handler. What it costs: a
   polkit request that waited prints the time it was handed to the sheet, "right after another one", not when polkit sent it;
-  a newer polkit request still replaces the open or waiting one (Quickshell's behaviour) and keeps its place.
+  a newer polkit request still replaces the open or waiting one (Quickshell's behaviour) and keeps its place. **Amended after
+  the opus review of step 9b (NIT-1):** that place is kept while the polkit sheet is present, its key sink's linger included,
+  so a polkit request that arrives during the linger after an earlier one is shown before a secret request queued meanwhile
+  (out of arrival order; it is held, with the keys on the sink: the keyboard rule holds). Giving it a new place would need
+  two polkit places (the linger's, before the secret request, and the new request's, after it), which Quickshell's one
+  request at a time does not provide; recorded in the spec's known limitations.
 - **9-16. The caller's button labels.** Options: (a) the caller's `continue` and `cancel` labels when given (the first
   version of SC3); (b) Grassfield's "Cancel" and "OK" always. **Choice: (b).** Rule applied: R12 (a secret sheet never looks
   like the authorization sheet; who asks is never the caller's text): a caller could label its button "Allow" or
@@ -1433,6 +1444,25 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
   plumbing: `shell.qml` reads it through `Mode.devValue`, the security module uses it only behind its own `RunMode.dev` gate),
   else nothing. Rule applied: ADR-0019 (a dev shell never reaches the user's bridge; a leaked value changes nothing in a real
   session); `tests/ci/run_mode.py` (security modules read no other `GRASSFIELD_*` variable).
+- **9-23. Can a confirmation take the keyboard when it arrives?** (opus review of step 9b, MAJOR-1.) Question: a
+  confirmation with no other reason to be held took the keyboard at once with OK focused, so one stray Space, Return or Enter
+  granted it; a program of the user can make gpg-agent or gcr-ssh-agent ask for a confirmation at a moment of its choosing
+  (an SSH key marked "confirm" used through a forwarded agent), while the user types elsewhere. The polkit sheet never allows
+  this (its field has the focus, and Allow with an empty field sends nothing). Options: (a) every confirmation is held: shown
+  without the keyboard until a click past the 500 ms guard, the keys staying with the window the user was typing in; (b) it
+  takes the keyboard with no button focused and ignores activation keys until a click or Tab. **Choice: (a).** Rule applied:
+  R12 (no answer from a key typed for something else), the reviewed hold reused (its guard, its click, its notice: "Click
+  the alert to answer it: no key answers a confirmation before that."), never a new mechanism; (b) would also swallow what
+  the user was typing elsewhere. After the click, OK has the focus and Return answers, as on macOS. Tests: `secret_sheets.sh`
+  test_19 (Space, Return and Enter with OK focused send nothing; a click within the guard gives nothing; past it Return
+  answers), test_14 amended; mutant `confirm-not-held`.
+- **9-24. Can a stray Return send an empty new password?** (opus review of step 9b, MINOR-1.) Question: Return in New took
+  both fields at once, so one Return on an untouched New and Verify sheet answered with an empty password (gcr then stores
+  passwords unencrypted). **Choice:** Return in New only moves the focus to Verify and hands nothing over
+  (`PasswordField.submitOnReturn`, default true: the lock and the polkit sheet unchanged); Return in Verify takes both fields
+  but sends nothing when both are empty; an empty new password goes out only from OK (a click, or Space or Return once Tab
+  reached it). Rule applied: R12, 9-20 (an empty new password stays possible, but only deliberately). Tests: test_20, test_13
+  amended; mutants `empty-new-password-by-return`, `return-in-new-submits`.
 - **9-22. Screen sharing.** **Choice:** `no_screen_share` layer rules for `grassfield-secret` and, as D-9 proposed under the
   same review, `grassfield-polkit` (`config/hypr/grassfield/privacy.lua`; Hyprland 0.56.2 accepts the key for layers,
   `LayerRuleEffectContainer.cpp:23`, and `Hyprland --verify-config` refuses a misspelt one). Both sheets' layers cover the

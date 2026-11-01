@@ -430,7 +430,9 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   frame (step 9b, decision 9-18: under the field it read as the sheet's own error); a secure field (`password-new`: New and
   Verify fields and a strength bar from the length, decision 9-17); `choice-label` as a check box; the buttons are always
   Grassfield's "Cancel" and "OK", never the caller's `continue-label` / `cancel-label` (step 9b, decision 9-16); a `confirm`
-  prompt has no field. Built in step 9b as a macOS alert (`shell/security/secret/SecretSheet.qml`, decision 9-18).
+  prompt has no field. Built in step 9b as a macOS alert (`shell/security/secret/SecretSheet.qml`, decision 9-18). A
+  confirmation is always shown held, no key answering it before a click past the guard (decision 9-23); Return in New moves
+  on to Verify, and an empty new password is sent only from OK (decision 9-24).
 - SC3b the row names the program whose process opened the bus connection, not proof of whose code is asking (opus review
   of step 9a, MINOR-2; ADR-0035 9-4, 9-14): "Keyring", "GnuPG" and "SSH" can be made to ask by any program of the user,
   with text of its own. Under such a row (`onBehalf`) the caller's text is shown as unverified text from another program
@@ -653,12 +655,16 @@ remembered network passwords are as safe as the keyring that holds them (Omarchy
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b); VPN
 secrets are not asked (SC8); the shell's sheets (step 9b): copies of a typed password stay in the shell's heap until reused
 (the field's text, the JavaScript string handed to the model, the answer's JSON line and the socket's write buffer; none can
-be zeroed, SC5, as the polkit sheet's); Quickshell's line reader keeps a bridge line without a line feed in memory until one
-comes (the 16384 cap is checked per line; only the bridge's own socket is read); `JSON.parse` keeps the last of two equal
+be zeroed, SC5, as the polkit sheet's); the shell reads whatever serves `$XDG_RUNTIME_DIR/grassfield/prompter.sock`: a
+same-user process can stop the bridge and bind that path (the same-user stance of every Grassfield socket), and Quickshell's
+line reader then keeps a line without a line feed from that server in memory until one comes (the 16384 cap is checked per
+line, once a line ends); `JSON.parse` keeps the last of two equal
 keys (the bridge's Qt writer never repeats one; every value's type is still checked); a wrong password makes gcr's caller
 ask again as a new request, which appears after "Password sent", held, and needs a click (macOS shakes the same alert); a
 polkit request that waited behind a secret sheet says it arrived "right after another one" at the time it got its turn
-(decision 9-15), and a newer polkit request takes the place of a waiting one (Quickshell keeps one); a shared or captured
+(decision 9-15), and a newer polkit request takes the place of a waiting one (Quickshell keeps one); a polkit request that
+arrives during the key sink's linger after an earlier one keeps that one's place, so it is shown, held, before a secret request
+queued meanwhile (opus review of step 9b, NIT-1); a shared or captured
 output is black while a secret or authorization sheet is up (the layer covers the output, decision 9-22); the strength meter
 reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet's look are not verified; until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
 the Secret Service for a session when a KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's
