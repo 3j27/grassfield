@@ -18,6 +18,8 @@ namespace gf::prompter {
         constexpr int kOpenRequests   = 32;   // open requests in all
         constexpr int kStoresInFlight = 8;
         constexpr int kReleaseDelayMs = 1000; // between the last answers and the name's release (decision 9-37)
+        constexpr int kKiod6SettleMs  = 2000; // after kiod6 appears, before the bridge looks whether it took the name
+        constexpr char kKiod6Name[]   = "org.kde.kiod6";
 
         // KIO v6.31.0's org.kde.KPasswdServer (src/core/org.kde.KPasswdServer.xml) without its LEGACY "ay" methods, which KF6's
         // client never calls: GDBus checks every call's arguments against it (anything else: UnknownMethod or InvalidArgs).
@@ -136,6 +138,8 @@ namespace gf::prompter {
             g_source_remove(m_processSource);
         if (m_releaseSource)
             g_source_remove(m_releaseSource);
+        if (m_repairSource)
+            g_source_remove(m_repairSource);
         for (const guint id : std::as_const(m_stepTimers))
             g_source_remove(id);
         m_stepTimers.clear();
@@ -176,6 +180,8 @@ namespace gf::prompter {
         (void)schema();
         log(QStringLiteral("KIO's password server ready at %1 (%2 is requested while a shell that draws kind kio is connected)")
                 .arg(QLatin1String(kio::kObjectPath), QLatin1String(kio::kBusName)));
+        // A kiod6 that runs without the name (it started while an earlier bridge held it) never takes it (releaseUnlessKiod6).
+        repairLater();
         return true;
     }
 
@@ -190,6 +196,7 @@ namespace gf::prompter {
             m_releaseSource = 0;
         }
         if (wanted) {
+            m_forKiod6 = false;
             wantName(true);
             return;
         }
@@ -204,14 +211,118 @@ namespace gf::prompter {
         auto* self            = static_cast<KioServer*>(data);
         self->m_releaseSource = 0;
         if (!self->m_wanted)
-            self->wantName(false);
+            self->releaseUnlessKiod6();
         return G_SOURCE_REMOVE;
+    }
+
+    // kiod6 registers the names of its modules once, when it starts, without queueing (kiod_main.cpp:107-115), and a second
+    // kiod6 leaves at once, as KDBusService Unique (kdbusservice.cpp:196-230): a kiod6 that started while the bridge held
+    // the name (a KF6 app's SSL check or cookie jar starts it for its other names) never takes it. Released then, the name
+    // would make D-Bus activation start a kiod6 that exits, and KIO's calls time out after 25 s with no dialog; kept, they
+    // are answered "nothing" at once until kiod6 leaves the bus (the security review of step 9e, MINOR-1; decision 9-36).
+    void KioServer::releaseUnlessKiod6() {
+        if (!m_nameWanted)
+            return;
+        if (!m_owned) {
+            wantName(false); // queued behind another owner: nothing to keep
+            return;
+        }
+        auto* call = new Call{m_alive, this, {}, {}, m_nameGen};
+        g_dbus_connection_call(m_bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", g_variant_new("(s)", kKiod6Name),
+                               G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NONE, kBusTimeoutMs, m_cancel, onKiod6Running, call);
+    }
+
+    void KioServer::onKiod6Running(GObject* source, GAsyncResult* result, gpointer data) {
+        auto*     call    = static_cast<Call*>(data);
+        GError*   error   = nullptr;
+        GVariant* reply   = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
+        gboolean  running = FALSE;
+        if (reply) {
+            g_variant_get(reply, "(b)", &running);
+            g_variant_unref(reply);
+        }
+        KioServer* self = call->live();
+        if (self && !cancelled(error) && call->generation == self->m_nameGen && self->m_nameWanted && !self->m_wanted) {
+            if (running && self->m_owned) {
+                self->m_forKiod6 = true;
+                log(QStringLiteral("%1 kept: kiod6 runs without it (it takes its names only when it starts), so KIO's requests are answered "
+                                   "with nothing until kiod6 leaves the bus or a shell that draws kind kio returns")
+                        .arg(QLatin1String(kio::kBusName)));
+            } else {
+                self->wantName(false);
+            }
+        }
+        g_clear_error(&error);
+        delete call;
+    }
+
+    void KioServer::kiod6Changed(bool running) {
+        if (running) {
+            if (!m_nameWanted)
+                repairLater();
+            return;
+        }
+        if (m_forKiod6 && !m_wanted) {
+            log(QStringLiteral("kiod6 left the bus"));
+            wantName(false);
+        }
+    }
+
+    void KioServer::repairLater() {
+        if (m_repairSource || m_nameWanted)
+            return;
+        m_repairSource = g_timeout_add(kKiod6SettleMs, onRepair, this);
+    }
+
+    gboolean KioServer::onRepair(gpointer data) {
+        auto* self           = static_cast<KioServer*>(data);
+        self->m_repairSource = 0;
+        if (!self->m_nameWanted) {
+            auto* call = new Call{self->m_alive, self, {}, {}, self->m_nameGen};
+            g_dbus_connection_call(self->m_bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "ListNames", nullptr,
+                                   G_VARIANT_TYPE("(as)"), G_DBUS_CALL_FLAGS_NONE, kBusTimeoutMs, self->m_cancel, onRepairNames, call);
+        }
+        return G_SOURCE_REMOVE;
+    }
+
+    void KioServer::onRepairNames(GObject* source, GAsyncResult* result, gpointer data) {
+        auto*     call     = static_cast<Call*>(data);
+        GError*   error    = nullptr;
+        GVariant* reply    = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
+        bool      kiod6    = false;
+        bool      nameHeld = false;
+        if (reply) {
+            GVariantIter* names = nullptr;
+            const gchar*  name  = nullptr;
+            g_variant_get(reply, "(as)", &names);
+            while (g_variant_iter_next(names, "&s", &name)) {
+                kiod6    = kiod6 || g_strcmp0(name, kKiod6Name) == 0;
+                nameHeld = nameHeld || g_strcmp0(name, kio::kBusName) == 0;
+            }
+            g_variant_iter_free(names);
+            g_variant_unref(reply);
+        }
+        KioServer* self = call->live();
+        if (self && !cancelled(error) && call->generation == self->m_nameGen && !self->m_nameWanted && kiod6 && !nameHeld) {
+            // kiod6 had kKiod6SettleMs to take it at its start: it never will now.
+            log(QStringLiteral("%1 taken: kiod6 runs without it, so KIO's requests are answered with nothing at once instead of waiting "
+                               "for a kiod6 that cannot take it")
+                    .arg(QLatin1String(kio::kBusName)));
+            self->wantName(true);
+            self->m_forKiod6 = true;
+        }
+        g_clear_error(&error);
+        delete call;
     }
 
     void KioServer::wantName(bool want) {
         if (want == m_nameWanted)
             return;
         m_nameWanted = want;
+        if (!want) {
+            m_owned    = false;
+            m_forKiod6 = false;
+        }
         ++m_nameGen;
         auto* call = new Call{m_alive, this, {}, {}, m_nameGen};
         if (want) {
@@ -262,9 +373,12 @@ namespace gf::prompter {
                                        g_variant_new("(s)", kio::kBusName), G_VARIANT_TYPE("(u)"), G_DBUS_CALL_FLAGS_NONE, kBusTimeoutMs, nullptr, nullptr, nullptr);
                 return;
             }
+            self->m_owned = true;
             log(QStringLiteral("%1 acquired").arg(QLatin1String(kio::kBusName)));
-        } else if (self->m_nameWanted) {
-            log(QStringLiteral("%1 lost").arg(QLatin1String(kio::kBusName)));
+        } else {
+            self->m_owned = false;
+            if (self->m_nameWanted)
+                log(QStringLiteral("%1 lost").arg(QLatin1String(kio::kBusName)));
         }
     }
 
@@ -276,8 +390,11 @@ namespace gf::prompter {
         const gchar* oldOwner = nullptr;
         const gchar* newOwner = nullptr;
         g_variant_get(parameters, "(&s&s&s)", &name, &oldOwner, &newOwner);
+        auto* self = static_cast<KioServer*>(data);
         if (name[0] == ':' && !newOwner[0])
-            static_cast<KioServer*>(data)->callerGone(QString::fromUtf8(name));
+            self->callerGone(QString::fromUtf8(name));
+        else if (g_strcmp0(name, kKiod6Name) == 0)
+            self->kiod6Changed(newOwner[0] != '\0');
     }
 
     // --- calls ------------------------------------------------------------------------------------------------------------

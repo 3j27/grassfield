@@ -10,8 +10,14 @@
 //   client waits for its result with no time limit (kpasswdserverloop.cpp:25-31) and hears only of the name being freed
 //   (:16-19), never of it passing to another owner. The release comes kReleaseDelayMs after the answers (decision 9-37): a
 //   client that reads its result and the name's departure in one turn of its event loop takes the departure, the later of
-//   the two exit() calls, for the server's death (KIO::ERR_PASSWD_SERVER); meanwhile every new request gets "nothing". With no shell, D-Bus activation starts kiod6 (KDE's dialog), as before
-//   step 9e; kiod6 neither queues for nor replaces a name (kiod_main.cpp:112, Qt's defaults), so whichever holds it keeps it.
+//   the two exit() calls, for the server's death (KIO::ERR_PASSWD_SERVER); meanwhile every new request gets "nothing". With
+//   no shell, D-Bus activation starts kiod6 (KDE's dialog), as before step 9e; kiod6 neither queues for nor replaces a name
+//   (kiod_main.cpp:107-115, Qt's defaults), so whichever holds it keeps it. kiod6 takes its names once, when it starts, and
+//   a second kiod6 leaves at once (KDBusService Unique): a kiod6 that started while the bridge held the name never takes it
+//   later, and D-Bus activation for it would time out (25 s). So the name is released only while kiod6 is not running;
+//   else the bridge keeps it, answering "nothing" at once, until kiod6 leaves the bus; and a bridge that finds kiod6
+//   running without the name takes it, kKiod6SettleMs after kiod6 appeared (the security review of step 9e, MINOR-1).
+
 // - The object stays exported for the bridge's life; a call that reaches it while no shell draws "kio" is answered as if
 //   nothing were known: no cache read, no sheet, nothing stored.
 // - Results go to the caller only: each result signal is addressed to the unique name that asked
@@ -147,8 +153,11 @@ namespace gf::prompter {
         static void onLookup(GObject* source, GAsyncResult* result, gpointer data);
         static void onLookupSecret(GObject* source, GAsyncResult* result, gpointer data);
         static void onStored(GObject* source, GAsyncResult* result, gpointer data);
+        static void onKiod6Running(GObject* source, GAsyncResult* result, gpointer data);
+        static void onRepairNames(GObject* source, GAsyncResult* result, gpointer data);
         static gboolean onProcess(gpointer self);
         static gboolean onRelease(gpointer data);
+        static gboolean onRepair(gpointer data);
         static gboolean onStepTimeout(gpointer data);
 
         void check(GDBusMethodInvocation* invocation, GVariant* parameters, const QString& sender);
@@ -180,6 +189,11 @@ namespace gf::prompter {
         void    forget(const Request& request);
 
         void wantName(bool want);
+        // The shell went: the name goes, unless kiod6 runs without it (MINOR-1).
+        void releaseUnlessKiod6();
+        // org.kde.kiod6 appeared or left the bus.
+        void kiod6Changed(bool running);
+        void repairLater();
 
         GDBusConnection*       m_bus = nullptr;
         Sink*                  m_sink;
@@ -192,6 +206,9 @@ namespace gf::prompter {
         guint                  m_lostSub = 0;
         bool                   m_wanted = false;
         bool                   m_nameWanted = false;
+        bool                   m_owned = false;    // the bus said NameAcquired (and no NameLost since)
+        bool                   m_forKiod6 = false; // held with no shell: kiod6 runs without it
+        guint                  m_repairSource = 0;
         quint64                m_nameGen = 0;
         guint                  m_processSource = 0;
         guint                  m_releaseSource = 0;
