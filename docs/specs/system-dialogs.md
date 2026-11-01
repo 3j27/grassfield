@@ -399,7 +399,7 @@ PASS, fail closed where a secret is involved, nothing logged). Step 9a builds th
 its unit; step 9b the shell's queue and secret sheets for gcr's `password` and `confirm` prompts (ADR-0035 "Delivered in
 step 9b", decisions 9-15 to 9-22); step 9c udiskie's helper and the NetworkManager agent (planned as 9d, merged into 9c by
 this step's brief; ADR-0035 "Delivered in step 9c", decisions 9-25 to 9-35); step 9e KIO's password server (ADR-0035
-"Delivered in step 9e", decisions 9-36 to 9-49).
+"Delivered in step 9e", decisions 9-36 to 9-50).
 From 9b the shell connects in the session: gcr's prompts (gnome-keyring, pinentry-gnome3, gcr-ssh-agent) are drawn by the
 shell; from 9c also an encrypted removable disk's password (udiskie) and NetworkManager's Wi-Fi secrets; from 9e the
 passwords of network locations that KIO asks for (Files, the D-4 panel, any KF6 app).
@@ -483,38 +483,47 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   nm-applet runs the VPN plugin's auth dialog, which this one does not), so a VPN that needs secrets at connect time fails,
   as it does today.
 - SC9 KIO network passwords (ADR-0035 D-12 b; built in step 9e: `bridges/prompter/src/KioServer.{h,cpp}`, `KioAuth.{h,cpp}`,
-  decisions 9-36 to 9-49): the bridge serves `org.kde.KPasswdServer` at `/modules/kpasswdserver` (`checkAuthInfoAsync`,
+  decisions 9-36 to 9-50): the bridge serves `org.kde.KPasswdServer` at `/modules/kpasswdserver` (`checkAuthInfoAsync`,
   `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo`, the two result signals; KIO's types, its AuthInfo
   `(ysssssssssbbbba{s(siv)})` read with bounds; the LEGACY `ay` methods not served) and holds `org.kde.kpasswdserver6`
   (flags 0: queued behind kiod6 when kiod6 holds it, replaced by nobody) only while a shell that draws kind `kio` is
-  connected; it keeps kpasswdserver's rules (sequence numbers, the session cache and its quirks, one prompt per window and
-  per server, checks that wait for a query of their server, the user's Cancel kept, a changed name moving its entry) and
-  shows the server sheet: "Enter your name and password for the server “%1”." (a host name only, 9-42), who asked from the
-  caller's credentials ("Requested by KIO for an app" for KIO's worker, an app's name, or an unidentified program and its
-  executable, 9-43), the realm framed as the server's unverified words, the name field (read-only or absent as the caller
-  says; a field of its own, unlike a network's read-only username), the password field (no Show password), Remember this
-  password (offered when the caller offers it; off at first, on when the keyring already holds one, 9-41), a line under it
-  when the keyring that would keep it has no password ("Your keyring has no password: a password remembered here is stored
-  unencrypted on this computer.", known only for gnome-keyring, 9-45),
-  Cancel / Connect (a password, and a name when asked, 9-47); after a failed login "The name or password was not accepted.
-  Try again." (the worker's own message never shown, 9-40); always held until a click past the guard (9-38). Remembered
-  passwords go to the Secret Service through libsecret (schema `org.grassfield.NetworkPassword`, 9-44), never through
-  KWallet's API, only when the user ticked Remember; in the Grassfield session the Secret Service stays gnome-keyring's
-  (ADR-0035 Q17-b); bridge down → D-Bus activation starts kiod6 (KDE's dialog, as before).
+  connected, or while kiod6 runs without it (9-36); it keeps kpasswdserver's rules (sequence numbers, the session cache and
+  its quirks, one prompt per window and per server, checks that wait for a query of their server, the user's Cancel kept, a
+  changed name moving its entry) and shows the server sheet: "Enter your name and password for the server “%1”." (a host
+  name only, 9-42), who asked from the caller's credentials ("Requested by KIO for an app" for KIO's worker running only
+  trusted code, an app's name, or an unidentified program and its executable, 9-43), the realm framed as the server's
+  unverified words, the name field (read-only or absent as the caller says; a field of its own, unlike a network's read-only
+  username), the password field (no Show password), Remember this password (offered when the caller offers it; off at first,
+  on when the keyring already holds one, 9-41), a line under it when the keyring that would keep it has no password ("Your
+  keyring has no password: a password remembered here is stored unencrypted on this computer.", known only for
+  gnome-keyring, 9-45), Cancel / Connect (a password, and a name when asked, 9-47); after a failed login "The name or
+  password was not accepted. Try again." (the worker's own message never shown, 9-40); always held until a click past the
+  guard (9-38). Remembered passwords go to the Secret Service through libsecret (schema `org.grassfield.NetworkPassword`,
+  9-44), never through KWallet's API, only when the user ticked Remember; in the Grassfield session the Secret Service stays
+  gnome-keyring's (ADR-0035 Q17-b); bridge down or no shell → D-Bus activation starts kiod6 (KDE's dialog, as before),
+  except after kiod6 started while the bridge held the name: kiod6 never takes it then (it registers its names only when it
+  starts), so the bridge keeps it and answers "nothing" at once until kiod6 leaves the bus (9-36, security review of step
+  9e, MINOR-1).
 - SC9b results go to the caller only (counter-review of PR #13, minor; built in step 9e): kpasswdserver broadcasts
   `checkAuthInfoAsyncResult` and `queryAuthInfoAsyncResult`, credentials included, to every listener on the session bus (KIO
   `src/core/org.kde.KPasswdServer.xml:4-15`, `src/kpasswdserver/kpasswdserver.cpp:330, 852, 883`); the bridge sends each
   result as a signal addressed to the caller's unique name (`g_dbus_connection_emit_signal` with a destination, after the
   method reply that gave the requestId), which KIO's real client receives unchanged (`tests/security/kio_passwd.sh`). A
   cached credential goes only to the connection that asks; any same-user process can still ask for one by its URL, as with
-  kpasswdserver today (upstream protocol, known limitation).
+  kpasswdserver today (upstream protocol, known limitation). Addressing keeps results from match rules and eavesdropping,
+  not from a bus monitor: a same-user process that calls `BecomeMonitor` (the session bus allows it to any connection of
+  its user) sees every message, a targeted result and its password included, as it sees every other secret on the session
+  bus (the reviewer's probe; known limitation, security review of step 9e, NIT-1).
 - SC9c never blocks on itself (counter-review of PR #13, minor; built in step 9e): storing into a locked keyring makes
   gnome-keyring ask through gcr's prompter, which is the bridge. The bridge therefore stores with libsecret's asynchronous
   calls (`secret_password_storev_binary` with a callback on its GLib main context), answers `addAuthInfo` at once, looks
   remembered passwords up asynchronously too (a check unlocks the keyring when an item is there; a query searches without
   unlocking), and makes no synchronous call that can cause a prompt; the unlock prompt then takes its turn in the queue
   (`kio_passwd.sh`: addAuthInfo answered in milliseconds with the keyring locked, the unlock prompt in the shell, other
-  calls answered meanwhile).
+  calls answered meanwhile). A call that may hold one of gnome-keyring's unlock prompts is never cancelled while that
+  Secret Service runs (gnome-keyring 51.1 aborts when an unlock prompt waiting behind another is dismissed); a store holds
+  one of 8 places for at most 120 s; the stores and searches sent to a Secret Service that leaves the bus end at once
+  (ADR-0035 9-50).
 - SC10 the Secret Service handover (ADR-0035 D-12, owner decision Q17-b, step 2c; `grassfield-secrets-handover`, a user unit
   the session starts before the shell). Nothing for the user to do. At the session's start a ksecretd left over from an
   earlier session that still holds `org.freedesktop.secrets` is made to quit, so apps opened from the Dock find the keychain;
@@ -730,7 +739,12 @@ Rules (fail closed: no answer is ever invented):
   and a KIO sheet) answered "nothing" at once; wrong answers; the shell's refusal (no cancelled entry); a changed name and
   the old URL's next query; no name field; `<NoAuthPrompt>`; the caller leaving; the shell leaving (the client answered, the
   name released, kiod6's stand-in activated); no shell or a shell without kind `kio`: the name not held, kiod6's stand-in
-  activated or keeping it; oversized AuthInfo and the LEGACY method refused; no test password in the bridge's output;
+  activated or keeping it; KDE's real kiod6 started while the bridge holds the name (kept with no shell and a check
+  answered at once, taken by a bridge started then, released when kiod6 goes); a worker plugin of the user's run by
+  the real kioworker shown as an unidentified program; the keychain's calls (a remembered entry in memory only while its
+  window lives, gnome-keyring up when a check's caller leaves while its unlock prompt waits behind a store's, a store's
+  place freed after its time, gnome-keyring killed: the waiting stores end); oversized AuthInfo and the LEGACY method
+  refused; no test password in the bridge's output;
   `--mutants`: 14 of the server, among them a broadcast result, a requester trusted without its credentials, a synchronous
   store, Remember ignored and the kinds gate, and 6 of the cache key and the cache against the unit tests, all caught), the
   server sheet (`tests/security/secret_sheets.sh`: held, Connect's rule, Remember and the keyring's line, a fixed name, the
@@ -789,11 +803,16 @@ with the original app named only when the caller's text names it); copies of the
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted; the
 sheet says so only for gnome-keyring, whose file format tells, ADR-0035 9-45); a
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b),
-and can make KIO's worker ask for a server of its own choosing (the row says "KIO", the server is the address the worker
-connects to, 9-42, 9-43); step 9e: a kiod6 started while no shell drew the sheet (a shell restart, a KF6 app's SSL check
-that started kiod6 for its other names) keeps `org.kde.kpasswdserver6` for the session, and KIO asks in KDE's dialog
-until kiod6 exits (the journal says the bridge is queued, 9-36); for 1 s after the shell goes, KIO requests get "nothing"
-(9-37); a KIO request is held until a click, even right after the user's own click on a network location (9-38); the sheet
+and can make KIO's worker ask for a server of its own choosing (the row says "KIO" only while the worker runs nothing but
+trusted code, and the server is the host the request names, never proof of where anything connects, 9-42, 9-43); step
+9e: a kiod6 started while no shell drew the sheet (a shell restart, a KF6 app's SSL check that started kiod6 for its other
+names) keeps `org.kde.kpasswdserver6` for the session, and KIO asks in KDE's dialog until kiod6 exits (the journal says
+the bridge is queued, 9-36); a kiod6 started while the bridge held the name never takes it, so with no shell KIO's
+requests get "nothing" at once until kiod6 exits, never KDE's dialog (9-36); for 1 s after the shell goes, KIO requests
+get "nothing" (9-37); gnome-keyring 51.1 itself aborts when a client dismisses an unlock prompt waiting behind another,
+and its queue of unlock prompts stalls after a dismissal (the bridge never dismisses one; a store whose prompt stalls
+gives its place up after 120 s, 9-50); a KIO request is held until a click, even right after the user's own click on a
+network location (9-38); the sheet
 has no domain field (a domain the caller sent goes back unchanged) and no anonymous option, and an account with an empty
 password cannot be entered (9-47); an entry of the session cache tied to a window id lives for the bridge's life, as in
 kiod6 (9-39); KIO's workers other than ftp, a real Files window and a real keyring prompt on screen are not verified; GDBus

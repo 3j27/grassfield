@@ -1737,7 +1737,8 @@ only); no QtDBus, no KWallet API.
   `UnknownMethod` or `InvalidArgs`). An `AuthInfo` is `(ysssssssssbbbba{s(siv)})` as `authinfo.cpp:210-231` marshals it,
   read with bounds (9-46) and written back with version 1; its password lives in gcr's secure memory from the bus to the
   reply, never in a `QString`. `org.kde.kpasswdserver6` is requested (flags 0) while a shell that draws kind `kio` is
-  connected and released 1 s after the shell goes (9-36, 9-37). The method reply (the requestId, counted from 0 as
+  connected and released 1 s after the shell goes, or kept while kiod6 runs without it (9-36, 9-37, amended after the
+  security review of step 9e). The method reply (the requestId, counted from 0 as
   `kpasswdserver.cpp:46-50`) always goes before its result, as `:285-291`; each result is a signal addressed to the caller's
   unique name (`g_dbus_connection_emit_signal` with a destination), never broadcast as `:330, 852, 883` do (SC9b).
 - **kpasswdserver's rules** (9-39): the sequence number (`DESIGN`, "Sequence numbers"); the session cache, its key with its
@@ -1753,7 +1754,8 @@ only); no QtDBus, no KWallet API.
   locked keyring asks through gcr's prompter, which is this bridge, and its sheet takes its turn in the shell's queue (SC9c).
 - **Who asks** (9-43): the caller's credentials and pidfd (`Identity.h`), as for gcr; KIO's worker executable
   `/usr/lib/kf6/kioworker` (root's, trusted) is the new known role `kio`, on another program's behalf (it runs whatever
-  worker plugin its command line names, `worker.cpp:495-531`); an app's row or "Unidentified program" otherwise.
+  worker plugin its command line names, `worker.cpp:495-531`), only while it maps nothing but trusted code (9-43 amended);
+  an app's row or "Unidentified program" otherwise.
 - **prompter/1**: the kind `kio` (spec section 5, "prompter/1 protocol"): the requester, the server (a host name and its port
   only, 9-42), the login (the name field's first text and mode, the realm, retry, Remember, the keyring's protection, 9-45);
   the answer's `identity` (the name, when asked), `password` (never empty), `choice` (Remember, when offered). The bridge's
@@ -1767,21 +1769,23 @@ only); no QtDBus, no KWallet API.
   line about a keyring without a password, Cancel / Connect; "The name or password was not accepted. Try again." after a
   failed login (9-40); `SecretAgent` holds every KIO request until a click past the guard (9-38). French catalog: 14
   strings.
-- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (71 cases, plain and under ASan and UBSan: the AuthInfo read and written
+- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (72 cases, plain and under ASan and UBSan: the AuthInfo read and written
   as KIO marshals it and its bounds, the extra fields, a password that is not text never on the bus, secure copies, the
   cache key and its quirks, the server shown, the keyring item's attributes, the keyring's protection from its file, the
-  cache's rules, its lifetimes and its bound, the kio prompt, the kio role); `tests/security/tst_prompter.qml` (93 with step
-  9c's fixes merged), `tst_secretsheetmodel.qml` (35); `tests/security/kio_passwd.sh` (50 checks on a private session bus
-  with KIO's REAL client, `KPasswdServerClient` of the installed KF6 KIOCore, KIO's real ftp worker logging in to a local
-  test server, the real gnome-keyring, a fake Secret Service, kiod6's stand-in started by D-Bus activation, a second
-  listener and a stranger; `--mutants`: 14 of the server and 6 of the cache's rules against the unit tests, all caught);
+  cache's rules, its lifetimes and its bound, the kio prompt, the kio role and its trusted code);
+  `tests/security/tst_prompter.qml` (93 with step 9c's fixes merged), `tst_secretsheetmodel.qml` (35);
+  `tests/security/kio_passwd.sh` (70 checks on a private session bus with KIO's REAL client, `KPasswdServerClient` of the
+  installed KF6 KIOCore, KIO's real ftp worker logging in to a local test server, the real gnome-keyring, a fake Secret
+  Service, kiod6's stand-in started by D-Bus activation and KDE's real kiod6, a second listener, a stranger and a worker
+  plugin of the user's own; `--mutants`: 23 of the server and 6 of the cache's rules against the unit tests, all caught);
   `tests/security/secret_sheets.sh` (the server sheet in the real agent and queue: 71 results with the model's test, 17
-  static checks; `--mutants`: 44 with step 9c's, all caught); `tests/security/secret_bridge.sh` (the kio kind through the
-  shell's real client against the fake bridge, a server that is not a host name closing the connection, and a KIO query
-  answered through that client against the real bridge; `--mutants`: 3 more, 13 in all, all caught); `kio_passwd.sh`,
-  `prompter_bridge.sh` and `nm_agent.sh` also pass with the bridge built with ASan and UBSan (`build-direct.sh --asan`);
-  `tests/shell/session_services.sh` (the PKGBUILD declares libsecret). Nested and visual: NOT VERIFIED; KIO's sftp and smb
-  workers, a real gnome-keyring unlock prompt on screen, a real Files window: NOT VERIFIED (owner L2, spec A-SC7).
+  static checks; `--mutants`: 43 with step 9c's, all caught; the count was 44 before the security review of step 9e, NIT-3:
+  43 are defined and run); `tests/security/secret_bridge.sh` (the kio kind through the shell's real client against the fake
+  bridge, a server that is not a host name closing the connection, and a KIO query answered through that client against the
+  real bridge; `--mutants`: 3 more, 13 in all, all caught); `kio_passwd.sh`, `prompter_bridge.sh` and `nm_agent.sh` also
+  pass with the bridge built with ASan and UBSan (`build-direct.sh --asan`); `tests/shell/session_services.sh` (the PKGBUILD
+  declares libsecret). Nested and visual: NOT VERIFIED; KIO's sftp and smb workers, a real gnome-keyring unlock prompt on
+  screen, a real Files window: NOT VERIFIED (owner L2, spec A-SC7).
 - **What 9e changes for the user**: a network location that needs a password (Files, the D-4 panel, any KF6 app) asks in
   Grassfield's server sheet instead of KDE's dialog, and "Remember this password" keeps it in the keyring instead of
   KWallet: no KWallet wizard or wallet password appears for network passwords in a Grassfield session.
@@ -1799,7 +1803,24 @@ none widens a rule of Q12's text).
   dialog). Cost: a kiod6 started while the shell was down (a shell restart, a KF6 app's SSL check) keeps the name for the
   session, and KDE's dialog stays until it exits; the journal says "queued behind it" (spec known limitations). The object
   stays exported for the bridge's life; a call that reaches it while no shell draws `kio` is answered as if nothing were
-  known: no cache read, no sheet, nothing stored (9-48).
+  known: no cache read, no sheet, nothing stored (9-48). **Amended after the security review of step 9e (MINOR-1).** The
+  cost above missed a case: a kiod6 started while the *bridge* holds the name (a KF6 app's SSL check or cookie jar starts it
+  for `org.kde.kssld6` or `org.kde.kcookiejar6`) cannot register `org.kde.kpasswdserver6` and never tries again (its names
+  are registered once, at start, without queueing: `kiod_main.cpp:107-115`), and a second kiod6 started by activation
+  leaves at once, as KDBusService `Unique` (`kdbusaddons/src/kdbusservice.cpp:196-230`: `Activate` on the first, then
+  `exit`). Once the bridge released the name, KIO's calls waited for activation's 25 s and failed, with no dialog until the
+  shell came back (the reviewer's probe, reproduced with the real kiod6 in the test container: "Failed to activate service
+  'org.kde.kpasswdserver6': timed out"). No call of kiod6's makes it register the name again: it exports `/MainApplication`
+  (QApplication's slots, `quit` among them) and its modules' objects, loaded on demand by a D-Bus spy hook, never their
+  names; making it quit would drop its other modules' session state (kcookiejar's session cookies, kssld's SSL rules).
+  Options: (a) make kiod6 quit when the bridge releases the name; (b) keep the name while kiod6 runs without it, answering
+  "nothing" at once (9-48), until kiod6 leaves the bus; a bridge that finds kiod6 running without the name (2 s after kiod6
+  appears, and at its own start: a bridge restarted meanwhile) takes it the same way. **Choice: (b).** KDE's dialog is the
+  fallback only while kiod6 did not start during the bridge's hold; otherwise, with no shell, KIO's workers report a
+  cancelled login at once until the shell returns or kiod6 exits (fail closed, never a 25 s hang). Tests: `kio_passwd.sh`
+  20 with KDE's real kiod6 (started for kssld6 while the bridge holds the name: not taken; the shell gone: kept, a check
+  answered in milliseconds; a bridge started then: takes it; kiod6 gone: released, and the next call starts kiod6, which
+  takes it); mutants `kiod6-ignored-at-release`, `kiod6-not-repaired`, `kept-after-kiod6-left`.
 - **9-37. How do requests in flight end when the shell goes?** KIO's client waits for its result with no time limit
   (`kpasswdserverloop.cpp:25-31`) and hears only of the name being freed (`:16-19`), never of it passing to a queued owner.
   **Choice:** every open request (shown, waiting, a check in a keyring lookup) is answered "nothing" (the AuthInfo unmodified:
@@ -1813,7 +1834,10 @@ none widens a rule of Q12's text).
   queries would be answered "nothing" without a sheet for a Cancel the user never gave. A refusal carries nothing; one with a
   password, a name or a choice is a wrong answer (cancelled). Tests: `kio_passwd.sh` 13 (two queries of one server, the first
   refused: the second gets a sheet; a refusal carrying a password ends with nothing), mutant `refusal-as-cancel`;
-  `secret_sheets.sh` test_34 and the fake bridge's bound scenario (a kio request past the bound is `refused`).
+  `secret_sheets.sh` test_34 and the fake bridge's bound scenario (a kio request past the bound is `refused`). **Amended
+  after the security review of step 9e (MINOR-1):** the name goes 1 s later only while kiod6 is not running; else it is
+  kept until kiod6 leaves the bus (9-36). A check's keyring search still running when its request ends is not cancelled:
+  its result is dropped (9-50).
 - **9-38. Does a KIO request take the keyboard when it arrives?** A KIO worker asks when it decides: a job any program of the
   user can start (for a server of its own choosing), Files' background listings, a KF6 app's autosave to a remote URL; what
   reaches the fields goes to that worker. Options: (a) gcr's rule (the keyboard at once unless held for another reason);
@@ -1831,7 +1855,15 @@ none widens a rule of Q12's text).
   `:313-315`); a clock that does not jump (`CLOCK_MONOTONIC` for `time()`); bounds (9-46). An entry tied to a window lives
   for the bridge's life, as in kiod6, which never hears of windows closing outside KDE (`KDEDModule::windowUnregistered`,
   X11's `windowRemoved`). Rule applied: byte compatibility with KIO's clients means the same answers for the same requests;
-  never copy a bug that blocks the user.
+  never copy a bug that blocks the user. **Amended after the security review of step 9e (NIT-2).** A password sent to the
+  keychain stayed in the session cache for the bridge's life (keepPassword makes an entry of no window live for ever), so a
+  check got it from memory while the keyring was locked. kpasswdserver clears keepPassword in its in-memory entry once its
+  wallet took the password (`kpasswdserver.cpp:427-434, 947-950`): the entry then lives while its window lives, or 10 s
+  for no window. The bridge does the same once a store is sent, and a store that fails gives its entry the session's life
+  back when it is still the same entry (kpasswdserver keeps it so when its wallet cannot take it). The result sent to KIO
+  keeps the user's choice (kpasswdserver clears it there too): the worker's own addAuthInfo stores only on it (9-41).
+  Tests: `kio_passwd.sh` 21 (a check of a remembered server after 10 s, the keyring locked: not answered from memory; a
+  store whose unlock prompt the user dismissed: kept for the session), mutant `remembered-kept-in-memory`.
 - **9-40. What does the sheet show of the caller's text?** An AuthInfo carries the worker's prompt, caption and comment (KIO's
   own translated strings, some with HTML: `ftp.cpp:574-578`), the realm, and the query's errorMsg (for ftp the server's own
   reply, `:563-567`). Options: (a) kpasswdserver's dialog (prompt, caption, comment, errorMsg's retry box); (b) Grassfield's
@@ -1855,14 +1887,26 @@ none widens a rule of Q12's text).
   zone, then its port when the URL has one; no host of that form, no sheet (the query gets nothing). It is a quoted field of
   Grassfield's sentence, as the SSID is (9-33). Rule applied: SC3b keeps free text out of the title; a host name is the
   address the worker connects to, shown as a browser shows it (never a look-alike character); `Prompter.js` refuses any other
-  server, so a broken bridge cannot draw free text there either.
+  server, so a broken bridge cannot draw free text there either. **Amended after the security review of step 9e
+  (MINOR-2):** the server is the host of the URL in the caller's request, never proof of where anything connects: any
+  program can name any server, through KIO's worker or on its own; the row says which program asks (9-43).
 - **9-43. Who is shown as asking?** KF6 starts each worker detached (`worker.cpp:531`, `QProcess::startDetached`): its parent
   is not the app, and the window id an app passes (`simplejob.cpp:151-154`) means nothing on Wayland (kpasswdserver uses it
   to parent its dialog). Options: (a) the worker's row from its credentials, as gcr's callers; (b) look for the app through
   the process tree or the window id. **Choice: (a)**: `/usr/lib/kf6/kioworker` is the role `kio` ("Requested by KIO for an
   app"), on another program's behalf; an app that calls the server itself gets its own row; anything else "Unidentified
   program" with its executable. Rule applied: Q12 (the requester only from D-Bus credentials), 9-14 (the row names the
-  program that opened the connection); (b) would name an app from data its caller controls.
+  program that opened the connection); (b) would name an app from data its caller controls. **Amended after the security
+  review of step 9e (MINOR-2).** `kioworker` loads whatever library its first argument names, from any path (KIO 6.31.0
+  `src/kioworker/kioworker.cpp:49-65`, `QPluginLoader` then `QLibrary`): the reviewer's own plugin, run as
+  `/usr/lib/kf6/kioworker <its .so> smb x y`, was shown as KIO with a server of its own in Grassfield's sentence and got the
+  typed password. 9-14's rule for an app's name now holds for this row too: `kio` only for a process in the bridge's mount
+  and user namespaces whose every file mapped executable is trusted (root's, by device and inode, as KIO's own workers under
+  `/usr/lib/qt6/plugins/kf6/kio` are); a worker that maps a library of the user's is "Unidentified program" with
+  `/usr/lib/kf6/kioworker` named. The other known callers keep 9-14's rule (step 9b's integrator round adds the bridge's
+  namespaces to them). What this cannot see stays 9-14's (a process that ptraces a trusted worker, a connection handed
+  over). Tests: unit `KiosWorkerRowNeedsOnlyTrustedCode`; `kio_passwd.sh` 9 (KIO's real ftp worker: `kio`; a plugin of the
+  user's run by the real kioworker: unidentified), mutant `kio-row-for-any-plugin`.
 - **9-44. How are remembered passwords kept?** **Choice:** libsecret's schema `org.grassfield.NetworkPassword` in the default
   collection (`SECRET_COLLECTION_DEFAULT`, which libsecret creates with gnome-keyring's own new-keyring prompt when it is
   missing): attributes `key` (kpasswdserver's cache key) and `realm` (KWallet's entry "<key>-<realm>", `:97-101`) and `user`
@@ -1892,7 +1936,9 @@ none widens a rule of Q12's text).
   once; a query shares the shell's bound of 8 with gcr's and NetworkManager's requests; at most 8 stores in flight; the
   session cache holds 256 entries (the expired go first, then the oldest). No time limit on a sheet (KIO's client has
   none); each keyring step before a sheet (the search, the protection) gives up after 5 s and the sheet goes without what it
-  would say. Rule applied: bounded input on the secret path (9-11); kpasswdserver has none of these bounds.
+  would say. Rule applied: bounded input on the secret path (9-11); kpasswdserver has none of these bounds. **Amended after
+  the security review of step 9e (MINOR-3):** a store holds one of the 8 places for at most 120 s, 32 stores alive at most,
+  and the stores sent to a Secret Service that leaves the bus end at once (9-50).
 - **9-47. The name and password fields.** **Choice:** Connect takes a password that is not empty and, when the sheet asks for a
   name, a name; Return in the name moves on to the password; a caller's readOnly shows the name read-only (and the answer
   carries none: the caller's stays), `hide-username-line` shows no name field; the `anonymous` extra field is answered false
@@ -1916,6 +1962,41 @@ none widens a rule of Q12's text).
   libsecret value straight into gcr's secure memory (`KioAuth.h` `Secret`), the cache keeps it there, a result's string and
   a stored value are that memory itself (zeroed and freed with the GVariant or the SecretValue); GDBus marshals copies into
   the messages it reads and writes and frees them unwiped, as for Wi-Fi secrets (9-35). Rule applied: SC5, D-9.
+- **9-50. Keychain calls and gnome-keyring's unlock prompts** (security review of step 9e, MINOR-3 and its triage;
+  gnome-keyring 51.1's `daemon/dbus/gkd-secret-unlock.c` read as data). A store had no time limit: with gnome-keyring killed
+  while stores waited on its unlock prompt, libsecret's calls never returned, cancelled or not, and the 8 places stayed
+  taken for the bridge's life (every later Remember dropped, only logged; reproduced in the test container). Triage of the
+  reviewer's gnome-keyring abort (3 of 6 runs when the shell left while a check's and a store's unlock prompts were
+  pending): gnome-keyring keeps one global queue of unlock prompts, and `mark_as_complete` pops its head and calls
+  `perform_next_unlock` on it whatever it is (`:176-179`), so dismissing a prompt that waits in the queue while another is
+  shown restarts the shown one and fails `g_assert (!self->current)` (`:244`): the daemon aborts. Read from the same code,
+  not reproduced here: dismissing the shown prompt leaves the next one waiting for good (`on_unlock_complete` pops it as its
+  own, `:195-199`), and a user's cancel of the shown prompt while two or more wait requeues the next one behind the others
+  and starts none (`:272-300`; the reviewer's probe saw none of seven waiting stores' prompts after the user dismissed the
+  first). Our order triggered the abort: when the shell left, or a check's caller left, the bridge cancelled the check's
+  unlocking search, and libsecret dismissed its waiting prompt while a store's was shown. The abort is gnome-keyring's own:
+  two plain D-Bus clients with no KIO and no libsecret reproduce it every time (A: `Unlock`, then `Prompt`, its prompt shown
+  by gcr's prompter, here the bridge with a test shell that does not answer; B: the same, then `Dismiss` while it waits; 3
+  of 3 in the test container), and any app whose libsecret call to unlock is cancelled can trigger it (to be reported
+  upstream; no report filed from here). **Choice:** a call that may hold an unlock prompt (a store, a check's unlocking
+  search) is never cancelled while the Secret Service that holds it runs: a request that ends drops its search's result (its
+  unlock sheet stays for the user to answer), and the bridge cancels no keychain call when it stops; a store holds one of 8
+  places for at most 120 s (`--kio-store-timeout-ms` in development runs), then gives the place up and goes on, its outcome
+  logged when it comes ("after its place was freed"), 32 stores alive at most; when `org.freedesktop.secrets`'s owner leaves
+  the bus, the stores and searches sent to it end at once (their places freed, their checks answered "nothing", the log says
+  why) and their calls are cancelled, which dismisses nothing that runs; libsecret's shared service is then dropped
+  (`secret_service_disconnect`): it kept the session opened with the Secret Service that left, and every later store and
+  search failed ("The session wrapping the secret does not exist") for the bridge's life once gnome-keyring restarted (found
+  by `kio_passwd.sh` 21). Cost: a check whose caller left keeps its unlock sheet in the shell until the user answers it; a
+  libsecret call to a Secret Service that died keeps its copy of the password in secure memory until the bridge exits
+  (libsecret never completes it, cancelled or not: LeakSanitizer counts these calls when the bridge exits, and
+  `kio_passwd.sh` judges no leak of the bridge that 21 used). Tests: `kio_passwd.sh` 21 (a check's caller leaves while its
+  unlock prompt waits behind a store's: gnome-keyring stays up; eight waiting stores fill the places, the ninth is dropped,
+  after 4 s the places are free and the next store goes; gnome-keyring killed: the nine waiting stores end at once, and with
+  gnome-keyring back the next store is remembered); the reviewer's probe (the shell leaving with both prompts pending) 6 of
+  6 runs without an abort (2 of 4 aborted before); mutants `unlock-search-cancelled-with-its-request`,
+  `store-places-never-freed`, `stores-kept-when-the-service-leaves`, `libsecret-session-kept`. Rule applied: SC9c (never
+  block on the keychain), fail closed, never take the user's keyring down.
 
 ### D-10. What Omarchy still shows (category D; O1–O11)
 - **Screenshots (O1, O2, P8).** Re-wired now, replaced later (owner decision Q4, 2026-10-27):
@@ -1993,7 +2074,7 @@ Options (asked 2026-10-27, recommended first):
   Caveat shown in the
   spec: Omarchy's default keyring is unencrypted (probe P12), so a remembered network password is stored in clear on disk
   until the user protects the keyring (macOS encrypts the login keychain). Fallback: bridge down → D-Bus activation starts
-  kiod6 (KDE's dialog, as today). **Delivered in step 9e** (D-9, "Delivered in step 9e", decisions 9-36 to 9-49).
+  kiod6 (KDE's dialog, as today). **Delivered in step 9e** (D-9, "Delivered in step 9e", decisions 9-36 to 9-50).
 - K2. Grassfield delegates for Files' own dialogs only; KDE's password dialog stays (themed); KWallet disabled for the session
   by a session-only `kwalletrc` (`[Wallet] Enabled=false` in a Grassfield `XDG_CONFIG_DIRS` entry; the key is read by
   `KWalletDLauncher`, `src/api/KWallet/kwallet.cpp:872-884`; the user's own `kwalletrc` wins), passwords remembered for the
