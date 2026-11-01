@@ -1,0 +1,21 @@
+// Grassfield Software Update (ADR-0033 "Step 5", owner decision SU-M2: one password for Update Now and its migrations'
+// sudo commands). OPUS SECURITY REVIEW REQUIRED: it grants root without a dialog.
+//
+// grassfield-update-helper, as root and after the password of Update Now, runs Omarchy's migrations as that person in the
+// transient system unit grassfield-update-migrate.service (NoNewPrivileges=yes). A process of that unit, and no other,
+// may start a transient unit named grassfield-update-root-<32 hex>.service: the migrations' `sudo` (the helper's
+// /usr/lib/grassfield/update-sudo/sudo) asks systemd for one per command. Everything else that unit asks systemd to manage
+// is refused, never a dialog.
+//
+// subject.system_unit is the system unit systemd reports for the caller's pidfd, which dbus-broker hands to polkit
+// (polkit sets it only from such a safe pidfd: a process cannot claim it). Only root can make a system unit, and only the
+// unit's own descendants are in it; the unit and every process in it end when the migrations end.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units" || subject.system_unit !== "grassfield-update-migrate.service")
+        return polkit.Result.NOT_HANDLED;
+    var unit = action.lookup("unit") || "";
+    if (subject.no_new_privileges === true && action.lookup("verb") === "start"
+        && /^grassfield-update-root-[0-9a-f]{32}\.service$/.test(unit))
+        return polkit.Result.YES;
+    return polkit.Result.NO;
+});

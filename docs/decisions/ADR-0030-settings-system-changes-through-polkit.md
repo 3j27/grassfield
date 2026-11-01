@@ -337,3 +337,35 @@ The helper:
 - writes only pacman's own files (through pacman, and the sync databases it checked), snapper's snapshots, and its status
   files under `/run/grassfield-update/`.
 It, its runner and its policy need the security reviewer's (opus) PASS before they merge. Everything else in this ADR stands.
+
+## Amendment (ADR-0033 "Step 5", owner decision SU-M2, 2026-10-31, Proposed)
+The owner chose one password for Update Now and the `sudo` commands of Omarchy's migrations (« Mot de passe unique »). This
+widens step 3's exception; it needs the security reviewer's (opus) PASS before it merges:
+- `grassfield-update-helper` may run, after its transaction, the migrations that update brings (the same loop as
+  `omarchy-migrate`, by name). It runs them as the person who chose Update Now: pkexec's caller, with a real uid of 1000 or
+  more, who must be an administrator (in `wheel`). They run in the transient system unit
+  `grassfield-update-migrate.service`, with:
+  - the primary group `grassfield-update` (sysusers.d, no member), so the person's other processes cannot open the unit's
+    `/proc` entries or attach to it;
+  - `NoNewPrivileges=yes`, no namespace of its own (`RestrictNamespaces=yes`), its personality locked;
+  - a `/tmp` of its own.
+  The helper still runs no Omarchy script as root and reads no variable for itself. It reads its caller's uid and two session
+  values (`WAYLAND_DISPLAY`, `HYPRLAND_INSTANCE_SIGNATURE`, checked) from `/proc`, for that unit only.
+- **A polkit rule**, the first Grassfield ships: `/usr/share/polkit-1/rules.d/49-grassfield-update.rules`. It lets a
+  process of that unit, and no other, start a transient unit named `grassfield-update-root-<32 hex>.service` through
+  systemd (`org.freedesktop.systemd1.manage-units`, verb `start`), without a dialog. The migrations' `sudo`
+  (`/usr/lib/grassfield/update-sudo/sudo`, run as the person) asks systemd for one such unit per command.
+- **It runs only when all of these hold,** otherwise the run goes to Omarchy's terminal before any change:
+  - systemd;
+  - an administrator;
+  - no older migration pending;
+  - the unit's group without a member;
+  - a trial `sudo true` through the channel.
+- **What needs a person still goes to the terminal:** `gum`, `/dev/tty`, `pkexec`, `su`, `run0`, `doas`, or a `sudo` by its
+  path.
+
+Details, the boundary, what remains (the person's own files, as in Omarchy's terminal) and the evidence are in ADR-0033
+"Step 5". Its independent opus review failed the first version (a non-administrator, and `/proc/<pid>/fd`); the conditions
+above answer it, and the re-review passed (its minors answered: the migrations' `sudo` takes root as its only target). The
+integrator's opus review found no MAJOR; its required minors are answered (no namespaces in the unit; the migrations, their
+folder, the sudo and every root command root's alone).
