@@ -5,7 +5,8 @@
 # (tests/fixtures/ftp-login-server.py), a fake shell on the bridge's socket (tests/fixtures/prompter-shell.py), the real
 # gnome-keyring as the Secret Service (a throwaway keyring in the scenario's scratch home), a fake Secret Service that is not
 # gnome-keyring (tests/fixtures/fake-secret-service.py), a stand-in for kiod6 that D-Bus activation starts, a second listener
-# and a stranger (tests/fixtures/kpasswd-peer.py). Never the owner's buses, keyring or secrets: every process runs under env -i
+# and a stranger (tests/fixtures/kpasswd-peer.py), a worker plugin of the user's own (tests/fixtures/kio-plugin.cpp) and KDE's
+# real kiod6 started by D-Bus activation. Never the owner's buses, keyring or secrets: every process runs under env -i
 # with the test's scratch directories, the bridge as a development run, which refuses any bus but a private test bus.
 #  1 no shell: the bridge does not hold org.kde.kpasswdserver6, and a KIO client's check activates kiod6's stand-in; the
 #    listener hears the stand-in's broadcast result (the control for 7)
@@ -22,7 +23,8 @@
 #  8 a stranger (a Python client) is shown as an unidentified program with its executable; its result comes to it only
 #  9 KIO's real worker: kio_ftp asks for the test server's login: requester "kio" (/usr/lib/kf6/kioworker, its text another
 #    program's), the server 127.0.0.1:<port>; the login typed in the shell reaches the server; the worker's own
-#    addAuthInfo remembers it; a second job logs in without a sheet
+#    addAuthInfo remembers it; a second job logs in without a sheet; a worker plugin of the user's own run by kioworker is
+#    an unidentified program, never KIO's row (the security review of step 9e, MINOR-2)
 # 10 addAuthInfo with the keyring locked: answered at once, the keyring's unlock prompt comes to the shell (after the server
 #    sheet, in the queue) while the bridge keeps answering other calls; once unlocked, the password is stored
 # 11 the keyring's protection: a keyring without a password (Omarchy's plain-text Default_keyring) is "unprotected"; a
@@ -37,11 +39,19 @@
 # 16 the caller leaves while its query is shown: the shell gets "cancel"
 # 17 the shell leaves while a query is shown: KIO's client gets nothing at once; the name is released and the next request
 #    activates kiod6's stand-in
+# 20 KDE's real kiod6, started for its other names (kssld6) while the bridge holds the name, never takes it: the shell gone,
+#    the bridge keeps it and answers at once; a bridge started while kiod6 runs without it takes it; kiod6 gone, the name
+#    is released and the next call starts kiod6, which takes it (the security review of step 9e, MINOR-1)
+# 21 the keychain's calls (the security review of step 9e, MINOR-3 and NIT-2): a password sent to the keychain stays in
+#    memory only while its window lives (a check after that, with the keyring locked, is not answered from memory); the
+#    caller of a check whose unlock prompt waits behind a store's leaves: gnome-keyring stays up (it aborts when a queued
+#    unlock prompt is dismissed); a store that fails stays in memory for the session; a store holds its place for
+#    --kio-store-timeout-ms only; gnome-keyring killed, the stores waiting on it end at once and the next one is remembered
 # 18 an AuthInfo over the bounds and KIO's LEGACY "ay" method: InvalidArgs
 # 19 no test password, and no sanitizer report (GRASSFIELD_PROMPTER built with build-direct.sh --asan), in the bridge's output
 # Needs g++ with the Qt 6 Core, D-Bus and gcr-4 headers, libsecret and KF6 KIOCore (or GRASSFIELD_PROMPTER: a built bridge;
 # the KIO fixtures are always built here), dbus-daemon, dbus-send, gdbus, python3 with PyGObject (Gio, Secret 1 and Gcr 4);
-# SKIPs without them. 9 SKIPs without kio_ftp; 6, 10 and 11 without gnome-keyring-daemon.
+# SKIPs without them. 9 SKIPs without kio_ftp; 6, 10, 11 and 21 without gnome-keyring-daemon; 20 without kiod6.
 #
 #   tests/security/kio_passwd.sh              PASS / FAIL lines, exit 0 when all pass
 #   tests/security/kio_passwd.sh --mutants    also mutants of the server's guards (and of the cache key, against the unit
@@ -182,6 +192,7 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
   }
   kc_is() { [[ $(kc_lookup "$1" "$2" "$3") == "$4" ]]; }
   have_keyring=0
+  local fakess_pid=""
   command -v gnome-keyring-daemon >/dev/null && have_keyring=1
   gk_up() { # [--unlock]: the real gnome-keyring in the scratch home, unlocked with a throwaway password
     if [[ ${1:-} == --unlock ]]; then
@@ -198,7 +209,7 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
   if ((have_keyring)); then
     gk_up --unlock || { echo "FAIL: gnome-keyring starts on the private bus"; fail=1; have_keyring=0; }
   fi
-  "${env_base[@]}" GRASSFIELD_DEV=1 "$bridge" --socket "$sock" --peer-unit "$leaf" >"$d/bridge.log" 2>&1 &
+  "${env_base[@]}" GRASSFIELD_DEV=1 "$bridge" --socket "$sock" --peer-unit "$leaf" --kio-store-timeout-ms 4000 >"$d/bridge.log" 2>&1 &
   local bridge_pid=$!
   pids+=("$bridge_pid")
   wait_until 5 test -S "$sock"
@@ -326,11 +337,21 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
       desc="...the login typed in the shell reaches the server and the job succeeds"
       check wait_until 30 bash -c 'grep -q "^login ok ftpuser" "$1" && grep -qx "stat ok" "$2"' _ "$d/ftp.log" "$d/stat1.out"
       desc="...the worker's own addAuthInfo keeps it, Remember chosen"
-      check wait_until 10 grep -q "addAuthInfo (ftp): kept for the session and remembered" "$d/bridge.log"
+      check wait_until 10 grep -q "addAuthInfo (ftp): kept in the session's cache while its window lives, and sent to the keychain" "$d/bridge.log"
       n=$(prompts s)
       "${env_base[@]}" "$tmpb/bin/kio-stat" "ftp://127.0.0.1:$port/" >"$d/stat2.out" 2>"$d/stat2.err"
       desc="...a second job logs in without a sheet [$(cat "$d/stat2.out")]"
       check bash -c 'grep -qx "stat ok" "$1" && [[ $(grep -c "\"type\":\"prompt\"" "$2") == "$3" && $(grep -c "^login ok ftpuser" "$4") -ge 2 ]]' _ "$d/stat2.out" "$d/s.shell" "$n" "$d/ftp.log"
+      # A worker plugin of the user's own: kioworker loads it from any path (kioworker.cpp:49-65); KIO's row needs trusted code.
+      n=$(prompts s)
+      "${env_base[@]}" /usr/lib/kf6/kioworker "$tmpb/bin/kio-plugin.so" smb x y >"$d/plugin.out" 2>&1 &
+      pids+=("$!")
+      wait_prompt s "$n" 15
+      desc="a worker plugin of the user's own run by kioworker is an unidentified program (kioworker named), never KIO's row [$(last_prompt s 'm["requester"]["role"] + " " + m["server"]' 2>/dev/null)]"
+      check test "$(last_prompt s '"|".join((m["requester"]["role"], m["requester"]["path"], str(m["requester"]["identified"]), m["server"]))')" \
+        = "unidentified|/usr/lib/kf6/kioworker|False|plugin.example"
+      say s "answer last cancel"
+      wait_until 10 grep -q "^plugin result" "$d/plugin.out"
     else
       echo "FAIL: KIO's real ftp worker asks the shell [$(cat "$d/stat1.out" "$d/stat1.err" 2>/dev/null | head -5)] [$(tail -n 5 "$d/bridge.log" | tr '\n' '|')] [$(tr '\n' '|' <"$d/ftp.log")]"
       fail=1
@@ -378,7 +399,8 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
     kill "$gk_pid" 2>/dev/null
     wait_until 5 bash -c '! gdbus call --address "$1" -d org.freedesktop.DBus -o /org/freedesktop/DBus -m org.freedesktop.DBus.GetNameOwner org.freedesktop.secrets >/dev/null 2>&1' _ "$bus"
     "${env_base[@]}" python3 -I "$root/tests/fixtures/fake-secret-service.py" keychain --log "$d/fakess.log" </dev/null >/dev/null 2>&1 &
-    pids+=("$!")
+    fakess_pid=$!
+    pids+=("$fakess_pid")
     wait_until 10 owned org.freedesktop.secrets
     n=$(prompts s)
     say c "query sftp://other-service.example/ - - keep skipcache"
@@ -510,6 +532,72 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
   desc="results go to the caller only: the second listener heard the stand-in's broadcasts and none of the bridge's"
   check bash -c '[[ $(grep -c "^signal" "$1") -ge 2 && $(grep -c "^signal" "$1") == $(grep -c "^signal .* user=kiod-standin" "$1") ]]' _ "$d/listen.log"
 
+  # --- 21 the keychain's calls (the security review of step 9e, MINOR-3, NIT-2) ------------------------------------------
+  if ((have_keyring)); then
+    [[ -n $fakess_pid ]] && kill "$fakess_pid" 2>/dev/null
+    wait_until 5 bash -c '! gdbus call --address "$1" -d org.freedesktop.DBus -o /org/freedesktop/DBus -m org.freedesktop.DBus.GetNameOwner org.freedesktop.secrets >/dev/null 2>&1' _ "$bus"
+    rm -rf "$d/gk/data/keyrings"
+    gk_up --unlock
+    # gnome-keyring makes its login keyring the default a moment after it took the name
+    login_ready() { wait_until 10 bash -c 'gdbus call --address "$1" -d org.freedesktop.secrets -o /org/freedesktop/secrets -m org.freedesktop.Secret.Service.ReadAlias default 2>/dev/null | grep -q collection/login' _ "$bus"; }
+    login_ready
+    local gk_owner
+    gk_owner=$(owner org.freedesktop.secrets)
+    ask c "add sftp://keep.example/ kuser keep-pass-1 keep" >/dev/null
+    desc="a password sent to the keychain stays in the session's cache only while its window lives (kpasswdserver after a wallet store)"
+    check grep -q "addAuthInfo (sftp): kept in the session.s cache while its window lives, and sent to the keychain" "$d/bridge.log"
+    wait_until 10 kc_is "sftp-keep.example:-1" "" kuser keep-pass-1
+    gdbus call --address "$bus" -d org.freedesktop.secrets -o /org/freedesktop/secrets -m org.freedesktop.Secret.Service.Lock \
+      "['/org/freedesktop/secrets/collection/login']" >/dev/null 2>&1
+    sleep 10.5 # an entry of no window lives 10 s (kpasswdserver.cpp:703-705)
+    n=$(prompts s)
+    say st2 "add sftp://store-a.example/ u pw-a"
+    wait_prompt s "$n"
+    local gid_a
+    gid_a=$(last_id s)
+    desc="a store into the locked keyring: its unlock prompt in the shell [$(last_prompt s 'm["kind"] + " " + m["requester"]["role"]' 2>/dev/null)]"
+    check test "$(last_prompt s 'm["kind"] + "|" + m["requester"]["role"]')" = "password|keyring"
+    peer_up chk stranger
+    say chk "check sftp://keep.example/"
+    wait_until 5 grep -q '^check [0-9]' "$d/chk.log"
+    sleep 1.5
+    desc="...a check of the remembered server, after its window's time, is not answered from memory while the keyring is locked [$(grep "^result check" "$d/chk.log")]"
+    check bash -c '! grep -q "^result check" "$1"' _ "$d/chk.log"
+    say chk quit
+    sleep 2
+    desc="...its caller leaves while its unlock prompt waits behind the store's: gnome-keyring stays up (it aborts when a queued unlock prompt is dismissed)"
+    check bash -c 'kill -0 "$1" 2>/dev/null && [[ $2 == "$3" ]]' _ "$gk_pid" "$(owner org.freedesktop.secrets)" "$gk_owner"
+    n=$(prompts s)
+    say s "answer $gid_a cancel"
+    desc="...the store's prompt dismissed by the user: not remembered, kept in memory for the session instead"
+    check wait_until 10 grep -q "a password (sftp) could not be remembered.*; kept in the session.s cache for the session" "$d/bridge.log"
+    if wait_prompt s "$n" 10; then say s "answer last cancel"; fi # the check's own unlock prompt, its turn come
+    sleep 1
+    n=$(prompts s)
+    local i
+    for i in 1 2 3 4 5 6 7 8 9; do say st2 "add sftp://place$i.example/ u pw-p$i"; done
+    desc="eight stores waiting on the keyring hold the eight places: the ninth is dropped [$(grep -c "remembering a password" "$d/bridge.log") stores, $(grep -c "dropped" "$d/bridge.log") dropped, $(grep -c "could not be remembered" "$d/bridge.log") failed]"
+    check wait_until 10 bash -c '(( $(grep -c "dropped: 8 stores hold a place" "$1") >= 1 ))' _ "$d/bridge.log"
+    desc="...after --kio-store-timeout-ms (4 s) a waiting store gives its place up, not cancelled (it may hold gnome-keyring's prompt)"
+    check wait_until 10 bash -c '(( $(grep -c "is not remembered yet: no answer from the Secret Service within 4 s" "$1") >= 8 ))' _ "$d/bridge.log"
+    local before_stores
+    before_stores=$(grep -c "remembering a password" "$d/bridge.log")
+    say st2 "add sftp://place10.example/ u pw-p10"
+    desc="...and the next store goes"
+    check wait_until 5 bash -c '(( $(grep -c "remembering a password" "$1") > $2 ))' _ "$d/bridge.log" "$before_stores"
+    local left_before
+    left_before=$(grep -c "could not be remembered: the Secret Service left the bus" "$d/bridge.log")
+    kill -KILL "$gk_pid" 2>/dev/null
+    wait "$gk_pid" 2>/dev/null
+    desc="gnome-keyring killed while nine stores wait on it: they end at once, their places freed"
+    check wait_until 5 bash -c '(( $(grep -c "could not be remembered: the Secret Service left the bus" "$1") - $2 == 9 ))' _ "$d/bridge.log" "$left_before"
+    gk_up --unlock
+    login_ready
+    say st2 "add sftp://after.example/ u after-pass"
+    desc="...and the next store is remembered"
+    check wait_until 10 kc_is "sftp-after.example:-1" "" u after-pass
+  fi
+
   # --- 17 the shell leaves ------------------------------------------------------------------------------------------------
   n=$(prompts s)
   say c "query sftp://leave.example/ - - keep"
@@ -527,11 +615,76 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
   desc="...and the next request activates kiod6's stand-in [$out]"
   check bash -c '[[ $1 == *"user=kiod-standin"* ]] && grep -q "^#owned" "$2"' _ "$out" "$d/kiod.log"
 
+  # --- 20 KDE's real kiod6 started while the bridge holds the name (the security review of step 9e, MINOR-1) -------------
+  if [[ -x /usr/lib/kf6/kiod6 ]]; then
+    pkill -f "$peer_py kiod" 2>/dev/null # the stand-in 17 started
+    wait_until 5 bash -c '! gdbus call --address "$1" -d org.freedesktop.DBus -o /org/freedesktop/DBus -m org.freedesktop.DBus.GetNameOwner org.kde.kpasswdserver6 >/dev/null 2>&1' _ "$bus"
+    {
+      printf '#!/bin/sh\n'
+      printf 'export PATH=%q HOME=%q XDG_RUNTIME_DIR=%q DBUS_SESSION_BUS_ADDRESS=%q QT_QPA_PLATFORM=offscreen\n' "$PATH" "$d/gk" "$d/run" "$bus"
+      printf 'exec /usr/lib/kf6/kiod6 >>%q 2>&1\n' "$d/kiod6.log"
+    } >"$d/kiod6.sh"
+    chmod 700 "$d/kiod6.sh"
+    local svc
+    for svc in org.kde.kiod6 org.kde.kpasswdserver6 org.kde.kssld6; do
+      printf '[D-BUS Service]\nName=%s\nExec=%s\n' "$svc" "$d/kiod6.sh" >"$d/services/$svc.service"
+    done
+    dbus-send --bus="$bus" --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.ReloadConfig >/dev/null 2>&1
+    kiod6_pid() { gdbus call --address "$bus" -d org.freedesktop.DBus -o /org/freedesktop/DBus -m org.freedesktop.DBus.GetConnectionUnixProcessID org.kde.kiod6 2>/dev/null | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p'; }
+    local acquired
+    acquired=$(grep -c "kpasswdserver6 acquired" "$d/bridge.log")
+    shell_up s5
+    say s5 "hello password confirm kio"
+    wait_until 5 bash -c '(( $(grep -c "kpasswdserver6 acquired" "$1") > $2 ))' _ "$d/bridge.log" "$acquired"
+    gdbus introspect --address "$bus" -d org.kde.kssld6 -o / >/dev/null 2>&1 # a KF6 app's SSL check starts kiod6
+    wait_until 20 bash -c 'gdbus call --address "$1" -d org.freedesktop.DBus -o /org/freedesktop/DBus -m org.freedesktop.DBus.GetNameOwner org.kde.kiod6 >/dev/null 2>&1' _ "$bus"
+    local kpid
+    kpid=$(kiod6_pid)
+    desc="KDE's kiod6, started for kssld6 while the bridge holds org.kde.kpasswdserver6, does not take it [kiod6 $kpid]"
+    check bash -c '[[ -n $1 && $2 == "$3" ]]' _ "$kpid" "$(owner org.kde.kpasswdserver6)" "$bridge_name"
+    say s5 close
+    desc="...the shell gone, the bridge keeps the name: kiod6 would never take it"
+    check wait_until 5 bash -c 'grep -q "kpasswdserver6 kept: kiod6 runs without it" "$1"' _ "$d/bridge.log"
+    desc="...it still owns org.kde.kpasswdserver6"
+    check test "$(owner org.kde.kpasswdserver6)" = "$bridge_name"
+    local t0 t1
+    t0=$(date +%s%N)
+    out=$(ask c "check sftp://example.org/home" 10)
+    t1=$(date +%s%N)
+    desc="...and KIO's check is answered with nothing at once, not after 25 s of activating a kiod6 that cannot take it [$out, $(( (t1 - t0) / 1000000 )) ms]"
+    check bash -c '[[ $1 == "check found=0 "* ]] && (( $2 < 3000 ))' _ "$out" "$(( (t1 - t0) / 1000000 ))"
+    kill -TERM "$bridge_pid" 2>/dev/null
+    wait_until 10 bash -c '! kill -0 "$1" 2>/dev/null' _ "$bridge_pid"
+    "${env_base[@]}" GRASSFIELD_DEV=1 "$bridge" --socket "$sock" --peer-unit "$leaf" >"$d/bridge2.log" 2>&1 &
+    pids+=("$!")
+    wait_until 5 grep -q "KIO's password server ready" "$d/bridge2.log"
+    local bridge2_name
+    bridge2_name=$(sed -n 's/^grassfield-prompter: [^ ]* prompter\/1 on \(:[0-9.]*\) .*/\1/p' "$d/bridge2.log")
+    desc="a bridge that starts while kiod6 runs without the name takes it, and answers at once"
+    check wait_until 10 bash -c 'grep -q "kpasswdserver6 taken: kiod6 runs without it" "$1" && grep -q "kpasswdserver6 acquired" "$1"' _ "$d/bridge2.log"
+    desc="...it owns org.kde.kpasswdserver6"
+    check test "$(owner org.kde.kpasswdserver6)" = "$bridge2_name"
+    out=$(ask c "check sftp://example.org/home" 10)
+    desc="...and a KIO check gets nothing at once [$out]"
+    check bash -c '[[ $1 == "check found=0 "* ]]' _ "$out"
+    kill "$kpid" 2>/dev/null
+    desc="kiod6 gone, the bridge releases the name"
+    check wait_until 10 bash -c 'grep -q "kiod6 left the bus" "$1" && grep -q "kpasswdserver6 released" "$1"' _ "$d/bridge2.log"
+    gdbus call --address "$bus" -d org.kde.kpasswdserver6 -o /modules/kpasswdserver -m org.kde.KPasswdServer.checkAuthInfoAsync \
+      "(byte 1, 'sftp://example.org/', '', '', '', '', '', '', '', '', false, false, false, false, @a{s(siv)} {})" 0 0 >/dev/null 2>&1
+    desc="...and the next KIO call starts kiod6, which takes it (KDE's dialog, as before step 9e)"
+    check bash -c '[[ -n $1 && $1 == "$2" && $1 != "$3" ]]' _ "$(owner org.kde.kpasswdserver6)" "$(owner org.kde.kiod6)" "$bridge2_name"
+    kpid=$(kiod6_pid)
+    [[ -n $kpid ]] && kill "$kpid" 2>/dev/null
+  else
+    echo "SKIP: kio_passwd: no /usr/lib/kf6/kiod6 (20, KDE's real kiod6)"
+  fi
+
   # --- 19 nothing secret in the journal ---------------------------------------------------------------------------------
   desc="no test password in the bridge's output"
-  check bash -c '! grep -q -e "correct horse" -e correct_horse -e stranger-pass -e ftp-pass -e locked-pass -e change-pass -e pin-pass -e throwaway -e "pw-" "$1"' _ "$d/bridge.log"
+  check bash -c '! cat "$@" 2>/dev/null | grep -q -e "correct horse" -e correct_horse -e stranger-pass -e ftp-pass -e locked-pass -e change-pass -e pin-pass -e keep-pass -e after-pass -e throwaway -e "pw-"' _ "$d/bridge.log" "$d/bridge2.log"
   desc="no sanitizer report in the bridge's output (a bridge built with build-direct.sh --asan)"
-  check bash -c '! grep -q -e "AddressSanitizer" -e "runtime error:" "$1"' _ "$d/bridge.log"
+  check bash -c '! cat "$@" 2>/dev/null | grep -q -e "AddressSanitizer" -e "runtime error:"' _ "$d/bridge.log" "$d/bridge2.log"
   return $fail
 }
 
@@ -550,6 +703,9 @@ g++ "${kio_flags[@]}" $(pkg-config --cflags Qt6Core Qt6DBus) "$root/tests/fixtur
 g++ "${kio_flags[@]}" $(pkg-config --cflags Qt6Core Qt6DBus) "$root/tests/fixtures/kio-stat.cpp" -o "$tmpb/bin/kio-stat" \
   -lKF6KIOCore -lKF6CoreAddons $(pkg-config --libs Qt6Core Qt6DBus) >>"$tmpb/kio-build.log" 2>&1 \
   || { cat "$tmpb/kio-build.log"; echo "FAIL: the KIO job builds against KF6 KIOCore"; exit 1; }
+# shellcheck disable=SC2046
+g++ -shared -fPIC -O1 $(pkg-config --cflags gio-2.0) "$root/tests/fixtures/kio-plugin.cpp" -o "$tmpb/bin/kio-plugin.so" $(pkg-config --libs gio-2.0) \
+  >>"$tmpb/kio-build.log" 2>&1 || { cat "$tmpb/kio-build.log"; echo "FAIL: the worker plugin builds"; exit 1; }
 if [[ -z $bridge ]]; then
   "$root/bridges/prompter/build-direct.sh" --out "$tmpb/bridge" >"$tmpb/build.log" 2>&1 || { cat "$tmpb/build.log"; echo "FAIL: the bridge builds"; exit 1; }
   bridge=$tmpb/bridge/grassfield-prompter
@@ -599,6 +755,15 @@ kinds-gate-ignored#bridge#Bridge.cpp#                m_kio->setWanted(m_kinds.co
 keyring-protection-ignored#bridge#KioServer.cpp#                    r->keyring = kio::fileProtection(#                    (void)kio::fileProtection(
 name-kept-when-the-shell-goes#bridge#KioServer.cpp#        if (m_nameWanted)\n            m_releaseSource = g_timeout_add(kReleaseDelayMs, onRelease, this);#        if (false)\n            m_releaseSource = g_timeout_add(kReleaseDelayMs, onRelease, this);
 user-cancel-not-kept#bridge#KioServer.cpp#            m_cache.add(r->key, r->info, 0, m_seqNr, true);#            ;
+kio-row-for-any-plugin#bridge#Identity.cpp#            if (codeChecked && !runsTrustedCodeOnly(facts, where))#            if (false)
+kiod6-ignored-at-release#bridge#KioServer.cpp#            if (running && self->m_owned) {#            if (false) {
+kiod6-not-repaired#bridge#KioServer.cpp#        if (self && !cancelled(error) && call->generation == self->m_nameGen && !self->m_nameWanted && kiod6 && !nameHeld) {#        if (false) {
+kept-after-kiod6-left#bridge#KioServer.cpp#        if (m_forKiod6 && !m_wanted) {#        if (false) {
+unlock-search-cancelled-with-its-request#bridge#KioServer.cpp#SECRET_SEARCH_LOAD_SECRETS), unlock, onLookup, call);#SECRET_SEARCH_LOAD_SECRETS), r->cancellable, onLookup, call);
+store-places-never-freed#bridge#KioServer.cpp#                    store->holdsPlace = false;\n                    --self->m_storesInFlight;#                    ;
+stores-kept-when-the-service-leaves#bridge#KioServer.cpp#            self->secretsOwnerLeft();#            ;
+libsecret-session-kept#bridge#KioServer.cpp#        secret_service_disconnect();#        ;
+remembered-kept-in-memory#bridge#KioServer.cpp#        if (stored)\n            cached.keepPassword = false;#        if (false)\n            cached.keepPassword = false;
 refusal-as-cancel#bridge#Bridge.cpp#            m_kio->abandon(request, QStringLiteral("the shell could not take it"));#            m_kio->userCancel(request);
 old-key-left-prompted#bridge#KioServer.cpp#            m_prompted.removeOne(r->promptedKey);#            m_prompted.removeOne(r->key);
 no-per-caller-bound#bridge#KioServer.cpp#        if (mine >= kPerCaller)#        if (mine >= 99)
