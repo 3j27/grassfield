@@ -27,6 +27,10 @@ tests/integration/portal_settings.sh (ADR-0035 D-8). Output is JSON on stdout (a
                                                grassfield-portal directly, as the frontend makes it (CHOICES a JSON list of desktop
                                                ids; OPTIONS: last_choice, filename, uri, modal, activation_token, strings or a
                                                boolean); its reply, as for impl
+    portal-client.py print PATH SECONDS        org.freedesktop.portal.Print as GTK calls it (gtk/print/gtkprintoperation-portal.c):
+                                               PreparePrint with GTK's settings (two copies) and an A4 page setup, then, when the
+                                               sheet answers 0, Print with the document PATH (a descriptor) and the token:
+                                               {"prepare": <Response>, "print": <Response>}
     portal-client.py permission TABLE ID       the permission store's entry (org.freedesktop.impl.portal.PermissionStore's
                                                Lookup): {"permissions": {app: [...]}}, or {"error": name}
 """
@@ -117,6 +121,10 @@ ACCESS_TYPES = {"icon": "s", "deny_label": "s", "grant_label": "s", "modal": "b"
 
 
 def response_of(conn, request, call, seconds):
+    print(json.dumps(wait_response(conn, request, call, seconds)), flush=True)
+
+
+def wait_response(conn, request, call, seconds):
     answer = {}
     loop = GLib.MainLoop()
 
@@ -130,7 +138,33 @@ def response_of(conn, request, call, seconds):
     call()
     GLib.timeout_add(int(float(seconds) * 1000), lambda: (answer.setdefault("timeout", True), loop.quit()))
     loop.run()
-    print(json.dumps(answer), flush=True)
+    return answer
+
+
+def print_document(conn, path, seconds):
+    sender = conn.get_unique_name()[1:].replace(".", "_")
+    stamp = GLib.get_monotonic_time() % 1000000
+    prepare_token, print_token = "gfprep%d" % stamp, "gfprint%d" % stamp
+    settings = {"n-copies": GLib.Variant("s", "2")}
+    page_setup = {"Name": GLib.Variant("s", "iso_a4_210x297mm"), "Width": GLib.Variant("d", 210.0), "Height": GLib.Variant("d", 297.0)}
+    options = {"handle_token": GLib.Variant("s", prepare_token)}
+    request = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, prepare_token)
+    prepared = wait_response(conn, request, lambda: conn.call_sync(
+        DEST, PATH, "org.freedesktop.portal.Print", "PreparePrint",
+        GLib.Variant("(ssa{sv}a{sv}a{sv})", ("", "Print", settings, page_setup, options)), None, Gio.DBusCallFlags.NONE, 10000, None),
+        seconds)
+    out = {"prepare": prepared}
+    if prepared.get("response") == 0:
+        fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+        fds = Gio.UnixFDList.new()
+        index = fds.append(fd)
+        os.close(fd)
+        options = {"handle_token": GLib.Variant("s", print_token), "token": GLib.Variant("u", prepared["results"]["token"])}
+        request = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, print_token)
+        out["print"] = wait_response(conn, request, lambda: conn.call_with_unix_fd_list_sync(
+            DEST, PATH, "org.freedesktop.portal.Print", "Print", GLib.Variant("(ssha{sv})", ("", "Print", index, options)),
+            None, Gio.DBusCallFlags.NONE, 10000, fds, None), seconds)
+    print(json.dumps(out), flush=True)
 
 
 def camera(conn, seconds):
@@ -219,6 +253,9 @@ def main():
         return
     if command == "apps":
         apps(conn, json.loads(sys.argv[2]), json.loads(sys.argv[3]), sys.argv[4])
+        return
+    if command == "print":
+        print_document(conn, sys.argv[2], sys.argv[3])
         return
     if command == "permission":
         permission(conn, sys.argv[2], sys.argv[3])

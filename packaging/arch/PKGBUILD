@@ -195,7 +195,9 @@ package_grassfield-desktop() {
   # xdg-desktop-portal and xdg-desktop-portal-gtk: the session routes Settings to grassfield-portal-settings, then to gtk for
   # the keys it does not own, and GTK 3 apps read their theme through the portal (GTK_USE_PORTAL=1, ADR-0035 D-8): declared,
   # not assumed to come with Omarchy.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk)
+  # libcups: grassfield-portal's print sheet asks CUPS for the printers and sends the jobs (ADR-0035 D-7, owner decision Q6);
+  # already there with qt6-base and gtk3, declared since the backend links it.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons networkmanager bluez-utils wireplumber wl-clipboard grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.

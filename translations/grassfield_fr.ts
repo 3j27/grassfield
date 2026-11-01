@@ -8261,6 +8261,165 @@
     </message>
 </context>
 <context>
+    <name>PrintSheet</name>
+    <message>
+        <source>Print</source>
+        <translation>Imprimer</translation>
+    </message>
+    <message>
+        <source>Untitled</source>
+        <translation>Sans titre</translation>
+    </message>
+    <message>
+        <source>Save as PDF</source>
+        <translation>Enregistrer au format PDF</translation>
+    </message>
+    <message>
+        <source>Printer:</source>
+        <translation>Imprimante&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Printer</source>
+        <translation>Imprimante</translation>
+    </message>
+    <message>
+        <source>Looking for printers…</source>
+        <translation>Recherche d’imprimantes…</translation>
+    </message>
+    <message>
+        <source>Printers Not Responding</source>
+        <translation>Les imprimantes ne répondent pas</translation>
+    </message>
+    <message>
+        <source>No Printers Available</source>
+        <translation>Aucune imprimante disponible</translation>
+    </message>
+    <message>
+        <source>Add Printer…</source>
+        <translation>Ajouter une imprimante…</translation>
+    </message>
+    <message>
+        <source>Copies:</source>
+        <translation>Copies&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Copies</source>
+        <translation>Copies</translation>
+    </message>
+    <message>
+        <source>Pages:</source>
+        <translation>Pages&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Pages</source>
+        <translation>Pages</translation>
+    </message>
+    <message>
+        <source>All Pages</source>
+        <translation>Toutes les pages</translation>
+    </message>
+    <message>
+        <source>Current Page</source>
+        <translation>Page actuelle</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>Sélection</translation>
+    </message>
+    <message>
+        <source>Range</source>
+        <translation>Plage</translation>
+    </message>
+    <message>
+        <source>Pages to print, for example 1-3, 5</source>
+        <translation>Pages à imprimer, par exemple 1-3, 5</translation>
+    </message>
+    <message>
+        <source>1-3, 5</source>
+        <translation>1-3, 5</translation>
+    </message>
+    <message>
+        <source>Paper Size:</source>
+        <translation>Format de papier&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Paper Size</source>
+        <translation>Format de papier</translation>
+    </message>
+    <message>
+        <source>Orientation:</source>
+        <translation>Orientation&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Orientation</source>
+        <translation>Orientation</translation>
+    </message>
+    <message>
+        <source>Portrait</source>
+        <translation>Portrait</translation>
+    </message>
+    <message>
+        <source>Landscape</source>
+        <translation>Paysage</translation>
+    </message>
+    <message>
+        <source>Scale:</source>
+        <translation>Échelle&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Scale, in per cent</source>
+        <translation>Échelle, en pourcentage</translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation>%</translation>
+    </message>
+    <message>
+        <source>Two-Sided:</source>
+        <translation>Recto verso&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Two-Sided</source>
+        <translation>Recto verso</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Long-Edge Binding</source>
+        <translation>Reliure bord long</translation>
+    </message>
+    <message>
+        <source>Short-Edge Binding</source>
+        <translation>Reliure bord court</translation>
+    </message>
+    <message>
+        <source>Colour:</source>
+        <translation>Couleur&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Colour</source>
+        <translation>Couleur</translation>
+    </message>
+    <message>
+        <source>Black &amp; White</source>
+        <translation>Noir et blanc</translation>
+    </message>
+    <message>
+        <source>Save as PDF…</source>
+        <translation>Enregistrer au format PDF…</translation>
+    </message>
+    <message>
+        <source>Click the panel to use the keyboard in it.</source>
+        <translation>Cliquez dans la fenêtre pour y utiliser le clavier.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+</context>
+<context>
     <name>PrinterSheet</name>
     <message>
         <source>Done</source>

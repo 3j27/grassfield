@@ -128,6 +128,25 @@ QtObject {
         }
     }
 
+    // The keyboard given back to a browser window that a panel blocks goes on to the panel, as macOS keeps it on a modal panel
+    // (Hyprland gives it to the main window when an exclusive layer closes; integrator nested pass of step 5c, NIT).
+    property Connections panelKeys: Connections {
+        target: root.app
+        function onFocusWindowChanged(): void {
+            const key = root.app.focusWindow;
+            if (!key || root.windows.indexOf(key) < 0)
+                return;
+            let last = null;
+            for (const id in root.applicationPanels) {
+                const entry = root.applicationPanels[id];
+                if (entry.over === key && entry.panel.visible)
+                    last = entry.panel;
+            }
+            if (last)
+                last.requestActivate();
+        }
+    }
+
     function openApplicationPanel(id: int, request: var): void {
         // A browser window: the one under the panel the user worked in, if it was a panel (review of step 5c, NIT).
         let over = root.lastActiveWindow ?? (root.windows.length > 0 ? root.windows[root.windows.length - 1] : null);
