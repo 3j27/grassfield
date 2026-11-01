@@ -4,6 +4,9 @@
 #include "units.h"
 
 #include <QDebug>
+#include <QPointer>
+#include <QProcess>
+#include <QTimer>
 
 #include <cerrno>
 #include <csignal>
@@ -22,7 +25,76 @@ QString errorText(int error)
 
 } // namespace
 
-ProcessActions::ProcessActions(std::string procRoot, QObject *parent) : QObject(parent), m_procRoot(std::move(procRoot)) {}
+ProcessActions::ProcessActions(std::string procRoot, QObject *parent) : QObject(parent), m_procRoot(std::move(procRoot))
+{
+    // AM52: while Quit waits, the outcome is looked for at kShellQuitPollMs, up to its bound.
+    m_outcome.setInterval(kShellQuitPollMs);
+    connect(&m_outcome, &QTimer::timeout, this, &ProcessActions::pollOutcome);
+    m_bound.setSingleShot(true);
+    connect(&m_bound, &QTimer::timeout, this, [this] {
+        // No outcome within the bound: what is still open gets Force Quit's offer.
+        std::vector<int> open;
+        for (const Pending &p : m_pending) {
+            if (p.windowed && !p.answered)
+                open.push_back(p.handle.pid());
+        }
+        for (int pid : open)
+            takeShellAnswer(pid, QString());
+    });
+    // AM61: `qs ipc ... call activity quit <pid>`, its answer on stdout; killed at Quit's bound (AM52). Without a shell to
+    // call (a dev session that names none) the answer is "" at once.
+    m_shellQuit = [this](int pid, std::function<void(const QString &)> answer) {
+        const QStringList ipc = grassfield::apps::runmode::shellIpcArgs();
+        if (ipc.isEmpty()) {
+            QTimer::singleShot(0, this, [answer] { answer(QString()); });
+            return;
+        }
+        auto *process = new QProcess(this);
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        for (const QString &key : env.keys()) {
+            if (key.startsWith(QLatin1String("QS_")))
+                env.remove(key);
+        }
+        process->setProcessEnvironment(env);
+        process->setStandardErrorFile(QProcess::nullDevice());
+        auto *timer = new QTimer(process);
+        timer->setSingleShot(true);
+        connect(timer, &QTimer::timeout, process, [process] { process->kill(); });
+        auto replied = std::make_shared<bool>(false);
+        const auto reply = [process, answer, replied](const QString &text) {
+            if (*replied)
+                return;
+            *replied = true;
+            answer(text);
+            process->deleteLater();
+        };
+        connect(process, &QProcess::finished, process, [process, reply](int code, QProcess::ExitStatus status) {
+            reply(status == QProcess::NormalExit && code == 0 ? QString::fromUtf8(process->readAllStandardOutput()).trimmed() : QString());
+        });
+        connect(process, &QProcess::errorOccurred, process, [reply](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart)
+                reply(QString());
+        });
+        timer->start(m_shellQuitBound);
+        process->start(QStringLiteral("qs"), ipc + QStringList{QStringLiteral("activity"), QStringLiteral("quit"), QString::number(pid)});
+    };
+}
+
+void ProcessActions::adoptHooks(const ProcessActions &main)
+{
+    m_unitReader = main.m_unitReader;
+    if (main.m_shellQuitSet) {
+        m_shellQuit = main.m_shellQuit;
+        m_shellQuitSet = true;
+    }
+    m_shellQuitBound = main.m_shellQuitBound;
+}
+
+void ProcessActions::setProjection(bool valid, QSet<int> windowPids)
+{
+    m_projection = valid;
+    m_windowPids = valid ? std::move(windowPids) : QSet<int>();
+}
 
 bool ProcessActions::canQuit() const
 {
@@ -103,8 +175,9 @@ QVariantMap ProcessActions::prepare(const QString &action)
         p.session = isSessionProcess(cgroup);
         p.appUnit = classify(cgroup, true, false, false) == Kind::App;
         if (p.appUnit && handle.tty() != 0) {
-            const int parent = handle.ppid();
-            p.terminal = !cgroup.empty() && (m_unitReader ? m_unitReader(parent) : cgroupOf(m_procRoot, parent)) == cgroup;
+            // AD43: its parent now, read again through the descriptor and checked (not the pid the row or the sheet read).
+            const std::string parent = m_unitReader ? m_unitReader(handle.currentPpid()) : handle.parentCgroup(m_procRoot);
+            p.terminal = !cgroup.empty() && parent == cgroup;
         }
         p.handle = std::move(handle);
         if (p.session && session.isEmpty())
@@ -130,6 +203,10 @@ QVariantMap ProcessActions::prepare(const QString &action)
 void ProcessActions::release()
 {
     m_pending.clear();
+    m_waiting = 0;
+    m_outcome.stop();
+    m_bound.stop();
+    ++m_generation; // a shell's answer still to come goes nowhere
 }
 
 QVariantMap ProcessActions::done()
@@ -161,8 +238,17 @@ QString ProcessActions::devRefusal(const char *what) const
 
 QVariantMap ProcessActions::deliver(int sig, const char *what)
 {
+    std::vector<const Pending *> all;
+    for (const Pending &p : m_pending)
+        all.push_back(&p);
+    return deliverTo(all, sig, what);
+}
+
+QVariantMap ProcessActions::deliverTo(const std::vector<const Pending *> &targets, int sig, const char *what)
+{
     bool failedOne = false;
-    for (const Pending &p : m_pending) {
+    for (const Pending *t : targets) {
+        const Pending &p = *t;
         const int error = p.handle.signal(sig);
         // AM53: a process that ended meanwhile is silent; any other error is the journal's, with its reason.
         if (error != 0 && error != ESRCH) {
@@ -179,30 +265,121 @@ QVariantMap ProcessActions::quit()
 {
     if (m_pending.empty())
         return done();
+    if (m_waiting > 0)
+        return {{QStringLiteral("pending"), true}};
     if (const QString refused = devRefusal("quit"); !refused.isEmpty())
         return failed(refused);
-    // AM52: a process of an app unit is quit by the shell, which closes its windows so the app can save or ask (step 3, the
-    // projection and `activity quit`). Without it, the process that started an app unit is not quit by a signal: the sheet
-    // offers Force Quit only (AM75: no shell, Quit as AM52). A command run in a terminal has no window of its own to
-    // close: it gets SIGTERM (AD43, the integrator's decision on the review of 1153365).
-    for (const Pending &p : m_pending) {
-        if (p.appUnit && !p.self && !p.terminal)
+    // AM52, decided before anything is sent: a process that owns windows (the projection) is quit by the shell, which closes
+    // them so the app can save or ask (AM61); a process without windows gets SIGTERM, and so does a command run in a terminal
+    // (AD43, the integrator's decision on the review of 1153365). Without a projection (no shell, AM75) the process that
+    // started an app unit is not quit by a signal: the sheet offers Force Quit only.
+    for (Pending &p : m_pending) {
+        p.windowed = !p.self && m_projection && m_windowPids.contains(p.handle.pid());
+        if (!p.self && !p.windowed && p.appUnit && !p.terminal && !m_projection)
             return failed(m_pending.size() == 1 ? tr("The process couldn't be quit safely.") : tr("These processes couldn't all be quit safely."), true);
     }
-    // AM54: the app's own row closes its window instead of a signal; the others get SIGTERM.
-    bool self = false;
-    std::vector<Pending> others;
-    for (Pending &p : m_pending) {
+    // AM54: the app's own row closes its window instead of a signal, once the others are done.
+    std::vector<const Pending *> plain;
+    int windowed = 0;
+    m_waitSelf = m_waitUnsafe = false;
+    for (const Pending &p : m_pending) {
         if (p.self)
-            self = true;
+            m_waitSelf = true;
+        else if (p.windowed)
+            ++windowed;
         else
-            others.push_back(std::move(p));
+            plain.push_back(&p);
     }
-    m_pending = std::move(others);
-    const QVariantMap result = deliver(SIGTERM, "quit");
-    if (self)
+    m_waitFailed = !deliverTo(plain, SIGTERM, "quit").value(QStringLiteral("done")).toBool();
+    if (windowed == 0) {
+        if (m_waitSelf && !m_waitFailed)
+            emit closeWindowRequested();
+        return m_waitFailed ? failed(tr("The process couldn't be quit.")) : done();
+    }
+    m_waiting = windowed;
+    ++m_generation;
+    for (Pending &p : m_pending)
+        p.answered = false;
+    for (const Pending &p : m_pending) {
+        if (p.windowed)
+            askShell(p);
+    }
+    m_outcome.start();
+    m_bound.start(m_shellQuitBound);
+    return {{QStringLiteral("pending"), true}};
+}
+
+void ProcessActions::askShell(const Pending &p)
+{
+    const int pid = p.handle.pid();
+    const quint64 generation = m_generation;
+    QPointer<ProcessActions> self(this);
+    // The answer always comes later, on this object's thread (never inside quit(), which then says "pending").
+    m_shellQuit(pid, [self, pid, generation](const QString &answer) {
+        if (!self)
+            return;
+        QMetaObject::invokeMethod(
+            self.data(),
+            [self, pid, generation, answer] {
+                if (self && generation == self->m_generation)
+                    self->takeShellAnswer(pid, answer);
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+void ProcessActions::pollOutcome()
+{
+    // The shell's close done, whatever its answer's delay: the process ended, or it owns no window in the projection now.
+    std::vector<int> quit;
+    for (const Pending &p : m_pending) {
+        if (!p.windowed || p.answered)
+            continue;
+        const bool ended = p.handle.signal(0) == ESRCH;
+        if (ended || (m_projection && !m_windowPids.contains(p.handle.pid())))
+            quit.push_back(p.handle.pid());
+    }
+    for (int pid : quit)
+        takeShellAnswer(pid, QStringLiteral("ok"));
+}
+
+void ProcessActions::takeShellAnswer(int pid, const QString &answer)
+{
+    Pending *found = nullptr;
+    for (Pending &p : m_pending) {
+        if (p.windowed && p.handle.pid() == pid)
+            found = &p;
+    }
+    if (!found || found->answered || m_waiting <= 0)
+        return;
+    found->answered = true;
+    if (answer == QLatin1String("no-windows")) {
+        // Its windows closed meanwhile: a signal, through the descriptor, as a process without windows.
+        if (!deliverTo({found}, SIGTERM, "quit").value(QStringLiteral("done")).toBool())
+            m_waitFailed = true;
+    } else if (answer != QLatin1String("ok")) {
+        qInfo().noquote() << "activity: the shell did not quit pid" << pid << ":" << (answer.isEmpty() ? QStringLiteral("no answer") : answer);
+        m_waitUnsafe = true;
+    }
+    if (--m_waiting == 0) {
+        m_outcome.stop();
+        m_bound.stop();
+        finishQuit();
+    }
+}
+
+void ProcessActions::finishQuit()
+{
+    QVariantMap result;
+    if (m_waitUnsafe)
+        result = failed(m_pending.size() == 1 ? tr("The process couldn't be quit safely.") : tr("These processes couldn't all be quit safely."), true);
+    else if (m_waitFailed)
+        result = failed(tr("The process couldn't be quit."));
+    else
+        result = done();
+    if (m_waitSelf && !m_waitUnsafe && !m_waitFailed)
         emit closeWindowRequested();
-    return result;
+    emit quitFinished(result);
 }
 
 QVariantMap ProcessActions::forceQuit()

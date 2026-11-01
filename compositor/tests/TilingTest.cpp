@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
+#include "core/Protocol.hpp"
 #include "core/Tiling.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -680,7 +682,7 @@ TEST(TilingJson, TheNoticeIsSmallAndTheStateIsAReply) {
     EXPECT_EQ(stateJson(3, outputs),
               R"({"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","area":{"x":0,"y":24,"w":1920,"h":974},"class":"large","grid":1,"windows":[)"
               R"({"address":"abc","state":"tiled","place":"left","layout":"","zone":-1,"sides":"","group":0,"x":8,"y":64,"w":948,"h":926},)"
-              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"splits":[],"unfit":[],"fixed":[],"suggestion":null})");
+              R"({"address":"def","state":"tiled","place":"","layout":"left-right","zone":1,"sides":"","group":0,"x":964,"y":64,"w":948,"h":926}]}],"splits":[],"unfit":[],"fixed":[],"unfitZones":[],"suggestion":null})");
     Placement edge;
     edge.sides = kSideTop | kSideLeft;
     CTileBook edges;
@@ -981,10 +983,10 @@ TEST(TilingHover, APressEndsTheHoverUntilThePointerLeavesTheLight) {
 
 TEST(TilingHover, TheEventIsSmall) {
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Enter, Rect{1500, 40, 18.6667, 18.6667}, true),
-              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"enter","x":1500,"y":40,"w":18.7,"h":18.7,"tileable":true,"splittable":false})")
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"enter","x":1500,"y":40,"w":18.7,"h":18.7,"tileable":true,"splittable":false,"unfitZones":[],"unfitPlaces":[]})")
         << "one decimal, as the state reply";
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Open, Rect{1, 2, 3, 4}, false),
-              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":false,"splittable":false})");
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":false,"splittable":false,"unfitZones":[],"unfitPlaces":[]})");
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Leave, Rect{1, 2, 3, 4}, true), R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"leave"})")
         << "leave carries no box";
     EXPECT_LT(tileHoverJson(UINT64_MAX, HoverState::Enter, Rect{-99999.5, -99999.5, 99999.5, 99999.5}, true).size(), 200U);
@@ -1129,9 +1131,9 @@ TEST(TilingSuggest, TheReplyCarriesTheSuggestion) {
     sg.windows    = {0xd1, 0xd2};
     const std::array<StateOutput, 0> none{};
     EXPECT_EQ(stateJson(12, none, &sg),
-              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"fixed":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
+              R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"fixed":[],"unfitZones":[],"suggestion":{"gen":12,"address":"abc","layout":"thirds","output":"GF-REF",)"
               R"("zones":[{"zone":0,"x":8,"y":64,"w":629,"h":926},{"zone":2,"x":1283,"y":64,"w":629,"h":926}],"windows":["d1","d2"]}})");
-    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"fixed":[],"suggestion":null})");
+    EXPECT_EQ(stateJson(12, none), R"({"v":"gfc/1","type":"tiling","gen":12,"outputs":[],"splits":[],"unfit":[],"fixed":[],"unfitZones":[],"suggestion":null})");
     // Bounded: at most kMaxSuggested windows, and a zone without a frame is not written.
     for (uint64_t i = 0; i < 20; ++i)
         sg.windows.push_back(0x100 + i);
@@ -1477,14 +1479,14 @@ TEST(TilingSplit, TheReplyListsTheSplitDesktops) {
                                           SplitDesk{.workspace = 9, .output = "A\"B", .home = 4, .members = {0xc3}, .waiting = true}};
     EXPECT_EQ(stateJson(5, none, nullptr, splits),
               R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[{"workspace":7,"output":"GF-REF","home":2,"windows":["a1","b2"],"waiting":false},)"
-              R"({"workspace":9,"output":"A\"B","home":4,"windows":["c3"],"waiting":true}],"unfit":[],"fixed":[],"suggestion":null})");
+              R"({"workspace":9,"output":"A\"B","home":4,"windows":["c3"],"waiting":true}],"unfit":[],"fixed":[],"unfitZones":[],"suggestion":null})");
 }
 
 // D57 (integrator PASS on 8316ed2, for later): the windows that do not fit half of their output, for the Window menu.
 TEST(TilingSplit, TheReplyListsTheWindowsThatDoNotFitAHalf) {
     const std::array<StateOutput, 0> none{};
     const std::array<uint64_t, 2>    unfit{0xa1, 0xbeef};
-    EXPECT_EQ(stateJson(5, none, nullptr, {}, unfit), R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[],"unfit":["a1","beef"],"fixed":[],"suggestion":null})");
+    EXPECT_EQ(stateJson(5, none, nullptr, {}, unfit), R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[],"unfit":["a1","beef"],"fixed":[],"unfitZones":[],"suggestion":null})");
 }
 
 // ADR-0040 step 1b (the integrator's nested pass of 85c2c10): a window of fixed size has its zoom light disabled (no tiling
@@ -1500,7 +1502,21 @@ TEST(TilingFixed, AWindowOfFixedSizeHasItsZoomLightDisabled) {
     EXPECT_FALSE(fixedSize(Constraints{.minW = 1, .minH = 1, .maxW = 0, .maxH = 0}));
     const std::array<StateOutput, 0> none{};
     const std::array<uint64_t, 1>    fixed{0xab0};
-    EXPECT_EQ(stateJson(6, none, nullptr, {}, {}, fixed), R"({"v":"gfc/1","type":"tiling","gen":6,"outputs":[],"splits":[],"unfit":[],"fixed":["ab0"],"suggestion":null})");
+    EXPECT_EQ(stateJson(6, none, nullptr, {}, {}, fixed), R"({"v":"gfc/1","type":"tiling","gen":6,"outputs":[],"splits":[],"unfit":[],"fixed":["ab0"],"unfitZones":[],"suggestion":null})");
+}
+
+// ADR-0040 step 1b's review: Super+Alt+F zoomed About This Computer to 1918x980 and Super+Ctrl+F made it full screen in
+// nested, while the Window menu greys Zoom and Enter Full Screen for a window of fixed size. The keys ask window_size: the
+// modes by Hyprland's names only, and a window of fixed size only leaves the mode it is in.
+TEST(TilingFixed, TheFullScreenAndZoomKeysLeaveAWindowOfFixedSizeAlone) {
+    EXPECT_EQ(parseSizeMode("fullscreen"), SizeMode::Fullscreen);
+    EXPECT_EQ(parseSizeMode("maximized"), SizeMode::Maximized);
+    for (const auto* bad : {"", "Fullscreen", "maximised", "fullscreen ", "zoom", "fullscreenstate"})
+        EXPECT_FALSE(parseSizeMode(bad).has_value()) << '"' << bad << '"';
+    EXPECT_FALSE(sizeKeyActs(true, false)) << "About This Computer: no Zoom, no Enter Full Screen";
+    EXPECT_TRUE(sizeKeyActs(true, true)) << "zoomed or in full screen anyway: Unzoom, Exit Full Screen";
+    EXPECT_TRUE(sizeKeyActs(false, false)) << "a resizable window zooms";
+    EXPECT_TRUE(sizeKeyActs(false, true)) << "and unzooms";
 }
 
 // TL33, ADR-0036 D50, D52: the members are the Split View's two windows, whatever their state; a window that left its
@@ -1532,7 +1548,114 @@ TEST(TilingSplit, AWindowTooWideForAHalfDoesNotFit) {
     EXPECT_FALSE(fitsFrame(Constraints{.minW = 957, .minH = 1}, half));
     EXPECT_FALSE(fitsFrame(Constraints{.minW = 400, .minH = 1060, .band = 30}, half)) << "the band takes height";
     EXPECT_EQ(tileHoverJson(0xabc, HoverState::Open, Rect{1, 2, 3, 4}, true, true),
-              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":true,"splittable":true})");
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"open","x":1,"y":2,"w":3,"h":4,"tileable":true,"splittable":true,"unfitZones":[],"unfitPlaces":[]})");
+}
+
+// ADR-0036 D69 (capture defect of 2026-10-30): Quarters at 1440 x 900 with Settings (minimum 560 x 420, its own chrome) came
+// out with shifted rows. The plugin now offers a window only the zones it fits: the capture's work area (menu bar 24, Dock 82,
+// margins on) gives quarters 385 px tall, so Settings fits the left and right halves and not one quarter, the top or bottom
+// half, nor a third.
+TEST(TilingFitZone, TheCaptureCaseFitsTheHalvesAndNoQuarter) {
+    const Area        area{Rect{0, 24, 1440, 794}, kMargin, Grid{0, 0, 1}};
+    const Constraints settings{.minW = 560, .minH = 420};
+    for (const auto& z : layoutById("quarters")->zones) {
+        EXPECT_FALSE(fitsZone(settings, z, area)) << zoneName(z);
+        EXPECT_LT(zoneFrame(z, area).h, 420) << "a quarter is shorter than its minimum";
+    }
+    EXPECT_TRUE(fitsZone(settings, zoneOf(Place::Left).value_or(Zone{}), area));
+    EXPECT_TRUE(fitsZone(settings, zoneOf(Place::Right).value_or(Zone{}), area));
+    EXPECT_FALSE(fitsZone(settings, zoneOf(Place::Top).value_or(Zone{}), area));
+    EXPECT_FALSE(fitsZone(settings, zoneOf(Place::LeftThird).value_or(Zone{}), area));
+    const auto unfit = unfitZones(settings, area);
+    const auto has   = [&unfit](std::string_view name) { return std::ranges::find(unfit, name) != unfit.end(); };
+    for (const auto* name : {"0,0,6,6", "6,0,6,6", "0,6,6,6", "6,6,6,6", "0,0,12,6", "0,6,12,6", "0,0,4,12"})
+        EXPECT_TRUE(has(name)) << name;
+    for (const auto* name : {"0,0,6,12", "6,0,6,12", "0,0,8,12", "4,0,8,12", "3,0,6,12"})
+        EXPECT_FALSE(has(name)) << name << " fits";
+    EXPECT_FALSE(has("0,0,12,12")) << "Fill is always offered";
+    // A small window fits every zone: nothing listed; the event says so with an empty list.
+    EXPECT_TRUE(unfitZones(Constraints{.minW = 200, .minH = 150, .band = kBar}, area).empty());
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Enter, Rect{1, 2, 3, 4}, true, true, std::array<std::string, 2>{"0,0,6,6", "6,0,6,6"}),
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"enter","x":1,"y":2,"w":3,"h":4,"tileable":true,"splittable":true,)"
+              R"("unfitZones":["0,0,6,6","6,0,6,6"],"unfitPlaces":[]})");
+    EXPECT_EQ(tileHoverJson(0xabc, HoverState::Leave, Rect{1, 2, 3, 4}, true, true, std::array<std::string, 1>{"0,0,6,6"}),
+              R"({"v":"gfc/1","type":"tile-hover","address":"abc","state":"leave"})")
+        << "leave carries nothing else";
+}
+
+// D69: the zones offered are the places' and the catalogue's, each once, named as the shell's glyph tokens; with every one
+// listed the event still fits Hyprland's 1024-byte cut; the reply lists the windows that do not fit some zone.
+TEST(TilingFitZone, EveryOfferedZoneOnceAndTheEventStaysSmall) {
+    const auto zones = offeredZones();
+    for (size_t i = 0; i < zones.size(); ++i) {
+        EXPECT_NE(zones[i], Zone{}) << "not Fill's whole area";
+        for (size_t j = i + 1; j < zones.size(); ++j)
+            EXPECT_NE(zones[i], zones[j]) << zoneName(zones[i]) << " twice";
+    }
+    for (const auto& l : catalogue()) {
+        for (const auto& z : l.zones)
+            EXPECT_NE(std::ranges::find(zones, z), zones.end()) << l.id << " " << zoneName(z);
+    }
+    for (const auto p : {Place::Left, Place::BottomRight, Place::MiddleThird, Place::RightTwoThirds})
+        EXPECT_NE(std::ranges::find(zones, zoneOf(p).value_or(Zone{})), zones.end()) << nameOf(p);
+    EXPECT_EQ(zoneName(Zone{0, 6, 12, 6}), "0,6,12,6");
+    const Area huge{Rect{0, 0, 800, 600}, kMargin, Grid{0, 0, 1}};
+    const auto all = unfitZones(Constraints{.minW = 5000, .minH = 5000}, huge);
+    EXPECT_EQ(all.size(), zones.size()) << "too large for every zone";
+    const auto places = unfitPlaces(Constraints{.minW = 5000, .minH = 5000}, huge);
+    EXPECT_EQ(places.size(), 13U) << "every place but Fill and Center";
+    EXPECT_LT(tileHoverJson(UINT64_MAX, HoverState::Enter, Rect{-99999.5, -99999.5, 99999.5, 99999.5}, true, true, all, places).size(), gf::gfc::kMaxEventBytes);
+    const std::array<StateOutput, 0> none{};
+    const std::array<WindowFit, 1>   fits{WindowFit{.address = 0xa1, .zones = {"0,0,6,6", "0,0,12,6"}, .places = {"top-left"}}};
+    EXPECT_EQ(stateJson(5, none, nullptr, {}, {}, {}, fits),
+              R"({"v":"gfc/1","type":"tiling","gen":5,"outputs":[],"splits":[],"unfit":[],"fixed":[],"unfitZones":[{"address":"a1","zones":["0,0,6,6","0,0,12,6"],"places":["top-left"]}],"suggestion":null})");
+}
+
+// D69, review MINOR 1: a place is checked on the frame tile() applies (placeStartFrame), which for a half next to a tiled
+// neighbour is the rest beside it (TL7), narrower than the half zone an arrangement uses. A window 600 px wide at least, at
+// 1440 x 900 with a window in the right two thirds: the Left place does not fit (471 px left) while the half zone, and so
+// Left & Right, still does (708 px).
+TEST(TilingFitZone, APlaceIsCheckedOnTheFrameTileApplies) {
+    const Area                  area{Rect{0, 24, 1440, 794}, kMargin, Grid{0, 0, 1}};
+    const Rect                  twoThirds = zoneFrame(zoneOf(Place::RightTwoThirds).value_or(Zone{}), area);
+    const std::array<Rect, 1>   neighbours{twoThirds};
+    const Constraints           wide{.minW = 600, .minH = 300, .band = kBar};
+    const Rect                  half   = zoneFrame(zoneOf(Place::Left).value_or(Zone{}), area);
+    const Rect                  beside = placeStartFrame(Place::Left, area, neighbours);
+    EXPECT_EQ(beside, halfBesideNeighbour(Place::Left, area, neighbours).value_or(Rect{})) << "the frame tile() gives";
+    EXPECT_DOUBLE_EQ(beside.w, 471);
+    EXPECT_DOUBLE_EQ(half.w, 708);
+    EXPECT_EQ(placeStartFrame(Place::Left, area), half) << "no neighbour: the half zone";
+    EXPECT_EQ(placeStartFrame(Place::TopLeft, area, neighbours), zoneFrame(zoneOf(Place::TopLeft).value_or(Zone{}), area)) << "only halves look beside";
+    const auto places = unfitPlaces(wide, area, neighbours);
+    const auto zones  = unfitZones(wide, area);
+    const auto has    = [](const std::vector<std::string>& v, std::string_view name) { return std::ranges::find(v, name) != v.end(); };
+    EXPECT_TRUE(has(places, "left")) << "471 px beside the neighbour";
+    EXPECT_FALSE(has(places, "right")) << "nothing holds the left side: the half zone";
+    EXPECT_FALSE(has(zones, "0,0,6,12")) << "the half zone itself fits: Left & Right is offered";
+    EXPECT_FALSE(has(unfitPlaces(wide, area), "left")) << "without the neighbour Left fits";
+    EXPECT_FALSE(has(places, "top-left")) << "a quarter (708 x 385) holds 600 x 300 and its band";
+    EXPECT_TRUE(has(places, "left-third")) << "a third (471 px) does not";
+}
+
+// D69: members that fit their zones keep the catalogue's frames exactly (fitFrames moves nothing): Quarters is four equal
+// quarters, the rows and the columns aligned, whatever their minimum below the quarter.
+TEST(TilingFitZone, MembersThatFitKeepTheCatalogueFrames) {
+    const Area                     area{Rect{0, 24, 1440, 794}, kMargin, Grid{0, 0, 1}};
+    const auto&                    zones = layoutById("quarters")->zones;
+    std::vector<Rect>              frames;
+    std::vector<Constraints>       cons;
+    for (const auto& z : zones) {
+        frames.push_back(zoneFrame(z, area));
+        cons.push_back(Constraints{.minW = 600, .minH = 360});
+        ASSERT_TRUE(fitsZone(cons.back(), z, area)) << zoneName(z);
+    }
+    const auto fit = fitFrames(zones, frames, cons, area);
+    for (size_t i = 0; i < fit.size(); ++i)
+        EXPECT_EQ(fit[i], frames[i]) << zoneName(zones[i]);
+    EXPECT_DOUBLE_EQ(fit[0].y + fit[0].h, fit[1].y + fit[1].h) << "the top row ends on one line";
+    EXPECT_DOUBLE_EQ(fit[2].y, fit[3].y) << "the bottom row starts on one line";
+    EXPECT_DOUBLE_EQ(fit[0].x + fit[0].w, fit[2].x + fit[2].w) << "the left column ends on one line";
 }
 
 // Step 6b (TL33): the separator is the shared edge between the two members of a Split View Desktop, one on each side.

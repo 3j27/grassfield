@@ -4,3 +4,4 @@ StackHelper 1.0 StackHelper.qml
 StackIcon 1.0 StackIcon.qml
 StackPile 1.0 StackPile.qml
 StackWatch 1.0 StackWatch.qml
+TileGraphView 1.0 TileGraphView.qml

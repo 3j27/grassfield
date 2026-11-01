@@ -219,6 +219,10 @@
             "shrink"
           ],
           "default": "funnel"
+        },
+        "endTask": {
+          "type": "boolean",
+          "default": false
         }
       }
     },

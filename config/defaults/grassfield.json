@@ -33,7 +33,8 @@
     "minimizeIntoApp": false,
     "animateOpening": true,
     "showIndicators": true,
-    "minimizeEffect": "funnel"
+    "minimizeEffect": "funnel",
+    "endTask": false
   },
   "windows": {
     "titlebarDoubleClick": "zoom",

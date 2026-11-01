@@ -5,9 +5,11 @@
 
 #include "sampler.h"
 
+#include <QList>
 #include <QObject>
 
 #include <memory>
+#include <unordered_set>
 
 namespace activity {
 
@@ -24,12 +26,15 @@ public:
 public slots:
     // `interval`: AM9's, for AD32's pauses. `forget`: AM8, the window comes back after a time hidden.
     void sample(unsigned reads, double interval, bool forget);
+    // AM60, AM65: the pids that own a window (the shell's projection), from the next sample on.
+    void setWindowOwners(const QList<int> &pids);
 
 signals:
     void sampled(activity::SnapshotPtr snapshot, unsigned reads);
 
 private:
     Options m_options;
+    std::unordered_set<int> m_windowOwners;
     std::unique_ptr<Sampler> m_sampler; // made on the worker's thread at its first sample
 };
 

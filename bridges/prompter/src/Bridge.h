@@ -21,9 +21,12 @@
 // - Fail closed: no password is ever invented. An answer to an id that is not outstanding is ignored; a wrong answer to an
 //   outstanding id cancels that request; a line that cannot be attributed (not JSON, over the length limit, no id) closes
 //   the connection, which cancels every request and releases the name.
+// - NetworkManager's secrets (step 9c): a secret agent on the bridge's system bus connection (NmAgent.h), registered with
+//   NetworkManager only while a shell that draws kind "nm" is connected; its requests share the bound of 8 and the ids.
 // - Nothing the callers or the shell send is logged; the journal gets ids, kinds, requesters' roles and paths, and refusals.
 
 #include "Filter.h"
+#include "NmAgent.h"
 #include "Peer.h"
 #include "Prompt.h"
 #include "Protocol.h"
@@ -38,6 +41,7 @@
 #include <QStringList>
 #include <QTimer>
 
+#include <memory>
 #include <string_view>
 #include <sys/types.h>
 
@@ -45,13 +49,16 @@ class QSocketNotifier;
 
 namespace gf::prompter {
 
-    class Bridge : public PromptSink {
+    class Bridge : public PromptSink, public NmAgent::Sink {
       public:
         struct Options {
             QString socketPath;
             QString peerUnit;            // the shell's unit (cgroup leaf)
             bool    requireUserManager = true; // false only in a development run
             uid_t   uid = 0;
+            // The system bus for the NetworkManager agent (step 9c); nullptr: no agent (NetworkManager gets NoSecrets).
+            GDBusConnection* systemBus   = nullptr;
+            int              nmTimeoutMs = nm::kAnswerTimeoutMs;
         };
 
         Bridge(GDBusConnection* bus, Options options);
@@ -70,12 +77,17 @@ namespace gf::prompter {
         void withdraw(GfPrompt* prompt) override;
         void forget(GfPrompt* prompt) override;
 
+        // NmAgent::Sink
+        QString submitNm(NmRequest* request) override;
+        void    withdrawNm(const QString& id) override;
+
       private:
         struct Pending {
             GfPrompt*  prompt = nullptr; // a reference, held while outstanding
             PromptKind kind   = PromptKind::None;
             bool       sent   = false;   // the shell has it
             bool       choice = false;   // it was shown with a check box
+            NmRequest* nm     = nullptr; // a NetworkManager request (kind "nm"; prompt is then nullptr), owned by m_nm
         };
 
         static GcrPrompt* onNewPrompt(GcrSystemPrompter* prompter, gpointer self);
@@ -95,6 +107,7 @@ namespace gf::prompter {
         void handleLine(std::string_view line);
         void protocolError(const QString& code, const QString& why, bool fatal);
         void onAnswer(const ShellLine& answer, std::string_view line);
+        void onNmAnswer(const ShellLine& answer, std::string_view line, NmRequest* request);
 
         void identified(const QString& id, GfPrompt* prompt, const RequesterView& requester);
         void cancelRequest(const QString& id, bool tellShell);
@@ -144,6 +157,8 @@ namespace gf::prompter {
         bool    m_nameWanted = false;
         quint64 m_nameGen    = 0;
         QString m_nameState  = QStringLiteral("released");
+
+        std::unique_ptr<NmAgent> m_nm; // the NetworkManager agent, when a system bus was given
     };
 
 } // namespace gf::prompter

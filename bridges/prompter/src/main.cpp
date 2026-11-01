@@ -2,10 +2,15 @@
 // grassfield-prompter: gcr's system prompter for the Grassfield session; the shell draws the prompts (ADR-0035 D-9, owner
 // decision Q1 = S2; docs/specs/system-dialogs.md section 5).
 //
-// Usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--version]
+// Usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--version]
 //   --peer-unit UNIT   the systemd unit whose process may connect as the shell (default grassfield-shell.service); set by
 //                      grassfield-prompter.service. Only an argument: no environment variable changes it.
 //   --socket PATH      the socket (default $XDG_RUNTIME_DIR/grassfield/prompter.sock); required in a development run
+//   --nm-timeout-ms N  development runs only (the tests): how long a NetworkManager request waits for its answer
+//                      (default 110000, under NetworkManager's own 120 s)
+// The system bus (the NetworkManager secret agent, step 9c): in the session always unix:path=/run/dbus/system_bus_socket,
+// whatever DBUS_SYSTEM_BUS_ADDRESS says; in a development run only DBUS_SYSTEM_BUS_ADDRESS when it is a private test bus
+// under GF_TEST_BUS_DIR (none set: no agent). No system bus, or no NetworkManager on it: no agent, gcr's prompts unchanged.
 // Environment:
 //   GRASSFIELD_SESSION=1   required in the Grassfield session (the systemd unit checks it too)
 //   GRASSFIELD_DEV=1       development run (ADR-0019: only while GRASSFIELD_SESSION is not "1"): only on a private test bus
@@ -16,6 +21,7 @@
 
 #include "Bridge.h"
 #include "Filter.h"
+#include "NmSecrets.h"
 #include "Log.h"
 #include "Peer.h"
 #include "Protocol.h"
@@ -50,6 +56,19 @@ namespace {
     void onClosed(GDBusConnection* /*bus*/, gboolean /*remotePeerVanished*/, GError* /*error*/, gpointer /*data*/) {
         log(QStringLiteral("the bus connection closed: stopping"));
         QCoreApplication::exit(1);
+    }
+
+    // The real system bus's socket (D-Bus specification): the session bridge never takes another from its environment.
+    constexpr char kSystemBus[] = "unix:path=/run/dbus/system_bus_socket";
+
+    void onSystemClosed(GDBusConnection* /*bus*/, gboolean /*remotePeerVanished*/, GError* /*error*/, gpointer /*data*/) {
+        log(QStringLiteral("the system bus connection closed: NetworkManager has no agent until the bridge restarts"));
+    }
+
+    GDBusConnection* connectBus(const QString& address, GError** error) {
+        return g_dbus_connection_new_for_address_sync(
+            address.toUtf8().constData(), static_cast<GDBusConnectionFlags>(G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT | G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION),
+            nullptr, nullptr, error);
     }
 
     bool hasOwner(GDBusConnection* bus, const char* name) {
@@ -90,7 +109,8 @@ int main(int argc, char** argv) {
     g_log_set_always_fatal(G_LOG_LEVEL_ERROR);
 
     QString           socketArgument;
-    QString           peerUnit = QStringLiteral("grassfield-shell.service");
+    QString           peerUnit    = QStringLiteral("grassfield-shell.service");
+    int               nmTimeoutMs = 0; // 0: the default
     const QStringList args     = QCoreApplication::arguments();
     for (qsizetype i = 1; i < args.size(); ++i) {
         if (args.at(i) == QLatin1String("--version")) {
@@ -105,7 +125,16 @@ int main(int argc, char** argv) {
             peerUnit = args.at(++i);
             continue;
         }
-        std::fprintf(stderr, "usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--version]\n");
+        if (args.at(i) == QLatin1String("--nm-timeout-ms") && i + 1 < args.size()) {
+            bool ok     = false;
+            nmTimeoutMs = args.at(++i).toInt(&ok);
+            if (!ok || nmTimeoutMs < 100 || nmTimeoutMs > nm::kAnswerTimeoutMs) {
+                std::fprintf(stderr, "grassfield-prompter: --nm-timeout-ms takes 100 to %d\n", nm::kAnswerTimeoutMs);
+                return 2;
+            }
+            continue;
+        }
+        std::fprintf(stderr, "usage: grassfield-prompter [--peer-unit UNIT] [--socket PATH] [--nm-timeout-ms N] [--version]\n");
         return 2;
     }
 
@@ -123,6 +152,17 @@ int main(int argc, char** argv) {
     }
     if (!validPeerUnit(peerUnit, dev))
         return refuse(QStringLiteral("--peer-unit %1 is not a systemd service name").arg(peerUnit));
+    if (nmTimeoutMs && !dev)
+        return refuse(QStringLiteral("--nm-timeout-ms is for development runs only"));
+    // The system bus of the NetworkManager agent: the real one in the session, only a private test bus in a development run.
+    QString systemAddress;
+    if (dev) {
+        systemAddress = qEnvironmentVariable("DBUS_SYSTEM_BUS_ADDRESS");
+        if (!systemAddress.isEmpty() && !grassfield::apps::isPrivateTestBus(systemAddress, qEnvironmentVariable("GF_TEST_BUS_DIR")))
+            return refuse(QStringLiteral("a development run takes DBUS_SYSTEM_BUS_ADDRESS only for a private test bus under GF_TEST_BUS_DIR"));
+    } else {
+        systemAddress = QLatin1String(kSystemBus);
+    }
 
     // libgcr runs its callbacks in GLib's main context, which Qt's GLib event dispatcher runs (QT_NO_GLIB turns it off).
     if (!QAbstractEventDispatcher::instance() || !QAbstractEventDispatcher::instance()->inherits("QEventDispatcherGlib"))
@@ -152,16 +192,39 @@ int main(int argc, char** argv) {
         return refuse(QStringLiteral("a development run found org.freedesktop.systemd1 on its bus: not a private test bus"));
     }
 
+    GDBusConnection* systemBus = nullptr;
+    if (!systemAddress.isEmpty()) {
+        systemBus = connectBus(systemAddress, &error);
+        if (!systemBus) {
+            log(QStringLiteral("no system bus (%1): no NetworkManager secret agent").arg(QString::fromUtf8(error ? error->message : "unknown error")));
+            g_clear_error(&error);
+        } else if (dev && hasOwner(systemBus, "org.freedesktop.systemd1")) {
+            g_object_unref(systemBus);
+            g_object_unref(bus);
+            return refuse(QStringLiteral("a development run found org.freedesktop.systemd1 on its system bus: not a private test bus"));
+        } else {
+            g_dbus_connection_set_exit_on_close(systemBus, FALSE);
+            g_signal_connect(systemBus, "closed", G_CALLBACK(onSystemClosed), nullptr);
+        }
+    } else {
+        log(QStringLiteral("a development run without DBUS_SYSTEM_BUS_ADDRESS: no NetworkManager secret agent"));
+    }
+
     Bridge::Options options;
     options.socketPath         = path;
     options.peerUnit           = peerUnit;
     options.requireUserManager = !dev;
     options.uid                = ::getuid();
+    options.systemBus          = systemBus;
+    if (nmTimeoutMs)
+        options.nmTimeoutMs = nmTimeoutMs;
     int rc = 0;
     {
         Bridge  bridge(bus, options);
         QString startError;
         if (!bridge.start(&startError)) {
+            if (systemBus)
+                g_object_unref(systemBus);
             g_object_unref(bus);
             return envError(startError);
         }
@@ -182,6 +245,8 @@ int main(int argc, char** argv) {
     }
     if (signalFd >= 0)
         ::close(signalFd);
+    if (systemBus)
+        g_object_unref(systemBus);
     g_object_unref(bus);
     return rc;
 }

@@ -2,7 +2,8 @@
 // /proc/<pid> descriptor and its start time; the signal through that same descriptor; a process that ended and was reaped
 // is never signalled, even after a new process took its pid (in a user and pid namespace of the test's own, where the
 // next pid can be chosen; skipped, with the reason, where the kernel refuses such a namespace). AM56's dev roots on a
-// fixture tree.
+// fixture tree. AD43's parent: read again through the descriptor after a reparenting, and its unit read through its own
+// directory, never a younger process's (step 2d, the integrator's follow-ups on pull request #63).
 #include "fixture.h"
 #include "procparse.h"
 #include "signals.h"
@@ -16,6 +17,7 @@
 #include <sched.h>
 #include <sstream>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -40,6 +42,7 @@ pid_t idleChild()
 {
     const pid_t pid = fork();
     if (pid == 0) {
+        activity_test::defaultSignals();
         for (;;)
             pause();
     }
@@ -223,4 +226,72 @@ TEST(Signals, DevRootsNameTheirProcessesAndDescendants)
     f.write("proc/100/stat", Fixture::statLine(100, "fixture", 'S', 1, 0, 0, 0, 1, 5000));
     f.remove("proc/200");
     EXPECT_FALSE(activity::underDevRoot(f.proc(), 300, 7000, 200, roots));
+}
+
+// The integrator's follow-up on pull request #63 (mutant T7): the parent is read again through the descriptor. A grandchild
+// whose parent ends is reparented to this test (a subreaper): ppid() keeps the pid the handle was opened with,
+// currentPpid() and parentCgroup() follow the new parent.
+TEST(Signals, TheParentIsReadAgainThroughTheDescriptor)
+{
+    ASSERT_EQ(prctl(PR_SET_CHILD_SUBREAPER, 1), 0);
+    int up[2], go[2];
+    ASSERT_EQ(pipe(up), 0);
+    ASSERT_EQ(pipe(go), 0);
+    const pid_t child = fork();
+    if (child == 0) {
+        const pid_t grandchild = idleChild();
+        char c = 0;
+        if (write(up[1], &grandchild, sizeof grandchild) != sizeof grandchild || read(go[0], &c, 1) != 1)
+            _exit(1);
+        _exit(0); // the grandchild is orphaned
+    }
+    ASSERT_GT(child, 0);
+    pid_t grandchild = 0;
+    ASSERT_EQ(read(up[0], &grandchild, sizeof grandchild), static_cast<ssize_t>(sizeof grandchild));
+    ProcessHandle h = ProcessHandle::open("/proc", grandchild, startOf("/proc", grandchild));
+    ASSERT_TRUE(h.valid());
+    EXPECT_EQ(h.ppid(), child);
+    EXPECT_EQ(h.currentPpid(), child);
+    const std::string own = h.cgroup(); // the test's unit: every process here shares it
+    EXPECT_EQ(h.parentCgroup("/proc"), own);
+
+    ASSERT_EQ(write(go[1], "x", 1), 1);
+    EXPECT_EQ(endingSignal(child), 0);
+    // Reparented to this process.
+    for (int i = 0; i < 100 && h.currentPpid() != getpid(); ++i)
+        usleep(10000);
+    EXPECT_EQ(h.ppid(), child);
+    EXPECT_EQ(h.currentPpid(), getpid());
+    EXPECT_EQ(h.parentCgroup("/proc"), own);
+
+    EXPECT_EQ(h.signal(SIGKILL), 0);
+    EXPECT_EQ(endingSignal(grandchild), SIGKILL);
+    EXPECT_EQ(h.parentCgroup("/proc"), ""); // it ended: its descriptor reads nothing, nor its parent's unit
+    prctl(PR_SET_CHILD_SUBREAPER, 0);
+    for (int fd : {up[0], up[1], go[0], go[1]})
+        close(fd);
+}
+
+// AD43, AD40: the parent's unit is read through the parent's own directory, after its stat: a process younger than the
+// child under the parent's pid is not its parent, and its unit is never taken for the parent's.
+TEST(Signals, TheParentsUnitIsNeverAYoungerProcesss)
+{
+    Fixture fx;
+    fx.write("proc/300/stat", Fixture::statLine(300, "python", 'S', 250, 0, 1, 1, 1, 5000));
+    fx.write("proc/250/stat", Fixture::statLine(250, "fish", 'S', 1, 0, 1, 1, 1, 4000));
+    fx.write("proc/250/cgroup", "0::/app.slice/app-Hyprland-foot@1a2b.service\n");
+    ProcessHandle h = ProcessHandle::open(fx.proc(), 300, 5000);
+    ASSERT_TRUE(h.valid());
+    EXPECT_EQ(h.parentCgroup(fx.proc()), "/app.slice/app-Hyprland-foot@1a2b.service");
+    fx.write("proc/250/stat", Fixture::statLine(250, "other", 'S', 1, 0, 1, 1, 1, 9000)); // started after the child
+    EXPECT_EQ(h.parentCgroup(fx.proc()), "");
+    // Reparented: the parent now is 251, whatever the handle read when it opened.
+    fx.write("proc/251/stat", Fixture::statLine(251, "init", 'S', 0, 0, 1, 1, 1, 10));
+    fx.write("proc/251/cgroup", "0::/init.scope\n");
+    fx.write("proc/300/stat", Fixture::statLine(300, "python", 'S', 251, 0, 1, 1, 1, 5000));
+    EXPECT_EQ(h.ppid(), 250);
+    EXPECT_EQ(h.currentPpid(), 251);
+    EXPECT_EQ(h.parentCgroup(fx.proc()), "/init.scope");
+    fx.remove("proc/251");
+    EXPECT_EQ(h.parentCgroup(fx.proc()), "");
 }

@@ -146,7 +146,7 @@ no Apple font is used, shipped or required.
 
 ## 5. Icons and wallpaper
 
-Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). The symbolic icons are Grassfield's own (`ls branding/icons/symbolic/*.svg | wc -l` prints 98 (96 symbolic icons and the two logo files))
+Provenance per file: `branding/LICENSES.md` (shipped as `BRANDING.md`). The symbolic icons are Grassfield's own (`ls branding/icons/symbolic/*.svg | wc -l` prints 100 (98 symbolic icons and the two logo files))
 (CC-BY-SA-4.0); the procedural wallpaper is QML code in `shell/desktop/WallpaperArt.qml`.
 No Apple asset is used. Licence of Grassfield-made art (symbolic icons, cursors, wallpaper): CC-BY-SA-4.0, decided by the
 owner on 2026-10-27 (an earlier text attributed this to decision D-9, which concerned the icon pack). The Grassfield

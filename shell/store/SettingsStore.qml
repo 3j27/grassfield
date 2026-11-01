@@ -197,6 +197,8 @@ Scope {
     readonly property bool dockMinimizeIntoApp: read("dock.minimizeIntoApp")
     readonly property bool dockAnimateOpening: read("dock.animateOpening")
     readonly property bool dockShowIndicators: read("dock.showIndicators")
+    // End Task in the Dock menus of running apps (ADR-0038 AQ5, AM63): off by default, as Windows' own.
+    readonly property bool dockEndTask: read("dock.endTask")
     // The clipboard history in Search (ADR-0034): off until allowed; retention of unpinned items; the opt-in history store; the
     // Clear Clipboard History marks the Settings app writes (milliseconds since the epoch; a change clears).
     readonly property bool clipboardEnabled: read("search.clipboard.enabled")

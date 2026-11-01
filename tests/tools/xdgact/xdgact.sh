@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # A window that activates itself through xdg-activation-v1 on SIGUSR1 and unmaps itself (alive) on SIGUSR2, for the NESTED dev
 # compositor only (tests/tools/xdgact).
-# Usage (through the isolation helper, like every test client): scripts/dev/isolated.sh tests/tools/xdgact/xdgact.sh APP_ID [MIN_WIDTH]
+# Usage (through the isolation helper, like every test client): scripts/dev/isolated.sh tests/tools/xdgact/xdgact.sh APP_ID [MIN_WIDTH | WxH]
 # Builds the tool into .dev/tools/ on first use. Refuses anything but this tree's verified nested socket
 # (dev_nested_target: live recorded compositor running this tree's dev config; never the owner's instance or WAYLAND_DISPLAY).
 # Build only: tests/tools/xdgact/xdgact.sh --build
