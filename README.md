@@ -39,7 +39,7 @@ Nothing runs as root, no service starts by itself, no file is written under `$HO
 ## Uninstall
 
 ```bash
-sudo pacman -Rns grassfield-login-themes grassfield-desktop grassfield-compositor grassfield-icons
+sudo pacman -Rns grassfield-login-themes grassfield-desktop grassfield-wallpapers grassfield-compositor grassfield-icons
 ```
 
 If you made Grassfield's login or boot theme the current one, revert it first
