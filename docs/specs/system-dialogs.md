@@ -398,8 +398,8 @@ master-prompt R12, ADR-0010 "Amendment 2026-10-31"), in force from the integrato
 PASS, fail closed where a secret is involved, nothing logged). Step 9a builds the bridge, its socket protocol (below) and
 its unit; step 9b the shell's queue and secret sheets for gcr's `password` and `confirm` prompts (ADR-0035 "Delivered in
 step 9b", decisions 9-15 to 9-22); step 9c udiskie's helper and the NetworkManager agent (planned as 9d, merged into 9c by
-the integrator's brief; ADR-0035 "Delivered in step 9c", decisions 9-25 to 9-35); step 9e KIO's password server
-(ADR-0035 "Delivered in step 9e", decisions 9-36 to 9-49).
+this step's brief; ADR-0035 "Delivered in step 9c", decisions 9-25 to 9-35); step 9e KIO's password server (ADR-0035
+"Delivered in step 9e", decisions 9-36 to 9-49).
 From 9b the shell connects in the session: gcr's prompts (gnome-keyring, pinentry-gnome3, gcr-ssh-agent) are drawn by the
 shell; from 9c also an encrypted removable disk's password (udiskie) and NetworkManager's Wi-Fi secrets; from 9e the
 passwords of network locations that KIO asks for (Files, the D-4 panel, any KF6 app).
