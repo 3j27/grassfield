@@ -171,7 +171,12 @@ TEST(PrompterProtocol, AnswerIsParsedAndThePasswordStaysRaw) {
     EXPECT_EQ(decoded(line, a.password), std::string("s3cr\"t \xc3\xa9\xf0\x9f\x94\x91"));
     const ShellLine cancel = parsed(R"({"type":"answer","id":"p1","result":"cancel"})", ParseStatus::Ok);
     EXPECT_FALSE(cancel.ok);
+    EXPECT_FALSE(cancel.refused);
     EXPECT_FALSE(cancel.hasPassword);
+    // The shell's refusal (its bound; opus review of step 9c): not ok, and not the user's cancellation.
+    const ShellLine refused = parsed(R"({"type":"answer","id":"p1","result":"refused"})", ParseStatus::Ok);
+    EXPECT_FALSE(refused.ok);
+    EXPECT_TRUE(refused.refused);
     // An empty password is a password (gnome-keyring asks about storing unencrypted then).
     const ShellLine empty = parsed(R"({"type":"answer","id":"p2","result":"ok","password":""})", ParseStatus::Ok);
     EXPECT_TRUE(empty.hasPassword);
@@ -463,7 +468,7 @@ TEST(PrompterNm, TheSsidIsPlainTextAndMustShowSomething) {
     EXPECT_FALSE(asked(c, "802-11-wireless-security").ask);
 }
 
-TEST(PrompterNm, EnterpriseNameAndPassword) {
+TEST(PrompterNm, EnterprisePasswordWithTheStoredUsername) {
     Con c;
     c.keyMgmt  = "wpa-eap";
     c.eap      = {"peap"};
@@ -471,7 +476,14 @@ TEST(PrompterNm, EnterpriseNameAndPassword) {
     const nm::Ask a = asked(c, "802-1x");
     ASSERT_TRUE(a.ask) << a.why.toStdString();
     EXPECT_EQ(a.security, nm::Security::Enterprise);
-    EXPECT_EQ(a.identity, QStringLiteral("alice"));
+    EXPECT_EQ(a.identity, QStringLiteral("alice")) << "shown read-only";
+    // NetworkManager keeps only secrets from a reply: without a username stored with the connection nothing useful can be
+    // asked (opus review of step 9c, MAJOR).
+    Con nameless = c;
+    nameless.identity.clear();
+    const nm::Ask none = asked(nameless, "802-1x");
+    EXPECT_FALSE(none.ask);
+    EXPECT_TRUE(none.why.contains(QStringLiteral("no username"))) << none.why.toStdString();
     EXPECT_EQ(a.setting, QByteArray("802-1x"));
     EXPECT_EQ(a.key, QByteArray("password"));
     const char* const passwordHints[] = {"password", "password-raw", nullptr};
@@ -499,7 +511,7 @@ TEST(PrompterNm, TheReplyHoldsTheSecretInItsSetting) {
     nm::Ask a = asked(c, "802-11-wireless-security");
     char* secret = static_cast<char*>(gcr_secure_memory_alloc(16));
     std::memcpy(secret, "c0rrect h0rse", 14);
-    GVariant* reply = g_variant_ref_sink(nm::secretsReply(a, secret, 13, QByteArray()));
+    GVariant* reply = g_variant_ref_sink(nm::secretsReply(a, secret, 13));
     ASSERT_TRUE(g_variant_is_of_type(reply, G_VARIANT_TYPE("(a{sa{sv}})")));
     {
         // Walked child by child (a lookup would serialise the dictionary into a copy of its own): the reply's string is
@@ -526,21 +538,20 @@ TEST(PrompterNm, TheReplyHoldsTheSecretInItsSetting) {
     g_variant_unref(reply); // zeroes and frees the buffer (ASan would see a double free or a leak)
 
     Con e;
-    e.keyMgmt = "wpa-eap";
-    e.eap     = {"ttls"};
-    a         = asked(e, "802-1x");
-    secret    = static_cast<char*>(gcr_secure_memory_alloc(8));
+    e.keyMgmt  = "wpa-eap";
+    e.eap      = {"ttls"};
+    e.identity = "alice";
+    a          = asked(e, "802-1x");
+    secret     = static_cast<char*>(gcr_secure_memory_alloc(8));
     std::memcpy(secret, "pw", 3);
-    reply   = g_variant_ref_sink(nm::secretsReply(a, secret, 2, QByteArray("bob")));
+    reply   = g_variant_ref_sink(nm::secretsReply(a, secret, 2));
     secrets = g_variant_get_child_value(reply, 0);
     setting = g_variant_lookup_value(secrets, "802-1x", G_VARIANT_TYPE("a{sv}"));
     ASSERT_NE(setting, nullptr);
-    const gchar* identity = nullptr;
     const gchar* password = nullptr;
-    EXPECT_TRUE(g_variant_lookup(setting, "identity", "&s", &identity));
     EXPECT_TRUE(g_variant_lookup(setting, "password", "&s", &password));
-    EXPECT_STREQ(identity, "bob");
     EXPECT_STREQ(password, "pw");
+    EXPECT_EQ(g_variant_n_children(setting), 1u) << "the password only: NetworkManager would drop a username";
     g_variant_unref(setting);
     g_variant_unref(secrets);
     g_variant_unref(reply);

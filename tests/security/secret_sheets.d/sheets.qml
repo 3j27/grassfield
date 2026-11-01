@@ -209,6 +209,7 @@ Item {
             compare(rig.secret.requestCount, 8);
             compare(client.answers.length, 1);
             compare([client.answers[0].id, client.answers[0].ok], ["p9", false]);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p9", result: "refused"}, "the shell's refusal, never a user's cancel");
             compare(rig.queue.secretCount, 8);
         }
 
@@ -575,27 +576,22 @@ Item {
             compare(rig.secret.model.showPassword, false, "hidden again");
         }
 
-        // Step 9c: WPA2 Enterprise: the connection's identity is the name's first text; Return in the name moves on to the
-        // password; Join sends the name and the password.
+        // Step 9c: WPA2 Enterprise: the connection's username is shown, read-only (NetworkManager keeps only secrets from a
+        // reply: opus review of step 9c, MAJOR); Join sends the password only.
         function test_22_networkEnterprise() {
             client.promptNetwork("p1", {ssid: "Office", security: "enterprise", identity: "alice"});
             shown("p1");
             compare(named("secretTitle").text, "The Wi-Fi network “Office” requires WPA2 enterprise credentials.");
             const name = named("secretIdentity");
             compare(name.visible, true);
-            compare(name.text, "alice");
+            compare(name.text, "Username: alice");
+            verify(name.textFormat === Text.PlainText && name.cursorPosition === undefined, "plain text, not a field");
             clickPastGuard();
-            tryVerify(() => named("secretField").activeFocus, 3000, "the name is there: the password field first");
-            name.forceActiveFocus();
-            name.selectAll();
-            typeText("bob");
-            compare(rig.secret.model.identity, "bob");
-            keyClick(Qt.Key_Return);
-            verify(named("secretField").activeFocus, "Return in the name moves on to the password");
+            tryVerify(() => named("secretField").activeFocus);
             typeText("p");
             keyClick(Qt.Key_Return);
             compare(client.answers.length, 1);
-            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "p", identity: "bob"});
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "p"});
         }
 
         // Step 9c: NetworkManager cancels (CancelGetSecrets) while the user types: the sheet ends, the rest of the password
@@ -656,6 +652,38 @@ Item {
             SessionState.locked = false;
             compare(rig.secret.heldByLock, true);
             compare(named("secretField").reveal, false, "hidden again");
+        }
+
+        // Opus review of step 9c, MINOR: a password shown by Show password is never selectable or copyable: Select All and
+        // Copy (and Cut) put nothing on the clipboard, a mouse drag selects nothing; the text stays in the field.
+        function test_26_shownPasswordNotCopyable() {
+            client.promptNetwork("p1", {});
+            shown("p1");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            const field = named("secretField");
+            typeText("secretpass");
+            mouseClick(named("secretShowPassword"));
+            compare(field.reveal, true);
+            const input = find(field, i => i.echoMode !== undefined);
+            verify(input !== null);
+            compare(input.echoMode, TextInput.Normal, "shown as typed");
+            const other = createTemporaryQmlObject("import QtQuick; TextInput { width: 100; height: 20; text: \"marker\" }", top);
+            other.selectAll();
+            other.copy();
+            field.forceActiveFocus();
+            keySequence(StandardKey.SelectAll);
+            compare(input.selectedText, "", "Select All selects nothing");
+            input.select(0, 4);
+            compare(input.selectedText, "", "no selection can stay");
+            keySequence(StandardKey.Copy);
+            keySequence(StandardKey.Cut);
+            compare(field.length, 10, "Cut takes nothing away");
+            mouseDrag(input, 1, input.height / 2, input.width - 2, 0);
+            compare(input.selectedText, "", "a mouse drag selects nothing");
+            other.text = "";
+            other.paste();
+            compare(other.text, "marker", "the clipboard never got the password");
         }
 
         // The caller's text is plain: markup is shown as typed, never rendered.

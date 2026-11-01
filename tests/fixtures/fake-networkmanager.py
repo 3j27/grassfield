@@ -11,7 +11,10 @@ FIFO (one per line, shell-quoted) and write what happens to FILE, one line each,
                                          for a Wi-Fi connection built from: keymgmt= (default wpa-psk), ssid= (text) or
                                          ssidhex= (bytes), wepidx=, authalg=, eap= (comma-separated), identity=, type=
                                          (default 802-11-wireless), hints= (comma-separated); logs "TAG secrets <json>"
-                                         or "TAG error <D-Bus error name>"
+                                         (what NetworkManager keeps: only secret properties of the connection's settings,
+                                         as 1.58's validate_secret_flags and libnm's for_each_secret keep them) and, when
+                                         the reply held anything else, "TAG dropped <setting.key,...>"; or "TAG error <D-Bus
+                                         error name>"
   cancel TAG                             CancelGetSecrets for TAG's connection path and setting; "TAG cancel ok|error <name>"
   save TAG / delete TAG                  SaveSecrets / DeleteSecrets of TAG's connection; "TAG save ok|error <name>"
   target NAME|-                          call the agent named NAME whether it registered or not (always so with --attacker);
@@ -39,6 +42,31 @@ MANAGER_XML = """<node><interface name="org.freedesktop.NetworkManager.AgentMana
 <method name="RegisterWithCapabilities"><arg name="identifier" type="s" direction="in"/><arg name="capabilities" type="u" direction="in"/></method>
 <method name="Unregister"/>
 </interface></node>"""
+
+
+# NetworkManager 1.58's secret properties of the settings an agent may answer (libnm NM_SETTING_PARAM_SECRET); a reply's
+# other properties, and settings the connection does not have, are dropped (nm-settings-connection.c validate_secret_flags).
+SECRETS = {
+    "802-11-wireless-security": {"psk", "wep-key0", "wep-key1", "wep-key2", "wep-key3", "leap-password"},
+    "802-1x": {"password", "password-raw", "pin", "private-key-password", "phase2-private-key-password", "ca-cert-password",
+               "phase2-ca-cert-password", "client-cert-password", "phase2-client-cert-password"},
+}
+
+
+def keep_secrets(reply, connection):
+    """(kept, dropped): what NetworkManager keeps of an agent's reply, and the setting.key names it drops."""
+    kept, dropped = {}, []
+    for setting, props in reply.items():
+        if setting not in connection:
+            dropped += ["%s.%s" % (setting, k) for k in props]
+            continue
+        kept[setting] = {}
+        for k, v in props.items():
+            if k in SECRETS.get(setting, set()):
+                kept[setting][k] = v
+            else:
+                dropped.append("%s.%s" % (setting, k))
+    return kept, sorted(dropped)
 
 
 def unpack(v):
@@ -134,7 +162,7 @@ def main():
             settings["802-1x"] = x
         return settings
 
-    def call(tag, method, params, reply_type, what, timeout=120000):
+    def call(tag, method, params, reply_type, what, timeout=120000, settings=None):
         name = agent()
         if not name:
             log.write("%s %s no-agent\n" % (tag, what))
@@ -144,7 +172,10 @@ def main():
             try:
                 v = conn.call_finish(result)
                 if what == "secrets":
-                    log.write("%s secrets %s\n" % (tag, json.dumps(unpack(v)[0], sort_keys=True, ensure_ascii=False)))
+                    kept, dropped = keep_secrets(unpack(v)[0], settings or {})
+                    log.write("%s secrets %s\n" % (tag, json.dumps(kept, sort_keys=True, ensure_ascii=False)))
+                    if dropped:
+                        log.write("%s dropped %s\n" % (tag, ",".join(dropped)))
                 else:
                     log.write("%s %s ok\n" % (tag, what))
             except GLib.Error as e:
@@ -162,8 +193,9 @@ def main():
             path = "/org/freedesktop/NetworkManager/Settings/%d" % (len(requests) + 1)
             requests[tag] = (path, setting)
             hints = opts["hints"].split(",") if opts.get("hints") else []
-            call(tag, "GetSecrets", GLib.Variant("(a{sa{sv}}osasu)", (connection(opts), path, setting, hints, flags)),
-                 GLib.VariantType("(a{sa{sv}})"), "secrets")
+            con = connection(opts)
+            call(tag, "GetSecrets", GLib.Variant("(a{sa{sv}}osasu)", (con, path, setting, hints, flags)),
+                 GLib.VariantType("(a{sa{sv}})"), "secrets", settings=con)
         elif op == "cancel":
             path, setting = requests[rest[0]]
             call(rest[0], "CancelGetSecrets", GLib.Variant("(os)", (path, setting)), None, "cancel", 1500)

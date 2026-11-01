@@ -16,7 +16,8 @@
 #            (tests/fixtures/prompter-client.py): a password typed in the shell reaches the gcr client through the sx-aes-1
 #            exchange; a confirmation; a cancellation; step 9c: with a private "system" bus and a fake NetworkManager
 #            (tests/fixtures/fake-networkmanager.py), the shell's real client registers the agent by its hello, and a WPA2
-#            password, an enterprise name and password and a cancellation answered in the shell reach NetworkManager (SKIP
+#            password, an enterprise password (nothing else: the fake keeps only secrets, as NetworkManager) and a
+#            cancellation answered in the shell reach NetworkManager (SKIP
 #            without dbus-daemon, PyGObject with Gcr 4, a built bridge or g++ with Qt 6 Core and gcr-4, or a cgroup of this
 #            process)
 #
@@ -235,8 +236,8 @@ e2e() {
   wait_until 15 grep -qE '^n1 secrets \{"802-11-wireless-security": \{"psk": "pw-p[0-9]+"\}\}$' "$e/nm.log" \
     && pass "e2e: a WPA2 password answered in the shell reaches NetworkManager" || bad "e2e: WPA2: $(grep '^n1' "$e/nm.log")"
   timeout 5 bash -c "$say_nm" _ "$e/nm.cmd" "get n2 802-1x 0x1 keymgmt=wpa-eap eap=peap identity=alice ssid=answer-ok"
-  wait_until 15 grep -qE '^n2 secrets \{"802-1x": \{"identity": "user-p[0-9]+", "password": "pw-p[0-9]+"\}\}$' "$e/nm.log" \
-    && pass "e2e: an enterprise name and password answered in the shell reach NetworkManager" || bad "e2e: enterprise: $(grep '^n2' "$e/nm.log")"
+  wait_until 15 grep -qE '^n2 secrets \{"802-1x": \{"password": "pw-p[0-9]+"\}\}$' "$e/nm.log" && ! grep -q '^n2 dropped' "$e/nm.log" \
+    && pass "e2e: an enterprise password answered in the shell reaches NetworkManager, nothing in the reply dropped" || bad "e2e: enterprise: $(grep '^n2' "$e/nm.log")"
   timeout 5 bash -c "$say_nm" _ "$e/nm.cmd" "get n3 802-11-wireless-security 0x1 ssid=answer-cancel"
   wait_until 15 grep -qx 'n3 error org.freedesktop.NetworkManager.SecretAgent.UserCanceled' "$e/nm.log" \
     && pass "e2e: a cancellation in the shell: UserCanceled" || bad "e2e: cancel: $(grep '^n3' "$e/nm.log")"
@@ -269,14 +270,14 @@ PY
     cfg "$tmp/mcfg" "$m"
     if run_client "$tmp/mcfg" "mut-$RANDOM" >/dev/null 2>&1; then echo "MUTANT $name: NOT CAUGHT"; fail=1; else echo "MUTANT $name: CAUGHT"; fi
   done <<'EOF_MUTANTS'
-answers-twice#security/secret/PrompterClient.qml#        root.forget(id);#        ;
+answers-twice#security/secret/PrompterClient.qml#        const line = Prompter.answerLine(priv.open[id], ok, password, choice, identity);\n        if (line === "")\n            return false;\n        root.forget(id);#        const line = Prompter.answerLine(priv.open[id], ok, password, choice, identity);\n        if (line === "")\n            return false;
 withdrawn-stays-open#security/secret/PrompterClient.qml#            root.forget(m.id);#            ;
 lenient-parser#security/secret/PrompterClient.qml#        if (!parsed.ok) {\n            root.fail(parsed.reason);\n            return;\n        }#        if (!parsed.ok)\n            return;
 duplicate-id-accepted#security/secret/PrompterClient.qml#                root.fail("request " + m.id + " sent twice");#                ;
 no-back-off#security/secret/PrompterClient.qml#            retry.interval = Prompter.retryDelay(priv.failures);#            retry.interval = 100;
 no-hello#security/secret/PrompterClient.qml#socket.write(Prompter.helloLine(root.shellVersion)#socket.write(""
 strict-parser-off#security/secret/Prompter.js#    if (!exactKeys(m, ["type", "id", "kind", "requester", "texts", "choice", "passwordNew", "strength"]))#    if (false)
-nm-name-for-any-network#security/secret/Prompter.js#            if (security === "enterprise") {#            if (true) {
+nm-name-sent (opus review of step 9c, MAJOR)#security/secret/Prompter.js#        const nmLine = JSON.stringify(m);#        if (typeof identity === "string")\n            m.identity = identity;\n        const nmLine = JSON.stringify(m);
 nm-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm"];#var KINDS = ["password", "confirm"];
 nm-network-lenient#security/secret/Prompter.js#    if (n.security !== "enterprise" && n.identity !== "")#    if (false)
 EOF_MUTANTS

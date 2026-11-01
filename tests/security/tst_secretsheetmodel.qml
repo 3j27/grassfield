@@ -219,7 +219,7 @@ TestCase {
         compare(m.glyph, "wifi-3");
         verify(!m.hasCallerText, "no caller text");
         compare(m.callerIntro, "");
-        compare(m.needsIdentity, d.tag === "enterprise");
+        compare(m.showsIdentity, d.tag === "enterprise");
     }
 
     function test_networkSsidStaysAField() {
@@ -229,9 +229,9 @@ TestCase {
 
     function test_networkJoinRule() {
         const m = createTemporaryObject(modelC, test, {request: network("wpa")});
-        verify(!m.networkReady(7, 0), "WPA2: 8 characters at least");
-        verify(m.networkReady(8, 0));
-        verify(!m.networkReady(65, 0));
+        verify(!m.networkReady(7), "WPA2: 8 characters at least");
+        verify(m.networkReady(8));
+        verify(!m.networkReady(65));
         const sent = wired(m);
         verify(!m.submit("short", null), "a WPA2 password too short is not sent");
         verify(m.error !== "");
@@ -240,24 +240,23 @@ TestCase {
         compare(sent, [{ok: true, password: "correct horse", choice: false}]);
         verify(!m.submit("again horse", null), "once");
         m.request = network("wep");
-        verify(m.networkReady(1, 0), "WEP: any length (NetworkManager checks the key)");
-        verify(!m.networkReady(0, 0));
+        verify(m.networkReady(1), "WEP: any length (NetworkManager checks the key)");
+        verify(!m.networkReady(0));
     }
 
+    // The connection's username is shown, read-only; the answer is the password only (NetworkManager keeps nothing else of a
+    // reply: opus review of step 9c, MAJOR).
     function test_networkEnterprise() {
-        const m = createTemporaryObject(modelC, test, {request: network("enterprise", "alice")});
-        compare(m.identity, "alice", "the connection's identity as the name's first text");
-        verify(m.networkReady(1, 5));
-        verify(!m.networkReady(1, 0), "a name is needed");
+        const m = createTemporaryObject(modelC, test, {request: network("enterprise", "alice\u202e")});
+        compare(m.identity, "alice", "the connection's username, flattened");
+        verify(m.showsIdentity);
+        verify(m.networkReady(1));
         const sent = wired(m);
-        m.identity = "";
-        verify(!m.submit("pw", null), "no name: nothing sent");
-        compare(sent.length, 0);
-        m.identity = "bob";
         verify(m.submit("pw", null));
-        compare(sent, [{ok: true, password: "pw", choice: false, identity: "bob"}]);
+        compare(sent, [{ok: true, password: "pw", choice: false}], "no name in the answer");
         m.request = network("wpa");
-        compare(m.identity, "", "a new request starts without a name");
+        compare(m.identity, "");
+        verify(!m.showsIdentity);
     }
 
     function test_networkCancelAndShowPassword() {

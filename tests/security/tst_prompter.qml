@@ -196,6 +196,7 @@ TestCase {
             {tag: "SSID over its cap", p: nm({}, {ssid: "s".repeat(65)})},
             {tag: "an SSID that shows nothing", p: nm({}, {ssid: "\u202e \n"})},
             {tag: "a name for a WPA2 network", p: nm({}, {identity: "eve"})},
+            {tag: "an enterprise network without its username", p: nm({}, {security: "enterprise", identity: "\u200b "})},
             {tag: "SSID a number", p: nm({}, {ssid: 3})},
             {tag: "bad id", p: nm({id: "p0"})}
         ];
@@ -224,12 +225,19 @@ TestCase {
         compare(Prompter.answerLine(kept, true, "", false, null), "", "never an empty Wi-Fi password");
         compare(Prompter.answerLine(kept, true, "x".repeat(4097), false, null), "", "over 4096 bytes");
         compare(JSON.parse(Prompter.answerLine(kept, true, "pw", false, "eve")), {type: "answer", id: "p7", result: "ok", password: "pw"}, "no name for a WPA2 network");
+        // Enterprise: the password only; NetworkManager would drop a name (opus review of step 9c, MAJOR).
         const ent = Object.assign({}, kept, {security: "enterprise"});
-        compare(JSON.parse(Prompter.answerLine(ent, true, "pw", false, "bob")), {type: "answer", id: "p7", result: "ok", password: "pw", identity: "bob"});
-        compare(Prompter.answerLine(ent, true, "pw", false, ""), "", "an enterprise answer needs a name");
-        compare(Prompter.answerLine(ent, true, "pw", false, null), "", "...a string one");
-        compare(Prompter.answerLine(ent, true, "pw", false, "n".repeat(1025)), "", "a name over 1024 bytes");
+        compare(JSON.parse(Prompter.answerLine(ent, true, "pw", false, "bob")), {type: "answer", id: "p7", result: "ok", password: "pw"});
+        compare(JSON.parse(Prompter.answerLine(parse(nm({}, {security: "enterprise", identity: "alice"})).message, true, "pw", false, null)),
+                {type: "answer", id: "p7", result: "ok", password: "pw"});
         verify(w.kind === "nm");
+    }
+
+    // The shell's refusal (its bound): "refused", never "cancel" (opus review of step 9c, NIT).
+    function test_refusalLine() {
+        compare(JSON.parse(Prompter.refusalLine("p9")), {type: "answer", id: "p9", result: "refused"});
+        compare(Prompter.refusalLine("p09"), "", "an id the bridge never sends");
+        compare(Prompter.refusalLine(""), "");
     }
 
     function test_diskRole() {

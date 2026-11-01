@@ -33,6 +33,19 @@ QtObject {
         return true;
     }
 
+    // The shell's refusal (its bound): "refused", once per open request (Prompter.refusalLine).
+    function refuse(id: string): bool {
+        if (!Object.prototype.hasOwnProperty.call(fake.open, id))
+            return false;
+        const line = Prompter.refusalLine(id);
+        if (line === "")
+            return false;
+        delete fake.open[id];
+        fake.openCount = Object.keys(fake.open).length;
+        fake.answers.push({id: id, ok: false, password: null, choice: false, identity: null, line: line});
+        return true;
+    }
+
     // A NetworkManager request (kind nm, step 9c) as the bridge sends it, parsed by the real parser (WPA2 by default).
     function promptNetwork(id: string, network: var): var {
         const m = {type: "prompt", id: id, kind: "nm", network: Object.assign({ssid: "Home", security: "wpa", identity: ""}, network || {})};
