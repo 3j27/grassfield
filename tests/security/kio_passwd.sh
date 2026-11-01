@@ -29,8 +29,9 @@
 #    Secret Service that is not gnome-keyring is "unknown"
 # 12 bounds: one caller's ninth and tenth open requests answered at once; the shell's bound of 8 shared with gcr's prompts
 # 13 wrong answers from the shell (a name where none is asked, ok without a password, a choice not offered, an empty
-#    password) each end their query with nothing; the shell's refusal (result "refused", its bound) ends its query with
-#    nothing and, unlike the user's Cancel, keeps no cancelled entry: the server's next query gets a sheet
+#    password, a refusal carrying a password) each end their query with nothing; the shell's refusal (result "refused",
+#    its bound) ends its query with nothing and, unlike the user's Cancel, keeps no cancelled entry: the server's next
+#    query gets a sheet
 # 14 a name changed in the sheet: the result's URL names it, and the old URL's next query is not blocked
 # 15 hide-username-line: no name field, the user name kept; <NoAuthPrompt>: nothing at once, no sheet
 # 16 the caller leaves while its query is shown: the shell gets "cancel"
@@ -416,7 +417,7 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
 
   # --- 13 wrong answers from the shell ------------------------------------------------------------------------------------
   local wrong line
-  for wrong in name nopass choice empty; do
+  for wrong in name nopass choice empty refusedpass; do
     n=$(prompts s)
     case $wrong in
       name) say c "query sftp://wrong-$wrong.example/ fixeduser - readonly keep" ;;
@@ -430,6 +431,7 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
       nopass) line="{\"type\":\"answer\",\"id\":\"$gid\",\"result\":\"ok\",\"identity\":\"eve\"}" ;;
       choice) line="{\"type\":\"answer\",\"id\":\"$gid\",\"result\":\"ok\",\"identity\":\"eve\",\"password\":\"pw-$wrong\",\"choice\":true}" ;;
       empty) line="{\"type\":\"answer\",\"id\":\"$gid\",\"result\":\"ok\",\"identity\":\"eve\",\"password\":\"\"}" ;;
+      refusedpass) line="{\"type\":\"answer\",\"id\":\"$gid\",\"result\":\"refused\",\"password\":\"pw-$wrong\"}" ;;
     esac
     before=$(lines "$d/c.out")
     say s "raw $line"
