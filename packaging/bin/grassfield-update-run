@@ -15,7 +15,8 @@
 #   4. runs `pkexec /usr/lib/grassfield/grassfield-update-helper run <op-id> [<migration>...]` and reads its outcome from
 #      /run/grassfield-update/<op-id>.exit (pkexec alone: 126 dismissed, 127 not allowed);
 #   5. after a helper that installed something, runs Omarchy's steps that act for the user, as Omarchy's update does
-#      after its transaction: omarchy-migrate, omarchy-hook post-update, omarchy-update-mise (ADR-0033 s3.6). Each runs
+#      after its transaction: omarchy-migrate (unless the helper ran it, `migrations ran`: ADR-0033 s5, owner decision
+#      SU-M2), omarchy-hook post-update, omarchy-update-mise (ADR-0033 s3.6). Each runs
 #      with standard input /dev/null and no terminal, a time limit, PATH=/usr/share/omarchy/bin:/usr/bin and
 #      OMARCHY_PATH=/usr/share/omarchy, without BASH_ENV, SUDO_ASKPASS or the caller's exported shell functions. Its
 #      output goes to $XDG_RUNTIME_DIR/grassfield/software-update-run.log (0600);
@@ -153,8 +154,12 @@ esac
 # 5. Omarchy's steps for the user (ADR-0033 s3.6).
 phase=configuring
 write_state
+# Migrations that need root ran in the helper, as this user, with their sudo commands as root (ADR-0033 s5, owner decision
+# SU-M2: `migrations ran`); any other run's migrations run here. Either way, one still pending is Omarchy's terminal's.
 if [[ -x $OMARCHY/bin/omarchy-migrate ]]; then
-  timeout -k 10 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" </dev/null 9>&- || echo "grassfield-update-run: omarchy-migrate failed"
+  if ! has "migrations ran"; then
+    timeout -k 10 900 "${omarchy_env[@]}" "$OMARCHY/bin/omarchy-migrate" </dev/null 9>&- || echo "grassfield-update-run: omarchy-migrate failed"
+  fi
   read_pending
   if ((pending_feed == 1)) || [[ -n $pending_out ]]; then deferred+=(migrations); fi
 fi

@@ -41,13 +41,15 @@ desc="a comment naming the old form and a -p start are not flagged"
 check bash -c '[ -z "$(named_qs "$1")" ]' _ "$mut/n4"
 # bare_qs DIR...: qs/quickshell ipc|kill|log callers (any quoting, /usr/bin/ prefix) that do not select the instance by pid
 # (--pid), by the system path (-p /usr/share/grassfield/shell), through bindings.lua's shell_selector (itself checked below)
-# or through the hyprland-dialog stand-in's shell_dir (ADR-0035 D-3; checked below too).
+# or through the hyprland-dialog stand-in's shell_dir (ADR-0035 D-3; checked below too), or grassfield-security-status's
+# path, the security unit's own system path (ADR-0041 S1; checked below too).
 # Comment lines are skipped. A -p with any other path, a -c name, or no selector is reported.
 bare_qs() {
   grep -rnIHE "([\"']?(/usr/bin/)?(qs|quickshell)[\"']?([[:space:]]*,[[:space:]]*|[[:space:]]+)[\"']?(ipc|kill|log)[\"']?([^[:alnum:]_]|$))" "$@" 2>/dev/null |
     grep -vE '^[^:]*:[0-9]*:[[:space:]]*(#|--|//|\*)' |
     grep -vE "(--pid|[\"']--pid[\"']|(-p|[\"']-p[\"'][[:space:]]*,)[[:space:]]+[\"']?/usr/share/grassfield/shell([\"' ]|$))" | grep -v shell_selector |
-    grep -vE '/packaging/session-bin/hyprland-dialog:[0-9]+:answer=\$\(timeout -k 0\.2 1 qs ipc -p "\$shell_dir" call anr report '
+    grep -vE '/packaging/session-bin/hyprland-dialog:[0-9]+:answer=\$\(timeout -k 0\.2 1 qs ipc -p "\$shell_dir" call anr report ' |
+    grep -vE '/packaging/bin/grassfield-security-status:[0-9]+:(state|beat)=\$\(timeout -k 0\.2 2 qs ipc \$display -p "\$path" call security (state|heartbeat) '
 }
 export -f bare_qs
 desc="every shipped qs ipc/kill/log caller (the whole of apps, bridges, packaging, config, shell and ui) selects an instance by the system path (-p) or by pid (--pid), never by name or bare"
@@ -71,6 +73,11 @@ printf 'var c = ["qs", "ipc", "--pid", String(pid), "call", "a", "b"];\n// qs ip
 printf 'answer=$(timeout -k 0.2 1 qs ipc -p "$shell_dir" call anr report "$$"\n' >"$mut/packaging/bin/anr"
 desc="mutation: the stand-in's shell_dir form anywhere but the stand-in is caught"
 check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/packaging/bin/anr"
+printf 'state=$(timeout -k 0.2 2 qs ipc $display -p "$path" call security state 2>/dev/null)\n' >"$mut/packaging/bin/sec"
+desc="mutation: the security status form anywhere but grassfield-security-status is caught"
+check bash -c '[ -n "$(bare_qs "$1")" ]' _ "$mut/packaging/bin/sec"
+desc="grassfield-security-status's path is the security unit's system path, set once"
+check bash -c 'f=$1; [[ $(grep -c "^path=" "$f") == 1 ]] && grep -qx "path=/usr/share/grassfield/shell/security.qml" "$f"' _ "$root/packaging/bin/grassfield-security-status"
 desc="a --pid caller, a -p caller and a comment are not flagged"
 check bash -c '[ -z "$(bare_qs "$1")" ]' _ "$mut/ok.txt"
 desc="every installed qs ipc caller (bindings, lid, sleep-lock stand-in) names the same system path as the unit"

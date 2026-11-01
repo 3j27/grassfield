@@ -250,11 +250,14 @@ TestCase {
 
     // The shell runs the check (it answered "ok"): the pane waits for the file's next answer, not for the pending logout alone.
     function test_theShellsAnswerEndsTheWait() {
-        const t = make(available(Date.now() - 5 * 60 * 1000));
+        // One time for both files: checkedAt keeps whole seconds, and two Date.now() calls around the page's creation could
+        // fall on either side of a second, which made the pending logout below look like a new answer (1 run in 4).
+        const before = Date.now() - 5 * 60 * 1000;
+        const t = make(available(before));
         t.backend.finished("update.ask", true, "ok\n");
         verify(t.updates.checking);
         compare(t.backend.runs, []);
-        t.backend.write(testCase.stateFile, JSON.stringify(Object.assign(available(Date.now() - 5 * 60 * 1000), {logoutPending: true})));
+        t.backend.write(testCase.stateFile, JSON.stringify(Object.assign(available(before), {logoutPending: true})));
         verify(t.updates.checking, "the pending logout written alone is no answer");
         t.backend.write(testCase.stateFile, JSON.stringify(answer("up-to-date", {grassfield: {installed: "1.0.1-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}})));
         verify(!t.updates.checking);
@@ -527,12 +530,14 @@ TestCase {
         verify(row(t.page, "Log out to finish updating Grassfield"));
         const asked = [];
         t.page.endSessionRequested.connect(a => asked.push(a));
+        verify(button(t.page, "Log Out…").enabled, "no run going on: Log Out… can be used");
         button(t.page, "Log Out…").clicked();
         compare(asked, ["logout"]);
         t.updates.endSession("logout");
         compare(t.backend.launches, [["/usr/lib/grassfield/grassfield-session-end", "logout"]]);
         const r = make(answer("up-to-date"), {files: {"/home/u/.local/state/omarchy/reboot-required": ""}});
         verify(row(r.page, "Restart to finish updating"));
+        verify(button(r.page, "Restart…").enabled, "no run going on: Restart… can be used");
         button(r.page, "Restart…").clicked();
         r.updates.endSession("restart");
         compare(r.backend.launches, [["/usr/lib/grassfield/grassfield-session-end", "restart"]]);
@@ -644,6 +649,13 @@ restart kernel
         // A pid reused by another process (another start time) is not the runner.
         const reused = Object.assign({}, gone, {"/proc/4242/stat": testCase.runnerStat.replace(" 777 ", " 999 ")});
         verify(!make(available(), {runner: true, files: reused}).updates.running);
+        // Restart… and Log Out… wait for the run's end (the system changes until then).
+        const marked = Object.assign({}, running, {"/home/u/.local/state/omarchy/reboot-required": ""});
+        const m = make(available(), {runner: true, files: marked});
+        verify(row(m.page, "Restart to finish updating"));
+        verify(!button(m.page, "Restart…").enabled, "no restart while the run goes on");
+        const after = Object.assign({}, gone, {"/home/u/.local/state/omarchy/reboot-required": ""});
+        verify(button(make(available(), {runner: true, files: after}).page, "Restart…").enabled, "Restart… is back once the run ended");
         // A new session (the log out took the runner's folder): the helper `last` names, while it runs.
         const session = {"/run/grassfield-update/last": testCase.runOp + "\n"};
         session[helperFile("started")] = "5151 888\n";

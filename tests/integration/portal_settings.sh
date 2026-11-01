@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The Settings portal backend (ADR-0035 D-4, D-8, step 2b) with the real xdg-desktop-portal frontend.
-# Static (always): the session's routing file lists only Settings (grassfield-settings, then gtk) and FileChooser (grassfield,
-# then gtk: tests/integration/portal_filechooser.sh); the .portal file, the D-Bus
+# Static (always): the session's routing file lists only Settings (grassfield-settings, then gtk) and FileChooser, Access,
+# AppChooser and Print (grassfield, then gtk: tests/integration/portal_filechooser.sh); the .portal file, the D-Bus
 # service file and the unit name the same bus name and program; the unit is Type=dbus, restarts on failure, clears
 # GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME and is hardened; the shell's unit clears GTK_USE_PORTAL; env-grassfield, on scratch
 # copies of its paths, puts the routing directory first in XDG_DATA_DIRS once (keeping the list, or the default), sets
@@ -47,9 +47,9 @@ name=org.freedesktop.impl.portal.desktop.grassfield_settings
 unit=$pk/systemd/grassfield-portal-settings.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the session's routing lists only Settings, FileChooser, Access and AppChooser (D-4, D-5): Grassfield first, then gtk"
+desc="the session's routing lists only Settings, FileChooser, Access, AppChooser and Print (D-4, D-5, D-7): Grassfield first, then gtk"
 check test "$(grep -v '^#' "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf" | grep -v '^$' | tr '\n' ' ')" = \
-  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk org.freedesktop.impl.portal.Access=grassfield;gtk org.freedesktop.impl.portal.AppChooser=grassfield;gtk "
+  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk org.freedesktop.impl.portal.Access=grassfield;gtk org.freedesktop.impl.portal.AppChooser=grassfield;gtk org.freedesktop.impl.portal.Print=grassfield;gtk "
 desc="the .portal file, the D-Bus service file and the unit name the same bus name and program"
 check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.Settings;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal-settings" "$3" && grep -qx "SystemdService=grassfield-portal-settings.service" "$3" &&
@@ -61,12 +61,12 @@ check bash -c 'for l in Type=dbus Restart=on-failure RestartSec=1 ConditionEnvir
   PrivateNetwork=yes RestrictAddressFamilies=AF_UNIX; do grep -qx "$l" "$1" || { echo "missing: $l"; exit 1; }; done' _ "$unit"
 desc="the shell's unit clears GTK_USE_PORTAL (its start never waits on the portal, gate P5)"
 check grep -qx "UnsetEnvironment=GTK_USE_PORTAL" "$pk/systemd/grassfield-shell.service"
-desc="the PKGBUILD builds and installs the backend, its unit, routing, .portal and service files, and the generated themes"
+desc="the PKGBUILD builds and installs the backend, its unit, routing, .portal and service files, and the generated themes; the package depends on the portals and libcups"
 check bash -c 'grep -q "cmake --install \"\$srcdir/portal-settings-build\"" "$1" && grep -q "for unit in .*portal-settings" "$1" &&
   grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf" "$1" &&
   grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield-settings.portal" "$1" &&
   grep -q "usr/share/dbus-1/services/$2.service" "$1" && grep -q "gen-gtk-themes.py\" \"\$srcdir/gtk-themes\"" "$1" &&
-  grep -q "\$pkgdir/usr/share/themes/" "$1" && grep -q "xdg-desktop-portal xdg-desktop-portal-gtk)" "$1"' _ "$pk/arch/PKGBUILD" "$name"
+  grep -q "\$pkgdir/usr/share/themes/" "$1" && grep -q "xdg-desktop-portal xdg-desktop-portal-gtk libcups)" "$1"' _ "$pk/arch/PKGBUILD" "$name"
 
 # The real env file, its paths rewritten to a scratch copy.
 mkdir -p "$tmp/gf/xdg-desktop-portal"
@@ -168,13 +168,14 @@ got="$(call read-one org.freedesktop.appearance color-scheme) $(call read-all 'o
 desc="1 ReadOne and the namespace filter [$got]"
 check test "$got" = '1 ["org.gnome.desktop.interface"]'
 got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.[A-Za-z]+ \(((default|interface specific) )?config\)" "$d/frontend.log" | sort -u | tr '\n' ';')
-desc="1 the session's file routes Settings, FileChooser, Access and AppChooser only: every other interface keeps the stock routing (Screenshot) [$got]"
+desc="1 the session's file routes Settings, FileChooser, Access, AppChooser and Print only: every other interface keeps the stock routing (Screenshot) [$got]"
 check bash -c '[[ $1 == *"Using grassfield-settings.portal for org.freedesktop.impl.portal.Settings (config)"* &&
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.FileChooser (interface specific config)"* &&
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Access (interface specific config)"* &&
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.AppChooser (interface specific config)"* &&
+  $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Print (interface specific config)"* &&
   $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
-  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | sort -u | tr "\n" " ") == "Access (interface specific config) AppChooser (interface specific config) FileChooser (interface specific config) Settings (config) " ]]' _ "$got"
+  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | sort -u | tr "\n" " ") == "Access (interface specific config) AppChooser (interface specific config) FileChooser (interface specific config) Print (interface specific config) Settings (config) " ]]' _ "$got"
 read -r rss anon < <(awk '/^VmRSS:/ { r = $2 } /^RssAnon:/ { a = $2 } END { print r, a }' "/proc/$(cat "$d/backend.pid")/status" 2>/dev/null)
 desc="1 the backend's memory is within its budget (private <= 4 MB, resident <= 20 MB) [private ${anon:-?} kB, resident ${rss:-?} kB]"
 check bash -c '[[ -n $1 && -n $2 && $1 -le 4096 && $2 -le 20480 ]]' _ "$anon" "$rss"

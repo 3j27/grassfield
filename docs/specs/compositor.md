@@ -644,7 +644,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   after an output goes away, a floating window left off every output (Hyprland moves only the removed output's Desktops)
   comes back centred on the work area of its Desktop's output at its size (D67; not a full-screen, Stages strip or
   minimized window; one INFO line each), and the revealed titlebar of a full-screen window posts `titlebar-reveal` (P6,
-  D65). Untrusted: fixed-size strings, the address
+  D65). Step 6d: `unsplit(address[, how])` also takes Make Window Full Screen ("fullscreen": home, then full screen there)
+  and Replace Tiled Window ("replace": home without showing it, the other member waiting again with the suggestion of the
+  vacated half from that Desktop's windows but the one replaced; refused with one member), feature `tiling-split-rows`
+  (D71). Untrusted: fixed-size strings, the address
   compared with live windows, the place and the side from fixed lists, the output name checked and compared with the live
   outputs.
 - **FR50** Settings (macOS Desktop & Dock > Windows, all on by default; tiling.md TL32): `windows.tilingEdges` ("Drag

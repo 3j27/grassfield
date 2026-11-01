@@ -210,6 +210,15 @@ function withAnnounced(file, items) {
     return Object.assign({}, f, {announced: f.announced.concat((items || []).map(n => n.id)).slice(-MAX_ANNOUNCED)});
 }
 
+// The file with this session's toolkit announcement (U31) marked as made: the end of an Update Now run that asks for a
+// restart or a log out says what finishes the update, and a restart covers the log out (ADR-0033 s3.7), so the toolkit's
+// "Log out to finish updating" is not posted after it (one update, one notice: the integrator's review of b6fdedf). The
+// pane's log out row stays the checker's (`toolkitLogout`).
+function withToolkitCovered(file, sessionStartMs) {
+    const id = "toolkit " + String(sessionStartMs);
+    return normalize(file).announced.indexOf(id) >= 0 ? normalize(file) : withAnnounced(file, [{id: id}]);
+}
+
 // Two flags: `pending`, GF-083's own log out (Grassfield itself was updated in this session); `toolkit`, a toolkit package
 // replaced under the session (U31). The pane words its row by them: "Log out to finish updating Grassfield" for the first,
 // "Log out to finish updating" for the second alone.
@@ -458,6 +467,36 @@ function runView(run, alive, progress, helperAlive) {
     const total = phase === "downloading" || phase === "installing" ? progress.total : 0;
     return { state: "running", phase: phase, done: done, total: total, percent: percentOf(phase, done, total), result: "", restart: "", snapshot: "",
         synced: false, deferred: [] };
+}
+
+// The notice the end of an Update Now run deserves when the shell saw it going on (docs/specs/updates.md U33, ADR-0033
+// "Step 4"): "restart", "logout", "migrations", "aur", "installed", "bootimage", "incompatible", "terminal", "stopped", "failed",
+// or "" for none (nothing installed and nothing to do: up to date; cancelled or refused in the dialog the person saw).
+function runNotice(run) {
+    if (run === null || run.phase !== "done")
+        return "";
+    switch (run.result) {
+    case "done":
+        if (run.restart === "restart" || run.restart === "logout")
+            return run.restart;
+        if (run.deferred.indexOf("migrations") >= 0)
+            return "migrations";
+        return run.deferred.indexOf("aur") >= 0 ? "aur" : "installed";
+    case "bootimage":
+    case "incompatible":
+        return run.result;
+    case "terminal":
+    case "stalelock":
+        return "terminal";
+    case "failed-partial":
+        return "stopped";
+    case "failed":
+    case "space":
+    case "power":
+    case "busy":
+        return "failed";
+    }
+    return "";
 }
 
 // The run the helper's `last` names, when no runner's state is left (a log out ended the runner and its runtime folder, a new

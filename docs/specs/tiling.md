@@ -4,9 +4,10 @@ Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (P
 (PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
 (PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
 merged (PR #42: the shared edge, TL30); step 5 merged (PR #43: Settings > Desktop & Dock > Windows, TL32); step 6 is split
-in two, then four (ADR-0036 D40, D40 amended, D63): 6a merged (PR #48: the Split View Desktop, TL33), 6b merged (PR #56:
-the separator's reset and the swap), 6c on its branch (full screen's reveal, Dock and green button; windows gathered after
-an unplug), 6d not built. Below, "Today" is the state before step 1. A requirement
+in two, then five (ADR-0036 D40, D40 amended, D63, D70): 6a merged (PR #48: the Split View Desktop, TL33), 6b merged (PR
+#56: the separator's reset and the swap), 6c merged (PR #70: full screen's reveal, Dock and green button; windows gathered
+after an unplug), 6d on its branch (the Split View rows, the Overview's drop rule), 6e not built (the titles hidden and
+revealed at the top). Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -530,9 +531,14 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   output goes away, a floating window left off every output comes back centred on the work area of its Desktop's output at
   its size, at most the area's (core `strayFrame`, `gatheredFrame`; not a full-screen, Stages strip or minimized window).
   The picker's deadline for the plugin's reply is 6 s (D68); a reply adopts a Split View's picker unless it answers the
-  shell's own ask (`WindowTiling.replyPicker`), so an earlier ask still open never hides a new Split View's picker. Step 6d: the titles hidden and revealed at the top of a Split
-  View Desktop, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full Screen) and the Overview's
-  drop targets for a Split View Desktop.
+  shell's own ask (`WindowTiling.replyPicker`), so an earlier ask still open never hides a new Split View's picker.
+  Step 6d as built (ADR-0036 D70-D72): with the plugin's `tiling-split-rows`, a Split View window's tiling popover offers
+  Move Window to Desktop (Exit Full Screen's effect, D44), Make Window Full Screen (back home, in full screen there) and
+  Replace Tiled Window (only with two members: back home without showing it, the other keeps its half and waits, the picker
+  offering the windows of that Desktop but the one replaced); the Window menu adds the last two after Exit Full Screen. All
+  through `unsplit(address[, how])` (core `unsplitHow`, `withoutWindow`), refused while locked. The Overview takes no window
+  onto a Split View Desktop and drags no member out of one (`WindowTiling.dropAllowed`). Step 6e: the titles hidden and
+  revealed at the top of a Split View Desktop, the revealed bar taking a member's drag (D59) as well as its lights.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover

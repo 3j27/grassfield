@@ -403,6 +403,19 @@ TestCase {
             compare(Minimized.splitCall(address, "left") + Minimized.unsplitCall(address), "", String(address));
     }
 
+    // Step 6d (ADR-0036 D71): how a window leaves its Split View Desktop, the second argument only when it is not "desktop".
+    function test_unsplitCallTakesHowAWindowLeaves() {
+        const guard = "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.unsplit then p.unsplit(";
+        compare(Minimized.unsplitCall("0x55AB", "desktop"), guard + "\"0x55ab\") end end", "Move Window to Desktop: as Exit Full Screen");
+        compare(Minimized.unsplitCall("0x55AB", undefined), guard + "\"0x55ab\") end end");
+        compare(Minimized.unsplitCall("0x55AB", "fullscreen"), guard + "\"0x55ab\", \"fullscreen\") end end");
+        compare(Minimized.unsplitCall("55ab", "replace"), guard + "\"0x55ab\", \"replace\") end end");
+        compare(Minimized.unsplitCall("0x55AB", ""), guard + "\"0x55ab\") end end", "empty: as desktop");
+        for (const how of ["Desktop", "full screen", "zoom", "replace\") end os.exit() --", null, 0])
+            compare(Minimized.unsplitCall("55ab", how), "", String(how));
+        compare(Minimized.unsplitCall("zz", "replace"), "", "an invalid address");
+    }
+
     // TL27, TL28 (step 4a): a zone of the Layouts section, and a pick of the suggestions into the layout of another window.
     function test_zoneCallsAreBuiltFromValidatedPieces() {
         const guard = "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.arrange then p.arrange(";
