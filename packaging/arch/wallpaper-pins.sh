@@ -1,0 +1,58 @@
+# The wallpaper photographs' downloads (ADR-0040 step 2c): sourced by packaging/arch/PKGBUILD. Plain assignments only, no
+# commands. The one list is packaging/arch/wallpaper-photos.json (names, authors, licences, credits); these arrays repeat its
+# id, original and sha1 in its order, and tests/ci/wallpaper_photos.py holds them equal. The SHA-1 is the one Wikimedia
+# Commons publishes for each file (imageinfo sha1): a changed upload fails the build instead of shipping another picture.
+GF_PHOTO_IDS=(
+  golden-mist
+  frosted-meadow
+  valley-fog
+  river-mist
+  steppe-storm
+  evening-fields
+  mountain-pasture
+  rice-terraces
+  morning-dew
+  summer-grass
+  seed-heads
+  terraces-at-dusk
+  winter-sunrise
+  autumn-dew
+  silver-grass
+  starlit-hill
+)
+GF_PHOTO_URLS=(
+  https://upload.wikimedia.org/wikipedia/commons/0/07/Matt_Palmer_2016_%28Unsplash%29.jpg
+  https://upload.wikimedia.org/wikipedia/commons/3/3c/%C5%81%C4%85ki_nad_Wis%C5%82%C4%85_pod_Brze%C5%BAnic%C4%85_po_wschodzie_s%C5%82o%C5%84ca%2C_20241116_0725_2676.jpg
+  https://upload.wikimedia.org/wikipedia/commons/1/1a/Zamglona_dolina_w_Witowie_w_powiecie_proszowickim%2C_20241020_0808_6322.jpg
+  https://upload.wikimedia.org/wikipedia/commons/0/0a/Desna_river_Vinn_meadow_2016_G2.jpg
+  https://upload.wikimedia.org/wikipedia/commons/6/6d/%D0%A7%D1%83%D0%B9%D1%81%D0%BA%D0%B8%D0%B9_%D1%85%D1%80%D0%B5%D0%B1%D0%B5%D1%82_%D0%B8_%D0%9A%D1%83%D1%80%D0%B0%D0%B9%D1%81%D0%BA%D0%B0%D1%8F_%D1%81%D1%82%D0%B5%D0%BF%D1%8C.jpg
+  https://upload.wikimedia.org/wikipedia/commons/e/e9/Tatry_-_panorama_z_Polskiego_Spiszu.jpg
+  https://upload.wikimedia.org/wikipedia/commons/e/ec/Ingushetia%2C_%D0%97%D0%B0%D0%BA%D0%B0%D1%82%D0%BD%D1%8B%D0%B9_%D0%B7%D0%BE%D0%BB%D0%BE%D1%82%D0%BE%D0%B9_%D1%81%D0%B2%D0%B5%D1%82_%D0%BD%D0%B0_%D1%81%D0%BA%D0%BB%D0%BE%D0%BD%D0%B0%D1%85_%D0%B4%D0%BE%D0%BB%D0%B8%D0%BD%D1%8B_%D0%90%D1%80%D0%BC%D1%85%D0%B8%2C_%D0%B3%D0%BE%D1%80%D1%8B_%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D0%B8%2C_%D0%9A%D0%B0%D0%B2%D0%BA%D0%B0%D0%B7.jpg
+  https://upload.wikimedia.org/wikipedia/commons/b/b9/Hyogo-Rice_terraces_in_Ueyama.%28early_autumn.%29-xl.jpg
+  https://upload.wikimedia.org/wikipedia/commons/c/c6/Dew_on_grass_%2821677746153%29.jpg
+  https://upload.wikimedia.org/wikipedia/commons/8/84/Grass_%2814448015527%29.jpg
+  https://upload.wikimedia.org/wikipedia/commons/e/e2/Grass_at_Sunrise_%2836993588030%29.jpg
+  https://upload.wikimedia.org/wikipedia/commons/f/f2/Kyoto-Evening_view_of_Sodeshi_rice_terraces.-xl.jpg
+  https://upload.wikimedia.org/wikipedia/commons/1/1c/Wsch%C3%B3d_s%C5%82o%C5%84ca_nad_%C5%82%C4%85kami_pod_Ty%C5%84cem_w_Krakowie%2C_20260301_0636_4894.jpg
+  https://upload.wikimedia.org/wikipedia/commons/2/28/Dew_on_grass_%2822309335571%29.jpg
+  https://upload.wikimedia.org/wikipedia/commons/7/74/Waving_grass_under_mountains_%28Unsplash%29.jpg
+  https://upload.wikimedia.org/wikipedia/commons/a/a2/Milky_Way_over_Cronan_Ranch_%2852321033535%29.jpg
+)
+GF_PHOTO_SHA1=(
+  a5eeee96a4b9eaaa9edfc29978a51350ae1681f1
+  d0b41e3e969f335acd11780e2f113650998abdd7
+  0204c6b1c12e800674ffd3423f3c0b903af020f1
+  196669deb715c8b405f4287cd1fd81d50f98c2c0
+  c575bc76d11b0bf6812a36e809b8554f9564e442
+  d4115b6f9b916be76e481c10136152a2aed63c07
+  bd234713779074883e9a1224dfa47ad1b74a7e99
+  0cfb04ba13187bf1dd97e877d887971cf3a7f7b7
+  2e957c1b62c108c1fde0d40bd0ca7d9ddef9a016
+  e62fb94310d784ed8a1269cd7d913f269d0bc591
+  6a0b778018cb0a7852ed511044465b71640d3610
+  0010fd3f3ace11c370043ba827c65e4647127aca
+  25e8e34e0bccfe8682af9271e8e36e473c7e053d
+  c30b00aa5b61b314e673b65169406697332f5762
+  d2206e38f449f9943eec4f86d2e0140fa0961b05
+  32f20961a05ee28acf6f28055b699b28be79430f
+)

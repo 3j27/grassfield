@@ -1,5 +1,6 @@
 #include "wallpaperlogic.h"
 
+#include <QBuffer>
 #include <QByteArray>
 #include <QColorSpace>
 #include <QCryptographicHash>
@@ -9,6 +10,7 @@
 #include <QFileInfo>
 #include <QImageReader>
 #include <QImageIOHandler>
+#include <QImageWriter>
 #include <QJsonArray>
 #include <QPainter>
 #include <QRegularExpression>
@@ -410,6 +412,43 @@ bool writeAtomic(const QString &path, const QByteArray &data)
     if (f.write(data) != data.size())
         return false;
     return f.commit();
+}
+
+QSize shrunkSize(const QSize &shown, int maxWidth)
+{
+    if (shown.isEmpty() || maxWidth < 1)
+        return {};
+    if (shown.width() <= maxWidth)
+        return shown;
+    return QSize(maxWidth, std::max(1, int(std::lround(double(shown.height()) * maxWidth / shown.width()))));
+}
+
+ExitCode shrinkPicture(const QString &src, const QString &dst, int maxWidth, int quality, QSize *written)
+{
+    if (maxWidth < 1 || maxWidth > kMaxSide || quality < 1 || quality > 100 || dst.isEmpty())
+        return Usage;
+    if (const ExitCode c = checkFile(src, kMaxFileBytes))
+        return c;
+    QSize shown;
+    if (const ExitCode c = probePicture(src, &shown))
+        return c;
+    const QSize target = shrunkSize(shown, maxWidth);
+    QImage img;
+    if (const ExitCode c = loadPicture(src, target, Fit::Fit, &img))
+        return c;
+    // A fresh canvas of the target size (compose): the decoded picture's text keys and colour space stay behind.
+    const QImage out = compose(img, target, Fit::Stretch, QColor(Qt::black));
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    buffer.open(QIODevice::WriteOnly);
+    QImageWriter w(&buffer, "jpeg");
+    w.setQuality(quality);
+    w.setOptimizedWrite(true);
+    if (!w.write(out) || bytes.isEmpty() || !writeAtomic(dst, bytes))
+        return WriteFailed;
+    if (written)
+        *written = target;
+    return Ok;
 }
 
 } // namespace wallpaper

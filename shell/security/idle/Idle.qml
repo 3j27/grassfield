@@ -35,6 +35,8 @@ Scope {
     property int displayOffSeconds: devHooks ? 0 : IdleModel.DISPLAY_OFF_SECONDS
     // This module switched the displays off (and must switch them on again).
     property bool displayOff: false
+    // The lock's moving clouds hold while the displays are off (ADR-0040 step 9; display only, like Lock.fromDim).
+    onDisplayOffChanged: Lock.displaysOff = root.displayOff
     // Seconds without input before the displays go off while unlocked, for the power source in use; 0 = never. Always off in
     // the nested dev session (a dark nested output would spoil every capture; no test needs it there).
     readonly property int inactiveOffSeconds: devHooks ? 0 : IdleModel.inactiveDisplayOffSeconds(Settings.lockDisplayOffBattery, Settings.lockDisplayOffPower, Battery.onBattery)
@@ -68,14 +70,21 @@ Scope {
         target: Lock
 
         function onLockedChanged(): void {
-            if (!Lock.locked)
+            if (!Lock.locked) {
                 root.offForInactivity = false;
+                root.endDimUntilLock();
+            }
             root.acquireOnTries = 0;
             Qt.callLater(root.updateDisplays);
         }
 
         function onHoldingChanged(): void {
             root.acquireOnTries = 0;
+            // The lock holds: the dim that led to it goes (under the lock surfaces, unseen).
+            if (Lock.holding) {
+                root.endDimUntilLock();
+                root.dimmed = false;
+            }
             Qt.callLater(root.updateDisplays);
         }
     }
@@ -96,7 +105,45 @@ Scope {
         }
     }
 
+    // ---- ADR-0040 step 5 (ID-8): the dim stays until the lock it led to holds; the lock's content starts at the dim's level
+    // (Lock.fromDim). The lock request is not delayed; when it fails, the dim lifts at once (as before). Display only. ----
+    property bool dimUntilLock: false
+    function endDimUntilLock(): void {
+        if (!root.dimUntilLock)
+            return;
+        root.dimUntilLock = false;
+        dimUntilLockBound.stop();
+        Lock.fromDim = false;
+        root.update();
+    }
+    Timer {
+        id: dimUntilLockBound
+        interval: IdleModel.DIM_UNTIL_LOCK_MAX_MS
+        onTriggered: root.endDimUntilLock()
+    }
+
+    // ---- ADR-0040 step 5 (IQ-T4 A): a display that turns off for inactivity locks the session, at once (the displays stay
+    // on until the lock holds, IdleModel.displaysOff, so the lock is drawn just before they go off) or after
+    // lock.requirePasswordAfterDisplayOff without input, or never; lock.idleMinutes stays the ceiling. ----
+    readonly property int requireAfterMs: IdleModel.requireAfterDisplayOffMs(Settings.lockRequirePasswordAfterDisplayOff)
+    function displayOffLock(): void {
+        const result = Lock.lock("display-off");
+        if (result !== "ok" && result !== "already-locked")
+            console.warn("grassfield-idle: display-off lock not engaged:", result);
+    }
+    Timer {
+        id: displayOffLockTimer
+        interval: Math.max(1, root.requireAfterMs)
+        onTriggered: {
+            if (root.offForInactivity && !Lock.locked)
+                root.displayOffLock();
+        }
+    }
+
     function update(): void {
+        // A lock that the dim led to is being acquired: the dim stays until it holds (ID-8).
+        if (root.dimUntilLock)
+            return;
         if (monitor.enabled && monitor.isIdle) {
             if (!dimmed)
                 console.info("grassfield-idle: idle, dimming; lock in " + root.timing.lockDelayMs / 1000 + " s");
@@ -139,10 +186,21 @@ Scope {
         id: lockTimer
         interval: root.timing.lockDelayMs
         onTriggered: {
+            // The lock's content starts at the dim's level (ADR-0040 ID-8), and the dim stays until the lock holds. Set before
+            // the request: Lock.lock() flips `locked` synchronously, which disables the monitor and runs update() at once
+            // (opus review of 9a417967, MINOR 1).
+            Lock.fromDim = true;
+            root.dimUntilLock = true;
+            dimUntilLockBound.restart();
             const result = Lock.lock("idle");
-            root.dimmed = false;
-            if (result !== "ok")
+            if (result !== "ok") {
+                // As before this step: the dim lifts at once, and no new attempt is scheduled (not through update()).
+                root.dimUntilLock = false;
+                dimUntilLockBound.stop();
+                Lock.fromDim = false;
+                root.dimmed = false;
                 console.warn("grassfield-idle: idle lock not engaged:", result);
+            }
         }
     }
 
@@ -155,11 +213,22 @@ Scope {
         respectInhibitors: true
         onIsIdleChanged: {
             root.offForInactivity = isIdle && enabled;
+            // IQ-T4 A: the lock first (at once), or after the delay without input, or never.
+            if (root.offForInactivity && !Lock.locked) {
+                if (root.requireAfterMs === 0)
+                    root.displayOffLock();
+                else if (root.requireAfterMs > 0)
+                    displayOffLockTimer.restart();
+            } else {
+                displayOffLockTimer.stop();
+            }
             root.updateDisplays();
         }
         onEnabledChanged: {
-            if (!enabled)
+            if (!enabled) {
                 root.offForInactivity = false;
+                displayOffLockTimer.stop();
+            }
             Qt.callLater(root.updateDisplays);
         }
         // The power source changed (or the setting): re-enable so that the new timeout applies (see `rearming`).

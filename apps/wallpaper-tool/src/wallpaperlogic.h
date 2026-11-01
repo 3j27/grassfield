@@ -102,4 +102,14 @@ bool jpegComplete(const QString &path);
 // Writes `data` to `path` through a temporary file in the same directory and a rename (atomic).
 bool writeAtomic(const QString &path, const QByteArray &data);
 
+// ---- the shipped photographs (ADR-0040 step 2c): build only, never run by the shell or Settings ----
+// The size a photograph is shipped at: no wider than `maxWidth`, its aspect kept (the height rounded); `shown` itself when it
+// is not wider. An empty size for an empty `shown` or a `maxWidth` under 1.
+QSize shrunkSize(const QSize &shown, int maxWidth);
+// Decodes `src` as loadPicture does (EXIF orientation applied, converted to sRGB), scales it to shrunkSize and writes it to
+// `dst` (atomically) as a JPEG of `quality` (1..100) on a fresh canvas, so none of the source's metadata goes with it: no
+// EXIF, no comment, no colour profile (sRGB is implied). `written`: the size written. Ok, Usage for bad arguments, or the
+// reason the source or the write failed.
+ExitCode shrinkPicture(const QString &src, const QString &dst, int maxWidth, int quality, QSize *written = nullptr);
+
 } // namespace wallpaper

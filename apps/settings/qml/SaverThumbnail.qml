@@ -5,7 +5,8 @@ import Grassfield.Ui
 
 // One screen saver's picture in Settings > Wallpaper > Screen Saver (ADR-0032), drawn the way the shell draws it
 // (shell/saver/SaverView.qml): `choice` "artwork" (the Grassfield artwork), "wallpaperClock" (the artwork dimmed under the
-// time), "slideshow" (a stack of pictures) or "clock" (the time on black). The drawing's proportions are tokens
+// time), "slideshow" (a stack of pictures), "clock" (the time on black) or "moving" (the artwork with its clouds, held still
+// here: ADR-0040 step 9). The drawing's proportions are tokens
 // (settings.saverThumb*).
 Item {
     id: root
@@ -39,7 +40,8 @@ Item {
 
         GrassfieldArtwork {
             anchors.fill: parent
-            visible: root.choice === "artwork" || root.choice === "wallpaperClock"
+            visible: root.choice === "artwork" || root.choice === "wallpaperClock" || root.choice === "moving"
+            moving: root.choice === "moving"
         }
 
         // The wallpaper with a clock: dimmed as the shell dims it, the time in the middle.

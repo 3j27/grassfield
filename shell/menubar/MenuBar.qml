@@ -253,6 +253,8 @@ Scope {
             UsableProbe {
                 kind: "bar"
                 screenName: win.modelData ? win.modelData.name : ""
+                // P5 counts the entrance (ADR-0040 step 6): the bar's first frame once it is shown.
+                armed: win.entered
             }
 
             // Last non-empty app: layer-shell focus (a popup is open) clears the active toplevel.
@@ -636,8 +638,57 @@ Scope {
                     b.activated();
             }
 
-            Component.onCompleted: Popups.registerBar(win.screen.name, win)
-            Component.onDestruction: Popups.unregisterBar(win.screen.name, win)
+            // The entrance's key for this output, taken once (the screen is gone when a removed output destroys the window).
+            property string entranceKey: ""
+            Component.onCompleted: {
+                Popups.registerBar(win.screen.name, win);
+                win.entranceKey = "menubar:" + win.screen.name;
+                Entrance.expect(win.entranceKey);
+                if (win.barFinal)
+                    win.settleBar();
+                if (win.entered)
+                    Journal.shown("menubar", win.screen.name);
+            }
+            Component.onDestruction: {
+                Popups.unregisterBar(win.screen.name, win);
+                if (win.entered)
+                    Journal.hidden("menubar", win.screen ? win.screen.name : "");
+                else
+                    Entrance.forget(win.entranceKey);
+            }
+
+            // ---- the entrance (ADR-0040 step 6, ID-20, ID-5, ID-6) ----
+            // The bar's content is final once the settings are read (or the wait for them is over: Entrance.settingsFinal); its
+            // auto-hide then starts where it will rest (hidden when it hides, as the Dock's), instead of showing and sliding
+            // away. It appears with the Dock and the desktop icons in one fade (Entrance.revealed, session.revealMs).
+            readonly property bool barFinal: Entrance.settingsFinal
+            onBarFinalChanged: {
+                if (barFinal)
+                    win.settleBar();
+            }
+            function settleBar(): void {
+                win.hideMachine = AutoHide.initial(win.autoHides);
+                Entrance.ready(win.entranceKey);
+            }
+            readonly property bool entered: Entrance.revealed
+            onEnteredChanged: {
+                if (!entered)
+                    return;
+                // What it rests in now: the settings or the full-screen state may have changed since settleBar (review of
+                // 3a5e1b80: slow settings, a restart over a full-screen window).
+                win.hideMachine = AutoHide.initial(win.autoHides);
+                Journal.shown("menubar", win.screen.name);
+            }
+            onAutoHidesChanged: {
+                if (!win.entered && win.barFinal)
+                    win.hideMachine = AutoHide.initial(win.autoHides);
+            }
+            property real entrance: Entrance.revealed ? 1 : 0
+            Behavior on entrance {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.sessionRevealMs)
+                }
+            }
 
             // Opens a popup under (left) or aligned to the right edge of (right) a bar button.
             function openFor(kind: string, button: Item, alignment: string, payload: var): void {
@@ -756,7 +807,8 @@ Scope {
             WlrLayershell.namespace: "grassfield-menubar"
             // Quickshell qmltypes name this property's type PendingRegion/FileViewAdapter without exporting it (metadata quirk).
             // qmllint disable missing-type
-            // The band while any of it is in view, the indicator's piece while it shows (ADR-0035 7-14), both during the slide.
+            // The band while any of it is in view, the indicator's piece while it shows (ADR-0035 7-14), both during the slide; the
+            // band not before the entrance (a blurred strip under an invisible band would show the bar in two steps, review of 3a5e1b80).
             BackgroundEffect.blurRegion: win.bandBlurred ? (win.pinnedBlurred ? bandAndPinnedRegion : blurRegion) : (win.pinnedBlurred ? pinnedRegion : null)
             // The bar, or only the top edge strip while it is away.
             mask: Region {
@@ -764,7 +816,7 @@ Scope {
             }
             // qmllint enable missing-type
 
-            readonly property bool bandBlurred: win.showBackground && material.blurActive && win.hideMachine.visible > 0
+            readonly property bool bandBlurred: win.entered && win.showBackground && material.blurActive && win.hideMachine.visible > 0
             readonly property bool pinnedBlurred: pinnedShare.visible && pinnedShare.blurActive
 
             Region {
@@ -793,7 +845,8 @@ Scope {
             Item {
                 id: hitItem
                 width: win.width
-                height: BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away)
+                // No input before the entrance: nothing of the bar is visible yet.
+                height: win.entered ? BarHide.inputHeight(Tokens.menubarHeight, Tokens.menubarRevealZone, win.away) : 0
             }
 
             // The menu bar window is mapped for the whole session: it hosts the idle reads of the icon shapes (the first output's
@@ -874,7 +927,7 @@ Scope {
                 y: win.slideY
                 width: parent.width
                 height: parent.height
-                opacity: win.dimOpacity
+                opacity: win.dimOpacity * win.entrance
                 visible: win.showBackground
                 // ADR-0024: the band is glass like the other surfaces (the "menu" class: its target at the slider, raised to keep the
                 // text at 4.5:1 over the wallpaper strip), not the legacy clamped tint; the strip under the bar is what lies behind it.
@@ -907,7 +960,7 @@ Scope {
                 y: win.slideY
                 width: parent.width
                 height: parent.height
-                opacity: win.dimOpacity
+                opacity: win.dimOpacity * win.entrance
 
                     Row {
                         id: leftRow

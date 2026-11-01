@@ -7,11 +7,11 @@
 # or a name dropped by icons-apple-logos.txt) or when an alias is already an icon name of a layer.
 # Chosen by eye on the composed pack (integrator, 2026-10-23); no target carries an Apple mark (the guard checks the output).
 
-# ---- Grassfield's own apps and the Dock's Apps tile
+# ---- Grassfield's own apps (the Store, Activity Monitor and the Dock's Apps tile have Grassfield's own icons, ADR-0040
+# IQ-B5 C: installed in hicolor, never aliased here)
 org.grassfield.Files            file-manager            # Pebble's folder (the file manager; the Finder face is removed)
 org.grassfield.Settings         preferences-system      # the gear
 org.grassfield.Preview          org.gnome.Loupe         # a photo with a magnifier
-org.grassfield.Apps             view-app-grid           # the Dock's Apps tile (shell/dock/Dock.qml), the app grid
 
 # ---- the session's system tools (Omarchy) whose own icon names the pack does not have
 imv                             eog                     # Image Viewer

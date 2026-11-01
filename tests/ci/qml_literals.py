@@ -5,7 +5,7 @@
   python3 -I tests/ci/qml_literals.py --selftest  the scanner on fixed samples
 
 Scanned: every .qml file of ui/Grassfield/ (Tokens.qml, generated from ui/tokens/tokens.json, excepted), shell/ (shell/security/
-included: it is read, never changed) and apps/.
+included: it is read, never changed), apps/ and the login theme packaging/sddm/theme/ (ADR-0042).
 
 A design property is known by its name (the last part of a dotted name, a group's member, or a declared property's name), so
 `anchors.leftMargin`, `font { pixelSize }`, `Layout.preferredWidth`, `sourceSize.width` and `readonly property int pillInset`
@@ -41,7 +41,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOTS = ("ui/Grassfield", "shell", "apps")
+ROOTS = ("ui/Grassfield", "shell", "apps", "packaging/sddm/theme")
 SKIP = {"ui/Grassfield/Ui/Tokens.qml"}
 KINDS = ("radius", "font", "duration", "opacity", "scale", "geometry", "colour")
 MARK = re.compile(r"\bliteral-ok\s+(?P<kinds>[a-z]+(?:\s*,\s*[a-z]+)*)\s*:\s*\S.{8,}")
@@ -77,7 +77,6 @@ NAMED = re.compile(r"([\"'`])[A-Za-z]+\1")
 
 # Colour literals that stay, by file: {path: (how many, why)}. A file holding more fails, so a new literal there is caught too.
 ALLOWED = {
-    "ui/Grassfield/Ui/GrassfieldArtwork.qml": (9, "the default artwork's own painting, its 8 colours and the sun's glow alpha (ADR-0040 ID-1 turns it into artwork tokens)"),
     "ui/Grassfield/Ui/Appearance.qml": (3, "the dev-only glyph markers of tests/visual (never drawn in production)"),
     "ui/Grassfield/Ui/TintedIcon.qml": (1, "black as the neutral default of a tint property the host sets"),
     "ui/Grassfield/Ui/IconEffect.qml": (1, "black as the neutral default of a tint property the host sets"),

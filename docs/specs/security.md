@@ -3,7 +3,7 @@
 Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 
 ## macOS reference behavior (described in words)
-- Lock screen: blurred wallpaper, large clock and date at the top center, user avatar (circle) and name near
+- Lock screen: the wallpaper, sharp (ADR-0040 IQ-W4 A; ASSUMPTION from memory), large clock and date at the top center, user avatar (circle) and name near
   the bottom center, a rounded password field with a return arrow; wrong password → the field shakes.
   "Cancel"/"Switch user" are not shown for a single user.
 - Authorization dialog: a compact centered sheet with a lock icon, "<App> wants to make changes.", the
@@ -234,11 +234,13 @@ does not check its gate.
 | brightness | up, down | action | brightness keys |
 | keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
 | capabilities | status | dev | visual tests wait on it |
+| session | cover, lift | action | `packaging/bin/grassfield-session-end` once every window has gone (ADR-0040 ID-10): `cover` brings up the exit cover, one opaque fade to the ground over every output (it answers the fade's length and lifts itself after `session.exitCoverHoldMs`), `lift` takes it down when the session could not be ended. Neither ends the session; another process of the user can hide the desktop for that long at most |
+| session | state | dev | the exit cover's nested check (`shown` or `hidden`) |
 | security | state, heartbeat | action | the security process's own target (`shell/security.qml`, ADR-0041 step 1 S1, a second `qs` instance at `/usr/share/grassfield/shell/security.qml`): what it hosts (`starting` at S1) and a sequence number; read by `packaging/bin/grassfield-security-status` and the S1 measurements; never private state, nothing locks or unlocks |
 | stages | activate, newStage | action | SUPER+ALT+1..4 (the n-th recent stage forward), SUPER+ALT+S (focused window to a stage of its own); they do nothing while Stages is off |
 | stages | status, enable | dev | `tests/visual/scenarios/stages.sh`; `enable` changes the persisted setting |
 | bartone | status | dev | visual tests |
-| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
+| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status, phase | dev | wallpaper tests (`set` also needs the fixtures to show; `phase` shows a phase of the day, ADR-0040 IQ-W1 C) |
 | visual | glyphs | dev | contrast run |
 <!-- ipc-inventory:end -->
 
@@ -713,6 +715,21 @@ VERIFIED until run). The same file hides the shell's secret sheets and its autho
 a mutation). Both layers cover the output, so a capture is black while either sheet is up (nested capture NOT VERIFIED).
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
+- **The order of idle, the screen saver and display-off (ADR-0040 step 5; ID-8, IQ-T4 A, IQ-T5 A).** The idle lock is
+  requested at once, as before; the dim stays until that lock holds (`Idle.dimUntilLock`, at most
+  `IdleModel.DIM_UNTIL_LOCK_MAX_MS`), and the lock's content starts at the dim's level (`Lock.fromDim`: a shadow layer at
+  `idle.dimOpacity` over the wallpaper gives way to the scrim and the text as they fade in); a request that fails lifts the
+  dim at once and is logged. A screen saver on screen when a lock starts stays until the lock holds
+  (`Saver.lockStarting && wasShown`, at most `SaverModel.UNTIL_LOCK_MAX_MS`), then it is under the lock surfaces. A display
+  that turns off for inactivity locks the session (`lock.requirePasswordAfterDisplayOff`, `IdleModel.requireAfterDisplayOffMs`,
+  anything unknown is "immediately"): at once, the displays staying on until the lock holds (`IdleModel.displaysOff`, so the
+  lock is drawn just before they go off), or after the delay without input, or never; `lock.idleMinutes` stays the
+  ceiling. A lock request of any reason also abandons a password check in flight (`controller.abort()`: PAM aborted, back to
+  `locked`, no failure counted; opus review of f66cf08e, MINOR 1), so a check submitted just before the lid closes cannot
+  unlock after the sleep request. IQ-T5 A: `misc.lockdead_screen_delay = 5000` (`looknfeel.lua`): while a restarted shell
+  takes its lock back (about 1 to 2 s) the compositor keeps the session locked and draws black; the red "lock screen died"
+  screen comes only after 5 s. NOT VERIFIED (nested): the order on screen, a lock at display-off on a real display, only
+  black during the delay (`reload_locked.sh`).
 - Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
   `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -p /usr/share/grassfield/shell call lock lid` on every close
   (it decides nothing about locking; it only switches the laptop panel off and on for clamshell mode,
@@ -888,7 +905,7 @@ after the release while input reached windows; `lock lock` answered `already-loc
 the sleep delay was released on the stale `secure`.
 
 Behavior now (`Lock.qml`, `LockMachine.ownershipAction`):
-1. While this shell holds a lock the compositor confirmed (`locked`/`authenticating`, `WlSessionLock.secure`), it asks
+1. While this shell holds a lock the compositor confirmed (`locked`/`authenticating`/`releasing`, `WlSessionLock.secure`), it asks
    Hyprland for the real session lock state (`ownershipProbe`: one `Hyprland.refreshMonitors()` request through
    Quickshell.Hyprland, no `hyprctl` process, never while unlocked or locking) once per second, and every 100 ms while
    a takeover is suspected (`LockMachine.takeoverSuspected`, R12 review #3): no lock surface of this shell has the
@@ -973,6 +990,59 @@ Independent guards here:
 Only wrong attempts are ever used for the L2 failure path, and only by the owner with `GRASSFIELD_DEV_ALLOW_PAM=1`
 (at most 3 per run; faillock deny=10).
 
+## The lock's backdrop and data (ADR-0040 step 4a, ID-7, ID-2, ID-15; ADR-0016 section 6, W8)
+Display only: nothing below can lock, unlock, delay engaging the lock or keep it from failing closed.
+- **Backdrop.** The wallpaper each output shows, sharp (IQ-W4 A): the desktop records it in `wallpaper.json` `shown`
+  (`WallpaperState.setShown`); `WallpaperState.lockBackdrop(output)` (`WallpaperConfig.lockBackdropOf`) gives the lock a
+  picture only as a plain cache name (`<32 hex>.jpg|png`) directly in the prepared or the video folder (a video's poster),
+  else the colour, else the artwork and variant the output draws (the artwork is also every picture's fallback).
+  `LockStill.qml` (one per output, in `LockStills.qml`, which `Lock.qml` creates at run time, last, never as a declared
+  child: a display file that fails to load costs the backdrop and the picture, never the lock) decides it while the
+  session is unlocked, when the wallpaper changes: a picture is checked again by absolute path and argument vector
+  (`/usr/bin/realpath -m -- <prepared> <video> <file>`: the file's real path must be a plain cache name directly in one of
+  the two folders' real paths; `/usr/bin/stat --printf %f|%s --`: the raw mode, which no locale translates, a regular file
+  of at most `wallpaper.lockStillMaxBytes`), one process per step and request, an answer of a superseded request dropped, then
+  decoded by a hidden `Image` (`cache: true`, no `sourceSize`: the helper wrote it at the output's physical size, and a
+  `sourceSize` would key Qt's pixmap cache on each window's scale; Qt's image allocation limit bounds a file that is not
+  what it should be; Qt's `@2x` lookup is off for the shell, `QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING=1` in its unit, so the
+  decoded path is the checked one). Any failure (gone, outside the cache, too large, not decodable,
+  `wallpaper.toolTimeoutMs` without an answer) gives the artwork, logged. No user original and no video decoder enters the
+  module. Known limit (opus review of cbd6ef05, MINOR 1): a process of the same user writing the 0700 cache can still swap
+  the file between the check and the decode, or give another image format under the cache name; bounded by the size cap,
+  Qt's allocation limit and the timeout, and the lock itself is unaffected; ADR-0041 S2 narrows it.
+- **Taken once.** A lock surface (`LockView`) adopts its output's backdrop when it is created, or when it is first decided
+  (a hotplugged output, a wallpaper that changed just before the lock), at most `wallpaper.firstShowTimeoutMs` later, then
+  the artwork; until then the surface's own colour shows: the output's ground (`Ground.of`, ID-2, ID-15), under the scrim
+  and the text, which are there at once. Its `Image` asks for the url `LockStill` decoded, with the same options, so the
+  pixmap cache gives it already decoded. The account's full name and picture are taken at creation too: the picture only
+  when `Lock.qml`'s `avatarPreload` (the shell's PNG copy of at most 256 x 256, same options) has decoded it, else the
+  initials. Once the lock shows nothing on it changes but the clock, which `SleepInhibitor.afterResume` refreshes
+  (`Lock.resumed`, T-14), and the moving artwork's clouds (below).
+- **The moving artwork** (ADR-0040 step 9, as the integrator decided in the review of e067f26f, after P1 measured 3.70 %
+  with the clouds moving on the desktop): with `wallpaper.moving`, the Grassfield artwork's clouds move on the lock screen
+  only, as macOS's moving wallpapers do; the desktop draws them still. `LockView` takes the setting once, at creation, and
+  where the desktop's clouds rest until they first move (a surface whose output is known only after its creation starts
+  from that output's clouds) (`WallpaperState.motionOf`, through `LockStills` and `Lock.qml`'s `moving` and `motionOf`:
+  display data, without the stills off and from 0); they move by the artwork's own `wallpaper.movingFrameMs` Timer while the
+  backdrop is the artwork, not while releasing, not under Reduce Motion and not while `motionHeld`: `Lock.qml` holds them
+  while the displays are off (`Lock.displaysOff`, which Idle sets from its own `displayOff` in a change handler outside
+  `setDisplays`) and once the controller is unlocked, should a surface outlive the unlock (opus review of bdc11b2d). When the release fade starts they slow down
+  linearly to a stop within it (`Easing.OutQuad` over `Appearance.duration(lock.fadeOutMs)`, the controller's `releaseMs`,
+  from the running speed: `WallpaperConfig.lockMotionRest`, half the fade further on), and the view sets `motionRest`, which
+  `Lock.qml` hands to the desktop at once (`restMotion`, in a `try`; `WallpaperState.setMotion`), so the desktop under the
+  lock is the frame the lock comes to rest on. Nothing waits for it: the release stays the controller's timer, the view
+  emits no new signal and calls nothing; a lock request during the fade stops the slow-down and lets them move on from
+  there. Not on the lock path (`tst_lockbackdrop.qml`: `lock()`, `engage()`, `release()`, `restore()` read none of it).
+- **Scrim** (IQ-W4 A): see "Lock screen contrast" above; A2 holds per band by the same argument as before: every text line
+  lies on `lock.dimOpacity`.
+- Tests: `tst_wallpaper.qml` (`lockBackdropOf`, `withShown`; `motionIn`, `withMotion`, `lockMotionRest`), `tst_lockbackdrop.qml`
+  (`test_theCloudsMoveOnTheLockOnly`), `test_contrast_tokens.py` (the model matches the scrim's lines,
+  the clear band below the text bands), `lock_surfaces.sh` (the clock's one refresh), `tst_wallpaper.qml`
+  (`lockStillReal`, `lockStillStatOk`). The pixmap cache hit was checked offscreen on Qt 6.10 by the reviewer. NOT VERIFIED
+  (no Quickshell or nested session here; required before the merge): the real `Lock.qml` loading
+  (`tests/security/lock_monitor_model.sh`, `dev_gate.sh`, `reload_locked.sh`), L1 to L5, a hotplugged output while
+  locked, the clock after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`).
+
 ## Known limitations
 - Successful-unlock tests need the owner's password: the agent only verifies failure paths (L2 owner check).
 - L3 cannot be verified in nested.
@@ -1045,7 +1115,9 @@ same directory and the modules move without moving a file), one step at a time u
 | `shell/security/LockController.qml` | Auth controller over an injected PAM backend: one prompt answered, 30 s timeout, secret dropped on every outcome |
 | `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
 | `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
-| `shell/security/lock/LockView.qml` | Lock surface (display only): blurred `WallpaperArt` under a scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions) |
+| `shell/security/lock/LockView.qml` | Lock surface (display only): the output's wallpaper, sharp (the still LockStill decoded, else its colour or `WallpaperArt`), the banded scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions); backdrop, name and picture taken once (ADR-0040 step 4a) |
+| `shell/security/lock/LockStill.qml` | Per output (display only): the lock's backdrop decided while unlocked from `WallpaperState.lockBackdrop`; a picture checked (`/usr/bin/realpath -m`: a plain cache name in the real prepared or video folder; `/usr/bin/stat %f`: a regular file of at most `wallpaper.lockStillMaxBytes`) and decoded into Qt's pixmap cache before any lock (ADR-0040 ID-7, ADR-0016 W8) |
+| `shell/security/lock/LockStills.qml` | The display data the lock surfaces take (one LockStill per output, the account picture decoded ahead), created by `Lock.qml` at run time so that it can never keep the lock from loading |
 | `shell/security/polkit/` | `AuthAgent` (PolkitAgent + overlay window, IPC `polkit status`), `AuthDialog`, `AuthDialogModel` |
 | `shell/security/idle/` | `Idle` (IdleMonitor, dim layer, idle lock, display power-off on the lock screen, IPC `idle`), `SleepInhibitor` (delay inhibitor, PrepareForSleep watcher, retry and notice, logind budget), `IdleModel.js` |
 | `config/hypr/grassfield/privacy.lua` | Omarchy's `no_screen_share` rules read from Omarchy's own files (SEC-01) |
@@ -1064,7 +1136,7 @@ same directory and the modules move without moving a file), one step at a time u
 
 IPC (all on the shell instance; classes in "IPC surface"): `lock lock` → `ok` / `already-locked` / `refused: missing-pam`
 (when already locked, the session lock is re-verified, see "Lock ownership"); `lock lid` → the same or `docked`. Dev
-hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locking|locked|authenticating`;
+hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locking|locked|authenticating|releasing`;
 `lock devReload` → `reloading` (soft reload), `lock devPauseOwnershipCheck` → `paused` (periodic ownership check off
 for 10 s), `lock devForgeUnlockedAnswer` → `forged` | `not-holding` (counts one "unlocked" answer Hyprland never gave,
 as a stale answer would; only a confirmed relock can follow), `lock devLockView` → JSON {state, field: empty|filled,
@@ -1072,10 +1144,18 @@ message, failedAttempts, pamSuppressed} (never the text or its length), `idle de
 (before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`,
 `idle status` → JSON, `polkit status` → `registered|unregistered`.
 
-States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> unlocked`;
-`failure|error|timeout|abort` → `locked`; a lock dropped by the compositor, or a session found unlocked under a lock
-still reported secure (foreign takeover + release) → `locking` (fresh lock, re-requested every 500 ms);
-fingerprint success unlocks from `locked`. Unknown states/events never unlock (exhaustive test).
+States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> releasing
+-released-> unlocked`; `failure|error|timeout|abort` → `locked`; a lock dropped by the compositor, or a session found
+unlocked under a lock still reported secure (foreign takeover + release) → `locking` (fresh lock, re-requested every
+500 ms); fingerprint success enters `releasing` from `locked`. `releasing` (ADR-0040 step 4b, IQ-T2 A): the lock's scrim
+and text fade out over `lock.fadeOutMs` while the session is still locked (it counts as holding: the ownership check,
+`secure` and the sleep delay work as in `locked`); `released`, sent only by the controller's own Timer armed by the PAM
+success (never by the view's animation), unlocks; a lock request (any reason, `Lock.lock` → `interruptRelease`), an abort
+or an error during it → `locked`, a lost lock → `locking`, and the PAM success is spent: unlocking needs a new one. No
+input during `releasing` (the field is disabled, `canSubmit` false). The content fades in over `lock.fadeInMs` once a
+surface shows; the field takes input from the first frame (opacity stops no input). Reduce Motion caps both
+(`Appearance.duration`). Unknown states/events never unlock (exhaustive test, and every two-event path from `locking`
+or `locked`).
 
 Decisions:
 - Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`,
@@ -1108,7 +1188,10 @@ Decisions:
 - Idle: `IdleMonitor { respectInhibitors: true }`, dim at T−10 s, lock at T; Quickshell 0.3.1 keeps the timeout an
   `IdleMonitor` was enabled with, so the monitor is re-enabled on every timeout change (verified in nested).
 - Lock screen contrast (gate A2, both appearances, any wallpaper): as on macOS, white text (dark palette, both appearances)
-  with a soft shadow over the blurred wallpaper darkened by a shadow-colour scrim (`lock.dimOpacity` 0.6), and a dark frosted
+  with a soft shadow over the wallpaper (sharp since ADR-0040 step 4a) darkened by a shadow-colour scrim (`lock.dimOpacity` 0.6
+  under the date and clock band and under the account column; `lock.scrimClearOpacity` 0.25 between them, where no text
+  lies, the `lock.scrimFeather` ramps on the clear side of each band edge, the edges bound to the two columns' geometry, so
+  every text line lies on 0.6 at every text scale; the whole surface at 0.6 when there is no room), and a dark frosted
   password field (shadow colour at `lock.fieldFillOpacity` 0.45, `textSecondary` placeholder, white focus ring at
   `lock.focusRingOpacity`). The scrim alone carries the contrast (the shadow is decoration). Minimum over 9 worst-case
   wallpaper colours (`tests/visual/test_contrast_tokens.py`, "lock ..." roles): text 5.27, initials 3.41 (large), placeholder

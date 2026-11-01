@@ -73,4 +73,5 @@ add RimmedCapsule
 add TileGlyph
 add SoftwareUpdateLogic
 add DevicePicture
+add TimeOfDay
 ```

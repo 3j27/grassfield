@@ -274,6 +274,14 @@ function blurCall(size, passes) {
     return "function() hl.config({ decoration = { blur = { size = " + size + ", passes = " + passes + " } } }) end";
 }
 
+// The session's ground (ADR-0040 ID-2): the compositor's background colour, sent as one Lua call like the blur. "" for anything
+// but "#rrggbb" (the value is interpolated into the Lua expression).
+function groundCall(hex) {
+    if (typeof hex !== "string" || !/^#[0-9a-fA-F]{6}$/.test(hex))
+        return "";
+    return "function() hl.config({ misc = { background_color = \"rgba(" + hex.substring(1).toLowerCase() + "ff)\" } }) end";
+}
+
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).

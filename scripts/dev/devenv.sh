@@ -35,6 +35,9 @@ elif [[ -f $_gf_icon_src ]]; then
   cp -f "$_gf_dev_root"/branding/icons/theme/scalable/devices/*.svg "$_gf_icon_dst/scalable/devices/" 2>/dev/null || true
 fi
 unset _gf_icon_src _gf_icon_dst
+# The Dock's Apps tile (ADR-0040 IQ-B5 C): its own drawing in hicolor, as grassfield-desktop installs it (the Store and
+# Activity Monitor copy theirs in their build-direct.sh).
+{ mkdir -p "$_gf_dev_root/.dev/share/icons/hicolor/scalable/apps" && { cmp -s "$_gf_dev_root/branding/icons/apps/org.grassfield.Apps.svg" "$_gf_dev_root/.dev/share/icons/hicolor/scalable/apps/org.grassfield.Apps.svg" || cp -f "$_gf_dev_root/branding/icons/apps/org.grassfield.Apps.svg" "$_gf_dev_root/.dev/share/icons/hicolor/scalable/apps/"; }; } 2>/dev/null || true
 # Grayscale QtQuick text (ADR-0003), as /usr/share/uwsm/env-grassfield gives a real session: the distance-field renderer
 # ignores fontconfig and would draw RGB subpixel text (orange/blue fringes).
 export QSG_DISTANCEFIELD_ANTIALIASING=${QSG_DISTANCEFIELD_ANTIALIASING-gray}  # an explicitly set (even empty) value wins: before/after captures

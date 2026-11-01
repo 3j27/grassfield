@@ -281,6 +281,9 @@ Scope {
         shuffle: rawValue("wallpaper.shuffle"),
         videoOnBattery: rawValue("wallpaper.videoOnBattery"),
         online: rawValue("wallpaper.online"),
+        artwork: rawValue("wallpaper.artwork"),
+        artworkVariant: rawValue("wallpaper.artworkVariant"),
+        moving: rawValue("wallpaper.moving"),
         outputs: rawValue("wallpaper.outputs")
     })
     // Minutes of inactivity before the session locks, 0 = never. An invalid value is the default 5, never 0 (fail closed:
@@ -288,6 +291,8 @@ Scope {
     readonly property int lockIdleMinutes: read("lock.idleMinutes")
     // Minutes without input before the displays turn off while unlocked, on battery and on the power adapter; 0 = never.
     readonly property int lockDisplayOffBattery: read("lock.displayOffBattery")
+    // When a display that turned off for inactivity locks the session (ADR-0040 IQ-T4 A): "immediately" ... "never".
+    readonly property string lockRequirePasswordAfterDisplayOff: read("lock.requirePasswordAfterDisplayOff")
     readonly property int lockDisplayOffPower: read("lock.displayOffPower")
     // The lock screen shows the account's name and picture, and the user's message (plain text, one line).
     readonly property bool lockShowUser: read("lock.showUser")

@@ -79,7 +79,7 @@ TestCase {
     function test_savers() {
         const t = make();
         const picker = named(t.sheet, "Screen saver");
-        compare(picker.model.map(m => m.id), ["artwork", "wallpaperClock", "slideshow", "clock"]);
+        compare(picker.model.map(m => m.id), ["artwork", "wallpaperClock", "slideshow", "clock", "moving"]);
         compare(picker.value, "artwork");
         picker.picked("clock");
         compare(last(t.store), {"screensaver.kind": "clock"});

@@ -1644,8 +1644,20 @@
         <translation>Auteur</translation>
     </message>
     <message>
+        <source>Credit</source>
+        <translation>Crédit</translation>
+    </message>
+    <message>
         <source>Source</source>
         <translation>Source</translation>
+    </message>
+    <message>
+        <source>Changes</source>
+        <translation>Modifications</translation>
+    </message>
+    <message>
+        <source>Resized and re-encoded by Grassfield, metadata removed</source>
+        <translation>Redimensionnée et réencodée par Grassfield, métadonnées supprimées</translation>
     </message>
     <message>
         <source>Wikimedia Commons</source>
@@ -6528,6 +6540,18 @@
         <translation>Après %1 minutes</translation>
     </message>
     <message>
+        <source>The session locks when a display turns off for inactivity, as set below; otherwise it does not lock by itself.</source>
+        <translation>La session se verrouille quand un écran s’éteint faute d’activité, selon le réglage ci-dessous ; sinon, elle ne se verrouille pas d’elle-même.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, or as soon as a display turns off.</source>
+        <translation>La session se verrouille après cette durée sans saisie au clavier ni au pointeur, ou dès qu’un écran s’éteint.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, or once a display has been off for the time set below. Until then, any input turns it back on without the password.</source>
+        <translation>La session se verrouille après cette durée sans saisie au clavier ni au pointeur, ou quand un écran est éteint depuis la durée réglée ci-dessous. D’ici là, toute saisie le rallume sans le mot de passe.</translation>
+    </message>
+    <message>
         <source>The session does not lock by itself: a display that turned off comes back on with any input, without the password.</source>
         <translation>La session ne se verrouille pas d’elle-même&#xa0;: un écran éteint se rallume à la moindre saisie, sans le mot de passe.</translation>
     </message>
@@ -6540,6 +6564,22 @@
         <translation>La session se verrouille après ce délai sans saisie au clavier ni au pointeur, que les écrans soient allumés ou éteints.</translation>
     </message>
     <message>
+        <source>Immediately</source>
+        <translation>Immédiatement</translation>
+    </message>
+    <message>
+        <source>After 5 seconds</source>
+        <translation>Après 5 secondes</translation>
+    </message>
+    <message>
+        <source>After 5 minutes</source>
+        <translation>Après 5 minutes</translation>
+    </message>
+    <message>
+        <source>After 15 minutes</source>
+        <translation>Après 15 minutes</translation>
+    </message>
+    <message>
         <source>Turn display off on battery when inactive</source>
         <translation>Éteindre l’écran sur batterie en cas d’inactivité</translation>
     </message>
@@ -6550,6 +6590,10 @@
     <message>
         <source>Turn display off when inactive</source>
         <translation>Éteindre l’écran en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Require password after the display turns off</source>
+        <translation>Exiger le mot de passe après l’extinction de l’écran</translation>
     </message>
     <message>
         <source>Require password after inactivity</source>
@@ -8441,6 +8485,33 @@
     </message>
 </context>
 <context>
+    <name>PopupKinds</name>
+    <message>
+        <source>If you do nothing, you will be logged out automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, votre session sera fermée automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, you will be logged out automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, votre session sera fermée automatiquement dans %1 secondes.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will restart automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, l’ordinateur redémarrera automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will restart automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, l’ordinateur redémarrera automatiquement dans %1 secondes.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will shut down automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, l’ordinateur s’éteindra automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will shut down automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, l’ordinateur s’éteindra automatiquement dans %1 secondes.</translation>
+    </message>
+</context>
+<context>
     <name>Power</name>
     <message>
         <source>Sleep</source>
@@ -9661,6 +9732,10 @@
         <translation>Horloge</translation>
     </message>
     <message>
+        <source>Clouds</source>
+        <translation>Nuages</translation>
+    </message>
+    <message>
         <source>Start screen saver when inactive</source>
         <translation>Démarrer l’économiseur d’écran en cas d’inactivité</translation>
     </message>
@@ -10185,10 +10260,6 @@
     <message>
         <source>Are you sure you want to restart your computer now?</source>
         <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
-    </message>
-    <message>
-        <source>Open applications will be closed.</source>
-        <translation>Les applications ouvertes seront fermées.</translation>
     </message>
     <message>
         <source>Are you sure you want to shut down your computer now?</source>
@@ -12696,10 +12767,6 @@
         <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
     </message>
     <message>
-        <source>Open applications will be closed.</source>
-        <translation>Les applications ouvertes seront fermées.</translation>
-    </message>
-    <message>
         <source>Restart</source>
         <translation>Redémarrer</translation>
     </message>
@@ -13215,6 +13282,34 @@
         <translation>Fond d’écran</translation>
     </message>
     <message>
+        <source>Meadow</source>
+        <translation>Prairie</translation>
+    </message>
+    <message>
+        <source>Field Rows</source>
+        <translation>Sillons</translation>
+    </message>
+    <message>
+        <source>Ridgeline</source>
+        <translation>Ligne de crête</translation>
+    </message>
+    <message>
+        <source>Time of Day</source>
+        <translation>Selon l’heure</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>Clair</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>Sombre</translation>
+    </message>
+    <message>
         <source>When logging in</source>
         <translation>À l’ouverture de session</translation>
     </message>
@@ -13503,6 +13598,18 @@
         <translation>Tous les écrans</translation>
     </message>
     <message>
+        <source>Appearance of the wallpaper</source>
+        <translation>Aspect du fond d’écran</translation>
+    </message>
+    <message>
+        <source>Moving clouds</source>
+        <translation>Nuages en mouvement</translation>
+    </message>
+    <message>
+        <source>On the lock screen, clouds drift and the light changes slowly, coming to rest as you unlock; the desktop shows them still. Still with Reduce Motion.</source>
+        <translation>Sur l’écran verrouillé, les nuages dérivent et la lumière change lentement, puis s’arrêtent quand vous déverrouillez ; le bureau les montre immobiles. Immobiles avec Réduire les animations.</translation>
+    </message>
+    <message>
         <source>Use the All Displays Wallpaper</source>
         <translation>Utiliser le fond d’écran de Tous les écrans</translation>
     </message>
@@ -13517,6 +13624,10 @@
     <message>
         <source>Preparing the video</source>
         <translation>Préparation de la vidéo</translation>
+    </message>
+    <message>
+        <source>Photographs</source>
+        <translation>Photographies</translation>
     </message>
     <message>
         <source>Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.</source>
@@ -13541,6 +13652,10 @@
     <message>
         <source>Author</source>
         <translation>Auteur</translation>
+    </message>
+    <message>
+        <source>Credit</source>
+        <translation>Crédit</translation>
     </message>
     <message>
         <source>Source</source>
@@ -13597,6 +13712,14 @@
     <message>
         <source>Add Video…</source>
         <translation>Ajouter une vidéo…</translation>
+    </message>
+    <message>
+        <source>Changes</source>
+        <translation>Modifications</translation>
+    </message>
+    <message>
+        <source>Resized and re-encoded by Grassfield, metadata removed</source>
+        <translation>Redimensionnée et réencodée par Grassfield, métadonnées supprimées</translation>
     </message>
     <message>
         <source>Choose a folder of pictures</source>

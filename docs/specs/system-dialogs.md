@@ -878,6 +878,9 @@ apply to every app.
   colour roles (decision 2b-5): the GTK 4 focus ring opaque (`control.focusOutlineOpacity`, decision 2b-15), hover, pressed
   and border shades as the shell's overlays, the selected tab's indicator at GTK's own width (`gtk.tabIndicatorWidth`); no
   CSS colour function; the radii stay GTK's (decision 2b-7). MIT, no copy of Adwaita. `gtk-theme` names the matching one.
+  Every theme but `-hc` also lays the warm grounds of ADR-0040 (window `groupFill`, views, lists, menus and popovers
+  `windowBackground`, header bars `titlebar.background*`, text `text`; `tests/ci/gtk_themes.py` checks them and 7:1 for the
+  text); libadwaita apps keep their own.
 - AP5 a change of appearance, accent, contrast or motion in Settings or Quick Settings reaches running GTK 3 (with the
   variable), GTK 4 (with `GDK_DEBUG=portals`), libadwaita, Qt (`gtk3` theme), Chromium, Electron and Firefox within 1 s.
 
