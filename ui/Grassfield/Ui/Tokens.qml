@@ -2340,6 +2340,10 @@ QtObject {
     readonly property int filesPanelLabelWidth: 96
     // estimate: the Save As field and the Where pop-up of the Save panel [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelFieldWidth: 300
+    // estimate: the print sheet without its preview (step 6a), the width of macOS's print panel's settings column and its margins [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintSheetWidth: 480
+    // estimate: the print sheet's pop-ups (Printer, Pages, Paper Size, Two-Sided, Colour), as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintFieldWidth: 240
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]

@@ -553,12 +553,14 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 | O21 | `grassfield-keyring` dependency until grassfield-packages builds the package (step 1 review, minor 5) | hold it back; a follow-up adds it once grassfield-packages' step 1b is merged (recommended) · keep it, the owner builds the keyring once · a keyless keyring from this repository's PKGBUILD | **hold it back**; added once grassfield-packages PR #3 was merged (follow-up, O22) |
 | O22 | O21's follow-up, `grassfield-keyring` in grassfield-desktop's `depends`: its install script then runs as root wherever grassfield-desktop is installed, the owner's machine included, and until `[grassfield]` is published a source build needs the keyring installed first (otherwise the install half of `makepkg -si`, its `pacman -U`, refuses grassfield-desktop) | add it now; a source build installs grassfield-packages' `keyring/` once with `makepkg -si` (keyless until O11: three empty files, it trusts nothing) (recommended) · hold it back until the repository is published (after M5) | **add it now** (« Accepter maintenant »); the owner builds the keyring once before the next `makepkg -si` (`docs/owner-setup/real-session.md` section 3) |
 | SU-M1 | Update Now (2026-10-29, the integrator's question after the incident of 2026-10-29) | as on a Mac: Grassfield's password dialog, a snapshot, Omarchy's update without a terminal through a Grassfield root helper behind its own polkit action, progress in Settings, Restart at the end, a compatibility check before the transaction (recommended) · keep Omarchy's terminal | **as on a Mac** (« Comme sur Mac », confirmed by the owner in the Claude Code session of step 3); "Step 3" |
+| SU-D4 | Telling the end of an Update Now run (step 4, delegated) | a notice for each end that leaves something to do or to know, whose click opens the pane, none for a restart or a log out while Settings' window is in front, whose end sheet asks it (recommended: macOS posts such a notification when its window is not in front) · a notice for a restart only · nothing outside the pane | **a notice for each end**, « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »; "Step 4 as built" |
 | SU-M2 | Omarchy migrations that need `sudo` (2026-10-31, step 3's limit s3.8) | keep Omarchy's terminal for them (recommended by the session: no root widening) · Grassfield's own password window for each migration's `sudo` (a new password surface outside polkit) · one password: the password of Update Now also covers the migrations' `sudo` commands, run as root through Grassfield's helper (the widest root change; a dedicated design and an opus security review) | **one password** (« Mot de passe unique », the owner's answer to the question tool of the 2026-10-31 session); "Step 5" |
 
 The owner gave every answer of O1-O22 on 2026-10-27: O1-O21 in this Claude Code session, through its question tool, and
 O22 to the integrator. SU-M1 was asked by the integrator on 2026-10-29 and confirmed by the owner through the question tool
 of the step 3 session, since it widens what runs as root. SU-M2 was asked in the Claude Code session of 2026-10-31 through the
-question tool, with the three options and the root widening of each spelled out, and answered by the owner. The answers to O1-O16 were recorded in `fd49abc` and confirmed again after the first review; O21 was asked
+question tool, with the three options and the root widening of each spelled out, and answered by the owner. SU-D4 was decided under
+the owner's delegation of 2026-10-27 (it changes nothing that runs as root and no security rule). The answers to O1-O16 were recorded in `fd49abc` and confirmed again after the first review; O21 was asked
 after the step 1 review. O22 was asked by the integrator on grassfield PR #24: it changes what runs as root on the owner's machine, which the owner's
 delegation of 2026-10-27 leaves to the owner. Why now rather than at publication: a user of the repository installs
 grassfield-desktop and gets the keyring with nothing to do, as omarchy depends on omarchy-keyring
@@ -1048,7 +1050,8 @@ so that release goes to the terminal; a package update without an Omarchy releas
 - A conflict pacman reports only inside the transaction (`--print` does not check conflicts: measured) is found after the
   databases are committed; nothing is installed, and the pane offers Omarchy's terminal.
 - Settings follows the run by files; Omarchy's own `omarchy update`, started meanwhile, says an update is running.
-- When the run ends while Settings is closed, nothing announces it until Settings opens (the pane's row).
+- When the run ends while Settings is closed, nothing announced it until Settings opened (the pane's row): step 4 adds the
+  shell's notice (below).
 
 ### s3.9 Evidence (this branch)
 - `tests/integration/update_helper.sh` in a throwaway `archlinux:base` container (pacman 7.1, polkit 128): 80 PASS, 0 FAIL
@@ -1068,6 +1071,35 @@ so that release goes to the terminal; a package update without an Omarchy releas
 - NOT verified here: the transient systemd unit, snapper, paccache, the free-space and battery refusals, the real polkit
   dialog through the shell's agent, the PKGBUILD's BUILD-DEPS in grassfield-packages' build container (quickshell from its
   Omarchy package set), a nested shot. They are the integrator's nested pass and L2 (spec A15).
+
+## Step 4 as built (2026-10-31, branch `claude/software-update-step4`)
+The owner asked to go on while the integrator is away ("tu peux continuer et vérifier après"); the integrator reviews it
+afterwards. Three changes, none to the privileged code (the helper, the runner, the policy and Settings' allowlist are
+untouched):
+- **The flaky test of #44's merge note.** `test_theShellsAnswerEndsTheWait` built the "same" `software-update.json` with two
+  `Date.now()` calls around the page's creation; `checkedAt` keeps whole seconds, so across a second the pending logout looked
+  like a new answer (`answered()` compares `checkedAt`). One time for both: 2 failures in 30 runs before, 0 in 60 after.
+- **The end of a run is announced** (spec U33). The shell's service watches the runner's state
+  (`$XDG_RUNTIME_DIR/grassfield/software-update-run.json`, replaced by rename: measured with Quickshell's FileView, which
+  follows a rename, a removal and a late creation only while the folder exists, so the service makes the folder first, 0700
+  as the runner does). A run it saw going on is announced once when it ends, by `SoftwareUpdateLogic.runNotice`; a run
+  already ended when the shell started is not. shell.qml posts one notice opening the pane; a restart or a log out is not
+  posted while Settings' window (not About This Computer) is in front, since its end sheet asks it. GF-083's log-out notice
+  waits while a run goes on (an hour at most) and is never posted after the run's restart or log out: one notice says what
+  finishes the update. A dev session watches its own folder (ADR-0019 `UPDATE_RUN_DIR`). Decision SU-D4: « décision
+  déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: macOS
+  tells about a finished install that asks for a restart with a notification when its window is not in front.
+- **Restart… and Log Out… wait for the run's end** in the pane: the system changes until then (the helper also blocks a
+  shutdown with logind).
+
+Evidence: `tests/shell/software_update_service.sh` (the real Quickshell, offscreen) with a new step r: a run found already
+ended is not announced, one seen going on is announced once as a restart, the same end written again alone says nothing, a
+run configuring is a run going on, a cancelled run ends with no notice, an incompatible one is announced; a dev session's
+run folder is its own (0700) and the runtime folder is left alone. `tst_softwareupdate` 26 (`test_runNotice`),
+`tst_settingssoftwareupdate` 22 (Restart… and Log Out… disabled during a run, enabled after it), `tst_settingsmain` 8;
+check-i18n 0 unfinished. Not verified here: the notice in a real session (the integrator's nested pass, with
+`GRASSFIELD_UPDATE_RUN_DIR`), Settings in front skipping a restart, GF-083's notice held during a run (shell.qml, which no
+headless test loads).
 
 ## Step 5: one password for the migrations' sudo (SU-M2, 2026-10-31, branch `claude/software-update-su-m2`)
 The owner chose « Mot de passe unique » (SU-M2): the password typed for Update Now also covers the `sudo` commands of
@@ -1303,6 +1335,30 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
   - the polkit dialog (the container lets the runner through).
 
 ## Review history
+Software Update step 4 (PR #82), the integrator's opus review of b6fdedf: **PASS on its own**; with #77 merged first
+(ADR-0041 step 2b, U31), three things before the merge, answered in the next commits:
+- main merged; this PR's rule renumbered U33 (#77 took U31, #89 U32), the catalog keeping both sides' messages;
+- **minor:** with Settings closed, #77's toolkit "Log out to finish updating" could follow the run's "Restart to finish
+  updating" at the next automatic check. The run's restart or log out now marks this session's toolkit announcement made
+  (`withToolkitCovered`; the pane's row stays); a unit test and a step of the service test;
+- **nit:** a run still going on after an hour stopped holding GF-083's notice for good; the next run's end resets it.
+
+Software Update step 4 (PR #82), an independent opus review of 9dbacaa7 while the integrator was away (read-only, mutants on
+copies): **PASS**, no BLOCKER or MAJOR; five minors and six nits, answered in the next commit:
+- **Minor 1**, step r did not test what it claimed: the same end written again was overwritten before it was read, and two
+  waits never checked their condition (mutants M2, a lost reset of the run going on, and M5, `configuring` not counted,
+  survived). The same end is now read alone after a pause, and each wait checks its condition.
+- **Minor 2**, a Settings window in front hid every end, About This Computer and other sections included (a failed startup
+  image's "Don't restart this computer yet" too): only a restart or a log out is skipped, and only for Settings' main window.
+- **Minor 3**, a run whose AUR apps wait for Omarchy's terminal said "This computer is up to date.": its own notice.
+- **Minor 4**, GF-083 posted "Log out to finish updating" during the run, then the run posted "Restart…"; a pkgrel-only
+  rebuild of grassfield-desktop was announced by nobody: GF-083's notice waits for the run, the run's log out is posted with
+  GF-083's text, and one notice says what finishes the update.
+- **Minor 5**, a dev shell watched the real session's runs: dev plumbing `UPDATE_RUN_DIR` (ADR-0019).
+- **Nits:** a relative `XDG_RUNTIME_DIR` is refused and `mkdir` gets `--`; the pane test checks the buttons enabled after a
+  run; the terminal notice names Omarchy's terminal; precedence and the unannounced ends are in U33 and the limits; SU-D4 is a
+  row of the decision table.
+
 Software Update step 5 (SU-M2), the integrator's delta re-review of 935981b: **security PASS**; the merge waits for the
 owner's agreement on the polkit rule and the group. Four small follow-ups, folded in before the merge:
 - the folder that holds a link is checked too, every folder on the path as written;

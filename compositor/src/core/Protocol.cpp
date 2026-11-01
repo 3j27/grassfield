@@ -164,8 +164,10 @@ namespace gf::gfc {
             out.push_back(kFeatureTilingGroups);
         if (windowTiling && tilingArrange && sharedEdge)
             out.push_back(kFeatureTilingSharedEdge);
-        if (windowTiling && tilingArrange && split)
+        if (windowTiling && tilingArrange && split) {
             out.push_back(kFeatureTilingSplit);
+            out.push_back(kFeatureTilingSplitRows);
+        }
         return out;
     }
 
