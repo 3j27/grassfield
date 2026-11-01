@@ -17,6 +17,10 @@ struct DesktopApp {
 // The [Desktop Entry] group's Name (Name[<lang>_<COUNTRY>], Name[<lang>], Name) and Icon of one entry's text.
 DesktopApp parseDesktopApp(const QString &text, const QString &locale);
 
+// The basename of the program an entry's Exec runs (AM65): its first word, after `env` and its NAME=value words, unquoted;
+// "" when there is none.
+QString execBasename(const QString &text);
+
 class DesktopApps
 {
 public:
@@ -26,11 +30,17 @@ public:
     static DesktopApps fromEnvironment();
 
     const DesktopApp &app(const QString &desktopId);
+    // AM65: the entry whose Exec runs the program `basename` (a launch by command), by the first directory and file name
+    // that has one; the entries are read once, at the first call. An empty app when none does.
+    const DesktopApp &byExec(const QString &basename);
 
 private:
     QStringList m_dirs;
     QString m_locale;
     QHash<QString, DesktopApp> m_cache;
+    bool m_execRead = false;
+    QHash<QString, QString> m_execIds; // Exec's basename → desktop id (without ".desktop")
+    DesktopApp m_none;
 };
 
 } // namespace activity

@@ -57,6 +57,19 @@ function forceQuitPids(pids) {
     return out;
 }
 
+// The last rows of a running app's Dock menu: Hide and Quit (macOS), with Option Hide Others and Force Quit, and Force Quit
+// without Option for an app that does not respond (ADR-0035 decision 3-5). With `endTask` (Settings > Desktop & Dock, owner
+// AQ5, ADR-0038 AM63) End Task follows: Windows' name for the Option + Force Quit (every process of the app), absent with
+// Option (Force Quit is there already) and on the fixed Files tile. `o`: {alt, hung, endTask, fixed}; the rows' ids.
+function quitRows(o) {
+    if (o.alt)
+        return ["hideOthers", "forcequit"];
+    const rows = ["hide", o.hung ? "forcequitHung" : "quit"];
+    if (o.endTask && !o.fixed)
+        rows.push("endtask");
+    return rows;
+}
+
 // Window list at the top of an app's Dock menu (macOS): one row per window of the app, the most recent first. Each window is
 // {ref, title, minimized, stamp}; a row is {ref, title (whitespace collapsed, elided to `max` characters, the app name when
 // empty), minimized, checked}. The check goes to the most recently focused window that is not minimized (macOS: the key window);

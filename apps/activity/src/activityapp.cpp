@@ -1,10 +1,14 @@
 #include "activityapp.h"
 
+#include "appscope.h"
 #include "autoappearance.h"
 #include "chromecaps.h"
 #include "runmode.h"
 #include "shortcutstyle.h"
+#include "shownwatch.h"
 #include "translationloader.h"
+#include "signals.h"
+#include "units.h"
 
 #include <QClipboard>
 #include <QDBusMessage>
@@ -15,6 +19,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QTime>
+#include <QWindow>
 
 #include <pwd.h>
 
@@ -58,6 +63,20 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
     , m_statePath(std::move(statePath))
     , m_state(readState(m_statePath))
     , m_actions(m_options.procRoot)
+    , m_efficiency(m_options.procRoot)
+    , m_appHistory(
+          [this](const QString &app) {
+              // AM65's naming, as the Apps sub-groups: the entry of that id, else the one whose Exec runs it, else the name.
+              const DesktopApp *entry = &m_apps.app(app);
+              if (entry->name.isEmpty())
+                  entry = &m_apps.byExec(app);
+              return AppHistory::App{entry->name.isEmpty() ? app : entry->name, entry->icon};
+          },
+          [this] { return liveUnits(); })
+    , m_performance(m_options.procRoot, m_options.sysRoot)
+    , m_inspectors(m_options.procRoot, m_options.uid, m_options.clockTicks)
+    , m_runtimeFolder(runtimeFolder())
+    , m_projection(m_runtimeFolder, m_options.procRoot)
     , m_apps(DesktopApps::fromEnvironment())
 {
     qRegisterMetaType<SnapshotPtr>();
@@ -68,6 +87,37 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
     connect(m_worker, &SamplerWorker::sampled, this, &ActivityApp::takeSnapshot, Qt::QueuedConnection);
     m_thread.setObjectName(QStringLiteral("activity-sampler"));
     m_thread.start(QThread::LowPriority);
+
+    // AM57: Inspect's reads run on the sampler's thread too (AD35), between its samples.
+    m_inspectors.setWorker(m_worker);
+    m_inspectors.setMainActions(&m_actions);
+    m_inspectors.setInterval(m_state.interval);
+    m_inspectors.setNames(
+        [this](int pid, quint64 start) {
+            const TableRow *row = m_table.processRow(pid, start);
+            return row ? row->name : QString();
+        },
+        [this](uint32_t uid) { return userName(uid); });
+    connect(&m_inspectors, &Inspectors::opened, this, &ActivityApp::inspectRequested);
+    m_inspectors.setHangs([this](int pid, quint64 start) {
+        // AM57: "—" until there is a projection (step 3), then the times it marked the process since the app opened.
+        if (!m_projection.projection().valid)
+            return -1;
+        const auto it = m_hangs.constFind(pid);
+        return it != m_hangs.constEnd() && (it->start == 0 || it->start == start) ? it->count : 0;
+    });
+    m_appHistory.setUser(userName(m_options.uid));
+    // AM74: App History's period is remembered.
+    m_appHistory.restorePeriod(m_state.appHistoryPeriod);
+    connect(&m_appHistory, &AppHistory::periodChanged, this, [this] {
+        m_state.appHistoryPeriod = m_appHistory.period();
+        scheduleSave();
+    });
+    connect(&m_projection, &ProjectionWatch::changed, this, &ActivityApp::applyProjection);
+    applyProjection();
+    // Never qGuiApp: a static cast, undefined where the application is a QCoreApplication (the backend's tests; UBSan).
+    if (auto *gui = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        connect(gui, &QGuiApplication::focusWindowChanged, this, &ActivityApp::focusWindowChanged);
 
     m_timer.setInterval(m_state.interval * 1000);
     connect(&m_timer, &QTimer::timeout, this, [this] {
@@ -86,6 +136,12 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
     });
     connect(&m_battery, &BatteryWatch::changed, this, [this] { m_summary.setBattery(m_battery.state()); });
     connect(&m_table, &ProcessTable::selectionChanged, this, &ActivityApp::updateActionTargets);
+    // AM68: a unit that took its weight shows it at the next sample, taken now; AM76: asked once the window is up.
+    connect(&m_efficiency, &Efficiency::finished, this, [this](const QString &error) {
+        if (error.isEmpty())
+            requestSample();
+    });
+    QTimer::singleShot(0, this, [this] { m_efficiency.setSupported(Efficiency::userManagerPresent()); });
     m_summary.setDiskMode(m_state.diskGraph);
     m_summary.setNetworkMode(m_state.networkGraph);
 
@@ -120,6 +176,9 @@ ActivityApp::ActivityApp(Options options, QString statePath, QObject *parent)
 
 ActivityApp::~ActivityApp()
 {
+    // AM62: the tile shows the icon again once the app has quit; only a file this app wrote is removed (review of 5bfd4419).
+    if (m_tileWritten)
+        removeDockTile(m_runtimeFolder);
     if (m_saveTimer.isActive()) {
         m_saveTimer.stop();
         writeState(m_statePath, m_state);
@@ -215,6 +274,7 @@ void ActivityApp::setInterval(int seconds)
     m_state.interval = seconds;
     if (!m_quick)
         m_timer.setInterval(seconds * 1000);
+    m_inspectors.setInterval(seconds);
     emit intervalChanged();
     scheduleSave();
 }
@@ -329,10 +389,95 @@ void ActivityApp::copySelection()
 // AM50: the actions follow the selection, and the rows' owners as the last sample gave them.
 void ActivityApp::updateActionTargets()
 {
+    const std::vector<TableRow> rows = m_table.selectedRows();
     std::vector<ProcessActions::Target> targets;
-    for (const TableRow &r : m_table.selectedRows())
+    for (const TableRow &r : rows)
         targets.push_back({r.process.pid, r.process.start, r.name, r.process.own, r.kernel});
     m_actions.setSelection(std::move(targets));
+    // AM68: one of the processes, as the last sample gave it.
+    std::optional<Efficiency::Target> efficiencyTarget;
+    if (rows.size() == 1 && !rows.front().kernel) {
+        const TableRow &r = rows.front();
+        efficiencyTarget = Efficiency::Target{r.process.pid, r.process.start, r.appName.isEmpty() ? r.name : r.appName,
+                                              r.process.own, r.process.efficiencyEligible, r.process.session, r.process.efficient};
+    }
+    m_efficiency.setTarget(std::move(efficiencyTarget));
+    const bool inspectable = rows.size() == 1 && !rows.front().kernel; // AM3: the Info button, one row
+    if (inspectable != m_inspectable) {
+        m_inspectable = inspectable;
+        emit inspectChanged();
+    }
+}
+
+void ActivityApp::applyProjection()
+{
+    const Projection &projection = m_projection.projection();
+    QSet<int> windowPids;
+    QList<int> owners;
+    for (auto it = projection.apps.cbegin(); it != projection.apps.cend(); ++it) {
+        windowPids.insert(it.key());
+        owners << it.key();
+    }
+    m_actions.setProjection(projection.valid, windowPids);
+    m_inspectors.setProjection(projection.valid, windowPids);
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, [worker = m_worker, owners] { worker->setWindowOwners(owners); }, Qt::QueuedConnection);
+    // AM57: Recent hangs counts each time the shell marks a process again.
+    for (int pid : projection.notResponding) {
+        if (m_hung.contains(pid))
+            continue;
+        const TableRow *row = m_table.processRow(pid, 0);
+        const quint64 start = row ? row->process.start : 0;
+        Hangs &h = m_hangs[pid];
+        if (h.start != 0 && start != 0 && h.start != start)
+            h = Hangs{}; // the pid is another process's now
+        if (h.start == 0)
+            h.start = start;
+        ++h.count;
+    }
+    m_hung = projection.notResponding;
+    m_inspectors.namesChanged();
+    // Between two samples the table takes the new names and marks at once (in a sample it comes with the rows).
+    if (!m_inSnapshot && m_lastSnapshot) {
+        m_table.setRows(tableRows(*m_lastSnapshot));
+        updateActionTargets();
+    }
+}
+
+bool ActivityApp::canInspect() const
+{
+    return m_inspectable;
+}
+
+QObject *ActivityApp::focusWindow() const
+{
+    return QGuiApplication::focusWindow();
+}
+
+void ActivityApp::inspectSelection()
+{
+    const std::vector<TableRow> rows = m_table.selectedRows();
+    if (rows.size() == 1 && !rows.front().kernel)
+        m_inspectors.open(rows.front().process.pid, rows.front().process.start, rows.front().name);
+}
+
+void ActivityApp::inspectRow(int row)
+{
+    const TableRow *r = m_table.rowAt(row);
+    if (r && !r->kernel)
+        m_inspectors.open(r->process.pid, r->process.start, r->name);
+}
+
+bool ActivityApp::openLoginItems()
+{
+    // As every Grassfield app starts another: through uwsm's app launcher in a real session (its own scope), else directly
+    // (a dev session's Settings reads the dev session's files).
+    return grassfield::apps::startApplication(QStringLiteral("grassfield-settings"), {QStringLiteral("--section=login")});
+}
+
+void ActivityApp::closeInspection(QObject *inspection)
+{
+    m_inspectors.close(qobject_cast<Inspection *>(inspection));
 }
 
 void ActivityApp::saveSize(int width, int height)
@@ -342,6 +487,21 @@ void ActivityApp::saveSize(int width, int height)
     m_state.width = width;
     m_state.height = height;
     scheduleSave();
+}
+
+void ActivityApp::saveWindowSize(const QString &kind, int width, int height)
+{
+    if (!windowKinds().contains(kind) || width < 200 || height < 150 || width > 16384 || height > 16384)
+        return;
+    if (m_state.windows.value(kind) == QSize(width, height))
+        return;
+    m_state.windows.insert(kind, QSize(width, height));
+    scheduleSave();
+}
+
+QSize ActivityApp::savedWindowSize(const QString &kind) const
+{
+    return m_state.windows.value(kind, QSize(0, 0));
 }
 
 void ActivityApp::setGraphMode(const QString &graph, const QString &mode)
@@ -358,13 +518,75 @@ void ActivityApp::setGraphMode(const QString &graph, const QString &mode)
     }
 }
 
+QVariantList ActivityApp::dockIcons() const
+{
+    const char *const titles[] = {QT_TRANSLATE_NOOP("ActivityApp", "Show Application Icon"), QT_TRANSLATE_NOOP("ActivityApp", "Show Network Usage"),
+                                  QT_TRANSLATE_NOOP("ActivityApp", "Show Disk Activity"), QT_TRANSLATE_NOOP("ActivityApp", "Show CPU Usage"),
+                                  QT_TRANSLATE_NOOP("ActivityApp", "Show CPU History")};
+    QVariantList list;
+    for (int k = 0; k < dockIconKinds().size(); ++k)
+        list << QVariantMap{{QStringLiteral("key"), dockIconKinds().at(k)},
+                            {QStringLiteral("title"), QCoreApplication::translate("ActivityApp", titles[k])}};
+    return list;
+}
+
+void ActivityApp::setAskEfficiency(bool ask)
+{
+    if (ask == m_state.askEfficiency)
+        return;
+    m_state.askEfficiency = ask;
+    emit askEfficiencyChanged();
+    scheduleSave();
+}
+
+void ActivityApp::setDockIcon(const QString &key)
+{
+    if (key == m_state.dockIcon || !dockIconKinds().contains(key))
+        return;
+    m_state.dockIcon = key;
+    emit dockIconChanged();
+    scheduleSave();
+    writeDockTile();
+    // Off screen, a Dock graph keeps the system's files read at the interval (AM-P3: no process is read); the icon stops it.
+    if (!m_shown) {
+        if (key == QLatin1String("icon")) {
+            m_timer.stop();
+        } else {
+            m_timer.setInterval(m_state.interval * 1000);
+            m_timer.start();
+            requestSample();
+        }
+    }
+}
+
+void ActivityApp::writeDockTile()
+{
+    // Never a file this app did not write (another instance's, a test's): it removes only its own.
+    if (m_state.dockIcon == QLatin1String("icon")) {
+        if (m_tileWritten) {
+            removeDockTile(m_runtimeFolder);
+            m_tileWritten = false;
+        }
+        return;
+    }
+    const QVariantList samples = m_summary.dockTileSamples(m_state.dockIcon, kDockTileSamples);
+    if (!samples.isEmpty()
+        && activity::writeDockTile(m_runtimeFolder, dockTileText(QCoreApplication::applicationPid(), ownStartTime(), m_state.dockIcon, samples)))
+        m_tileWritten = true;
+}
+
 void ActivityApp::setWindowShown(bool shown)
 {
     if (shown == m_shown)
         return;
     m_shown = shown;
+    // Off screen, the summary keeps its histories and builds its blocks again when the window shows (nothing draws them).
+    m_summary.setLive(shown);
     if (!shown) {
-        m_timer.stop(); // AM8, AM-P3: no per-process sample while the window is not on screen
+        // AM8, AM-P3: no per-process sample while the window is not on screen; a Dock graph, or a Performance or CPU
+        // window, keeps the system's files read.
+        if (m_state.dockIcon == QLatin1String("icon") && !m_performance.anyShown())
+            m_timer.stop();
         return;
     }
     // Back on screen: a sample at once, and no rate drawn across the gap (AM8). Its rates show "—", so the next sample
@@ -378,9 +600,33 @@ void ActivityApp::setWindowShown(bool shown)
     m_timer.start();
 }
 
+void ActivityApp::setAuxShown(const QString &kind, bool shown)
+{
+    const bool before = m_performance.anyShown();
+    m_performance.setShown(kind, shown);
+    if (m_shown)
+        return; // the main window's samples carry everything
+    if (m_performance.anyShown()) {
+        if (!before || shown)
+            requestSample(); // its graphs fill at once
+        if (!m_timer.isActive())
+            m_timer.start();
+    } else if (m_state.dockIcon == QLatin1String("icon")) {
+        m_timer.stop();
+    }
+}
+
+void ActivityApp::watchAux(QWindow *window, const QString &kind)
+{
+    if (!window)
+        return;
+    new ShownWatch(window, [this, kind](bool shown) { setAuxShown(kind, shown); });
+    connect(window, &QObject::destroyed, this, [this, kind] { setAuxShown(kind, false); });
+}
+
 void ActivityApp::requestSample()
 {
-    if (!m_shown)
+    if (!m_shown && m_state.dockIcon == QLatin1String("icon") && !m_performance.anyShown())
         return;
     if (m_busy) {
         m_again = true; // one at a time: the next starts when this one is back
@@ -391,25 +637,33 @@ void ActivityApp::requestSample()
         m_inhibitors.refresh(); // AM38: asked at each sample while the Energy tab is shown
         m_battery.refresh();    // AM39: the battery's figures and graph, the same way
     }
-    emit sampleRequested(readsForColumns(m_state.tab, tabState().columns) | readsForView(m_state.view), m_state.interval, m_forget);
+    // Off screen with a Dock graph: the system's files alone (AM62, AM-P3); with a Performance or CPU window, every system
+    // file, and the GPU clients for Performance and GPU History (AM66, AM72). AM68: the app units' weights while the main
+    // window shows (the Status column and the View menu's checked item).
+    unsigned reads = ReadSystemCpu | ReadSystemDisk | ReadSystemNet;
+    const bool gpuWindow = m_performance.shown(QStringLiteral("performance")) || m_performance.shown(QStringLiteral("gpuHistory"));
+    if (m_shown) {
+        // AM68: the units' weights at every sample (the Status column and the menu item's check mark follow a change made
+        // elsewhere at once; about 4 µs per app unit, step3-5.md).
+        reads = readsForColumns(m_state.tab, tabState().columns) | readsForView(m_state.view) | ReadEfficiency;
+        // AM66, AM72: the GPU clients for those windows whatever the tab.
+        if (gpuWindow)
+            reads |= ReadDescriptors | ReadGpu;
+    } else if (m_performance.anyShown()) {
+        reads |= ReadSystemMemory;
+        if (gpuWindow)
+            reads |= ReadProcesses | ReadDescriptors | ReadGpu;
+    }
+    emit sampleRequested(reads, m_state.interval, m_forget);
     m_forget = false;
 }
 
-void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
+void ActivityApp::nameGpus(const Snapshot &snapshot)
 {
-    m_busy = false;
-    m_sampledOnce = true;
-    if (reads & ReadProcesses)
-        ++m_processSamples;
-    if ((reads & ReadSystemMemory) && snapshot->system.memory.ok && m_swapped != !snapshot->system.memory.swapIsZramOnly) {
-        m_swapped = !snapshot->system.memory.swapIsZramOnly; // AM34: Compressed or Swapped Memory
-        m_table.setSwappedMemory(m_swapped);
-        emit columnsChanged();
-    }
-    m_summary.addSample(*snapshot);
-    // AM47: a GPU's name from pci.ids, else its card's place ("GPU 1" for card0), for the headers of Processes, by GPU.
+    // AM47: a GPU's name from pci.ids, else its card's place ("GPU 1" for card0), for the headers of Processes, by GPU and
+    // the Performance and GPU History windows.
     bool named = false;
-    for (const GpuDevice &gpu : snapshot->gpus) {
+    for (const GpuDevice &gpu : snapshot.gpus) {
         const QString pdev = QString::fromStdString(gpu.pdev);
         const QString name = !gpu.model.empty() ? QString::fromStdString(gpu.model)
                              : gpu.card >= 0 ? QCoreApplication::translate("ActivityApp", "GPU %1").arg(gpu.card + 1)
@@ -419,16 +673,81 @@ void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
             named = true;
         }
     }
-    if (named)
+    if (named) {
         m_table.setGpuNames(m_gpuNames);
+        m_performance.setGpuNames(m_gpuNames);
+    }
+}
+
+void ActivityApp::takeSnapshot(const SnapshotPtr &snapshot, unsigned reads)
+{
+    m_busy = false;
+    nameGpus(*snapshot);
+    // Off screen, for the Dock graph and the Performance and CPU windows: their histories alone. The table, the actions and
+    // the inspections wait for the main window (a sample comes at once when it shows, AM8).
+    if (!(reads & ReadProcesses) || !m_shown) {
+        m_summary.addSample(*snapshot);
+        m_performance.take(*snapshot);
+        writeDockTile();
+        if (m_again) {
+            m_again = false;
+            requestSample();
+        }
+        return;
+    }
+    m_lastSnapshot = snapshot;
+    // The writer may have ended without a change to the file (a crashed shell): read again at each sample, one small file.
+    m_inSnapshot = true;
+    m_projection.recheck();
+    m_inSnapshot = false;
+    m_sampledOnce = true;
+    if (reads & ReadProcesses)
+        ++m_processSamples;
+    if ((reads & ReadSystemMemory) && snapshot->system.memory.ok && m_swapped != !snapshot->system.memory.swapIsZramOnly) {
+        m_swapped = !snapshot->system.memory.swapIsZramOnly; // AM34: Compressed or Swapped Memory
+        m_table.setSwappedMemory(m_swapped);
+        m_inspectors.setSwappedMemory(m_swapped);
+        emit columnsChanged();
+    }
+    m_summary.addSample(*snapshot);
+    m_performance.take(*snapshot);
     m_table.setRows(tableRows(*snapshot));
     updateActionTargets();
+    m_inspectors.namesChanged(); // a parent's or a group leader's name may have come
+    writeDockTile();
     m_ready = true;
     emit sampled();
     if (m_again) {
         m_again = false;
         requestSample();
     }
+}
+
+std::vector<LiveUnit> ActivityApp::liveUnits()
+{
+    std::vector<LiveUnit> out;
+    QSet<quint64> seen;
+    for (const TableRow &r : m_table.allRows()) {
+        if (!r.process.own || r.process.unitKey == 0 || seen.contains(r.process.unitKey))
+            continue;
+        // The unit now, through the process's descriptor (AD25: a row keeps no cgroup path).
+        const ProcessHandle handle = ProcessHandle::open(m_options.procRoot, r.process.pid, r.process.start);
+        const std::string cgroup = handle.valid() ? handle.cgroup() : std::string();
+        if (cgroup.empty() || !parseAppUnit(unitOf(cgroup)))
+            continue;
+        seen.insert(r.process.unitKey);
+        const QString dir = QString::fromStdString(m_options.sysRoot + "/fs/cgroup" + cgroup + "/");
+        LiveUnit live;
+        live.unit = QString::fromStdString(std::string(unitOf(cgroup)));
+        QFile stat(dir + QStringLiteral("cpu.stat"));
+        if (stat.open(QIODevice::ReadOnly))
+            parseCpuStatUsage(stat.read(64 * 1024), live.cpuNs);
+        QFile peak(dir + QStringLiteral("memory.peak"));
+        if (peak.open(QIODevice::ReadOnly))
+            live.memoryPeak = peak.read(64).trimmed().toULongLong();
+        out.push_back(live);
+    }
+    return out;
 }
 
 std::vector<TableRow> ActivityApp::tableRows(const Snapshot &snapshot)
@@ -454,11 +773,32 @@ std::vector<TableRow> ActivityApp::tableRows(const Snapshot &snapshot)
         r.name = QString::fromStdString(p.name);
         r.user = userName(p.uid);
         if (p.own && !p.appId.empty()) {
-            const DesktopApp &app = m_apps.app(QString::fromStdString(p.appId));
-            r.appName = app.name;
-            r.icon = app.icon;
+            // AM65: the desktop entry whose id is the unit's name (a launch by entry), else the one whose Exec runs it.
+            const QString id = QString::fromStdString(p.appId);
+            const DesktopApp *app = &m_apps.app(id);
+            if (app->name.isEmpty())
+                app = &m_apps.byExec(id);
+            r.appName = app->name;
+            r.icon = app->icon;
         }
-        r.preventingSleep = sleepers.contains(p.pid);
+        // AM60: the shell's projection names the processes that own a window (their app's desktop entry name and icon,
+        // AM17), those that inhibit idle (AM38) and those it marks as not responding (AM27).
+        const Projection &projection = m_projection.projection();
+        if (projection.valid && p.own) {
+            const auto app = projection.apps.constFind(p.pid);
+            r.windowed = app != projection.apps.constEnd();
+            if (r.windowed) {
+                const DesktopApp &entry = m_apps.app(*app);
+                if (!entry.name.isEmpty()) {
+                    r.name = entry.name;
+                    r.appName = entry.name;
+                }
+                if (!entry.icon.isEmpty())
+                    r.icon = entry.icon;
+            }
+            r.notResponding = projection.notResponding.contains(p.pid);
+        }
+        r.preventingSleep = sleepers.contains(p.pid) || (projection.valid && p.own && projection.idleInhibitors.contains(p.pid));
         rows.push_back(std::move(r));
     }
     return rows;
@@ -521,6 +861,9 @@ void ActivityApp::readAppearance()
         m_formats = locale;
         m_table.setLocale(locale);
         m_summary.setLocale(locale);
+        m_inspectors.setLocale(locale);
+        m_appHistory.setLocale(locale);
+        m_performance.setLocale(locale);
     }
     const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
