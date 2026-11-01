@@ -148,9 +148,10 @@ TestCase {
         wait(200);
         compare(ctl.lockState, "locking");
         compare(unlockSpy.count, 0);
-        // A late "released" is ignored outside the fade.
+        // A late "released" is ignored outside the fade: no unlock either (the integrator's review of e067f26f, mutant M4).
         ctl.released();
         compare(ctl.lockState, "locking");
+        compare(unlockSpy.count, 0);
         verify(!ctl.interruptRelease(), "nothing to interrupt");
     }
 
