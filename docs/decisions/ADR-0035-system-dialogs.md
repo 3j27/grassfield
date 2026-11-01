@@ -1237,7 +1237,8 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   stopping it (`gcr-system-prompt.c:472-475, 786-799`), so gcr kept it until the client left the bus, and a long-lived
   client (gnome-keyring-daemon) was locked out after eight departures of the shell. When the shell goes, the bridge now
   closes every open prompt (`gcr_prompt_close`, the interface's own way to say a prompt closed): gcr ends each one, tells
-  its caller `PromptDone` and drops it, without unregistering anything (journal: "N open gcr prompt(s) closed").
+  its caller `PromptDone` and drops it, without unregistering anything (journal: "N open gcr prompt(s) closed ... (0
+  still open)", the count of what gcr did not end; `tests/security/prompter_bridge.sh` checks it at eight departures).
 - **9-4. Which requesters are named?** Options: (a) the rule of the step's brief: a desktop entry of the same executable,
   "Keyring" for gnome-keyring, "GnuPG" for gpg-agent and pinentry, anything else "Unidentified program" with the path;
   (b) also a trusted executable's own file name. **Choice: (a)**, with the entry rule made strict: the entry's `Exec` is
