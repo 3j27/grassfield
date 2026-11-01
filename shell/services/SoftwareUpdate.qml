@@ -18,7 +18,7 @@ import Grassfield.Ui
 //     offline or on a metered connection (U7); a retry the checker asks for (retryAt, U3) comes earlier.
 //   - Each newly found Grassfield or Omarchy version, and each `blocking` episode, is announced once (`announce`; shell.qml
 //     posts the notification), never for a check the user started (U20, U22).
-//   - Update Now's runs (ADR-0033 "Step 4", U31): the runner's state ($XDG_RUNTIME_DIR/grassfield/software-update-run.json,
+//   - Update Now's runs (ADR-0033 "Step 4", U33): the runner's state ($XDG_RUNTIME_DIR/grassfield/software-update-run.json,
 //     replaced by rename) is watched; the end of a run this shell saw going on is announced once (`runEnded`; shell.qml posts
 //     the notice, and holds GF-083's while the run goes on). A run found already ended (the shell started after it) is never
 //     announced. The folder is made first (0700, as the runner makes it): a FileView sees no file in a missing folder.
@@ -40,6 +40,11 @@ Singleton {
     readonly property bool waiting: waitProc.running
     // GF-083's updatePending, bound by shell.qml: written to the file for the pane's "Log out to finish updating" (U14).
     property bool logoutPending: false
+    // ADR-0041 step 2b (U31): a toolkit package was replaced under this session (installed at or after the session's start,
+    // whatever the build's record says); once due, a log out stays due until the session ends, through a restart of the
+    // shell (re-read from the file at load). A test seam too.
+    property bool toolkitLogout: false
+    readonly property bool logoutDue: logoutPending || toolkitLogout
 
     // A newly found release ("grassfield" or "omarchy", its version and the installed one) or a `blocking` episode.
     signal announce(string kind, string version, string installed)
@@ -47,7 +52,7 @@ Singleton {
     // notice (GF-083's notice, held while the run goes on, is then shown: shell.qml).
     signal runEnded(string kind)
 
-    // Update Now's runner state (U31), "" without an absolute runtime folder; the operation this shell saw going on, "" when
+    // Update Now's runner state (U33), "" without an absolute runtime folder; the operation this shell saw going on, "" when
     // none. A dev session watches its own folder (dev plumbing UPDATE_RUN_DIR, else under its state; ADR-0019), never the
     // real session's runs.
     readonly property string runFolder: {
@@ -81,6 +86,9 @@ Singleton {
         "XDG_CACHE_HOME": Mode.stateDir + "/cache"
     } : ({})
     readonly property double startedAt: Date.now()
+    // The session's start (U31): Hyprland's, from HYPRLAND_INSTANCE_SIGNATURE, the same across a restart of the shell; the
+    // shell's own start without a signature. A test seam too.
+    property double sessionStartedAt: SoftwareUpdateLogic.sessionStart(Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE"), startedAt)
     // A user asked for the running check (Settings, the Store): its findings are not announced (U20).
     property bool userAsked: false
     // An automatic check waits for the connectivity to come back.
@@ -156,8 +164,17 @@ Singleton {
                 busyTimer.restart();
             return;
         }
-        const items = SoftwareUpdateLogic.news(file, answer);
-        save(SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items));
+        const items = SoftwareUpdateLogic.news(file, answer, sessionStartedAt);
+        const replaced = SoftwareUpdateLogic.toolkitReplaced(answer, sessionStartedAt, SoftwareUpdateLogic.toolkitAsked(file));
+        if (replaced.length > 0) {
+            if (!toolkitLogout)
+                console.info("software update: a toolkit package was replaced under this session (log out due): " + replaced.map(p => p.name + " " + p.installed + (p.moved ? " (not the version Grassfield was built with: " + p.built + ")" : "")).join(", "));
+            toolkitLogout = true;
+        }
+        let next = SoftwareUpdateLogic.withAnnounced(SoftwareUpdateLogic.combine(file, answer), items);
+        if (replaced.length > 0)
+            next = SoftwareUpdateLogic.withToolkitAsked(next, replaced);
+        save(SoftwareUpdateLogic.withLogoutPending(next, logoutPending, toolkitLogout));
         console.info("software update: " + answer.state + (answer.error ? " (" + answer.error + ")" : "") + (items.length > 0 ? ", new: " + items.map(n => n.id).join(", ") : ""));
         if (!user) {
             for (const n of items)
@@ -187,9 +204,22 @@ Singleton {
             stateFile.setText(JSON.stringify(next) + "\n");
     }
 
-    onLogoutPendingChanged: {
-        if (loaded && (file.logoutPending === true) !== logoutPending)
-            save(SoftwareUpdateLogic.withLogoutPending(file, logoutPending));
+    onLogoutDueChanged: {
+        if (loaded && ((file.logoutPending === true) !== logoutPending || (file.toolkitLogout === true) !== toolkitLogout))
+            save(SoftwareUpdateLogic.withLogoutPending(file, logoutPending, toolkitLogout));
+    }
+
+    // At load: a log out an earlier shell found due for the toolkit (a crash and Restart=always in between) is still due
+    // when the file's list, against the session's start (not this shell's), says so, or when the file says it was found due
+    // in this very session (the announcement marked with this session's start: the install times may have been unreadable
+    // and recorded as asked for); a previous session's flag is not (the integrator's reviews of 9043ac4, e03013d and
+    // f8b0916). The caller saves the adopted file once.
+    function adopt(f: var): var {
+        const n = SoftwareUpdateLogic.normalize(f);
+        const replaced = SoftwareUpdateLogic.toolkitReplaced(n, sessionStartedAt, SoftwareUpdateLogic.toolkitAsked(n));
+        if (replaced.length > 0 || SoftwareUpdateLogic.toolkitDueFromFile(n, sessionStartedAt))
+            toolkitLogout = true;
+        return SoftwareUpdateLogic.withLogoutPending(replaced.length > 0 ? SoftwareUpdateLogic.withToolkitAsked(n, replaced) : n, logoutPending, toolkitLogout);
     }
 
     // ---- automatic checks (U7) ----
@@ -475,15 +505,16 @@ Singleton {
             } catch (e) {
                 f = null;
             }
-            root.file = SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.normalize(f), root.logoutPending);
+            root.file = root.adopt(f);
             root.loaded = true;
+            root.save(root.file);
             root.reschedule();
             root.resume();
         }
         onLoadFailed: {
             if (root.loaded)
                 return;
-            root.file = SoftwareUpdateLogic.withLogoutPending(SoftwareUpdateLogic.normalize(null), root.logoutPending);
+            root.file = root.adopt(null);
             root.loaded = true;
             root.reschedule();
         }

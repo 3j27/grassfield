@@ -10422,6 +10422,14 @@
         <translation>La nouvelle version de Grassfield démarre à votre prochaine ouverture de session.</translation>
     </message>
     <message>
+        <source>Some of the update is used only after you log in again.</source>
+        <translation>Une partie de la mise à jour n’est utilisée qu’après votre prochaine ouverture de session.</translation>
+    </message>
+    <message>
+        <source>Log out to finish updating</source>
+        <translation>Fermez la session pour terminer la mise à jour</translation>
+    </message>
+    <message>
         <source>Restart…</source>
         <translation>Redémarrer…</translation>
     </message>
@@ -13332,6 +13340,10 @@
     <message>
         <source>Open Software Update to see why.</source>
         <translation>Ouvrez Mise à jour de logiciels pour en connaître la raison.</translation>
+    </message>
+    <message>
+        <source>Some updates finish when you log out. Log out and back in to use them.</source>
+        <translation>Certaines mises à jour se terminent à la fermeture de session. Fermez la session, puis rouvrez-la pour les utiliser.</translation>
     </message>
     <message>
         <source>and 1 more</source>

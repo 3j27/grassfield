@@ -85,13 +85,22 @@ function combine(file, answer) {
     const out = Object.assign({}, answer, {announced: f.announced});
     delete out.previous;
     delete out.logoutPending;
+    delete out.toolkitLogout;
     if (["failed", "blocking", "update-running"].indexOf(answer.state) >= 0) {
         const last = lastSuccess(f);
         if (last)
             out.previous = successPart(last);
     }
+    // An answer given before the checker ran (busy, update-running) or by no checker (noAnswer) carries no toolkit: the
+    // file's list stays, so the pane's sentence does not fall back meanwhile (the integrator's review of 9043ac4, nit 7).
+    if (out.toolkit === undefined && f.toolkit !== undefined)
+        out.toolkit = f.toolkit;
+    if (f.toolkitAsked !== undefined)
+        out.toolkitAsked = f.toolkitAsked;
     if (f.logoutPending === true)
         out.logoutPending = true;
+    if (f.toolkitLogout === true)
+        out.toolkitLogout = true;
     return out;
 }
 
@@ -104,9 +113,82 @@ function releases(file) {
     return (isObject(s.grassfield) && s.grassfield.available ? 1 : 0) + (isObject(s.omarchy) && s.omarchy.available ? 1 : 0);
 }
 
-// What an answer brings that was never announced: each Grassfield or Omarchy version found for the first time (U20), and a
-// `blocking` episode (U22). [{id, kind, version, installed}].
-function news(file, answer) {
+// ADR-0041 step 2b (U31): the toolkit as the checker lists it ([{name, installed, installedAt, built, moved}]); [] when the
+// answer (or the file) carries no list (an older checker, a `busy` or `update-running` answer before the file kept one).
+function toolkitPackages(answer) {
+    const t = isObject(answer) && isObject(answer.toolkit) && Array.isArray(answer.toolkit.packages) ? answer.toolkit.packages : [];
+    return t.filter(p => isObject(p) && typeof p.name === "string" && p.name !== "" && typeof p.installed === "string");
+}
+
+// The installed versions a log out was already asked for on an install time the checker could not read ({name: installed},
+// the file's `toolkitAsked`): asked once, then not again for the same installed version (a pacman database outside its
+// default path has no readable entry; without this every session would ask again).
+function toolkitAsked(file) {
+    const a = isObject(file) && isObject(file.toolkitAsked) ? file.toolkitAsked : {};
+    const out = {};
+    for (const k of Object.keys(a)) {
+        if (typeof a[k] === "string")
+            out[k] = a[k];
+    }
+    return out;
+}
+
+// The packages replaced under the running session: installed at or after `sessionStartMs`, or at a time the checker could
+// not read and not asked for yet (`asked`, the safe side: a log out asked for nothing is a nuisance, a session kept on a
+// library that was replaced is a crash waiting). Whatever the build's record says: a pkgrel rebuild replaces the file too.
+// A package installed before the session started is what the session already runs on: no log out for it.
+function toolkitReplaced(answer, sessionStartMs, asked) {
+    const a = asked || {};
+    return toolkitPackages(answer).filter(p => {
+        const at = timeOf(p.installedAt);
+        return at > 0 ? at >= sessionStartMs : a[p.name] !== p.installed;
+    });
+}
+
+function toolkitLogout(answer, sessionStartMs, asked) {
+    return toolkitReplaced(answer, sessionStartMs, asked).length > 0;
+}
+
+// The file says a log out for the toolkit was found due in THIS session (its flag, and the announcement marked with this
+// session's start): a shell restarted in the same session keeps it due, even when the packages' install times could not be
+// read and were recorded as asked for (the integrator's review of f8b0916, round 3). Another session's flag is stale.
+function toolkitDueFromFile(file, sessionStartMs) {
+    const f = normalize(file);
+    return f.toolkitLogout === true && f.announced.indexOf("toolkit " + sessionStartMs) >= 0;
+}
+
+// The file with the packages of `replaced` whose install time could not be read recorded as asked for.
+function withToolkitAsked(file, replaced) {
+    const out = normalize(file);
+    const a = toolkitAsked(out);
+    for (const p of replaced || []) {
+        if (!(timeOf(p.installedAt) > 0))
+            a[p.name] = p.installed;
+    }
+    out.toolkitAsked = a;
+    return out;
+}
+
+// The packages that moved away from the record this Grassfield was built with (U27's rule): for the log line, never for a
+// sentence (the integrator's decision on #77: macOS never names libraries in an update notice).
+function toolkitMoved(answer) {
+    return toolkitPackages(answer).filter(p => p.moved === true);
+}
+
+// The session's start, in ms: Hyprland's own, from HYPRLAND_INSTANCE_SIGNATURE ("<hash>_<unix seconds>_<n>"), the same
+// across a restart of the shell (a shell restarted after an upgrade would otherwise date the upgrade before its own start
+// and ask for nothing, while the compositor keeps running on the replaced libraries); never later than `fallbackMs` (the
+// shell's start: a later signature would hide installs), and `fallbackMs` without a signature or with one of another shape.
+function sessionStart(signature, fallbackMs) {
+    const m = /^[0-9a-fA-F]+_([0-9]{9,11})_[0-9]+$/.exec(String(signature || ""));
+    const t = m ? Number(m[1]) * 1000 : 0;
+    return t > 0 ? Math.min(t, fallbackMs) : fallbackMs;
+}
+
+// What an answer brings that was never announced: each Grassfield or Omarchy version found for the first time (U20), a
+// `blocking` episode (U22), and a toolkit replaced under the running session (U31: once per session, whatever the versions,
+// the id carries the session's start and the `announced` list survives a restart of the shell). [{id, kind, version, installed}].
+function news(file, answer, sessionStartMs) {
     const announced = normalize(file).announced;
     const out = [];
     if (isObject(answer) && LISTING.indexOf(answer.state) >= 0) {
@@ -118,6 +200,8 @@ function news(file, answer) {
     }
     if (isObject(answer) && answer.state === "blocking" && answer.episode)
         out.push({kind: "blocking", version: String(answer.episode), installed: ""});
+    if (toolkitLogout(answer, sessionStartMs, toolkitAsked(file)))
+        out.push({kind: "toolkit", version: String(sessionStartMs), installed: ""});
     return out.map(n => Object.assign(n, {id: n.kind + " " + n.version})).filter(n => announced.indexOf(n.id) < 0);
 }
 
@@ -126,12 +210,19 @@ function withAnnounced(file, items) {
     return Object.assign({}, f, {announced: f.announced.concat((items || []).map(n => n.id)).slice(-MAX_ANNOUNCED)});
 }
 
-function withLogoutPending(file, pending) {
+// Two flags: `pending`, GF-083's own log out (Grassfield itself was updated in this session); `toolkit`, a toolkit package
+// replaced under the session (U31). The pane words its row by them: "Log out to finish updating Grassfield" for the first,
+// "Log out to finish updating" for the second alone.
+function withLogoutPending(file, pending, toolkit) {
     const out = normalize(file);
     if (pending)
         out.logoutPending = true;
     else
         delete out.logoutPending;
+    if (toolkit)
+        out.toolkitLogout = true;
+    else
+        delete out.toolkitLogout;
     return out;
 }
 
@@ -369,7 +460,7 @@ function runView(run, alive, progress, helperAlive) {
         synced: false, deferred: [] };
 }
 
-// The notice the end of an Update Now run deserves when the shell saw it going on (docs/specs/updates.md U31, ADR-0033
+// The notice the end of an Update Now run deserves when the shell saw it going on (docs/specs/updates.md U33, ADR-0033
 // "Step 4"): "restart", "logout", "migrations", "aur", "installed", "bootimage", "incompatible", "terminal", "stopped", "failed",
 // or "" for none (nothing installed and nothing to do: up to date; cancelled or refused in the dialog the person saw).
 function runNotice(run) {

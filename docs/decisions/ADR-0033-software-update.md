@@ -1070,7 +1070,7 @@ untouched):
 - **The flaky test of #44's merge note.** `test_theShellsAnswerEndsTheWait` built the "same" `software-update.json` with two
   `Date.now()` calls around the page's creation; `checkedAt` keeps whole seconds, so across a second the pending logout looked
   like a new answer (`answered()` compares `checkedAt`). One time for both: 2 failures in 30 runs before, 0 in 60 after.
-- **The end of a run is announced** (spec U31). The shell's service watches the runner's state
+- **The end of a run is announced** (spec U33). The shell's service watches the runner's state
   (`$XDG_RUNTIME_DIR/grassfield/software-update-run.json`, replaced by rename: measured with Quickshell's FileView, which
   follows a rename, a removal and a late creation only while the folder exists, so the service makes the folder first, 0700
   as the runner does). A run it saw going on is announced once when it ends, by `SoftwareUpdateLogic.runNotice`; a run
@@ -1106,7 +1106,7 @@ copies): **PASS**, no BLOCKER or MAJOR; five minors and six nits, answered in th
   GF-083's text, and one notice says what finishes the update.
 - **Minor 5**, a dev shell watched the real session's runs: dev plumbing `UPDATE_RUN_DIR` (ADR-0019).
 - **Nits:** a relative `XDG_RUNTIME_DIR` is refused and `mkdir` gets `--`; the pane test checks the buttons enabled after a
-  run; the terminal notice names Omarchy's terminal; precedence and the unannounced ends are in U31 and the limits; SU-D4 is a
+  run; the terminal notice names Omarchy's terminal; precedence and the unannounced ends are in U33 and the limits; SU-D4 is a
   row of the decision table.
 
 Software Update step 3 (PR #44), the integrator's re-review of 1ce7c37..0294373 (independent opus): **PASS**, with two

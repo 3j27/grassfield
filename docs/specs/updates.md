@@ -248,12 +248,28 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   Nothing restarts by itself. When the update could not prepare the startup files (Omarchy's initramfs check), the pane says
   "Don't restart this computer yet" and offers no restart. While a run goes on, the pane's Restart… and Log Out… wait for
   its end (step 4).
+- U31. A toolkit replaced under the running session (ADR-0041 step 2b). Every check, in every state, lists the toolkit as
+  installed (`toolkit`): each package of U27's record (`qt6-base`, `quickshell`, `hyprland`, `aquamarine`, `kcoreaddons`)
+  pacman names, with its version, the time pacman installed it (`/var/lib/pacman/local/<name>-<version>/desc`,
+  `%INSTALLDATE%`), the version this Grassfield was built with (`/usr/share/grassfield/BUILD-DEPS`) and whether it moved
+  away from that record by U27's rule (`null` without a record, `true` when the record does not name it). A package
+  installed at or after the session started (Hyprland's start, read from `HYPRLAND_INSTANCE_SIGNATURE`, so the same after a
+  crash and restart of the shell; a time that cannot be read counts as this session), whatever the record says, means the
+  session runs on a file that was replaced under it: the shell posts "Log out to finish updating" once per session ("Some
+  updates finish when you log out. Log out and back in to use them.", opening Software Update; no package name in a
+  sentence, the journal names them) and writes U14's pending log out with its reason, so the pane shows "Log out to finish
+  updating Grassfield" with "Log Out…" and the subtitle "Some of the update is used only after you log in again."; the
+  log out stays due until the session ends, through a restart of the shell (re-read from the file). A package installed
+  before the session started is what the session already runs on, and asks for nothing. Where the check comes from: the
+  scheduled checks (U7), the check `omarchy update` asks for at its end (U9) and Update Now's own; a `pacman -Syu` typed in
+  a terminal is seen by the next scheduled check or at the next login (the path unit that watches pacman's database is
+  step 2b's second slice).
 - U30. A failure before any change says "The update could not be installed. Nothing was changed." (offline, a mirror, a
   download, a plan pacman refuses or that cannot be read); once the checked sync databases became the system's, it says "The
   update could not be installed." and "The updates were not installed…" instead (and the terminal answer of U28 the same);
   one during the transaction "The update stopped before it finished.", and names the snapshot only when one was taken.
   Update Now stays available to try again after every outcome.
-- U31. The end of a run the shell saw going on (step 4) is one notice whose click opens Settings > General > Software
+- U33. The end of a run the shell saw going on (step 4) is one notice whose click opens Settings > General > Software
   Update: "Restart to finish updating", "Log out to finish updating", "Some of Omarchy's last steps need its terminal",
   "Updates installed" (with "Apps from the AUR are updated in Omarchy's terminal." when some wait for it, as the pane says),
   "Don't restart this computer yet", "This update needs a newer version of Grassfield", "This update needs Omarchy's
@@ -325,7 +341,12 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 - `grassfield-update-check` output, version 1: `{"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":…,
   "error":…,"grassfield":{"installed":…,"available":…,"notes":[…]},"omarchy":{"installed":…,"available":…},"others":N}`.
   Step 2 adds `otherPackages` (the list behind `others`), cut first when the output would pass 256 KiB (ADR-0033 d.3).
-- `software-update.json`, version 1: the last output plus `announced` (versions already notified). State class, ADR-0020.
+  ADR-0041 step 2b adds `toolkit` (U31: `{"record":bool,"packages":[{"name","installed","installedAt","built","moved"}]}`,
+  one entry per tracked package pacman names), in every state that runs the checker (not in `busy` or `update-running`,
+  answered before it: the shell then keeps the file's).
+- `software-update.json`, version 1: the last output plus `announced` (versions already notified), `logoutPending` (U14) and
+  `toolkitLogout` (U31: the pending log out is for a toolkit replaced under the session).
+  State class, ADR-0020.
 - `grassfield.json`: `updates.automaticCheck` (boolean, default true), schema-generated (ADR-0020).
 - Step 3: `/usr/share/grassfield/BUILD-DEPS` (`<name> <version>` lines, U27); `/run/grassfield-update/<op>.progress`
   (`checking | snapshot | keyring | downloading <done> <total> | installing <done> <total> | finishing`), `<op>.exit` (the code,
@@ -398,7 +419,7 @@ owner decision O22). Omarchy's commands used:
 - The compatibility check covers five packages; another library Grassfield links can move unchecked.
 - A package conflict is found by pacman only inside the transaction (`--print` does not check them), after the checked
   databases became the system's: nothing is installed, and Grassfield Store refuses installs until an update finishes.
-- The end-of-run notice (U31) needs the shell to have seen the run going on: a run that started and ended while the shell
+- The end-of-run notice (U33) needs the shell to have seen the run going on: a run that started and ended while the shell
   was not running (a crash, a restart of the shell) is said only by the pane's row. A runner killed during the run leaves
   its state going on: no notice, and GF-083's waits an hour. A run folder removed during the session is no longer followed
   until the shell starts again (Quickshell's FileView, measured by the step 4 review).

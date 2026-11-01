@@ -19,9 +19,12 @@ import qs.overlay
 //   h  a checker that hangs: stopped at the deadline, failed ("took too long")
 //   i  busy: the file is not changed
 //   w  a waiter whose own answer is update-running again: the next one waits for waitRetryMs (no loop)
-//   r  Update Now's runs (U31): a run found already ended is not announced; one seen going on is, once, by its outcome; a
+//   r  Update Now's runs (U33): a run found already ended is not announced; one seen going on is, once, by its outcome; a
 //      cancelled one is not
 //   j  GF-083's pending logout written to the file
+//   t  ADR-0041 step 2b (U31): a toolkit package installed before the session's start asks for nothing; one installed
+//      after it is announced once as "toolkit" and the pending log out is written with its reason and the list; a later
+//      update in the same session announces nothing more and the log out stays due
 //   k  IPC (the script calls `qs ipc ... update check bogus|user` once "ipc-ready" is printed): bogus refused, user ran
 // Prints "software-update-service: PASS" or FAIL <why>.
 ShellRoot {
@@ -378,8 +381,70 @@ ShellRoot {
         SoftwareUpdate.logoutPending = true;
         when(() => (JSON.parse(root.stateText() || "{}").logoutPending === true), () => {
             root.check(JSON.parse(root.stateText() || "{}").logoutPending === true, "j: the pending logout written");
-            put("answer", answer(null, null));
-            root.callsAtIpc = calls().length;
+            stepT();
+        });
+    }
+
+    // U31: an up-to-date answer whose toolkit lists qt6-base installed at `at` (a move away from the record too).
+    function toolkitAnswer(at: string): string {
+        return JSON.stringify({version: 1, state: "up-to-date", channel: "stable", checkedAt: new Date().toISOString(), grassfield: {installed: "1.0.3-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}, others: 0, otherPackages: [], toolkit: {record: true, packages: [{name: "qt6-base", installed: "6.12.0-1", installedAt: at, built: "6.11.2-1", moved: true}]}});
+    }
+
+    // The saved file, or {} while it is not valid JSON (it is rewritten atomically, but read here between writes).
+    function saved(): var {
+        try {
+            return JSON.parse(root.stateText() || "{}");
+        } catch (e) {
+            return {};
+        }
+    }
+
+    // The install time the saved file's toolkit list carries ("" before the service saved an answer with one): what a
+    // step waits for, since the check's end is not the save's (the integrator's review of e03013d, major B).
+    function savedToolkitAt(): string {
+        const s = root.saved();
+        return s.toolkit && s.toolkit.packages && s.toolkit.packages[0] ? String(s.toolkit.packages[0].installedAt) : "";
+    }
+
+    function stepT(): void {
+        SoftwareUpdate.sessionStartedAt = Date.parse("2026-10-28T10:00:00Z");
+        const before = root.announced;
+        put("answer", toolkitAnswer("2026-10-28T09:00:00Z"));
+        SoftwareUpdate.request("omarchy");
+        when(() => !SoftwareUpdate.checking && root.savedToolkitAt() === "2026-10-28T09:00:00Z", () => {
+            const saved1 = root.saved();
+            root.check(root.announced === before && !SoftwareUpdate.toolkitLogout && saved1.toolkitLogout === undefined && saved1.logoutPending === true, "t1: a package installed before the session's start asks for nothing (" + (root.announced - before) + " announced, toolkit flag " + saved1.toolkitLogout + ", GF-083's own log out kept " + saved1.logoutPending + ")");
+            put("answer", toolkitAnswer("2026-10-28T11:00:00Z"));
+            SoftwareUpdate.request("omarchy");
+            when(() => !SoftwareUpdate.checking && root.savedToolkitAt() === "2026-10-28T11:00:00Z" && root.saved().toolkitLogout === true, () => {
+                const saved2 = root.saved();
+                root.check(root.announced === before + 1 && root.lastAnnounce[0] === "toolkit" && SoftwareUpdate.toolkitLogout, "t2: a package installed after the session's start: announced once as toolkit (" + (root.announced - before) + ", " + JSON.stringify(root.lastAnnounce) + ")");
+                root.check(saved2.logoutPending === true && saved2.toolkitLogout === true && saved2.announced.indexOf("toolkit " + SoftwareUpdate.sessionStartedAt) >= 0, "t2: the pending log out written with its reason and the announcement marked: " + JSON.stringify([saved2.logoutPending, saved2.toolkitLogout, saved2.announced]));
+                put("answer", toolkitAnswer("2026-10-28T11:30:00Z"));
+                SoftwareUpdate.request("omarchy");
+                when(() => !SoftwareUpdate.checking && root.savedToolkitAt() === "2026-10-28T11:30:00Z", () => {
+                    root.check(root.announced === before + 1 && SoftwareUpdate.toolkitLogout && root.saved().toolkitLogout === true, "t3: a later update in the same session announces nothing more, the log out stays due (" + (root.announced - before) + ")");
+                    stepK();
+                });
+            });
+        });
+    }
+
+    // The calls log is read again until two reads agree before step k's baseline is taken: the t-steps read it no more,
+    // and the first reload after them can return the content before their three runs (the integrator's review of
+    // f8b0916, round 3: k then counted their runs as its own).
+    property int callsLast: -1
+
+    function stepK(): void {
+        put("answer", answer(null, null));
+        root.callsLast = -1;
+        when(() => {
+            const n = calls().length;
+            const stable = n === root.callsLast;
+            root.callsLast = n;
+            return stable;
+        }, () => {
+            root.callsAtIpc = root.callsLast;
             console.log("software-update-service: ipc-ready");
             when(() => calls().length > root.callsAtIpc, finish);
         });

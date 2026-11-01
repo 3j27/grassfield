@@ -379,9 +379,11 @@ ShellRoot {
                 Notifications.postInternalAction(qsTr("Grassfield %1 is available").arg(name), qsTr("See what's new in Software Update."), open);
             else if (kind === "omarchy")
                 Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
+            else if (kind === "toolkit")   // ADR-0041 step 2b (U31): no package name in the sentence (the service logs them)
+                Notifications.postInternalAction(qsTr("Log out to finish updating"), qsTr("Some updates finish when you log out. Log out and back in to use them."), open);
         }
 
-        // The end of an Update Now run (U31): one notice whose click opens the pane. A restart or a log out is not posted when
+        // The end of an Update Now run (U33): one notice whose click opens the pane. A restart or a log out is not posted when
         // Settings' window is in front: its end sheet asks it there (U29). The restart and the log out are GF-083's notice
         // too: it is never posted after them, and a notice it held for the run is posted after any other end.
         function onRunEnded(kind: string): void {

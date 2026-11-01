@@ -507,6 +507,24 @@ TestCase {
     }
 
     // U14: after an update, Log Out… (GF-083's pending logout) or Restart… (Omarchy's marker, or the kernel's modules gone).
+    // ADR-0041 step 2b (U31): a toolkit package replaced under the session, without a Grassfield update of its own: the row
+    // says "Log out to finish updating" (no "Grassfield", no package name), with the generic subtitle; with Grassfield's
+    // own log out too, its name comes back.
+    function test_aToolkitLogOutAlone() {
+        const t = make(Object.assign(answer("up-to-date"), {toolkitLogout: true}));
+        verify(t.updates.toolkitLogout && !t.updates.grassfieldLogout && t.updates.logoutNeeded, "the toolkit's log out alone is a log out");
+        verify(row(t.page, "Log out to finish updating"), "the generic title");
+        verify(!row(t.page, "Log out to finish updating Grassfield"), "not Grassfield's");
+        const asked = [];
+        t.page.endSessionRequested.connect(a => asked.push(a));
+        button(t.page, "Log Out…").clicked();
+        compare(asked, ["logout"]);
+        const both = make(Object.assign(answer("up-to-date"), {toolkitLogout: true, logoutPending: true}));
+        verify(both.updates.grassfieldLogout && row(both.page, "Log out to finish updating Grassfield"), "with Grassfield's own update, its name");
+        const none = make(answer("up-to-date"));
+        verify(!none.updates.toolkitLogout && !none.updates.logoutNeeded && !row(none.page, "Log out to finish updating"));
+    }
+
     function test_logOutOrRestartAfterAnUpdate() {
         const t = make(Object.assign(answer("up-to-date"), {logoutPending: true}));
         verify(row(t.page, "Log out to finish updating Grassfield"));
