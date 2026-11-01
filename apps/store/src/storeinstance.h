@@ -2,7 +2,7 @@
 // pattern of Settings' (apps/settings/src/settingsinstance.h) and Activity Monitor's (ADR-0038 AD34): the running Store
 // owns a name on the session bus, object /org/grassfield/Store, interface org.grassfield.Store; a second launch hands it its
 // --page and its xdg-activation token, and leaves. Open(s page, s token) brings the window forward on that page (the page
-// is checked again by the window, StoreNav.parse; an unknown one keeps the page shown).
+// is checked again by the window, Main.qml's openPage; an unknown one keeps the page shown).
 //
 // The name: org.grassfield.Store in the session; a run with its own state directory (a dev session, an isolated test run:
 // GRASSFIELD_STATE_HOME) adds ".Dev" in a dev session and a digest of that directory, as Settings' does.
@@ -49,7 +49,7 @@ public:
     static QString interfaceName() { return QStringLiteral("org.grassfield.Store"); }
 
     // A page as --page takes it: printable, at most 512 characters, else "" (the window as it is). Its form is the window's
-    // to check (StoreNav.parse).
+    // to check (Main.qml's openPage).
     static QString cleanPage(const QString &page)
     {
         bool printable = page.size() <= 512;
