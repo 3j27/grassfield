@@ -1405,7 +1405,8 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   a trusted path name other files there. The mapped-code check stays an app's only ((c) above). Their user units
   (`gnome-keyring-daemon.service`, `gcr-ssh-agent.service`, `gpg-agent.service`) use no namespace option, so nothing
   changes for them. Tests: `tst_prompter.cpp` (`KnownCallersAskOnSomeoneElsesBehalf`, and a real child in a user and mount
-  namespace of its own running a known program: unidentified); mutant `known-caller-in-any-namespace`.
+  namespace of its own running a known program: unidentified); mutant `known-caller-in-any-namespace` (named
+  `every-known-caller-exempt` since step 9c). Step 9c's "Disks" is exempt from this rule: 9-26, amended.
 
 **Delivered in step 9b (the shell's queue and secret sheets; udiskie is 9c, the NetworkManager agent 9d, KIO's password
 server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31").
@@ -1648,6 +1649,22 @@ none widens a rule of Q12's text).
   the user can run the helper with a disk name of its own, so the text under the row is shown as another program's
   unverified text (SC3b), as for GnuPG (9-4, 9-14). The role is a new value of an existing field within `prompter/1`: bridge
   and shell ship in one package, and a shell that did not know it would close the connection (fail closed, 9-20).
+  **Amended when step 9b's integrator round met step 9c (delegated by the owner on 2026-10-27).** Question: 9-14, amended
+  after the integrator's review of PR #95, names a known caller only in the bridge's own mount and user namespaces, and
+  udiskie's unit runs the helper in namespaces of its own: in a user unit, `ProtectSystem=strict`, `ProtectHome=read-only`
+  and `PrivateTmp=yes` each make systemd 262 set up a user namespace that maps the user only (`PrivateUsers=self`) first,
+  then the mount namespace (`src/core/exec-invoke.c`, `exec_needs_cap_sys_admin` and the unprivileged set-up that calls it,
+  read as data). Options: (a) keep the rule for "Disks": udiskie's real request would show as "Unidentified program", which
+  (a) above rejects; (b) loosen the unit's sandbox until it runs in the bridge's namespaces: weaker hardening of a process
+  that handles removable media; (c) exempt the `disk` role from the namespace rule, and only that role. **Choice: (c).**
+  Rule applied: macOS names the asker, and the rule protects nothing for this role: any program of the user can already run
+  the real root-owned helper in the bridge's namespaces and get the "Disks" row, its text shown as unverified (the known gap
+  above). The helper's other checks stay: a root-owned path not writable by others, the file it names by device and
+  inode the very file the process runs, the process not traced; every other known caller keeps the namespace rule. Tests:
+  `tst_prompter.cpp` (a real child in a user and mount namespace of its own: the disk role named, the keyring role not;
+  the disk role refused when the path names another file or the process is traced), `askpass.sh` (the installed helper
+  run under `unshare --user --mount` still gets "Disks"), mutants `disk-not-exempt` and `every-known-caller-exempt`
+  (`prompter_bridge.sh --mutants`).
 - **9-27. When is the NetworkManager agent registered, and on which bus?** Options: (a) for the bridge's whole life; (b) while
   a shell that draws kind `nm` is connected, unregistered when it goes, registered again when NetworkManager comes back on
   the bus. **Choice: (b)** (D-9: "when the shell is not connected the agent unregisters"); the object stays exported for the

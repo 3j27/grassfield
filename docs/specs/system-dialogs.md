@@ -426,7 +426,9 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
   entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers, each only
-  for a process in the bridge's own mount and user namespaces (as an app's row: the integrator's review of PR #95); anything
+  for a process in the bridge's own mount and user namespaces (as an app's row: the integrator's review of PR #95);
+  "Disks" for udiskie's helper `grassfield-askpass` in any namespaces (udiskie's unit runs it in its own, decision 9-26
+  amended); anything
   else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
   as plain text, flattened and capped, in the secondary style, framed and introduced as the caller's; `warning` in red in that
   frame (step 9b, decision 9-18: under the field it read as the sheet's own error); a secure field (`password-new`: New and
@@ -717,7 +719,7 @@ since it was loaded), which also leaves an app unidentified after an upgrade of 
 mapped files are compared by device and inode with the files their paths name, and only for a process in the bridge's
 own mount and user namespaces (opus counter-review of step 9a, MINOR-C: a user namespace lets a process bind-mount its
 own file over a trusted path; the known callers need those namespaces too since the integrator's review of PR #95, so a
-known program run in a sandbox of its own shows as "Unidentified program"); a trusted app that runs code of the user's through its own scripting maps no untrusted
+known program run in a sandbox of its own shows as "Unidentified program", save "Disks", decision 9-26 amended); a trusted app that runs code of the user's through its own scripting maps no untrusted
 file (`emacs --batch -l`, `nvim -l`, an app's plugin interpreter) and still gets the app's row. The gcr
 protocol is unauthenticated: its exchange protects the
 password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
@@ -742,7 +744,8 @@ reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet
 its own (the text under the row is shown as unverified, SC3b), and a passphrase udiskie refuses is not asked again (udiskie
 2.7.0 reports the failure, which `--no-notify` hides; the disk stays locked until it is plugged in again); the helper's
 identification inside udiskie's sandbox (`PrivateUsers=self`) relies on the bridge reading `/proc/<pid>/exe` across that
-user namespace, checked here outside a sandbox only; the NetworkManager agent stores no secret: a connection whose secrets
+user namespace, checked here with the installed helper in a user and mount namespace that `unshare` makes, not under
+systemd's own sandbox; the NetworkManager agent stores no secret: a connection whose secrets
 are agent-owned (`psk-flags=1`, as some editors make them) is asked for its password at every connection, and its
 `SaveSecrets` is refused so that another agent may store them; system-owned secrets the agent returns are kept by
 NetworkManager only when the user has its `settings.modify.system` (or `modify.own`) permission without authentication
