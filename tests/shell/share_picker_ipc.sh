@@ -11,7 +11,12 @@
 #   5 another popup in the panel's place: cancelled (nothing reaches xdph), the stand-in ends;
 #   6 the session locks while the panel is open: cancelled; a request while locked: "locked", nothing shows;
 #   7 requests not of the stand-in's form (an id that is not 128-bit hex, a socket elsewhere): "refused", nothing shows.
-#   8 a request whose socket is not there (a stand-in that gave up): accepted, the connection fails, no panel ever shows.
+#   8 a request whose socket is not there (a stand-in that gave up): accepted, the connection fails, no panel ever shows,
+#     and its socket is gone;
+#  13 a failed connection does not poison the next request (review of PR #83, MAJOR 2: on Quickshell 0.3.1 one long-lived
+#     Socket never connected again after a failed connection): after case 8, after a socket file nobody listens on, and after
+#     a stand-in that gave up because the shell's answer took over 1 s (a slow `qs ipc`: it ran its stock picker), the next
+#     request shows its panel and its answer reaches xdph; each request has its own socket, and none is left once it ended.
 # Step 7b:
 #   9 Selection: an area past its display's logical size is not answered; one inside is `[SELECTION]/region:<display>@x,y,w,h`;
 #  10 a window that hides itself from capture (Hyprland's getprop, faked) is greyed and never answered, another window is;
@@ -153,6 +158,8 @@ share() { # runs the stand-in as xdph does; sets `standin`
   standin=$!
 }
 shown_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(shown)s %(popup)s') == "True sharePicker" ]] && return 0; sleep 0.05; done; return 1; }
+# No request open and no request socket left (a Socket per request, destroyed with it), within 3 s (the 2 s connection deadline).
+gone_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(open)s %(channels)s') == "False 0" ]] && return 0; sleep 0.05; done; return 1; }
 # No window is answered before Hyprland has said which hide from capture.
 known_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(blocked)s') != None ]] && return 0; sleep 0.05; done; return 1; }
 ended_within() { local i; for ((i = 0; i < $2 * 20; i++)); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.05; done; return 1; }
@@ -162,6 +169,8 @@ idle_within() { local i; for ((i = 0; i < 20; i++)); do [[ $(state '%(open)s %(s
 share
 desc="1 the shell accepts, connects, gets xdph's two windows and opens the panel"
 check shown_within
+desc="1 the request has its own socket, the only one"
+check test "$(state '%(channels)s')" == 1
 desc="1 the windows the shell holds are xdph's, with their handles"
 check test "$(state '%(windows)s')" == "[{'handle': '123456', 'appId': 'org.gnome.TextEditor', 'title': 'notes.txt', 'address': '1000'}, {'handle': '777', 'appId': 'firefox', 'title': 'A page', 'address': '2000'}]"
 desc="1 the user's choice of the display with Remember this choice reaches xdph"
@@ -170,6 +179,7 @@ ended_within "$standin" 3 || true
 check test "$(cat "$tmp/standin.out")" == "[SELECTION]r/screen:$display"
 desc="1 the request and the panel are gone, the stock picker never ran, nothing on stderr"
 check idle_within
+check gone_within
 check bash -c '[[ ! -e $1/stock.ran && ! -s $1/standin.err ]]' _ "$tmp"
 
 # 2.
@@ -232,6 +242,46 @@ check test "$(ipc picker request "$(printf '%032x' 7)" "$runtime/grassfield/pick
 check test "$(state '%(popup)s')" == ""
 check idle_within
 check test "$(state '%(popup)s')" == ""
+desc="8 the failed connection's socket is gone"
+check gone_within
+
+# 13.
+answered_screen() { # a request after a failed connection: its own socket, its panel, its answer
+  share
+  shown_within && [[ $(state '%(channels)s') == 1 && $(ipc picker choose screen DP-1 no) == ok ]] || return 1
+  ended_within "$standin" 3 || true
+  [[ $(cat "$tmp/standin.out") == "[SELECTION]/screen:DP-1" ]] && gone_within
+}
+desc="13 after case 8's failed connection, the next request shows its panel and its answer reaches xdph; no socket left"
+check answered_screen
+desc="13 a socket file nobody listens on: accepted, the connection is refused, nothing shows, no socket left"
+refused_sock="$runtime/grassfield/picker/$(printf '%032x' 9).sock"
+python3 -I -c 'import socket, sys; s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.close()' "$refused_sock"
+check test "$(ipc picker request "$(printf '%032x' 9)" "$refused_sock")" == accepted
+check gone_within
+check test "$(state '%(shown)s %(popup)s')" == "False "
+rm -f "$refused_sock"
+desc="13 then a request shows its panel and its answer reaches xdph; no socket left"
+check answered_screen
+desc="13 a stand-in whose request took over 1 s (a slow qs ipc) runs its stock picker; the shell's late connection leaves nothing"
+mkdir -p "$tmp/slow"
+printf '#!/bin/sh
+%q "$@"
+rc=$?
+[ "$2" = -p ] && [ "$5" = picker ] && exec sleep 1.5
+exit $rc
+' "$(command -v qs)" >"$tmp/slow/qs"
+chmod +x "$tmp/slow/qs"
+rm -f "$tmp/stock.ran" "$tmp/standin.out"
+env "${base_env[@]}" GRASSFIELD_SHELL_DIR="$tmp/cfg" PATH="$tmp/slow:$tmp/fake:$PATH" XDPH_WINDOW_SHARING_LIST="$windows" \
+  "$tmp/bin/hyprland-share-picker" --allow-token >"$tmp/standin.out" 2>"$tmp/standin.err" &
+standin=$!
+ended_within "$standin" 5 || true
+check bash -c '[[ -e $1/stock.ran && ! -s $1/standin.out ]]' _ "$tmp"
+check gone_within
+check test "$(state '%(shown)s %(popup)s')" == "False "
+desc="13 then a request shows its panel and its answer reaches xdph; no socket left"
+check answered_screen
 
 # 9.
 share
@@ -297,6 +347,7 @@ check test "$(cat "$tmp/standin.out")" == "[SELECTION]/window:123456"
 xdph_bin=""
 if [[ -n $pw ]] && command -v cc >/dev/null && pkg-config --exists libpipewire-0.3 2>/dev/null; then
   mkdir -p "$tmp/xdph"
+  # shellcheck disable=SC2046 # pkg-config's flags are words
   cc -O1 -o "$tmp/xdph/xdg-desktop-portal-hyprland" tests/shell/share_picker_ipc.d/fake-xdph-stream.c \
     $(pkg-config --cflags --libs libpipewire-0.3) 2>"$tmp/xdph/cc.log" && xdph_bin="$tmp/xdph/xdg-desktop-portal-hyprland"
 fi

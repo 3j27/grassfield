@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 pragma Singleton
 import QtQuick
 import Quickshell
@@ -11,9 +12,9 @@ import "SharePicker.js" as Logic
 // packaging/session-bin/hyprland-share-picker, which asks here with `picker request <id> <socket>`; the answer comes at
 // once: "accepted", "busy" (a picker is open: one at a time), "locked" (owner decision Q15: nothing shows while the session
 // is locked) or "refused" (not a request of the stand-in's form; it then runs the stock picker, as with no shell). Accepted,
-// the shell connects to the stand-in's one-time socket and shows the panel (SharePickerPanel, popup kind "sharePicker") only
-// once the stand-in's window list has arrived on it; a connection that fails or a list that does not come within 2 s shows
-// nothing. While the panel is open the shell writes `<id> wait` every 5 s, then one answer, `<id> <flags>/<choice>` or
+// the shell connects to the stand-in's one-time socket with a Socket made for that request alone (destroyed when the request
+// ends, whatever ends it) and shows the panel (SharePickerPanel, popup kind "sharePicker") only once the stand-in's window
+// list has arrived on it; a connection that fails or a list that does not come within 2 s shows nothing. While the panel is open the shell writes `<id> wait` every 5 s, then one answer, `<id> <flags>/<choice>` or
 // `<id> cancel`, and closes. The panel goes when the stand-in's end closes (it gave up, or xdph ended), when the session
 // locks, or when another popup takes its place: each of those is "cancelled". Window titles are never logged.
 Singleton {
@@ -21,6 +22,13 @@ Singleton {
 
     // The request being answered, {id, path}, or null.
     property var current: null
+    // Its channel: a Socket made for this request (channelComponent) and destroyed when it ends. Never one Socket for every
+    // request: on Quickshell 0.3.1 a Socket whose connection failed once keeps its dead QLocalSocket and never connects again
+    // (fixed upstream in 0.3.2, "io/socket: discard sockets which have failed to connect"), so after one stand-in that gave up
+    // every later request was accepted, then cancelled after 2 s (review of PR #83, MAJOR 2).
+    property Socket channel: null
+    // The request Sockets alive (a test hook, in `picker status`): one while a request is open, none once it ended.
+    property int channels: 0
     // The windows xdph listed ({handle, appId, title, address}), from the stand-in's first line.
     property var windows: []
     // The panel was shown for the current request.
@@ -92,12 +100,19 @@ Singleton {
             root.finish(root.current.id + " cancel");
     }
 
-    // One answer line (or none), then the channel and the panel close.
+    // One answer line (or none), then the channel closes and goes, and the panel closes. Never called from inside a Socket's
+    // error signal (lost() runs later): a Socket closed or destroyed there crashes Quickshell 0.3.2 (tests/ci/socket_errors.py).
     function finish(line: string): void {
         const wasShown = root.shown;
-        if (line !== "" && channel.connected) {
-            channel.write(line + "\n");
-            channel.flush();
+        const sock = root.channel;
+        root.channel = null;
+        if (sock !== null) {
+            if (line !== "" && sock.connected) {
+                sock.write(line + "\n");
+                sock.flush();
+            }
+            sock.connected = false;
+            Qt.callLater(() => sock.destroy());
         }
         root.current = null;
         root.windows = [];
@@ -105,13 +120,13 @@ Singleton {
         root.blockedKnown = false;
         root.shown = false;
         connectDeadline.stop();
-        channel.connected = false;
         if (wasShown && Popups.kind === "sharePicker")
             Popups.close();
     }
 
-    function received(line: string): void {
-        if (root.current === null || root.shown)
+    // A line on a request's channel; a channel that is not the current request's says nothing.
+    function received(sock: Socket, line: string): void {
+        if (sock === null || sock !== root.channel || root.current === null || root.shown)
             return;
         const listed = Logic.parseList(line, root.current.id);
         if (listed === null)
@@ -142,9 +157,10 @@ Singleton {
         blockedQuery.running = true;
     }
 
-    // The connection failed, or ended: the stand-in gave up (2 s without a connection) or xdph ended.
-    function lost(): void {
-        if (root.current !== null && !channel.connected)
+    // The request's connection failed, or ended: the stand-in gave up (2 s without a connection) or xdph ended. A channel that
+    // is no longer the current request's (it ended, a newer one has its own) changes nothing.
+    function lost(sock: Socket): void {
+        if (sock !== null && sock === root.channel && root.current !== null && !sock.connected)
             root.finish("");
     }
 
@@ -174,13 +190,29 @@ Singleton {
         }
     }
 
-    Socket {
-        id: channel
-        parser: SplitParser {
-            onRead: line => root.received(line)
+    // One per request (request() makes it, finish() destroys it). Its error is judged once Quickshell's own error handler has
+    // returned (the signal can fire inside createObject, and closing the Socket from inside it crashes Quickshell 0.3.2).
+    Component {
+        id: channelComponent
+
+        Socket {
+            id: sock
+
+            function lost(): void {
+                root.lost(sock);
+            }
+
+            parser: SplitParser {
+                onRead: line => root.received(sock, line)
+            }
+            onConnectedChanged: Qt.callLater(sock.lost)
+            Component.onCompleted: {
+                root.channels++;
+                sock.error.connect(() => Qt.callLater(sock.lost));
+                sock.connected = true;
+            }
+            Component.onDestruction: root.channels--
         }
-        onConnectedChanged: Qt.callLater(root.lost)
-        onError: Qt.callLater(root.lost)
     }
 
     // Accepted: the connection and the window list within 2 s, as the stand-in waits for them; else nothing shows.
@@ -197,10 +229,12 @@ Singleton {
     Timer {
         interval: 5000
         repeat: true
-        running: root.shown && channel.connected
+        running: root.shown && root.channel !== null && root.channel.connected
         onTriggered: {
-            channel.write(root.current.id + " wait\n");
-            channel.flush();
+            if (root.channel === null || root.current === null)
+                return;
+            root.channel.write(root.current.id + " wait\n");
+            root.channel.flush();
         }
     }
 
@@ -241,8 +275,9 @@ Singleton {
             root.windows = [];
             root.shown = false;
             connectDeadline.restart();
-            channel.path = socket;
-            channel.connected = true;
+            root.channel = channelComponent.createObject(root, {
+                path: socket
+            }) as Socket;
             return "accepted";
         }
 
@@ -253,7 +288,8 @@ Singleton {
             return JSON.stringify({
                 open: root.current !== null,
                 shown: root.shown,
-                connected: channel.connected,
+                connected: root.channel !== null && root.channel.connected,
+                channels: root.channels,
                 popup: Popups.kind,
                 outputs: root.outputs(),
                 windows: root.windows,
