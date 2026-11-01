@@ -570,20 +570,28 @@ of the session, never in a terminal.
 
 ### Step 2c as built (2026-11-01, the branch of the stability lane; the rc-channel gate)
 - `scripts/gates/rc-toolkit.sh` (`just gate-rc`; T-5, T-10, C3): a throwaway Arch container (`archlinux:base` at the digest
-  the integration tests pin, the repository mounted read-only, the report directory mounted) whose pacman mirrorlist names
-  Omarchy's rc mirror only (`https://rc-mirror.omarchy.org/$repo/os/$arch`, Omarchy's `mirrorlist-rc` at v4.0.4; `--mirror`
-  takes the stable one for a stable-channel run). `pacman -Syuu` brings the whole base to that snapshot (downgrades allowed:
-  the image may be newer than the snapshot), then the PKGBUILD's makedepends and the desktop package's depends, read from
-  the PKGBUILD itself (version constraints off, Grassfield's own packages out: they are built from the tree), so the set
-  never drifts from what an rc machine installs. A `git archive HEAD` runs as an unprivileged user, three steps, each
-  logged and timed: `lint` (`scripts/dev/qmllint.sh`: the tree's QML against the installed Quickshell's `qmltypes`, T-10),
+  the integration tests pin, the repository mounted read-only, the report directory mounted) set up as an Omarchy machine
+  of the channel (`--channel rc`, the default, or `stable`): pacman's configuration in Omarchy 4.0.6's layout, `[omarchy]`
+  first (`https://pkgs.omarchy.org/<channel>/$arch`: Omarchy's own builds win, and Quickshell is one of them, `quickshell
+  0.3.2.r7.g2b4501a-1` in both channels' databases on 2026-11-01, where Arch's `[extra]` has 0.3.2-1), then `[core]` and
+  `[extra]` from the channel's dated Arch mirror (`https://<channel>-mirror.omarchy.org/$repo/os/$arch`, Omarchy's
+  `mirrorlist-<channel>`: where Hyprland, Qt and KDE Frameworks come from), packages signed; Omarchy's key from
+  keys.openpgp.org, signed locally, then `omarchy-keyring`, as Omarchy's own bootstrap does. `pacman -Syuu` brings the whole
+  base to the channel's snapshot (downgrades allowed: the image may be newer than it), then the PKGBUILD's makedepends and
+  the desktop package's depends, read from the PKGBUILD itself (version constraints off, Grassfield's own packages out:
+  they are built from the tree), so the set never drifts from what such a machine installs. A `git archive HEAD` made on
+  the host (git on the mounted repository would refuse another owner's tree; a worktree's `.git` points outside the mount)
+  runs as an unprivileged user, three steps, each logged and timed: `lint` (`scripts/dev/qmllint.sh`: the tree's QML
+  against the installed Quickshell's `qmltypes`, T-10),
   `test` (`scripts/dev/test.sh --layer data,logic,headless`: the offscreen suites on the rc Qt, Quickshell and KDE
   Frameworks, T-5), `plugin` (the compositor plugin and its unit tests with CMake/Ninja against the rc Hyprland headers,
-  C3; the ABI stamp in the note). The report (`.dev/rc-toolkit/<timestamp>/`): `result.tsv`, `toolkit.txt` (`pacman -Q` of
-  qt6-base, qt6-declarative, quickshell, hyprland, aquamarine, hyprutils, hyprlang, kcoreaddons, kio in the container, and
-  how many Quickshell `qmltypes` the lint saw), `snapshot.txt` (the mirror and its database's date), `stable.txt` (the same
-  packages on the machine that runs the gate, when pacman knows them) and `summary.json`: the record the watch job of
-  ADR-0033 f reads (the toolkit, what moved against this machine, each step's result, the verdict). Exit 0 PASS, 1 FAIL,
+  C3; the ABI stamp in the note). The report (`.dev/rc-toolkit/<timestamp>/`, its files given back to the host's user):
+  `result.tsv`, `toolkit.txt` (`pacman -Q` of qt6-base, qt6-declarative, quickshell, hyprland, aquamarine, hyprutils,
+  hyprlang, kcoreaddons, kio in the container, and how many Quickshell `qmltypes` the lint saw), `sources.txt` (the package
+  file each came from: which repository served it), `snapshot.txt` (the channel's two databases and their dates),
+  `stable.txt` (the same packages on the machine that runs the gate, when pacman knows them) and `summary.json`: the record
+  the watch job of ADR-0033 f reads (the channel's toolkit, what moved against this machine, the sources, each step's
+  result, the verdict). Exit 0 PASS, 1 FAIL,
   2 INCONCLUSIVE (no docker, a failed setup, a wanted step without a result: never a pass). `just release-check --rc` runs
   it as its step 8 on the snapshot (its report beside the run's logs); without `--rc` the summary says the gate did not run.
 - Incident I-1 as a regression (step 7's row, the r7 proof as a container case): `tests/shell/hypr_socket_errors.sh` runs the
@@ -592,10 +600,11 @@ of the session, never in a terminal.
   exactly once (`answered(ticket, ok)`: false, false, true, false), nothing twice, and Quickshell exits 0 (a crash is its
   exit code: 139). In the headless layer it runs on every machine with Quickshell; in the gate it runs on the rc channel's
   Quickshell, which is what the 2026-10-29 proof with a 0.3.2.r7 built from source showed by hand.
-- Tests: `scripts/gates/rc-toolkit.sh --selftest` (the dependency reader on a fixture PKGBUILD with comments, quotes,
-  constraints and another package's depends; the moved table; the verdict's three words and the partial run; the record)
-  from `tests/shell/gates.sh`; `tests/shell/hypr_socket_errors.sh` (headless).
-- Evidence (this container; no docker daemon, no Quickshell): `tests/shell/gates.sh` exit 0 (the selftest's 10 cases
+- Tests: `scripts/gates/rc-toolkit.sh --selftest` (the channel's pacman configuration and mirrorlist; the dependency
+  reader on a fixture PKGBUILD with comments, quotes, constraints and another package's depends; the moved table; the
+  verdict's three words and the partial run; the record) from `tests/shell/gates.sh`; `tests/shell/hypr_socket_errors.sh`
+  (headless).
+- Evidence (this container; no docker daemon, no Quickshell): `tests/shell/gates.sh` exit 0 (the selftest's 12 cases
   among it); `bash -n` on the gate, the release check and the test; `python3 -I tests/ci/inventory.py` ok (605 tests);
   `tests/ci/socket_errors.py` ok; `tests/tools/check-isolation.py` ok; qmllint 6.4 parses `probe.qml`; `git diff --check`
   clean. NOT VERIFIED here: the container run itself (the rc mirror's snapshot, the time it takes, the suites' skips on

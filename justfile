@@ -238,7 +238,7 @@ gate-startup *args:
 gate-version *args:
     scripts/gates/version-agreement.sh {{args}}
 
-# The rc-channel gate (ADR-0041 step 2c; T-5, T-10, C3): the tree's QML lint, offscreen suites and plugin build on Omarchy's rc toolkit in a throwaway container (bare; docker). Flags: --only lint,test,plugin --mirror URL --logs DIR
+# The rc-channel gate (ADR-0041 step 2c; T-5, T-10, C3): the tree's QML lint, offscreen suites and plugin build on Omarchy's rc toolkit in a throwaway container (bare; docker). Flags: --only lint,test,plugin --channel rc|stable --logs DIR
 gate-rc *args:
     scripts/gates/rc-toolkit.sh {{args}}
 

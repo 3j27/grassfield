@@ -4,40 +4,73 @@
 # Hyprland) is known one Omarchy cycle before it reaches stable. Never on a real machine: inside, it refuses to run unless it
 # is root in a container with the repository mounted at /src and the report directory at /out.
 #
-#   scripts/gates/rc-toolkit.sh [--only lint,test,plugin] [--mirror URL] [--logs DIR]
+#   scripts/gates/rc-toolkit.sh [--only lint,test,plugin] [--channel rc|stable] [--logs DIR]
 #   scripts/gates/rc-toolkit.sh --selftest
-#     --only STEPS   run only these steps (debugging; the verdict then says "partial")
-#     --mirror URL   the channel's Arch mirror (default https://rc-mirror.omarchy.org, Omarchy's mirrorlist-rc at v4.0.4; the
-#                    stable mirror, https://stable-mirror.omarchy.org, gives a stable-channel run)
-#     --logs DIR     where the report goes (default .dev/rc-toolkit/<timestamp>/)
-#     --selftest     the pure parts (the dependency reader, the moved-package table, the verdict, the record) on fixed
-#                    samples; no container
+#     --only STEPS      run only these steps (debugging; the verdict then says "partial")
+#     --channel NAME    Omarchy's channel (default rc; stable gives a stable-channel run, what the owner's machine installs)
+#     --logs DIR        where the report goes (default .dev/rc-toolkit/<timestamp>/)
+#     --selftest        the pure parts (the pacman configuration, the dependency reader, the moved-package table, the
+#                       verdict, the record) on fixed samples; no container
 #
 # Runs `docker run --rm --network host` on archlinux:base (digest pinned below, the one of tests/integration) with the
-# repository mounted read-only; HTTPS_PROXY/HTTP_PROXY/NO_PROXY are passed through and GRASSFIELD_TEST_CA, when set, is
-# mounted as the container's CA bundle. Inside: pacman's mirrorlist names the channel's mirror only and `pacman -Syuu`
-# brings the whole base to that snapshot (downgrades allowed: the image may be newer than the snapshot), then the PKGBUILD's
-# makedepends and the desktop package's depends (what an rc machine runs) are installed from it. A `git archive HEAD` of the
-# repository (uncommitted changes are not in it, and are reported) runs as an unprivileged user:
+# repository mounted read-only and the report directory mounted; HTTPS_PROXY/HTTP_PROXY/NO_PROXY are passed through and
+# GRASSFIELD_TEST_CA, when set, is mounted as the container's CA bundle. Inside, pacman is set up as an Omarchy machine of
+# that channel (Omarchy 4.0.6's pacman-<channel>.conf: `[omarchy]` first, so Omarchy's own builds win, Quickshell among
+# them, then `[core]` and `[extra]` from the channel's dated Arch mirror, which is where Hyprland, Qt and KDE Frameworks come
+# from; Omarchy's key from keys.openpgp.org, signed locally, then omarchy-keyring, as Omarchy's own bootstrap does) and
+# `pacman -Syuu` brings the whole base to the channel's snapshot (downgrades allowed: the image may be newer than it). Then
+# the PKGBUILD's makedepends and the desktop package's depends (what such a machine runs) are installed from it. A
+# `git archive HEAD` of the repository, made on this machine (uncommitted changes are not in it, and are reported), runs as
+# an unprivileged user:
 #   lint    scripts/dev/qmllint.sh: the tree's QML against the installed Quickshell's qmltypes (T-10; gate Q1 on rc)
 #   test    scripts/dev/test.sh --layer data,logic,headless: the offscreen suites on the rc Quickshell, Qt and KDE Frameworks
 #           (T-5); among them tests/shell/hypr_socket_errors.sh, incident I-1's error paths on that Quickshell
 #   plugin  the compositor plugin and its unit tests built with CMake/Ninja against the rc Hyprland headers (C3)
 # Report (the logs directory): setup.log, <step>.log, result.tsv, toolkit.txt (pacman -Q of the toolkit in the container),
-# snapshot.txt (the mirror and its database's date), stable.txt (the same packages on this machine, when pacman knows them)
-# and summary.json, the record a watch job reads (ADR-0033 f: the rc toolkit, what moved against this machine, each step's
-# result, the verdict). Exit: 0 PASS (every step passed), 1 FAIL (a step failed), 2 INCONCLUSIVE (no docker, the setup
-# failed, a step did not run; never a pass) or usage error. Bare command: needs the docker daemon.
+# sources.txt (the package files the toolkit came from: which repository served each), snapshot.txt (the channel's
+# databases and their dates), stable.txt (the same packages on this machine, when pacman knows them) and summary.json, the
+# record a watch job reads (ADR-0033 f: the channel's toolkit, what moved against this machine, each step's result, the
+# verdict). Exit: 0 PASS (every step passed), 1 FAIL (a step failed), 2 INCONCLUSIVE (no docker, the setup failed, a step
+# did not run; never a pass) or usage error. Bare command: needs the docker daemon.
 set -uo pipefail
 
 IMAGE=archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
-MIRROR_DEFAULT=https://rc-mirror.omarchy.org
+CHANNEL_DEFAULT=rc
+# Omarchy's signing key (bin/omarchy-update-keyring at v4.0.6; tests/integration/update_helper.sh fetches the same).
+OMARCHY_KEY=40DFB630FF42BCFFB047046CF0134EE680CAC571
 # The packages the record names: BUILD-DEPS's five (ADR-0033 s3.4: what the compatibility check tracks) and the ones the
 # shell's QML and the plugin's ABI depend on besides.
 TOOLKIT=(qt6-base qt6-declarative quickshell hyprland aquamarine hyprutils hyprlang kcoreaddons kio)
 STEPS=(lint test plugin)
 
 # --- the pure parts (tested by --selftest, run by tests/shell/gates.sh) ---------------------------------------------------
+
+# pacman.conf of an Omarchy machine of a channel (default/pacman/pacman-<channel>.conf at v4.0.6, the options the image needs
+# kept: `[omarchy]` first, then Arch's repositories from the channel's mirrorlist; `[multilib]` is not needed here).
+# DisableSandbox: the container has no user namespace for pacman's download sandbox (tests/integration do the same).
+rc_pacman_conf() { # <channel>
+  cat <<EOF
+[options]
+HoldPkg = pacman glibc
+Architecture = auto
+CheckSpace
+ParallelDownloads = 5
+DisableSandbox
+SigLevel = Required DatabaseOptional
+LocalFileSigLevel = Optional
+[omarchy]
+Server = https://pkgs.omarchy.org/$1/\$arch
+[core]
+Include = /etc/pacman.d/mirrorlist
+[extra]
+Include = /etc/pacman.d/mirrorlist
+EOF
+}
+
+# The channel's Arch mirror (default/pacman/mirrorlist-<channel> at v4.0.4 and v4.0.6: one line).
+rc_mirrorlist() { # <channel>
+  printf 'Server = https://%s-mirror.omarchy.org/$repo/os/$arch\n' "$1"
+}
 
 # The packages the container installs: the PKGBUILD's global makedepends and the depends of package_grassfield-desktop(),
 # version constraints stripped, Grassfield's own packages left out (they are built from this tree), sorted and unique.
@@ -93,11 +126,11 @@ rc_verdict() { # <result.tsv> <wanted steps, comma-separated>
   case $verdict in PASS) return 0 ;; FAIL) return 1 ;; *) return 2 ;; esac
 }
 
-# summary.json: the record of a run (ADR-0033 f's watch job reads it: the rc toolkit, what moved, the steps, the verdict).
-rc_summary() { # <logs dir> <commit> <mirror> <wanted steps> <verdict> [uncommitted paths]
+# summary.json: the record of a run (ADR-0033 f's watch job reads it: the channel's toolkit, what moved, the steps, the verdict).
+rc_summary() { # <logs dir> <commit> <channel> <wanted steps> <verdict> [uncommitted paths]
   python3 -I - "$@" <<'PY'
 import json, os, sys
-logs, commit, mirror, wanted, verdict = sys.argv[1:6]
+logs, commit, channel, wanted, verdict = sys.argv[1:6]
 dirty = int(sys.argv[6]) if len(sys.argv) > 6 else 0
 
 def pairs(name):
@@ -119,16 +152,19 @@ if os.path.exists(path):
         parts = line.rstrip("\n").split("\t")
         if len(parts) >= 3:
             steps[parts[0]] = {"result": parts[1], "seconds": int(parts[2]) if parts[2].isdigit() else None, "note": parts[3] if len(parts) > 3 else ""}
-snapshot = ""
-path = os.path.join(logs, "snapshot.txt")
-if os.path.exists(path):
-    snapshot = open(path, encoding="utf-8", errors="replace").read().strip()
+def lines(name):
+    path = os.path.join(logs, name)
+    if not os.path.exists(path):
+        return []
+    return [l.strip() for l in open(path, encoding="utf-8", errors="replace") if l.strip()]
+
 record = {
     "v": 1,
     "commit": commit,
     "uncommitted_paths": dirty,
-    "mirror": mirror,
-    "snapshot": snapshot,
+    "channel": channel,
+    "snapshot": lines("snapshot.txt"),
+    "sources": lines("sources.txt"),
     "toolkit": toolkit,
     "stable": stable,
     "moved": {name: {"stable": stable[name], "rc": toolkit[name]} for name in sorted(toolkit) if name in stable and stable[name] != toolkit[name]},
@@ -149,6 +185,10 @@ selftest() {
   expect() { # <name> <got> <want>
     if [[ $2 == "$3" ]]; then echo "  ok   $1"; else echo "  FAIL $1: got '$2', want '$3'"; fails=$((fails + 1)); fi
   }
+  expect "pacman.conf of the rc channel: [omarchy] first (pkgs.omarchy.org/rc), then core and extra from the mirrorlist, packages signed" \
+    "$(rc_pacman_conf rc | grep -E '^\[|^Server|^SigLevel' | paste -sd';' -)" \
+    '[options];SigLevel = Required DatabaseOptional;[omarchy];Server = https://pkgs.omarchy.org/rc/$arch;[core];[extra]'
+  expect "the mirrorlist of the stable channel" "$(rc_mirrorlist stable)" 'Server = https://stable-mirror.omarchy.org/$repo/os/$arch'
   cat >"$work/PKGBUILD" <<'EOF'
 pkgname=(grassfield-desktop grassfield-store)
 makedepends=(cmake ninja  # a tool the plugin needs
@@ -183,55 +223,69 @@ EOF
   expect "verdict: a failed step beside a missing one stays inconclusive (nothing was proven)" \
     "$(printf 'lint\tFAIL(1)\t3\t\n' >"$work/fm.tsv"; verdict_of "$work/fm.tsv" lint,test)" "INCONCLUSIVE 2"
   cp "$work/all.tsv" "$work/result.tsv"
-  echo "https://rc-mirror.omarchy.org extra.db of Sat, 01 Nov 2026 00:00:00 GMT" >"$work/snapshot.txt"
-  rc_summary "$work" abc123 https://rc-mirror.omarchy.org lint,test,plugin PASS 2
-  expect "the record: valid JSON with the moved packages and the verdict" \
-    "$(python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["verdict"], sorted(r["moved"]), r["steps"]["test"]["seconds"], r["uncommitted_paths"], r["toolkit"]["kio"])' "$work/summary.json")" \
-    "PASS ['hyprland', 'qt6-base'] 600 2 6.31.0-1"
-  if ((fails == 0)); then echo "rc-toolkit selftest: PASS (10 cases)"; else echo "rc-toolkit selftest: FAIL ($fails)"; fi
+  printf 'extra.db https://rc-mirror.omarchy.org Thu, 22 Oct 2026 02:42:04 GMT\nomarchy.db https://pkgs.omarchy.org/rc unknown date\n' >"$work/snapshot.txt"
+  printf 'https://pkgs.omarchy.org/rc/x86_64/quickshell-0.3.2.r7.g2b4501a-1-x86_64.pkg.tar.zst\n' >"$work/sources.txt"
+  rc_summary "$work" abc123 rc lint,test,plugin PASS 2
+  expect "the record: valid JSON with the channel, the moved packages, the sources and the verdict" \
+    "$(python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["verdict"], r["channel"], sorted(r["moved"]), r["steps"]["test"]["seconds"], r["uncommitted_paths"], r["toolkit"]["kio"], len(r["snapshot"]), r["sources"][0].rsplit("/", 1)[1][:10])' "$work/summary.json")" \
+    "PASS rc ['hyprland', 'qt6-base'] 600 2 6.31.0-1 2 quickshell"
+  if ((fails == 0)); then echo "rc-toolkit selftest: PASS (12 cases)"; else echo "rc-toolkit selftest: FAIL ($fails)"; fi
   return $((fails > 0))
 }
 
 # --- inside the container ---------------------------------------------------------------------------------------------------
 
-inside() { # <mirror> <wanted steps>
-  local mirror=$1 wanted=$2
-  [[ -f /.dockerenv && $(id -u) == 0 && -f /src/packaging/arch/PKGBUILD && -d /out ]] ||
-    { echo "refused: runs only as root inside a throwaway container (/src, /out)"; exit 2; }
+inside() { # <channel> <wanted steps>
+  local channel=$1 wanted=$2
+  [[ -f /.dockerenv && $(id -u) == 0 && -f /src/packaging/arch/PKGBUILD && -d /out && -f /out/snapshot.tar ]] ||
+    { echo "refused: runs only as root inside a throwaway container (/src, /out with the snapshot)"; exit 2; }
   local log=/out/setup.log t0 rc step name
-  : >"$log"
+  : >$log
   quiet() { "$@" >>"$log" 2>&1; }
   setup_fail() { echo "rc-toolkit: setup failed: $1 (see setup.log)"; tail -n 15 "$log"; exit 2; }
   want() { [[ ",$wanted," == *",$1,"* ]]; }
+  # Files left in /out belong to whoever owns it on the host, not to root.
+  trap 'chown -R "$(stat -c %u:%g /out)" /out 2>/dev/null' EXIT
 
-  echo "rc-toolkit: the channel's snapshot ($mirror)"
-  sed -i 's/^#\?DisableSandbox.*//; /^\[options\]/a DisableSandbox' /etc/pacman.conf
-  printf 'Server = %s/$repo/os/$arch\n' "$mirror" >/etc/pacman.d/mirrorlist
+  echo "rc-toolkit: an Omarchy machine of the $channel channel"
+  rc_pacman_conf "$channel" >/etc/pacman.conf
+  rc_mirrorlist "$channel" >/etc/pacman.d/mirrorlist
   quiet pacman-key --init && quiet pacman-key --populate archlinux || setup_fail "pacman-key"
-  # The whole base to the snapshot: an rc machine's package set, the image's newer packages brought down to it.
-  quiet pacman -Syuu --noconfirm || setup_fail "pacman -Syuu from $mirror"
-  { printf '%s extra.db of ' "$mirror"; curl -fsSI "$mirror/extra/os/x86_64/extra.db" 2>/dev/null | awk 'tolower($1) == "last-modified:" { $1 = ""; sub(/^ /, ""); print; found = 1 } END { if (!found) print "unknown date" }' | tr -d '\r'; } >/out/snapshot.txt
-  cat /out/snapshot.txt
-
-  echo "rc-toolkit: the toolkit and the build tools"
-  mapfile -t deps < <(rc_deps /src/packaging/arch/PKGBUILD)
-  ((${#deps[@]} > 0)) || setup_fail "no dependency read from the PKGBUILD"
-  # Besides the PKGBUILD's: the suites' private buses and PyGObject fakes, a font for offscreen text, the portal frontend the
-  # file chooser test drives, git for the snapshot, jq for the gate tooling, gcc for the direct builds and their sanitizers.
-  quiet pacman -S --needed --noconfirm "${deps[@]}" git jq python python-gobject dbus gcc xdg-desktop-portal ttf-dejavu ||
-    setup_fail "pacman -S of the toolkit"
-  pacman -Q "${TOOLKIT[@]}" 2>/dev/null >/out/toolkit.txt
-  # The lint's reference (T-10): how many qmltypes of this Quickshell the lint sees.
-  echo "quickshell-qmltypes $(find /usr/lib/qt6/qml/Quickshell -name '*.qmltypes' 2>/dev/null | wc -l)" >>/out/toolkit.txt
-  sed 's/^/  /' /out/toolkit.txt
+  curl -fsS "https://keys.openpgp.org/vks/v1/by-fingerprint/$OMARCHY_KEY" -o /tmp/omarchy.asc && quiet pacman-key --add /tmp/omarchy.asc &&
+    quiet pacman-key --lsign-key "$OMARCHY_KEY" || setup_fail "Omarchy's public key from keys.openpgp.org"
+  # The whole base to the channel's snapshot, Omarchy's keyring with it: the package set of a machine on that channel.
+  quiet pacman -Syuu --noconfirm omarchy-keyring || setup_fail "pacman -Syuu on the $channel channel"
+  {
+    for db in "extra.db https://${channel}-mirror.omarchy.org/extra/os/x86_64/extra.db" "omarchy.db https://pkgs.omarchy.org/$channel/x86_64/omarchy.db"; do
+      set -- $db
+      printf '%s %s ' "$1" "${2%/x86_64/*}"
+      curl -fsSI "$2" 2>/dev/null | awk 'tolower($1) == "last-modified:" { $1 = ""; sub(/^ /, ""); print; found = 1 } END { if (!found) print "unknown date" }' | tr -d '\r'
+    done
+  } >/out/snapshot.txt
+  sed 's/^/  /' /out/snapshot.txt
 
   echo "rc-toolkit: the snapshot of HEAD, as an unprivileged user"
   useradd -m builder || setup_fail "useradd"
-  mkdir -p /work/src && git -C /src archive --format=tar HEAD | tar -x -C /work/src || setup_fail "git archive"
+  mkdir -p /work/src && tar -x -C /work/src -f /out/snapshot.tar || setup_fail "the snapshot"
+  rm -f /out/snapshot.tar
   chown -R builder:builder /work
   as_builder() { runuser -u builder -- env HOME=/home/builder PATH=/usr/bin:/usr/local/bin "$@"; }
   (cd /work/src && as_builder git init -q -b main && as_builder git add -A &&
     as_builder git -c user.name=rc-toolkit -c user.email=rc-toolkit@localhost commit -q -m "snapshot") >>"$log" 2>&1 || setup_fail "git init of the snapshot"
+
+  echo "rc-toolkit: the toolkit and the build tools"
+  mapfile -t deps < <(rc_deps /work/src/packaging/arch/PKGBUILD)
+  ((${#deps[@]} > 0)) || setup_fail "no dependency read from the PKGBUILD"
+  # Besides the PKGBUILD's: the suites' private buses and PyGObject fakes, a font for offscreen text, git for the snapshot,
+  # jq for the gate tooling, gcc for the direct builds and their sanitizers.
+  quiet pacman -S --needed --noconfirm "${deps[@]}" git jq python python-gobject dbus gcc ttf-dejavu ||
+    setup_fail "pacman -S of the toolkit"
+  pacman -Q "${TOOLKIT[@]}" 2>/dev/null >/out/toolkit.txt
+  # The lint's reference (T-10): how many qmltypes of this Quickshell the lint sees.
+  echo "quickshell-qmltypes $(find /usr/lib/qt6/qml/Quickshell -name '*.qmltypes' 2>/dev/null | wc -l)" >>/out/toolkit.txt
+  # Which repository served each (Omarchy's own Quickshell build, Arch's Hyprland and Qt): the package files' URLs.
+  pacman -Sp --noconfirm "${TOOLKIT[@]}" 2>/dev/null | grep -E '^https?://' >/out/sources.txt
+  sed 's/^/  /' /out/toolkit.txt
 
   : >/out/result.tsv
   run_step() { # <name> <command...>: as builder, in the snapshot, logged to /out/<name>.log; result.tsv gets one line
@@ -257,17 +311,16 @@ inside() { # <mirror> <wanted steps>
   run_step lint scripts/dev/qmllint.sh
   run_step test scripts/dev/test.sh --layer data,logic,headless
   run_step plugin sh -c 'cmake -S compositor -B compositor/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build compositor/build && compositor/build/grassfield-compositor-tests --gtest_brief=1'
-  chmod -R a+rX /out 2>/dev/null
   exit 0
 }
 
 # --- outside ---------------------------------------------------------------------------------------------------------------
 
-mirror=$MIRROR_DEFAULT only="" logs="" mode=run
+channel=$CHANNEL_DEFAULT only="" logs="" mode=run
 while (($#)); do
   case $1 in
     --only) shift; only=$1 ;;
-    --mirror) shift; mirror=$1 ;;
+    --channel) shift; channel=$1 ;;
     --logs) shift; logs=$1 ;;
     --selftest) mode=selftest ;;
     --inside) mode=inside ;;
@@ -276,13 +329,14 @@ while (($#)); do
   esac
   shift
 done
+[[ $channel == rc || $channel == stable ]] || { echo "rc-toolkit: --channel takes rc or stable, not '$channel'" >&2; exit 2; }
 wanted=${only:-$(IFS=,; echo "${STEPS[*]}")}
 for s in ${wanted//,/ }; do
   [[ " ${STEPS[*]} " == *" $s "* ]] || { echo "rc-toolkit: unknown step '$s' (${STEPS[*]})" >&2; exit 2; }
 done
 case $mode in
   selftest) selftest; exit $? ;;
-  inside) inside "$mirror" "$wanted" ;;
+  inside) inside "$channel" "$wanted" ;;
 esac
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
@@ -293,30 +347,36 @@ dirty=$(git -C "$root" status --porcelain | wc -l)
 [[ -n $logs ]] || logs=$root/.dev/rc-toolkit/$(date +%Y%m%d-%H%M%S)
 mkdir -p "$logs" || exit 2
 logs=$(realpath "$logs")
-# This machine's toolkit, when pacman knows these packages (an Omarchy machine): what the rc run is compared with.
+# The snapshot is made here (git on a mounted repository would refuse another owner's tree, and a worktree's .git points
+# outside the mount); the container unpacks it and removes it.
+git -C "$root" archive --format=tar HEAD >"$logs/snapshot.tar" || { echo "rc-toolkit: git archive HEAD failed" >&2; exit 2; }
+# This machine's toolkit, when pacman knows these packages (an Omarchy machine): what the channel's run is compared with.
 pacman -Q "${TOOLKIT[@]}" 2>/dev/null >"$logs/stable.txt" || true
-echo "rc-toolkit: commit $commit ($dirty uncommitted path(s) are NOT in the snapshot); mirror $mirror; steps $wanted; report in $logs"
+echo "rc-toolkit: commit $commit ($dirty uncommitted path(s) are NOT in the snapshot); channel $channel; steps $wanted; report in $logs"
 args=(--rm --network host -v "$root:/src:ro" -v "$logs:/out")
 [[ -n ${GRASSFIELD_TEST_CA:-} ]] && args+=(-v "$(realpath "$GRASSFIELD_TEST_CA"):/etc/ssl/certs/ca-certificates.crt:ro")
 for v in HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy; do [[ -n ${!v:-} ]] && args+=(-e "$v"); done
-docker run "${args[@]}" "$IMAGE" bash /src/scripts/gates/rc-toolkit.sh --inside --mirror "$mirror" --only "$wanted"
+docker run "${args[@]}" "$IMAGE" bash /src/scripts/gates/rc-toolkit.sh --inside --channel "$channel" --only "$wanted"
 container_rc=$?
+rm -f "$logs/snapshot.tar"
 
 echo
 printf '%-8s %-9s %6s  %s\n' step result sec note
-while IFS=$'\t' read -r step result secs note; do
-  printf '%-8s %-9s %6s  %s\n' "$step" "$result" "$secs" "$note"
-done <"$logs/result.tsv" 2>/dev/null
-echo "toolkit ($(cat "$logs/snapshot.txt" 2>/dev/null || echo "snapshot unknown")):"
-sed 's/^/  /' "$logs/toolkit.txt" 2>/dev/null
+if [[ -f $logs/result.tsv ]]; then
+  while IFS=$'\t' read -r step result secs note; do
+    printf '%-8s %-9s %6s  %s\n' "$step" "$result" "$secs" "$note"
+  done <"$logs/result.tsv"
+fi
+echo "toolkit of the $channel channel:"
+sed 's/^/  /' "$logs/snapshot.txt" "$logs/toolkit.txt" 2>/dev/null
 if [[ -s $logs/stable.txt ]]; then
   moved=$(rc_moved "$logs/toolkit.txt" "$logs/stable.txt")
-  echo "moved against this machine: ${moved:+$'\n'}${moved:-nothing (the same versions)}"
+  if [[ -n $moved ]]; then echo "moved against this machine:"; sed 's/^/  /' <<<"$moved"; else echo "moved against this machine: nothing (the same versions)"; fi
 else
   echo "moved against this machine: not compared (pacman does not know these packages here)"
 fi
 verdict=$(rc_verdict "$logs/result.tsv" "$wanted")
-rc_summary "$logs" "$commit" "$mirror" "$wanted" "$verdict" "$dirty"
+rc_summary "$logs" "$commit" "$channel" "$wanted" "$verdict" "$dirty"
 echo "report: $logs (summary.json for the watch job)"
 case $verdict in
   PASS) echo "rc-toolkit: PASS${only:+ (partial: only $only)}"; exit 0 ;;
