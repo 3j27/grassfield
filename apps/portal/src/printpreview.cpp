@@ -161,6 +161,7 @@ Spooled spoolDocument(int fd, const QString &folder, int idleMs, qint64 maxBytes
         }
         if (hooks.budget && !hooks.budget->take(bytes)) {
             out.error = QStringLiteral("the documents waiting to print take all the room they may");
+            out.overBudget = true;
             return false;
         }
         out.reserved += bytes;

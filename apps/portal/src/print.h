@@ -30,6 +30,7 @@
 #include <QVariantMap>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <tuple>
@@ -139,8 +140,13 @@ signals:
     // Save as PDF's answer: the file chosen (a local file:// URI), or none.
     void pdfChosen(int id, const QString &uri);
     void pdfCancelled(int id);
-    // A document sent first is read (its pages; 0 when they cannot be drawn: no preview, the document still prints).
+    // A document sent first is kept: the sheet may print, save or open it (its preview comes apart: documentReady).
+    void documentRead(int id);
+    // Its pages are counted (0 when they cannot be drawn: no preview, the document still prints).
     void documentReady(int id, int pages);
+    // The paper of its first page, as the printer lists it, found after the printer's options were read: the sheet takes it
+    // unless the user chose a paper (print::toQml(Media)).
+    void documentPaper(int id, const QVariantMap &media);
     // A page of its preview: an image://printpreview/ URL, "" when it could not be drawn.
     void pageRendered(int id, int page, const QString &source);
     // The sheet of request `id` goes now (a document's job is being sent; the request ends when it is).
@@ -224,6 +230,8 @@ private:
     void openInPreview(int id, const Ticket &ticket, int fd);
     // Print with no token: the sheet over the document `fd` (taken), read into a private file meanwhile.
     void showDocument(int id, const QString &appId, const QString &parentWindow, const QString &title, int fd);
+    // A kept document's page count and first page's size, from the child that draws it (off this thread).
+    void inspectDocument(int id, const std::function<bool()> &stopped);
     void startRender(int id, int page, int width, int height);
     // The choices with the preset they name applied (Default Settings: the application's and the printer's; Last Used Settings:
     // those, then the last print's), what belongs to the document kept as chosen.

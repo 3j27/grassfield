@@ -1476,22 +1476,30 @@ TEST_F(PrintTest, ADocumentSentFirstGetsTheSheetWithItsPreview)
     // The printer's own default paper is A5: the document's A4 wins.
     system.officeDefault = QStringLiteral("iso_a5_148x210mm");
     QList<QPair<int, int>> ready;
+    QList<int> kept;
+    QList<QVariantMap> papers;
     QList<std::tuple<int, int, QString>> drawn;
     QList<int> dismissed;
     QObject::connect(printer.get(), &Print::documentReady, printer.get(), [&ready](int id, int pages) { ready.append({id, pages}); });
+    QObject::connect(printer.get(), &Print::documentRead, printer.get(), [&kept](int id) { kept.append(id); });
+    QObject::connect(printer.get(), &Print::documentPaper, printer.get(), [&papers](int, const QVariantMap &media) { papers.append(media); });
     QObject::connect(printer.get(), &Print::pageRendered, printer.get(),
                      [&drawn](int id, int page, const QString &source) { drawn.append({id, page, source}); });
     QObject::connect(printer.get(), &Print::dismissed, printer.get(), [&dismissed](int id) { dismissed.append(id); });
     const int imagesBefore = PreviewImages::size();
     const QByteArray pdf = twoPages();
     auto reply = printDocument(kHandle, pdf, {});
-    ASSERT_TRUE(waitFor([&] { return !chosen.isEmpty(); }, 15000));
+    ASSERT_TRUE(waitFor([&] { return !chosen.isEmpty() && !ready.isEmpty(); }, 15000));
     ASSERT_EQ(opened.size(), 1);
     const int id = opened.first().first;
     EXPECT_TRUE(opened.first().second.value("document").toBool());
     EXPECT_TRUE(opened.first().second.value("canSavePdf").toBool()) << "the document is a PDF";
+    EXPECT_EQ(kept, QList<int>{id}) << "kept, so printable, before (or whatever) its preview";
     EXPECT_EQ(ready, (QList<QPair<int, int>>{{id, 2}}));
-    EXPECT_EQ(chosen.first().choices.value("media").toMap().value("name").toString(), QStringLiteral("iso_a4_210x297mm")) << "the document's paper";
+    // The document's paper: chosen with the printer's options when its size came first, else suggested to the sheet after.
+    const QString paper = papers.isEmpty() ? chosen.first().choices.value("media").toMap().value("name").toString()
+                                           : papers.last().value("name").toString();
+    EXPECT_EQ(paper, QStringLiteral("iso_a4_210x297mm")) << "the document's paper over the printer's A5";
     EXPECT_TRUE(gtk.calls.isEmpty());
 
     printer->renderPage(id, 0, 120, 160);
@@ -1768,9 +1776,18 @@ TEST_F(PrintTest, DocumentsWaitingShareOneBudget)
     auto first = printDocument(kHandle, pdf, {});
     ASSERT_TRUE(waitFor([&] { return !chosen.isEmpty(); }, 15000));
     const int firstId = chosen.last().id;
+    // Over the budget the first one left: a file read in place goes to x-d-p-gtk as it came (ADR-0035 6-28), a pipe fails.
     auto second = printDocument(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/second"), pdf, {});
-    ASSERT_TRUE(waitFor([&] { return second->done; }, 15000));
-    EXPECT_EQ(second->response, 2u) << "over the budget the first one left";
+    ASSERT_TRUE(waitFor([&] { return gtk.calls.size() == 1; }, 15000));
+    EXPECT_EQ(gtk.calls.first(), QStringLiteral("Print /org/freedesktop/portal/desktop/request/1_1/second token 0 fd valid"));
+    EXPECT_EQ(gtk.offsets, QList<qint64>{0}) << "as it came";
+    gtkBus->send(gtk.held.createReply(QVariantList{QVariant::fromValue(0u), QVariantMap{}}));
+    ASSERT_TRUE(waitFor([&] { return second->done; }));
+    EXPECT_EQ(second->response, 0u) << "x-d-p-gtk's answer, relayed";
+    auto piped = printPipe(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/piped"), pdf, {});
+    ASSERT_TRUE(waitFor([&] { return piped->done; }, 15000));
+    EXPECT_EQ(piped->response, 2u) << "a pipe read already cannot go on";
+    EXPECT_EQ(gtk.calls.size(), 1);
     EXPECT_TRUE(printer->answer(firstId, 1));
     ASSERT_TRUE(waitFor([&] { return first->done; }));
     const qsizetype before = chosen.size();
@@ -1837,6 +1854,24 @@ TEST_F(PrintTest, OpenInPreviewKeepsItsCopiesInBounds)
     EXPECT_TRUE(QFileInfo(QDir(base).filePath(QStringLiteral("print-link"))).isSymLink()) << "a link is not a copy's folder";
     EXPECT_TRUE(precious.exists());
 
+    // A name with dollar signs (systemd-run, and uwsm's own when it starts services, would expand ${NAME}): none in the copy's
+    // name, which stays within 255 bytes (each sign becomes a 3-byte character before the cap).
+    out.remove();
+    auto dollars = preparedAnswer(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/dollars"), {{QStringLiteral("preview"), true}},
+                                  {{QStringLiteral("output-basename"), QStringLiteral("${HOME}") + QString(120, QLatin1Char('$'))}});
+    ASSERT_EQ(dollars->response, 0u);
+    auto dollarJob = printWith(QStringLiteral("/org/freedesktop/portal/desktop/request/1_1/dollarjob"), dollars, "%PDF-1.7 dollars");
+    ASSERT_TRUE(waitFor([&] { return dollarJob->done; }));
+    EXPECT_EQ(dollarJob->response, 0u);
+    QFile second(launched);
+    ASSERT_TRUE(waitFor([&] { return second.exists(); }));
+    ASSERT_TRUE(second.open(QIODevice::ReadOnly));
+    const QString dollarCopy = QString::fromUtf8(second.readAll()).trimmed();
+    EXPECT_FALSE(QFileInfo(dollarCopy).fileName().contains(QLatin1Char('$'))) << dollarCopy.toStdString();
+    EXPECT_TRUE(QFileInfo(dollarCopy).fileName().startsWith(QString(QChar(0xFF04)) + QStringLiteral("{HOME}")));
+    EXPECT_LE(QFile::encodeName(QFileInfo(dollarCopy).fileName()).size(), 255);
+    EXPECT_TRUE(QFileInfo(dollarCopy).isFile());
+
     // systemd-run: --expand-environment=no where systemd knows it, uwsm-app where there is one.
     EXPECT_EQ(Print::sessionPreviewCommand(true, true),
               (QStringList{QStringLiteral("systemd-run"), QStringLiteral("--user"), QStringLiteral("--collect"), QStringLiteral("--quiet"),
@@ -1844,6 +1879,24 @@ TEST_F(PrintTest, OpenInPreviewKeepsItsCopiesInBounds)
                            QStringLiteral("grassfield-preview"), QStringLiteral("--")}));
     EXPECT_FALSE(Print::sessionPreviewCommand(false, false).contains(QStringLiteral("--expand-environment=no")));
     EXPECT_FALSE(Print::sessionPreviewCommand(false, false).contains(QStringLiteral("uwsm-app")));
+}
+
+// Open in Preview's old copies go when the portal starts too, not only at the next copy (the counter-review of step 6b, NIT).
+TEST_F(PrintTest, OldCopiesGoWhenThePortalStarts)
+{
+    const QString base = dir.filePath(QStringLiteral("startup"));
+    ASSERT_TRUE(QDir().mkpath(base));
+    ASSERT_EQ(::chmod(QFile::encodeName(base).constData(), 0700), 0);
+    const QString old = QDir(base).filePath(QStringLiteral("print-old000"));
+    const QString recent = QDir(base).filePath(QStringLiteral("print-new000"));
+    ASSERT_TRUE(QDir().mkpath(old));
+    ASSERT_TRUE(QDir().mkpath(recent));
+    const qint64 then = QDateTime::currentSecsSinceEpoch() - 3 * 24 * 3600;
+    const struct timespec times[2] = {{time_t(then), 0}, {time_t(then), 0}};
+    ASSERT_EQ(::utimensat(AT_FDCWD, QFile::encodeName(old).constData(), times, 0), 0);
+    make([&base](Print::Options &o) { o.previewFolder = base; });
+    EXPECT_TRUE(waitFor([&] { return !QFileInfo::exists(old); })) << "three days old";
+    EXPECT_TRUE(QFileInfo::exists(recent));
 }
 
 // The user's own default (lpoptions) reaches the job when it differs from the queue's (the counter-review of step 6b, MINOR 1:

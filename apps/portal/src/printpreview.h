@@ -73,6 +73,8 @@ struct Spooled {
     QString error;
     // What it took of the budget (the owner gives it back when the file goes).
     qint64 reserved = 0;
+    // Not kept because the budget was full: a file read in place can still go on to x-d-p-gtk as it came (ADR-0035 6-28).
+    bool overBudget = false;
 };
 
 // Reads the document at `fd` (taken: closed when done) into an unlinked file of its own in `folder` (O_TMPFILE, mode 0600; the

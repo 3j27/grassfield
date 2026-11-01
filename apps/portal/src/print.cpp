@@ -221,6 +221,14 @@ Print::Print(const QDBusConnection &bus, PrintSystem *system, const Options &opt
     , m_options(options)
     , m_budget(std::make_shared<SpoolBudget>(options.spoolBudget))
 {
+    // Open in Preview's old copies go when the portal starts too, not only at the next copy (counter-review of step 6b, NIT).
+    if (!m_options.previewFolder.isEmpty()) {
+        const QString base = m_options.previewFolder;
+        QThread *pruner = QThread::create([base] { removeOldCopies(base, QDateTime::currentSecsSinceEpoch()); });
+        pruner->setParent(this);
+        connect(pruner, &QThread::finished, pruner, &QObject::deleteLater);
+        pruner->start();
+    }
 }
 
 Print::~Print()
@@ -422,8 +430,14 @@ bool Print::answer(int id, int response, const QVariantMap &choices)
     t.capabilities = it->capabilities;
     t.choices = c;
     t.document = it->document;
-    t.documentName = print::pdfFileName({it->settings.value(QStringLiteral("output-basename")).toString(), it->document ? it->title : QString(),
-                                  appName(it->appId), it->title});
+    // The copy Open in Preview opens is named after the document, never with a dollar sign: systemd-run, and uwsm's own when it
+    // starts applications as services, would expand ${NAME} in it (counter-review of step 6b, NIT); replaced before the
+    // 255-byte cap, so the name stays within it.
+    QStringList names{it->settings.value(QStringLiteral("output-basename")).toString(), it->document ? it->title : QString(), appName(it->appId),
+                      it->title};
+    for (QString &name : names)
+        name.replace(QLatin1Char('$'), QChar(0xFF04));
+    t.documentName = print::pdfFileName(names);
     if (!c.outputUri.isEmpty()) {
         t.pdfFolder = it->pdfFolder;
         t.pdfName = it->pdfName;
@@ -737,10 +751,8 @@ void Print::openInPreview(int id, const Ticket &ticket, int fd)
         bool keepsArguments = true;
         if (command->isEmpty())
             *command = defaultPreviewCommand(&keepsArguments);
-        // Where systemd-run would expand ${NAME} in it, the name carries no dollar sign.
-        QString file = name;
-        if (!keepsArguments)
-            file.replace(QLatin1Char('$'), QChar(0xFF04));
+        // The name has no dollar sign already (answer()).
+        const QString file = name;
         removeOldCopies(base, QDateTime::currentSecsSinceEpoch());
         const QString folder = privateFolder(base, error.get());
         if (folder.isEmpty()) {
@@ -797,15 +809,12 @@ void Print::showDocument(int id, const QString &appId, const QString &parentWind
     m_pending.insert(id, p);
     emit opened(id, sheet);
 
-    // The document read into a private file, then its page count and first page's size (the paper it asks for) from the child
-    // that draws it: off this thread.
+    // The document read into a private file, off this thread; then, apart, its page count and first page's size (the paper it
+    // asks for) from the child that draws it: the sheet can print as soon as the document is kept, whatever the preview does
+    // (counter-review of step 6b, NIT: the preview waits its turn behind other sheets' children).
     auto spooled = std::make_shared<Spooled>();
-    auto info = std::make_shared<Rendered>();
     const QString folder = m_options.spoolFolder;
-    const int idle = m_options.fileIdleMs, deadline = m_options.renderDeadlineMs;
-    const QStringList renderer = m_options.rendererCommand.isEmpty()
-        ? QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--print-preview")}
-        : m_options.rendererCommand;
+    const int idle = m_options.fileIdleMs;
     const auto stopAll = m_stopWriting;
     SpoolHooks hooks;
     hooks.stopped = [stop, stopAll] { return stop->load() || stopAll->load(); };
@@ -815,13 +824,9 @@ void Print::showDocument(int id, const QString &appId, const QString &parentWind
         return source->compare_exchange_strong(untouched, kSourceRead);
     };
     hooks.budget = m_budget;
-    QThread *reader = QThread::create([fd, folder, idle, deadline, renderer, spooled, info, hooks] {
-        *spooled = spoolDocument(fd, folder, idle, print::kMaxDocumentBytes, hooks);
-        if (spooled->fd >= 0)
-            *info = renderPreview(renderer, spooled->fd, 0, {}, deadline, hooks.stopped);
-    });
+    QThread *reader = QThread::create([fd, folder, idle, spooled, hooks] { *spooled = spoolDocument(fd, folder, idle, print::kMaxDocumentBytes, hooks); });
     reader->setParent(this);
-    connect(reader, &QThread::finished, this, [this, id, reader, spooled, info] {
+    connect(reader, &QThread::finished, this, [this, id, reader, spooled, hooks] {
         reader->deleteLater();
         auto file = std::make_shared<SpoolFile>();
         file->fd = spooled->fd;
@@ -840,23 +845,62 @@ void Print::showDocument(int id, const QString &appId, const QString &parentWind
                 forward(id);
             return;
         }
+        if (spooled->overBudget && !spooled->consumed) {
+            // The budget is full (other documents wait): a file read in place goes to x-d-p-gtk as it came, as before step 6b,
+            // rather than fail (ADR-0035 6-28); one on a pipe cannot.
+            qWarning("grassfield-portal: the documents waiting to print take all their room; this one goes to x-d-p-gtk");
+            forward(id);
+            return;
+        }
         if (file->fd < 0) {
             qWarning("grassfield-portal: the document sent to print could not be read: %s", qPrintable(spooled->error));
             finish(id, 2, {});
             return;
         }
         p->spool = file;
-        p->pages = info->ok ? info->pages : 0;
-        if (info->ok) {
-            // The paper of its first page (portrait, in millimetres) is the one first chosen where the printer has it.
-            const double w = info->pageSize.width() * 25.4 / 72, h = info->pageSize.height() * 25.4 / 72;
-            p->pageSetup = {{QStringLiteral("Width"), std::min(w, h)}, {QStringLiteral("Height"), std::max(w, h)}};
-        }
-        qInfo("grassfield-portal: a document of %d pages to print", p->pages);
-        emit documentReady(id, p->pages);
+        emit documentRead(id);
         listPrinters(id);
+        inspectDocument(id, hooks.stopped);
     });
     reader->start();
+}
+
+void Print::inspectDocument(int id, const std::function<bool()> &stopped)
+{
+    const auto it = m_pending.find(id);
+    if (it == m_pending.end() || !it->spool)
+        return;
+    const auto spool = it->spool;
+    const int deadline = m_options.renderDeadlineMs;
+    const QStringList renderer = m_options.rendererCommand.isEmpty()
+        ? QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--print-preview")}
+        : m_options.rendererCommand;
+    auto info = std::make_shared<Rendered>();
+    QThread *inspector = QThread::create([spool, deadline, renderer, info, stopped] { *info = renderPreview(renderer, spool->fd, 0, {}, deadline, stopped); });
+    inspector->setParent(this);
+    connect(inspector, &QThread::finished, this, [this, id, inspector, info] {
+        inspector->deleteLater();
+        const auto p = m_pending.find(id);
+        if (p == m_pending.end() || !isOpen(id))
+            return;
+        p->pages = info->ok ? info->pages : 0;
+        qInfo("grassfield-portal: a document of %d pages to print", p->pages);
+        emit documentReady(id, p->pages);
+        if (!info->ok)
+            return;
+        // The paper of its first page (portrait, in millimetres) is the one first chosen where the printer has it: by the
+        // printer's options when they are read after this, by the sheet (unless the user chose a paper) when they were before.
+        const double w = info->pageSize.width() * 25.4 / 72, h = info->pageSize.height() * 25.4 / 72;
+        p->pageSetup = {{QStringLiteral("Width"), std::min(w, h)}, {QStringLiteral("Height"), std::max(w, h)}};
+        if (p->capabilities.known && !p->reading) {
+            const print::Media paper = print::findMedia(p->capabilities.media, {}, std::min(w, h), std::max(w, h));
+            if (!paper.name.isEmpty()) {
+                p->choices.media = paper;
+                emit documentPaper(id, print::toQml(paper));
+            }
+        }
+    });
+    inspector->start();
 }
 
 void Print::renderPage(int id, int page, int width, int height)
