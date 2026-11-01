@@ -347,7 +347,7 @@ widens step 3's exception; it needs the security reviewer's (opus) PASS before i
   `grassfield-update-migrate.service`, with:
   - the primary group `grassfield-update` (sysusers.d, no member), so the person's other processes cannot open the unit's
     `/proc` entries or attach to it;
-  - `NoNewPrivileges=yes`;
+  - `NoNewPrivileges=yes`, no namespace of its own (`RestrictNamespaces=yes`), its personality locked;
   - a `/tmp` of its own.
   The helper still runs no Omarchy script as root and reads no variable for itself. It reads its caller's uid and two session
   values (`WAYLAND_DISPLAY`, `HYPRLAND_INSTANCE_SIGNATURE`, checked) from `/proc`, for that unit only.
@@ -366,4 +366,6 @@ widens step 3's exception; it needs the security reviewer's (opus) PASS before i
 
 Details, the boundary, what remains (the person's own files, as in Omarchy's terminal) and the evidence are in ADR-0033
 "Step 5". Its independent opus review failed the first version (a non-administrator, and `/proc/<pid>/fd`); the conditions
-above answer it, and the re-review passed (its minors answered: the migrations' `sudo` takes root as its only target).
+above answer it, and the re-review passed (its minors answered: the migrations' `sudo` takes root as its only target). The
+integrator's opus review found no MAJOR; its required minors are answered (no namespaces in the unit; the migrations, their
+folder, the sudo and every root command root's alone).

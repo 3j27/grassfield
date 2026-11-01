@@ -324,16 +324,34 @@ download() { # package
 (umask 077 && mkdir -m 0700 -- "$work") || finish 8 "cannot make $work"
 
 # s5 (SU-M2): a program as the person, in grassfield-update-migrate.service:
-#   - the person's uid, the primary group grassfield-update (no member) and the person's own group as a supplementary one
-#     (its files stay its own); the person's other processes then cannot open the unit's /proc entries (descriptors,
-#     environment, memory) or attach to it (the step 5 review's MAJOR: a pipe of the unit could be reopened through
-#     /proc/<pid>/fd by any process of the same uid and gid);
+#   - the person's uid, the primary group grassfield-update (no member); systemd adds the person's own groups as
+#     supplementary ones (its initgroups), and its primary group explicitly, so its files stay its own. The person's other
+#     processes then cannot open the unit's /proc entries (descriptors, environment, memory) or attach to it: the kernel
+#     compares the real, effective and saved gids, not the supplementary ones (the step 5 review's MAJOR: a pipe of the
+#     unit could be reopened through /proc/<pid>/fd by any process of the same uid and gid);
+#   - no namespace of its own (RestrictNamespaces): a user namespace a migration made would belong to the person, whose
+#     other processes could then reach into it (the integrator's review, MINOR 1); its personality locked, no setuid or
+#     setgid file made;
 #   - no new privileges (no setuid program, so no real sudo or pkexec), a /tmp of its own that the root units of its sudo
 #     join (no other process can reach its temporary files), its sudo first in PATH, Omarchy's folder, the person's runtime
 #     folder and session bus, and the two session values pkexec's caller had;
-#   - standard input /dev/null, its output to $migrations (root's, 0600; read below with the log), at most 30 minutes,
-#     and every process of the unit ends with it, given 5 seconds.
+#   - standard input /dev/null, its output to $migrations (root's, 0600; read below with the log), no file written past
+#     64 MiB (/run stays bounded while it runs), at most 30 minutes, and every process of the unit ends with it, given 5
+#     seconds.
 # Its exit status.
+# A path and every folder above it, links resolved, owned by root and writable by no one else (the integrator's review,
+# MINOR 2: the unit runs the installed migrations, which nothing but root may then change).
+root_alone() { # path
+  local p owner mode
+  p=$(realpath -e -- "$1" 2>/dev/null) || return 1
+  while :; do
+    read -r owner mode < <(stat -c '%u %a' -- "$p" 2>/dev/null) || return 1
+    [[ $owner == 0 && $mode =~ ^[0-7]{3,4}$ ]] && (((8#$mode & 8#022) == 0)) || return 1
+    [[ $p == / ]] && return 0
+    p=${p%/*}
+    [[ -n $p ]] || p=/
+  done
+}
 migrations=$GU_DIR/$op.migrations
 migrate_unit() { # program [argument...]
   local env=(--setenv=PATH="$GU_SUDO_DIR:/usr/share/omarchy/bin:/usr/bin" --setenv=OMARCHY_PATH=/usr/share/omarchy
@@ -343,7 +361,8 @@ migrate_unit() { # program [argument...]
   (umask 077 && : >>"$migrations") && [[ -f $migrations && ! -L $migrations ]] || return 1
   systemd-run --unit="$GU_MIGRATE_UNIT" --description="Grassfield Software Update: Omarchy's migrations" --collect --quiet \
     --wait --service-type=exec --expand-environment=no --uid="$caller_uid" --gid="$GU_MIGRATE_GROUP" \
-    -p SupplementaryGroups="$caller_gid" -p NoNewPrivileges=yes -p PrivateTmp=yes -p RuntimeMaxSec=30min \
+    -p SupplementaryGroups="$caller_gid" -p NoNewPrivileges=yes -p RestrictNamespaces=yes -p LockPersonality=yes \
+    -p RestrictSUIDSGID=yes -p PrivateTmp=yes -p LimitFSIZE=64M -p RuntimeMaxSec=30min \
     -p TimeoutStopSec=5s -p KillMode=control-group -p 'WorkingDirectory=~' -p StandardInput=null \
     -p StandardOutput=append:"$migrations" -p StandardError=append:"$migrations" "${env[@]}" -- "$@" 9<&-
 }
@@ -556,6 +575,8 @@ if ((${#pending[@]})); then
       why="the group $GU_MIGRATE_GROUP is missing, has members or a password, or is the person's own"
     elif [[ ! -f $GU_RULE || -L $GU_RULE || ! -x $GU_SUDO_DIR/sudo || -L $GU_SUDO_DIR/sudo ]]; then
       why="Grassfield's sudo for migrations is not installed"
+    elif ! root_alone /usr/share/omarchy/migrations || ! root_alone "$GU_SUDO_DIR/sudo"; then
+      why="Omarchy's migrations folder or Grassfield's sudo is not root's alone"
     elif ! migrate_unit "$GU_SUDO_DIR/sudo" -n /usr/bin/true; then
       why="the trial sudo through the migrations' unit failed"
     fi
@@ -702,6 +723,19 @@ progress finishing
 # then covers their output too. A failure leaves the failed one and those after it pending: the runner sees them.
 if ((migrate_here)); then
   mapfile -t ordered < <(printf '%s\n' "${!seen[@]}" | sort)
+  # The installed migrations, as the transaction left them: each a regular file, root's alone (MINOR 2). Otherwise none
+  # runs here; the runner then runs them without root, and what needs it stays pending for Omarchy's terminal.
+  for name in "${ordered[@]}"; do
+    path=/usr/share/omarchy/migrations/$name
+    [[ -e $path || -L $path ]] || continue
+    if [[ ! -f $path || -L $path ]] || ! root_alone "$path"; then
+      say "$path is not root's alone: no migration runs with root"
+      migrate_here=0
+      break
+    fi
+  done
+fi
+if ((migrate_here)); then
   say "Omarchy's migrations of this update as $caller_name, their sudo commands as root (SU-M2): ${ordered[*]}"
   migrate_unit /usr/bin/bash -c "$GU_MIGRATE_LOOP" grassfield-migrate "${ordered[@]}" ||
     say "a migration failed: it stays pending, Omarchy's terminal update finishes it"

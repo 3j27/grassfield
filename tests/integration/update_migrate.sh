@@ -63,6 +63,9 @@ fi
 [[ -f /.dockerenv && $(id -u) == 0 && -f /src/packaging/pacman/grassfield-update-sudo && -d /omarchy/bin && -d /run/systemd/system ]] ||
   { echo "refused: runs only as root inside a throwaway container run by systemd (/src, /omarchy)"; exit 2; }
 
+# docker exec runs with umask 0000 in a container run by systemd: the test packages would then carry world-writable
+# folders, which the helper rightly refuses (the integrator's MINOR 2). A real package's folders are 0755.
+umask 022
 W=/work
 mkdir -p "$W" && chmod 1777 "$W"
 fails=0
@@ -100,21 +103,25 @@ expect "the migrations' unit's group exists, with no member" bash -c 'getent gro
 # carol is an administrator (wheel, as Omarchy's user is); dave is not.
 useradd -m -G wheel carol
 useradd -m dave
-uid=$(id -u carol) duid=$(id -u dave)
+# erin is an administrator whose own group is the unit's (the helper refuses that).
+useradd -m -g grassfield-update -G wheel erin
+uid=$(id -u carol) duid=$(id -u dave) euid=$(id -u erin)
 # The runners have no agent to ask the password through in a container: polkit lets carol's and dave's through (an
 # administrator's password, typed for dave's in a real session; the dialog is the owner's L2); the rule under test is the
 # packaged one.
 cat >/etc/polkit-1/rules.d/50-grassfield-test.rules <<'EOF'
 polkit.addRule(function(action, subject) {
-  if (action.id == "org.grassfield.packages.update-system" && (subject.user == "carol" || subject.user == "dave")) return polkit.Result.YES;
+  if (action.id == "org.grassfield.packages.update-system" && (subject.user == "carol" || subject.user == "dave" || subject.user == "erin")) return polkit.Result.YES;
   return polkit.Result.NOT_HANDLED;
 });
 EOF
 systemctl restart polkit
 cp /var/cache/pacman/pkg/archlinux-keyring-"$(ver archlinux-keyring)"-any.pkg.tar.zst "$W/keyring.pkg.tar.zst" ||
   { echo "FAIL: the installed archlinux-keyring's package file is not in the cache"; exit 1; }
-mkdir -p "/run/user/$uid" "/run/user/$duid" && chown carol: "/run/user/$uid" && chown dave: "/run/user/$duid" &&
-  chmod 700 "/run/user/$uid" "/run/user/$duid"
+mkdir -p "/run/user/$uid" "/run/user/$duid" "/run/user/$euid" && chown carol: "/run/user/$uid" && chown dave: "/run/user/$duid" &&
+  chown erin: "/run/user/$euid" && chmod 700 "/run/user/$uid" "/run/user/$duid" "/run/user/$euid"
+# A command in a root-owned folder that others can write: the migrations' sudo refuses it.
+install -d -m 775 /usr/local/gu-gw && printf '#!/bin/sh\necho group-writable\n' >/usr/local/gu-gw/gu-x && chmod 755 /usr/local/gu-gw/gu-x
 
 say "the channel: the migrations' sudo inside grassfield-update-migrate.service (the helper's properties)"
 # The unit as the helper's migrate_unit makes it.
@@ -123,7 +130,8 @@ in_migrate() { # [--no-nnp] [--no-wait] -- program [argument...]
   if [[ ${1-} == --no-nnp ]]; then props=(); shift; fi
   if [[ ${1-} == --no-wait ]]; then wait=(); shift; fi
   systemd-run --unit=grassfield-update-migrate --collect --quiet "${wait[@]}" --service-type=exec --expand-environment=no \
-    --uid=carol --gid=grassfield-update -p SupplementaryGroups=carol "${props[@]}" -p PrivateTmp=yes -p TimeoutStopSec=5s \
+    --uid=carol --gid=grassfield-update -p SupplementaryGroups=carol "${props[@]}" -p RestrictNamespaces=yes \
+    -p LockPersonality=yes -p RestrictSUIDSGID=yes -p PrivateTmp=yes -p LimitFSIZE=64M -p TimeoutStopSec=5s \
     -p 'WorkingDirectory=~' --setenv=PATH="/usr/lib/grassfield/update-sudo:/usr/share/omarchy/bin:/usr/bin" "$@"
 }
 cat >"$W/channel.sh" <<'EOF'
@@ -161,6 +169,13 @@ systemctl --no-ask-password stop "$root_unit" 2>/dev/null; r stop-root "$?:${roo
 wait
 systemctl --no-ask-password stop polkit 2>/dev/null; r stop-polkit "$?"
 /usr/bin/sudo -n true 2>/dev/null; r real-sudo "$?"
+if unshare -U true 2>/dev/null; then r userns allowed; else r userns refused; fi
+sudo -nHE true 2>/dev/null; r c-E "$?"
+sudo -nHs true 2>/dev/null; r c-s "$?"
+sudo -nHunobody id -u 2>/dev/null; r c-u "$?"
+sudo "$HOME/bin/gu-evil" >/dev/null 2>&1; r user-path "$?"
+sudo /usr/local/gu-gw/gu-x >/dev/null 2>&1; r gw-path "$?"
+r root-env "$(LD_PRELOAD=/nonexistent.so LD_LIBRARY_PATH=/x PYTHONPATH=/x PYTHONSTARTUP=/x PERL5LIB=/x BASH_ENV=/x ENV=/x GU_CALLER=leak sudo env 2>/dev/null | cut -d= -f1 | sort | tr '\n' ' ')"
 EOF
 chmod 755 "$W/channel.sh"
 out=$(in_migrate -- "$W/channel.sh" 2>&1)
@@ -186,6 +201,15 @@ expect "a root unit name without its 32 hex digits -> refused" test "$(get short
 expect "stopping a root unit from the unit (another verb) -> refused" bash -c '[[ $1 == [1-9]*:named ]]' _ "$(get stop-root)"
 expect "any other unit operation from the unit -> refused (polkit still active)" test "$(get stop-polkit)" != 0 -a "$(systemctl is-active polkit)" == active
 expect "the real sudo cannot run in the unit (NoNewPrivileges)" test "$(get real-sudo)" != 0
+expect "no user namespace in the unit (RestrictNamespaces; the integrator's MINOR 1)" test "$(get userns)" == refused
+expect "an unknown letter in a cluster is refused (-nHE, -nHs, -nHunobody)" test "$(get c-E):$(get c-s):$(get c-u)" == "1:1:1"
+expect "a command that is not root's alone is refused (the person's file; a folder others can write)" \
+  test "$(get user-path):$(get gw-path)" == "1:1"
+# The root unit's environment: systemd's own for a root service, and SUDO_*; nothing of the caller's (LD_*, PYTHON*,
+# PERL5LIB, BASH_ENV, ENV, any other variable).
+allowed=" HOME INVOCATION_ID LANG LANGUAGE LC_ALL LOGNAME MEMORY_PRESSURE_WATCH MEMORY_PRESSURE_WRITE PATH SHELL SUDO_GID SUDO_UID SUDO_USER SYSTEMD_EXEC_PID USER "
+expect "the root unit's environment is the fixed set (no LD_PRELOAD, PYTHON*, PERL5LIB, BASH_ENV or the caller's own; got: $(get root-env))" \
+  bash -c 'env=$1 allowed=$2; [[ -n $env && $env == *SUDO_USER* ]] || exit 1; for k in $env; do [[ $allowed == *" $k "* || $k == LC_* ]] || exit 1; done' _ "$(get root-env)" "$allowed"
 expect "nothing of the unit is left" bash -c '! systemctl is-active --quiet grassfield-update-migrate.service && test -z "$(systemctl list-units --all --plain --no-legend "grassfield-update-migrate*" "grassfield-update-root-*")"'
 
 say "carol's other processes cannot reach into the unit (the step 5 review's MAJOR)"
@@ -253,7 +277,7 @@ omarchy_commands+=("usr/bin/omarchy-migrate:/omarchy/bin/omarchy-migrate" "usr/s
 base_files=("usr/share/omarchy/version=4.0.4" "${omarchy_commands[@]}" "usr/share/omarchy/migrations/100.sh=echo 100 >>\"\$HOME/migrations.log\"")
 # 700 needs root (sudo, and a command that calls it): it writes on both sides, hands a temporary file to a root command (as
 # 4.0.6's 1791403252 does with mktemp and sudo install), and records its session and group.
-m700='echo 700 >>"$HOME/migrations.log"; echo carol-side >"$HOME/su-m2-user"; echo root-side | sudo tee /root/su-m2-root >/dev/null; sudo install -m 644 /dev/null /etc/su-m2-marker; omarchy-gu-indirect; t=$(mktemp); echo from-tmp >"$t"; sudo install -m 644 "$t" /root/su-m2-tmp; echo "$t" >"$HOME/su-m2-tmppath"; echo "${WAYLAND_DISPLAY-} ${HYPRLAND_INSTANCE_SIGNATURE-}" >"$HOME/su-m2-session"; exec 3< <(sleep 12); touch "$HOME/su-m2-holding"; sleep 8'
+m700='echo 700 >>"$HOME/migrations.log"; echo carol-side >"$HOME/su-m2-user"; echo root-side | sudo tee /root/su-m2-root >/dev/null; sudo install -m 644 /dev/null /etc/su-m2-marker; omarchy-gu-indirect; t=$(mktemp); echo from-tmp >"$t"; sudo install -m 644 "$t" /root/su-m2-tmp; echo "$t" >"$HOME/su-m2-tmppath"; if unshare -U true 2>/dev/null; then echo allowed; else echo refused; fi >"$HOME/su-m2-userns"; echo "${WAYLAND_DISPLAY-} ${HYPRLAND_INSTANCE_SIGNATURE-}" >"$HOME/su-m2-session"; exec 3< <(sleep 12); touch "$HOME/su-m2-holding"; sleep 8'
 m700f="usr/share/omarchy/migrations/700.sh=$m700"
 mkpkg omarchy 1 "${base_files[@]}"
 mkpkg omarchy 2 "${base_files[@]}" "$m700f"
@@ -320,6 +344,24 @@ expect "the unit's group with a member -> done terminal, omarchy stays 1 ($(stat
   test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
 expect "  its log says why" logsays "$op" "grassfield-update is missing, has members"
 gpasswd -d dave grassfield-update >/dev/null
+cp /etc/gshadow "$W/gshadow.saved"
+sed -i 's|^grassfield-update:[^:]*:|grassfield-update:$6$gu$NotARealHashButAPassword:|' /etc/gshadow
+runner carol; op=$(last)
+expect "the unit's group with a password (newgrp would take it) -> done terminal, omarchy stays 1 ($(state carol))" \
+  test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
+expect "  its log says why" logsays "$op" "has members or a password"
+cp "$W/gshadow.saved" /etc/gshadow
+mkdir -p /home/erin/.local/state/omarchy/migrations && touch /home/erin/.local/state/omarchy/migrations/100.sh && chown -R erin: /home/erin/.local
+runner erin; op=$(last)
+expect "erin, whose own group is the unit's -> done terminal, omarchy stays 1 ($(state erin))" \
+  test "$(state erin):$(ver omarchy)" == "done terminal -:1-1"
+expect "  its log says why" logsays "$op" "or is the person's own"
+chmod 775 /usr/share/omarchy/migrations
+runner carol; op=$(last)
+expect "Omarchy's migrations folder writable by its group -> done terminal, omarchy stays 1 ($(state carol))" \
+  test "$(state carol):$(ver omarchy)" == "done terminal -:1-1"
+expect "  its log says why (the integrator's MINOR 2)" logsays "$op" "migrations folder or Grassfield's sudo is not root's alone"
+chmod 755 /usr/share/omarchy/migrations
 # The run in the background: while 700 holds a pipe, a process of carol's outside the unit tries the unit's processes.
 cat >"$W/attacker.sh" <<'EOF'
 #!/bin/bash
@@ -341,6 +383,7 @@ pids=$(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null | tr '\n' ' ')
 attack=$(runuser -u carol -- "$W/attacker.sh" $pids 2>/dev/null)
 wait "$runner_pid"
 op=$(last)
+[[ $(state carol) == "done done -" ]] || { echo "   (diagnostics: state '$(state carol)', the run's log and exit file)"; tail -n 12 "$D/$op.log" | sed 's/^/   /'; cat "$D/$op.exit" 2>/dev/null | sed 's/^/   exit: /'; tail -n 5 "/run/user/$uid/grassfield/software-update-run.log" 2>/dev/null | sed 's/^/   runner: /'; }
 expect "the helper's own unit: carol's other processes get none of its processes' descriptors, environment, folder or /tmp ($(wc -w <<<"$pids") processes)" \
   test "$(wc -w <<<"$pids"):$attack" != "0:checked" -a "$attack" == checked
 expect "  the migration's temporary file was in the unit's own /tmp, not the shared one" \
@@ -351,6 +394,7 @@ expect "  700's sudo commands ran as root (tee, install, a file of its own /tmp)
   test "$(cat /root/su-m2-root 2>/dev/null):$(stat -c %U /etc/su-m2-marker 2>/dev/null):$(cat /root/su-m2-tmp 2>/dev/null)" == "root-side:root:from-tmp"
 expect "  700 ran as carol (its file carol's, group grassfield-update), once, marked done in carol's state" \
   test "$(stat -c %U:%G /home/carol/su-m2-user 2>/dev/null):$(grep -c 700 /home/carol/migrations.log):$(test -f /home/carol/.local/state/omarchy/migrations/700.sh && echo marked)" == "carol:grassfield-update:1:marked"
+expect "  700 could not make a user namespace (the helper's unit, RestrictNamespaces)" test "$(cat /home/carol/su-m2-userns 2>/dev/null)" == refused
 expect "  700 had carol's session values (Wayland display, Hyprland instance)" test "$(cat /home/carol/su-m2-session 2>/dev/null)" == "wayland-1 gu_test_123"
 expect "  the migrations' output is root's alone (0600), not in the 0644 log" \
   bash -c "test \"\$(stat -c %U:%a '$D/$op.migrations')\" == root:600 && grep -q 'Running migration (700)' '$D/$op.migrations' && ! grep -q 'Running migration' '$D/$op.log'"

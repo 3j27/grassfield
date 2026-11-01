@@ -1088,10 +1088,15 @@ review of the first version (b369f16) failed it (see "Review history"); this tex
   each migration in order, `bash -euo pipefail`, its marker after it, the first failure stops), but only for this update's
   scanned migrations, by name. A marker removed meanwhile never brings another migration into the unit.
   It runs them in the transient system unit `grassfield-update-migrate.service`:
-  - as the person's uid, with the **primary group `grassfield-update`**, which has no member (sysusers.d), and the person's
-    own group as a supplementary one. The kernel lets a process open another's `/proc` entries (descriptors, environment,
-    memory, folder) or attach to it only when all its uids and all its gids match. None of the person's other processes
-    can therefore reach into the unit; this is measured in s5.6;
+  - as the person's uid, with the **primary group `grassfield-update`**, which has no member (sysusers.d). systemd adds
+    the person's groups as supplementary ones (its `initgroups`), and the helper adds the person's own primary group, so
+    the person's files stay theirs. The kernel lets a process open another's `/proc` entries (descriptors, environment,
+    memory, folder) or attach to it only when all its uids and all its real, effective and saved gids match; supplementary
+    groups do not count. None of the person's other processes can therefore reach into the unit; this is measured in s5.6;
+  - with **no namespace of its own** (`RestrictNamespaces=yes`). A user namespace a migration made (bwrap, flatpak, rootless
+    podman, a browser's sandbox, `unshare -U`) would belong to the person, whose other processes could then reach into it
+    (the integrator's review, MINOR 1). Its personality is locked, and it makes no setuid or setgid file
+    (`LockPersonality`, `RestrictSUIDSGID`);
   - with `NoNewPrivileges=yes`, so no setuid program runs (no real `sudo`, `pkexec` or `su`, no `newgrp`);
   - with `PrivateTmp=yes`: its `/tmp` is its own, and the root units of its `sudo` join it (`JoinsNamespaceOf`). A
     temporary file a migration hands to a root command (4.0.6's `1791403252` does `mktemp` then `sudo install`) is out of
@@ -1100,7 +1105,7 @@ review of the first version (b369f16) failed it (see "Review history"); this tex
   - with the person's runtime folder and session bus, and two session values (s5.2);
   - with standard input `/dev/null`, and its output in `/run/grassfield-update/<op-id>.migrations` (root's, 0600, cut at
     the log's 8 MiB, read with the log for a failed startup image). Its output holds root commands' output too, so it never
-    joins the 0644 log;
+    joins the 0644 log. No file it writes may pass 64 MiB (`LimitFSIZE`), so `/run` stays bounded while it runs;
   - at most 30 minutes; when it ends, every process left is stopped within 5 seconds (`TimeoutStopSec=5s`,
     `KillMode=control-group`).
 - **After the unit, the helper waits** (30 minutes at most) for any root unit its `sudo` started. A long command (pacman)
@@ -1118,8 +1123,12 @@ The conditions, checked in this order:
 3. That person is an administrator: a member of `wheel` (Arch's polkit rule and Omarchy's sudoers). The grant is that
    person's own `sudo`, never more than they have in Omarchy's terminal (the review's BLOCKER).
 4. No migration from before this update is pending (the runner's names): the unit runs this update's own migrations only.
-5. The group `grassfield-update` exists, has no member, and is not the person's own group.
-6. The sudo and the rule are installed.
+5. The group `grassfield-update` exists, has no member and a locked password (`newgrp` would take a password), and is
+   not the person's own group.
+6. The sudo and the rule are installed, and Omarchy's migrations folder and the sudo are root's alone: they and every
+   folder above them belong to root and no one else can write them (the integrator's MINOR 2). After the transaction, each
+   migration file must be too; otherwise none runs here (the runner runs them without root, and what needs root stays
+   pending).
 7. A trial `sudo -n /usr/bin/true` through a migrations' unit succeeded. This proves the whole channel (the unit, the rule,
    polkit, systemd) before anything changes.
 
@@ -1141,19 +1150,23 @@ The conditions, checked in this order:
   - `-n`, `-H`, `--`, and `-u` with root as the target (`root`, `0`, `#0`);
   - `-v`, `-k`, `-K` without a command: success;
   - `-l`: exit 1.
-  It refuses every other form (`-E`, `-i`, `-s`, a variable before the command, ...) and any other target. A process of the
+  It refuses every other form (`-E`, `-i`, `-s`, a variable before the command, an unknown letter in a cluster such as
+  `-nHE`, ...) and any other target. A process of the
   person's own identity started by a root unit would be outside the unit's group but inside its `/tmp`, open to the
   person's other processes (the re-review's MINOR 1, reproduced). Omarchy 4.0.6's migrations never use `-u`. A refused
   form fails the migration, which stays pending.
   It looks a name up in fixed root-owned folders (`/usr/share/omarchy/bin`, `/usr/local/sbin`, `/usr/local/bin`,
-  `/usr/bin`), never in the caller's PATH, so a migration cannot point a root command at a file of the person's. Then it
+  `/usr/bin`), never in the caller's PATH. Whatever the command, the file and every folder above it, links resolved, must
+  be root's and writable by root alone, or it is refused. A migration therefore cannot point a root command at a file of the
+  person's, or at one anyone else could swap between the check and the run. Then it
   runs `systemd-run --wait --pipe --no-ask-password --expand-environment=no` with:
   - a unit named `grassfield-update-root-<32 hex>.service`;
   - root as the user;
   - the caller's working folder, standard input, output and error;
   - the unit's `/tmp`;
   - `SUDO_USER`, `SUDO_UID`, `SUDO_GID`.
-  The command's exit status is sudo's. Its arguments reach it unexpanded.
+  The command's exit status is sudo's. Its arguments reach it unexpanded. Its environment is systemd's for a root service
+  plus `SUDO_*`, nothing of the caller's (no `LD_*`, `PYTHON*`, `PERL5LIB`, `BASH_ENV`): the test checks the list.
 - **The boundary is polkit's rule** `/usr/share/polkit-1/rules.d/49-grassfield-update.rules`. For
   `org.freedesktop.systemd1.manage-units` asked by a subject whose `system_unit` is `grassfield-update-migrate.service`:
   - YES when `no_new_privileges` is set, the verb is `start` and the unit is `grassfield-update-root-<32 hex>.service`;
@@ -1173,7 +1186,8 @@ The conditions, checked in this order:
     unless the caller has `CAP_SYS_PTRACE`, for `/proc/<pid>/fd`, `environ`, `cwd`, `mem` and attaching alike. Measured:
     a process of the person's is refused the unit's pipe, environment, folder and temporary files.
   - NoNewPrivileges keeps the unit's processes from leaving that group (`newgrp`, `sg`). The person cannot join it: it has
-    no member and no password. A file of the person's cannot carry the group's setgid bit, since the kernel clears it for
+    no member and a locked password, both checked before each run. RestrictNamespaces keeps them from making a user
+    namespace the person would own. A file of the person's cannot carry the group's setgid bit, since the kernel clears it for
     an owner who is not a member.
 - **What remains.**
   - **Signals.** They follow the uid: the person's other processes can stop or kill the unit's, or raise their
@@ -1214,6 +1228,8 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
   again and give the end its restart.
 - **A process a migration starts to outlive it** (a detached daemon) is stopped with the unit. Omarchy's restarts that go
   through the user's systemd manager (`uwsm-app`, `systemctl --user`) are not affected.
+- **A migration that needs a namespace of its own** (bwrap, flatpak, rootless podman, `unshare`), **or writes a file past
+  64 MiB**, fails in the unit and stays pending for Omarchy's terminal. No 4.0.6 migration does either.
 - **The channel needs** systemd ≥ 254 (`--expand-environment`), polkit with `system_unit` (128 measured), a bus that hands
   polkit a pidfd (dbus-broker 37 measured) and `JoinsNamespaceOf`. Anything else fails the trial, and the run goes to the
   terminal with nothing changed.
@@ -1225,7 +1241,7 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
   (pre-existing from step 3; the review's NIT 11). It runs in the unit only if it is this update's.
 
 ### s5.6 Evidence (this branch)
-- **`tests/integration/update_migrate.sh` (new, A16): 53 PASS, 0 FAIL.** It runs in a privileged `archlinux:base` container
+- **`tests/integration/update_migrate.sh` (new, A16): 64 PASS, 0 FAIL.** It runs in a privileged `archlinux:base` container
   with systemd 262 as PID 1 (cgroup2 mounted), dbus-broker 37, polkit 128, sudo 1.9.17, and the REAL helper, runner,
   policy, `sudo`, rule and group (no change to any of them).
   - **The channel:**
@@ -1238,6 +1254,17 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
     The same holds for the helper's own unit during a real run, for each of its processes: the migration loop, the
     migration, the `sudo` and its `systemd-run` client. The migration's temporary file never reached the shared `/tmp`.
   - **`sudo -u` with another target is refused** (the re-review's MINOR 1); `-u root` and `-u #0` work.
+  - **The integrator's review:**
+    - no user namespace in the unit (the test's and the helper's);
+    - an unknown letter in a cluster refused;
+    - a command of the person's, or in a folder others can write, refused;
+    - the root unit's environment is the fixed list;
+    - a group with a password, a person whose own group is the unit's, and a migrations folder others can write, all go
+      to the terminal.
+    - Its three surviving mutants each fail the test now: `LD_PRELOAD` passed to the root unit, the locked-password check
+      dropped, and the person's-group check dropped (RestrictNamespaces dropped too).
+    - The test sets `umask 022`: `docker exec` runs with 0000 under systemd, so the test packages had world-writable
+      folders, which the new ownership check rightly refused.
   - **Refusals:** outside the unit, in another unit, and without NoNewPrivileges.
   - **The helper from a runner through pkexec:**
     - a user who is not an administrator goes to the terminal (the review's BLOCKER);
@@ -1263,6 +1290,22 @@ the terminal, a rare case (Omarchy runs pending migrations at login).
   - the polkit dialog (the container lets the runner through).
 
 ## Review history
+Software Update step 5 (SU-M2), the integrator's opus security review of db67a5f: **no MAJOR; the design holds** (the rule,
+the empty group, removal leaving no grant). Required before the merge, answered in the next commit:
+- **MINOR 1**, the unit could make user namespaces; one would belong to the person, whose other processes could reach into it
+  and use the unit's grant. `RestrictNamespaces=yes` (with `LockPersonality`, `RestrictSUIDSGID`); the test checks
+  `unshare -U` fails in the unit.
+- **MINOR 2**, no ownership check before running. The migrations folder and the sudo must be root's alone before any change,
+  and each migration file after the transaction; the sudo refuses a command that is not root's alone (its folders
+  included).
+- **Test gaps:** the root unit's environment is checked against a fixed list; a group with a password; a person whose own
+  group is the unit's. The three surviving mutants each fail now.
+- **Nits:**
+  - an unknown letter in a sudo option cluster is refused;
+  - the supplementary groups are described as systemd sets them;
+  - `LimitFSIZE=64M` bounds the output on `/run` while it runs.
+The owner sees the rule before the merge, as the integrator asks.
+
 Software Update step 5 (SU-M2), the same reviewer's re-review of 3b41c95: **PASS**, no BLOCKER or MAJOR. It confirmed the
 premise (Linux's `__ptrace_may_access` compares uids and gids), measured the unit's identity (gid `grassfield-update`,
 NoNewPrivileges), and found both first-round attacks and the marker-deletion path closed. It also checked: `newgrp` refused,

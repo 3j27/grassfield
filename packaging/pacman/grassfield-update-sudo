@@ -16,11 +16,13 @@
 #                                            would let the person's other processes reach that /tmp (the step 5
 #                                            re-review's MINOR 1); Omarchy 4.0.6's migrations never use -u
 #   -v, -k, -K and their long forms          without a command: success (no credential to validate or forget)
+#   a cluster of these short letters (-nH)    each letter as above; any other letter refused
 #   -l, --list                                 exit 1: nothing is listed (a caller then takes its other path)
 #   --                                         the end of the options
 # The command: a name is looked up as sudo's secure_path does, in fixed root-owned folders (/usr/share/omarchy/bin,
 # /usr/local/sbin, /usr/local/bin, /usr/bin), never in the caller's PATH; a path with a slash is taken as given (made
-# absolute). Its arguments reach it unchanged (no $VAR expansion by systemd). It runs as a transient system service: root's
+# absolute); either way the file, and every folder above it and above where it was found, must be root's and writable by
+# root alone. Its arguments reach it unchanged (no $VAR expansion by systemd). It runs as a transient system service: root's
 # identity and home, systemd's own environment for it plus SUDO_USER, SUDO_UID and SUDO_GID, the caller's
 # working folder, standard input, output and error passed through, and the unit's own /tmp (PrivateTmp, joined: the files a
 # migration makes there reach its root commands and no other process); its exit status is this program's.
@@ -46,13 +48,16 @@ while (($#)); do
       ;;
     --user=*) target=${1#--user=} ;;
     -u?*) target=${1#-u} ;;
-    -[nHvkKl][nHvkKl]*)
+    -[!-]?*)
+      # A cluster of short options: each letter one of the above, or refused (the integrator's review: -nHE, -nHs and
+      # -nHunobody were taken).
       flags=${1#-}
       while [[ -n $flags ]]; do
         case ${flags:0:1} in
           n | H) ;;
           v | k | K) only=1 ;;
           l) list=1 ;;
+          *) refuse "the option -${flags:0:1} (in $1) is not supported" ;;
         esac
         flags=${flags:1}
       done
@@ -73,6 +78,20 @@ fi
 [[ $target == root || $target == 0 || $target == '#0' ]] || refuse "a target user other than root ($target) is not supported"
 target=root
 
+# A path and every folder above it, links resolved, owned by root and writable by no one else: the file root runs cannot be
+# changed or swapped by anyone but root between this check and its run (the integrator's review, MINOR 2).
+root_alone() { # path
+  local p owner mode
+  p=$(/usr/bin/realpath -e -- "$1" 2>/dev/null) || return 1
+  while :; do
+    read -r owner mode < <(/usr/bin/stat -c '%u %a' -- "$p" 2>/dev/null) || return 1
+    [[ $owner == 0 && $mode =~ ^[0-7]{3,4}$ ]] && (((8#$mode & 8#022) == 0)) || return 1
+    [[ $p == / ]] && return 0
+    p=${p%/*}
+    [[ -n $p ]] || p=/
+  done
+}
+
 command=$1
 shift
 if [[ $command == */* ]]; then
@@ -88,6 +107,8 @@ else
   [[ -n $found ]] || { echo "sudo: $command: command not found" >&2; exit 1; }
   command=$found
 fi
+[[ -f $command ]] && root_alone "$command" && root_alone "${command%/*}/" ||
+  refuse "$command is not root's alone (it, or a folder above it, is not owned by root or is writable by others)"
 
 read -r id </proc/sys/kernel/random/uuid || refuse "no unit name"
 id=${id//-/}
