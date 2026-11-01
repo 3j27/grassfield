@@ -52,6 +52,47 @@ TestCase {
                 visible: keyFocus.active
             }
         }
+
+        // A button that takes no focus on a click (the review of #88): a later Tab to it still shows the ring.
+        Item {
+            id: noFocusItem
+            width: 60
+            height: 40
+            activeFocusOnTab: true
+            property int clicks: 0
+
+            KeyFocus {
+                id: noFocusKey
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: noFocusItem.clicks++
+            }
+        }
+
+        // A button whose click opens a "menu" that takes the focus and gives it back later: no ring when it comes back.
+        Item {
+            id: menuButton
+            width: 60
+            height: 40
+            activeFocusOnTab: true
+
+            KeyFocus {
+                id: menuKey
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: menuStandIn.forceActiveFocus()
+            }
+        }
+
+        Item {
+            id: menuStandIn
+            width: 10
+            height: 40
+        }
     }
 
     Column {
@@ -124,6 +165,25 @@ TestCase {
     function init() {
         before.forceActiveFocus(Qt.TabFocusReason);
         item.clicks = 0;
+    }
+
+    function test_aClickThatTakesNoFocusLeavesTheRingToTheKeyboard() {
+        mouseClick(noFocusItem);
+        compare(noFocusItem.clicks, 1);
+        verify(!noFocusItem.activeFocus, "the click gave it no focus");
+        tryVerify(() => !noFocusKey.pointer, 1000, "the press owns nothing: pointer reset");
+        noFocusItem.forceActiveFocus(Qt.TabFocusReason);
+        verify(noFocusKey.active, "a later key's focus shows the ring");
+    }
+
+    function test_theFocusAMenuGivesBackAfterAClickShowsNoRing() {
+        mouseClick(menuButton);
+        verify(menuStandIn.activeFocus, "the click moved the focus to the menu");
+        wait(0);
+        verify(menuKey.pointer, "the press keeps the pointer's mark for the focus that comes back");
+        menuButton.forceActiveFocus();
+        verify(menuButton.activeFocus);
+        verify(!menuKey.active, "no ring when the menu gives the focus back");
     }
 
     function test_aKeyShowsTheRing() {

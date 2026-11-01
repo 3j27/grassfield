@@ -16,6 +16,17 @@ Item {
     readonly property bool active: root.target !== null && root.target.activeFocus && !root.pointer
     // A press on the target since it last lost the focus.
     property bool pointer: false
+    // What had the window's focus when the last press began. A press that leaves the focus where it was (a button that takes
+    // no focus on a click) gives the pointer nothing to own: `pointer` is reset, so a later key still shows the ring. A press
+    // that moved the focus elsewhere (a menu it opened) keeps it, for the focus that comes back from that action (the
+    // integrator's review of #88).
+    property Item focusAtPress: null
+
+    function settlePress(): void {
+        if (root.target !== null && !root.target.activeFocus && root.target.Window.activeFocusItem === root.focusAtPress)
+            root.pointer = false;
+        root.focusAtPress = null;
+    }
 
     anchors.fill: parent
     // Above the target's own MouseArea or TapHandler wherever it is declared: the press is watched before they take it.
@@ -25,8 +36,13 @@ Item {
     PointHandler {
         acceptedButtons: Qt.AllButtons
         onActiveChanged: {
-            if (active)
+            if (active) {
                 root.pointer = true;
+                root.focusAtPress = root.target !== null ? root.target.Window.activeFocusItem : null;
+            } else {
+                // After the click's own handlers (a MouseArea's onClicked that takes the focus) have run.
+                Qt.callLater(root.settlePress);
+            }
         }
     }
 
