@@ -4,7 +4,8 @@
 # against a FAKE bridge (secret_bridge.d/fake_bridge.py, a Unix socket server of the test's own) and, when the tools are
 # there, the REAL grassfield-prompter on a private test bus with a real libgcr client. Never the user's bus, socket or
 # secrets: every socket and runtime directory is the test's own; test passwords only.
-#   client   the client: its hello; one answer per request, only for its own open ids; a withdrawal; a cancel for an
+#   client   the client: its hello; one answer per request, only for its own open ids (an nm and a kio request's own fields,
+#            steps 9c and 9e; a kio server that is not a host name closes the connection); a withdrawal; a cancel for an
 #            unknown id ignored; no late answer to a withdrawn request; a confirmation without a password; the check box's
 #            state; a malformed line, an over-long line, a prompt before hello, another version and a duplicate id each
 #            close the connection; the next attempt after 1 s, 2 s, 4 s, reset by a hello; no password in the shell's output
@@ -294,7 +295,10 @@ no-back-off#security/secret/PrompterClient.qml#            retry.interval = Prom
 no-hello#security/secret/PrompterClient.qml#socket.write(Prompter.helloLine(root.shellVersion)#socket.write(""
 strict-parser-off#security/secret/Prompter.js#    if (!exactKeys(m, ["type", "id", "kind", "requester", "texts", "choice", "passwordNew", "strength"]))#    if (false)
 nm-name-for-any-network#security/secret/Prompter.js#            if (security === "enterprise") {#            if (true) {
-nm-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm"];#var KINDS = ["password", "confirm"];
+nm-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm", "kio"];#var KINDS = ["password", "confirm", "kio"];
+kio-not-drawn#security/secret/Prompter.js#var KINDS = ["password", "confirm", "nm", "kio"];#var KINDS = ["password", "confirm", "nm"];
+kio-server-lenient#security/secret/Prompter.js#    if (typeof m.server !== "string" || m.server.length > CAPS.server || !SERVER_PATTERN.test(m.server))#    if (typeof m.server !== "string" || m.server.length > CAPS.server)
+kio-name-where-none-asked#security/secret/Prompter.js#            if (login.nameMode === "edit") {#            if (true) {
 nm-network-lenient#security/secret/Prompter.js#    if (n.security !== "enterprise" && n.identity !== "")#    if (false)
 EOF_MUTANTS
 fi

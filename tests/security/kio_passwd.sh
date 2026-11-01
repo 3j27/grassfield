@@ -72,6 +72,10 @@ cleanup() {
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done
   for p in "${bus_pids[@]}"; do kill -TERM -- "-$p" 2>/dev/null; done
   [[ -n $d ]] && pkill -f "$d/" 2>/dev/null
+  # A bridge blocked in its main loop (the sync-store mutant) never reads its SIGTERM: whatever is left is killed.
+  sleep 0.5
+  for p in "${pids[@]}"; do kill -KILL "$p" 2>/dev/null; done
+  [[ -n $d ]] && pkill -KILL -f "$d/" 2>/dev/null
   wait 2>/dev/null
   [[ -n $tmp ]] && rm -rf "$tmp"
   [[ -n $d ]] && rm -rf "$d"

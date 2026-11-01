@@ -138,6 +138,12 @@ def nm_prompt(n, ssid, security, identity=""):
     return {"type": "prompt", "id": "p%d" % n, "kind": "nm", "network": {"ssid": ssid, "security": security, "identity": identity}}
 
 
+def kio_prompt(n, server, name_mode="edit", remember="off", keyring="protected", name=""):
+    req = {"role": "kio", "name": "", "desktopId": "", "icon": "", "path": "/usr/lib/kf6/kioworker", "identified": True, "onBehalf": True}
+    return {"type": "prompt", "id": "p%d" % n, "kind": "kio", "requester": req, "server": server,
+            "login": {"name": name, "nameMode": name_mode, "realm": "", "retry": False, "remember": remember, "keyring": keyring}}
+
+
 def shell_hello(c, desc):
     h = c.json()
     check(desc, isinstance(h, dict) and h.get("v") == "prompter/1" and h.get("type") == "hello" and h.get("kinds") == ["password", "confirm", "nm", "kio"]
@@ -181,6 +187,17 @@ def scenario_client(server):
     c.send(nm_prompt(22, "answer-cancel", "wep"))
     a = c.json()
     check("an nm request cancelled carries nothing", a == {"type": "answer", "id": "p22", "result": "cancel"}, repr(a))
+    c.send(kio_prompt(23, "answer-ok.example"))
+    a = c.json()
+    check("a kio request answered ok carries the name, the password and Remember",
+          a == {"type": "answer", "id": "p23", "result": "ok", "identity": "user-p23", "password": "pw-p23", "choice": True}, repr(a))
+    c.send(kio_prompt(24, "answer-ok.example", name_mode="fixed", remember="none", keyring="unknown", name="alice"))
+    a = c.json()
+    check("a kio request with a fixed name and no Remember carries the password only",
+          a == {"type": "answer", "id": "p24", "result": "ok", "password": "pw-p24"}, repr(a))
+    c.send(kio_prompt(25, "answer-cancel.example"))
+    a = c.json()
+    check("a kio request cancelled carries nothing", a == {"type": "answer", "id": "p25", "result": "cancel"}, repr(a))
     extra = c.quiet(0.6)
     check("nothing else is sent (the late answer to p4 included)", extra == [], repr(extra))
     bad = prompt(7, "answer-ok")
@@ -239,6 +256,15 @@ def scenario_client(server):
     hello(c)
     c.send(nm_prompt(30, "answer-ok", "wpa", "eve"))
     check("an nm prompt with a name for a WPA2 network closes the connection (never answered)", c.closed())
+    c.close()
+    closed_at = time.monotonic()
+    c = reconnect("then 1 s again", 0.8, 1.5)
+    if c is None:
+        return
+    c.json()
+    hello(c)
+    c.send(kio_prompt(31, "Your Bank"))
+    check("a kio prompt whose server is not a host name closes the connection (never answered)", c.closed())
     c.close()
 
 
