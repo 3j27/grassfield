@@ -67,6 +67,7 @@ TestCase {
         for (const f of ["cover", "lift", "state"])
             verify(new RegExp("function " + f + "\\(\\): string \\{").test(cover), f);
         verify(/return Math\.min\(root\.fadeMs, Tokens\.sessionExitWaitMs\);/.test(cover), "the answer never asks for more than the bound");
+        verify(/function cover\(\): int \{\s*if \(SessionState\.refuses\("exit cover"\)\)\s*return 0;/.test(cover), "refused while locked: nothing to wait for");
         verify(/interval: Tokens\.sessionExitCoverHoldMs/.test(cover), "the cover lifts by itself");
         verify(/function state\(\): string \{\s*if \(!VisualFixtures\.dev\)\s*return "";/.test(cover), "state is a dev hook");
         const helper = source("packaging/bin/grassfield-session-end");

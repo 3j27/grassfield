@@ -5,7 +5,7 @@
 #   wiring    shell.qml mirrors Lock.locked into SessionState.locked; Overview and Switcher get the lock state;
 #   refusal   each surface's entry point refuses while locked as its first decision: Popups.open, Search.show,
 #             AppsController.show, Overview.show, Notifications.toggleCenter/openWidgetGallery, Dock.enterKeyboardMode,
-#             the four window commands (IPC target "windows"), Switcher.step;
+#             the four window commands (IPC target "windows"), Switcher.step, the exit cover (ExitCover.cover);
 #   closing   each surface closes when the lock engages (Popups, Search, Apps, Notification Center, Overview, Dock keyboard
 #             mode, Switcher);
 #   routes    every IPC action that opens a surface goes through that entry point (search toggle, apps toggle/open,
@@ -87,6 +87,8 @@ first_decision("shell/overview/Overview.qml", "show", R)
 first_decision("shell/notifications/Notifications.qml", "openWidgetGallery", R)
 first_decision("shell/dock/Dock.qml", "enterKeyboardMode", R)
 first_decision("shell/dock/Dock.qml", "reopen", R, lines=1)
+# ADR-0040 step 7 (the integrator's review of e067f26f, NIT): the exit cover stays down while locked.
+first_decision("shell/overlay/ExitCover.qml", "cover", R, lines=1)
 toggle = function(read("shell/notifications/Notifications.qml"), "toggleCenter") or ""
 opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
@@ -528,13 +530,14 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
   shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml \
-  shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml; do
+  shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml shell/overlay/ExitCover.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
 cp -a "$root/shell/security" "$mut/shell/" # the wall-clock scan reads every file of shell/security
 python3 -I "$tmp/check.py" "$mut" >/dev/null 2>&1 && pass "mutation: the unchanged copy passes" || bad "mutation: the unchanged copy fails"
 for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
+  'shell/overlay/ExitCover.qml#SessionState.refuses("exit cover")#false' \
   'shell/desktop/DesktopWidgets.qml#SessionState.refuses("widget menu")#false' \
   'shell/desktop/IconsView.qml#root.closeMenu("outside");#root.closeAbout("outside");' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows cycleApp")#false' \

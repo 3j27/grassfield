@@ -23,8 +23,12 @@ Scope {
     property bool shown: false
     readonly property int fadeMs: Appearance.duration(Tokens.sessionExitFadeMs)
 
-    // The milliseconds the caller waits for the fade, never more than session.exitWaitMs.
+    // The milliseconds the caller waits for the fade, never more than session.exitWaitMs. While the session is locked nothing
+    // but the lock screen opens (GF-116; the integrator's review of e067f26f, NIT): the lock already covers every output, so
+    // the cover stays down and the caller waits for nothing.
     function cover(): int {
+        if (SessionState.refuses("exit cover"))
+            return 0;
         if (!root.shown)
             console.info("grassfield-shell: exit cover shown");
         root.shown = true;
