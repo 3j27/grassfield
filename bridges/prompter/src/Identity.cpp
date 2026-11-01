@@ -238,6 +238,9 @@ namespace gf::prompter {
             // udiskie's password command in grassfield-automount.service (step 9c): any program of the user can run it with a
             // disk name of its own, so its text is another program's too (onBehalf).
             {QStringLiteral("/usr/lib/grassfield/grassfield-askpass"), QStringLiteral("disk")},
+            // KIO's worker executable (step 9e): KF6 apps start one per network location, and it runs whatever worker plugin
+            // its command line names, so any program of the user can make it ask, with a server of its own (onBehalf).
+            {QStringLiteral("/usr/lib/kf6/kioworker"), QStringLiteral("kio")},
         };
         return known;
     }

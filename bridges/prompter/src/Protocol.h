@@ -13,12 +13,17 @@
 //    "choice":{"label":"...","chosen":true|false}|null,"passwordNew":true|false,"strength":true|false}
 //   {"type":"prompt","id":"p<N>","kind":"nm",                                     (step 9c: NetworkManager's secrets)
 //    "network":{"ssid":"...","security":"wpa"|"wpa3"|"wep"|"enterprise","identity":"..."}}
+//   {"type":"prompt","id":"p<N>","kind":"kio","requester":{...as above, role "kio" too...}, (step 9e: KIO's passwords)
+//    "server":"<host>[:<port>]",
+//    "login":{"name":"...","nameMode":"edit"|"fixed"|"none","realm":"...","retry":true|false,"remember":"none"|"off"|"on",
+//             "keyring":"protected"|"unprotected"|"unknown"}}
 //   {"type":"cancel","id":"p<N>"}
 //   {"type":"error","code":"<code>","message":"<text>"}
 // shell -> bridge (at most limits::kShellLine bytes per line, the newline excluded):
 //   {"v":"prompter/1","type":"hello","shell":"<version>","kinds":["password","confirm","nm"]} (first line, once)
 //   {"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false,"identity":"..."}
-//   ("identity" only for an nm request of security "enterprise" answered ok)
+//   ("identity" only for an nm request of security "enterprise" answered ok, and for a kio request of nameMode "edit"
+//   answered ok; for kio, "choice" is "Remember this password", only when it was offered, and a cancel carries nothing)
 //
 // Everything the shell sends is untrusted: a strict parser for flat objects (strings, booleans, null, arrays of strings;
 // no numbers, no nesting, no duplicate keys, valid UTF-8, no NUL), every key and type checked. The password is never
@@ -119,7 +124,7 @@ namespace gf::prompter {
     // --- bridge -> shell ---------------------------------------------------------------------------------------------
 
     struct RequesterView {
-        QString role = QStringLiteral("unidentified"); // app, keyring, gnupg, ssh, disk (step 9c), unidentified
+        QString role = QStringLiteral("unidentified"); // app, keyring, gnupg, ssh, disk (step 9c), kio (step 9e), unidentified
         QString name;
         QString desktopId;
         QString icon;
@@ -150,10 +155,29 @@ namespace gf::prompter {
         QString identity;
     };
 
+    // A KIO request (kind "kio", step 9e): who asks (resolved from the caller's credentials, as for gcr: a KIO worker is the
+    // role "kio"), the server (a host name and its port only: KioAuth.h serverLabel), the name field's first text and whether
+    // it can be changed ("edit"), only shown ("fixed", the caller's readOnly) or absent ("none", hide-username-line), the
+    // realm (the server's own words, plain, capped), whether the last name and password failed (the worker's message itself
+    // is never sent), "Remember this password" ("none": not offered; "off" or "on": its first state) and the protection of
+    // the keyring that would receive it.
+    struct KioPromptView {
+        QString       id;
+        RequesterView requester;
+        QString       server;
+        QString       name;
+        QString       nameMode;
+        QString       realm;
+        bool          retry = false;
+        QString       remember;
+        QString       keyring;
+    };
+
     QByteArray helloMessage(const QStringList& kinds);
     QByteArray nameMessage(const QString& state);
     QByteArray promptMessage(const PromptView& prompt);
     QByteArray nmPromptMessage(const NmPromptView& prompt);
+    QByteArray kioPromptMessage(const KioPromptView& prompt);
     QByteArray cancelMessage(const QString& id);
     QByteArray errorMessage(const QString& code, const QString& message);
 

@@ -14,7 +14,8 @@
 //   text of its own (gpg-connect-agent, running pinentry-gnome3, ssh-add), so the row names the program that asks, never
 //   a guarantee about the text under it, which the shell shows as another program's unverified words; "disk" for
 //   /usr/lib/grassfield/grassfield-askpass, udiskie's password command (step 9c), which any program can run with a disk
-//   name of its own, likewise;
+//   name of its own, likewise; "kio" for /usr/lib/kf6/kioworker, KIO's worker executable (step 9e), which runs whatever worker
+//   plugin its command line names, likewise;
 // - "app" with a desktop entry's name and icon when exactly one entry of /usr/share/applications (a root-owned regular
 //   file) runs exactly that executable: its Exec line is the program and field codes only, so an interpreter, a wrapper or
 //   a launcher with arguments never lends its entry to whatever it runs; and every file mapped executable in the process
@@ -94,7 +95,8 @@ namespace gf::prompter {
         QString role;
     };
 
-    // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg; gcr-ssh-agent -> ssh; grassfield-askpass -> disk.
+    // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg; gcr-ssh-agent -> ssh; grassfield-askpass -> disk;
+    // kioworker -> kio.
     const QList<KnownCaller>& knownCallers();
 
     // A file mapped executable: its path and the device (major:minor) and inode /proc/<pid>/maps gives for it.

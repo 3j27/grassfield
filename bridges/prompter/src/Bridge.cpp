@@ -27,12 +27,14 @@ namespace gf::prompter {
         constexpr std::size_t kInCapacity = limits::kShellLine + 1; // one full line and its newline
         constexpr int         kBusTimeoutMs = 5000;
 
-        // The kinds this bridge can send: gcr's password and confirm, and nm when its NetworkManager agent runs (step 9c);
-        // kio and bluetooth come with step 9e and step 10.
-        QStringList bridgeKinds(bool nm) {
+        // The kinds this bridge can send: gcr's password and confirm, nm when its NetworkManager agent runs (step 9c), kio when
+        // its KIO password server runs (step 9e); bluetooth comes with step 10.
+        QStringList bridgeKinds(bool nm, bool kio) {
             QStringList kinds{QStringLiteral("password"), QStringLiteral("confirm")};
             if (nm)
                 kinds.append(QStringLiteral("nm"));
+            if (kio)
+                kinds.append(QStringLiteral("kio"));
             return kinds;
         }
 
@@ -121,6 +123,12 @@ namespace gf::prompter {
                 m_nm.reset();
             }
         }
+        // KIO's network passwords (step 9e): without it, KIO's clients reach kiod6 by D-Bus activation, as before.
+        m_kio = std::make_unique<KioServer>(m_bus, this, KioServer::Options{m_options.uid, m_options.keyringDirectory});
+        if (QString kioError; !m_kio->start(&kioError)) {
+            log(QStringLiteral("no KIO password server: %1").arg(kioError));
+            m_kio.reset();
+        }
         return listen(error);
     }
 
@@ -194,7 +202,8 @@ namespace gf::prompter {
         }
         if (m_client >= 0)
             dropClient(QStringLiteral("stopping"));
-        m_nm.reset(); // answers whatever is still pending
+        m_nm.reset();  // answers whatever is still pending
+        m_kio.reset(); // likewise, then releases its name
         if (m_listenFd >= 0) {
             delete m_acceptNotifier;
             m_acceptNotifier = nullptr;
@@ -361,6 +370,12 @@ namespace gf::prompter {
                 m_nm->refuse(pending.nm, nm::kErrorNoSecrets, QStringLiteral("cancelled by the bridge"));
             return;
         }
+        if (pending.kio) {
+            // Fail closed: the KIO client gets "nothing" (its worker reports a cancelled login), nothing is cached.
+            if (m_kio)
+                m_kio->abandon(pending.kio, QStringLiteral("cancelled by the bridge"));
+            return;
+        }
         answerCancel(pending.prompt);
         unrefLater(pending.prompt);
     }
@@ -456,6 +471,96 @@ namespace gf::prompter {
         m_nm->answer(request, secure, static_cast<std::size_t>(n), identity);
     }
 
+    // --- KIO's side (step 9e) ----------------------------------------------------------------------------------------------
+
+    QString Bridge::submitKio(KioRequest* request) {
+        if (m_client < 0 || !m_ready || !m_kinds.contains(QStringLiteral("kio")))
+            return {};
+        const QString id = m_book.reserve(request);
+        if (id.isEmpty()) {
+            log(QStringLiteral("a kio request answered with nothing: %1 requests are outstanding").arg(m_book.count()));
+            return {};
+        }
+        Pending pending;
+        pending.kio    = request;
+        pending.sent   = true;
+        pending.choice = request->rememberOffered;
+        m_pending.insert(id, pending);
+        request->id = id;
+        KioPromptView view;
+        view.id        = id;
+        view.requester = request->requester;
+        view.server    = request->server;
+        view.name      = request->name;
+        view.nameMode  = request->nameMode;
+        view.realm     = request->realm;
+        view.retry     = request->retry;
+        view.remember  = !request->rememberOffered ? QStringLiteral("none") : request->rememberChosen ? QStringLiteral("on") : QStringLiteral("off");
+        view.keyring   = request->rememberOffered ? kio::protectionName(request->keyring) : QStringLiteral("unknown");
+        send(kioPromptMessage(view)); // may drop the shell, which then ends this request too (KioServer checks)
+        return id;
+    }
+
+    void Bridge::withdrawKio(const QString& id) {
+        const auto it = m_pending.find(id);
+        if (it == m_pending.end() || !it->kio)
+            return;
+        m_pending.erase(it);
+        m_book.release(id);
+        if (m_client >= 0)
+            send(cancelMessage(id));
+    }
+
+    void Bridge::onKioAnswer(const ShellLine& answer, std::string_view line, KioRequest* request) {
+        const bool asksName = request->nameMode == QLatin1String("edit");
+        QString    wrong;
+        if (!answer.ok && (answer.hasPassword || answer.hasIdentity || answer.hasChoice))
+            wrong = QStringLiteral("a secret, a name or a choice in a cancellation");
+        else if (answer.ok && !answer.hasPassword)
+            wrong = QStringLiteral("ok without a password");
+        else if (answer.ok && asksName && !answer.hasIdentity)
+            wrong = QStringLiteral("ok without a name");
+        else if (answer.hasIdentity && !asksName)
+            wrong = QStringLiteral("a name where none is asked");
+        else if (answer.hasChoice && !request->rememberOffered)
+            wrong = QStringLiteral("a choice where none was shown");
+        if (!wrong.isEmpty()) {
+            log(QStringLiteral("invalid answer to %1: %2; the request is cancelled").arg(answer.id, wrong));
+            cancelRequest(answer.id, true);
+            protocolError(QStringLiteral("bad-answer"), wrong, false);
+            return;
+        }
+        m_pending.remove(answer.id);
+        m_book.release(answer.id);
+        if (!m_kio)
+            return;
+        if (!answer.ok) {
+            m_kio->userCancel(request);
+            return;
+        }
+        // Decoded straight into gcr's secure memory; the line it came from is wiped by the caller.
+        auto*      secure = static_cast<char*>(gcr_secure_memory_alloc(limits::kPassword + 1));
+        const long n      = decodeJsonString(line.data() + answer.password.begin, answer.password.end - answer.password.begin, secure, limits::kPassword);
+        QString    name;
+        long       named = 0;
+        if (asksName) {
+            std::array<char, limits::kIdentity> buffer{};
+            named = decodeJsonString(line.data() + answer.identity.begin, answer.identity.end - answer.identity.begin, buffer.data(), buffer.size());
+            if (named > 0)
+                name = QString::fromUtf8(buffer.data(), static_cast<qsizetype>(named));
+        }
+        if (n <= 0 || (asksName && named <= 0)) {
+            explicit_bzero(secure, limits::kPassword + 1);
+            gcr_secure_memory_free(secure);
+            log(QStringLiteral("answer to %1: an empty or undecodable password or name; the request is cancelled").arg(answer.id));
+            send(cancelMessage(answer.id));
+            m_kio->abandon(request, QStringLiteral("an empty answer"));
+            return;
+        }
+        secure[n] = '\0';
+        m_kio->answer(request, name, kio::Secret::adopt(secure, static_cast<std::size_t>(n)), answer.hasChoice && answer.choice);
+    }
+
     void Bridge::cancelAll(bool tellShell) {
         for (const QString& id : m_book.ids())
             cancelRequest(id, tellShell);
@@ -510,7 +615,7 @@ namespace gf::prompter {
             log(QStringLiteral("shell connected (pid %1, %2)")
                     .arg(check.pid)
                     .arg(check.raceFree ? QStringLiteral("cgroup read through its pidfd") : QStringLiteral("cgroup read through SO_PEERCRED's pid")));
-            send(helloMessage(bridgeKinds(m_nm != nullptr)));
+            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));
         }
     }
 
@@ -586,6 +691,8 @@ namespace gf::prompter {
             wantName(true);
             if (m_nm)
                 m_nm->setWanted(m_kinds.contains(QStringLiteral("nm")));
+            if (m_kio)
+                m_kio->setWanted(m_kinds.contains(QStringLiteral("kio")));
             return;
         }
         if (!m_ready) {
@@ -605,6 +712,10 @@ namespace gf::prompter {
         const Pending pending = *it;
         if (pending.nm) {
             onNmAnswer(answer, line, pending.nm);
+            return;
+        }
+        if (pending.kio) {
+            onKioAnswer(answer, line, pending.kio);
             return;
         }
         QString wrong;
@@ -714,6 +825,10 @@ namespace gf::prompter {
         // NetworkManager loses its agent with the shell (step 9c): it fails with NoSecrets meanwhile, as before.
         if (m_nm)
             m_nm->setWanted(false);
+        // KIO's clients get "nothing" for every request still open, then the name goes: kiod6 is activated for the next
+        // one (step 9e).
+        if (m_kio)
+            m_kio->setWanted(false);
         // gcr's clients forget a prompt without stopping it when the prompter's name goes (gcr-system-prompt.c
         // on_prompter_vanished): gcr would keep it, and the filter would count it, until the client leaves the bus. Each
         // open prompt is closed instead, so gcr ends it and tells its caller PromptDone (counter-review of step 9a,

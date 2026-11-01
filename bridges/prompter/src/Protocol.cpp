@@ -537,6 +537,20 @@ namespace gf::prompter {
         return line({{QStringLiteral("type"), QStringLiteral("name")}, {QStringLiteral("state"), state}});
     }
 
+    namespace {
+        QJsonObject requesterObject(const RequesterView& r) {
+            return {
+                {QStringLiteral("role"), r.role},
+                {QStringLiteral("name"), r.name},
+                {QStringLiteral("desktopId"), r.desktopId},
+                {QStringLiteral("icon"), r.icon},
+                {QStringLiteral("path"), r.path},
+                {QStringLiteral("identified"), r.identified},
+                {QStringLiteral("onBehalf"), r.onBehalf},
+            };
+        }
+    } // namespace
+
     QByteArray promptMessage(const PromptView& p) {
         const QJsonObject requester{
             {QStringLiteral("role"), p.requester.role},
@@ -574,6 +588,25 @@ namespace gf::prompter {
             {QStringLiteral("kind"), QStringLiteral("nm")},
             {QStringLiteral("network"),
              QJsonObject{{QStringLiteral("ssid"), p.ssid}, {QStringLiteral("security"), p.security}, {QStringLiteral("identity"), p.identity}}},
+        });
+    }
+
+    QByteArray kioPromptMessage(const KioPromptView& p) {
+        return line({
+            {QStringLiteral("type"), QStringLiteral("prompt")},
+            {QStringLiteral("id"), p.id},
+            {QStringLiteral("kind"), QStringLiteral("kio")},
+            {QStringLiteral("requester"), requesterObject(p.requester)},
+            {QStringLiteral("server"), p.server},
+            {QStringLiteral("login"),
+             QJsonObject{
+                 {QStringLiteral("name"), p.name},
+                 {QStringLiteral("nameMode"), p.nameMode},
+                 {QStringLiteral("realm"), p.realm},
+                 {QStringLiteral("retry"), p.retry},
+                 {QStringLiteral("remember"), p.remember},
+                 {QStringLiteral("keyring"), p.keyring},
+             }},
         });
     }
 

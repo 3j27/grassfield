@@ -5,13 +5,15 @@ add_compile_definitions(GRASSFIELD_VERSION="${GF_VERSION}")
 
 # ADR-0035 D-9: C++/Qt 6 (QtCore) and libgcr-4 for gcr's protocol and its exchange; GDBus (GIO, which gcr-4 and qt6-base's
 # GLib event dispatcher already bring) for the bus, because gcr's prompter needs a GDBusConnection. No QtDBus, no
-# QtNetwork (decision 9-5: the bridge reads the shell into gcr's secure memory itself). No C source of Grassfield's own.
+# QtNetwork (decision 9-5: the bridge reads the shell into gcr's secure memory itself). libsecret (step 9e, D-9's list) for
+# KIO's remembered passwords in the Secret Service, its asynchronous calls only. No C source of Grassfield's own.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GCR REQUIRED IMPORTED_TARGET gcr-4 gio-unix-2.0)
+pkg_check_modules(SECRET REQUIRED IMPORTED_TARGET libsecret-1)
 
 # gcr-4's headers stay behind this definition (gcr.h); Qt's signals/slots keywords clash with GIO's struct members.
 add_compile_definitions(GCR_API_SUBJECT_TO_CHANGE QT_NO_KEYWORDS)
@@ -25,17 +27,19 @@ set(PROMPTER_LOGIC
     src/Filter.cpp src/Filter.h
     src/Prompt.cpp src/Prompt.h
     src/NmSecrets.cpp src/NmSecrets.h
+    src/KioAuth.cpp src/KioAuth.h
     src/Askpass.cpp src/Askpass.h)
 
 add_executable(grassfield-prompter
     src/main.cpp
     src/Bridge.cpp src/Bridge.h
     src/NmAgent.cpp src/NmAgent.h
+    src/KioServer.cpp src/KioServer.h
     src/Log.h
     ${PROMPTER_LOGIC})
 # apps/runmode.h and apps/testbus.h: the run-mode rule (ADR-0019) and the private test bus, header-only, shared with the apps.
 target_include_directories(grassfield-prompter PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR}/../../apps)
-target_link_libraries(grassfield-prompter PRIVATE Qt6::Core PkgConfig::GCR)
+target_link_libraries(grassfield-prompter PRIVATE Qt6::Core PkgConfig::GCR PkgConfig::SECRET)
 
 # grassfield-askpass (step 9c): udiskie's password command, a gcr client (grassfield-automount.service). Qt Core for its
 # French message (ui/i18n/translationloader.h, the system catalog), libgcr-4 for the prompt; no C source of its own.

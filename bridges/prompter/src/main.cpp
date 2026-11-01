@@ -8,6 +8,8 @@
 //   --socket PATH      the socket (default $XDG_RUNTIME_DIR/grassfield/prompter.sock); required in a development run
 //   --nm-timeout-ms N  development runs only (the tests): how long a NetworkManager request waits for its answer
 //                      (default 110000, under NetworkManager's own 120 s)
+// KIO's password server (step 9e) is on the session bus; the Secret Service it remembers passwords in is reached through
+// libsecret's own connection to that bus.
 // The system bus (the NetworkManager secret agent, step 9c): in the session always unix:path=/run/dbus/system_bus_socket,
 // whatever DBUS_SYSTEM_BUS_ADDRESS says; in a development run only DBUS_SYSTEM_BUS_ADDRESS when it is a private test bus
 // under GF_TEST_BUS_DIR (none set: no agent). No system bus, or no NetworkManager on it: no agent, gcr's prompts unchanged.
@@ -21,6 +23,7 @@
 
 #include "Bridge.h"
 #include "Filter.h"
+#include "KioAuth.h"
 #include "NmSecrets.h"
 #include "Log.h"
 #include "Peer.h"
@@ -216,6 +219,9 @@ int main(int argc, char** argv) {
     options.requireUserManager = !dev;
     options.uid                = ::getuid();
     options.systemBus          = systemBus;
+    // Where gnome-keyring keeps its keyrings (GLib's user data directory, as gnome-keyring finds it): the KIO server reads
+    // only whether the default one has a password (step 9e).
+    options.keyringDirectory = kio::keyringDirectory(qEnvironmentVariable("XDG_DATA_HOME"), QString::fromUtf8(g_get_home_dir()));
     if (nmTimeoutMs)
         options.nmTimeoutMs = nmTimeoutMs;
     int rc = 0;
