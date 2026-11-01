@@ -235,8 +235,33 @@ Window {
 
     function goToFolder(): void {
         goSheet.focusBack = win.tab ? win.tab.view : null;
-        goSheet.setField("");
         goSheet.open();
+    }
+
+    function goToStandardFolder(which: string): void {
+        const url = win.app.standardFolder(which);
+        if (String(url) !== "")
+            win.tab.navigate(url, true);
+    }
+
+    // Go > Connect to Server… (FP-77): its own window, one per browser window, connected to this window's tab.
+    property var connectWindow: null
+    function connectToServer(): void {
+        if (!win.connectWindow) {
+            win.connectWindow = connectComponent.createObject(win, {app: win.app, browser: win});
+            if (!win.connectWindow) {
+                console.warn("grassfield-files: cannot create Connect to Server:", connectComponent.errorString());
+                return;
+            }
+        }
+        win.connectWindow.show();
+        win.connectWindow.raise();
+        win.connectWindow.requestActivate();
+    }
+
+    Component {
+        id: connectComponent
+        ConnectWindow {}
     }
 
     // File > New Smart Folder (Finder): a new window on an empty search of this computer, the + ready for its rules.
@@ -496,6 +521,33 @@ Window {
         sequence: "Ctrl+Shift+A"
         enabled: !win.childIsKey
         onActivated: win.tab.navigate(win.app.applicationsUrl(), true)
+        onActivatedAmbiguously: activated()
+    }
+    // The Go menu's places (Finder): Desktop, Documents, Downloads, Computer, Network (decision F-1: no Utilities folder).
+    Instantiator {
+        model: [{keys: "Ctrl+Shift+D", place: "desktop"}, {keys: "Ctrl+Shift+O", place: "documents"}, {keys: "Ctrl+Alt+L", place: "downloads"},
+                {keys: "Ctrl+Shift+C", place: "computer"}, {keys: "Ctrl+Shift+K", place: "network"}]
+
+        delegate: Shortcut {
+            required property var modelData
+            sequence: modelData.keys
+            enabled: !win.childIsKey && win.tab !== null
+            onActivated: win.goToStandardFolder(modelData.place)
+            onActivatedAmbiguously: activated()
+        }
+    }
+    // Show Hidden Files (Finder's Shift+Cmd+.; Ctrl+H stays for the PC habit).
+    Shortcut {
+        // Shift+. types ">" on most layouts: both spellings, as the Open and Save panels (FilePanel.qml).
+        sequences: ["Ctrl+Shift+.", "Ctrl+>"]
+        enabled: !win.childIsKey
+        onActivated: win.app.showHidden = !win.app.showHidden
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+K"
+        enabled: !win.childIsKey
+        onActivated: win.connectToServer()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -928,19 +980,10 @@ Window {
         }
     }
 
-    Sheet {
+    GoToFolderPanel {
         id: goSheet
-        title: qsTr("Go to the folder:")
-        withField: true
-        placeholder: qsTr("~/Documents, /usr/share or trash:/")
-        confirmText: qsTr("Go")
-        confirmHandler: text => {
-            const url = win.app.resolveLocation(text, win.tab.url);
-            if (String(url) === "")
-                return qsTr("The folder “%1” can’t be found.").arg(text);
-            win.tab.navigate(url, true);
-            return "";
-        }
+        app: win.app
+        tab: win.tab
     }
 
     Sheet {

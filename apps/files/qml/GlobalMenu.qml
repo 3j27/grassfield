@@ -409,7 +409,7 @@ Platform.MenuBar {
         }
         MenuCheckItem {
             text: qsTr("Show Hidden Files")
-            shortcut: "Ctrl+H"
+            shortcut: "Ctrl+Shift+."
             enabled: bar.keysHere
             on: bar.app.showHidden
             onChosen: bar.app.showHidden = !bar.app.showHidden
@@ -503,7 +503,7 @@ Platform.MenuBar {
 
                 visible: kind !== "tag"
                 text: bar.label(name)
-                shortcut: kind === "recents" ? "Ctrl+Shift+F" : kind === "applications" ? "Ctrl+Shift+A" : bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
+                shortcut: bar.app.placeShortcut(kind, url)
                 enabled: bar.keysHere
                 onTriggered: bar.win.openPlace(index, url, mounted)
             }
@@ -513,11 +513,44 @@ Platform.MenuBar {
             onObjectRemoved: (index, object) => goMenu.removeItem(object as Platform.MenuItem)
         }
         Platform.MenuSeparator {}
+        // Recent Folders (Finder): the folders shown last, then Clear Menu.
+        Platform.Menu {
+            id: recentFoldersMenu
+            title: qsTr("Recent Folders")
+            enabled: bar.app.recentFolders.length > 0
+
+            Instantiator {
+                model: bar.app.recentFolders
+
+                delegate: Platform.MenuItem {
+                    required property var modelData
+
+                    readonly property var segments: bar.app.pathSegments(modelData.url)
+                    text: bar.label(segments.length > 0 ? segments[segments.length - 1].label : String(modelData.url))
+                    onTriggered: bar.tab.navigate(modelData.url, true)
+                }
+
+                onObjectAdded: (index, object) => recentFoldersMenu.insertItem(index, object as Platform.MenuItem)
+                onObjectRemoved: (index, object) => recentFoldersMenu.removeItem(object as Platform.MenuItem)
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem {
+                text: qsTr("Clear Menu")
+                onTriggered: bar.app.clearRecentFolders()
+            }
+        }
+        Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Go to Folder…")
             shortcut: "Ctrl+Shift+G"
             enabled: bar.keysHere
             onTriggered: bar.win.goToFolder()
+        }
+        Platform.MenuItem {
+            text: qsTr("Connect to Server…")
+            shortcut: "Ctrl+K"
+            enabled: bar.keysHere
+            onTriggered: bar.win.connectToServer()
         }
     }
 }

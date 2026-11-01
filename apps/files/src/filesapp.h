@@ -324,6 +324,39 @@ public:
     Q_INVOKABLE bool hasSavedSearch(const QString &name) const;
     Q_INVOKABLE void removeSavedSearch(const QString &file);
     Q_INVOKABLE void setSavedSearchInSidebar(const QString &file, bool on);
+
+    // The Go menu (FP-75..FP-77, NavLogic). The Finder's shortcut of a sidebar place ("" for none).
+    Q_INVOKABLE QString placeShortcut(const QString &kind, const QUrl &url) const;
+    // The Go menu's standard places: "desktop", "documents", "downloads" (XDG user folders), "computer" (the root folder),
+    // "network" (remote:/, invalid without a KIO network worker).
+    Q_INVOKABLE QUrl standardFolder(const QString &which) const;
+    // Go to Folder: lists the local folders matching `text` (relative text in `base`) off the GUI thread, so a slow mount
+    // never freezes the window; folderCompletions(text, matches) answers the latest request only, matches
+    // [{name, url, parts}] (parts: the path's folder names), at most kMaxCompletions.
+    static constexpr int kMaxCompletions = 50;
+    static constexpr int kMaxCompletionScan = 5000;
+    Q_INVOKABLE void completeFolder(const QString &text, const QUrl &base);
+    // The text once `match` completes it ("~/D" + "Downloads" -> "~/Downloads/").
+    Q_INVOKABLE QString completedText(const QString &text, const QUrl &base, const QString &match) const;
+    // Go > Recent Folders and Go to Folder's list while its field is empty: the folders shown last, newest first
+    // ([{url}], at most kMaxRecentFolders; local folders and servers, never a search, the Trash or Recents).
+    static constexpr int kMaxRecentFolders = 10;
+    Q_PROPERTY(QVariantList recentFolders READ recentFolders NOTIFY recentFoldersChanged)
+    QVariantList recentFolders() const;
+    Q_INVOKABLE void noteFolder(const QUrl &url);
+    Q_INVOKABLE void clearRecentFolders();
+    // Connect to Server (decision F-9): an address's URL (invalid: refused), the servers connected to lately and the
+    // favourite servers, kept in QSettings servers/* without any password.
+    static constexpr int kMaxServers = 20;
+    Q_INVOKABLE QUrl serverUrl(const QString &text) const;
+    Q_PROPERTY(QStringList recentServers READ recentServers NOTIFY serversChanged)
+    Q_PROPERTY(QStringList favoriteServers READ favoriteServers NOTIFY serversChanged)
+    QStringList recentServers() const;
+    QStringList favoriteServers() const;
+    Q_INVOKABLE void noteServer(const QUrl &url);
+    Q_INVOKABLE bool addFavoriteServer(const QString &text);
+    Q_INVOKABLE void removeFavoriteServer(int index);
+    Q_INVOKABLE void clearRecentServers();
     // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
     // and it stays usable. Setting that tag in Files again lists it again.
     Q_INVOKABLE void forgetTag(const QString &tag);
@@ -367,6 +400,9 @@ signals:
     // spring-loaded goes back) or was dropped there (it stays, whichever view took the drop).
     void outsideDragEnded(QObject *window, bool dropped);
     void savedSearchesChanged();
+    void folderCompletions(const QString &text, const QVariantList &matches);
+    void recentFoldersChanged();
+    void serversChanged();
 
 protected:
     // Remembers the last drag move over each window (refreshDrag).
@@ -401,6 +437,9 @@ private:
     KioPrompts *m_prompts = nullptr;
     PlacesModel *m_places = nullptr;
     SavedSearches *m_savedSearches = nullptr;
+    quint64 m_completionGeneration = 0;
+    // Stored lists read back: valid URLs only, bounded.
+    QStringList storedUrls(const QString &key, int max) const;
     void publishSavedSearches();
     QSettings m_settings;
     QFileSystemWatcher m_watcher;

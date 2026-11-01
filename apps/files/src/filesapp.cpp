@@ -6,6 +6,7 @@
 
 #include "filelogic.h"
 #include "launchguard.h"
+#include "navlogic.h"
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "imagerotate.h"
@@ -20,6 +21,7 @@
 #include <QDateTime>
 #include <QLocale>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -30,10 +32,12 @@
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QPair>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QThread>
 #include <QWindow>
 
 #include <memory>
@@ -1947,6 +1951,170 @@ QString FilesApp::searchDateValue(const QString &text) const
 QString FilesApp::searchToday() const
 {
     return QDate::currentDate().toString(Qt::ISODate);
+}
+
+QString FilesApp::placeShortcut(const QString &kind, const QUrl &url) const
+{
+    const QStringList xdg = {QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
+                             QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+                             QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)};
+    return NavLogic::placeShortcut(kind, url.isLocalFile() ? url.toLocalFile() : QString(), QDir::homePath(), xdg);
+}
+
+QUrl FilesApp::standardFolder(const QString &which) const
+{
+    if (which == QLatin1String("desktop"))
+        return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation));
+    if (which == QLatin1String("documents"))
+        return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
+    if (which == QLatin1String("downloads"))
+        return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
+    if (which == QLatin1String("computer"))
+        return QUrl::fromLocalFile(QStringLiteral("/"));
+    if (which == QLatin1String("network") && m_places && m_places->networkAvailable())
+        return QUrl(QStringLiteral("remote:/"));
+    return {};
+}
+
+void FilesApp::completeFolder(const QString &text, const QUrl &base)
+{
+    const quint64 generation = ++m_completionGeneration;
+    const NavLogic::CompletionTarget target = NavLogic::completionTarget(text, base.isLocalFile() ? base.toLocalFile() : QString(), QDir::homePath());
+    if (target.folder.isEmpty()) {
+        emit folderCompletions(text, {});
+        return;
+    }
+    const bool hidden = showHidden();
+    const QPointer<FilesApp> self(this);
+    // Listed on a thread of its own: a folder on a slow or hung mount never blocks the window (the answer is then
+    // dropped by the next request's generation).
+    QThread *thread = QThread::create([self, generation, text, target, hidden]() {
+        QStringList names;
+        QDirIterator it(target.folder, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden);
+        for (int seen = 0; it.hasNext() && seen < kMaxCompletionScan; ++seen) {
+            it.next();
+            names.append(it.fileName());
+        }
+        const QStringList matches = NavLogic::folderMatches(names, target.prefix, hidden, kMaxCompletions);
+        QMetaObject::invokeMethod(
+            qApp,
+            [self, generation, text, target, matches]() {
+                if (!self || generation != self->m_completionGeneration)
+                    return;
+                QVariantList out;
+                const QStringList parts = target.folder.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+                for (const QString &name : matches) {
+                    const QString path = target.folder == QStringLiteral("/") ? QLatin1Char('/') + name : target.folder + QLatin1Char('/') + name;
+                    out.append(QVariantMap{{QStringLiteral("name"), name},
+                                           {QStringLiteral("url"), QUrl::fromLocalFile(path)},
+                                           {QStringLiteral("parts"), QStringList(parts) << name}});
+                }
+                emit self->folderCompletions(text, out);
+            },
+            Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+}
+
+QString FilesApp::completedText(const QString &text, const QUrl &base, const QString &match) const
+{
+    return NavLogic::completedText(NavLogic::completionTarget(text, base.isLocalFile() ? base.toLocalFile() : QString(), QDir::homePath()), match);
+}
+
+QStringList FilesApp::storedUrls(const QString &key, int max) const
+{
+    QStringList out;
+    for (const QString &s : m_settings.value(key).toStringList()) {
+        const QUrl url(s, QUrl::StrictMode);
+        if (url.isValid() && !url.scheme().isEmpty() && !out.contains(s))
+            out.append(s);
+        if (out.size() >= max)
+            break;
+    }
+    return out;
+}
+
+QVariantList FilesApp::recentFolders() const
+{
+    QVariantList out;
+    for (const QString &s : storedUrls(QStringLiteral("go/recentFolders"), kMaxRecentFolders))
+        out.append(QVariantMap{{QStringLiteral("url"), QUrl(s)}});
+    return out;
+}
+
+void FilesApp::noteFolder(const QUrl &url)
+{
+    // Folders one goes back to: local folders and servers; never a search, the Trash, Recents or the Applications list.
+    const QString scheme = url.scheme();
+    if (scheme != QLatin1String("file") && !NavLogic::serverUrl(url.toString()).isValid())
+        return;
+    const QString clean = url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments | QUrl::RemovePassword).toString();
+    const QStringList before = storedUrls(QStringLiteral("go/recentFolders"), kMaxRecentFolders);
+    const QStringList after = NavLogic::pushRecent(before, clean, kMaxRecentFolders);
+    if (after == before)
+        return;
+    m_settings.setValue(QStringLiteral("go/recentFolders"), after);
+    emit recentFoldersChanged();
+}
+
+void FilesApp::clearRecentFolders()
+{
+    m_settings.remove(QStringLiteral("go/recentFolders"));
+    emit recentFoldersChanged();
+}
+
+QUrl FilesApp::serverUrl(const QString &text) const
+{
+    return NavLogic::serverUrl(text);
+}
+
+QStringList FilesApp::recentServers() const
+{
+    return storedUrls(QStringLiteral("servers/recent"), kMaxServers);
+}
+
+QStringList FilesApp::favoriteServers() const
+{
+    return storedUrls(QStringLiteral("servers/favorites"), kMaxServers);
+}
+
+void FilesApp::noteServer(const QUrl &url)
+{
+    const QUrl clean = NavLogic::serverUrl(url.toString());
+    if (!clean.isValid())
+        return;
+    m_settings.setValue(QStringLiteral("servers/recent"), NavLogic::pushRecent(recentServers(), clean.toString(), kMaxServers));
+    emit serversChanged();
+}
+
+bool FilesApp::addFavoriteServer(const QString &text)
+{
+    const QUrl url = NavLogic::serverUrl(text);
+    if (!url.isValid())
+        return false;
+    QStringList favorites = favoriteServers();
+    if (!favorites.contains(url.toString()) && favorites.size() < kMaxServers)
+        favorites.append(url.toString());
+    m_settings.setValue(QStringLiteral("servers/favorites"), favorites);
+    emit serversChanged();
+    return true;
+}
+
+void FilesApp::removeFavoriteServer(int index)
+{
+    QStringList favorites = favoriteServers();
+    if (index < 0 || index >= favorites.size())
+        return;
+    favorites.removeAt(index);
+    m_settings.setValue(QStringLiteral("servers/favorites"), favorites);
+    emit serversChanged();
+}
+
+void FilesApp::clearRecentServers()
+{
+    m_settings.remove(QStringLiteral("servers/recent"));
+    emit serversChanged();
 }
 
 QVariantList FilesApp::savedSearches() const

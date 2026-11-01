@@ -2501,6 +2501,44 @@ QtObject {
     readonly property int filesCriteriaValueWidth: 160
     // estimate: ms typing rests before the search starts again (the Finder searches as one types) [ref: docs/specs/files.md § Search]
     readonly property int filesSearchDelay: 250
+    // macOS 27 Finder-Go-To-Folder: the panel, 920 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoPanelWidth: 460
+    // macOS 27 Finder-Go-To-Folder: the panel, 366 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoPanelHeight: 183
+    // macOS 27 Finder-Go-To-Folder: the corner rounds over about 33 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoPanelRadius: 17
+    // macOS 27 Finder-Go-To-Folder: the field row to its hairline, 69 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoFieldHeight: 35
+    // macOS 27 Finder-Go-To-Folder: the typed text and the clear button 33 px inside the panel at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoFieldInset: 16
+    // macOS 27 Finder-Go-To-Folder: the typed text's capitals 22 px tall at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoFieldTextSize: 16
+    // macOS 27 Finder-Go-To-Folder: the clear button, 28 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoClearSize: 14
+    // macOS 27 Finder-Go-To-Folder: hairline to the first row, 66 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoHeaderHeight: 33
+    // macOS 27 Finder-Go-To-Folder: "Go to:" centred 43 px below the hairline at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property real filesGoHeaderCenter: 21.5
+    // macOS 27 Finder-Go-To-Folder: a row, 44 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoRowHeight: 22
+    // macOS 27 Finder-Go-To-Folder: the chosen row 20 px inside the panel at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoRowInset: 10
+    // macOS 27 Finder-Go-To-Folder: the row's text 18 px inside the chosen row at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoRowTextInset: 9
+    // macOS 27 Finder-Go-To-Folder: the list area 250 under the white field row (the text colour at 2%) [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property real filesGoListOpacity: 0.02
+    // macOS 27 Finder-Connect-to-Server: the window, 972 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectWindowWidth: 486
+    // macOS 27 Finder-Connect-to-Server: the window below its 32-pt title bar, 403 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectWindowHeight: 202
+    // macOS 27 Finder-Connect-to-Server: the field, list and buttons 40 px inside the window at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectInset: 20
+    // macOS 27 Finder-Connect-to-Server: a Favorite Servers row, 38 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectRowHeight: 19
+    // macOS 27 Finder-Connect-to-Server: the list shows four rows [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectListRows: 4
+    // macOS 27 Finder-Connect-to-Server: the history pop-up button inside the field, 48 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectHistoryWidth: 24
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

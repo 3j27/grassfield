@@ -173,6 +173,9 @@ FocusScope {
         root.applyFolderView(target);
         root.url = target;
         root.folder.url = target;
+        // Go > Recent Folders (FilesApp keeps folders and servers only).
+        if (!root.chooser)
+            root.app.noteFolder(target);
         if (record && !(root.historyIndex >= 0 && root.app.sameUrl(root.history[root.historyIndex], target))) {
             const h = Nav.pushHistory(root.history, root.historyIndex, target);
             root.history = h.entries;
@@ -988,7 +991,7 @@ FocusScope {
         items.push({id: "useGroups", text: qsTr("Use Groups"), shortcut: qsTr("Ctrl+Super+0"), checked: root.groupBy > 0});
         items.push(root.groupSubmenu());
         items.push(root.sortSubmenu());
-        items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+H"), checked: root.app.showHidden});
+        items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+Shift+."), checked: root.app.showHidden});
         items.push({id: "preview", text: root.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview"), shortcut: qsTr("Ctrl+Shift+P")});
         return items;
     }
@@ -1066,7 +1069,7 @@ FocusScope {
         items.push({id: "useGroups", text: qsTr("Use Groups"), shortcut: qsTr("Ctrl+Super+0"), checked: root.groupBy > 0});
         items.push(root.groupSubmenu());
         items.push(root.sortSubmenu());
-        items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+H"), checked: root.app.showHidden});
+        items.push({id: "hidden", text: qsTr("Show Hidden Files"), shortcut: qsTr("Ctrl+Shift+."), checked: root.app.showHidden});
         items.push({id: "preview", text: root.previewShown ? qsTr("Hide Preview") : qsTr("Show Preview"), shortcut: qsTr("Ctrl+Shift+P")});
         return items;
     }
