@@ -364,6 +364,23 @@ QList<AppStreamComponent> parseAppStream(const QByteArray &bytes)
                     c.flatpakRef = ref.join(QLatin1Char('/'));
                     c.runtime = isFlatpakRuntime(runtime) ? runtime : QString();
                 }
+            } else if (name == u"provides" || name == u"mimetypes") {
+                // The document types it opens (the Store's search by type): <provides><mediatype>, <mimetypes><mimetype>.
+                const bool provides = name == u"provides";
+                while (!xml.atEnd()) {
+                    xml.readNext();
+                    if (xml.isEndElement() && xml.name() == (provides ? u"provides" : u"mimetypes"))
+                        break;
+                    if (!xml.isStartElement())
+                        continue;
+                    if (xml.name() != (provides ? u"mediatype" : u"mimetype")) {
+                        xml.skipCurrentElement();
+                        continue;
+                    }
+                    const QString v = xml.readElementText().trimmed().toLower();
+                    if (isMediaType(v) && !c.mediaTypes.contains(v) && c.mediaTypes.size() < 64)
+                        c.mediaTypes.append(v);
+                }
             } else if (name == u"custom") {
                 while (!xml.atEnd()) {
                     xml.readNext();
@@ -380,13 +397,19 @@ QList<AppStreamComponent> parseAppStream(const QByteArray &bytes)
                         c.verified = true;
                 }
             } else {
-                xml.skipCurrentElement(); // provides, suggests, extends, requires, agreement, …
+                xml.skipCurrentElement(); // suggests, extends, requires, agreement, …
             }
         }
         if (!c.id.isEmpty() && (isPackageName(c.pkgname) || !c.flatpak.isEmpty()) && c.id.size() <= 255)
             out.append(c);
     }
     return out;
+}
+
+bool isMediaType(const QString &type)
+{
+    static const QRegularExpression re(QStringLiteral(R"(\A[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\z)"));
+    return re.match(type).hasMatch();
 }
 
 bool isFlatpakRuntime(const QString &runtime)

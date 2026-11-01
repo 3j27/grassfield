@@ -113,7 +113,10 @@ fin 0)SH";
 
 // flatpak's stand-in (b.3, step 3c): `install --user --noninteractive flathub <ref>` prints S24's lines and adds the app to
 // the flatpaks file (fmode fail: flatpak's error; slow: it waits for SIGTERM after its first ref, S25), `uninstall` removes it
-// and `--unused` the runtime, `list --user --app` answers from the file. Each call is written to fcalls.
+// and `--unused` the runtime, `list --user --app` answers from the file. Step 4: `update --user --noninteractive -- <ref>...`
+// prints "Updating <ref>" and takes each ref out of the fupdates file, `remote-ls --user --updates` lists that file's refs
+// (S31); fmode offline: the update says "Nothing to update." and exits 0, the listing fails (S31d); stale: the update exits 0
+// and updates nothing. Each call is written to fcalls.
 const QByteArray kFlatpak = R"SH(root=$(dirname "$0")
 echo "$*" >>"$root/fcalls"
 mode=$(cat "$root/fmode" 2>/dev/null)
@@ -136,6 +139,19 @@ case "$1" in
     grep -vx "$5" "$root/flatpaks" >"$root/f2"; mv "$root/f2" "$root/flatpaks"
     echo "Uninstalling app/$5/x86_64/stable" ;;
   list) cat "$root/flatpaks" ;;
+  update)
+    [ "$mode" = fail ] && { echo "error: Could not connect"; exit 1; }
+    if [ "$mode" = offline ] || [ "$mode" = stale ]; then echo; echo "Nothing to update."; exit 0; fi
+    shift 4
+    for ref in "$@"; do
+      echo "Updating $ref"
+      grep -vx "$ref" "$root/fupdates" >"$root/u2"; mv "$root/u2" "$root/fupdates"
+    done ;;
+  remote-ls)
+    [ "$mode" = offline ] && { echo "error: Unable to load summary from remote flathub" >&2; exit 1; }
+    while read -r ref; do
+      [ -n "$ref" ] && printf '%s\t%s\tflathub\t%s\n' "$(echo "$ref" | cut -d/ -f2)" "$(echo "$ref" | cut -d/ -f4)" "$ref"
+    done <"$root/fupdates" ;;
   *) exit 2 ;;
 esac)SH";
 
@@ -168,6 +184,7 @@ struct Fixture {
         config.omarchy = [installer](const QString &command, const QStringList &args) { return QStringList{installer, command} + args; };
         config.flatpak = storetest::script(root + QStringLiteral("/flatpak"), kFlatpak);
         storetest::writeFile(root + QStringLiteral("/flatpaks"), "");
+        storetest::writeFile(root + QStringLiteral("/fupdates"), "");
         config.pollMs = 20;
     }
     void mode(const QByteArray &m) { storetest::writeFile(dir.filePath(QStringLiteral("mode")), m); }
@@ -886,6 +903,108 @@ TEST(Operations, FlatpakInstallAndRemove)
     without.enqueue(flatpakRecord(QStringLiteral("org.example.Draw"), QStringLiteral("install")));
     ASSERT_TRUE(waitFor([&] { return ended.count() == 1; }));
     EXPECT_EQ(without.results().value(QStringLiteral("org.example.Draw")).outcome, QStringLiteral("notFinished"));
+}
+
+// A Flatpak's update (step 4): its refs (an app's, or the group's apps and runtimes), the app's own ref among them when it
+// updates one app; only on the flatpak path.
+OperationRecord flatpakUpdate(const QString &app, const QStringList &refs, const QString &appRef)
+{
+    OperationRecord r;
+    r.id = newOperationId();
+    r.kind = QStringLiteral("update");
+    r.path = QStringLiteral("flatpak");
+    r.app = app;
+    r.name = app;
+    r.packages = refs;
+    r.flatpak = appRef;
+    return r;
+}
+
+TEST(Operations, FlatpakUpdateRecords)
+{
+    const QString notes = QStringLiteral("app/org.example.Notes/x86_64/stable");
+    const QString platform = QStringLiteral("runtime/org.example.Platform/x86_64/1");
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes).toJson()));
+    EXPECT_TRUE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {notes, platform}, QString()).toJson()));
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes, platform}, notes).toJson()))
+        << "one app's update names its ref alone";
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, platform).toJson())) << "an app's ref";
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), {}, QString()).toJson())) << "no ref";
+    for (const QString &bad : {QStringLiteral("--system"), QStringLiteral("app/org.example.Notes"), QStringLiteral("app/org.example.Notes/x86_64/../x"),
+                               QStringLiteral("extension/org.example.X/x86_64/1")})
+        EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), {notes, bad}, QString()).toJson())) << bad.toStdString();
+    QJsonObject helper = flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes).toJson();
+    helper.insert(QStringLiteral("path"), QStringLiteral("helper"));
+    EXPECT_FALSE(OperationRecord::fromJson(helper)) << "only a Flatpak updates through the Store";
+    // Not even with a package name the helper takes: the system updates as a whole, in Software Update (SD32).
+    helper.insert(QStringLiteral("packages"), QJsonArray{QStringLiteral("example-notes")});
+    helper.insert(QStringLiteral("flatpak"), QString());
+    EXPECT_FALSE(OperationRecord::fromJson(helper)) << "a package's update through the helper";
+    helper.insert(QStringLiteral("kind"), QStringLiteral("install"));
+    EXPECT_TRUE(OperationRecord::fromJson(helper)) << "the same record as an install is the helper's";
+    QStringList many;
+    for (int i = 0; i < 65; ++i)
+        many.append(QStringLiteral("app/org.example.A%1/x86_64/stable").arg(i));
+    EXPECT_FALSE(OperationRecord::fromJson(flatpakUpdate(QStringLiteral("all"), many, QString()).toJson())) << "at most 64";
+}
+
+// An update runs flatpak update with its refs; it is done when a new check no longer lists them, never on the exit code
+// alone (offline flatpak exits 0 with "Nothing to update.", S31d).
+TEST(Operations, FlatpakUpdate)
+{
+    Fixture f;
+    Operations ops(f.config);
+    Ended finished(ops);
+    const QString notes = QStringLiteral("app/org.example.Notes/x86_64/stable");
+    const QString paint = QStringLiteral("app/org.example.Paint/x86_64/stable");
+    const QString platform = QStringLiteral("runtime/org.example.Platform/x86_64/1");
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fupdates")), (notes + QLatin1Char('\n') + paint + QLatin1Char('\n') + platform + QLatin1Char('\n')).toUtf8());
+    int total = 0;
+    QObject::connect(&ops, &Operations::changed, &ops, [&] {
+        for (const QVariant &v : ops.list())
+            total = qMax(total, v.toMap().value(QStringLiteral("total")).toInt());
+    });
+    ops.enqueue(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 1; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << ops.results().value(QStringLiteral("org.example.Notes")).outcome.toStdString();
+    EXPECT_EQ(total, 1);
+    EXPECT_EQ(f.read(QStringLiteral("fcalls")), "update --user --noninteractive -- " + notes.toUtf8()
+                                                    + "\nremote-ls --user --updates --columns=application,branch,origin,ref\n");
+
+    // Offline: flatpak says nothing was to update and exits 0; the check cannot answer: not finished, never done.
+    QFile::remove(f.dir.filePath(QStringLiteral("fcalls")));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "offline");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 2; }));
+    Operations::Result r = ops.results().value(QStringLiteral("store:flatpak-updates"));
+    EXPECT_EQ(r.kind, QStringLiteral("update"));
+    EXPECT_EQ(r.outcome, QStringLiteral("notFinished"));
+    EXPECT_EQ(r.present, 0);
+    EXPECT_EQ(r.total, 2);
+    EXPECT_EQ(f.read(QStringLiteral("fcalls")), "update --user --noninteractive -- " + paint.toUtf8() + " " + platform.toUtf8()
+                                                    + "\nremote-ls --user --updates --columns=application,branch,origin,ref\n");
+
+    // Exit 0, the refs still listed: not finished either.
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "stale");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    EXPECT_EQ(ops.results().value(QStringLiteral("store:flatpak-updates")).outcome, QStringLiteral("notFinished"));
+
+    // flatpak's own failure keeps its words; then all of it, done.
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "fail");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 4; }));
+    r = ops.results().value(QStringLiteral("store:flatpak-updates"));
+    EXPECT_EQ(r.outcome, QStringLiteral("failed"));
+    EXPECT_TRUE(r.details.contains(QLatin1String("Could not connect")));
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "");
+    ops.enqueue(flatpakUpdate(QStringLiteral("store:flatpak-updates"), {paint, platform}, QString()));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 5; }));
+    EXPECT_TRUE(ops.results().isEmpty());
+    EXPECT_EQ(f.read(QStringLiteral("fupdates")), "");
 }
 
 // Stopping an install (SD26): SIGTERM to flatpak, which ends at once (S25); the outcome says it was stopped, and only a

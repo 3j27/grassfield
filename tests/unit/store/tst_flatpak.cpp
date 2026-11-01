@@ -3,6 +3,7 @@
 // flatpak 1.18 printed in store-probes-4.sh (S22, S23), its sizes with the no-break space of a UTF-8 locale. The fake
 // flatpak here answers as flatpak does: its questions only on a terminal, and nothing installed unless told to proceed.
 #include "appstreamsource.h"
+#include "childprocess.h"
 #include "flatpak.h"
 #include "operations.h"
 #include "storetest.h"
@@ -84,6 +85,97 @@ TEST(Flatpak, RefsAndLists)
     EXPECT_TRUE(hasFlathubRemote("fedora\nflathub\n"));
     EXPECT_FALSE(hasFlathubRemote("flathub-beta\nmyflathub\n"));
     EXPECT_FALSE(flatpakArch().isEmpty());
+}
+
+// Step 4's updates (S31): `remote-ls --user --updates --columns=application,branch,origin,ref`, each line checked; an app's
+// and a runtime's refs.
+TEST(Flatpak, UpdatesListed)
+{
+    EXPECT_TRUE(isFlatpakRef(QStringLiteral("runtime/org.gnome.Platform/x86_64/50")));
+    EXPECT_TRUE(isFlatpakRef(QStringLiteral("app/org.x.Y/x86_64/stable")));
+    for (const char *bad : {"extension/org.x.Y/x86_64/1", "runtime/org.x.Y/x86_64", "runtime/notanid/x86_64/1", "runtime/org.x.Y/../1",
+                            "app/org.x.Y/x86_64/-stable", "--system"})
+        EXPECT_FALSE(isFlatpakRef(QLatin1String(bad))) << bad;
+    // S31a's lines (tab-separated), and lines that are not one of them.
+    const QList<FlatpakUpdate> updates = parseFlatpakUpdates(
+        "org.example.Hello\tstable\tflathub\tapp/org.example.Hello/x86_64/stable\n"
+        "org.example.Platform\t1\tflathub\truntime/org.example.Platform/x86_64/1\n"
+        "\n"
+        "org.example.Other\tstable\tflathub\tapp/org.example.Hello/x86_64/stable\n"   // a ref of another id
+        "org.example.Hello\tbeta\tflathub\tapp/org.example.Hello/x86_64/stable\n"     // of another branch
+        "org.example.Bad\tstable\t\tapp/org.example.Bad/x86_64/stable\n"              // no origin
+        "org.example.Bad\tstable\tflathub\tapp/org.example.Bad/x86_64/stable --system\n"
+        "org.example.Two\tstable\tflathub\n"                                           // three columns
+        "org.example.Mine\tstable\tmine\tapp/org.example.Mine/x86_64/stable\n");
+    ASSERT_EQ(updates.size(), 3);
+    EXPECT_EQ(updates.at(0).id, QStringLiteral("org.example.Hello"));
+    EXPECT_TRUE(updates.at(0).app);
+    EXPECT_EQ(updates.at(1).ref, QStringLiteral("runtime/org.example.Platform/x86_64/1"));
+    EXPECT_FALSE(updates.at(1).app);
+    EXPECT_EQ(updates.at(2).origin, QStringLiteral("mine")) << "the origin is kept: the backend keeps Flathub's";
+    QByteArray many;
+    for (int i = 0; i < 600; ++i)
+        many += QStringLiteral("org.example.A%1\tstable\tflathub\tapp/org.example.A%1/x86_64/stable\n").arg(i).toUtf8();
+    EXPECT_EQ(parseFlatpakUpdates(many).size(), 512);
+
+    // flatpak answering, and not (offline: exit 1, S31d).
+    QTemporaryDir dir;
+    FlatpakTools tools;
+    tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
+                                      "echo \"$*\" >>'" + dir.path().toUtf8() + "/calls'\n"
+                                      "[ -e '" + dir.path().toUtf8() + "/offline' ] && { echo 'error: Unable to load summary' >&2; exit 1; }\n"
+                                      "printf 'org.example.Hello\\tstable\\tflathub\\tapp/org.example.Hello/x86_64/stable\\n'\n");
+    const std::optional<QList<FlatpakUpdate>> listed = listFlatpakUpdates(tools);
+    ASSERT_TRUE(listed);
+    EXPECT_EQ(listed->size(), 1);
+    EXPECT_EQ(readAll(dir.filePath(QStringLiteral("calls"))), "remote-ls --user --updates --columns=application,branch,origin,ref\n");
+    storetest::writeFile(dir.filePath(QStringLiteral("offline")), "");
+    EXPECT_FALSE(listFlatpakUpdates(tools));
+}
+
+// What an update lets an app reach that it could not (SD25 for an update): the installed metadata against Flathub's newer
+// one; nothing new, something new, and either unread.
+TEST(Flatpak, UpdateAccessAdded)
+{
+    QTemporaryDir dir;
+    const QByteArray d = dir.path().toUtf8();
+    storetest::writeFile(dir.filePath(QStringLiteral("installed")), "[Application]\nname=org.example.Hello\n[Context]\nshared=network;\n");
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nshared=network;\n");
+    FlatpakTools tools;
+    tools.flatpak = storetest::script(dir.filePath(QStringLiteral("flatpak")),
+                                      "echo \"$*\" >>'" + d + "/calls'\n"
+                                      "case \"$1\" in\n"
+                                      "  info) [ -e '" + d + "/unreadable' ] && exit 1; cat '" + d + "/installed' ;;\n"
+                                      "  remote-info) cat '" + d + "/newer' ;;\n"
+                                      "esac\n");
+    const QString ref = QStringLiteral("app/org.example.Hello/x86_64/stable");
+    std::optional<QStringList> added = flatpakAccessAdded(tools, ref);
+    ASSERT_TRUE(added);
+    EXPECT_TRUE(added->isEmpty());
+    EXPECT_EQ(readAll(dir.filePath(QStringLiteral("calls"))), "info --user --show-metadata -- " + ref.toUtf8() + "\n"
+                                                                "remote-info --user --show-metadata flathub " + ref.toUtf8() + "\n");
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")),
+                         "[Application]\nname=org.example.Hello\n[Context]\nshared=network;\nfilesystems=home;\nsockets=x11;\n");
+    added = flatpakAccessAdded(tools, ref);
+    ASSERT_TRUE(added);
+    EXPECT_EQ(*added, (QStringList{QStringLiteral("home"), QStringLiteral("x11"), QStringLiteral("login"), QStringLiteral("outside")}));
+    // What it could reach and no longer can is not "added".
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n");
+    added = flatpakAccessAdded(tools, ref);
+    ASSERT_TRUE(added);
+    EXPECT_TRUE(added->isEmpty());
+    // Unread: metadata naming no app, or a value flatpak cannot interpret.
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Context]\nshared=network;\n");
+    EXPECT_FALSE(flatpakAccessAdded(tools, ref));
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nfilesystems=b\\qc;\n");
+    EXPECT_FALSE(flatpakAccessAdded(tools, ref));
+    // The installed side unread (flatpak info fails) is unread too, whatever the newer commit reaches.
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nshared=network;\n");
+    ASSERT_TRUE(flatpakAccessAdded(tools, ref));
+    storetest::writeFile(dir.filePath(QStringLiteral("unreadable")), "");
+    EXPECT_FALSE(flatpakAccessAdded(tools, ref));
+    QFile::remove(dir.filePath(QStringLiteral("unreadable")));
+    EXPECT_FALSE(flatpakAccessAdded(tools, QStringLiteral("runtime/org.example.Platform/x86_64/1"))) << "an app's ref only";
 }
 
 TEST(Flatpak, TerminalLinesAndSizes)
@@ -581,4 +673,35 @@ TEST(Flatpak, RealFlatpak)
     runtimes.start(tools.flatpak, {QStringLiteral("list"), QStringLiteral("--user"), QStringLiteral("--runtime"), QStringLiteral("--columns=application")});
     ASSERT_TRUE(runtimes.waitForFinished(20000));
     EXPECT_EQ(runtimes.readAllStandardOutput().trimmed(), QByteArray()) << "the unused runtime went with it";
+}
+
+// Step 4 with the real flatpak (tests/integration/store_flatpak.sh, after RealFlatpak: Hello 1.2 installed by flatpak itself,
+// then 1.3 published, with the same metadata): the Store's check names its ref, the update adds nothing it can reach, the
+// Store's own command updates it (operations.cpp: update --user --noninteractive -- <ref>), and the check no longer names it.
+TEST(Flatpak, RealUpdate)
+{
+    if (qEnvironmentVariable("STORE_TEST_FLATPAK_UPDATE") != QLatin1String("1"))
+        GTEST_SKIP() << "tests/integration/store_flatpak.sh runs it in a throwaway container";
+    storetest::ensureApp();
+    FlatpakTools tools;
+    tools.env = flatpakEnvironment();
+    const QString ref = QStringLiteral("app/org.example.Hello/x86_64/stable");
+    const std::optional<QList<FlatpakUpdate>> before = listFlatpakUpdates(tools);
+    ASSERT_TRUE(before);
+    ASSERT_TRUE(std::any_of(before->cbegin(), before->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref && u.app && u.origin == kFlathubRemote; }))
+        << "Hello 1.3 on the repository";
+    const std::optional<QStringList> added = flatpakAccessAdded(tools, ref);
+    ASSERT_TRUE(added);
+    EXPECT_TRUE(added->isEmpty()) << added->join(QLatin1Char(',')).toStdString();
+    ChildOptions options;
+    options.timeoutMs = 120000;
+    options.extraEnv = tools.env;
+    const ChildResult r = runChild(tools.flatpak, {QStringLiteral("update"), QStringLiteral("--user"), QStringLiteral("--noninteractive"),
+                                                   QStringLiteral("--"), ref},
+                                   options);
+    EXPECT_EQ(r.exitCode, 0) << r.out.toStdString() << r.err.toStdString();
+    EXPECT_GE(flatpakSteps(r.out, true), 1) << r.out.toStdString();
+    const std::optional<QList<FlatpakUpdate>> after = listFlatpakUpdates(tools);
+    ASSERT_TRUE(after);
+    EXPECT_TRUE(std::none_of(after->cbegin(), after->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }));
 }

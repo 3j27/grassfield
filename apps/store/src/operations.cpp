@@ -109,7 +109,8 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
     r.webUrl = o.value(QStringLiteral("webUrl")).toString();
     r.flatpak = o.value(QStringLiteral("flatpak")).toString();
     r.startedAt = QDateTime::fromString(o.value(QStringLiteral("startedAt")).toString(), Qt::ISODate);
-    const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove");
+    const bool update = r.kind == QLatin1String("update");
+    const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove") || (update && r.path == QLatin1String("flatpak"));
     const bool namesOk = !r.packages.isEmpty() && r.packages.size() <= 64 && std::all_of(r.packages.cbegin(), r.packages.cend(), isName);
     const bool helperOk = r.path == QLatin1String("helper") && namesOk;
     // A setup's recipe of the operation's own kind (e.5), or the AUR's command of that kind with the package names (b.2).
@@ -122,8 +123,13 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
         && r.packages == QStringList{kFlatpakPackage};
     const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && (setupOk || aurOk || flatpakGetOk);
     const bool webOk = r.path == QLatin1String("webapp") && isWebAppName(r.webName);
-    // An install takes Flathub's ref, a removal the app id (b.3).
-    const bool flatpakOk = r.path == QLatin1String("flatpak") && (install ? isFlatpakAppRef(r.flatpak) : isFlatpakId(r.flatpak));
+    // An install takes Flathub's ref, a removal the app id (b.3); an update its refs (step 4), with its app's among them when
+    // it updates one app.
+    const bool refsOk = !r.packages.isEmpty() && r.packages.size() <= 64 && std::all_of(r.packages.cbegin(), r.packages.cend(), isFlatpakRef);
+    const bool flatpakOk = r.path == QLatin1String("flatpak")
+        && (update ? refsOk && (r.flatpak.isEmpty() || (isFlatpakAppRef(r.flatpak) && r.packages == QStringList{r.flatpak}))
+            : install ? isFlatpakAppRef(r.flatpak)
+                      : isFlatpakId(r.flatpak));
     if (!isOperationId(r.id) || !kindOk || !(helperOk || terminalOk || webOk || flatpakOk))
         return std::nullopt;
     return r;
@@ -337,7 +343,7 @@ QVariantList Operations::list() const
                                {QStringLiteral("state"), QString::fromLatin1(states[int(i.state)])},
                                {QStringLiteral("blocked"), i.blocked},
                                {QStringLiteral("done"), i.done},
-                               {QStringLiteral("total"), int(i.record.plan.size())},
+                               {QStringLiteral("total"), int(i.record.kind == QLatin1String("update") ? i.record.packages.size() : i.record.plan.size())},
                                {QStringLiteral("stoppable"), i.record.path == QLatin1String("flatpak") && i.record.kind == QLatin1String("install")
                                                                  && i.state == State::Running && !m_stopping}});
     }
@@ -413,6 +419,9 @@ void Operations::startNext()
         const OperationRecord &r = m_current->record;
         startFlatpak(r.kind == QLatin1String("install")
                          ? QStringList{QStringLiteral("install"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), kFlathubRemote, r.flatpak}
+                     : r.kind == QLatin1String("update")
+                         // Its refs only (S31b: an app's runtime comes with it when the app needs the newer one).
+                         ? QStringList{QStringLiteral("update"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), QStringLiteral("--")} + r.packages
                          : QStringList{QStringLiteral("uninstall"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), QStringLiteral("--"), r.flatpak});
     } else {
         startWebApp(*m_current);
@@ -503,7 +512,7 @@ void Operations::startFlatpak(const QStringList &args)
         ::setpgid(0, 0);
         ::prctl(PR_SET_PDEATHSIG, SIGTERM);
     });
-    const bool install = m_current && m_current->record.kind == QLatin1String("install");
+    const bool install = m_current && m_current->record.kind != QLatin1String("remove"); // "Installing" or "Updating" lines
     connect(p, &QProcess::readyReadStandardOutput, this, [this, p, install] {
         const QByteArray out = p->readAllStandardOutput();
         if (m_output.size() < kMaxDetails)
@@ -511,7 +520,9 @@ void Operations::startFlatpak(const QStringList &args)
         if (m_flatpakOutput.size() < 1024 * 1024)
             m_flatpakOutput += out;
         if (m_current && !m_firstExit) {
-            const int done = qMin(flatpakSteps(m_flatpakOutput, install), int(m_current->record.plan.size()));
+            const int steps = m_current->record.kind == QLatin1String("update") ? int(m_current->record.packages.size())
+                                                                                 : int(m_current->record.plan.size());
+            const int done = qMin(flatpakSteps(m_flatpakOutput, install), steps);
             if (done != m_current->done) {
                 m_current->done = done;
                 emit changed();
@@ -758,7 +769,18 @@ void Operations::readState(const OperationRecord &record, std::function<void(int
     flatpak.env = m_config.flatpakEnv;
     QThreadPool::globalInstance()->start([self, record, pacman, applications, flatpak, then] {
         int present = 0, total = 0;
-        if (record.path == QLatin1String("flatpak")) {
+        if (record.path == QLatin1String("flatpak") && record.kind == QLatin1String("update")) {
+            // Each of its refs no longer listed by a new check (S31): never the exit code alone, which is 0 offline with
+            // nothing updated (S31d). No answer from flatpak: none is.
+            total = int(record.packages.size());
+            const std::optional<QList<FlatpakUpdate>> left = flatpak.flatpak.isEmpty() ? std::nullopt : listFlatpakUpdates(flatpak);
+            if (left) {
+                for (const QString &ref : record.packages) {
+                    if (std::none_of(left->cbegin(), left->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }))
+                        ++present;
+                }
+            }
+        } else if (record.path == QLatin1String("flatpak")) {
             // The app in the user's installation after an install, gone after a removal (flatpak info --user).
             total = 1;
             const QString id = record.kind == QLatin1String("install") ? flatpakRefId(record.flatpak) : record.flatpak;

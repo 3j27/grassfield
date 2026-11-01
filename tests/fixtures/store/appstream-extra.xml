@@ -21,6 +21,7 @@
     <launchable type="desktop-id">gimp.desktop</launchable>
     <icon type="cached" width="64" height="64">gimp_org.gimp.GIMP.png</icon>
     <icon type="cached" width="128" height="128">gimp_org.gimp.GIMP.png</icon>
+    <provides><mediatype>image/png</mediatype><mediatype>image/x-xcf</mediatype></provides>
     <icon type="cached" width="1024" height="1024">too-big.png</icon>
     <icon type="remote">https://example.com/remote.png</icon>
     <screenshots>

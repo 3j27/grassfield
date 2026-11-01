@@ -1,4 +1,5 @@
 #include <QCommandLineParser>
+#include <QDBusConnection>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -13,6 +14,7 @@
 #include "globalmenu.h"
 #include "screenshotprovider.h"
 #include "storebackend.h"
+#include "storeinstance.h"
 #include "translationloader.h"
 #include "windowchrome.h"
 
@@ -62,6 +64,16 @@ int main(int argc, char *argv[])
     parser.addOption(pageOption);
     parser.process(app);
 
+    // One Store per user (storeinstance.h): a second launch hands its page and its activation token to the running one and
+    // leaves (Files' "Search the Store", a second click on its entry).
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    grassfield::store::StoreInstance instance;
+    if (bus.isConnected()
+        && grassfield::store::claimOrHandOver(bus, &instance, grassfield::store::StoreInstance::cleanPage(parser.value(pageOption)),
+                                              grassfield::store::StoreInstance::cleanToken(qEnvironmentVariable("XDG_ACTIVATION_TOKEN")))
+            == grassfield::store::Launch::Leave)
+        return 0;
+
     // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
     // window down still see it.
     grassfield::store::StoreBackend backend;
@@ -87,6 +99,15 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty())
         return 1;
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
+    // A page another launch asked for: the window goes there (Main.qml openPage checks it) and comes forward.
+    QObject::connect(&instance, &grassfield::store::StoreInstance::openRequested, &app, [&engine](const QString &page, const QString &token) {
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
+        if (!window)
+            return;
+        if (!page.isEmpty())
+            QMetaObject::invokeMethod(window, "openPage", Q_ARG(QString, page));
+        grassfield::store::activateWindow(window, token);
+    });
     // The last window closed while an operation runs: the Store stays until it ends (ADR-0037 f; it holds Omarchy's update
     // lock and keeps the result), then quits.
     app.setQuitOnLastWindowClosed(false);

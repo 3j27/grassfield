@@ -50,6 +50,9 @@ struct AppStreamComponent {
     QString flatpakRef; // the bundle's whole ref: app/<id>/<arch>/<branch>
     QString runtime;
     bool verified = false;
+    // The document types it opens (step 4, ADR-0035 5c-3): <provides><mediatype>, or the older <mimetypes><mimetype>, lower
+    // case, each once, at most 64.
+    QStringList mediaTypes;
 };
 
 // gzip (RFC 1952) to bytes; empty when it is not gzip, is damaged, or would pass maxBytes.
@@ -60,5 +63,7 @@ QByteArray gunzip(const QByteArray &gz, qint64 maxBytes);
 QList<AppStreamComponent> parseAppStream(const QByteArray &xml);
 // A Flatpak runtime as a bundle names it: <id>/<arch>/<branch>.
 bool isFlatpakRuntime(const QString &runtime);
+// A media type as AppStream and the desktop's MIME database write it: type/subtype, lower case (RFC 6838's characters).
+bool isMediaType(const QString &type);
 
 } // namespace grassfield::store

@@ -24,7 +24,10 @@
 #include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMimeDatabase>
 #include <QNetworkInformation>
+#include <QPointer>
+#include <QProcessEnvironment>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
@@ -517,9 +520,29 @@ StoreBackend::StoreBackend(QObject *parent)
     connect(m_operations.get(), &Operations::finished, this, [this](const QString &app) {
         m_installPlans.remove(app);
         m_removePlans.remove(app);
+        m_updatePlans.remove(app);
         checkStaleLock();
         run(Job{}); // the system changed: read it again
+        // A Flatpak's install, removal or update: its updates listed again.
+        const StoreApp *a = storeApp(app);
+        if (app == kFlatpakUpdatesApp || app.startsWith(QLatin1String("flatpak:")) || (a && a->source == CatalogSource::Kind::Flatpak))
+            checkFlatpakUpdates();
     });
+
+    // Updates (step 4): the checker's 200 s backstop, the page's 2 s look at the update lock and the file, and the file's
+    // folder watched for the sidebar's count.
+    m_checkDeadline.setSingleShot(true);
+    m_checkDeadline.setInterval(200 * 1000);
+    connect(&m_checkDeadline, &QTimer::timeout, this, [this] {
+        m_systemChecking = false;
+        emit updatesChanged();
+    });
+    m_updatesPoll.setInterval(2000);
+    connect(&m_updatesPoll, &QTimer::timeout, this, &StoreBackend::followUpdates);
+    const QString stateDir = QFileInfo(env::softwareUpdateFile()).absolutePath();
+    if (QFileInfo(stateDir).isDir())
+        m_stateWatcher.addPath(stateDir);
+    connect(&m_stateWatcher, &QFileSystemWatcher::directoryChanged, this, &StoreBackend::followUpdates);
     connect(m_operations.get(), &Operations::idle, this, [this] {
         if (m_quitWhenIdle)
             QCoreApplication::quit();
@@ -708,6 +731,10 @@ void StoreBackend::apply(std::shared_ptr<const Snapshot> snapshot)
     m_refreshing = false;
     emit dataChanged();
     emit sourcesChanged(); // Flathub added, flatpak installed: what the settings say comes from the system read again
+    emit updatesChanged(); // the apps the updates name, Flathub on or off
+    // The Flatpaks' updates, when the Store opens and once Flathub is on (SR24); then on Check Now and after an operation.
+    if (m_flathub && !m_flatpakCheckedAt.isValid())
+        checkFlatpakUpdates();
     if (wasLoading != m_loading || wasRefreshing != m_refreshing)
         emit loadingChanged();
     if (m_pendingJob) {
@@ -1010,8 +1037,320 @@ QVariantList StoreBackend::installed() const
 
 QVariantMap StoreBackend::updates() const
 {
-    const QByteArray json = readSmall(apps::runmode::stateDir() + QStringLiteral("/software-update.json"), 512 * 1024);
-    return view::updates(json, m_snapshot ? m_snapshot->apps : QList<StoreApp>(), m_language, m_formats);
+    const QByteArray json = readSmall(env::softwareUpdateFile(), 512 * 1024);
+    QVariantMap u = view::updates(json, m_snapshot ? m_snapshot->apps : QList<StoreApp>(), m_language, m_formats);
+    const QString state = u.value(QStringLiteral("state")).toString();
+    // Omarchy's update lock held by another program (Software Update's run, omarchy update; the Store's own operation holds
+    // it too, and is not an update), or the checker saw one.
+    const bool running = m_lockHeld || state == QLatin1String("update-running") || state == QLatin1String("busy");
+    u.insert(QStringLiteral("checking"), m_systemChecking);
+    u.insert(QStringLiteral("askFailed"), m_askFailed);
+    u.insert(QStringLiteral("running"), running);
+    u.insert(QStringLiteral("unfinished"), running ? 0 : m_unfinished);
+    QVariantList apps;
+    int runtimes = 0;
+    const bool on = m_flathub && flatpakBlock() != QLatin1String("noFlatpak");
+    for (const FlatpakUpdate &f : on ? m_flatpakUpdates : QList<FlatpakUpdate>()) {
+        if (!f.app) {
+            ++runtimes;
+            continue;
+        }
+        const StoreApp *a = flatpakApp(f.id);
+        QVariantMap m = a ? view::summary(*a, m_language)
+                          : QVariantMap{{QStringLiteral("id"), QStringLiteral("flatpak:") + f.id}, {QStringLiteral("name"), f.id},
+                                        {QStringLiteral("summary"), QString()}, {QStringLiteral("icon"), QString()},
+                                        {QStringLiteral("kind"), QStringLiteral("flatpak")}, {QStringLiteral("installed"), true},
+                                        {QStringLiteral("launcher"), true}};
+        m.insert(QStringLiteral("ref"), f.ref);
+        m.insert(QStringLiteral("page"), a != nullptr);
+        apps.append(m);
+    }
+    u.insert(QStringLiteral("flatpak"), QVariantMap{{QStringLiteral("on"), on},
+                                                    {QStringLiteral("state"), m_flatpakUpdatesState},
+                                                    {QStringLiteral("apps"), apps},
+                                                    {QStringLiteral("runtimes"), runtimes},
+                                                    {QStringLiteral("block"), flatpakUpdateBlock()}});
+    u.insert(QStringLiteral("count"), int(u.value(QStringLiteral("apps")).toList().size() + apps.size()));
+    return u;
+}
+
+void StoreBackend::checkUpdates()
+{
+    askShellToCheck();
+    readUnfinished();
+    checkFlatpakUpdates();
+}
+
+void StoreBackend::updatesShown(bool shown)
+{
+    if (!shown) {
+        m_updatesPoll.stop();
+        return;
+    }
+    // As Settings' pane (ADR-0033 U8): a check when it opens, unless one finished less than a minute ago.
+    const QJsonObject file = QJsonDocument::fromJson(readSmall(env::softwareUpdateFile(), 512 * 1024)).object();
+    const QDateTime checked = QDateTime::fromString(file.value(QStringLiteral("checkedAt")).toString(), Qt::ISODate);
+    if (!checked.isValid() || checked.secsTo(QDateTime::currentDateTimeUtc()) > 60)
+        askShellToCheck();
+    readUnfinished();
+    if (!m_flatpakCheckedAt.isValid() || m_flatpakCheckedAt.secsTo(QDateTime::currentDateTimeUtc()) > 60)
+        checkFlatpakUpdates();
+    followUpdates();
+    m_updatesPoll.start();
+}
+
+void StoreBackend::askShellToCheck()
+{
+    if (m_systemChecking)
+        return;
+    const QStringList ipc = apps::runmode::shellIpcArgs();
+    if (ipc.isEmpty()) {
+        m_askFailed = true; // a dev session that names no shell: the installed one is never driven from it
+        emit updatesChanged();
+        return;
+    }
+    m_systemChecking = true;
+    m_askFailed = false;
+    m_askedCheckedAt = QJsonDocument::fromJson(readSmall(env::softwareUpdateFile(), 512 * 1024)).object().value(QStringLiteral("checkedAt")).toString();
+    m_checkDeadline.start();
+    emit updatesChanged();
+    // `qs ipc -p <shell> call update check user` (ADR-0033 d.7; the shell's IPC names the Store a caller, docs/specs/security.md),
+    // the shell named by its directory, never by QS_* (runChild passes none); the shell's check writes the file.
+    ChildOptions options;
+    options.timeoutMs = apps::runmode::kShellIpcMs;
+    options.maxOut = 64 * 1024;
+    const QProcessEnvironment system = QProcessEnvironment::systemEnvironment();
+    for (const char *key : {"HOME", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+                            "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY"}) {
+        if (system.contains(QLatin1String(key)))
+            options.extraEnv.insert(QLatin1String(key), system.value(QLatin1String(key)));
+    }
+    const QString program = env::shellProgram();
+    const QStringList args = ipc + QStringList{QStringLiteral("update"), QStringLiteral("check"), QStringLiteral("user")};
+    QPointer<StoreBackend> self(this);
+    QThreadPool::globalInstance()->start([self, program, args, options] {
+        const ChildResult r = runChild(program, args, options);
+        const bool asked = r.ok() && r.out.trimmed() == "ok";
+        QMetaObject::invokeMethod(self.data(), [self, asked] {
+            if (!self || asked)
+                return; // the shell checks: its answer is the file
+            self->m_systemChecking = false;
+            self->m_askFailed = true;
+            self->m_checkDeadline.stop();
+            emit self->updatesChanged();
+        });
+    });
+}
+
+void StoreBackend::readUnfinished()
+{
+    // pacman -Qu while no update runs (S12): packages the last system update did not install (exit 1 when there are none).
+    const QString pacman = env::pacman();
+    QPointer<StoreBackend> self(this);
+    QThreadPool::globalInstance()->start([self, pacman] {
+        const ChildResult r = runChild(pacman, {QStringLiteral("-Qu")});
+        const int count = r.started && !r.timedOut && !r.overflow && (r.exitCode == 0 || r.exitCode == 1)
+            ? int(unfinishedUpdates(r.out).size())
+            : 0;
+        QMetaObject::invokeMethod(self.data(), [self, count] {
+            if (!self || self->m_unfinished == count)
+                return;
+            self->m_unfinished = count;
+            emit self->updatesChanged();
+        });
+    });
+}
+
+void StoreBackend::checkFlatpakUpdates()
+{
+    if (!m_flathub || !flatpakBlock().isEmpty() || m_flatpakUpdatesState == QLatin1String("checking"))
+        return;
+    m_flatpakUpdatesState = QStringLiteral("checking");
+    emit updatesChanged();
+    const FlatpakTools tools = flatpakTools();
+    QPointer<StoreBackend> self(this);
+    QThreadPool::globalInstance()->start([self, tools] {
+        const std::optional<QList<FlatpakUpdate>> all = listFlatpakUpdates(tools);
+        QMetaObject::invokeMethod(self.data(), [self, all] {
+            if (!self)
+                return;
+            self->m_flatpakCheckedAt = QDateTime::currentDateTimeUtc();
+            if (all) {
+                // Flathub's only: the Store updates what it installs (another remote's apps are the user's own).
+                self->m_flatpakUpdates.clear();
+                for (const FlatpakUpdate &u : *all) {
+                    if (u.origin == kFlathubRemote)
+                        self->m_flatpakUpdates.append(u);
+                }
+            }
+            self->m_flatpakUpdatesState = all ? QString() : QStringLiteral("failed");
+            ++self->m_revision; // the buttons' Update
+            emit self->updatesChanged();
+            emit self->dataChanged();
+        });
+    });
+}
+
+void StoreBackend::followUpdates()
+{
+    const QByteArray json = readSmall(env::softwareUpdateFile(), 512 * 1024);
+    const bool held = !m_operations->running() && lockHeld(env::updateLock());
+    bool moved = json != m_updatesFile || held != m_lockHeld;
+    m_updatesFile = json;
+    m_lockHeld = held;
+    // The shell's answer: a checkedAt other than the one before the question.
+    if (m_systemChecking && QJsonDocument::fromJson(json).object().value(QStringLiteral("checkedAt")).toString() != m_askedCheckedAt) {
+        m_systemChecking = false;
+        m_checkDeadline.stop();
+        moved = true;
+    }
+    if (moved)
+        emit updatesChanged();
+}
+
+const StoreApp *StoreBackend::flatpakApp(const QString &flatpakId) const
+{
+    if (!m_snapshot)
+        return nullptr;
+    for (const StoreApp &a : m_snapshot->apps) {
+        if (a.source == CatalogSource::Kind::Flatpak && flatpakRefId(a.flatpakRef) == flatpakId)
+            return &a;
+    }
+    return nullptr;
+}
+
+std::optional<FlatpakUpdate> StoreBackend::flatpakUpdateOf(const QString &id) const
+{
+    // An app id: a Flathub app of the model, or "flatpak:<app id>" for one its AppStream does not have.
+    QString flatpakId = id.startsWith(QLatin1String("flatpak:")) ? id.mid(8) : QString();
+    if (flatpakId.isEmpty()) {
+        const StoreApp *a = storeApp(id);
+        if (!a || a->source != CatalogSource::Kind::Flatpak)
+            return std::nullopt;
+        flatpakId = flatpakRefId(a->flatpakRef);
+    }
+    if (!m_flathub)
+        return std::nullopt;
+    for (const FlatpakUpdate &u : m_flatpakUpdates) {
+        if (u.app && u.id == flatpakId)
+            return u;
+    }
+    return std::nullopt;
+}
+
+QString StoreBackend::flatpakUpdateBlock() const
+{
+    if (const QString block = flatpakBlock(); !block.isEmpty())
+        return block;
+    return m_online ? QString() : QStringLiteral("offline");
+}
+
+void StoreBackend::planFlatpakUpdate(const QString &id)
+{
+    const QString kind = QStringLiteral("update");
+    QStringList refs;
+    if (id == kFlatpakUpdatesApp) {
+        for (const FlatpakUpdate &u : m_flatpakUpdates)
+            refs.append(u.ref);
+    } else if (const std::optional<FlatpakUpdate> u = flatpakUpdateOf(id)) {
+        refs.append(u->ref);
+    }
+    const QString block = refs.isEmpty() ? QStringLiteral("none") : refs.size() > 64 ? QStringLiteral("tooMany") : flatpakUpdateBlock();
+    if (!block.isEmpty() || m_operations->queued(id)) {
+        m_updatePlans.remove(id);
+        emit planReady(id, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}, {QStringLiteral("detail"), block.isEmpty() ? QStringLiteral("queued") : block}});
+        return;
+    }
+    // What each app's update lets it reach that it could not (SD25 for an update): flatpak's --noninteractive accepts it
+    // silently, so the sheet says it first.
+    QList<std::pair<QString, QString>> apps; // ref, name
+    for (const QString &ref : refs) {
+        if (!isFlatpakAppRef(ref))
+            continue;
+        const StoreApp *a = flatpakApp(flatpakRefId(ref));
+        apps.append({ref, a ? a->name.pick(m_language) : flatpakRefId(ref)});
+    }
+    const FlatpakTools tools = flatpakTools();
+    QPointer<StoreBackend> self(this);
+    QThreadPool::globalInstance()->start([self, id, kind, refs, apps, tools] {
+        QVariantList widened;
+        QStringList unknown;
+        for (const auto &[ref, name] : apps) {
+            const std::optional<QStringList> added = flatpakAccessAdded(tools, ref);
+            if (!added)
+                unknown.append(name);
+            else if (!added->isEmpty())
+                widened.append(QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("access"), *added}});
+        }
+        const QVariantMap out{{QStringLiteral("refusal"), QString()},
+                              {QStringLiteral("refs"), int(refs.size())},
+                              {QStringLiteral("widened"), widened},
+                              {QStringLiteral("unknown"), unknown}};
+        QMetaObject::invokeMethod(self.data(), [self, id, kind, refs, out] {
+            if (!self)
+                return;
+            self->m_updatePlans.insert(id, refs);
+            emit self->planReady(id, kind, out);
+        });
+    });
+}
+
+bool StoreBackend::update(const QString &id)
+{
+    // The refs its plan checked, still listed (a check since may have found them updated), and nothing queued for it.
+    const auto it = m_updatePlans.constFind(id);
+    if (it == m_updatePlans.cend() || m_operations->queued(id) || !flatpakUpdateBlock().isEmpty())
+        return false;
+    QStringList refs;
+    for (const QString &ref : *it) {
+        if (std::any_of(m_flatpakUpdates.cbegin(), m_flatpakUpdates.cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }))
+            refs.append(ref);
+    }
+    m_updatePlans.remove(id);
+    if (refs.isEmpty())
+        return false;
+    OperationRecord r;
+    r.id = newOperationId();
+    r.kind = QStringLiteral("update");
+    r.app = id;
+    r.path = QStringLiteral("flatpak");
+    r.packages = refs;
+    if (id == kFlatpakUpdatesApp) {
+        r.name = QCoreApplication::translate("StoreBackend", "Flatpak apps");
+    } else {
+        r.flatpak = refs.first();
+        const StoreApp *a = storeApp(id);
+        r.name = a ? a->name.pick(m_language) : flatpakRefId(r.flatpak);
+    }
+    m_operations->enqueue(r);
+    return true;
+}
+
+QVariantMap StoreBackend::typeSearch(const QString &type) const
+{
+    const QString asked = type.trimmed().toLower();
+    if (!isMediaType(asked))
+        return {};
+    // The type, then its parents as the MIME database orders them (a C file: text/x-csrc, then text/plain); never
+    // application/octet-stream (any file).
+    QMimeDatabase db;
+    const QMimeType mime = db.mimeTypeForName(asked);
+    QStringList types{asked};
+    if (mime.isValid()) {
+        for (const QString &parent : mime.allAncestors()) {
+            const QString p = parent.toLower();
+            if (p != QLatin1String("application/octet-stream") && isMediaType(p) && !types.contains(p))
+                types.append(p);
+        }
+    }
+    QVariantList apps;
+    if (m_snapshot) {
+        for (const int i : appsForType(m_snapshot->apps, types))
+            apps.append(view::summary(m_snapshot->apps.at(i), m_language));
+    }
+    return {{QStringLiteral("type"), asked},
+            {QStringLiteral("description"), mime.isValid() && !mime.comment().isEmpty() ? cleanPlainText(mime.comment(), 128, false) : asked},
+            {QStringLiteral("apps"), apps}};
 }
 
 bool StoreBackend::openLink(const QString &url)
@@ -1475,19 +1814,23 @@ QVariantMap StoreBackend::actions(const QString &id) const
         return {{QStringLiteral("installed"), true}, {QStringLiteral("launcher"), true}, {QStringLiteral("get"), QStringLiteral("installed")},
                 {QStringLiteral("uninstall"), can ? QString() : (apps::runmode::dev() ? QStringLiteral("dev") : QStringLiteral("missing"))}};
     }
+    // A Flatpak with an update (SR13): "update" is "" when its Update runs now, else why not; "none" without one.
+    const QString update = flatpakUpdateOf(id) ? flatpakUpdateBlock() : QStringLiteral("none");
     if (!otherFlatpak(id).isEmpty()) {
         return {{QStringLiteral("installed"), true}, {QStringLiteral("launcher"), true}, {QStringLiteral("get"), QStringLiteral("installed")},
-                {QStringLiteral("uninstall"), flatpakBlock()}};
+                {QStringLiteral("uninstall"), flatpakBlock()}, {QStringLiteral("update"), update}};
     }
     const StoreApp *a = storeApp(id);
     if (!a)
         return {{QStringLiteral("installed"), false}, {QStringLiteral("launcher"), false},
-                {QStringLiteral("get"), QStringLiteral("source")}, {QStringLiteral("uninstall"), QStringLiteral("source")}};
+                {QStringLiteral("get"), QStringLiteral("source")}, {QStringLiteral("uninstall"), QStringLiteral("source")},
+                {QStringLiteral("update"), QStringLiteral("none")}};
     const bool launcher = a->source == CatalogSource::Kind::WebApp ? a->installed : !a->desktopId.isEmpty();
     return {{QStringLiteral("installed"), a->installed},
             {QStringLiteral("launcher"), launcher},
             {QStringLiteral("get"), a->installed ? QStringLiteral("installed") : getBlock(*a)},
-            {QStringLiteral("uninstall"), uninstallBlock(*a)}};
+            {QStringLiteral("uninstall"), uninstallBlock(*a)},
+            {QStringLiteral("update"), a->installed ? update : QStringLiteral("none")}};
 }
 
 PlanTools StoreBackend::planTools() const
@@ -1585,6 +1928,10 @@ void StoreBackend::planGetFlatpak()
 
 void StoreBackend::plan(const QString &id, const QString &kind)
 {
+    if (kind == QLatin1String("update")) {
+        planFlatpakUpdate(id);
+        return;
+    }
     if (id == kGetFlatpakApp) {
         if (kind == QLatin1String("install"))
             planGetFlatpak();

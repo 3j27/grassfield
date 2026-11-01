@@ -2,13 +2,17 @@
 
 #include "filelogic.h"
 #include "kiopromptlogic.h"
+#include "appscope.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QSslCertificate>
 #include <QSslError>
+#include <QStandardPaths>
 #include <QTimer>
 
 #include <KFileUtils>
@@ -52,6 +56,24 @@ QString itemName(const QUrl &url)
 {
     const QString name = url.adjusted(QUrl::StripTrailingSlash).fileName();
     return FileLogic::displayName(name.isEmpty() ? url.toDisplayString(QUrl::PreferLocalFile) : name);
+}
+
+// Grassfield Store, when it is there (ADR-0035 5c-3, Store step 4): in a dev session the grassfield-store beside this binary
+// (a dev build, ADR-0019), else the PATH's; "" without one.
+QString storeProgram()
+{
+    const QString sibling = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-store");
+    if (grassfield::apps::runmode::dev() && QFileInfo(sibling).isExecutable())
+        return sibling;
+    return QStandardPaths::findExecutable(QStringLiteral("grassfield-store"));
+}
+
+// The document type the Store searches by (`--page=type:<type>`): type/subtype as the MIME database writes it, lower case.
+QString storeType(const QString &mimeType)
+{
+    static const QRegularExpression re(QStringLiteral(R"(\A[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\z)"));
+    const QString type = mimeType.trimmed().toLower();
+    return re.match(type).hasMatch() ? type : QString();
 }
 
 // KIO's unknown size is (filesize_t)-1.
@@ -456,9 +478,24 @@ void GrassfieldOpenWithHandler::promptUserForApplication(KJob *job, const QList<
 {
     // The question stands while the job runs (OpenUrlJob waits for it); every way out but a chosen application is Cancel.
     QObject *owner = job ? static_cast<QObject *>(job) : this;
-    const QVariantMap request{{kKind, QStringLiteral("noApplication")}, {QStringLiteral("name"), urls.isEmpty() ? QString() : itemName(urls.first())}};
-    askOrStop(m_prompts, request, owner, [this, owner, urls, mimeType](const QVariantMap &reply) {
-        if (reply.value(kButton).toString() != QLatin1String("choose") || !m_prompts) {
+    // "Search the Store" (Finder's App Store button; ADR-0035 5c-3): offered when Grassfield Store is there and the type is
+    // one it can search by.
+    const QString type = storeType(mimeType);
+    const bool store = !type.isEmpty() && !storeProgram().isEmpty();
+    const QVariantMap request{{kKind, QStringLiteral("noApplication")},
+                              {QStringLiteral("name"), urls.isEmpty() ? QString() : itemName(urls.first())},
+                              {QStringLiteral("store"), store}};
+    askOrStop(m_prompts, request, owner, [this, owner, urls, mimeType, type, store](const QVariantMap &reply) {
+        const QString button = reply.value(kButton).toString();
+        if (button == QLatin1String("store") && store) {
+            // The Store on the apps that open this type; the document stays closed until an app opens it.
+            const QString program = storeProgram();
+            if (!program.isEmpty())
+                grassfield::apps::startApplication(program, {QStringLiteral("--page=type:") + type});
+            Q_EMIT canceled();
+            return;
+        }
+        if (button != QLatin1String("choose") || !m_prompts) {
             Q_EMIT canceled();
             return;
         }

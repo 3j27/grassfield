@@ -366,6 +366,13 @@ bool isFlatpakAppRef(const QString &ref)
         && isPart(parts.at(2), 32) && isPart(parts.at(3), 64);
 }
 
+bool isFlatpakRef(const QString &ref)
+{
+    const QStringList parts = ref.split(QLatin1Char('/'));
+    return ref.size() <= 400 && parts.size() == 4 && (parts.at(0) == QLatin1String("app") || parts.at(0) == QLatin1String("runtime"))
+        && isFlatpakId(parts.at(1)) && isPart(parts.at(2), 32) && isPart(parts.at(3), 64);
+}
+
 QString flatpakRefId(const QString &ref)
 {
     return isFlatpakAppRef(ref) ? ref.section(QLatin1Char('/'), 1, 1) : QString();
@@ -776,6 +783,62 @@ std::optional<FlatpakFacts> flatpakFacts(const FlatpakTools &tools, const QStrin
     if (meta.ok())
         facts.access = flatpakAccess(meta.out);
     return facts;
+}
+
+QList<FlatpakUpdate> parseFlatpakUpdates(const QByteArray &out)
+{
+    QList<FlatpakUpdate> updates;
+    for (const QByteArray &raw : out.split('\n')) {
+        const QStringList f = QString::fromUtf8(raw).trimmed().split(QLatin1Char('\t'));
+        if (f.size() != 4 || updates.size() >= 512)
+            continue;
+        FlatpakUpdate u;
+        u.id = f.at(0).trimmed();
+        u.branch = f.at(1).trimmed();
+        u.origin = f.at(2).trimmed();
+        u.ref = f.at(3).trimmed();
+        const QStringList parts = u.ref.split(QLatin1Char('/'));
+        if (!isFlatpakRef(u.ref) || parts.at(1) != u.id || parts.at(3) != u.branch || u.origin.isEmpty() || u.origin.size() > 64)
+            continue;
+        u.app = parts.at(0) == QLatin1String("app");
+        updates.append(u);
+    }
+    return updates;
+}
+
+std::optional<QList<FlatpakUpdate>> listFlatpakUpdates(const FlatpakTools &tools)
+{
+    const ChildResult r = runChild(tools.flatpak, {QStringLiteral("remote-ls"), QStringLiteral("--user"), QStringLiteral("--updates"),
+                                                   QStringLiteral("--columns=application,branch,origin,ref")},
+                                   options(tools, 60000));
+    if (!r.ok())
+        return std::nullopt;
+    return parseFlatpakUpdates(r.out);
+}
+
+std::optional<QStringList> flatpakAccessAdded(const FlatpakTools &tools, const QString &ref)
+{
+    if (!isFlatpakAppRef(ref))
+        return std::nullopt;
+    const ChildResult installed = runChild(tools.flatpak, {QStringLiteral("info"), QStringLiteral("--user"), QStringLiteral("--show-metadata"),
+                                                           QStringLiteral("--"), ref},
+                                           options(tools, 30000));
+    const ChildResult newer = runChild(tools.flatpak, {QStringLiteral("remote-info"), QStringLiteral("--user"), QStringLiteral("--show-metadata"),
+                                                       kFlathubRemote, ref},
+                                       options(tools, 30000));
+    if (!installed.ok() || !newer.ok())
+        return std::nullopt;
+    const std::optional<QStringList> before = flatpakAccess(installed.out);
+    const std::optional<QStringList> after = flatpakAccess(newer.out);
+    if (!before || !after)
+        return std::nullopt;
+    QStringList added;
+    for (const QString &a : *after) {
+        // A cut list ("more:<n>") is never matched: each of its lines may be new.
+        if (!before->contains(a) || a.startsWith(QLatin1String("more:")))
+            added.append(a);
+    }
+    return added;
 }
 
 InstallPlan checkFlatpakInstall(const QString &ref, const FlatpakTools &tools, bool online)

@@ -25,6 +25,8 @@ inline const QString kFlathubRepoFile = QStringLiteral("https://dl.flathub.org/r
 
 // An app's ref as Flathub's AppStream bundle names it: app/<id>/<arch>/<branch>, each part checked (catalog.h isFlatpakId).
 bool isFlatpakAppRef(const QString &ref);
+// A ref of an app or a runtime: (app|runtime)/<id>/<arch>/<branch>, each part as isFlatpakAppRef checks it.
+bool isFlatpakRef(const QString &ref);
 // The app id of a ref ("" when it is not one).
 QString flatpakRefId(const QString &ref);
 // flatpak's own name for this machine's architecture: x86_64, aarch64, i386 or arm ("" for another).
@@ -115,6 +117,21 @@ bool flatpakInstalled(const FlatpakTools &tools, const QString &appId);
 // An app's facts: of Flathub's ref before an install (`remote-info --user flathub <ref>`, online), of the installed app id
 // after (`info --user <id>`), each with its metadata (--show-metadata); nullopt when flatpak could not answer.
 std::optional<FlatpakFacts> flatpakFacts(const FlatpakTools &tools, const QString &target, bool installed);
+
+// A ref of the user's installation with a newer commit on its remote (step 4, S31): one line of `flatpak remote-ls --user
+// --updates --columns=application,branch,origin,ref`.
+struct FlatpakUpdate {
+    QString id, branch, origin, ref;
+    bool app = false; // an app's ref, else a runtime's (or an extension's)
+};
+// Its tab-separated lines, each kept only when the ref is well formed and names the line's id and branch; at most 512.
+QList<FlatpakUpdate> parseFlatpakUpdates(const QByteArray &out);
+// The updates of the user's installation (S31a); nullopt when flatpak could not answer (offline it exits 1, S31d).
+std::optional<QList<FlatpakUpdate>> listFlatpakUpdates(const FlatpakTools &tools);
+// What an update of an app lets it reach that the installed one cannot (SD25 for an update: flatpak's --noninteractive
+// would accept it silently): the access of Flathub's newer commit (`remote-info --show-metadata`) that the installed
+// one's (`info --show-metadata`) does not name, in flatpakAccess's order; nullopt when either could not be read.
+std::optional<QStringList> flatpakAccessAdded(const FlatpakTools &tools, const QString &ref);
 
 // A Flatpak's install plan (SD25): what its metadata grants it (`access`), then flatpak's own plan on a pseudo-terminal,
 // answered yes for the runtime it requires and no to proceed, so nothing is installed: the refs it would add (packages:

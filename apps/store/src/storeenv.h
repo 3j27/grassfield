@@ -114,6 +114,19 @@ inline QString inFixture(const QString &relative, const QString &system)
     return f.isEmpty() ? system : f + relative;
 }
 
+// Quickshell's client, which asks the running shell for a check (ADR-0033 d.7: `qs ipc -p <shell> call update check user`),
+// or the fixture's stand-in.
+inline QString shellProgram()
+{
+    return inFixture(QStringLiteral("/bin/qs"), QStringLiteral("/usr/bin/qs"));
+}
+
+// Software Update's result (ADR-0033 d.7), which the shell alone writes.
+inline QString softwareUpdateFile()
+{
+    return apps::runmode::stateDir() + QStringLiteral("/software-update.json");
+}
+
 inline QString statusDir()
 {
     return inFixture(QStringLiteral("/run/grassfield-store"), QStringLiteral("/run/grassfield-store"));

@@ -333,12 +333,102 @@ TestCase {
         verify(!shown("The apps you get from Flathub show in your app launcher after you log in again."));
         // Not offered: why, and the button dimmed (or gone, without Omarchy's terminal).
         t.backend.sources = {aur: false, flathub: false, flatpak: false, getFlatpak: "flatpakUnchecked", screenshots: true};
-        verify(shown("Getting Flatpak hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been."));
+        verify(shown("Flathub needs Flatpak, and getting it hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been."));
         verify(getButton() && !getButton().enabled);
         t.backend.sources = {aur: false, flathub: false, flatpak: false, getFlatpak: "missing", screenshots: true};
         verify(shown("Flathub needs the flatpak package."));
         verify(getButton() && !getButton().enabled);
         sw.close();
+    }
+
+    // Updates (step 4; SR24, SR25): the state line and Check Now, the system's part with Update All… (Software Update), the
+    // Flatpak group with each app's Update and Update All, the sidebar's count; an update asks only when it lets an app reach
+    // more than before.
+    function test_updatesPage() {
+        const t = make({startPage: "updates"});
+        compare(t.win.pageKind, "updates");
+        verify(t.backend.calls.indexOf("updatesShown:true") >= 0, "the page asks for a check when it opens");
+        compare(t.win.sidebarItems.find(i => i.key === "updates").count, 2);
+        const page = t.win.page;
+        const shown = text => find(page, i => i.text === text && i.visible) !== null;
+        const button = text => find(page, i => i.text === text && i.visible && i.clicked !== undefined);
+        verify(shown("Last checked 10/27/26 9:12 AM."));
+        verify(shown("Grassfield 1.0.1-1 is available (installed: 1.0.0-1)."));
+        verify(shown("Updates with the system"));
+        button("Check Now").clicked();
+        verify(t.backend.calls.indexOf("checkUpdates") >= 0);
+        button("Update All…").clicked();
+        verify(t.backend.calls.indexOf("openSoftwareUpdate") >= 0, "Software Update updates the whole system (SD32)");
+        verify(shown("Flatpak Apps"));
+        verify(shown("1 runtime has an update.") === false, "the apps' list says it: no runtime line while an app has one");
+        // An app's Update: nothing new to reach, it starts at once (no sheet).
+        t.backend.flatpakUpdates = {"flatpak:org.example.Draw": ""};
+        t.backend.revision += 1;
+        const update = () => find(page, i => i.text === "Update" && i.visible && i.clicked !== undefined);
+        tryVerify(() => update() !== null);
+        verify(update().enabled);
+        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, widened: [], unknown: []};
+        update().clicked();
+        verify(t.backend.calls.indexOf("plan:update:flatpak:org.example.Draw") >= 0);
+        verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") >= 0, "no sheet: it starts");
+        const sheet = find(t.win.contentItem, i => i.confirmEnabled !== undefined && i.plan !== undefined && i.showUpdate !== undefined);
+        verify(!sheet.visible);
+        // It would reach more: the sheet says what first, and Update starts it.
+        t.backend.operations = [];
+        t.backend.calls = [];
+        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, widened: [{name: "Draw", access: ["home", "network"]}], unknown: ["Other"]};
+        tryVerify(() => update() !== null);
+        update().clicked();
+        tryVerify(() => sheet.visible);
+        compare(sheet.title, "Update “Draw”?");
+        verify(sheet.message.indexOf("After this update, “Draw” can also reach: ") === 0, sheet.message);
+        verify(sheet.message.indexOf("What this update lets Other reach could not be read.") > 0);
+        compare(sheet.confirmText, "Update");
+        verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") < 0, "nothing before the sheet's button");
+        sheet.confirm();
+        verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") >= 0);
+        tryVerify(() => !sheet.visible);
+        // Offline: dimmed, with why.
+        t.backend.operations = [];
+        t.backend.flatpakUpdates = {"flatpak:org.example.Draw": "offline"};
+        t.backend.revision += 1;
+        tryVerify(() => update() !== null && !update().enabled);
+        // Update All of the group.
+        t.backend.calls = [];
+        t.backend.plans["store:flatpak-updates"] = {refusal: "", refs: 2, widened: [], unknown: []};
+        button("Update All").clicked();
+        verify(t.backend.calls.indexOf("plan:update:store:flatpak-updates") >= 0);
+        verify(t.backend.calls.indexOf("update:store:flatpak-updates") >= 0);
+        // While a system update runs: said, and nothing to start.
+        t.backend.updates = Object.assign({}, t.backend.updates, {running: true});
+        verify(shown("Update in progress"));
+        verify(button("Update All…") === null);
+        // The last system update did not finish.
+        t.backend.updates = Object.assign({}, t.backend.updates, {running: false, unfinished: 2});
+        verify(shown("The last system update did not finish."));
+        verify(button("Update All…") !== null);
+        // Leaving the page stops its 2 s look at the lock.
+        t.win.openPage("installed");
+        verify(t.backend.calls.indexOf("updatesShown:false") >= 0);
+    }
+
+    // The search by document type (ADR-0035 5c-3): Files' "Search the Store" opens --page=type:<type>; a malformed type is
+    // ignored.
+    function test_typePage() {
+        const t = make({startPage: "type:IMAGE/PNG"});
+        compare(t.win.pageKind, "type");
+        compare(t.win.current.id, "image/png");
+        compare(t.win.page.apps.length, 1);
+        compare(t.win.page.title, "Apps for “PNG image” Documents");
+        t.win.openPage("type:application/x-nothing");
+        compare(t.win.page.apps.length, 0);
+        verify(find(t.win.page, i => i.text === "No apps in the Store open “application/x-nothing” documents." && i.visible) !== null);
+        t.win.openPage("type:not a type");
+        compare(t.win.current.id, "application/x-nothing", "a malformed type opens nothing");
+        t.win.openPage("type:image/png;x");
+        compare(t.win.current.id, "application/x-nothing");
+        t.win.page.opened("org.example.Photo");
+        compare(t.win.pageKind, "app");
     }
 
     // --page and the pages it names.

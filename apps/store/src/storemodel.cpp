@@ -174,6 +174,7 @@ QList<StoreApp> buildModel(const ModelInputs &in)
                 a.icon = in.catalogIcon(*e.icon);
             a.screenshots = c ? c->screenshots : QStringList{};
             a.keywords = c ? c->keywords : QStringList{};
+            a.mediaTypes = c ? c->mediaTypes : QStringList{};
             a.categories = !e.categories.isEmpty() ? e.categories : mapCategories(c ? c->categories : QStringList{}, in.catalog);
             if (a.name.isEmpty())
                 a.name.en = a.package.isEmpty() ? a.id : a.package;
@@ -208,6 +209,7 @@ QList<StoreApp> buildModel(const ModelInputs &in)
         a.icon = iconFile(in.appstreamRoot, c);
         a.screenshots = c.screenshots;
         a.keywords = c.keywords;
+        a.mediaTypes = c.mediaTypes;
         a.categories = mapCategories(c.categories, in.catalog);
         listedIds.insert(a.id);
         listedPackages.insert(c.pkgname);
@@ -239,6 +241,7 @@ QList<StoreApp> buildModel(const ModelInputs &in)
         a.icon = flathubIcon(in.flathubRoot, c);
         a.screenshots = c.screenshots;
         a.keywords = c.keywords;
+        a.mediaTypes = c.mediaTypes;
         a.categories = mapCategories(c.categories, in.catalog);
         listedIds.insert(a.id);
         listedIds.insert(c.id);
@@ -274,6 +277,28 @@ QList<int> searchApps(const QList<StoreApp> &apps, const QString &query, const Q
             rank = 5;
         if (rank >= 0)
             ranked.append({rank, i});
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const auto &x, const auto &y) { return x.first < y.first; });
+    QList<int> out;
+    for (const auto &r : ranked) {
+        if (out.size() >= limit)
+            break;
+        out.append(r.second);
+    }
+    return out;
+}
+
+QList<int> appsForType(const QList<StoreApp> &apps, const QStringList &types, int limit)
+{
+    QList<QPair<int, int>> ranked; // the first of `types` it opens, index (the apps come sorted by name)
+    for (int i = 0; i < apps.size(); ++i) {
+        const QStringList &opens = apps.at(i).mediaTypes;
+        for (int t = 0; t < types.size(); ++t) {
+            if (opens.contains(types.at(t))) {
+                ranked.append({t, i});
+                break;
+            }
+        }
     }
     std::stable_sort(ranked.begin(), ranked.end(), [](const auto &x, const auto &y) { return x.first < y.first; });
     QList<int> out;

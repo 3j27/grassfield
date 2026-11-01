@@ -45,7 +45,7 @@ namespace grassfield::store {
 // What store.json keeps of the operation in flight (version 1, key "operation").
 struct OperationRecord {
     QString id;      // 32 lowercase hexadecimal digits
-    QString kind;    // install, remove
+    QString kind;    // install, remove; update (a Flatpak's, step 4)
     QString path;    // helper, terminal, webapp
     QString app;     // the app's id
     QString name;    // the app's name, for the messages
@@ -57,7 +57,9 @@ struct OperationRecord {
     // terminal: the catalog's pins (ADR-0037 g), written to <op-id>.pins when it starts; not kept in store.json.
     QList<std::pair<QString, QString>> pins;
     QString webName, webUrl, webIcon; // webapp: the launcher's name (its file's), its URL, the icon file given
-    QString flatpak; // flatpak: the ref an install takes (app/<id>/<arch>/<branch>), or the app id a removal takes
+    // flatpak: the ref an install takes (app/<id>/<arch>/<branch>), or the app id a removal takes; an update names its refs
+    // (apps' and runtimes') in `packages` and its app's ref here when it updates one app ("" for all of them)
+    QString flatpak;
     QDateTime startedAt;
 
     QJsonObject toJson() const;
