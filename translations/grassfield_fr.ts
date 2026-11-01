@@ -9838,6 +9838,10 @@
         <translation>Demande annulée</translation>
     </message>
     <message>
+        <source>Code sent</source>
+        <translation>Code envoyé</translation>
+    </message>
+    <message>
         <source>What you type is ignored for a moment.</source>
         <translation>Ce que vous tapez est ignoré pendant un instant.</translation>
     </message>
@@ -9855,6 +9859,14 @@
     <message>
         <source>Password</source>
         <translation>Mot de passe</translation>
+    </message>
+    <message>
+        <source>PIN</source>
+        <translation>Code PIN</translation>
+    </message>
+    <message>
+        <source>Code</source>
+        <translation>Code</translation>
     </message>
     <message>
         <source>New password</source>
@@ -9893,6 +9905,10 @@
         <translation>Annuler</translation>
     </message>
     <message>
+        <source>Decline</source>
+        <translation>Refuser</translation>
+    </message>
+    <message>
         <source>OK</source>
         <translation>OK</translation>
     </message>
@@ -9912,8 +9928,20 @@
         <translation>Demandé par NetworkManager</translation>
     </message>
     <message>
+        <source>Bluetooth device %1</source>
+        <translation>Appareil Bluetooth %1</translation>
+    </message>
+    <message>
         <source>Your keyring has no password: a password remembered here is stored unencrypted on this computer.</source>
         <translation>Votre trousseau n’a pas de mot de passe&#xa0;: un mot de passe mémorisé ici est enregistré sans chiffrement sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Digits typed on the device: %1 of %2</source>
+        <translation>Chiffres tapés sur l’appareil&#xa0;: %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Connection Request from “%1”</source>
+        <translation>Demande de connexion de «&#xa0;%1&#xa0;»</translation>
     </message>
     <message>
         <source>The server describes this login as follows. It is not verified:</source>
@@ -9952,6 +9980,14 @@
         <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour saisir votre nom et votre mot de passe&#xa0;: rien de ce qui est tapé ailleurs n’y entre.</translation>
     </message>
     <message>
+        <source>This request arrived at %1. Click the alert to type the code: nothing typed elsewhere goes into it.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour saisir le code&#xa0;: rien de ce qui est tapé ailleurs n’y entre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1. Click the alert to answer it: no key answers it before that.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour y répondre&#xa0;: aucune touche n’y répond avant cela.</translation>
+    </message>
+    <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.</source>
         <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur l’alerte pour y répondre.</translation>
     </message>
@@ -9982,6 +10018,86 @@
     <message>
         <source>KIO</source>
         <translation>KIO</translation>
+    </message>
+    <message>
+        <source>Bluetooth</source>
+        <translation>Bluetooth</translation>
+    </message>
+    <message>
+        <source>Enter the device&apos;s PIN code.</source>
+        <translation>Saisissez le code PIN de l’appareil.</translation>
+    </message>
+    <message>
+        <source>Enter the code shown on the device.</source>
+        <translation>Saisissez le code affiché sur l’appareil.</translation>
+    </message>
+    <message>
+        <source>Type this code on the device, then press Return on it.</source>
+        <translation>Tapez ce code sur l’appareil, puis appuyez sur sa touche Entrée.</translation>
+    </message>
+    <message>
+        <source>Connect only if the device shows the same code.</source>
+        <translation>Ne vous connectez que si l’appareil affiche le même code.</translation>
+    </message>
+    <message>
+        <source>The device wants to pair with this computer.</source>
+        <translation>L’appareil veut se jumeler avec cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>The device wants to use %1 on this computer.</source>
+        <translation>L’appareil veut utiliser %1 sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>audio streaming</source>
+        <translation>la diffusion audio</translation>
+    </message>
+    <message>
+        <source>media remote control</source>
+        <translation>la télécommande multimédia</translation>
+    </message>
+    <message>
+        <source>headset audio</source>
+        <translation>l’audio du casque</translation>
+    </message>
+    <message>
+        <source>hands-free calling</source>
+        <translation>les appels mains libres</translation>
+    </message>
+    <message>
+        <source>file transfer</source>
+        <translation>le transfert de fichiers</translation>
+    </message>
+    <message>
+        <source>sending files</source>
+        <translation>l’envoi de fichiers</translation>
+    </message>
+    <message>
+        <source>network sharing</source>
+        <translation>le partage de réseau</translation>
+    </message>
+    <message>
+        <source>keyboard or mouse input</source>
+        <translation>la saisie au clavier ou à la souris</translation>
+    </message>
+    <message>
+        <source>phonebook access</source>
+        <translation>l’accès au répertoire</translation>
+    </message>
+    <message>
+        <source>message access</source>
+        <translation>l’accès aux messages</translation>
+    </message>
+    <message>
+        <source>a serial port</source>
+        <translation>un port série</translation>
+    </message>
+    <message>
+        <source>dial-up networking</source>
+        <translation>l’accès réseau à distance</translation>
+    </message>
+    <message>
+        <source>a Bluetooth service</source>
+        <translation>un service Bluetooth</translation>
     </message>
     <message>
         <source>Enter your password for the server “%1”.</source>
@@ -10054,6 +10170,14 @@
     <message>
         <source>The program sent this message. It is not verified:</source>
         <translation>Le programme a envoyé ce message. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>A PIN has 1 to 16 letters or digits.</source>
+        <translation>Un code PIN comporte de 1 à 16 lettres ou chiffres.</translation>
+    </message>
+    <message>
+        <source>Type the 6 digits of the code.</source>
+        <translation>Tapez les 6 chiffres du code.</translation>
     </message>
     <message>
         <source>Type your name.</source>
