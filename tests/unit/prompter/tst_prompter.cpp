@@ -20,6 +20,7 @@
 #include <csignal>
 #include <cstring>
 #include <fcntl.h>
+#include <memory>
 #include <string>
 #include <sys/socket.h>
 #include <sched.h>
@@ -1438,6 +1439,67 @@ TEST(PrompterPrompt, NoSinkMeansCancelledAndTheCallerPropertyStaysPrivate) {
     EXPECT_EQ(g_object_interface_find_property(g_type_default_interface_peek(GCR_TYPE_PROMPT), kCallerProperty), nullptr);
     EXPECT_NE(g_object_class_find_property(G_OBJECT_GET_CLASS(prompt), kCallerProperty), nullptr);
     g_object_unref(prompt);
+}
+
+TEST(PrompterPrompt, LaterJobsRunOnceAndNeverAfterTheirOwner) {
+    // Work left for a later turn runs once, then its references go; what has not run when its owner goes never runs, its
+    // references released (opus re-check of step 9a, NIT: the bridge's idle sources outlived it). Built with ASan, a job
+    // running after its owner would write freed memory.
+    int  gone  = 0;
+    auto watch = [&gone](GfPrompt* prompt) {
+        g_object_weak_ref(G_OBJECT(prompt), [](gpointer data, GObject*) { ++*static_cast<int*>(data); }, &gone);
+        return prompt;
+    };
+    struct Owner {
+        PromptsLater later;
+        int          ran = 0;
+    };
+    // A sink that schedules more work as its prompt goes.
+    struct Rescheduling : PromptSink {
+        Owner* owner = nullptr;
+        int*   runs  = nullptr;
+        void   submit(GfPrompt*) override {}
+        void   withdraw(GfPrompt*) override {}
+        void   forget(GfPrompt*) override {
+            Owner* o = owner;
+            int*   r = runs;
+            o->later.schedule({}, [o, r](const QList<GfPrompt*>&) {
+                ++o->ran;
+                ++*r;
+            });
+        }
+    };
+    int        runs  = 0; // outlives the owner
+    auto       owner = std::make_unique<Owner>();
+    Owner*     o     = owner.get();
+    const auto job   = [o, &runs](const QList<GfPrompt*>& prompts) {
+        o->ran += static_cast<int>(prompts.size());
+        ++runs;
+    };
+    owner->later.schedule({watch(newPrompt(nullptr))}, job);
+    EXPECT_EQ(owner->later.pending(), 1);
+    EXPECT_EQ(runs, 0); // not now
+    spin();
+    EXPECT_EQ(runs, 1);
+    EXPECT_EQ(owner->ran, 1);
+    EXPECT_EQ(owner->later.pending(), 0);
+    EXPECT_EQ(gone, 1); // its reference went after it ran
+    // Left when the owner goes: a prompt held by two jobs, one of them only releasing it, and a prompt whose sink
+    // schedules one more job as it goes.
+    Rescheduling sink;
+    sink.owner     = o;
+    sink.runs      = &runs;
+    GfPrompt* a    = watch(newPrompt(nullptr));
+    GfPrompt* b    = watch(newPrompt(nullptr));
+    GfPrompt* c    = watch(newPrompt(&sink));
+    owner->later.schedule({a, b}, job);
+    owner->later.schedule({GF_PROMPT(g_object_ref(a))}, {});
+    owner->later.schedule({c}, job);
+    EXPECT_EQ(owner->later.pending(), 3);
+    owner.reset();
+    EXPECT_EQ(gone, 4); // every reference released with the owner, the one scheduled meanwhile removed too
+    spin();
+    EXPECT_EQ(runs, 1); // nothing ran after its owner
 }
 
 int main(int argc, char** argv) {
