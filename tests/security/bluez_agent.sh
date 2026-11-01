@@ -587,7 +587,7 @@ cancel-ends-codes-shown (opus review of step 10, MINOR)#BtAgent.cpp#            
 code-kept-when-disconnected (decision 10-16)#BtAgent.cpp#        const bool gone = device && g_variant_lookup(changed, "Connected", "b", &connected) && !connected;#        const bool gone = false;
 code-kept-when-removed (decision 10-16)#BtAgent.cpp#                agent->endWith(r, nullptr, QStringLiteral("the device was removed"), true);#                ;
 codes-not-capped (decision 10-16)#BtAgent.cpp#            if (!request->ended && bt::isDisplay(request->mode))\n                endWith(request, nullptr, why, true);#            if (false)\n                endWith(request, nullptr, why, true);
-display-not-withdrawn-when-paired#BtAgent.cpp#                agent->endWith(r, nullptr, QStringLiteral("the device is paired"), true);#                ;
+display-not-withdrawn-when-paired#BtAgent.cpp#        const bool done      = device && ((g_variant_lookup(changed, "Paired", "b", &paired) && paired) || (g_variant_lookup(changed, "Bonded", "b", &bonded) && bonded));#        const bool done      = false;
 no-progress#BtAgent.cpp#                        m_sink->progressBt(r->id, digits); // may end it (the shell lost while sending)#                        ;
 no-timeout#BtAgent.cpp#        request->timeout = g_timeout_add(static_cast<guint>(m_timeoutMs), onTimeout, request.get());#        request->timeout = 0;
 not-reregistered-after-a-restart#BtAgent.cpp#        if (!owner.isEmpty() && m_wanted)\n            sendRegister();#        if (false)\n            sendRegister();
