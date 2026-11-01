@@ -131,7 +131,8 @@ Item {
         y: root.height * cloudLayer.from
         width: root.width
         height: root.height * 0.4
-        opacity: root.artPalette.cloudAlpha
+        // An artwork without clouds has no cloudAlpha (the integrator's review of 951a311f, gate Q2): 0 then, never undefined.
+        opacity: root.movingOn ? root.artPalette.cloudAlpha : 0
         layer.enabled: root.movingOn
         layer.smooth: true
         layer.textureSize: Qt.size(Math.max(1, Math.ceil(cloudLayer.width / 2)), Math.max(1, Math.ceil(cloudLayer.height / 2)))
