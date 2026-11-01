@@ -335,6 +335,53 @@ except ProcessLookupError: alive = False
 check("a hung check is stopped at the deadline (SIGTERM to its process group) -> failed, no crash",
       r["state"] == "failed" and time.monotonic() - start < 10 and not alive, (r, alive))
 
+# -- ADR-0041 step 2b (U31): the toolkit as installed, each package with its install time, the record's version and whether
+# it moved by U27's rule
+m.BUILD_DEPS = tmp + "/BUILD-DEPS"; m.PACMAN_LOCAL = tmp + "/local"
+BUILT = "qt6-base 6.11.2-1\nquickshell 0.3.1-1\nhyprland 0.56.2-1\naquamarine 0.9.3-1\nkcoreaddons 6.20.0-1\n"
+def record(text):
+    with open(m.BUILD_DEPS, "w") as f: f.write(text)
+def desc(name, version, when):
+    d = m.PACMAN_LOCAL + "/%s-%s" % (name, version); os.makedirs(d, exist_ok=True)
+    with open(d + "/desc", "w") as f:
+        f.write("%NAME%\n" + name + "\n\n%VERSION%\n" + version + "\n\n" + ("%INSTALLDATE%\n" + str(when) + "\n\n" if when is not None else "") + "%VALIDATION%\npgp\n\n")
+def toolkit_lines(**over):
+    base = {"qt6-base": "6.11.2-1", "quickshell": "0.3.1-1", "hyprland": "0.56.2-1", "aquamarine": "0.9.3-1", "kcoreaddons": "6.20.0-1"}
+    base.update(over)
+    return "grassfield-desktop 1.0.0-1\nomarchy 4.0.4-1\n" + "".join("%s %s\n" % kv for kv in base.items() if kv[1] is not None)
+def view(r, *keys):
+    return [tuple(p[k] for k in keys) for p in r["toolkit"]["packages"]]
+setup(listed=False, conf=False); rm_record = lambda: os.path.exists(m.BUILD_DEPS) and os.unlink(m.BUILD_DEPS); rm_record()
+put("installed", toolkit_lines()); r = run()
+check("no record: the five packages listed with built and moved null, record false, the state as before",
+      r["state"] == "not-set-up" and r["toolkit"]["record"] is False and view(r, "name", "built", "moved") == [(n, None, None) for n in m.TRACKED], r)
+record(BUILT); r = run()
+check("every tracked package matches its record -> moved false, built as the record says, no install time without a database entry",
+      r["toolkit"]["record"] is True and view(r, "name", "installed", "built", "moved", "installedAt") == [(n, v, v, False, None) for n, v in zip(m.TRACKED, BUILT.split()[1::2])], r)
+put("installed", toolkit_lines(**{"qt6-base": "6.11.2-3", "hyprland": "0.56.4-1", "kcoreaddons": "6.20.1-2", "aquamarine": "0.9.3-2"})); r = run()
+check("a pkgrel or a patch level alone is no move (Qt, Hyprland, aquamarine and KF6 by major.minor), the installed version still listed",
+      view(r, "moved") == [(False,)] * 5 and view(r, "installed")[0] == ("6.11.2-3",), r)
+shutil.rmtree(m.PACMAN_LOCAL, ignore_errors=True); desc("qt6-base", "6.12.0-1", 1793000500); desc("quickshell", "0.3.2-1", None)
+put("installed", toolkit_lines(**{"qt6-base": "6.12.0-1", "quickshell": "0.3.2-1"})); r = run()
+check("Qt 6.11 -> 6.12 and Quickshell 0.3.1 -> 0.3.2 (compared whole) moved, with the install time (null without %INSTALLDATE%); the rest not moved",
+      view(r, "name", "built", "installed", "moved", "installedAt")[:2] == [("qt6-base", "6.11.2-1", "6.12.0-1", True, m.iso(1793000500)), ("quickshell", "0.3.1-1", "0.3.2-1", True, None)]
+      and view(r, "moved")[2:] == [(False,)] * 3, r)
+desc("aquamarine", "1:0.9.3-1", 1793000600); put("installed", toolkit_lines(**{"aquamarine": "1:0.9.3-1"})); r = run()
+check("an epoch is part of the key (aquamarine 0.9.3 -> 1:0.9.3 moved, dated)", [p["name"] for p in r["toolkit"]["packages"] if p["moved"]] == ["aquamarine"] and view(r, "installedAt")[3] == (m.iso(1793000600),), r)
+desc("hyprland", "0.57.0-1", -5); desc("kcoreaddons", "6.21.0-1", 2 ** 50); desc("qt6-base", "6.13.0-1", 253402300800); desc("quickshell", "0.4.0-1", 253402300799)
+put("installed", toolkit_lines(**{"hyprland": "0.57.0-1", "kcoreaddons": "6.21.0-1", "qt6-base": "6.13.0-1", "quickshell": "0.4.0-1"})); r = run()
+check("an install time outside a four-digit year reads as unknown (null), never a raise; 9999-12-31T23:59:59Z is the last one read",
+      view(r, "name", "installedAt") == [("qt6-base", None), ("quickshell", "9999-12-31T23:59:59Z"), ("hyprland", None), ("aquamarine", None), ("kcoreaddons", None)], r)
+record("qt6-base 6.11.2-1\nquickshell 0.3.1-1 extra words\n# a comment\nhyprland\naquamarine 0.9.3-1\n")
+put("installed", toolkit_lines(**{"kcoreaddons": None})); r = run()
+check("a record line outside pacman -Q's grammar is skipped (the helper reads it so) and the package it named reads as moved with built null (fail safe, as the helper refuses); a package pacman does not list is not listed",
+      view(r, "name", "built", "moved") == [("qt6-base", "6.11.2-1", False), ("quickshell", None, True), ("hyprland", None, True), ("aquamarine", "0.9.3-1", False)], r)
+setup(sections=2); record(BUILT); put("installed", toolkit_lines(**{"qt6-base": "6.12.0-1"})); r = run()
+check("the field is in a repair answer too", r["state"] == "repair" and [p["name"] for p in r["toolkit"]["packages"] if p["moved"]] == ["qt6-base"], r)
+setup(); put("conf-broken", ""); put("installed", toolkit_lines(**{"qt6-base": "6.12.0-1"})); r = run()
+check("...and in a failed one", r["state"] == "failed" and [p["name"] for p in r["toolkit"]["packages"] if p["moved"]] == ["qt6-base"], r)
+rm_record(); shutil.rmtree(m.PACMAN_LOCAL, ignore_errors=True)
+
 # -- the whole program (the installed paths): root refusal, its own lock, Omarchy's update lock and the waiter
 setup()
 env = dict(os.environ, XDG_CACHE_HOME=tmp + "/xdg-cache", XDG_RUNTIME_DIR=tmp + "/run")
