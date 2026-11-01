@@ -567,6 +567,13 @@ of the session, never in a terminal.
   cases and against a fake `qs` on a private PATH for the real-session case (the fake logs the exact command). Minor: a
   mutant refusing the origin `system` passed every test: `software_update_service.sh` now asks `update check system`
   over IPC (ok, one run) beside `user` (ok) and `bogus` (refused).
+- Review round 2 (2026-11-01, opus review of e6f4ddaa: FAIL, one major in a test): `trial.qml` set
+  `SessionConfig.pacmanLockPath` in the same handler that asked the lock step's reload, and a `FileView` read in the turn
+  of its path change is stale even through `waitForJob()`, so the reload went straight through (step 21 failed inside and
+  outside the sandbox, and a mutant without `waitForJob()` was not caught): the seam is set at the probe's first step, many
+  turns earlier, and the lock file is written (synchronously) at step 20 before the reload is asked. Nit: the probe's step
+  k sent `user` then `system` back to back, and a request made during a run joins it (U4): the probe logs every run that
+  ends once it is ready (`ipc-run-done <n>`) and the script sends `system` only after the user run's line.
 
 ### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
 Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.

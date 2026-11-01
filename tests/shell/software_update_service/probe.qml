@@ -35,6 +35,10 @@ ShellRoot {
     property var lastAnnounce: []
     property int step: 0
     property int callsAtIpc: 0
+    // Step k: once ready, every run that ends is logged ("ipc-run-done <n>"), so the script sends its second request only
+    // after the first run ended (a request made during a run joins it, U4, and k would count one run: round 2's nit).
+    property bool ipcReady: false
+    property int ipcRuns: 0
 
     function check(cond: bool, what: string): void {
         if (!cond && failure === "")
@@ -76,6 +80,13 @@ ShellRoot {
 
     Connections {
         target: SoftwareUpdate
+
+        function onCheckingChanged(): void {
+            if (root.ipcReady && !SoftwareUpdate.checking) {
+                root.ipcRuns++;
+                console.log("software-update-service: ipc-run-done " + root.ipcRuns);
+            }
+        }
 
         function onAnnounce(kind: string, version: string, installed: string): void {
             root.announced++;
@@ -383,6 +394,7 @@ ShellRoot {
             return stable;
         }, () => {
             root.callsAtIpc = root.callsLast;
+            root.ipcReady = true;
             console.log("software-update-service: ipc-ready");
             // The script asks `bogus` (refused: no run), `user` and `system` (ADR-0041 U31): two runs.
             when(() => calls().length >= root.callsAtIpc + 2, finish);

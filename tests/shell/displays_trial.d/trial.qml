@@ -128,6 +128,10 @@ ShellRoot {
             root.step++;
             switch (root.step) {
             case 1:
+                // The lock step's seam, set many turns before that step: a path changed in the same turn as a reload is read
+                // stale even through waitForJob() (the integrator's round 2 of the step 2b slice). The file does not exist
+                // until step 20, so no reload before it waits.
+                SessionConfig.pacmanLockPath = root.lockPath;
                 // At start the trial the test left (a shell that stopped mid-trial) was taken back.
                 root.check("the old trial is taken back at start", Displays.reloads === 1 && Displays.running === ""
                     && JSON.stringify(Displays.trialState) === '{"id":"old","state":"reverted"}');
@@ -214,8 +218,8 @@ ShellRoot {
                 break;
             case 20:
                 root.check("a change of mouse-trackpad.lua: one more", SessionConfig.reloads === 9);
-                // pacman's lock: the file exists (any readable or unreadable file counts; pacman's is unreadable).
-                SessionConfig.pacmanLockPath = root.lockPath;
+                // pacman's lock: the file exists (any readable or unreadable file counts; pacman's is unreadable); written
+                // synchronously (blockWrites) before the reload is asked, on the path set at step 1.
                 lockFile.setText("locked\n");
                 root.lockTicket = SessionConfig.reload("lock test", Tokens.settingsDisplayTrialAnswerMs);
                 break;

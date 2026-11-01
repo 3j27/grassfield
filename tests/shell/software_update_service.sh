@@ -66,6 +66,11 @@ if grep -q "software-update-service: ipc-ready" "$out"; then
   check test "$(ipc bogus)" == refused
   desc="IPC: update check user -> ok"
   check test "$(ipc user)" == ok
+  # The next request must not join this run (U4: a request made during a check joins it, and the probe would count one
+  # run for two requests): the probe logs every run that ends once it is ready.
+  for _ in $(seq 1 100); do grep -q "software-update-service: ipc-run-done 1" "$out" && break; sleep 0.1; done
+  desc="IPC: the user request's run ended before the next request (the probe logged it)"
+  check grep -q "software-update-service: ipc-run-done 1" "$out"
   desc="IPC: update check system -> ok (ADR-0041 U31: grassfield-pacman-watch's origin)"
   check test "$(ipc system)" == ok
 else
