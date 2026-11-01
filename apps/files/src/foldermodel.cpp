@@ -2,10 +2,13 @@
 
 #include "applicationslogic.h"
 #include "filelogic.h"
+#include "filesearch.h"
 #include "folderstylestore.h"
 #include "imageproviders.h"
 #include "imagesize.h"
 #include "recents.h"
+#include "runmode.h"
+#include "searchlogic.h"
 #include "taglogic.h"
 #include "tagsearch.h"
 #include "tagstore.h"
@@ -23,6 +26,7 @@
 #include <QMimeType>
 #include <QPointer>
 #include <QScopedValueRollback>
+#include <QStandardPaths>
 #include <memory>
 #include <QThread>
 
@@ -406,6 +410,17 @@ FolderModel::FolderModel(QObject *parent)
         m_loading = false;
         emit loadingChanged();
     });
+    // The search of a search location (ADR-0027), the same way.
+    m_fileSearch = new FileSearchRunner(this);
+    connect(m_fileSearch, &FileSearchRunner::found, this, &FolderModel::addResults);
+    connect(m_fileSearch, &FileSearchRunner::done, this, [this](int backend, bool limited, bool contentsUnavailable) {
+        qCDebug(lcFiles) << "search" << m_url.toDisplayString() << rowCount() << "matches, backend" << backend << "limited" << limited << "in" << m_listTimer.elapsed() << "ms";
+        m_searchLimited = limited;
+        m_searchBackend = backend;
+        m_searchContentsUnavailable = contentsUnavailable;
+        m_loading = false;
+        emit loadingChanged();
+    });
 }
 
 FolderModel::~FolderModel()
@@ -420,7 +435,7 @@ FolderModel::~FolderModel()
 
 void FolderModel::setUrl(const QUrl &url)
 {
-    const bool search = TagLogic::isSearchUrl(url) || Recents::isRecentsUrl(url);
+    const bool search = TagLogic::isSearchUrl(url) || Recents::isRecentsUrl(url) || SearchLogic::isSearchUrl(url);
     const bool applications = ApplicationsLogic::isLocationUrl(url);
     const QUrl clean = search ? url : applications ? ApplicationsLogic::locationUrl() : url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
     if (clean == m_url && (search || applications || m_lister->url().isValid()))
@@ -475,7 +490,24 @@ void FolderModel::setUrl(const QUrl &url)
 
 bool FolderModel::isSearch() const
 {
-    return TagLogic::isSearchUrl(m_url) || isRecents();
+    return TagLogic::isSearchUrl(m_url) || isRecents() || isFileSearch();
+}
+
+bool FolderModel::isFileSearch() const
+{
+    return SearchLogic::isSearchUrl(m_url);
+}
+
+QUrl FolderModel::searchBase() const
+{
+    if (isFileSearch()) {
+        const auto query = SearchLogic::fromUrl(m_url);
+        if (query && !query->inComputer())
+            return query->folder;
+        const QString root = grassfield::apps::runmode::devValue("SEARCH_ROOT");
+        return QUrl::fromLocalFile(root.isEmpty() ? QDir::homePath() : root);
+    }
+    return TagLogic::searchFolder(m_url);
 }
 
 bool FolderModel::isRecents() const
@@ -624,6 +656,13 @@ QString FolderModel::title() const
         return tr("Applications");
     if (isRecents())
         return tr("Recents");
+    if (isFileSearch()) {
+        // The Finder's "Searching “This Mac”": the scope in the title (F-12: "This Computer").
+        const auto query = SearchLogic::fromUrl(m_url);
+        if (query && !query->inComputer())
+            return tr("Searching “%1”").arg(FileLogic::displayName(QFileInfo(query->folder.toLocalFile()).fileName()));
+        return tr("Searching “%1”").arg(tr("This Computer"));
+    }
     if (isSearch())
         return TagLogic::displayName(TagLogic::searchTag(m_url));
     const QList<FileLogic::Segment> segments = FileLogic::pathSegments(m_url, QDir::homePath(), tr("Computer"), tr("Trash"));
@@ -873,8 +912,9 @@ void FolderModel::tagsChanged(const QList<QUrl> &urls)
     for (const QUrl &url : urls) {
         m_tags.remove(url);
         m_styles.remove(url);
-        // Only a tag search's rows depend on tags; Recents lists its files whatever their tags.
-        if (!isSearch() || isRecents()) {
+        // Only a tag search's rows depend on tags; Recents lists its files whatever their tags, and a search shows what
+        // its Tags rows matched when it ran (Reload asks again).
+        if (!isSearch() || isRecents() || isFileSearch()) {
             emitRowChanged(url, {TagsRole, TagColorsRole});
             continue;
         }
@@ -1249,9 +1289,9 @@ KFileItem FolderModel::itemAt(int row) const
 
 KFileItem FolderModel::rootItem() const
 {
-    // A tag search stands for its folder (Get Info without a selection).
-    if (isSearch())
-        return KFileItem(TagLogic::searchFolder(m_url));
+    // A tag search or a search stands for its folder (Get Info without a selection).
+    if (isSearch() && !isRecents())
+        return KFileItem(searchBase());
     return m_lister->rootItem();
 }
 
@@ -1648,6 +1688,10 @@ void FolderModel::watchApplications()
 
 void FolderModel::startSearch()
 {
+    if (isFileSearch()) {
+        startFileSearch();
+        return;
+    }
     const QString tag = TagLogic::searchTag(m_url);
     const QUrl folder = TagLogic::searchFolder(m_url);
     m_searchLimited = false;
@@ -1665,9 +1709,42 @@ void FolderModel::startSearch()
     m_search->start(folder.toLocalFile(), tag, showHidden());
 }
 
+void FolderModel::startFileSearch()
+{
+    m_searchLimited = false;
+    m_searchContentsUnavailable = false;
+    const auto query = SearchLogic::fromUrl(m_url);
+    if (!query) {
+        setError(tr("This search can't be read."));
+        m_loading = false;
+        emit loadingChanged();
+        return;
+    }
+    const QUrl base = searchBase();
+    if (!QFileInfo(base.toLocalFile()).isDir()) {
+        setError(tr("The folder of this search can't be found."));
+        m_loading = false;
+        emit loadingChanged();
+        return;
+    }
+    FileSearch::Settings settings;
+    settings.query = *query;
+    settings.root = base.toLocalFile();
+    settings.showHidden = showHidden();
+    settings.localsearch = QStandardPaths::findExecutable(QStringLiteral("localsearch"));
+    settings.plocate = QStandardPaths::findExecutable(QStringLiteral("plocate"));
+    settings.plocateDb = grassfield::apps::runmode::devValue("SEARCH_PLOCATE_DB");
+    watchChanges();
+    m_listTimer.start();
+    m_loading = true;
+    emit loadingChanged();
+    m_fileSearch->start(settings);
+}
+
 void FolderModel::stopSearch()
 {
     m_search->stop();
+    m_fileSearch->stop();
 }
 
 void FolderModel::watchChanges()
@@ -1757,7 +1834,7 @@ void FolderModel::renameResult(const QUrl &from, const QUrl &to)
         m_recentTimes.insert(to, m_recentTimes.take(from));
     } else {
         // Moved out of the searched folder (or to the Trash): it leaves the results.
-        const QUrl folder = TagLogic::searchFolder(m_url);
+        const QUrl folder = searchBase();
         if (!to.isLocalFile() || !(folder == to || folder.isParentOf(to))) {
             removeResults({from});
             return;

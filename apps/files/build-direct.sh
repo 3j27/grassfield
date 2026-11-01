@@ -32,6 +32,7 @@ if [[ ${1:-} == "--tests" ]]; then
   "$moc" "$here/src/tagsearch.h" -o "$out/moc_tests_tagsearch.cpp"
   "$moc" "$here/src/recents.h" -o "$out/moc_tests_recents.cpp"
   "$moc" "$here/src/filesearch.h" -o "$out/moc_tests_filesearch.cpp"
+  "$moc" "$here/src/savedsearches.h" -o "$out/moc_tests_savedsearches.cpp"
   extra=()
   suffix=""
   if [[ ${2:-} == "--asan" ]]; then
@@ -44,7 +45,7 @@ if [[ ${1:-} == "--tests" ]]; then
     "$root/tests/unit/files/tst_tagsearch.cpp" "$root/tests/unit/files/tst_folderstyle.cpp" "$root/tests/unit/files/tst_folderviews.cpp" "$root/tests/unit/files/tst_imagerotate.cpp" "$root/tests/unit/files/tst_imagesize.cpp" "$root/tests/unit/files/tst_recents.cpp" "$root/tests/unit/files/tst_folderprune.cpp" "$root/tests/unit/files/tst_search.cpp" \
     "$root/tests/unit/files/tst_appscope.cpp" "$root/tests/unit/files/tst_runmode.cpp" "$root/tests/unit/files/tst_applications.cpp" "$root/tests/unit/files/tst_autoappearance.cpp" "$root/tests/unit/files/tst_launchguard.cpp" "$root/tests/unit/files/tst_appicons.cpp" "$root/tests/unit/files/tst_imageproviders.cpp" \
     "$root/tests/unit/files/tst_menushortcuts.cpp" \
-    "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/imageproviders.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" "$here/src/searchlogic.cpp" "$here/src/filesearch.cpp" "$out/moc_tests_tagsearch.cpp" "$out/moc_tests_recents.cpp" "$out/moc_tests_filesearch.cpp" \
+    "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" "$here/src/tagsearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/imageproviders.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" "$here/src/searchlogic.cpp" "$here/src/filesearch.cpp" "$here/src/savedsearches.cpp" "$out/moc_tests_tagsearch.cpp" "$out/moc_tests_recents.cpp" "$out/moc_tests_filesearch.cpp" "$out/moc_tests_savedsearches.cpp" \
     $(pkg-config --libs Qt6Core Qt6Gui Qt6Quick Qt6Widgets Qt6Qml Qt6DBus Qt6Test) -lgtest -lgtest_main -pthread \
     -o "$out/files-unit-tests$suffix"
   echo "built $out/files-unit-tests$suffix"
@@ -90,13 +91,13 @@ compile() {
 
 defs=()
 mocs=()
-for h in foldermodel placesmodel filesapp tagsearch filesearch recents kioprompts applicationchooser diskprobe; do
+for h in foldermodel placesmodel filesapp tagsearch filesearch savedsearches recents kioprompts applicationchooser diskprobe; do
   "$moc" "${kf_includes[@]}" "$here/src/$h.h" -o "$out/moc_files_$h.cpp"
   mocs+=("$out/moc_files_$h.cpp")
 done
 compile "$out/files-core-obj" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp" "$here/src/diskprobe.cpp" \
   "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" \
-  "$here/src/tagsearch.cpp" "$here/src/searchlogic.cpp" "$here/src/filesearch.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" \
+  "$here/src/tagsearch.cpp" "$here/src/searchlogic.cpp" "$here/src/filesearch.cpp" "$here/src/savedsearches.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" \
   "$here/src/kioprompts.cpp" "$here/src/kiopromptlogic.cpp" "$here/src/applicationchooser.cpp" "${mocs[@]}"
 core=$out/libgrassfield-files-core.a
 rm -f "$core"

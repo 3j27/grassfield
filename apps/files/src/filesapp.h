@@ -20,6 +20,7 @@
 
 #include "folderstylestore.h"
 #include "folderviews.h"
+#include "savedsearches.h"
 #include "tagstore.h"
 
 #include <functional>
@@ -295,6 +296,29 @@ public:
     // folder, as in the Finder). Nothing happens when no drag is over `window`.
     Q_INVOKABLE void refreshDrag(QObject *window);
     Q_INVOKABLE QString searchedTag(const QUrl &url) const;
+
+    // Search (ADR-0027, SearchLogic): a query is {valid, text, folder (a local folder URL, empty for this computer),
+    // criteria: [{attribute, op, value, unit}]}, a search location its URL.
+    Q_INVOKABLE bool isFileSearch(const QUrl &url) const;
+    Q_INVOKABLE QVariantMap searchQuery(const QUrl &url) const;
+    Q_INVOKABLE QUrl searchUrl(const QVariantMap &query) const;
+    // The criteria rows' pop-ups, labels translated: [{key, label}] of the attributes; the operators of an attribute
+    // [{key, label, value}] (value: "none" | "text" | "number" | "date" | "kind" | "tag"); the units of an attribute
+    // [{key, label}] (days… for dates, KB… for sizes, none otherwise); the kinds [{key, label}] ("any" first).
+    Q_INVOKABLE QVariantList searchAttributes() const;
+    Q_INVOKABLE QVariantList searchOperators(const QString &attribute) const;
+    Q_INVOKABLE QVariantList searchUnits(const QString &attribute) const;
+    Q_INVOKABLE QVariantList searchKinds() const;
+    // A new row for an attribute: its first operator and a usable value (Kind: any; dates: within the last 7 days).
+    Q_INVOKABLE QVariantMap searchCriterion(const QString &attribute) const;
+    // Saved searches (the Finder's smart folders): [{name, url, sidebar, file}] by name.
+    Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
+    QVariantList savedSearches() const;
+    // Saves the search location `search` as `name` ("" or why not; a search of that name is replaced).
+    Q_INVOKABLE QString saveSearch(const QString &name, const QUrl &search, bool sidebar);
+    Q_INVOKABLE bool hasSavedSearch(const QString &name) const;
+    Q_INVOKABLE void removeSavedSearch(const QString &file);
+    Q_INVOKABLE void setSavedSearchInSidebar(const QString &file, bool on);
     // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
     // and it stays usable. Setting that tag in Files again lists it again.
     Q_INVOKABLE void forgetTag(const QString &tag);
@@ -337,6 +361,7 @@ signals:
     // A drag from another application ended over `window`: it left or was canceled (`dropped` false: what it
     // spring-loaded goes back) or was dropped there (it stays, whichever view took the drop).
     void outsideDragEnded(QObject *window, bool dropped);
+    void savedSearchesChanged();
 
 protected:
     // Remembers the last drag move over each window (refreshDrag).
@@ -370,6 +395,8 @@ private:
     // Before m_places: Grassfield's KIO delegate is in place before the first job (the Trash listing) starts.
     KioPrompts *m_prompts = nullptr;
     PlacesModel *m_places = nullptr;
+    SavedSearches *m_savedSearches = nullptr;
+    void publishSavedSearches();
     QSettings m_settings;
     QFileSystemWatcher m_watcher;
     bool m_dark = true;

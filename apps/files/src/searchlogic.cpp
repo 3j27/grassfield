@@ -45,11 +45,6 @@ const QList<QPair<FileLogic::KindCategory, const char *>> kKinds = {
     {FileLogic::KindCategory::Other, "other"},
 };
 
-bool isDateAttribute(Attribute a)
-{
-    return a == Attribute::Opened || a == Attribute::Modified || a == Attribute::Created;
-}
-
 bool needsValue(Op op)
 {
     switch (op) {

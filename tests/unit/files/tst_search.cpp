@@ -3,6 +3,7 @@
 // scripts/dev/test.sh. Files and the stand-in index programs are created under GRASSFIELD_TEST_TMP (a directory inside .dev/);
 // those tests skip without it.
 #include "filesearch.h"
+#include "savedsearches.h"
 #include "searchlogic.h"
 
 #include <QCoreApplication>
@@ -426,4 +427,49 @@ TEST(FileSearchRunner, ASupersededSearchReportsNothing)
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
     EXPECT_EQ(done, 1);
     EXPECT_EQ(seen, QStringList{dir->filePath(QStringLiteral("new/new.txt"))});
+}
+
+TEST(SavedSearchStore, SavesReplacesListsAndRemoves)
+{
+    QString why;
+    auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << why.toStdString();
+    app();
+    const QString folder = dir->filePath(QStringLiteral("saved-searches"));
+    SavedSearches store(folder);
+    EXPECT_TRUE(store.entries().isEmpty()) << "no folder yet";
+    Saved a;
+    a.name = QStringLiteral("Invoices");
+    a.query.text = QStringLiteral("invoice");
+    EXPECT_EQ(store.save(a), QString());
+    ASSERT_EQ(store.entries().size(), 1);
+    EXPECT_EQ(store.entries().first().file, QStringLiteral("Invoices.json"));
+    const QFileDevice::Permissions perms = QFile::permissions(folder + QStringLiteral("/Invoices.json"));
+    EXPECT_EQ(perms & (QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    EXPECT_EQ(perms & 0x0077, 0) << "0600: nothing for the group or others";
+    // The same name again replaces it.
+    a.query.text = QStringLiteral("facture");
+    a.sidebar = true;
+    EXPECT_EQ(store.save(a), QString());
+    ASSERT_EQ(store.entries().size(), 1);
+    EXPECT_EQ(store.entries().first().saved.query.text, QStringLiteral("facture"));
+    EXPECT_TRUE(store.entries().first().saved.sidebar);
+    // Another search whose file name would be taken by a file that is not a search of that name.
+    write(folder + QStringLiteral("/Big.json"), "not json");
+    Saved b;
+    b.name = QStringLiteral("Big");
+    EXPECT_EQ(store.save(b), QString());
+    QStringList files;
+    for (const auto &e : store.entries())
+        files << e.file;
+    EXPECT_EQ(files, (QStringList{QStringLiteral("Big 2.json"), QStringLiteral("Invoices.json")})) << "the unreadable file stays and is not listed";
+    EXPECT_TRUE(QFile::exists(folder + QStringLiteral("/Big.json")));
+    EXPECT_TRUE(store.setSidebar(QStringLiteral("Big 2.json"), true));
+    EXPECT_FALSE(store.remove(QStringLiteral("Big.json"))) << "only a listed search is removed";
+    EXPECT_FALSE(store.remove(QStringLiteral("../Invoices.json")));
+    EXPECT_TRUE(store.remove(QStringLiteral("Invoices.json")));
+    ASSERT_EQ(store.entries().size(), 1);
+    EXPECT_EQ(store.entries().first().saved.name, QStringLiteral("Big"));
+    EXPECT_NE(store.save(Saved{}), QString()) << "a nameless search";
 }

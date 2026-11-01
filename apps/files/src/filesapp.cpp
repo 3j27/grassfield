@@ -12,6 +12,7 @@
 #include "kioprompts.h"
 #include "placesmodel.h"
 #include "recents.h"
+#include "searchlogic.h"
 #include "taglogic.h"
 #include "tagstore.h"
 
@@ -163,6 +164,9 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &FilesApp::clipboardChanged);
     connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, &FilesApp::focusWindowChanged);
     connect(m_places, &PlacesModel::error, this, &FilesApp::operationFailed);
+    m_savedSearches = new SavedSearches(QString(), this);
+    connect(m_savedSearches, &SavedSearches::changed, this, &FilesApp::publishSavedSearches);
+    publishSavedSearches();
     qApp->installEventFilter(this);
 
     // Appearance follows grassfield.json like every Grassfield surface (read only).
@@ -674,6 +678,13 @@ QVariantList FilesApp::pathSegments(const QUrl &url) const
     }
     if (Recents::isRecentsUrl(url)) {
         out.append(QVariantMap{{QStringLiteral("label"), tr("Recents")}, {QStringLiteral("url"), url}});
+        return out;
+    }
+    // A search: one segment, its title (the path bar shows the selected result's path instead: BrowserWindow).
+    if (SearchLogic::isSearchUrl(url)) {
+        const auto query = SearchLogic::fromUrl(url);
+        const QString scope = query && !query->inComputer() ? FileLogic::displayName(QFileInfo(query->folder.toLocalFile()).fileName()) : tr("This Computer");
+        out.append(QVariantMap{{QStringLiteral("label"), tr("Searching “%1”").arg(scope)}, {QStringLiteral("url"), url}});
         return out;
     }
     // A tag search: the segments of its folder, then the tag.
@@ -1337,8 +1348,8 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
         trash(urls);
         return;
     }
-    // Recents is a list, not a place: nothing can be dropped into it.
-    if (Recents::isRecentsUrl(destination))
+    // Recents and search results are lists, not places: nothing can be dropped into them.
+    if (Recents::isRecentsUrl(destination) || SearchLogic::isSearchUrl(destination))
         return;
     // A drop on a tag search (its background, its path segment) tags the items, like a drop on the sidebar tag.
     if (TagLogic::isSearchUrl(destination)) {
@@ -1717,6 +1728,254 @@ QUrl FilesApp::tagSearchUrl(const QString &tag, const QUrl &from) const
 bool FilesApp::isTagSearch(const QUrl &url) const
 {
     return TagLogic::isSearchUrl(url);
+}
+
+bool FilesApp::isFileSearch(const QUrl &url) const
+{
+    return SearchLogic::isSearchUrl(url);
+}
+
+QVariantMap FilesApp::searchQuery(const QUrl &url) const
+{
+    const auto query = SearchLogic::fromUrl(url);
+    if (!query)
+        return {{QStringLiteral("valid"), false}};
+    QVariantList criteria;
+    for (const SearchLogic::Criterion &c : query->criteria) {
+        criteria.append(QVariantMap{{QStringLiteral("attribute"), SearchLogic::attributeKey(c.attribute)},
+                                    {QStringLiteral("op"), SearchLogic::opKey(c.op)},
+                                    {QStringLiteral("value"), c.value},
+                                    {QStringLiteral("unit"), c.unit}});
+    }
+    return {{QStringLiteral("valid"), true},
+            {QStringLiteral("text"), query->text},
+            {QStringLiteral("folder"), query->folder},
+            {QStringLiteral("criteria"), criteria}};
+}
+
+QUrl FilesApp::searchUrl(const QVariantMap &map) const
+{
+    SearchLogic::Query query;
+    query.text = map.value(QStringLiteral("text")).toString();
+    const QUrl folder = map.value(QStringLiteral("folder")).toUrl();
+    if (folder.isLocalFile())
+        query.folder = folder.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
+    for (const QVariant &v : map.value(QStringLiteral("criteria")).toList()) {
+        const QVariantMap row = v.toMap();
+        const auto attribute = SearchLogic::attributeFromKey(row.value(QStringLiteral("attribute")).toString());
+        const auto op = SearchLogic::opFromKey(row.value(QStringLiteral("op")).toString());
+        if (!attribute || !op || !SearchLogic::takesOp(*attribute, *op))
+            continue;
+        query.criteria.append({*attribute, *op, row.value(QStringLiteral("value")).toString(), row.value(QStringLiteral("unit")).toString()});
+    }
+    return SearchLogic::toUrl(query);
+}
+
+QVariantList FilesApp::searchAttributes() const
+{
+    using SearchLogic::Attribute;
+    // The Finder's order of the first pop-up.
+    const QList<QPair<Attribute, QString>> labels = {
+        {Attribute::Kind, tr("Kind")},           {Attribute::Opened, tr("Last opened date")}, {Attribute::Modified, tr("Last modified date")},
+        {Attribute::Created, tr("Created date")}, {Attribute::Name, tr("Name")},              {Attribute::Contents, tr("Contents")},
+        {Attribute::Size, tr("File size")},      {Attribute::Tags, tr("Tags")},
+    };
+    QVariantList out;
+    for (const auto &[a, label] : labels)
+        out.append(QVariantMap{{QStringLiteral("key"), SearchLogic::attributeKey(a)}, {QStringLiteral("label"), label}});
+    return out;
+}
+
+QVariantList FilesApp::searchOperators(const QString &attribute) const
+{
+    using SearchLogic::Attribute;
+    using SearchLogic::Op;
+    const auto a = SearchLogic::attributeFromKey(attribute);
+    if (!a)
+        return {};
+    auto label = [&](Op op) -> QString {
+        switch (op) {
+        case Op::Is:
+            return tr("is");
+        case Op::IsNot:
+            return tr("is not");
+        case Op::Contains:
+            return tr("contains");
+        case Op::BeginsWith:
+            return tr("begins with");
+        case Op::EndsWith:
+            return tr("ends with");
+        case Op::WithinLast:
+            return tr("is within last");
+        case Op::Exactly:
+            return tr("is exactly");
+        case Op::Before:
+            return tr("is before");
+        case Op::After:
+            return tr("is after");
+        case Op::Today:
+            return tr("is today");
+        case Op::Yesterday:
+            return tr("is yesterday");
+        case Op::ThisWeek:
+            return tr("is this week");
+        case Op::ThisMonth:
+            return tr("is this month");
+        case Op::ThisYear:
+            return tr("is this year");
+        case Op::Greater:
+            return tr("is greater than");
+        case Op::Less:
+            return tr("is less than");
+        }
+        return QString();
+    };
+    auto valueKind = [&](Op op) -> QString {
+        switch (*a) {
+        case Attribute::Kind:
+            return QStringLiteral("kind");
+        case Attribute::Tags:
+            return QStringLiteral("tag");
+        case Attribute::Size:
+            return QStringLiteral("number");
+        case Attribute::Opened:
+        case Attribute::Modified:
+        case Attribute::Created:
+            return op == Op::WithinLast ? QStringLiteral("number")
+                   : (op == Op::Exactly || op == Op::Before || op == Op::After) ? QStringLiteral("date")
+                                                                               : QStringLiteral("none");
+        case Attribute::Name:
+        case Attribute::Contents:
+            return QStringLiteral("text");
+        }
+        return QStringLiteral("none");
+    };
+    QVariantList out;
+    for (const Op op : SearchLogic::operatorsFor(*a))
+        out.append(QVariantMap{{QStringLiteral("key"), SearchLogic::opKey(op)}, {QStringLiteral("label"), label(op)}, {QStringLiteral("value"), valueKind(op)}});
+    return out;
+}
+
+QVariantList FilesApp::searchUnits(const QString &attribute) const
+{
+    const auto a = SearchLogic::attributeFromKey(attribute);
+    if (!a)
+        return {};
+    auto unit = [](const char *key, const QString &label) { return QVariantMap{{QStringLiteral("key"), QString::fromLatin1(key)}, {QStringLiteral("label"), label}}; };
+    switch (*a) {
+    case SearchLogic::Attribute::Opened:
+    case SearchLogic::Attribute::Modified:
+    case SearchLogic::Attribute::Created:
+        return {unit("days", tr("days")), unit("weeks", tr("weeks")), unit("months", tr("months")), unit("years", tr("years"))};
+    case SearchLogic::Attribute::Size:
+        return {unit("KB", tr("KB")), unit("MB", tr("MB")), unit("GB", tr("GB"))};
+    default:
+        return {};
+    }
+}
+
+QVariantList FilesApp::searchKinds() const
+{
+    using FileLogic::KindCategory;
+    // The Finder's Kind pop-up, in its order (Linux types: Executable and Text are Application and Document here).
+    const QList<QPair<QString, QString>> kinds = {
+        {QStringLiteral("any"), tr("Any")},
+        {SearchLogic::kindKey(KindCategory::Application), tr("Application")},
+        {SearchLogic::kindKey(KindCategory::Archive), tr("Archive")},
+        {SearchLogic::kindKey(KindCategory::Document), tr("Document")},
+        {SearchLogic::kindKey(KindCategory::Folder), tr("Folder")},
+        {SearchLogic::kindKey(KindCategory::Image), tr("Image")},
+        {SearchLogic::kindKey(KindCategory::Movie), tr("Movie")},
+        {SearchLogic::kindKey(KindCategory::Music), tr("Music")},
+        {SearchLogic::kindKey(KindCategory::Pdf), tr("PDF")},
+        {SearchLogic::kindKey(KindCategory::Presentation), tr("Presentation")},
+        {SearchLogic::kindKey(KindCategory::Spreadsheet), tr("Spreadsheet")},
+        {SearchLogic::kindKey(KindCategory::Other), tr("Other")},
+    };
+    QVariantList out;
+    for (const auto &[key, label] : kinds)
+        out.append(QVariantMap{{QStringLiteral("key"), key}, {QStringLiteral("label"), label}});
+    return out;
+}
+
+QVariantMap FilesApp::searchCriterion(const QString &attribute) const
+{
+    const auto a = SearchLogic::attributeFromKey(attribute);
+    if (!a)
+        return {};
+    const SearchLogic::Op op = SearchLogic::operatorsFor(*a).constFirst();
+    QString value;
+    QString unit;
+    switch (*a) {
+    case SearchLogic::Attribute::Kind:
+        value = QStringLiteral("any");
+        break;
+    case SearchLogic::Attribute::Opened:
+    case SearchLogic::Attribute::Modified:
+    case SearchLogic::Attribute::Created:
+        value = QStringLiteral("7");
+        unit = QStringLiteral("days");
+        break;
+    case SearchLogic::Attribute::Size:
+        unit = QStringLiteral("KB");
+        break;
+    default:
+        break;
+    }
+    return {{QStringLiteral("attribute"), attribute}, {QStringLiteral("op"), SearchLogic::opKey(op)}, {QStringLiteral("value"), value}, {QStringLiteral("unit"), unit}};
+}
+
+QVariantList FilesApp::savedSearches() const
+{
+    QVariantList out;
+    for (const SavedSearches::Entry &e : m_savedSearches->entries()) {
+        out.append(QVariantMap{{QStringLiteral("name"), e.saved.name},
+                               {QStringLiteral("url"), SearchLogic::toUrl(e.saved.query)},
+                               {QStringLiteral("sidebar"), e.saved.sidebar},
+                               {QStringLiteral("file"), e.file}});
+    }
+    return out;
+}
+
+QString FilesApp::saveSearch(const QString &name, const QUrl &search, bool sidebar)
+{
+    const auto query = SearchLogic::fromUrl(search);
+    if (!query)
+        return tr("This search can't be read.");
+    return m_savedSearches->save({name, *query, sidebar});
+}
+
+bool FilesApp::hasSavedSearch(const QString &name) const
+{
+    const QString wanted = name.trimmed();
+    for (const SavedSearches::Entry &e : m_savedSearches->entries()) {
+        if (FileLogic::sameName(e.saved.name, wanted))
+            return true;
+    }
+    return false;
+}
+
+void FilesApp::removeSavedSearch(const QString &file)
+{
+    if (!m_savedSearches->remove(file))
+        emit operationFailed(tr("The saved search couldn’t be removed."));
+}
+
+void FilesApp::setSavedSearchInSidebar(const QString &file, bool on)
+{
+    if (!m_savedSearches->setSidebar(file, on))
+        emit operationFailed(tr("The saved search couldn’t be changed."));
+}
+
+void FilesApp::publishSavedSearches()
+{
+    QList<PlacesModel::SavedSearch> sidebar;
+    for (const SavedSearches::Entry &e : m_savedSearches->entries()) {
+        if (e.saved.sidebar)
+            sidebar.append({e.saved.name, SearchLogic::toUrl(e.saved.query), e.file});
+    }
+    m_places->setSavedSearches(sidebar);
+    emit savedSearchesChanged();
 }
 
 bool FilesApp::eventFilter(QObject *watched, QEvent *event)
