@@ -344,7 +344,7 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
 - **Not in 7a:** Selection, the recording indicator and the greying of protected windows came in step 7b, below.
 - **Tests:**
   - `tests/shell/share_picker.sh`: A-SP1, A-SP2, A-SP2b and A-SP3 against fakes, with a copy of xdph 1.4.1's parser.
-  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms; case 13: a failed connection (no socket file, a refused one, a stand-in that gave up because the shell's answer took over 1 s) does not stop the next request from showing its panel, and no request's socket is left once it ended.
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms; case 13: a failed connection (no socket file, a refused one, a stand-in that gave up because the shell's answer took over 1 s) does not stop the next request from showing its panel, and no request's socket is left once it ended; cases 1 and 2: the panel (loaded as the Overlay loads it) opens with Remember this choice unticked and unarmed, and is armed after `panel.alertArmMs` with Remember still unticked, though xdph passed `--allow-token` (review of PR #83, MINOR 1).
   - `tests/unit/tst_sharepicker.qml`.
   - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
 

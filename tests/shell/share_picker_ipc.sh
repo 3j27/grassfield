@@ -17,6 +17,9 @@
 #     Socket never connected again after a failed connection): after case 8, after a socket file nobody listens on, and after
 #     a stand-in that gave up because the shell's answer took over 1 s (a slow `qs ipc`: it ran its stock picker), the next
 #     request shows its panel and its answer reaches xdph; each request has its own socket, and none is left once it ended.
+# The panel's privacy defaults (review of PR #83, MINOR 1; owner decision Q14, ADR-0035 7-8): in cases 1 and 2 the panel, as
+# the probe loads it, opens with Remember this choice unticked and unarmed (Share disabled), and is armed after
+# panel.alertArmMs with Remember still unticked, though xdph passed --allow-token.
 # Step 7b:
 #   9 Selection: an area past its display's logical size is not answered; one inside is `[SELECTION]/region:<display>@x,y,w,h`;
 #  10 a window that hides itself from capture (Hyprland's getprop, faked) is greyed and never answered, another window is;
@@ -160,6 +163,9 @@ share() { # runs the stand-in as xdph does; sets `standin`
 shown_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(shown)s %(popup)s') == "True sharePicker" ]] && return 0; sleep 0.05; done; return 1; }
 # No request open and no request socket left (a Socket per request, destroyed with it), within 3 s (the 2 s connection deadline).
 gone_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(open)s %(channels)s') == "False 0" ]] && return 0; sleep 0.05; done; return 1; }
+# The panel the probe loaded, as it opened (atOpen) or now: "remember=… armed=… box=… share=…", or "none".
+panel() { ipc probe panel | python3 -I -c 'import json, sys; t = sys.stdin.read().strip(); d = None if t == "none" else json.loads(t)[sys.argv[1]]; print("none" if d is None else "remember=%(remember)s armed=%(armed)s box=%(box)s share=%(share)s" % d)' "$1"; }
+armed_within() { local i; for ((i = 0; i < 40; i++)); do [[ $(panel now) == *" armed=True "* ]] && return 0; sleep 0.05; done; return 1; }
 # No window is answered before Hyprland has said which hide from capture.
 known_within() { local i; for ((i = 0; i < 60; i++)); do [[ $(state '%(blocked)s') != None ]] && return 0; sleep 0.05; done; return 1; }
 ended_within() { local i; for ((i = 0; i < $2 * 20; i++)); do kill -0 "$1" 2>/dev/null || return 0; sleep 0.05; done; return 1; }
@@ -171,6 +177,11 @@ desc="1 the shell accepts, connects, gets xdph's two windows and opens the panel
 check shown_within
 desc="1 the request has its own socket, the only one"
 check test "$(state '%(channels)s')" == 1
+desc="1 the panel opens with Remember this choice unticked and unarmed, Share disabled (xdph passed --allow-token)"
+check test "$(panel atOpen)" == "remember=False armed=False box=False share=False"
+desc="1 the panel is armed after panel.alertArmMs, Remember this choice still unticked"
+check armed_within
+check test "$(panel now)" == "remember=False armed=True box=False share=False"
 desc="1 the windows the shell holds are xdph's, with their handles"
 check test "$(state '%(windows)s')" == "[{'handle': '123456', 'appId': 'org.gnome.TextEditor', 'title': 'notes.txt', 'address': '1000'}, {'handle': '777', 'appId': 'firefox', 'title': 'A page', 'address': '2000'}]"
 desc="1 the user's choice of the display with Remember this choice reaches xdph"
@@ -185,6 +196,8 @@ check bash -c '[[ ! -e $1/stock.ran && ! -s $1/standin.err ]]' _ "$tmp"
 # 2.
 share
 shown_within || true
+desc="2 the panel opens again with Remember this choice unticked and unarmed, after Remember was ticked in case 1"
+check test "$(panel atOpen)" == "remember=False armed=False box=False share=False"
 desc="2 a second request while the panel is open: busy"
 check test "$(ipc picker request "$(printf '%032x' 1)" "$runtime/grassfield/picker/$(printf '%032x' 2).sock")" == busy
 desc="2 a window's choice reaches xdph as its handle, once Hyprland has said which windows hide from capture"

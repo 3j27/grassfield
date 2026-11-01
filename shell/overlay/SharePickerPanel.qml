@@ -439,6 +439,7 @@ Dialog {
             }
         },
         CheckBox {
+            objectName: "sharepicker-remember"
             text: qsTr("Remember this choice")
             checked: root.remember
             // A click before the panel is armed changes nothing (7-8): the box shows root.remember again.
@@ -457,6 +458,7 @@ Dialog {
             onClicked: SharePicker.cancel()
         },
         Button {
+            objectName: "sharepicker-share"
             text: qsTr("Share")
             primary: true
             enabled: root.armed && root.hasChoice
