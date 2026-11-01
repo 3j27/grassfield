@@ -2335,6 +2335,10 @@ QtObject {
     readonly property int filesPanelLabelWidth: 96
     // estimate: the Save As field and the Where pop-up of the Save panel [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelFieldWidth: 300
+    // estimate: the print sheet without its preview (step 6a), the width of macOS's print panel's settings column and its margins [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintSheetWidth: 480
+    // estimate: the print sheet's pop-ups (Printer, Pages, Paper Size, Two-Sided, Colour), as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintFieldWidth: 240
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
@@ -3269,6 +3273,15 @@ QtObject {
     readonly property int storeSettingsGroupGap: 20
     // estimate: between a settings group's lines [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSettingsLineGap: 8
+
+    // the light dimming slurp lays over the screen while the crosshair shows, and the fill of the boxes a click can pick (the same, so the veil is even; the box under the pointer takes the selection's fill and border), read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
+    readonly property string captureVeil: "#0000002E"
+    // the fill of the area being dragged, a light veil as the system's selection rectangle (ADR-0035 D-10, step 8); estimate
+    readonly property string captureSelection: "#FFFFFF24"
+    // the outline of the area being dragged, a near-white hairline (ADR-0035 D-10, step 8); estimate
+    readonly property string captureBorder: "#FFFFFFE6"
+    // the outline's width in pixels, a hairline (ADR-0035 D-10, step 8)
+    readonly property int captureBorderWidth: 1
 
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4

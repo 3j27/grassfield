@@ -35,11 +35,14 @@ moc=/usr/lib/qt6/moc
 "$moc" "${kf_includes[@]}" "$here/src/filechooser.h" -o "$out/moc_portal_filechooser.cpp"
 "$moc" "${kf_includes[@]}" "$here/src/access.h" -o "$out/moc_portal_access.cpp"
 "$moc" "${kf_includes[@]}" "$here/src/appchooser.h" -o "$out/moc_portal_appchooser.cpp"
+"$moc" "${kf_includes[@]}" "$here/src/printsystem.h" -o "$out/moc_portal_printsystem.cpp"
+"$moc" "${kf_includes[@]}" "$here/src/print.h" -o "$out/moc_portal_print.cpp"
 
 defs=()
 sources=("$here/src/requesthost.cpp" "$here/src/filechooser.cpp" "$here/src/access.cpp" "$here/src/appchooser.cpp"
-         "$here/src/chooserlogic.cpp" "$here/src/panelstate.cpp" "$out/moc_portal_requesthost.cpp" "$out/moc_portal_filechooser.cpp"
-         "$out/moc_portal_access.cpp" "$out/moc_portal_appchooser.cpp")
+         "$here/src/chooserlogic.cpp" "$here/src/panelstate.cpp" "$here/src/printlogic.cpp" "$here/src/printsystem.cpp"
+         "$here/src/print.cpp" "$out/moc_portal_requesthost.cpp" "$out/moc_portal_filechooser.cpp" "$out/moc_portal_access.cpp"
+         "$out/moc_portal_appchooser.cpp" "$out/moc_portal_printsystem.cpp" "$out/moc_portal_print.cpp")
 target=$out/grassfield-portal
 case $mode in
   --tests)
@@ -47,8 +50,10 @@ case $mode in
     "$moc" "$root/tests/unit/portal/tst_filechooser.cpp" -o "$out/tst_filechooser.moc"
     "$moc" "$root/tests/unit/portal/tst_access.cpp" -o "$out/tst_access.moc"
     "$moc" "$root/tests/unit/portal/tst_appchooser.cpp" -o "$out/tst_appchooser.moc"
+    "$moc" "$root/tests/unit/portal/tst_print.cpp" -o "$out/tst_print.moc"
     sources+=("$root/tests/unit/portal/tst_chooserlogic.cpp" "$root/tests/unit/portal/tst_panelstate.cpp" "$root/tests/unit/portal/tst_filechooser.cpp"
-              "$root/tests/unit/portal/tst_access.cpp" "$root/tests/unit/portal/tst_appchooser.cpp")
+              "$root/tests/unit/portal/tst_access.cpp" "$root/tests/unit/portal/tst_appchooser.cpp" "$root/tests/unit/portal/tst_printlogic.cpp"
+              "$root/tests/unit/portal/tst_print.cpp")
     target=$out/portal-unit-tests$suffix ;;
   --install-paths) sources+=("$here/src/main.cpp") ;;
   "") sources+=("$here/src/main.cpp"); defs+=("-DGRASSFIELD_FILES_QML_DIR=\"$root/apps/files/qml\"") ;;
@@ -70,5 +75,5 @@ for pid in "${pids[@]}"; do wait "$pid" || status=1; done
 [[ $status -eq 0 ]] || { echo "build-direct: compilation failed" >&2; exit 1; }
 extra=()
 [[ $mode == --tests ]] && extra=(-lgtest -pthread -lQt6Test)
-g++ "${sanitize[@]}" "${objs[@]}" "$out/libgrassfield-files-core.a" "${qt_libs[@]}" "${kf_libs[@]}" "${extra[@]}" -o "$target"
+g++ "${sanitize[@]}" "${objs[@]}" "$out/libgrassfield-files-core.a" "${qt_libs[@]}" "${kf_libs[@]}" -lcups "${extra[@]}" -o "$target"
 echo "built $target"

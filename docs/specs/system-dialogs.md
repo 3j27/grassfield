@@ -814,10 +814,45 @@ The last-used printer and settings are remembered per app.
   Grassfield sheet (screenshot).
 - A-PR3 F1 against the reference print sheet captures (both appearances).
 
+### Built in step 6a (ADR-0035 6-1 to 6-9)
+- PR1 done without Presets and the printer's own options (6b): Printer (the application's last printer, else the default; Add
+  Printer… last), Copies (up to what the printer takes), Pages (All Pages; Current Page and Selection when the application has
+  them; a range typed "1-3, 5", Print dimmed until it reads), Paper Size (the printer's, its default first shown, 6-8),
+  Orientation, Scale, and Two-Sided (Off, Long-Edge Binding, Short-Edge Binding) and Colour (Colour, Black & White) when the
+  printer has them; another printer chosen dims Print until its options are read. The answer: GTK's settings (strings, with
+  one copy: GTK 3 would render the copies itself) and page setup (doubles, no PPD name), and a token good once, for its
+  application, for five minutes, that keeps the backend running while it lives (6-4, 6-5).
+- PR2 with a token done: the job, named after the application, carries the copies, collation, paper, two sides and colour,
+  never the pages, scale or orientation GTK already applied (6-4); only a PDF, sent as one, at most 2 GiB; a job the printer
+  refuses is response 2. Without a token: x-d-p-gtk's dialog (6b).
+- PR3 done: Save as PDF… (a button, 6-3) opens D-4's Save panel through FileChooser with the application's name for the file;
+  Cancel there brings the sheet back, under the application's id. Only a PDF, at most 2 GiB, is written, only in the folder the
+  Save panel's answer named (resolved then), never through a link: the folder opened with `O_NOFOLLOW` all the way from "/", a
+  temporary file made there with `O_EXCL | O_NOFOLLOW`, synced and renamed over the name (a link at the name is replaced; a file
+  that may not be written stays) (6-3). The application never gets the path (its `output-uri` is `file:///dev/null`).
+- PR4 done: "No Printers Available" (or "Printers Not Responding"), Add Printer… opens Settings > Printers, Print dimmed, Save
+  as PDF kept.
+- PR5 done: CUPS's calls run on threads of their own with deadlines (listing 3 s and its own 2, a printer's options 8 s and 2,
+  a job's connection 10 s and 30 s without progress, from its first request) and libcups' cancel flag; a sheet that cannot show sends the call to
+  x-d-p-gtk (RequestHost).
+- A-PR1: `tests/unit/portal/tst_printlogic.cpp` (both directions with GTK's names and types; the CUPS options; what reaches
+  CUPS: PWG paper names, the document's type, the job's name), `tests/unit/portal/tst_print.cpp` (the D-Bus interface with
+  fakes: tokens, Save as PDF through the Save panel and never through a link, no printer, another printer, the forward; the
+  writer: links at the name and in the folder's path, a failed last step, the size limit, permissions kept),
+  `tests/integration/print_cups.sh` (libcups against a scratch cupsd: printers, options, a job with its options kept on it, a
+  printer language refused before any job). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9 (the real frontend, the sheet's test answer, the
+  job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
+- `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
+
 ### Known limitations
 Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, Electron and Qt apps keep their dialogs); no
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
-Settings.
+Settings. Step 6a: a Print with no sheet before it gets x-d-p-gtk's dialog; no Presets; a printer's options beyond paper, two
+sides and colour (trays, quality, finishing) are its defaults. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
+a GTK 3 application asking for n copies gets n × n (GTK renders the n copies its answer names and x-d-p-gtk's job asks for n
+again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes to the folder the Save panel's answer named as
+it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that
+moment (6-3). A raw print queue passes a document's bytes to the device as they are (6-4).
 
 ## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9)
 
@@ -922,3 +957,55 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
 - A worker's message box whose job's delegate is deleted before the user answers goes unanswered, and KIO's notification
   queue then waits for it, holding the later message boxes of Files' workers (`usernotificationhandler.cpp:43-54`); KIO's
   own widget handler behaves the same way.
+
+
+## 10. Screenshots (inventory O1, O2, P8; ADR-0035 D-10, owner decision Q4; built in step 8)
+
+### macOS reference behavior
+Shift-Cmd-3 captures the screen, and Shift-Cmd-4 a selection: a drag captures an area, and the window mode captures a window.
+The picture is saved to the Desktop as "Screenshot <date> at <time>.png". Shift-Cmd-5 opens the capture toolbar. Grassfield
+gives the toolbar its own chantier; until then it does the selection (8-1).
+
+### Functional requirements
+- SC1 Shift-Cmd-3 captures every display, one picture each, as macOS does (8-4). Shift-Cmd-4, Shift-Cmd-5 and Print capture a
+  selection: a crosshair over the live screen in Grassfield's colours (`capture.*`: an even veil; the window or display
+  under the pointer outlined).
+  - A drag captures that area.
+  - A click captures the window drawn on top under the pointer (on a workspace with a fullscreen or zoomed window, that
+    window or one pinned over it), or the display under it when no window is there (the Desktop, the menu bar, the Dock).
+  - Esc, or a second press while the crosshair shows, cancels without saving; only this helper's crosshair is cancelled.
+- SC2 Each file is saved on the Desktop as macOS names it, translated (the next display's " (2)"), and never overwrites a
+  file; the Desktop never shows a picture being written. The Desktop is xdg-user-dir's, never the home folder.
+- SC3 The focused display's picture, or the selection, is copied to the clipboard as PNG.
+- SC4 A notice shows the picture, as the shell's ordinary banner (then in the Notification Center). A click or its "Open in
+  Preview" button opens the capture's pictures in Grassfield's Preview for 2 minutes; then the notice goes. The next capture
+  closes it first, so no picture shows the notice of the one before.
+- SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session binds the keys; the nested session never
+  captures the owner's screen.
+
+### Acceptance criteria
+- A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp 1.5.0: the smallest box for a
+  click, a click outside every box cancelled; notify-send's output ending before it does, under its own name in /proc):
+  every display for the screen, the focused one first; a drag, a click on a window, on a window behind a larger one in
+  front (opened without the focus), with the pointer unread or gone from slurp's box, with a hand that moved a pixel, on a
+  pinned Picture-in-Picture window over the focused one, on a fullscreen window and the windows pinned or opened over it,
+  on a display only, and outside every display, with fixtures that carry every field Hyprland gives, in its stacking
+  order; the windows then the displays as slurp's boxes, in the veil's colour; the last capture's notice closed before the
+  next, the crosshair not waiting for it, the picture waiting; SIGTERM while the notice waits; Esc and a
+  second press (only this helper's slurp); slurp's colours equal to the tokens; the names in English and French and
+  " (2)"; every name a capture can take in the next 30 s already there (a picture, a link out of the home folder, a
+  dangling link): the next free ones taken, nothing overwritten or followed; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
+  notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
+  closing its notice), gdbus without notify-send (a PATH of the fakes only, so the machine's own notify-send is never
+  reached); Preview through `uwsm-app`; failures leave no file.
+- A-SC2 (L0) `tests/shell/session_services.sh`: the four bindings call `grassfield-capture`, never `omarchy-capture`.
+- A-SC3 (L2, owner) in the real session: Shift-Cmd-3 and Shift-Cmd-4 with a drag and a click on a window; the file on the
+  Desktop and in the clipboard; the notice and Preview.
+
+### Known limitations
+A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click on a window captures the window's
+own box, without Grassfield's title bar; a click on the title bar itself captures the window behind it or the display
+(8-5). Without notify-send (libnotify is optional), the last capture's notice is not closed before the next. While the crosshair shows, slurp outlines the smallest box under the pointer,
+which can be a window behind a larger one; the picture is the window drawn on top under the pointer, as Hyprland draws them. The notification settings list the helper under its translated
+name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
+the toolbar's options are the later chantier's.
