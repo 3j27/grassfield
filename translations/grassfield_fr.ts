@@ -1054,6 +1054,18 @@
         <translation>Déplacer vers %1</translation>
     </message>
     <message>
+        <source>Move Window to Desktop</source>
+        <translation>Placer la fenêtre sur le bureau</translation>
+    </message>
+    <message>
+        <source>Make Window Full Screen</source>
+        <translation>Mettre la fenêtre en plein écran</translation>
+    </message>
+    <message>
+        <source>Replace Tiled Window</source>
+        <translation>Remplacer la fenêtre en mosaïque</translation>
+    </message>
+    <message>
         <source>Fill &amp; Arrange</source>
         <translation>Remplir et disposer</translation>
     </message>
@@ -13595,6 +13607,74 @@
     <message>
         <source>Update Now in Software Update installs it.</source>
         <translation>Mettre à jour maintenant, dans Mise à jour de logiciels, l’installe.</translation>
+    </message>
+    <message>
+        <source>Restart to finish updating</source>
+        <translation>Redémarrez pour terminer la mise à jour</translation>
+    </message>
+    <message>
+        <source>The updates are installed. Restart when you&apos;re ready.</source>
+        <translation>Les mises à jour sont installées. Redémarrez quand vous le souhaitez.</translation>
+    </message>
+    <message>
+        <source>Some of Omarchy&apos;s last steps need its terminal</source>
+        <translation>Certaines des dernières étapes d’Omarchy nécessitent son terminal</translation>
+    </message>
+    <message>
+        <source>The updates are installed. Open Software Update to finish them.</source>
+        <translation>Les mises à jour sont installées. Ouvrez Mise à jour de logiciels pour les terminer.</translation>
+    </message>
+    <message>
+        <source>Updates installed</source>
+        <translation>Mises à jour installées</translation>
+    </message>
+    <message>
+        <source>Apps from the AUR are updated in Omarchy&apos;s terminal. Open Software Update to update them.</source>
+        <translation>Les apps de l’AUR sont mises à jour dans le terminal d’Omarchy. Ouvrez Mise à jour de logiciels pour les mettre à jour.</translation>
+    </message>
+    <message>
+        <source>This computer is up to date.</source>
+        <translation>Cet ordinateur est à jour.</translation>
+    </message>
+    <message>
+        <source>Don&apos;t restart this computer yet</source>
+        <translation>Ne redémarrez pas encore cet ordinateur</translation>
+    </message>
+    <message>
+        <source>The update could not prepare the computer&apos;s startup files. Open Software Update for details.</source>
+        <translation>La mise à jour n’a pas pu préparer les fichiers de démarrage de l’ordinateur. Ouvrez Mise à jour de logiciels pour en savoir plus.</translation>
+    </message>
+    <message>
+        <source>This update needs a newer version of Grassfield</source>
+        <translation>Cette mise à jour nécessite une version plus récente de Grassfield</translation>
+    </message>
+    <message>
+        <source>Software Update checks again later and tells you when it&apos;s ready.</source>
+        <translation>Mise à jour de logiciels vérifiera de nouveau plus tard et vous préviendra quand elle sera prête.</translation>
+    </message>
+    <message>
+        <source>This update needs Omarchy&apos;s terminal</source>
+        <translation>Cette mise à jour nécessite le terminal d’Omarchy</translation>
+    </message>
+    <message>
+        <source>Open Software Update to continue it in Omarchy&apos;s terminal.</source>
+        <translation>Ouvrez Mise à jour de logiciels pour la poursuivre dans le terminal d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>The update stopped before it finished</source>
+        <translation>La mise à jour s’est arrêtée avant la fin</translation>
+    </message>
+    <message>
+        <source>Open Software Update to try again.</source>
+        <translation>Ouvrez Mise à jour de logiciels pour réessayer.</translation>
+    </message>
+    <message>
+        <source>The update could not be installed</source>
+        <translation>La mise à jour n’a pas pu être installée</translation>
+    </message>
+    <message>
+        <source>Open Software Update to see why.</source>
+        <translation>Ouvrez Mise à jour de logiciels pour en connaître la raison.</translation>
     </message>
     <message>
         <source>Some updates finish when you log out. Log out and back in to use them.</source>

@@ -117,6 +117,13 @@
 #                  left, the Dock back on the top layer); off full screen the same click under tile_popover's popover zooms
 #   split-green    (integrator review of 7096305, MAJOR 1) a Split View member's light lies under the menu bar's strip: clicked
 #                  under its open popover it leaves the Split View, no app menu opens, no overlay stays
+# Step 6d (TL33, ADR-0036 D71; with tiling-split-rows):
+#   split-rows     unsplit with an unknown `how` refused; Replace Tiled Window: the member home, the Split View Desktop shown,
+#                  the other kept in its half and waiting, the suggestion never offering the window replaced, a pick filling the
+#                  half; Make Window Full Screen: home in full screen, the other filling; Replace with one member refused; Replace
+#                  refused while locked
+#   replace-shell  (with the shell) Replace Tiled Window from a member's popover by the keys: the picker shows on the Split
+#                  View Desktop and a Return picks the first window offered
 #   gather         (without the shell too) a headless output made, the window placed on its area with GF-REF's Desktop kept,
 #                  the output removed: the plugin logs it and centres it across GF-REF's work area; again while the foreign
 #                  locker holds the lock: it stays off every output until the unlock, then comes back (review of 7096305)
@@ -2000,6 +2007,13 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       unsplit_ipc "$addr"
       check "split locked: unsplit is refused (reason locked)" event_came '.type == "tiling" and .reason == "locked"'
       check "split locked: the window stays on the Split View Desktop" test "$(desktop_of "$addr")" = "$next"
+      if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-split-rows")' >/dev/null 2>&1; then
+        mark_events
+        nestctl dispatch "hl.plugin.grassfield.unsplit(\"$addr\", \"replace\")" >>"$log" 2>&1
+        sleep 1
+        check "split locked: Replace Tiled Window is refused too (reason locked, D71)" event_came '.type == "tiling" and .reason == "locked"'
+        check "split locked: still on the Split View Desktop" test "$(desktop_of "$addr")" = "$next"
+      fi
       mark_events
       split_ipc "$addr3" left
       check "split locked: split is refused (reason locked)" event_came '.type == "tiling" and .reason == "locked"'
@@ -2048,6 +2062,56 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "split green: it was not zoomed" test "$(nestctl clients -j | jq -r --arg a "$addr3" '.[] | select(.address == $a) | .fullscreen')" = 0
     check "split leave: the Split View Desktop ended" split_gone "$next2" "$home"
     tile_ipc "$addr" previous
+
+    # Step 6d (ADR-0036 D71): unsplit's second argument, with the plugin's tiling-split-rows. An unknown `how` is refused;
+    # Replace Tiled Window sends the member home without showing it, the other keeps its half and waits, the suggestion of the
+    # vacated half never offering the window replaced; a pick fills it again; Make Window Full Screen sends a member home in
+    # full screen, the other filling; Replace with one member is refused.
+    if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-split-rows")' >/dev/null 2>&1; then
+      unsplit_how() { nestctl dispatch "hl.plugin.grassfield.unsplit(\"$1\", \"$2\")" >>"$log" 2>&1; sleep 1; }
+      waiting_of() { tiling_state | jq -r --argjson w "$1" '[.splits[] | select(.workspace == $w) | .waiting][0] // "none"'; }
+      fs_state() { nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen'; }
+      next7=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+      split_ipc "$addr3" right
+      arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr\"],\"zone\":0,\"with\":\"$addr3\"}"
+      check "split rows: two members" split_members "$next7" "$addr3" "$addr"
+      mark_events
+      unsplit_how "$addr" zoom
+      check "split rows: an unknown how is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+      check "split rows: nothing moved" split_members "$next7" "$addr3" "$addr"
+      unsplit_how "$addr" replace
+      check "split replace: the window replaced is back on its Desktop" test "$(desktop_of "$addr")" = "$home"
+      check "split replace: the Split View Desktop stays shown" test "$(shown_desktop)" = "$next7"
+      check "split replace: the other member keeps its half" half_of tiling-foot3 right
+      check "split replace: one member, waiting again" split_members "$next7" "$addr3"
+      check "split replace: its half waits for a window" test "$(waiting_of "$next7")" = true
+      replace_offer() { # the suggestion fills the vacated left half for the member kept, never offering the window replaced
+        local sg
+        sg=$(suggestion)
+        say "  suggestion: $sg"
+        jq -e --arg kept "${addr3#0x}" --arg gone "${addr#0x}" '.address == $kept and .zones[0].zone == 0 and (.windows | index($gone) | not)' <<<"$sg" >/dev/null
+      }
+      check "split replace: the suggestion offers the vacated half, never the window replaced" replace_offer
+      arrange "{\"layout\":\"left-right\",\"windows\":[\"$addr2\"],\"zone\":0,\"with\":\"$addr3\"}"
+      check "split replace: a pick fills the vacated half" split_members "$next7" "$addr3" "$addr2"
+      check "split replace: in the left half" half_of tiling-foot2 left
+      unsplit_how "$addr2" fullscreen
+      check "split full screen: the member is back on its Desktop" test "$(desktop_of "$addr2")" = "$home"
+      check "split full screen: in full screen there (D71)" test "$(fs_state "$addr2")" = 2
+      check "split full screen: the other member fills the Split View Desktop" fills_output tiling-foot3
+      fs_clear "$addr2" || say "  split full screen: the window was still in full screen"
+      mark_events
+      unsplit_how "$addr3" replace
+      check "split replace alone: refused with one member (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
+      check "split replace alone: still the member" split_members "$next7" "$addr3"
+      unsplit_ipc "$addr3"
+      check "split rows: the Split View Desktop ended" split_gone "$next7" "$home"
+      tile_ipc "$addr" previous
+      tile_ipc "$addr2" previous
+      tile_ipc "$addr3" previous
+    else
+      say "SKIP: step 6d rows (the plugin does not advertise tiling-split-rows)"
+    fi
 
     # D51, D55 (re-review of e5bd9d2: MAJOR A and the glue mutants G4, G5): nothing of a Split View changes behind the lock,
     # and it settles at the unlock. An xdgact window is the first member here (it is closed while locked).
@@ -2225,6 +2289,51 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       check "split shell: ended" split_gone "$next5" "$home"
       tile_ipc "$addr3" previous
       tile_ipc "0x$first" previous
+      # Step 6d (D71) with the shell: Replace Tiled Window from a member's popover (its third row, by the keys): the member goes
+      # home, the Split View Desktop stays shown with the picker of the vacated half (D48's adoption), and a Return picks the
+      # first window offered, never the one replaced.
+      if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-split-rows")' >/dev/null 2>&1; then
+        close_shell_popup "split replace shell"
+        next8=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+        split_ipc "$addr3" left
+        keys -k Return
+        sleep 1.5
+        second8=$(tiling_state | jq -r --argjson w "$next8" '[.splits[] | select(.workspace == $w) | .windows[1]][0] // empty')
+        check "split replace shell: a Split View Desktop with two members ($addr3, 0x${second8:-none})" test -n "$second8"
+        close_shell_popup "split replace shell picker"
+        nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr3\")" >>"$log" 2>&1
+        if wait_popup_open && [[ $(open_kind) == "tiling@$out" ]]; then
+          keys -k Down
+          keys -k Down
+          keys -k Down
+          keys -k Return
+          picker_shown() {
+            local _
+            for _ in $(seq 1 40); do
+              [[ $(open_kind) == "tilingSuggest@$out" ]] && return 0
+              sleep 0.1
+            done
+            return 1
+          }
+          check "split replace shell: the replaced member is back on its Desktop" test "$(desktop_of "$addr3")" = "$home"
+          check "split replace shell: the Split View Desktop stays shown" test "$(shown_desktop)" = "$next8"
+          check "split replace shell: the picker of the vacated half shows" picker_shown
+          offered8=$(suggestion | jq -r '.windows[0] // empty')
+          replaced_not_offered() { ! suggestion | jq -e --arg a "${addr3#0x}" '.windows | index($a)' >/dev/null; }
+          check "split replace shell: the window replaced is never offered" replaced_not_offered
+          keys -k Return
+          sleep 1.5
+          check "split replace shell: a Return picks the first window offered" split_members "$next8" "0x$second8" "0x$offered8"
+        else
+          check "split replace shell: the member's tiling popover showed (openKind '$(open_kind)')" false
+        fi
+        close_shell_popup "split replace shell end"
+        for m8 in $(tiling_state | jq -r --argjson w "$next8" '[.splits[] | select(.workspace == $w) | .windows[]][]? // empty'); do
+          unsplit_ipc "0x$m8"
+        done
+        check "split replace shell: ended" split_gone "$next8" "$home"
+        tile_ipc "$addr3" previous
+      fi
       surfaces_state
       split_loops_after=$(shell_loops)
       check "split shell: the picker and the popover log no binding loop (${split_loops_before} before, ${split_loops_after} after)" \
