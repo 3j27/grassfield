@@ -723,6 +723,16 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   macOS's disabled items take no click; (a) left a selection out of sight that Return answered (review of step 5c, MINOR 2);
   (c) is macOS's, but the views' movers take the current row as their origin, a change of every view for a key path the
   panel's Return already keeps safe.
+- **5c-8. The type's applications the Applications grid hides** (integrator nested pass of step 5c, MINOR): on Omarchy every
+  image's default, imv, has `NoDisplay=true`, so Other… opened with nothing preselected and Open dimmed while Open With listed
+  it. Options: (a) leave such applications out of the candidates and Open With; (b) list them in the panel. **Choice: (b)**:
+  the panel names its candidates and its last choice (`listed`) and the Applications listing shows them although the grid
+  hides them (`alsoListed`: NoDisplay, a helper, OnlyShowIn/NotShowIn, a terminal's server); Hidden=true (deleted), no Name or
+  not an application still hide one; the location itself lists what the grid lists. (a) would take the user's own default away
+  from Open With. Main delivered it (1258a475, with 073ac15f: a panel's list is not the location's count); step 6a had the same
+  fix under other names and took main's when main 4a842164 was merged in. Step 6a delivered, from the same pass (NITs): the
+  keyboard Hyprland gives back to a Files window that a panel blocks (after an exclusive layer closes) goes on to the panel,
+  and a name that starts with a right-to-left letter keeps to the left edge of the list and column views, as Finder's.
 
 ### D-6. Screen-sharing picker: a stand-in for xdph's picker (category A; P10; owner decisions Q14, Q15)
 - `/usr/lib/grassfield/session-bin/hyprland-preview-share-picker` and `…/hyprland-share-picker` (handle 2: the two names
@@ -806,6 +816,95 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
 - Fallback: as D-4 (forward to x-d-p-gtk's Print).
 - Cost: medium-high (CUPS options model, sheet, preview of PDF/PostScript with Qt PDF already used by Preview). Risk: printer
   options vary widely; the sheet shows only the options CUPS reports and the job goes to CUPS unchanged otherwise.
+
+**Delivered in step 6a.** `apps/portal/src/print.{h,cpp}` (org.freedesktop.impl.portal.Print on grassfield-portal's object,
+RequestHost's lifecycle), `printlogic.{h,cpp}` (GTK's settings and page setup in and out, with the types GTK reads: strings and
+doubles; the sheet's choices; page ranges, 1-based shown, 0-based for GTK; PWG paper names; a job's CUPS options) and
+`printsystem.{h,cpp}` (the printers and jobs through libcups: `cupsEnumDests`, `cupsConnectDest`, `cupsCopyDestInfo`,
+`cupsCreateDestJob`, `cupsStartDestDocument`, `cupsFinishDestDocument`, each call on a thread of its own with a deadline and
+libcups' cancel flag); `apps/files/qml/PrintSheet.qml`, made by `FilePanels.qml` (the panels' root). PreparePrint shows the sheet:
+Printer (the application's last printer, else CUPS's default, else the first; Add Printer… last), Copies, Pages, Paper Size,
+Orientation, Scale, and Two-Sided and Colour when the printer has them; Save as PDF…, Cancel and Print. It answers GTK's settings,
+page setup and a token; Print with that token sends the document to the printer (or writes it for Save as PDF) with no sheet; any
+other Print goes to x-d-p-gtk. The session routes Print to grassfield, then gtk; the package depends on libcups. Tests:
+`tests/unit/portal/tst_printlogic.cpp`, `tst_print.cpp` (a fake frontend, x-d-p-gtk and print system on a private bus),
+`tests/unit/tst_printsheet.qml`, `tests/integration/print_cups.sh` (the libcups code against a scratch cupsd as the user, a
+queue through `tests/fixtures/print/office.ppd`: its printers, options and a job with its options kept on it), and
+`portal_filechooser.sh` scenario 9 (PreparePrint and Print through the real frontend, the job in the scratch scheduler).
+
+**Decisions of step 6a** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
+- **6-1. Two pull requests.** Options: (a) step 6 whole; (b) **6a**, PreparePrint's sheet, Print with its token, Save as PDF and
+  no printer; **6b**, Print with no sheet before it (the sheet with the document's preview), Presets ("Last Used Settings") and
+  a printer's own options in sections. **Choice: (b)**: GTK's portal path, every GTK application's, is PreparePrint then Print
+  with the token (gtk/print/gtkprintoperation-portal.c); a Print with no token (libportal's callers) is rare and goes to
+  x-d-p-gtk meanwhile, which prints it with its own dialog. Rule applied: the smallest slice that gives every GTK application
+  Grassfield's sheet.
+- **6-2. No preview in PreparePrint's sheet.** Options: (a) an empty page of the paper's shape where macOS shows the preview;
+  (b) no preview column. **Choice: (b)**: the document does not exist yet (GTK renders it with the answer), and an empty page
+  would read as a preview of nothing.
+- **6-3. Save as PDF.** Options: (a) macOS's "PDF" menu with one item; (b) a Save as PDF… button at the bottom left. **Choice:
+  (b)**: a menu of one item is one click too many; the menu comes back in 6b when it has more (Open in Preview). The Save panel is
+  D-4's own, asked through FileChooser (the application's remembered folder), over the application's window; the sheet steps
+  aside meanwhile, and Cancel in the Save panel brings it back with its choices (macOS ends the print there; Grassfield loses
+  nothing the user chose). Only an application that can make a PDF (its `supported_output_file_formats`) gets the button.
+  The file is written only in the folder the Save panel's answer named, and never through a link (integrator security review of step 6a,
+  MAJOR 1: the first build wrote through `QSaveFile`, which follows a link put at the name, so a sandboxed application that can
+  write in the folder could have replaced `~/.bashrc` with "%PDF-" and commands):
+  - the folder is resolved (its links followed) when the Save panel answers, off the GUI thread: a folder the user chose that is
+    a link (Documents on another disk) is the folder it leads to;
+  - when the document comes, that folder is opened from "/" one folder at a time with `O_NOFOLLOW`, so a link put since then in
+    place of it or of a folder above it fails the write;
+  - the document, only a PDF ("%PDF-" first) and at most 2 GiB, goes to a temporary file made there with `O_EXCL | O_NOFOLLOW`,
+    is synced, then `renameat` puts it in the name's place: a link at the name is replaced, never followed (the user's own
+    link there too, where `QSaveFile` updated the file it led to); any failure, or the process going away (the writes are told
+    to stop and react within 200 ms), removes the temporary file and leaves the file there as it was; a file there keeps its
+    permissions, and one that may not be written stays (as `QSaveFile` refused it); the folders are opened as places
+    (`O_PATH`), so a folder one may write in but not list still takes the file;
+  - the application gets `file:///dev/null` as its `output-uri`, never the user's path (MINOR 3): GTK 3 and 4 only read
+    whether the key is there and put a temporary file of theirs in its place before rendering;
+  - the sheet's answer may name only the file the Save panel answered (NIT), and only the last Save panel's answer counts.
+  Remaining risk (the counter-review, MINOR 2): the panel answers with a path, so an application that can write in the folder
+  above the one chosen can swap that folder for a link to another in the moment between the answer and its resolution; the file
+  then goes, under the name the user gave, to the folder the link leads to. Inherent to a panel that answers by path (the window
+  is a few milliseconds, the name is the user's); closing it would need the panel to hand over the folder it listed.
+- **6-4. What the job carries.** GTK renders only the pages asked, scaled and turned, in the collation and order asked. GTK 4
+  makes neither the copies nor the pages per sheet for a printer, but makes both for a file; GTK 3.24 always makes both (its
+  `manual_num_copies` is the settings' `n-copies`, gtk/gtkprintoperation-portal.c). Options: (a) every choice again as CUPS
+  options; (b) only what GTK leaves to the printer. **Choice: (b)**, with the copies taken from GTK: the answer always gives GTK
+  `n-copies` "1", and the job asks the printer for the copies and their collation, with the paper, the two sides and the colour;
+  never the page ranges, the scale or the orientation, which (a) would apply twice (pages 3–5 of a three-page file print
+  nothing). Only a PDF reaches the printer ("%PDF-" first), sent as `application/pdf`, never as `CUPS_FORMAT_AUTO`, which
+  would let an application send a printer language (PJL, PCL) straight to the device (integrator security review of step 6a,
+  MINOR 2); at most 2 GiB. PostScript is refused too (decision delegated by the owner on 2026-10-27, from the counter-review's
+  MINOR 1): question, PDF and PostScript as the review first said, or PDF only; options (a) both, (b) PDF only; choice (b);
+  rule applied: the smallest surface that keeps every application printing, since GTK always sends a PDF here (its file
+  backend's default; the answer never asks another format) and a PostScript program can change a PostScript printer's settings
+  (`exitserver`). Accepted risk: a raw queue (one an administrator sets up without a driver; deprecated in CUPS 2.x) passes the
+  bytes after the PDF header to the device as they are, whatever the type sent. The paper goes as one the printer
+  lists, or, when it listed none, only as a PWG name (no comma: CUPS would read several values); the job's name is cut to
+  IPP's 255 bytes on a character's boundary. The first build gave GTK the copies too, and a GTK 3 application printed n × n of them (review of step 6a, MAJOR).
+  The page setup names its paper without a `PPDName` (GTK takes any `PPDName` key, an empty one too, over `Name`). x-d-p-gtk's
+  answer, when the call goes to it (the sheet cannot show), is relayed as it is: a GTK 3 application gets n × n copies there,
+  as with x-d-p-gtk alone; giving GTK one copy in that answer would leave one copy for x-d-p-gtk's print to a file, and the
+  fallback stays upstream's own (counter-review of step 6a, NIT 4).
+- **6-5. Tokens.** Good once, for the application that got it, for five minutes (x-d-p-gtk's rule, src/print.c), at most 64 kept;
+  a token this backend did not give (x-d-p-gtk's, after a PreparePrint it served) or an expired one goes to x-d-p-gtk, which
+  knows its own or asks. A live token keeps grassfield-portal from quitting when idle (GTK may take a while to render a long
+  document, and the Print would otherwise land in x-d-p-gtk's dialog); its expiry starts the idle time again (review of step
+  6a, MINOR 2).
+- **6-6. No printer.** The Printer pop-up says "No Printers Available" (or "Printers Not Responding" when CUPS does not answer),
+  with Add Printer… opening Settings > Printers (`grassfield-settings --section=printers`); Print is dimmed; Save as PDF stays.
+- **6-7. A job that does not go.** The application gets response 2 (GTK tells it the print failed); no alert of Grassfield's in
+  6a: printers' queues are Settings > Printers'.
+- **6-8. The paper first shown.** The application's own (its page setup, then its settings), as the printer names it; else the
+  user's default for that printer (lpoptions), else the printer's `media-default`. libcups 2.4's `cupsGetDestMediaDefault` reads
+  only the first of those and then falls back to US Letter whatever the printer says (found by print_cups.sh), so the backend
+  reads them itself.
+- **6-9. The printer first shown.** The application's last one (its settings' "printer": GTK applications keep it), else CUPS's
+  default, else the first; another printer keeps the choices made where it takes them (its paper, two sides and colour; the
+  copies within its limit, and their collation), and pages being typed stay as typed. Print waits while the new printer's
+  options are read (the button dimmed, Return held, the backend refusing an answer meanwhile). No memory of Grassfield's in 6a
+  ("Last Used Settings" is 6b's).
 
 ### D-8. Toolkit appearance follows Grassfield, and the session routes GTK 3 to the portal (category C; T-rows)
 Upstream facts (inventory § T, read in source): GTK 4.24 reads its settings on Wayland from the portal
@@ -1645,7 +1744,9 @@ requests #8, #9 and #10 are merged (owner).
    **5b**, Open With (AppChooser); then **5c**, Files' Open With > Other… and KIO's "no application" question as the same panel
    (decisions 5b-7, 5c-1 to 5c-7).
 6. **Print sheet** (D-7, Q6): the Print interface in `grassfield-portal`, libcups. Here because it reuses the process, the
-   sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13).
+   sheet frame and the save panel (Save as PDF) of steps 4 and 5 (owner decision Q13). In two pull requests (decision 6-1):
+   **6a**, PreparePrint's sheet, Print with its token, Save as PDF, no printer; **6b**, Print with no sheet before it (with the
+   document's preview), Presets and a printer's own options (decisions 6-1 to 6-9).
 7. **Screen-sharing picker** (D-6): stand-ins, IPC `picker` with the one-time socket, the shell panel, the recording
    indicator. After #8–#10.
 8. **Screenshots re-wired** (D-10, Q4). After #8–#10 (bindings and a shell notice).

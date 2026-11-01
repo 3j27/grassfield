@@ -1433,6 +1433,31 @@ TEST(TilingSplit, ANewDesktopTakesTheNextId) {
     EXPECT_EQ(nextDesktopId(std::vector<int64_t>{-98}), 1);
 }
 
+// Step 6d (ADR-0036 D71): how a window leaves its Split View Desktop, and Replace Tiled Window's offer.
+TEST(TilingSplit, HowAWindowLeaves) {
+    EXPECT_EQ(unsplitHow(""), Unsplit::Desktop) << "no second argument: Move Window to Desktop (D44)";
+    EXPECT_EQ(unsplitHow("desktop"), Unsplit::Desktop);
+    EXPECT_EQ(unsplitHow("fullscreen"), Unsplit::Fullscreen);
+    EXPECT_EQ(unsplitHow("replace"), Unsplit::Replace);
+    for (const char* bad : {"Desktop", "full screen", "fullscreen ", "replace\n", "zoom", "left", "x"})
+        EXPECT_FALSE(unsplitHow(bad).has_value()) << bad;
+}
+
+TEST(TilingSplit, ReplaceOffersEveryWindowButTheOneReplaced) {
+    const Suggestion sg{.generation = 4, .asker = 0xa1, .layout = "left-right", .output = "GF-REF", .zones = {1}, .frames = {Rect{964, 0, 956, 1080}}, .windows = {0xb2, 0xc3, 0xd4}};
+    const auto       out = withoutWindow(sg, 0xc3);
+    ASSERT_TRUE(out.has_value());
+    EXPECT_EQ(out->windows, (std::vector<uint64_t>{0xb2, 0xd4})) << "the others, in their order";
+    EXPECT_EQ(out->asker, 0xa1U);
+    EXPECT_EQ(out->zones, std::vector<int>{1});
+    EXPECT_EQ(out->generation, 4U);
+    EXPECT_EQ(withoutWindow(sg, 0xe5)->windows.size(), 3U) << "a window not offered changes nothing";
+    Suggestion alone = sg;
+    alone.windows    = {0xc3};
+    EXPECT_FALSE(withoutWindow(alone, 0xc3).has_value()) << "nothing left to offer: no picker (the other member fills)";
+    EXPECT_FALSE(withoutWindow(std::nullopt, 0xc3).has_value());
+}
+
 TEST(TilingSplit, SidesAndDesktops) {
     EXPECT_EQ(splitZone("left"), 0);
     EXPECT_EQ(splitZone("right"), 1);
