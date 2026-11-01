@@ -621,17 +621,21 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
-        // hl.plugin.grassfield.unsplit(address): Exit Full Screen of a window of a Split View Desktop (TL33). Untrusted: the
-        // address is compared with the live windows.
+        // hl.plugin.grassfield.unsplit(address[, how]): a window leaves its Split View Desktop (TL33): Move Window to Desktop
+        // ("desktop", or no second argument: Exit Full Screen, D44), Make Window Full Screen ("fullscreen") or Replace Tiled
+        // Window ("replace"; step 6d, ADR-0036 D71). Untrusted: the address is compared with the live windows, `how` with
+        // those three words.
         int luaUnsplit(lua_State* L) {
             const auto address = readString<24>(L, 1);
+            const bool hasHow  = !lua_isnoneornil(L, 2);
+            const auto how     = readString<16>(L, 2);
             guarded("hl.plugin.grassfield.unsplit", [&] {
-                if (!address.ok) {
+                if (!address.ok || (hasHow && !how.ok)) {
                     logRequest(Log::WARN, "unsplit: rejected: invalid arguments");
-                    tiler::unsplitRequest(""); // posts the refusal (reason invalid, or locked)
+                    tiler::unsplitRequest("", "invalid"); // posts the refusal (reason invalid, or locked)
                     return;
                 }
-                tiler::unsplitRequest(address.view());
+                tiler::unsplitRequest(address.view(), hasHow ? how.view() : std::string_view{});
             });
             return pushNoOpDispatcher(L);
         }

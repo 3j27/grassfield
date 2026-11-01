@@ -629,6 +629,8 @@ Singleton {
     // Full Screen › Left or Right of Screen and Exit Full Screen of a window of a Split View Desktop: the plugin's split and
     // unsplit. Nothing without the capability, nothing while locked.
     readonly property bool canSplit: Capabilities.has("tiling-split")
+    // Step 6d (ADR-0036 D71): unsplit's Make Window Full Screen and Replace Tiled Window (a plugin before 6d would ignore them).
+    readonly property bool canSplitRows: Capabilities.has("tiling-split-rows")
     // ADR-0036 D47: while Stages shows its strip the plugin refuses Left and Right of Screen; the rows are greyed.
     readonly property bool splitBlocked: root.stagesAvailable && Settings.windowsStages
 
@@ -681,14 +683,21 @@ Singleton {
         return sent;
     }
 
-    // Exit Full Screen of a window of a Split View Desktop (D44): back to its Desktop and box; the other window fills alone.
-    // Refused while locked; false without the capability or for an invalid window.
-    function unsplit(toplevel: var): bool {
+    // A window of a Split View Desktop leaves it. Exit Full Screen and Move Window to Desktop (D44, `how` "desktop" or none):
+    // back to its Desktop and box, the other window fills alone; Make Window Full Screen ("fullscreen") then full screen there;
+    // Replace Tiled Window ("replace": its half waits for the window picked, D71). Refused while locked; false without the
+    // capability (the rows' without tiling-split-rows), or for an invalid window or `how`.
+    function unsplit(toplevel: var, how: var): bool {
         if (SessionState.refuses("windows unsplit"))
             return false;
-        if (!root.canSplit)
+        if (!root.canSplit || !WindowTiling.unsplitAllowed(how, root.canSplitRows))
             return false;
-        return dispatchRequest(Minimized.unsplitCall(addressOf(toplevel)));
+        return dispatchRequest(Minimized.unsplitCall(addressOf(toplevel), how));
+    }
+
+    // The window's Split View Desktop holds two windows: Replace Tiled Window has a window to keep (D71).
+    function splitPair(toplevel: var): bool {
+        return WindowTiling.splitPair(TilingLink.splits, addressOf(toplevel));
     }
 
     // D43: the picker of a Split View Desktop ended without a second window (services/TilingSuggest): the window `address`
