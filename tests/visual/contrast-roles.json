@@ -50,7 +50,7 @@
    {"file": "shell/security/PasswordField.qml", "class": "secondary", "count": 1},
    {"file": "shell/security/polkit/AuthDialog.qml", "class": "secondary", "count": 4},
    {"file": "shell/security/polkit/AuthAgent.qml", "class": "secondary", "count": 1},
-   {"file": "shell/security/secret/SecretSheet.qml", "class": "secondary", "count": 4},
+   {"file": "shell/security/secret/SecretSheet.qml", "class": "secondary", "count": 5},
    {"file": "shell/security/secret/SecretAgent.qml", "class": "secondary", "count": 1},
    {"file": "shell/widgets/WidgetGallery.qml", "class": "secondary", "count": 1},
    {"file": "shell/widgets/WidgetHost.qml", "class": "secondary", "count": 1},
