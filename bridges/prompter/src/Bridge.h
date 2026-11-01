@@ -10,7 +10,9 @@
 // - The well-known name org.gnome.keyring.SystemPrompter is requested only while a shell is connected and has said hello,
 //   without ALLOW_REPLACEMENT (no process can take it away) and queued behind an owner that holds it already (the stock
 //   gcr-prompter frees it 10 s after its last prompt); it is released when the shell goes, so the stock prompter is
-//   activated for the next prompt, as today. A request that reaches the bridge with no shell is answered "cancelled".
+//   activated for the next prompt, as today, and every open gcr prompt is closed then, in a later main loop turn (its
+//   caller saw the name go and will never stop it: counter-review of step 9a, MINOR-A; never from inside gcr's own
+//   callbacks: final check, MAJOR). A request that reaches the bridge with no shell is answered "cancelled".
 // - The shell connects to a private socket (Peer.h: this user, the expected unit's cgroup) and speaks prompter/1
 //   (Protocol.h). One shell at a time.
 // - Each request is identified (Identity.h) before the shell sees it; at most limits::kRequests are outstanding, the next
@@ -34,6 +36,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 
 #include <string_view>
 #include <sys/types.h>
@@ -97,6 +100,11 @@ namespace gf::prompter {
         void cancelRequest(const QString& id, bool tellShell);
         void cancelAll(bool tellShell);
 
+        // In a later main loop turn (never inside gcr's callbacks): dropClient's closing of gcr's open prompts, and a
+        // request's reference to its prompt on the paths that run inside gcr.
+        void closeOpenPromptsLater();
+        void unrefLater(GfPrompt* prompt);
+
         void wantName(bool want);
         void refreshName();
         void setNameState(const QString& state, const QString& owner = QString());
@@ -112,6 +120,8 @@ namespace gf::prompter {
 
         int              m_listenFd = -1;
         LogThrottle      m_refusals{10000}; // one journal line per 10 s for refused connections
+        QTimer           m_refusalReport;   // writes the count of the others when the window ends
+        void             reportRefusalsLater();
         dev_t            m_socketDev = 0;
         ino_t            m_socketIno = 0;
         QSocketNotifier* m_acceptNotifier = nullptr;
@@ -129,6 +139,7 @@ namespace gf::prompter {
         RequestBook             m_book{limits::kRequests};
         QHash<QString, Pending> m_pending; // id -> request
         QSet<GfPrompt*>         m_prompts; // live prompts reporting here
+        PromptsLater            m_later;   // cleared in ~Bridge once no prompt reports here any more
 
         bool    m_nameWanted = false;
         quint64 m_nameGen    = 0;

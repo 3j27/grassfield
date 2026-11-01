@@ -17,18 +17,23 @@
 //   file) runs exactly that executable: its Exec line is the program and field codes only, so an interpreter, a wrapper or
 //   a launcher with arguments never lends its entry to whatever it runs; and every file mapped executable in the process
 //   is trusted as well (no LD_PRELOAD or LD_LIBRARY_PATH code, no plugin from the user's files, nothing replaced since it
-//   was loaded);
+//   was loaded): a trusted path whose file, by device and inode, is the one the mapping names, in a process that shares
+//   the bridge's mount and user namespaces (a user namespace lets a process bind-mount its own file over a trusted path:
+//   counter-review of step 9a, MINOR-C);
 // - anything else, and every failure on the way (no ProcessFD, the process gone, another user, an executable in the home
 //   or deleted, a traced process), is "unidentified" with the executable's path when it is known.
 // What this cannot see (security review of step 9a, MINOR-2, decision 9-14): the row names the program whose process
 // opened the bus connection, not proof of whose code speaks on it. A process can connect, fork, and exec a trusted program
-// while its child keeps using the connection; an ancestor can ptrace a trusted program, change its code and detach.
+// while its child keeps using the connection; an ancestor can ptrace a trusted program, change its code and detach; a
+// trusted app can run the user's code through its own scripting (emacs --batch -l, nvim -l), mapping no untrusted file.
 // The pure parts take the owner and the top of the tree as parameters, so the tests run them on temporary trees.
 
 #include "Protocol.h"
 
 #include <QByteArray>
+#include <QHash>
 #include <QList>
+#include <QPair>
 #include <QString>
 
 #include <optional>
@@ -90,9 +95,28 @@ namespace gf::prompter {
     // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg; gcr-ssh-agent -> ssh.
     const QList<KnownCaller>& knownCallers();
 
-    // The files mapped executable in a process, from the text of /proc/<pid>/maps (unique, in order; pseudo mappings such
-    // as [vdso] and anonymous ones left out); *ok false when a line cannot be read.
-    QStringList executableFiles(const QByteArray& maps, bool* ok);
+    // A file mapped executable: its path and the device (major:minor) and inode /proc/<pid>/maps gives for it.
+    struct CodeMapping {
+        QString path;
+        quint32 major = 0;
+        quint32 minor = 0;
+        quint64 inode = 0;
+        bool    operator==(const CodeMapping& o) const {
+            return path == o.path && major == o.major && minor == o.minor && inode == o.inode;
+        }
+    };
+
+    // The files mapped executable in a process, from the text of /proc/<pid>/maps (unique by path, device and inode, in
+    // order; pseudo mappings such as [vdso] and anonymous ones left out); *ok false when a line cannot be read.
+    QList<CodeMapping> executableMappings(const QByteArray& maps, bool* ok);
+
+    // Mount id -> device (major, minor) of the text of /proc/self/mountinfo: the device a mapping of a file of that mount
+    // shows in /proc/<pid>/maps (the superblock's; on btrfs, stat's st_dev is the subvolume's instead).
+    QHash<quint64, QPair<quint32, quint32>> mountDevices(const QByteArray& mountinfo);
+
+    // What /proc/<pid>/maps would show for the file at `path` now, in the bridge's mount namespace: statx's inode, and its
+    // mount's device looked up in `devices`. inode 0 when it cannot be had.
+    CodeMapping fileMapping(const QString& path, const QHash<quint64, QPair<quint32, quint32>>& devices);
 
     // The "TracerPid:" of /proc/<pid>/status: 0 when not traced, -1 when the line is missing or not a number.
     qint64 tracerPid(const QByteArray& status);
@@ -107,9 +131,13 @@ namespace gf::prompter {
         bool    alive = false; // the pidfd still ran after every read
         bool    sameUser = false; // the bus's UnixUserID is this user
         bool    traced = true;    // TracerPid is not 0, or unknown
+        bool    sameNamespaces = false; // its mount and user namespaces are the bridge's
         bool    codeKnown = false;  // /proc/<pid>/maps was read whole
-        QStringList codeFiles;      // the files mapped executable (executableFiles)
+        QList<CodeMapping> code;    // the files mapped executable (executableMappings)
     };
+
+    // mountDevices of /proc/self/mountinfo.
+    QHash<quint64, QPair<quint32, quint32>> selfMountDevices();
 
     struct Where {
         QString            applications = QStringLiteral("/usr/share/applications");
@@ -117,12 +145,15 @@ namespace gf::prompter {
         QList<KnownCaller> known        = knownCallers();
         uid_t              owner        = 0;
         QString            top          = QStringLiteral("/");
+        // The bridge's mounts (/proc/self/mountinfo), read when the requester is resolved.
+        QHash<quint64, QPair<quint32, quint32>> devices = selfMountDevices();
     };
 
     // The requester for those facts (texts flattened and capped).
     RequesterView requesterFor(const ExeFacts& facts, const Where& where = Where());
 
-    // The facts behind a pidfd (sameUser is left false: the caller sets it from the bus).
-    ExeFacts exeFactsOfPidfd(int pidfd);
+    // The facts behind a pidfd (sameUser is left false: the caller sets it from the bus). `withCode` false reads the
+    // executable only (for a journal line), not its namespaces, tracer and mappings.
+    ExeFacts exeFactsOfPidfd(int pidfd, bool withCode = true);
 
 } // namespace gf::prompter

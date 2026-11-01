@@ -27,8 +27,16 @@
 #    the name is taken again
 # 11 an attacker that asks to replace the name's owner while the bridge holds it is only queued and receives no call at all and the client gets its password
 #    from the shell; when the shell goes, the name passes to the next in line (gcr's design: the known limitation)
-# 11b one connection holds at most 8 open prompts: its 9th BeginPrompting gets LimitsExceeded, another connection is
-#    still served; a PerformPrompt of the wrong shape gets InvalidArgs from the bridge at once (it never reaches gcr)
+# 11b one connection holds at most 8 open prompts (with callback objects, so gcr keeps them all): its 9th BeginPrompting
+#    gets LimitsExceeded, another connection is still served; a caller without callback objects is never held back
+#    (gcr drops each prompt whose PromptReady fails, and so does the count); interface-less StopPrompting calls free
+#    nothing (GDBus answers them UnknownMethod and gcr never sees them), so seventy rounds of them leave the pool for
+#    others (counter-review MINOR-B); a PerformPrompt of the wrong shape gets InvalidArgs from the bridge at once
+# 11c a long-lived client (one connection, as gnome-keyring-daemon) whose prompt is in flight each time the shell goes,
+#    eight times, is served again after (counter-review MINOR-A: gcr's clients forget such prompts without stopping them)
+# 11d the shell's write side fails (EPIPE, its reading side shut down, no end ever read) while gcr ends the prompts of a
+#    caller that left the bus with eight open, one of them performed: the bridge stays up and the departure closes no
+#    prompt from inside gcr's own clean-up (opus final check of step 9a, MAJOR: a use-after-free in gcr before the fix)
 # 12 queued behind a holder that owns the name first (the stock gcr-prompter for 10 s after its last prompt): "queued",
 #    then "owned" once the holder exits
 # 13 no test password in the bridge's journal output
@@ -182,6 +190,8 @@ for _ in range(10):
     s.close()' "$d/run/grassfield/strict.sock"
 desc="ten more refused connections at once: still one line in the bridge's output (refusals are logged once per 10 s)"
 check bash -c '[[ $(grep -c "refused a connection" "$1") == 1 ]]' _ "$d/strict.log"
+desc="...and when the window ends without another refusal, one line counts the others (counter-review NIT)"
+check wait_until 15 grep -q "^grassfield-prompter: 10 more connection(s) refused in the last 10 s, not logged one by one$" "$d/strict.log"
 kill "$strict_pid" 2>/dev/null
 
 shell_up badver "$sock"
@@ -342,19 +352,70 @@ wait_until 5 unowned
 shell_up s5 "$sock"
 say s5 hello
 wait_until 5 owned_by "$main_pid"
-client hog begins 9
-desc="one connection holds at most 8 open prompts: its ninth BeginPrompting is answered LimitsExceeded"
+client hog begins 9 --objects
+desc="one connection holds at most 8 open prompts that gcr keeps: its ninth BeginPrompting is answered LimitsExceeded"
 check wait_until 10 bash -c '[[ $(grep -c "^begin [0-7] ok$" "$1") == 8 ]] && grep -qx "begin 8 error org.freedesktop.DBus.Error.LimitsExceeded" "$1"' _ "$d/hog.out"
+client lossy begins 9 --pause 0.3
+desc="a caller without callback objects is not held back: gcr drops each prompt whose PromptReady fails, and so does the count"
+check wait_until 15 bash -c '[[ $(grep -c "^begin [0-8] ok$" "$1") == 9 ]]' _ "$d/lossy.out"
+client nif noiface 70
+nif_pid=$client_pid
+desc="seventy rounds of BeginPrompting and an interface-less StopPrompting: eight held, the rest refused, every stop UnknownMethod"
+check wait_until 60 bash -c 'grep -qx "begin ok: 8" "$1" && grep -qx "begin refused: 62" "$1" && grep -qx "stop org.freedesktop.DBus.Error.UnknownMethod: 70" "$1"' _ "$d/nif.out"
 client c11 password --title "After the hog"
 desc="...another connection is still served meanwhile"
 check wait_until 10 has_line s5 'After the hog'
 say s5 'answer last ok after-the-hog'
 check wait_until 10 grep -qx "password=after-the-hog" "$d/c11.out"
+kill "$nif_pid" 2>/dev/null
 client bad badperform
 desc="a PerformPrompt of the wrong shape gets InvalidArgs from the bridge at once, and never reaches gcr"
 check wait_until 10 grep -q "^error org.freedesktop.DBus.Error.InvalidArgs: PerformPrompt takes (o callback" "$d/bad.out"
 say s5 close
 wait_until 5 unowned
+
+# --- 11c a long-lived client across eight shell departures ------------------------------------------------------------
+mkdir -p "$d/ll"
+n_shell=0
+next_shell() { n_shell=$((n_shell + 1)); shell_up "ll$n_shell" "$sock" && say "ll$n_shell" hello && wait_until 5 owned_by "$main_pid"; }
+next_shell
+client ll longlived "$d/ll" 11
+for i in 0 1 2 3 4 5 6 7 8 9 10; do
+  touch "$d/ll/go-$i"
+  wait_until 10 has_line "ll$n_shell" "Long-lived $i" || break
+  if ((i < 8)); then
+    say "ll$n_shell" close # the shell goes with the prompt in flight
+    wait_until 10 grep -qx "$i cancelled" "$d/ll.out"
+    next_shell
+  else
+    say "ll$n_shell" "answer last ok long-lived-$i"
+    wait_until 10 grep -qx "$i password=long-lived-$i" "$d/ll.out"
+  fi
+done
+desc="a long-lived client whose prompt was in flight at each of eight shell departures is served again after them"
+check bash -c '[[ $(grep -c "^[0-7] cancelled$" "$1") == 8 ]] && grep -qx "8 password=long-lived-8" "$1" && grep -qx "10 password=long-lived-10" "$1" && ! grep -q "open error" "$1"' _ "$d/ll.out"
+desc="...because at each departure gcr ended its open prompts (none left to fill the pool of 64)"
+check bash -c '[[ $(grep -c "open gcr prompt(s) closed: their callers saw the name go (0 still open)$" "$1") -ge 8 ]] && ! grep -q "still open)$" <(grep -v "(0 still open)$" "$1")' _ "$d/main.log"
+say "ll$n_shell" close
+wait_until 5 unowned
+
+# --- 11d a write error inside gcr's clean-up --------------------------------------------------------------------------
+for which in 0 7; do
+  shell_up half$which "$sock"
+  say half$which hello
+  wait_until 5 owned_by "$main_pid"
+  client vanish$which vanish 8 "$which" "$d/half$which.go"
+  wait_until 10 has_line half$which "Vanishing with 8 open"
+  say half$which halfclose
+  errors_before=$(grep -c "shell gone: write error" "$d/main.log")
+  closed_before=$(grep -c " (0 still open)$" "$d/main.log")
+  wait_until 5 grep -q "^#halfclosed" "$d/half$which.shell" && touch "$d/half$which.go"
+  desc="a caller with eight prompts open (prompt $which performed) leaves while the half-closed shell's writes fail: the bridge stays up"
+  check wait_until 10 bash -c 'grep -qx vanishing "$1" && [[ $(grep -c "shell gone: write error" "$2") -gt $4 ]] && sleep 1 && kill -0 "$3"' _ "$d/vanish$which.out" "$d/main.log" "$main_pid" "$errors_before"
+  desc="...and the departure's prompts are ended after gcr's own clean-up, none left open"
+  check wait_until 10 bash -c '[[ $(grep -c " (0 still open)$" "$1") -gt $2 ]]' _ "$d/main.log" "$closed_before"
+  wait_until 5 unowned
+done
 
 # --- 12 queued behind a holder ---------------------------------------------------------------------------------------------
 client stock holder --log "$d/stock.calls"
@@ -372,7 +433,7 @@ check wait_until 5 owned_by "$main_pid"
 
 # --- 13 nothing secret in the journal ----------------------------------------------------------------------------------------
 desc="no test password in the bridge's output"
-check bash -c '! grep -q -e "correct horse" -e pin-0451 -e batch-p -e invented-secret -e attacker-never -e too-late -e early-secret -e after-the-hog "$1"' _ "$d/main.log"
+check bash -c '! grep -q -e "correct horse" -e pin-0451 -e batch-p -e invented-secret -e attacker-never -e too-late -e early-secret -e after-the-hog -e long-lived- "$1"' _ "$d/main.log"
 
 kill "$main_pid" 2>/dev/null
 desc="the bridge stops on SIGTERM and removes its socket"

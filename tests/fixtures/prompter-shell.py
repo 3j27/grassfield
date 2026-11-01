@@ -11,6 +11,8 @@ from --commands (a FIFO the test writes to, one command per line):
   raw <text>                      <text> and a newline, as is
   long <n>                        n bytes of "a" and a newline (an over-long line)
   close                           disconnects and exits
+  halfclose                       shuts its reading side down and keeps the socket open: the bridge's next write fails
+                                  (EPIPE) while it never reads an end
 When the bridge closes the connection the log gets "#closed" and the fake exits. Python standard library only; run it
 with python3 -I. Test data only: no real secret ever passes here.
 """
@@ -101,6 +103,11 @@ def main():
                             log.write("#bye\n")
                             sock.close()
                             return 0
+                        elif op == "halfclose":
+                            sock.shutdown(socket.SHUT_RD)
+                            sel.unregister(sock)
+                            log.write("#halfclosed\n")
+                            continue
                         log.write("#sent %s\n" % op)
                     except OSError as e:
                         log.write("#send-failed %s\n" % e)

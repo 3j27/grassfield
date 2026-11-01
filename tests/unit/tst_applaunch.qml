@@ -18,6 +18,25 @@ TestCase {
         verify(!("XDG_DATA_DIRS" in env));
     }
 
+    // Regression (PR #74 review): the nested dev shell's Search listed the owner's recent files.
+    function test_dataHomeDevIsNotTheOwners() {
+        const apps = "/w/.dev/apps-home";
+        compare(AppLaunch.dataHome(true, apps, "/home/o/.local/share", "/home/o"), apps + "/data");
+        compare(AppLaunch.dataHome(true, apps, "", "/home/o"), apps + "/data");
+        // The shell reads where the isolated apps write (Files' Recents).
+        compare(AppLaunch.dataHome(true, apps, "", "/home/o"), AppLaunch.isolatedEnvironment(apps).XDG_DATA_HOME);
+        // A real session is unchanged.
+        compare(AppLaunch.dataHome(false, apps, "/x/share", "/home/o"), "/x/share");
+        compare(AppLaunch.dataHome(false, apps, "", "/home/o"), "/home/o/.local/share");
+    }
+
+    function test_searchRootDevIsNotHome() {
+        const apps = "/w/.dev/apps-home";
+        compare(AppLaunch.searchRoot(true, "", apps, "/home/o"), apps + "/files");
+        compare(AppLaunch.searchRoot(true, "/fixture", apps, "/home/o"), "/fixture");
+        compare(AppLaunch.searchRoot(false, "", apps, "/home/o"), "/home/o");
+    }
+
     function test_mergeEnvironment() {
         const base = {"HOME": "/h"};
         const extra = {"XCURSOR_SIZE": "48"};

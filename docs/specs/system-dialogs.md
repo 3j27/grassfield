@@ -553,7 +553,12 @@ Rules (fail closed: no answer is ever invented):
 - At most 8 requests outstanding; a 9th caller is answered "cancelled" at once and the shell never sees it. At most 64
   gcr prompts open, at most 8 for one bus connection: a connection's ninth `BeginPrompting` is answered
   `org.freedesktop.DBus.Error.LimitsExceeded` and never reaches gcr; a `PerformPrompt` of the wrong shape is answered
-  `org.freedesktop.DBus.Error.InvalidArgs`.
+  `org.freedesktop.DBus.Error.InvalidArgs`. A connection's count follows what gcr holds (opus counter-review of step 9a,
+  MINOR-A and MINOR-B): a `BeginPrompting` counts with the prompter's interface named only, a prompt stops counting when
+  gcr ends it (its `PromptDone` to the caller, the caller's error to its `PromptReady`, the caller leaving the bus), and
+  every count goes when the prompter's name leaves the bridge; when the shell goes, the bridge closes every open gcr prompt
+  in the next main loop turn (its callers cancelled already, on seeing the name go; never from inside gcr's own callbacks,
+  opus final check of step 9a), so neither gcr nor the count keeps them.
 - A peer whose pidfd the kernel will not give is refused, except on a kernel without `SO_PEERPIDFD` (ENOPROTOOPT); in a
   session only slices may lie between `user@<uid>.service` and the shell's unit. Refused connections are logged once per
   10 s, with the count of the others.
@@ -647,7 +652,11 @@ MINOR-2; ADR-0035 9-14): "GnuPG", "Keyring" and "SSH" can be driven by any progr
 unlock), hence SC3b; a process can connect to the bus, then fork and exec a trusted program while its child speaks on the
 connection, or, as the ancestor of a trusted program, ptrace it, change its code and detach; an app's row is refused to a
 traced process and to one that maps code from untrusted files (`LD_PRELOAD`, `LD_LIBRARY_PATH`, a library replaced
-since it was loaded), which also leaves an app unidentified after an upgrade of its libraries until it restarts. The gcr
+since it was loaded), which also leaves an app unidentified after an upgrade of its libraries until it restarts. The
+mapped files are compared by device and inode with the files their paths name, and only for a process in the bridge's
+own mount and user namespaces (opus counter-review of step 9a, MINOR-C: a user namespace lets a process bind-mount its
+own file over a trusted path); a trusted app that runs code of the user's through its own scripting maps no untrusted
+file (`emacs --batch -l`, `nvim -l`, an app's plugin interpreter) and still gets the app's row. The gcr
 protocol is unauthenticated: its exchange protects the
 password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
 with the original app named only when the caller's text names it); copies of the password may stay in the shell's heap (SC5);

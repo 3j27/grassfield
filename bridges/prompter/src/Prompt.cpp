@@ -3,6 +3,7 @@
 #include "Filter.h"
 
 #include <cstring>
+#include <utility>
 
 using gf::prompter::PromptKind;
 using gf::prompter::PromptSink;
@@ -378,6 +379,47 @@ namespace gf::prompter {
 
     bool holdsPassword(GfPrompt* prompt) {
         return prompt->password != nullptr;
+    }
+
+    struct PromptsLater::Entry {
+        PromptsLater*    owner;
+        QList<GfPrompt*> prompts; // references, released when the source goes (done)
+        Job              job;
+        guint            source = 0;
+    };
+
+    PromptsLater::~PromptsLater() {
+        clear();
+    }
+
+    void PromptsLater::schedule(QList<GfPrompt*> prompts, Job job) {
+        auto* entry   = new Entry{this, std::move(prompts), std::move(job)};
+        entry->source = g_idle_add_full(G_PRIORITY_DEFAULT, run, entry, done);
+        m_sources.insert(entry->source);
+    }
+
+    void PromptsLater::clear() {
+        // Releasing a reference can dispose a prompt, whose sink may schedule more: until none is left.
+        while (!m_sources.isEmpty()) {
+            const QSet<guint> sources = std::exchange(m_sources, {});
+            for (const guint source : sources)
+                g_source_remove(source); // done() releases its references; run() never comes
+        }
+    }
+
+    gboolean PromptsLater::run(gpointer data) {
+        auto* entry = static_cast<Entry*>(data);
+        entry->owner->m_sources.remove(entry->source);
+        if (entry->job)
+            entry->job(entry->prompts);
+        return G_SOURCE_REMOVE;
+    }
+
+    void PromptsLater::done(gpointer data) {
+        auto* entry = static_cast<Entry*>(data);
+        for (GfPrompt* prompt : std::as_const(entry->prompts))
+            g_object_unref(prompt);
+        delete entry;
     }
 
 } // namespace gf::prompter
