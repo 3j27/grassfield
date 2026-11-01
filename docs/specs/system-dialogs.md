@@ -398,9 +398,10 @@ Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q
 master-prompt R12, ADR-0010 "Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step; R12 applies (opus
 PASS, fail closed where a secret is involved, nothing logged). Step 9a builds the bridge, its socket protocol (below) and
 its unit; step 9b the shell's queue and secret sheets for gcr's `password` and `confirm` prompts (ADR-0035 "Delivered in
-step 9b", decisions 9-15 to 9-22); udiskie's helper comes in 9c, the NetworkManager agent in 9d, KIO's password server in 9e.
+step 9b", decisions 9-15 to 9-22); step 9c udiskie's helper and the NetworkManager agent (planned as 9d, merged into 9c by
+this step's brief; ADR-0035 "Delivered in step 9c", decisions 9-25 to 9-35); KIO's password server comes in 9e.
 From 9b the shell connects in the session: gcr's prompts (gnome-keyring, pinentry-gnome3, gcr-ssh-agent) are drawn by the
-shell.
+shell; from 9c also an encrypted removable disk's password (udiskie) and NetworkManager's Wi-Fi secrets.
 
 ### macOS reference behavior
 System-modal alert centred on the active display, above every window, never on the lock screen: the requesting app's icon,
@@ -426,7 +427,9 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
   entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers, each only
-  for a process in the bridge's own mount and user namespaces (as an app's row: the integrator's review of PR #95); anything
+  for a process in the bridge's own mount and user namespaces (as an app's row: the integrator's review of PR #95);
+  "Disks" for udiskie's helper `grassfield-askpass` in any namespaces (udiskie's unit runs it in its own, decision 9-26
+  amended); anything
   else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
   as plain text, flattened and capped, in the secondary style, framed and introduced as the caller's; `warning` in red in that
   frame (step 9b, decision 9-18: under the field it read as the sheet's own error); a secure field (`password-new`: New and
@@ -451,17 +454,33 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   as for the polkit sheet today); the bridge reads the password into a buffer it zeroes after handing it to libgcr or to the
   D-Bus reply.
 - SC6 fallback: shell not connected → the bridge releases the name (the stock gcr-prompter is activated for the next prompt) and
-  unregisters its NetworkManager agent; it takes them again when the shell reconnects; a request in flight when the shell
-  disconnects is answered "no".
-- SC7 udiskie: `grassfield-askpass udiskie <device>` opens a gcr prompt ("Enter a password to unlock the disk “%1”.",
-  "Remember this password" when udiskie offers its cache), prints the password and a newline on stdout, exit 0; cancel: no
-  output, exit 1 (udiskie then leaves the disk locked).
-- SC8 NetworkManager: the bridge's secret agent answers `GetSecrets` for `802-11-wireless-security` and `802-1x` with the
-  sheet's Wi-Fi form ("The Wi-Fi network “%1” requires a WPA2 password.", Show password, Cancel / Join; identity and password
-  for 802.1X), `CancelGetSecrets` closes it, `SaveSecrets`/`DeleteSecrets` store nothing in Grassfield (NM keeps the secret as
-  the connection says). It accepts calls only from the current owner of `org.freedesktop.NetworkManager` on the system bus;
-  other callers get an error and no sheet. VPN settings get "no secrets": NetworkManager shows no VPN dialog itself (an agent
-  like nm-applet runs the VPN plugin's auth dialog, which this one does not), so a VPN that needs secrets at connect time fails,
+  unregisters its NetworkManager agent (built in step 9c: registered only while a shell that draws kind `nm` is connected,
+  and again when NetworkManager comes back on the bus, decision 9-27); it takes them again when the shell reconnects; a
+  request in flight when the shell disconnects is answered "no" (gcr: cancelled; NetworkManager: `NoSecrets`).
+- SC7 udiskie (built in step 9c: `bridges/prompter/src/askpass.cpp`, decisions 9-25, 9-26): `grassfield-automount.service`
+  runs udiskie with `--password-prompt "/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}"`;
+  `grassfield-askpass udiskie <device>` opens a gcr prompt (title "Encrypted Disk", message "Enter a password to unlock the
+  disk “%1”." with the device flattened; French with the system catalog), prints the password and a newline on stdout
+  straight from gcr's secure memory, exit 0; cancel or a prompt that ends without an answer: no output, exit 1 (udiskie then
+  leaves the disk locked); wrong arguments or stdout a terminal: exit 2 before asking; no prompt possible: exit 3. No
+  "Remember this password" check box: udiskie's command interface cannot carry the choice back (its cache follows its own
+  configuration). The bridge names the helper `disk` ("Disks"), on someone's behalf: any program can run it with a disk name
+  of its own (SC3b).
+- SC8 NetworkManager (built in step 9c: `bridges/prompter/src/NmAgent.{h,cpp}`, `NmSecrets.{h,cpp}`, decisions 9-27 to 9-35):
+  the bridge's secret agent answers `GetSecrets` for `802-11-wireless-security` (WPA/WPA2 `psk`, WPA3 `psk`, WEP
+  `wep-key<wep-tx-keyidx>`) and `802-1x` (the password, an EAP method that takes a name and a password, the connection's
+  username shown read-only: NetworkManager keeps only secrets from an agent's reply, opus review of step 9c) of a Wi-Fi connection, when
+  the flags allow interaction, with the sheet's Wi-Fi alert ("The Wi-Fi network “%1” requires a WPA2 password." / "… a WPA3
+  password." / "… a WEP password." / "… requires WPA2 enterprise credentials.", "Requested by NetworkManager", "Username: …"
+  for enterprise (read-only), Show password (never selectable or copyable, 9-34), Cancel / Join), always held until a click
+  past the guard (9-28); Join answers the secrets, Cancel
+  `UserCanceled`; `CancelGetSecrets` closes it (shown or queued, `AgentCanceled`); a request unanswered after 110 s is
+  withdrawn (`NoSecrets`, NetworkManager stops waiting at 120 s); `SaveSecrets` is refused (`Failed`: nothing is stored in
+  Grassfield, so NetworkManager asks another agent) and `DeleteSecrets` succeeds; NetworkManager keeps system-owned secrets as
+  the connection says. It accepts calls only from the current owner of `org.freedesktop.NetworkManager` on the system bus,
+  asked when each call arrives; other callers get `PermissionDenied` and no sheet. Without interaction allowed, for VPN, wired
+  802.1X, EAP-TLS, LEAP, OWE, an enterprise connection without a stored username: `NoSecrets` without a sheet. VPN: NetworkManager shows no VPN dialog itself (an agent like
+  nm-applet runs the VPN plugin's auth dialog, which this one does not), so a VPN that needs secrets at connect time fails,
   as it does today.
 - SC9 KIO network passwords (ADR-0035 D-12 b): the bridge owns `org.kde.kpasswdserver6` at `/modules/kpasswdserver`
   (interface `org.kde.KPasswdServer`: `checkAuthInfoAsync`, `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo`, the result
@@ -501,7 +520,7 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   narrowed to int, a const local that blocked a move), and what remains is Qt's own idiom (static `QStringLiteral`
   constants, `S_IW*` bit masks, a `QDBusArgument` operator returning its argument, an enum's base type).
 
-### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13)
+### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13; kind nm and role disk in step 9c, 9-26 and 9-33)
 Transport: the Unix stream socket `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600), served by
 `grassfield-prompter`; UTF-8 JSON, one object per line, ended by a line feed. The bridge accepts one peer at a time, only
 one that runs as the user and whose cgroup is the unit named by the bridge's `--peer-unit` (`grassfield-shell.service`;
@@ -510,28 +529,37 @@ second shell `{"type":"error","code":"busy"}`, and the connection is closed. Not
 shell; the shell sends a password once, in its answer, and the bridge decodes it straight into gcr's secure memory.
 
 Bridge to shell:
-- `{"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}`: first line, at once.
+- `{"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}`: first line, at once; `kinds`
+  ends with `"nm"` when the bridge's NetworkManager agent runs (it has a system bus, step 9c).
 - `{"type":"name","state":"released"|"queued"|"owned"}`: after the shell's hello and at every change of
   `org.gnome.keyring.SystemPrompter`'s ownership (queued: another process holds it, usually the stock gcr-prompter for 10 s
   after its last prompt; the bridge gets it when that process lets it go).
 - `{"type":"prompt","id":"p<N>","kind":"password"|"confirm","requester":{...},"texts":{...},"choice":{...}|null,
   "passwordNew":bool,"strength":bool}`:
   - `id`: `p` and a decimal number, never reused while the bridge runs;
-  - `requester`: `role` (`app`, `keyring`, `gnupg`, `ssh` or `unidentified`), `name` (the desktop entry's unlocalised
-    `Name` for `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG", `ssh` "SSH" and
-    `unidentified` "Unidentified program" in its own translated words), `desktopId` and `icon` (the entry's, for `app`),
-    `path` (the caller's executable when known, shown in the secondary style for `unidentified`), `identified` (true for
-    `app`, `keyring`, `gnupg`, `ssh`), `onBehalf` (true for `keyring`, `gnupg` and `ssh`: these programs ask for others
-    and any program of the user can make them ask, so the caller's text under the row is another program's unverified
-    text, SC3b). Only the bridge fills it, from the caller's bus credentials (SC3); it names the program whose process
+  - `requester`: `role` (`app`, `keyring`, `gnupg`, `ssh`, `disk` or `unidentified`), `name` (the desktop entry's
+    unlocalised `Name` for `app`, empty otherwise: the shell names `keyring` "Keyring", `gnupg` "GnuPG", `ssh` "SSH", `disk`
+    "Disks" and `unidentified` "Unidentified program" in its own translated words), `desktopId` and `icon` (the entry's, for
+    `app`), `path` (the caller's executable when known, shown in the secondary style for `unidentified`), `identified` (true
+    for `app`, `keyring`, `gnupg`, `ssh`, `disk`), `onBehalf` (true for `keyring`, `gnupg`, `ssh` and `disk`: these programs
+    ask for others and any program of the user can make them ask, so the caller's text under the row is another program's
+    unverified text, SC3b; `disk` is `/usr/lib/grassfield/grassfield-askpass`, udiskie's password command, step 9c). Only the bridge fills it, from the caller's bus credentials (SC3); it names the program whose process
     opened the connection: an `app` row only for a process that is not traced and runs nothing but trusted code;
   - `texts`: `title`, `message`, `description`, `warning`, `continue`, `cancel`: the caller's own text, plain, on one line,
     capped (title 128, message 256, description 1024, warning 256, buttons 32 UTF-16 code units, an ellipsis when cut);
     empty when the caller set none (the shell then uses its own words, "OK" and "Cancel");
   - `choice`: the check box (`label`, capped at 128, and `chosen`, its initial state) or null when there is none;
   - `passwordNew`: a new password (New and Verify fields); `strength`: show the strength meter (both only for `password`).
-- `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, or the bridge
-  cancelled it after a wrong answer): the shell removes its sheet, shown or still queued, and does not answer it.
+- `{"type":"prompt","id":"p<N>","kind":"nm","network":{"ssid":"...","security":"wpa"|"wpa3"|"wep"|"enterprise",
+  "identity":"..."}}` (step 9c): a NetworkManager request, sent only for a call whose sender is the current owner of
+  `org.freedesktop.NetworkManager` on the system bus, so it carries no requester object (the shell draws its own row:
+  "Wi-Fi", "Requested by NetworkManager"); `ssid` the connection's SSID, plain, at most 64 UTF-16 code units, never empty,
+  shown only as a quoted field of the sheet's sentence; `security` WPA/WPA2 Personal, WPA3 Personal, WEP or WPA2 Enterprise;
+  `identity` the connection's own username for `enterprise`, never empty there (a connection without one is not asked),
+  shown read-only (NetworkManager keeps only secrets from an agent's reply), empty otherwise.
+- `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, NetworkManager
+  cancelled it or left the bus, its answer's time ran out, or the bridge cancelled it after a wrong answer): the shell removes
+  its sheet, shown or still queued, and does not answer it.
 - `{"type":"error","code":"<code>","message":"<text>"}`: `refused`, `busy`, `version`, `bad-line`, `too-long`,
   `unknown-type`, `bad-answer`.
 
@@ -539,9 +567,12 @@ Shell to bridge (at most 16 KiB per line):
 - `{"v":"prompter/1","type":"hello","shell":"<version>","kinds":[...]}`: the first line, once; `kinds` lists what the
   shell draws. The bridge asks for the name only after it, and sends only requests of a listed kind (another kind is
   answered "cancelled" to its caller without reaching the shell).
-- `{"type":"answer","id":"p<N>","result":"ok"|"cancel","password":"...","choice":true|false}`: `password` only for a
-  `password` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password); `choice`
-  only when the prompt had a check box.
+- `{"type":"answer","id":"p<N>","result":"ok"|"cancel"|"refused","password":"...","choice":true|false}`: `password`
+  only for a `password` or `nm` request answered `ok` (at most 4096 bytes of UTF-8 after decoding; an empty one is a password
+  for gcr, never for `nm`); `choice` only when the prompt had a check box (never for `nm`); `refused` is the shell's own
+  refusal (beyond its bound of 8, or without a queue): gcr gets "cancelled", NetworkManager `NoSecrets`, never the user's
+  `UserCanceled` (opus review of step 9c). The bridge parses an `identity` (at most 1024 bytes) but no kind accepts one: an
+  `nm` answer with it, or that breaks the other rules, cancels its request (NetworkManager gets `NoSecrets`).
 
 The shell's reading (step 9b, decision 9-20; `shell/security/secret/Prompter.js`): exactly these messages with exactly
 these keys and types, texts within the caps above, a requester consistent with its role, only the kinds of its hello;
@@ -573,9 +604,12 @@ Rules (fail closed: no answer is ever invented):
   message of a connection closes it too.
 - When the shell disconnects, every outstanding request is answered "cancelled" and the name is released; the stock
   gcr-prompter is then activated for the next prompt, as before step 9.
-- Kinds `nm` (Wi-Fi and 802.1X secrets, step 9d), `kio` (server name and password, step 9e) and `bluetooth` (pairing, step
-  10) are reserved; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of an existing
-  kind is `prompter/2`.
+- Kind `nm` (Wi-Fi and 802.1X secrets) is built in step 9c; `kio` (server name and password, step 9e) and `bluetooth`
+  (pairing, step 10) are reserved; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of
+  an existing kind is `prompter/2`; a new value of a field (the role `disk`, step 9c) is not: bridge and shell ship together,
+  and a shell that does not know it closes the connection (9-26).
+- NetworkManager's requests share the ids and the bound of 8 with gcr's; the 9th, from either side, is refused (gcr:
+  cancelled; NetworkManager: `NoSecrets`).
 
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
@@ -627,6 +661,31 @@ Rules (fail closed: no answer is ever invented):
   environment as the bridge): `just shot secret-sheet` (the alert, its requester row, the framed caller text), type a
   password and Return (the client prints it), then `pkexec --help`-safe polkit with a gcr request arriving meanwhile (the
   polkit sheet keeps the keyboard; the secret sheet shows after, held). Visual NOT verified in step 9b.
+- Step 9c covers A-SC4 (`tests/security/nm_agent.sh`: the real bridge on a private "system" bus with a fake NetworkManager:
+  WPA2, WPA3, WEP and enterprise secrets typed in a fake shell reach it; flags without interaction, VPN, EAP-TLS and a wired
+  connection get `NoSecrets` without a sheet; a caller that does not own `org.freedesktop.NetworkManager` gets
+  `PermissionDenied` and nothing is shown, its `CancelGetSecrets` cancels nothing; `CancelGetSecrets` withdraws the sheet;
+  the shell's departure unregisters, its return registers, a restarted NetworkManager is registered with again; the bound of
+  8 shared with gcr; the 110-s withdrawal; `--mutants`: the sender check, the unregistering, the VPN and interaction
+  refusals, the cancellation, the kinds gate, the user's cancel, the name check, the timeout, `SaveSecrets`, the
+  re-registration), the Wi-Fi sheet (`tests/security/secret_sheets.sh`: held, Join's length rule, Show password,
+  enterprise, NetworkManager's cancel while typed into, the queue with polkit and gcr, the lock hiding the shown password;
+  mutants), the shell's real client end to end (`tests/security/secret_bridge.sh` e2e with the fake NetworkManager) and SC7
+  for the helper (`tests/security/askpass.sh`: through the real bridge, the passphrase printed once with a newline, exit 0;
+  Cancel and the shell's departure exit 1 with nothing printed; wrong arguments and a terminal exit 2; French; the stock
+  prompter's stand-in by D-Bus activation when no bridge holds the name; the disk role when the helper is the installed
+  root-owned file; mutants).
+- A-SC7 nested scenario for step 9c (owner approval: `just nested-up`, `just shot`): as for step 9b, with a second private
+  dbus-daemon as the "system" bus (the session bus's test configuration with `<type>system</type>` and its own socket under
+  `/tmp`, as `tests/security/nm_agent.sh` writes it) and the fake NetworkManager on it (`env DBUS_SYSTEM_BUS_ADDRESS=<that
+  bus> GF_TEST_BUS_DIR=/tmp python3 -I tests/fixtures/fake-networkmanager.py --log /tmp/nm.log --commands /tmp/nm.cmd`), the
+  bridge started with the same `DBUS_SYSTEM_BUS_ADDRESS`; once `/tmp/nm.log` says `#register`, `echo 'get w1
+  802-11-wireless-security 0x1 ssid=Café' >/tmp/nm.cmd`: `just shot wifi-sheet` (the Wi-Fi glyph, the sentence with the SSID,
+  "Requested by NetworkManager", held), click past the guard, type a password, tick Show password (`just shot
+  wifi-sheet-shown`), Return (`/tmp/nm.log` gets the psk); then `.dev/build/grassfield-askpass udiskie /dev/sdz1 >/tmp/disk.out`
+  on the nested session's bus: `just shot disk-sheet` (the drive glyph, "Disks asks for a password", the helper's text framed
+  as another program's). Visual NOT verified in step 9c; a real NetworkManager, a real udiskie with a LUKS image and the
+  helper's identification inside udiskie's sandbox (`PrivateUsers=self`) are the owner's L2 checks.
 - A-SC9 (L0) the handover against fakes on a private bus (`tests/integration/secrets_handover.sh`): the items move once and
   an item the keychain holds is kept; KWallet's own entries (stored as kwalletd 6.29 stores them) move too, and so does an
   older entry KWallet lists only once open; nothing is final from a locked listing that lists nothing; an empty value is
@@ -661,7 +720,7 @@ since it was loaded), which also leaves an app unidentified after an upgrade of 
 mapped files are compared by device and inode with the files their paths name, and only for a process in the bridge's
 own mount and user namespaces (opus counter-review of step 9a, MINOR-C: a user namespace lets a process bind-mount its
 own file over a trusted path; the known callers need those namespaces too since the integrator's review of PR #95, so a
-known program run in a sandbox of its own shows as "Unidentified program"); a trusted app that runs code of the user's through its own scripting maps no untrusted
+known program run in a sandbox of its own shows as "Unidentified program", save "Disks", decision 9-26 amended); a trusted app that runs code of the user's through its own scripting maps no untrusted
 file (`emacs --batch -l`, `nvim -l`, an app's plugin interpreter) and still gets the app's row. The gcr
 protocol is unauthenticated: its exchange protects the
 password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
@@ -681,7 +740,28 @@ polkit request that waited behind a secret sheet says it arrived "right after an
 arrives during the key sink's linger after an earlier one keeps that one's place, so it is shown, held, before a secret request
 queued meanwhile (opus review of step 9b, NIT-1); a shared or captured
 output is black while a secret or authorization sheet is up (the layer covers the output, decision 9-22); the strength meter
-reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet's look are not verified; until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
+reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet's look are not verified; step 9c:
+"Disks" names `grassfield-askpass`, which any program of the user can run with a disk name and a passphrase destination of
+its own (the text under the row is shown as unverified, SC3b), and a passphrase udiskie refuses is not asked again (udiskie
+2.7.0 reports the failure, which `--no-notify` hides; the disk stays locked until it is plugged in again); the helper's
+identification inside udiskie's sandbox (`PrivateUsers=self`) relies on the bridge reading `/proc/<pid>/exe` across that
+user namespace, checked here with the installed helper in a user and mount namespace that `unshare` makes, not under
+systemd's own sandbox; the NetworkManager agent stores no secret: a connection whose secrets
+are agent-owned (`psk-flags=1`, as some editors make them) is asked for its password at every connection, and its
+`SaveSecrets` is refused so that another agent may store them; system-owned secrets the agent returns are kept by
+NetworkManager only when the user has its `settings.modify.system` (or `modify.own`) permission without authentication
+(NetworkManager discards them otherwise and the connection fails: NOT VERIFIED on the owner's polkit rules); VPN, wired
+802.1X, EAP-TLS (a certificate's password), LEAP and a PIN are not asked (`NoSecrets`); an enterprise network's username
+cannot be changed from the sheet (NetworkManager keeps only secrets from an agent's reply: it is changed where the connection
+is edited, as on GNOME; a connection without one is not asked); NetworkManager sends the connection's current system-owned
+secrets (the old password of a network asked again) inside `GetSecrets`' connection argument to a user with the modify
+permission, and that copy stays in GDBus's buffers of the call until it is answered (never read, forwarded or logged by
+the bridge); an SSID is shown as the connection
+holds it, flattened, so two networks with look-alike names look alike (macOS shows the name too); a WPA2 password of 64
+characters that are not hexadecimal is refused by NetworkManager, not by the sheet; NetworkManager stops waiting at 120 s,
+so a Wi-Fi sheet left unanswered is withdrawn at 110 s; GDBus marshals a copy of a Wi-Fi secret into the reply it writes and
+frees it unwiped (the bridge is not dumpable and has no core file and no swap); a real NetworkManager and the Wi-Fi alert's
+look are not verified; until step 2a ships the session's `kwalletrc` (ADR-0035 Q17-b), KWallet's `ksecretd` can hold
 the Secret Service for a session when a KWallet client starts before gnome-keyring, and libsecret clients then meet KWallet's
 dialogs (inventory S12); a user `kwalletrc` that turns the key back on wins. The handover (SC10, step 2c) moves what
 KWallet holds into the keychain, and makes a leftover ksecretd quit; what remains: a Chromium that made a new key before the

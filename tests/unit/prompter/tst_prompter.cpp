@@ -3,8 +3,10 @@
 // requester (temporary trees stand for the system's root-owned ones), the bus filter that tells a prompt its caller, and
 // the GcrPrompt object itself (answers, withdrawals, the password wiped). The process on a private bus:
 // tests/security/prompter_bridge.sh.
+#include "Askpass.h"
 #include "Filter.h"
 #include "Identity.h"
+#include "NmSecrets.h"
 #include "Peer.h"
 #include "Prompt.h"
 #include "Protocol.h"
@@ -170,7 +172,12 @@ TEST(PrompterProtocol, AnswerIsParsedAndThePasswordStaysRaw) {
     EXPECT_EQ(decoded(line, a.password), std::string("s3cr\"t \xc3\xa9\xf0\x9f\x94\x91"));
     const ShellLine cancel = parsed(R"({"type":"answer","id":"p1","result":"cancel"})", ParseStatus::Ok);
     EXPECT_FALSE(cancel.ok);
+    EXPECT_FALSE(cancel.refused);
     EXPECT_FALSE(cancel.hasPassword);
+    // The shell's refusal (its bound; opus review of step 9c): not ok, and not the user's cancellation.
+    const ShellLine refused = parsed(R"({"type":"answer","id":"p1","result":"refused"})", ParseStatus::Ok);
+    EXPECT_FALSE(refused.ok);
+    EXPECT_TRUE(refused.refused);
     // An empty password is a password (gnome-keyring asks about storing unencrypted then).
     const ShellLine empty = parsed(R"({"type":"answer","id":"p2","result":"ok","password":""})", ParseStatus::Ok);
     EXPECT_TRUE(empty.hasPassword);
@@ -297,6 +304,284 @@ TEST(PrompterProtocol, PromptMessageCarriesTheRequesterAndTheTexts) {
     EXPECT_EQ(hello.value(QStringLiteral("v")).toString(), QStringLiteral("prompter/1"));
     EXPECT_EQ(hello.value(QStringLiteral("max")).toInt(), limits::kRequests);
     EXPECT_EQ(QJsonDocument::fromJson(cancelMessage(QStringLiteral("p9"))).object().value(QStringLiteral("id")).toString(), QStringLiteral("p9"));
+}
+
+// --- step 9c: NetworkManager's kind and the identity in an answer ----------------------------------------------------------
+
+TEST(PrompterProtocol, NmPromptCarriesTheNetworkOnly) {
+    NmPromptView v;
+    v.id                 = QStringLiteral("p5");
+    v.ssid               = QStringLiteral("Cafe");
+    v.security           = QStringLiteral("enterprise");
+    v.identity           = QStringLiteral("alice");
+    const QByteArray line = nmPromptMessage(v);
+    ASSERT_TRUE(line.endsWith('\n'));
+    EXPECT_EQ(line.count('\n'), 1);
+    const QJsonObject o = QJsonDocument::fromJson(line).object();
+    EXPECT_EQ(o.keys(), (QStringList{QStringLiteral("id"), QStringLiteral("kind"), QStringLiteral("network"), QStringLiteral("type")}));
+    EXPECT_EQ(o.value(QStringLiteral("kind")).toString(), QStringLiteral("nm"));
+    const QJsonObject n = o.value(QStringLiteral("network")).toObject();
+    EXPECT_EQ(n.keys(), (QStringList{QStringLiteral("identity"), QStringLiteral("security"), QStringLiteral("ssid")}));
+    EXPECT_EQ(n.value(QStringLiteral("ssid")).toString(), QStringLiteral("Cafe"));
+    EXPECT_EQ(n.value(QStringLiteral("security")).toString(), QStringLiteral("enterprise"));
+    EXPECT_EQ(n.value(QStringLiteral("identity")).toString(), QStringLiteral("alice"));
+}
+
+TEST(PrompterProtocol, AnAnswersIdentityStaysRawAndIsBounded) {
+    const std::string line = R"({"type":"answer","id":"p6","result":"ok","password":"pw","identity":"bob )" + jsonU("00e9") + R"("})";
+    const ShellLine   a    = parsed(line, ParseStatus::Ok);
+    EXPECT_TRUE(a.hasIdentity);
+    EXPECT_EQ(decoded(line, a.identity), std::string("bob \xc3\xa9"));
+    EXPECT_FALSE(parsed(R"({"type":"answer","id":"p6","result":"ok","password":"pw"})", ParseStatus::Ok).hasIdentity);
+    EXPECT_EQ(parsed(R"({"type":"answer","id":"p6","result":"ok","identity":true})", ParseStatus::Invalid).id, QStringLiteral("p6"));
+    const std::string longName = R"({"type":"answer","id":"p6","result":"ok","password":"pw","identity":")" + std::string(limits::kIdentity + 1, 'a') + "\"}";
+    EXPECT_EQ(parsed(longName, ParseStatus::Invalid).id, QStringLiteral("p6"));
+}
+
+namespace {
+    // A NetworkManager connection as GetSecrets carries it (a{sa{sv}}), from a few settings of strings, an SSID and lists.
+    struct Con {
+        QByteArray type    = "802-11-wireless";
+        QByteArray ssid    = "Home";
+        QByteArray keyMgmt = "wpa-psk";
+        QByteArray authAlg;
+        int        wepIndex = -1;
+        QList<QByteArray> eap;
+        QByteArray identity;
+        bool       wifi = true;
+
+        GVariant* build() const {
+            GVariantBuilder c;
+            g_variant_builder_init(&c, G_VARIANT_TYPE("a{sa{sv}}"));
+            GVariantBuilder s;
+            g_variant_builder_init(&s, G_VARIANT_TYPE("a{sv}"));
+            g_variant_builder_add(&s, "{sv}", "id", g_variant_new_string("A connection"));
+            g_variant_builder_add(&s, "{sv}", "type", g_variant_new_string(type.constData()));
+            g_variant_builder_add(&c, "{s@a{sv}}", "connection", g_variant_builder_end(&s));
+            if (wifi) {
+                g_variant_builder_init(&s, G_VARIANT_TYPE("a{sv}"));
+                g_variant_builder_add(&s, "{sv}", "ssid", g_variant_new_fixed_array(G_VARIANT_TYPE_BYTE, ssid.constData(), static_cast<gsize>(ssid.size()), 1));
+                g_variant_builder_add(&c, "{s@a{sv}}", "802-11-wireless", g_variant_builder_end(&s));
+            }
+            g_variant_builder_init(&s, G_VARIANT_TYPE("a{sv}"));
+            g_variant_builder_add(&s, "{sv}", "key-mgmt", g_variant_new_string(keyMgmt.constData()));
+            if (!authAlg.isEmpty())
+                g_variant_builder_add(&s, "{sv}", "auth-alg", g_variant_new_string(authAlg.constData()));
+            if (wepIndex >= 0)
+                g_variant_builder_add(&s, "{sv}", "wep-tx-keyidx", g_variant_new_uint32(static_cast<guint32>(wepIndex)));
+            g_variant_builder_add(&c, "{s@a{sv}}", "802-11-wireless-security", g_variant_builder_end(&s));
+            if (!eap.isEmpty()) {
+                g_variant_builder_init(&s, G_VARIANT_TYPE("a{sv}"));
+                GVariantBuilder list;
+                g_variant_builder_init(&list, G_VARIANT_TYPE("as"));
+                for (const QByteArray& m : eap)
+                    g_variant_builder_add(&list, "s", m.constData());
+                g_variant_builder_add(&s, "{sv}", "eap", g_variant_builder_end(&list));
+                if (!identity.isEmpty())
+                    g_variant_builder_add(&s, "{sv}", "identity", g_variant_new_string(identity.constData()));
+                g_variant_builder_add(&c, "{s@a{sv}}", "802-1x", g_variant_builder_end(&s));
+            }
+            return g_variant_ref_sink(g_variant_builder_end(&c));
+        }
+    };
+
+    nm::Ask asked(const Con& con, const char* setting, guint32 flags = nm::kAllowInteraction, const char* const* hints = nullptr) {
+        GVariant*     v = con.build();
+        const nm::Ask a = nm::evaluate(v, setting, hints, flags);
+        g_variant_unref(v);
+        return a;
+    }
+} // namespace
+
+TEST(PrompterNm, PersonalWifiPasswords) {
+    Con wpa;
+    const nm::Ask a = asked(wpa, "802-11-wireless-security");
+    ASSERT_TRUE(a.ask) << a.why.toStdString();
+    EXPECT_EQ(a.security, nm::Security::Wpa);
+    EXPECT_EQ(nm::securityName(a.security), QStringLiteral("wpa"));
+    EXPECT_EQ(a.ssid, QStringLiteral("Home"));
+    EXPECT_EQ(a.setting, QByteArray("802-11-wireless-security"));
+    EXPECT_EQ(a.key, QByteArray("psk"));
+    Con sae;
+    sae.keyMgmt = "sae";
+    EXPECT_EQ(asked(sae, "802-11-wireless-security").security, nm::Security::Wpa3);
+    EXPECT_EQ(asked(sae, "802-11-wireless-security").key, QByteArray("psk"));
+    Con wep;
+    wep.keyMgmt  = "none";
+    wep.wepIndex = 2;
+    const nm::Ask w = asked(wep, "802-11-wireless-security");
+    ASSERT_TRUE(w.ask);
+    EXPECT_EQ(w.security, nm::Security::Wep);
+    EXPECT_EQ(w.key, QByteArray("wep-key2"));
+    wep.wepIndex = -1; // NetworkManager's default index
+    EXPECT_EQ(asked(wep, "802-11-wireless-security").key, QByteArray("wep-key0"));
+    // REQUEST_NEW implies interaction.
+    EXPECT_TRUE(asked(wpa, "802-11-wireless-security", nm::kRequestNew).ask);
+}
+
+TEST(PrompterNm, NothingIsAskedWithoutInteractionOrForOtherSecrets) {
+    Con wpa;
+    EXPECT_FALSE(nm::interactionAllowed(0));
+    EXPECT_FALSE(nm::interactionAllowed(nm::kUserRequested | nm::kWpsPbcActive));
+    const nm::Ask none = asked(wpa, "802-11-wireless-security", 0);
+    EXPECT_FALSE(none.ask);
+    EXPECT_TRUE(none.why.contains(QStringLiteral("no interaction"))) << none.why.toStdString();
+    EXPECT_FALSE(asked(wpa, "802-11-wireless-security", nm::kUserRequested).ask);
+    const nm::Ask vpn = asked(wpa, "vpn");
+    EXPECT_FALSE(vpn.ask);
+    EXPECT_TRUE(vpn.why.contains(QStringLiteral("VPN"))) << vpn.why.toStdString();
+    EXPECT_FALSE(asked(wpa, "gsm").ask);
+    EXPECT_FALSE(asked(wpa, "").ask);
+    Con wired = wpa;
+    wired.type = "802-3-ethernet";
+    wired.wifi = false;
+    EXPECT_FALSE(asked(wired, "802-11-wireless-security").ask);
+    for (const char* mgmt : {"owe", "wpa-eap", "ieee8021x", "wpa-none", ""}) {
+        Con c = wpa;
+        c.keyMgmt = mgmt;
+        EXPECT_FALSE(asked(c, "802-11-wireless-security").ask) << mgmt;
+    }
+    Con leap = wpa;
+    leap.keyMgmt = "none";
+    leap.authAlg = "leap";
+    EXPECT_FALSE(asked(leap, "802-11-wireless-security").ask);
+    Con badIndex = wpa;
+    badIndex.keyMgmt  = "none";
+    badIndex.wepIndex = 4;
+    EXPECT_FALSE(asked(badIndex, "802-11-wireless-security").ask);
+    EXPECT_FALSE(nm::evaluate(nullptr, "802-11-wireless-security", nullptr, nm::kAllowInteraction).ask);
+    GVariant* notAConnection = g_variant_ref_sink(g_variant_new_string("x"));
+    EXPECT_FALSE(nm::evaluate(notAConnection, "802-11-wireless-security", nullptr, nm::kAllowInteraction).ask);
+    g_variant_unref(notAConnection);
+}
+
+TEST(PrompterNm, TheSsidIsPlainTextAndMustShowSomething) {
+    Con c;
+    c.ssid = QByteArray("Caf\xc3\xa9\n\xe2\x80\xae" "evil"); // a line feed, then U+202E (a direction override)
+    EXPECT_EQ(asked(c, "802-11-wireless-security").ssid, QStringLiteral("Caf") + ucs({0xe9}) + QStringLiteral(" evil"));
+    c.ssid = QByteArray("\xff\xfeok");
+    EXPECT_EQ(asked(c, "802-11-wireless-security").ssid, ucs({0xfffd, 0xfffd}) + QStringLiteral("ok"));
+    c.ssid = QByteArray("\t \n");
+    EXPECT_FALSE(asked(c, "802-11-wireless-security").ask);
+    c.ssid = QByteArray();
+    EXPECT_FALSE(asked(c, "802-11-wireless-security").ask);
+    c.ssid = QByteArray(33, 'a'); // longer than an SSID can be
+    EXPECT_FALSE(asked(c, "802-11-wireless-security").ask);
+}
+
+TEST(PrompterNm, EnterprisePasswordWithTheStoredUsername) {
+    Con c;
+    c.keyMgmt  = "wpa-eap";
+    c.eap      = {"peap"};
+    c.identity = "alice";
+    const nm::Ask a = asked(c, "802-1x");
+    ASSERT_TRUE(a.ask) << a.why.toStdString();
+    EXPECT_EQ(a.security, nm::Security::Enterprise);
+    EXPECT_EQ(a.identity, QStringLiteral("alice")) << "shown read-only";
+    // NetworkManager keeps only secrets from a reply: without a username stored with the connection nothing useful can be
+    // asked (opus review of step 9c, MAJOR).
+    Con nameless = c;
+    nameless.identity.clear();
+    const nm::Ask none = asked(nameless, "802-1x");
+    EXPECT_FALSE(none.ask);
+    EXPECT_TRUE(none.why.contains(QStringLiteral("no username"))) << none.why.toStdString();
+    EXPECT_EQ(a.setting, QByteArray("802-1x"));
+    EXPECT_EQ(a.key, QByteArray("password"));
+    const char* const passwordHints[] = {"password", "password-raw", nullptr};
+    EXPECT_TRUE(asked(c, "802-1x", nm::kAllowInteraction, passwordHints).ask);
+    // A certificate's password or a PIN cannot be met with a name and a password.
+    const char* const keyHints[] = {"private-key-password", nullptr};
+    EXPECT_FALSE(asked(c, "802-1x", nm::kAllowInteraction, keyHints).ask);
+    Con tls = c;
+    tls.eap = {"tls"};
+    EXPECT_FALSE(asked(tls, "802-1x").ask);
+    Con both = c;
+    both.eap = {"tls", "ttls"};
+    EXPECT_TRUE(asked(both, "802-1x").ask);
+    Con personal = c;
+    personal.keyMgmt = "wpa-psk";
+    EXPECT_FALSE(asked(personal, "802-1x").ask);
+    Con noEap = c;
+    noEap.eap.clear();
+    EXPECT_FALSE(asked(noEap, "802-1x").ask);
+    EXPECT_FALSE(asked(c, "802-1x", 0).ask);
+}
+
+TEST(PrompterNm, TheReplyHoldsTheSecretInItsSetting) {
+    Con c;
+    nm::Ask a = asked(c, "802-11-wireless-security");
+    char* secret = static_cast<char*>(gcr_secure_memory_alloc(16));
+    std::memcpy(secret, "c0rrect h0rse", 14);
+    GVariant* reply = g_variant_ref_sink(nm::secretsReply(a, secret, 13));
+    ASSERT_TRUE(g_variant_is_of_type(reply, G_VARIANT_TYPE("(a{sa{sv}})")));
+    {
+        // Walked child by child (a lookup would serialise the dictionary into a copy of its own): the reply's string is
+        // the secure buffer itself, not a copy.
+        GVariant* dict    = g_variant_get_child_value(reply, 0);
+        GVariant* entry   = g_variant_get_child_value(dict, 0);
+        GVariant* inner   = g_variant_get_child_value(entry, 1);
+        GVariant* pair    = g_variant_get_child_value(inner, 0);
+        GVariant* boxed   = g_variant_get_child_value(pair, 1);
+        GVariant* value   = g_variant_get_variant(boxed);
+        EXPECT_EQ(g_variant_get_string(value, nullptr), secret);
+        for (GVariant* v : {value, boxed, pair, inner, entry, dict})
+            g_variant_unref(v);
+    }
+    GVariant*    secrets = g_variant_get_child_value(reply, 0);
+    GVariant*    setting = g_variant_lookup_value(secrets, "802-11-wireless-security", G_VARIANT_TYPE("a{sv}"));
+    ASSERT_NE(setting, nullptr);
+    const gchar* psk = nullptr;
+    ASSERT_TRUE(g_variant_lookup(setting, "psk", "&s", &psk));
+    EXPECT_STREQ(psk, "c0rrect h0rse");
+    EXPECT_EQ(g_variant_n_children(setting), 1u);
+    g_variant_unref(setting);
+    g_variant_unref(secrets);
+    g_variant_unref(reply); // zeroes and frees the buffer (ASan would see a double free or a leak)
+
+    Con e;
+    e.keyMgmt  = "wpa-eap";
+    e.eap      = {"ttls"};
+    e.identity = "alice";
+    a          = asked(e, "802-1x");
+    secret     = static_cast<char*>(gcr_secure_memory_alloc(8));
+    std::memcpy(secret, "pw", 3);
+    reply   = g_variant_ref_sink(nm::secretsReply(a, secret, 2));
+    secrets = g_variant_get_child_value(reply, 0);
+    setting = g_variant_lookup_value(secrets, "802-1x", G_VARIANT_TYPE("a{sv}"));
+    ASSERT_NE(setting, nullptr);
+    const gchar* password = nullptr;
+    EXPECT_TRUE(g_variant_lookup(setting, "password", "&s", &password));
+    EXPECT_STREQ(password, "pw");
+    EXPECT_EQ(g_variant_n_children(setting), 1u) << "the password only: NetworkManager would drop a username";
+    g_variant_unref(setting);
+    g_variant_unref(secrets);
+    g_variant_unref(reply);
+}
+
+// --- step 9c: grassfield-askpass's pure parts ------------------------------------------------------------------------------
+
+TEST(PrompterAskpass, TheDiskNameIsPlainText) {
+    EXPECT_EQ(gf::askpass::diskName("/dev/sdb1"), QStringLiteral("/dev/sdb1"));
+    EXPECT_EQ(gf::askpass::diskName("/dev/sdb1\n\xe2\x80\xae" "gnp.exe"), QStringLiteral("/dev/sdb1 gnp.exe"));
+    EXPECT_EQ(gf::askpass::diskName(" \t "), QString());
+    EXPECT_EQ(gf::askpass::diskName(nullptr), QString());
+    const QString cut = gf::askpass::diskName(std::string(500, 'a').c_str());
+    EXPECT_EQ(cut.size(), gf::askpass::kDiskNameCap);
+    EXPECT_TRUE(cut.endsWith(ucs({0x2026})));
+}
+
+TEST(PrompterAskpass, WritesEverythingOrFails) {
+    int fds[2];
+    ASSERT_EQ(::pipe(fds), 0);
+    EXPECT_TRUE(gf::askpass::writeAll(fds[1], "luks pass\n", 10));
+    char buffer[32] = {};
+    EXPECT_EQ(::read(fds[0], buffer, sizeof buffer), 10);
+    EXPECT_STREQ(buffer, "luks pass\n");
+    ::close(fds[0]);
+    const auto previous = std::signal(SIGPIPE, SIG_IGN);
+    EXPECT_FALSE(gf::askpass::writeAll(fds[1], "x", 1)) << "nobody reads any more: EPIPE";
+    std::signal(SIGPIPE, previous);
+    ::close(fds[1]);
 }
 
 // The integrator's review of PR #95: every line the shell sent is wiped once handled, before the next one is, and so are
@@ -684,6 +969,13 @@ TEST_F(PrompterTrust, EntriesThatDoNotCount) {
     EXPECT_EQ(requesterFor(facts(bin(QStringLiteral("editor"))), where()).role, QStringLiteral("app"));
 }
 
+TEST(PrompterIdentityList, TheAskpassHelperIsTheDiskRole) {
+    bool found = false;
+    for (const KnownCaller& k : knownCallers())
+        found = found || (k.path == QStringLiteral("/usr/lib/grassfield/grassfield-askpass") && k.role == QStringLiteral("disk"));
+    EXPECT_TRUE(found);
+}
+
 TEST_F(PrompterTrust, KnownCallersAskOnSomeoneElsesBehalf) {
     entry(QStringLiteral("keyring.desktop"), "keyringd"); // the role wins over an entry
     const RequesterView keyring = requesterFor(facts(bin(QStringLiteral("keyringd"))), where());
@@ -691,10 +983,24 @@ TEST_F(PrompterTrust, KnownCallersAskOnSomeoneElsesBehalf) {
     EXPECT_TRUE(keyring.identified);
     EXPECT_TRUE(keyring.onBehalf);
     EXPECT_TRUE(keyring.name.isEmpty()); // the shell names the role in its own words
-    // In namespaces of its own, a known program is not named (the integrator's review of PR #95, NIT).
+    // In namespaces of its own, a known program is not named (the integrator's review of PR #95, NIT)...
     ExeFacts elsewhere       = facts(bin(QStringLiteral("keyringd")));
     elsewhere.sameNamespaces = false;
     EXPECT_EQ(requesterFor(elsewhere, where()).role, QStringLiteral("unidentified"));
+    // ...save the disk helper, which udiskie's unit runs in namespaces of its own (decision 9-26, amended); its path, its
+    // file by device and inode and the trace check still hold.
+    Where diskWhere = where();
+    diskWhere.known = {{bin(QStringLiteral("keyringd")), QStringLiteral("disk")}};
+    const RequesterView disk = requesterFor(elsewhere, diskWhere);
+    EXPECT_EQ(disk.role, QStringLiteral("disk"));
+    EXPECT_TRUE(disk.identified);
+    EXPECT_TRUE(disk.onBehalf);
+    ExeFacts otherFile = elsewhere;
+    otherFile.file     = fileIdOf(bin(QStringLiteral("editor"))); // the path names another file than the one it runs
+    EXPECT_EQ(requesterFor(otherFile, diskWhere).role, QStringLiteral("unidentified"));
+    ExeFacts traced = elsewhere;
+    traced.traced   = true;
+    EXPECT_EQ(requesterFor(traced, diskWhere).role, QStringLiteral("unidentified"));
 }
 
 TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
@@ -907,7 +1213,7 @@ TEST(PrompterIdentity, AFileBindMountedOverATrustedPathInAnotherNamespaceIsSeen)
 
 // The integrator's review of PR #95 (NIT): a known caller is named only in the bridge's own mount and user namespaces, as
 // an app: a real child in namespaces of its own running a known program reads as unidentified.
-TEST(PrompterIdentity, AKnownCallerInNamespacesOfItsOwnIsUnidentified) {
+TEST(PrompterIdentity, AKnownCallerInNamespacesOfItsOwnIsUnidentifiedSaveTheDiskHelper) {
     if (!rootOwnsSystemFiles())
         GTEST_SKIP() << "/usr/bin is not root's here";
     int ready[2];
@@ -962,6 +1268,13 @@ TEST(PrompterIdentity, AKnownCallerInNamespacesOfItsOwnIsUnidentified) {
     const RequesterView r = requesterFor(facts, w);
     EXPECT_EQ(r.role, QStringLiteral("unidentified"));
     EXPECT_EQ(r.path, QStringLiteral("/usr/bin/sleep"));
+    // The disk helper is named there all the same (decision 9-26, amended: udiskie's unit runs it in namespaces of its own).
+    Where disk = w;
+    disk.known = {{QStringLiteral("/usr/bin/sleep"), QStringLiteral("disk")}};
+    const RequesterView d = requesterFor(facts, disk);
+    EXPECT_EQ(d.role, QStringLiteral("disk"));
+    EXPECT_TRUE(d.identified);
+    EXPECT_TRUE(d.onBehalf);
     facts.sameNamespaces = true;
     EXPECT_EQ(requesterFor(facts, w).role, QStringLiteral("keyring")) << "the same facts in the bridge's namespaces";
 }

@@ -3,7 +3,9 @@
 # the real shell/security/secret/SecretAgent.qml and shell/security/polkit/AuthAgent.qml with their Quickshell types replaced
 # by plain QML (secret_sheets.d/make_harness.py and authagent_flows.d/make_harness.py; the logic untouched), beside the real
 # SecretSheet, SecretSheetModel, AuthDialog, AuthDialogModel and SheetQueue, wired as shell.qml wires them, driven by
-# secret_sheets.d/sheets.qml with real key and mouse events, a fake prompter client and mock polkit flows: a gcr password
+# secret_sheets.d/sheets.qml with real key and mouse events, a fake prompter client and mock polkit flows (step 9c: the
+# Wi-Fi alert of a NetworkManager request: held, Join's length rule, Show password, enterprise, cancelled by NetworkManager
+# while typed into, in the queue with polkit and gcr, hidden again by the lock): a gcr password
 # answered once, the field then empty; cancel; a withdrawn request (queued: never shown; shown: the sink keeps the rest of
 # the password); the ninth request cancelled; a queued request held when its turn comes; the polkit sheet keeping the
 # keyboard while a gcr request arrives and the reverse; nothing over the lock; held after an unlock and under the screen
@@ -41,9 +43,13 @@ unset QT_QPA_PLATFORMTHEME
 export QT_QPA_PLATFORM=offscreen
 fail=0
 
-# qs.security and qs.lib are the real folders; qs.services holds the real SessionState and a ThemeIcons that finds no icon.
-mkdir -p "$scratch/qsroot/qs/services"
-ln -s "$root/shell/security" "$scratch/qsroot/qs/security"
+# qs.lib is the real folder; qs.security the real files but PasswordField.qml, which run() takes from the case under test
+# (a mutant may change it: opus review of step 9c, MINOR); qs.services holds the real SessionState and a ThemeIcons that
+# finds no icon.
+mkdir -p "$scratch/qsroot/qs/services" "$scratch/qsroot/qs/security"
+for entry in "$root"/shell/security/* "$root"/shell/security/qmldir; do
+  [[ $(basename "$entry") == PasswordField.qml ]] || ln -sf "$entry" "$scratch/qsroot/qs/security/$(basename "$entry")"
+done
 ln -s "$root/shell/lib" "$scratch/qsroot/qs/lib"
 cp "$root/shell/services/SessionState.qml" "$pd/ThemeIcons.qml" "$scratch/qsroot/qs/services/"
 printf 'module qs.services\nsingleton SessionState 1.0 SessionState.qml\nsingleton ThemeIcons 1.0 ThemeIcons.qml\n' >"$scratch/qsroot/qs/services/qmldir"
@@ -60,6 +66,7 @@ run() {
   cp "$src/SecretSheet.qml" "$src/SecretSheetModel.qml" "$src/Prompter.js" "$case_dir/secret/"
   sed 's#^import "../../../shell/security/secret/Prompter.js" as Prompter$#import "Prompter.js" as Prompter#' "$d/FakeClient.qml" >"$case_dir/secret/FakeClient.qml"
   cp "$src/AuthDialog.qml" "$src/AuthDialogModel.qml" "$case_dir/polkit/"
+  cp "$src/PasswordField.qml" "$scratch/qsroot/qs/security/PasswordField.qml"
   cp "$d/sheets.qml" "$case_dir/tst_sheets.qml"
   # The model's unit test against the same (possibly mutated) model.
   sed 's#^import "../../shell/security/secret"$#import "secret"#' "$root/tests/security/tst_secretsheetmodel.qml" >"$case_dir/tst_secretsheetmodel.qml"
@@ -71,7 +78,7 @@ run() {
 
 real=$scratch/real
 mkdir -p "$real"
-cp "$root"/shell/security/secret/{SecretAgent.qml,SecretSheet.qml,SecretSheetModel.qml,Prompter.js} "$root"/shell/security/polkit/{AuthAgent.qml,AuthDialog.qml,AuthDialogModel.qml} "$real/"
+cp "$root"/shell/security/secret/{SecretAgent.qml,SecretSheet.qml,SecretSheetModel.qml,Prompter.js} "$root"/shell/security/polkit/{AuthAgent.qml,AuthDialog.qml,AuthDialogModel.qml} "$root"/shell/security/PasswordField.qml "$real/"
 out=$(run "$real")
 rc=$?
 grep -E '^(PASS|FAIL|Totals)' <<<"$out" | grep -vE '^PASS   : qmltestrunner::[A-Za-z]+::(initTestCase|cleanupTestCase)\(\)'
@@ -114,7 +121,13 @@ for name in ("heldGuardMs", "heldAfterUnlockMs", "sinkLingerMaxMs"):
     a = re.search(r"readonly property int " + name + r":\s*(\d+)", model)
     b = re.search(r"readonly property int " + name + r":\s*(\d+)", polkit_model)
     expect(f"{name} equals the polkit sheet's", a is not None and b is not None and a.group(1) == b.group(1))
-expect("the password fields tell the input method they hold a secret (PasswordField)", sheet.count("PasswordField {") == 3 and "TextInput" not in sheet and "TextField" not in sheet)
+expect("the password fields tell the input method they hold a secret (PasswordField); no other field (a network's username is read-only text)",
+       sheet.count("PasswordField {") == 3 and "TextInput" not in sheet and "TextField" not in sheet)
+expect("Show password reveals a network's password field only (the secret sheet's one reveal), never copyable",
+       sheet.count("reveal:") == 1 and re.search(r"reveal:\s*root\.model\.network\s*&&\s*root\.model\.showPassword\s*\n", sheet) is not None
+       and re.search(r"copyable:\s*false\s*\n", sheet) is not None)
+expect("a NetworkManager request is always held (decision 9-28)",
+       re.search(r"root\.heldByLock = sheetModel\.active && \(typing \|\| waited \|\| confirm \|\| network \|\|", agent) is not None)
 expect("shell.qml wires one SheetQueue to both agents and the polkit sheet's place",
        re.search(r"SheetQueue\s*\{\s*id:\s*sheetQueue\s*polkitPresent:\s*authAgent\.queuePresent\s*\}", shell) is not None
        and re.search(r"AuthAgent\s*\{\s*id:\s*authAgent\s*queue:\s*sheetQueue\s*\}", shell) is not None
@@ -187,9 +200,16 @@ saver-not-held#SecretAgent.qml#                root.heldByLock = true;\n        
 answered-twice#SecretSheetModel.qml#    readonly property bool canSubmit: !!request && priv.answeredKey !== keyOf(request)#    readonly property bool canSubmit: !!request
 empty-unlock-password-sent#SecretSheetModel.qml#            if (typeof password !== "string" || (password.length === 0 && !passwordNew)) {#            if (typeof password !== "string") {#SecretSheet.qml#            id: field\n            objectName: "secretField"#            id: field\n            allowEmpty: true\n            objectName: "secretField"
 new-passwords-not-compared#SecretSheetModel.qml#            if (passwordNew && password !== verify) {#            if (false) {
-caller-title-as-the-sheet-title#SecretSheetModel.qml#    readonly property string title: titleOf(role, requesterName, kind, passwordNew)#    readonly property string title: request ? request.texts.title : ""
-caller-labels-on-the-buttons#SecretSheet.qml#            text: qsTr("OK")#            text: root.model.request && root.model.request.texts.continueLabel !== "" ? root.model.request.texts.continueLabel : qsTr("OK")
-confirm-not-held (MAJOR-1 of the opus review)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || sheetModel.arrivesHeld(
+caller-title-as-the-sheet-title#SecretSheetModel.qml#    readonly property string title: network ? networkTitleOf(networkSecurity, networkSsid) : titleOf(role, requesterName, kind, passwordNew)#    readonly property string title: request ? request.texts.title : ""
+caller-labels-on-the-buttons#SecretSheet.qml#            text: root.model.network ? qsTr("Join") : qsTr("OK")#            text: root.model.request && root.model.request.texts.continueLabel !== "" ? root.model.request.texts.continueLabel : qsTr("OK")
+confirm-not-held (MAJOR-1 of the opus review)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || network || sheetModel.arrivesHeld(
+network-not-held (decision 9-28)#SecretAgent.qml#        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || sheetModel.arrivesHeld(#        root.heldByLock = sheetModel.active && (typing || waited || confirm || sheetModel.arrivesHeld(
+network-password-always-shown#SecretSheet.qml#            reveal: root.model.network && root.model.showPassword#            reveal: root.model.network
+show-password-not-reset#SecretSheetModel.qml#    onClearRequested: root.showPassword = false#    onClearRequested: {}
+join-ignores-the-length#SecretSheet.qml#            if (root.model.networkReady(field.length))\n                field.submit();#            field.submit();#SecretSheet.qml#            enabled: root.model.canSubmit && (!root.model.network || root.model.networkReady(field.length))#            enabled: root.model.canSubmit#SecretSheetModel.qml#            if (!Prompter.networkLengthOk(networkSecurity, password.length)) {#            if (false) {
+refusal-as-cancel (opus review of step 9c, NIT)#SecretAgent.qml#            client.refuse(request.id);#            client.answer(request.id, false, null, false, null);
+shown-password-copyable (opus review of step 9c, MINOR)#SecretSheet.qml#            copyable: false#            copyable: true
+password-field-guard-off (opus review of step 9c, MINOR)#PasswordField.qml#    readonly property bool guarded: root.reveal && !root.copyable#    readonly property bool guarded: false
 empty-new-password-by-return (MINOR-1)#SecretSheet.qml#        if (!fromButton && first === "" && second === "")\n            return;#        if (false)\n            return;
 return-in-new-submits (MINOR-1)#SecretSheet.qml#            submitOnReturn: false#            submitOnReturn: true
 answer-kept-across-requests (a restarted bridge's p1)#SecretAgent.qml#        root.answeredId = "";#        ;

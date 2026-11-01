@@ -6,7 +6,7 @@ import qs.services
 // The secret sheets and the one queue (tests/security/secret_sheets.sh runs this as tst_sheets.qml beside the generated
 // agents): the real SecretAgent and AuthAgent (Quickshell types replaced, logic untouched), the real SecretSheet,
 // SecretSheetModel, AuthDialog, AuthDialogModel and SheetQueue, wired as shell.qml wires them; a fake prompter client and
-// mock polkit flows. Real key and mouse events. ADR-0035 D-9, master-prompt R12.
+// mock polkit flows. Real key and mouse events. ADR-0035 D-9, master-prompt R12. Step 9c: NetworkManager's Wi-Fi alert.
 Item {
     id: top
     width: 800
@@ -209,6 +209,7 @@ Item {
             compare(rig.secret.requestCount, 8);
             compare(client.answers.length, 1);
             compare([client.answers[0].id, client.answers[0].ok], ["p9", false]);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p9", result: "refused"}, "the shell's refusal, never a user's cancel");
             compare(rig.queue.secretCount, 8);
         }
 
@@ -502,7 +503,7 @@ Item {
 
         // Decided by the integrator on 2026-11-01 (closest to macOS: a pairing sheet's Connect button): one click on OK, past
         // the guard, confirms a confirmation sheet; within the guard the same click gives nothing.
-        function test_21_confirmByOneClickOnOk() {
+        function test_27_confirmByOneClickOnOk() {
             client.prompt("p1", {kind: "confirm"});
             shown("p1");
             compare(rig.secret.heldByLock, true);
@@ -533,6 +534,173 @@ Item {
             mouseClick(named("secretOk"));
             compare(client.answers.length, 1, "OK, clicked, may");
             compare(client.answers[0].password, "");
+        }
+
+        // Step 9c: a click past the guard on a held sheet.
+        function clickPastGuard() {
+            wait(600);
+            mouseClick(rig.secret.sheet, 5, 5);
+            compare(rig.secret.userFocused, true);
+        }
+
+        // Step 9c (decision 9-28): a NetworkManager request is the Wi-Fi alert, always held; after a click past the guard
+        // the password field has the keys; Join takes only a WPA2 password of 8 characters or more (a shorter one stays in
+        // the field); Show password shows the characters while checked; Join sends the password once.
+        function test_21_networkHeldThenJoin() {
+            client.promptNetwork("p1", {ssid: "Café"});
+            shown("p1");
+            compare(rig.secret.heldByLock, true, "always held");
+            compare(rig.secret.heldWhy, "network");
+            compare(rig.secret.sheet.takesKeys, false, "the keys stay where the user was typing");
+            verify(named("secretHeldNotice").text.indexOf("nothing typed elsewhere goes into it") >= 0);
+            compare(named("secretTitle").text, "The Wi-Fi network “Café” requires a WPA2 password.");
+            compare(named("secretRequester").text, "Requested by NetworkManager");
+            compare(named("secretGlyph").name, "wifi-3");
+            compare(named("secretCallerBlock").visible, false, "no caller text");
+            compare(named("secretIdentity").visible, false, "no name for WPA2");
+            compare(named("secretShowPassword").visible, true);
+            compare(named("secretOk").text, "Join");
+            // Offscreen, keys reach the field even while held (the compositor withholds them in a session: takesKeys is
+            // false): even a password of a valid length is not sent before the click.
+            named("secretField").forceActiveFocus();
+            typeText("longenough");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0, "no answer before the click past the guard");
+            verify(named("secretField").empty, "and the field is emptied");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            const field = named("secretField");
+            typeText("short");
+            compare(named("secretOk").enabled, false, "Join waits for 8 characters");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0, "Return with a WPA2 password too short sends nothing");
+            compare(field.length, 5, "...and keeps what was typed");
+            typeText("pass");
+            compare(named("secretOk").enabled, true);
+            compare(field.reveal, false, "hidden at first");
+            mouseClick(named("secretShowPassword"));
+            compare(rig.secret.model.showPassword, true);
+            compare(field.reveal, true, "Show password shows the characters");
+            let emptyAtAnswer = false;
+            rig.secret.model.answerRequested.connect(() => emptyAtAnswer = field.empty);
+            field.forceActiveFocus();
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "shortpass"});
+            verify(emptyAtAnswer, "the field is emptied before the answer goes out");
+            tryVerify(() => !rig.secret.model.active);
+            compare(rig.secret.lingerWhy, "sent", "the keys stay on the sink a moment after a password");
+            compare(rig.secret.model.showPassword, false, "hidden again");
+        }
+
+        // Step 9c: WPA2 Enterprise: the connection's username is shown, read-only (NetworkManager keeps only secrets from a
+        // reply: opus review of step 9c, MAJOR); Join sends the password only.
+        function test_22_networkEnterprise() {
+            client.promptNetwork("p1", {ssid: "Office", security: "enterprise", identity: "alice"});
+            shown("p1");
+            compare(named("secretTitle").text, "The Wi-Fi network “Office” requires WPA2 enterprise credentials.");
+            const name = named("secretIdentity");
+            compare(name.visible, true);
+            compare(name.text, "Username: alice");
+            verify(name.textFormat === Text.PlainText && name.cursorPosition === undefined, "plain text, not a field");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            typeText("p");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "p"});
+        }
+
+        // Step 9c: NetworkManager cancels (CancelGetSecrets) while the user types: the sheet ends, the rest of the password
+        // goes to the sink, nothing is answered.
+        function test_23_networkCancelledWhileTyping() {
+            client.promptNetwork("p1", {});
+            shown("p1");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            typeText("half");
+            client.withdraw("p1");
+            tryVerify(() => !rig.secret.model.active);
+            compare(rig.secret.lingering, true);
+            compare(rig.secret.lingerWhy, "cancelled");
+            verify(rig.secret.sink.activeFocus);
+            typeText("rest");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0);
+        }
+
+        // Step 9c: one queue with the polkit sheet and gcr: the polkit sheet keeps the keyboard while an nm request and a gcr
+        // request arrive; after it, the nm request (first in) is shown held; cancelled (Esc on its held sheet), the gcr
+        // request comes next, held.
+        function test_24_networkInTheQueue() {
+            const f = polkitArrives("A");
+            tryVerify(() => polkitField() && polkitField().activeFocus);
+            typeText("adm");
+            client.promptNetwork("p1", {});
+            client.prompt("p2", {});
+            wait(100);
+            compare(rig.secret.model.active, false, "both wait");
+            verify(polkitField().activeFocus, "the polkit field keeps the keyboard");
+            typeText("in");
+            keyClick(Qt.Key_Return);
+            compare(f.submits, ["admin"]);
+            polkitEnds();
+            shown("p1");
+            compare(rig.secret.heldByLock, true);
+            compare(rig.secret.sheet.takesKeys, false);
+            compare(named("secretOk").text, "Join");
+            keyClick(Qt.Key_Escape);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "cancel"});
+            shown("p2");
+            compare(rig.secret.heldByLock, true, "the gcr request waited: held");
+            compare(named("secretOk").text, "OK");
+        }
+
+        // Step 9c: the lock hides a sheet whose password was shown: shown again after the unlock, held, and hidden.
+        function test_25_showPasswordHiddenAgainByTheLock() {
+            client.promptNetwork("p1", {});
+            shown("p1");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            mouseClick(named("secretShowPassword"));
+            compare(named("secretField").reveal, true);
+            SessionState.locked = true;
+            SessionState.locked = false;
+            compare(rig.secret.heldByLock, true);
+            compare(named("secretField").reveal, false, "hidden again");
+        }
+
+        // Opus review of step 9c, MINOR: a password shown by Show password is never selectable or copyable: Select All and
+        // Copy (and Cut) put nothing on the clipboard, a mouse drag selects nothing; the text stays in the field.
+        function test_26_shownPasswordNotCopyable() {
+            client.promptNetwork("p1", {});
+            shown("p1");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            const field = named("secretField");
+            typeText("secretpass");
+            mouseClick(named("secretShowPassword"));
+            compare(field.reveal, true);
+            const input = find(field, i => i.echoMode !== undefined);
+            verify(input !== null);
+            compare(input.echoMode, TextInput.Normal, "shown as typed");
+            const other = createTemporaryQmlObject("import QtQuick; TextInput { width: 100; height: 20; text: \"marker\" }", top);
+            other.selectAll();
+            other.copy();
+            field.forceActiveFocus();
+            keySequence(StandardKey.SelectAll);
+            compare(input.selectedText, "", "Select All selects nothing");
+            input.select(0, 4);
+            compare(input.selectedText, "", "no selection can stay");
+            keySequence(StandardKey.Copy);
+            keySequence(StandardKey.Cut);
+            compare(field.length, 10, "Cut takes nothing away");
+            mouseDrag(input, 1, input.height / 2, input.width - 2, 0);
+            compare(input.selectedText, "", "a mouse drag selects nothing");
+            other.text = "";
+            other.paste();
+            compare(other.text, "marker", "the clipboard never got the password");
         }
 
         // The caller's text is plain: markup is shown as typed, never rendered.

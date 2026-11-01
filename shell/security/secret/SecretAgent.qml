@@ -21,7 +21,8 @@ import "Prompter.js" as Prompter
 // keys while a held request has them and lingers a moment after a request ended under the user's typing, so the rest of a
 // password reaches neither another sheet nor the window underneath. Two differences: a request never replaces the one on
 // screen (the queue holds it until that one is gone), and a password sent keeps the keys on the sink a moment too (gcr's
-// caller asks again at once after a wrong password, as a new request).
+// caller asks again at once after a wrong password, as a new request). A confirmation and a NetworkManager request are
+// always held (decisions 9-23 and 9-28).
 Scope {
     id: root
 
@@ -62,12 +63,12 @@ Scope {
         onLost: root.dropAll()
     }
 
-    // A request from the bridge: queued (ADR-0035 D-9: at most 8 secret requests; the ninth is answered "cancelled", and
-    // so is any without a queue).
+    // A request from the bridge: queued (ADR-0035 D-9: at most 8 secret requests; the ninth is refused, and so is any
+    // without a queue: "refused", which the bridge answers "cancelled" to gcr and NoSecrets to NetworkManager).
     function enqueue(request: var): void {
         if (root.queue === null || root.requestCount >= Prompter.MAX_REQUESTS || !root.queue.addSecret(request.id)) {
             console.warn("grassfield-secret: request " + request.id + " answered \"cancelled\": " + root.requestCount + " requests held");
-            client.answer(request.id, false, null, false);
+            client.refuse(request.id);
             return;
         }
         request.arrivedAt = new Date();
@@ -139,11 +140,11 @@ Scope {
     // The user's answer to the request on screen (SecretSheetModel.answerRequested). Sent only for that request, once
     // (PrompterClient.answer), and an "ok" only while its sheet is shown with the keyboard (not held, not behind the lock):
     // never a password for a request that is not on screen. A cancellation goes out whenever the sheet is open.
-    function respond(ok: bool, password: var, choice: bool): void {
+    function respond(ok: bool, password: var, choice: bool, identity: var): void {
         const id = sheetModel.id;
         if (id === "" || id !== root.shownId || (ok && !(win.shown && win.takesKeys && !root.sinkingKeys)))
             return;
-        if (!client.answer(id, ok, password, choice))
+        if (!client.answer(id, ok, password, choice, identity))
             return;
         root.answeredId = id;
         root.answeredKeysBack = !ok || !sheetModel.asksPassword;
@@ -163,7 +164,7 @@ Scope {
 
         // A request was put on screen (sync), or none is left.
         onActiveChanged: root.arrive()
-        onAnswerRequested: (ok, password, choice) => root.respond(ok, password, choice)
+        onAnswerRequested: (ok, password, choice, identity) => root.respond(ok, password, choice, identity)
     }
 
     Connections {
@@ -197,12 +198,16 @@ Scope {
         // Only a click on the alert past the guard gives it the keyboard; until then the keys stay with the window the user
         // was typing in.
         const confirm = sheetModel.active && sheetModel.request.kind === "confirm";
+        // A NetworkManager request too (decision 9-28): it comes when NetworkManager decides (a known network whose
+        // password changed, an activation any program can start), and what reaches its field may be stored with the
+        // connection, so nothing the user is typing elsewhere may land in it.
+        const network = sheetModel.active && sheetModel.request.kind === "nm";
         const queued = typing || (sheetModel.active && sheetModel.followsAnother());
         root.sinkingKeys = typing;
         if (!sheetModel.active)
             root.requestOpen = false;
-        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : waited ? "waited" : queued ? "queued" : confirm && !sheetModel.arrivesHeld(false) ? "confirm" : "unlock";
-        root.heldByLock = sheetModel.active && (typing || waited || confirm || sheetModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
+        root.heldWhy = SessionState.locked ? "locked" : SessionState.saverShown ? "saver" : waited ? "waited" : queued ? "queued" : network && !sheetModel.arrivesHeld(false) ? "network" : confirm && !sheetModel.arrivesHeld(false) ? "confirm" : "unlock";
+        root.heldByLock = sheetModel.active && (typing || waited || confirm || network || sheetModel.arrivesHeld(SessionState.locked || SessionState.saverShown));
         root.userFocused = false;
         if (sheetModel.active)
             root.requestOpen = true;

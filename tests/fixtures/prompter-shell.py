@@ -6,6 +6,7 @@ from --commands (a FIFO the test writes to, one command per line):
   hello [kind...]                 {"v":"prompter/1","type":"hello","shell":"test","kinds":[...]} (default: password confirm)
   answer <id> ok <password>       a password answer ("last" as the id: the newest prompt seen)
   answer <id> ok-choice <password>  the same with "choice": true
+  answer <id> ok-identity <identity> <password>  an nm answer with a name ("identity") and a password (step 9c)
   answer <id> cancel              a cancel answer
   confirm <id> ok|cancel          a confirmation answer
   raw <text>                      <text> and a newline, as is
@@ -13,6 +14,8 @@ from --commands (a FIFO the test writes to, one command per line):
   close                           disconnects and exits
   halfclose                       shuts its reading side down and keeps the socket open: the bridge's next write fails
                                   (EPIPE) while it never reads an end
+With --auto-answer PASSWORD (a stand-in for the stock prompter in tests/security/askpass.sh) it says hello at once and
+answers every password prompt "ok" with PASSWORD, every confirmation "ok"; --commands is then optional.
 When the bridge closes the connection the log gets "#closed" and the fake exits. Python standard library only; run it
 with python3 -I. Test data only: no real secret ever passes here.
 """
@@ -28,8 +31,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--socket", required=True)
     ap.add_argument("--log", required=True)
-    ap.add_argument("--commands", required=True)
+    ap.add_argument("--commands")
+    ap.add_argument("--auto-answer")
     args = ap.parse_args()
+    if args.commands is None and args.auto_answer is None:
+        ap.error("--commands or --auto-answer")
 
     log = open(args.log, "a", buffering=1, encoding="utf-8")
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -40,16 +46,21 @@ def main():
         return 1
     log.write("#connected\n")
     # Read-write: the FIFO always has a writer (this process), so it never reads as closed between the test's writes.
-    commands = os.open(args.commands, os.O_RDWR | os.O_NONBLOCK)
     sel = selectors.DefaultSelector()
     sel.register(sock, selectors.EVENT_READ, "sock")
-    sel.register(commands, selectors.EVENT_READ, "cmd")
+    commands = None
+    if args.commands is not None:
+        commands = os.open(args.commands, os.O_RDWR | os.O_NONBLOCK)
+        sel.register(commands, selectors.EVENT_READ, "cmd")
     inbuf = b""
     cmdbuf = b""
     last_id = None
 
     def send(obj):
         sock.sendall((json.dumps(obj) + "\n").encode())
+
+    if args.auto_answer is not None:
+        send({"v": "prompter/1", "type": "hello", "shell": "auto", "kinds": ["password", "confirm"]})
 
     while True:
         for key, _ in sel.select(timeout=30):
@@ -70,6 +81,11 @@ def main():
                         msg = json.loads(text)
                         if msg.get("type") == "prompt":
                             last_id = msg.get("id")
+                            if args.auto_answer is not None:
+                                answer = {"type": "answer", "id": last_id, "result": "ok"}
+                                if msg.get("kind") == "password":
+                                    answer["password"] = args.auto_answer
+                                send(answer)
                     except ValueError:
                         pass
             else:
@@ -86,6 +102,8 @@ def main():
                     try:
                         if op == "hello":
                             send({"v": "prompter/1", "type": "hello", "shell": "test", "kinds": rest or ["password", "confirm"]})
+                        elif op == "answer" and rest[1] == "ok-identity":
+                            send({"type": "answer", "id": target(rest[0]), "result": "ok", "identity": rest[2], "password": " ".join(rest[3:])})
                         elif op == "answer" and rest[1] in ("ok", "ok-choice"):
                             msg = {"type": "answer", "id": target(rest[0]), "result": "ok", "password": " ".join(rest[2:])}
                             if rest[1] == "ok-choice":

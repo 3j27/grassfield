@@ -14,6 +14,10 @@ import "Prompter.js" as Prompter
 // and for an app the name of its desktop entry). The caller's own texts are shown under them, introduced as text sent by
 // that program, in the secondary style, and for the programs that ask for others (Keyring, GnuPG, SSH: `onBehalf`) as
 // another program's unverified text (spec SC3b). Its button labels are never shown (decision 9-16).
+//
+// A NetworkManager request (kind "nm", step 9c) is the macOS Wi-Fi alert: its title is Grassfield's sentence with the
+// network's SSID as a quoted field ("The Wi-Fi network “%1” requires a WPA2 password."), under it who asked (NetworkManager),
+// then the name field (enterprise), the password field, Show password, Cancel and Join. It has no caller text.
 QtObject {
     id: root
 
@@ -24,7 +28,9 @@ QtObject {
     readonly property bool active: !!request
     readonly property string id: request ? request.id : ""
     readonly property string kind: request ? request.kind : ""
-    readonly property bool asksPassword: kind === "password"
+    // NetworkManager's Wi-Fi secrets (step 9c).
+    readonly property bool network: kind === "nm"
+    readonly property bool asksPassword: kind === "password" || network
     readonly property bool passwordNew: asksPassword && request.passwordNew === true
     readonly property bool showsStrength: passwordNew && request.strength === true
     readonly property string role: request ? request.requester.role : ""
@@ -37,10 +43,22 @@ QtObject {
     // The app's theme icon name (a plain name only, the notification icons' rule), "" otherwise: the sheet then draws the
     // role's glyph.
     readonly property string appIcon: role === "app" && request ? NotificationPrefs.safeIconName(request.requester.icon) : ""
-    readonly property string glyph: role === "app" ? "apps" : role === "unidentified" ? "exclamationmark-triangle" : "key"
+    readonly property string glyph: role === "app" ? "apps" : role === "unidentified" ? "exclamationmark-triangle" : role === "network" ? "wifi-3" : role === "disk" ? "drive" : "key"
+    // Who asked, under a NetworkManager request's title (the program the bridge checked the call came from); "" otherwise.
+    readonly property string requesterDetail: network ? qsTr("Requested by NetworkManager") : ""
+
+    // The network of an nm request: its SSID (plain, a field of the title's sentence), its security, and for WPA2 Enterprise
+    // the connection's username, shown read-only: NetworkManager keeps only secrets from an agent's reply, so a name typed
+    // here would be thrown away (opus review of step 9c, MAJOR; decision 9-33). Whether the password is shown as typed (Show
+    // password; back to hidden for each request and whenever the fields are emptied).
+    readonly property string networkSsid: network ? Prompter.flatten(request.network.ssid, Prompter.CAPS.ssid) : ""
+    readonly property string networkSecurity: network ? request.network.security : ""
+    readonly property bool showsIdentity: networkSecurity === "enterprise"
+    readonly property string identity: showsIdentity ? Prompter.flatten(request.network.identity, Prompter.CAPS.identity) : ""
+    property bool showPassword: false
 
     // The sheet's own title, Grassfield's words: who asks, and for what.
-    readonly property string title: titleOf(role, requesterName, kind, passwordNew)
+    readonly property string title: network ? networkTitleOf(networkSecurity, networkSsid) : titleOf(role, requesterName, kind, passwordNew)
     // The line that introduces the caller's text (spec SC3b): whose text it is.
     readonly property string callerIntro: callerIntroOf(role, requesterName)
     // The caller's own text: its title, message and description (plain lines, capped by the bridge and again here).
@@ -127,6 +145,8 @@ QtObject {
             return qsTr("This request arrived at %1, right after another one. Click the alert to answer it.").arg(at);
         if (why === "confirm")
             return qsTr("This request arrived at %1. Click the alert to answer it: no key answers a confirmation before that.").arg(at);
+        if (why === "network")
+            return qsTr("This request arrived at %1. Click the alert to type the password: nothing typed elsewhere goes into it.").arg(at);
         return qsTr("This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.").arg(at);
     }
 
@@ -142,7 +162,27 @@ QtObject {
             return qsTr("GnuPG");
         if (role === "ssh")
             return qsTr("SSH");
+        if (role === "disk")
+            return qsTr("Disks");
+        if (role === "network")
+            return qsTr("Wi-Fi");
         return role === "" ? "" : qsTr("Unidentified program");
+    }
+
+    // The Wi-Fi alert's sentence (macOS's): the SSID is a field inside Grassfield's words, never the title itself.
+    function networkTitleOf(security: string, ssid: string): string {
+        if (security === "wpa3")
+            return qsTr("The Wi-Fi network “%1” requires a WPA3 password.").arg(ssid);
+        if (security === "wep")
+            return qsTr("The Wi-Fi network “%1” requires a WEP password.").arg(ssid);
+        if (security === "enterprise")
+            return qsTr("The Wi-Fi network “%1” requires WPA2 enterprise credentials.").arg(ssid);
+        return qsTr("The Wi-Fi network “%1” requires a WPA2 password.").arg(ssid);
+    }
+
+    // Join may be pressed: a password of an acceptable length for the network (read as a length, never as text).
+    function networkReady(passwordLength: int): bool {
+        return network && canSubmit && Prompter.networkLengthOk(networkSecurity, passwordLength);
     }
 
     function titleOf(role: string, name: string, kind: string, isNew: bool): string {
@@ -156,9 +196,10 @@ QtObject {
     }
 
     function callerIntroOf(role: string, name: string): string {
-        if (role === "")
+        // A network request carries no caller text at all.
+        if (role === "" || role === "network")
             return "";
-        if (role === "keyring" || role === "gnupg" || role === "ssh")
+        if (role === "keyring" || role === "gnupg" || role === "ssh" || role === "disk")
             return qsTr("Another program sent this message through %1. It is not verified:").arg(name);
         if (role === "app")
             return qsTr("%1 sent this message:").arg(name);
@@ -178,10 +219,11 @@ QtObject {
 
     // The dialog must empty its fields (after every attempt and outcome).
     signal clearRequested
-    // An answer for the agent to send (SecretAgent.respond): `ok`, the password for a password request answered ok, the
-    // check box's state. The agent calls noteAnswered when it sent it (a cancellation or a confirmation gives the keyboard
-    // back at once; a password sent keeps it on the agent's key sink a moment: its caller often asks again at once).
-    signal answerRequested(bool ok, var password, bool choice)
+    // An answer for the agent to send (SecretAgent.respond): `ok`, the password for a password or nm request answered ok,
+    // the check box's state, the name for an enterprise network (else null). The agent calls noteAnswered when it sent it (a
+    // cancellation or a confirmation gives the keyboard back at once; a password sent keeps it on the agent's key sink a
+    // moment: its caller often asks again at once).
+    signal answerRequested(bool ok, var password, bool choice, var identity)
 
     component Private: QtObject {
         property string answeredKey: ""
@@ -198,7 +240,23 @@ QtObject {
             clearRequested();
             return false;
         }
-        if (asksPassword) {
+        if (network) {
+            if (typeof password !== "string" || password.length === 0) {
+                clearRequested();
+                return false;
+            }
+            if (!Prompter.networkLengthOk(networkSecurity, password.length)) {
+                priv.error = qsTr("A WPA2 password has 8 to 63 characters, or 64 hexadecimal digits.");
+                clearRequested();
+                return false;
+            }
+            if (Prompter.utf8Length(password) > Prompter.MAX_PASSWORD_BYTES) {
+                priv.error = qsTr("This password is too long.");
+                clearRequested();
+                return false;
+            }
+        }
+        if (asksPassword && !network) {
             if (typeof password !== "string" || (password.length === 0 && !passwordNew)) {
                 clearRequested();
                 return false;
@@ -215,7 +273,7 @@ QtObject {
             }
         }
         priv.error = "";
-        root.answerRequested(true, asksPassword ? password : null, root.choice);
+        root.answerRequested(true, asksPassword ? password : null, root.choice, null);
         clearRequested();
         return answered;
     }
@@ -223,7 +281,7 @@ QtObject {
     function cancel(): void {
         clearRequested();
         if (canSubmit)
-            root.answerRequested(false, null, root.choice);
+            root.answerRequested(false, null, root.choice, null);
     }
 
     // The agent sent the answer: nothing more is taken for this request.
@@ -231,6 +289,9 @@ QtObject {
         if (request)
             priv.answeredKey = keyOf(request);
     }
+
+    // Whenever the fields are emptied (an attempt, a hold, the lock, the screen saver), the password is hidden again.
+    onClearRequested: root.showPassword = false
 
     // A new request (or none): nothing typed or chosen carries over.
     onRequestChanged: {

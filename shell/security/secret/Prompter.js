@@ -10,9 +10,9 @@
 // sends for a request, and refuses (returns "") what the bridge would refuse.
 
 var PROTOCOL = "prompter/1";
-// The kinds this shell draws, its hello's "kinds" (the bridge never sends another); nm, kio and bluetooth come with
-// steps 9d, 9e and 10.
-var KINDS = ["password", "confirm"];
+// The kinds this shell draws, its hello's "kinds" (the bridge never sends another): gcr's password and confirm, and
+// NetworkManager's secrets (nm, step 9c); kio and bluetooth come with step 9e and step 10.
+var KINDS = ["password", "confirm", "nm"];
 // Secret requests the shell holds at once, shown or waiting (ADR-0035 D-9: the ninth is answered "cancelled").
 var MAX_REQUESTS = 8;
 // A bridge line longer than this (UTF-16 code units, the newline excluded) closes the connection. The longest prompt the
@@ -22,6 +22,8 @@ var MAX_BRIDGE_LINE = 16384;
 var MAX_SHELL_LINE = 16384;
 // A password: at most 4096 bytes of UTF-8 (limits::kPassword; the bridge cancels a longer one).
 var MAX_PASSWORD_BYTES = 4096;
+// The securities of an nm request (bridges/prompter/src/NmSecrets.h): WPA/WPA2 Personal, WPA3 Personal, WEP, WPA2 Enterprise.
+var SECURITIES = ["wpa", "wpa3", "wep", "enterprise"];
 // The bridge's caps (bridges/prompter/src/Text.h, ADR-0035 decision 9-11), UTF-16 code units, the ellipsis included.
 var CAPS = {
     title: 128,
@@ -35,11 +37,15 @@ var CAPS = {
     desktopId: 256,
     path: 512,
     version: 64,
-    error: 256
+    error: 256,
+    ssid: 64,
+    identity: 256
 };
-var ROLES = ["app", "keyring", "gnupg", "ssh", "unidentified"];
-// Programs that ask for others: the text under their row is another program's, unverified (spec SC3b, decision 9-14).
-var ON_BEHALF = ["keyring", "gnupg", "ssh"];
+// "disk": grassfield-askpass, udiskie's password command (step 9c).
+var ROLES = ["app", "keyring", "gnupg", "ssh", "disk", "unidentified"];
+// Programs that ask for others: the text under their row is another program's, unverified (spec SC3b, decision 9-14);
+// grassfield-askpass runs for whoever starts it, with a disk name of theirs.
+var ON_BEHALF = ["keyring", "gnupg", "ssh", "disk"];
 var NAME_STATES = ["released", "queued", "owned"];
 // Waits before the next connection attempt: 1 s, doubling, at most 30 s (a bridge that is restarting, or not there).
 var RETRY_FIRST_MS = 1000;
@@ -239,8 +245,10 @@ function parseError(m) {
 
 // A prompt: every key the bridge sends (Protocol.cpp promptMessage), the right types, texts within the bridge's caps,
 // the requester consistent with its role (only "app" has a name; identified for all but "unidentified"; on behalf of
-// others for keyring, gnupg and ssh), the kinds this shell draws, passwordNew and strength only for a password.
+// others for keyring, gnupg, ssh and disk), the kinds this shell draws, passwordNew and strength only for a password.
 function parsePrompt(m) {
+    if (m.kind === "nm")
+        return parseNetworkPrompt(m);
     if (!exactKeys(m, ["type", "id", "kind", "requester", "texts", "choice", "passwordNew", "strength"]))
         return failure("prompt: unexpected keys");
     if (!validId(m.id))
@@ -303,6 +311,54 @@ function parsePrompt(m) {
     };
 }
 
+// NetworkManager's request (kind nm, step 9c; Protocol.cpp nmPromptMessage): exactly its keys, the SSID shown (plain,
+// within its cap, not empty), a known security, a name only for enterprise. The bridge sends this kind only for a call
+// from the current owner of org.freedesktop.NetworkManager: the requester row is the shell's own ("Wi-Fi", asked by
+// NetworkManager), built here as the fixed role "network", never from anything the request carries. The rest of the
+// message has the shape of a gcr prompt with nothing in it (no caller text, no check box), so the sheet's rules apply.
+function parseNetworkPrompt(m) {
+    if (!exactKeys(m, ["type", "id", "kind", "network"]))
+        return failure("nm prompt: unexpected keys");
+    if (!validId(m.id))
+        return failure("nm prompt: invalid id");
+    const n = m.network;
+    if (!isObject(n) || !exactKeys(n, ["ssid", "security", "identity"]))
+        return failure("nm prompt: network has unexpected keys");
+    if (!isString(n.ssid, CAPS.ssid) || SECURITIES.indexOf(n.security) < 0 || !isString(n.identity, CAPS.identity))
+        return failure("nm prompt: network has wrong types");
+    const ssid = flatten(n.ssid, CAPS.ssid);
+    if (ssid === "")
+        return failure("nm prompt: an SSID that shows nothing");
+    if (n.security !== "enterprise" && n.identity !== "")
+        return failure("nm prompt: a name for a network that asks for none");
+    // An enterprise network's username is shown, never asked (NetworkManager keeps only secrets from an agent's reply):
+    // the bridge sends one only with the connection's own (opus review of step 9c, MAJOR).
+    if (n.security === "enterprise" && flatten(n.identity, CAPS.identity) === "")
+        return failure("nm prompt: an enterprise network without its username");
+    return {
+        ok: true,
+        message: {
+            type: "prompt",
+            id: m.id,
+            kind: "nm",
+            requester: {role: "network", name: "", desktopId: "", icon: "", path: "", identified: true, onBehalf: false},
+            texts: {title: "", message: "", description: "", warning: "", continueLabel: "", cancelLabel: ""},
+            choice: null,
+            passwordNew: false,
+            strength: false,
+            network: {ssid: ssid, security: n.security, identity: flatten(n.identity, CAPS.identity)}
+        }
+    };
+}
+
+// A Wi-Fi password the sheet may send, from its length in UTF-16 code units (never the text): WPA/WPA2 Personal takes
+// 8 to 63 characters or 64 hexadecimal digits (NetworkManager checks the rest); the other securities any non-empty one.
+function networkLengthOk(security, length) {
+    if (!(length > 0))
+        return false;
+    return security === "wpa" ? length >= 8 && length <= 64 : SECURITIES.indexOf(security) >= 0;
+}
+
 // --- shell -> bridge -------------------------------------------------------------------------------------------------
 
 // The shell's hello: the first line, once.
@@ -310,14 +366,25 @@ function helloLine(version) {
     return JSON.stringify({v: PROTOCOL, type: "hello", shell: flatten(String(version), CAPS.version), kinds: KINDS});
 }
 
-// The one answer to `request` (a parsed prompt): "ok" with the password for a password request (a string, "" only for a
-// new password) and the check box's state when the prompt had one; "cancel" carries no password. Returns the line, or ""
-// when it would be wrong (no password for an ok password answer, one over MAX_PASSWORD_BYTES, a line over MAX_SHELL_LINE):
-// nothing is sent then.
-function answerLine(request, ok, password, choice) {
+// The one answer to `request` (a parsed prompt, or what the client kept of it: id, kind, passwordNew, choice, security):
+// "ok" with the password for a password request (a string, "" only for a new password) and the check box's state when
+// the prompt had one; for an nm request the password only (not empty: NetworkManager keeps nothing else of a reply, opus
+// review of step 9c); "cancel" carries no password. `identity` is for a kind that asks a name (none does yet): never sent.
+// Returns the line, or "" when it would be wrong (no password for an ok password answer, one over MAX_PASSWORD_BYTES, a
+// line over MAX_SHELL_LINE): nothing is sent then.
+function answerLine(request, ok, password, choice, identity) {
     if (!isObject(request) || !validId(request.id) || KINDS.indexOf(request.kind) < 0)
         return "";
     const m = {type: "answer", id: request.id, result: ok === true ? "ok" : "cancel"};
+    if (request.kind === "nm") {
+        if (ok === true) {
+            if (typeof password !== "string" || password.length === 0 || utf8Length(password) > MAX_PASSWORD_BYTES)
+                return "";
+            m.password = password;
+        }
+        const nmLine = JSON.stringify(m);
+        return utf8Length(nmLine) <= MAX_SHELL_LINE ? nmLine : "";
+    }
     if (ok === true && request.kind === "password") {
         if (typeof password !== "string" || (password.length === 0 && request.passwordNew !== true) || utf8Length(password) > MAX_PASSWORD_BYTES)
             return "";
@@ -327,4 +394,11 @@ function answerLine(request, ok, password, choice) {
         m.choice = choice === true;
     const line = JSON.stringify(m);
     return utf8Length(line) <= MAX_SHELL_LINE ? line : "";
+}
+
+// The shell's refusal of a request it cannot take (its bound of MAX_REQUESTS, no queue): result "refused", never a user's
+// "cancel", so that NetworkManager hears NoSecrets, not UserCanceled (opus review of step 9c, NIT; decision 9-31). "" for
+// an id the bridge would not have sent.
+function refusalLine(id) {
+    return validId(id) ? JSON.stringify({type: "answer", id: id, result: "refused"}) : "";
 }

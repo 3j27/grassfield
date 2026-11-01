@@ -4,7 +4,7 @@ import "../../shell/security/secret/Prompter.js" as Prompter
 
 // prompter/1, the shell's side (shell/security/secret/Prompter.js; ADR-0035 D-9, step 9b): the bridge's lines read strictly
 // (anything else closes the connection), the flattening rule of the bridge (decision 9-13), the answer lines, the socket
-// path's run-mode rule and the back-off.
+// path's run-mode rule and the back-off; step 9c: NetworkManager's kind (nm), its length rule and answers, the disk role.
 TestCase {
     name: "Prompter"
 
@@ -88,7 +88,9 @@ TestCase {
         const req = o => Object.assign({}, base.requester, o);
         const txt = o => Object.assign({}, base.texts, o);
         return [
-            {tag: "unknown kind", p: prompt({kind: "nm"})},
+            {tag: "unknown kind", p: prompt({kind: "kio"})},
+            {tag: "nm with a gcr prompt's keys", p: prompt({kind: "nm"})},
+            {tag: "disk not on behalf", p: prompt({requester: req({role: "disk", onBehalf: false})})},
             {tag: "bad id", p: prompt({id: "x1"})},
             {tag: "id with a leading zero", p: prompt({id: "p0"})},
             {tag: "extra key", p: Object.assign(prompt(), {password: "x"})},
@@ -155,11 +157,93 @@ TestCase {
         compare(JSON.parse(Prompter.answerLine(fresh, true, "", false)), {type: "answer", id: "p1", result: "ok", password: ""}, "an empty new password; no choice key without a check box");
         const confirm = parse(prompt({kind: "confirm", choice: null})).message;
         compare(JSON.parse(Prompter.answerLine(confirm, true, "x", false)), {type: "answer", id: "p1", result: "ok"}, "a confirmation carries no password");
-        compare(Prompter.answerLine({id: "p1", kind: "nm"}, true, "x", false), "", "an unknown kind");
+        compare(Prompter.answerLine({id: "p1", kind: "kio"}, true, "x", false), "", "an unknown kind");
     }
 
     function test_hello_line() {
-        compare(JSON.parse(Prompter.helloLine("1.0\n")), {v: "prompter/1", type: "hello", shell: "1.0", kinds: ["password", "confirm"]});
+        compare(JSON.parse(Prompter.helloLine("1.0\n")), {v: "prompter/1", type: "hello", shell: "1.0", kinds: ["password", "confirm", "nm"]});
+    }
+
+    // --- step 9c: NetworkManager's kind and the disk role --------------------------------------------------------------
+
+    function nm(over, network) {
+        return Object.assign({type: "prompt", id: "p7", kind: "nm", network: Object.assign({ssid: "Home", security: "wpa", identity: ""}, network || {})}, over || {});
+    }
+
+    function test_networkPrompt() {
+        const r = parse(nm());
+        verify(r.ok, r.reason);
+        const m = r.message;
+        compare([m.id, m.kind, m.network.ssid, m.network.security, m.network.identity], ["p7", "nm", "Home", "wpa", ""]);
+        compare(m.requester.role, "network", "the shell's own requester row, never from the request");
+        compare(m.requester.onBehalf, false);
+        compare([m.texts.title, m.texts.message, m.choice, m.passwordNew, m.strength], ["", "", null, false, false], "no caller text, no check box");
+        const e = parse(nm({}, {security: "enterprise", identity: "alice\u202e"}));
+        verify(e.ok, e.reason);
+        compare(e.message.network.identity, "alice", "the identity flattened");
+        compare(parse(nm({}, {ssid: "Caf\u00e9\n\u202eevil"})).message.network.ssid, "Caf\u00e9 evil", "the SSID flattened");
+        for (const security of ["wpa3", "wep"])
+            verify(parse(nm({}, {security: security})).ok, security);
+    }
+
+    function test_networkPromptRefused_data() {
+        return [
+            {tag: "a requester object", p: nm({requester: {role: "network"}})},
+            {tag: "texts", p: nm({texts: {title: "Authentication required"}})},
+            {tag: "missing network", p: (() => { const p = nm(); delete p.network; return p; })()},
+            {tag: "network extra key", p: nm({}, {password: "x"})},
+            {tag: "unknown security", p: nm({}, {security: "owe"})},
+            {tag: "SSID over its cap", p: nm({}, {ssid: "s".repeat(65)})},
+            {tag: "an SSID that shows nothing", p: nm({}, {ssid: "\u202e \n"})},
+            {tag: "a name for a WPA2 network", p: nm({}, {identity: "eve"})},
+            {tag: "an enterprise network without its username", p: nm({}, {security: "enterprise", identity: "\u200b "})},
+            {tag: "SSID a number", p: nm({}, {ssid: 3})},
+            {tag: "bad id", p: nm({id: "p0"})}
+        ];
+    }
+    function test_networkPromptRefused(d) {
+        verify(!parse(d.p).ok, d.tag);
+    }
+
+    function test_networkLength() {
+        verify(!Prompter.networkLengthOk("wpa", 7), "WPA2: under 8");
+        verify(Prompter.networkLengthOk("wpa", 8));
+        verify(Prompter.networkLengthOk("wpa", 64), "64 hexadecimal digits");
+        verify(!Prompter.networkLengthOk("wpa", 65));
+        verify(Prompter.networkLengthOk("wpa3", 1));
+        verify(Prompter.networkLengthOk("wep", 5));
+        verify(Prompter.networkLengthOk("enterprise", 1));
+        verify(!Prompter.networkLengthOk("wep", 0), "never empty");
+        verify(!Prompter.networkLengthOk("owe", 8), "an unknown security");
+    }
+
+    function test_networkAnswerLines() {
+        const w = parse(nm()).message;
+        const kept = {id: "p7", kind: "nm", passwordNew: false, choice: null, security: "wpa"};
+        compare(JSON.parse(Prompter.answerLine(kept, true, "correct horse", false, null)), {type: "answer", id: "p7", result: "ok", password: "correct horse"});
+        compare(JSON.parse(Prompter.answerLine(kept, false, "ignored", true, "ignored")), {type: "answer", id: "p7", result: "cancel"}, "a cancellation carries nothing");
+        compare(Prompter.answerLine(kept, true, "", false, null), "", "never an empty Wi-Fi password");
+        compare(Prompter.answerLine(kept, true, "x".repeat(4097), false, null), "", "over 4096 bytes");
+        compare(JSON.parse(Prompter.answerLine(kept, true, "pw", false, "eve")), {type: "answer", id: "p7", result: "ok", password: "pw"}, "no name for a WPA2 network");
+        // Enterprise: the password only; NetworkManager would drop a name (opus review of step 9c, MAJOR).
+        const ent = Object.assign({}, kept, {security: "enterprise"});
+        compare(JSON.parse(Prompter.answerLine(ent, true, "pw", false, "bob")), {type: "answer", id: "p7", result: "ok", password: "pw"});
+        compare(JSON.parse(Prompter.answerLine(parse(nm({}, {security: "enterprise", identity: "alice"})).message, true, "pw", false, null)),
+                {type: "answer", id: "p7", result: "ok", password: "pw"});
+        verify(w.kind === "nm");
+    }
+
+    // The shell's refusal (its bound): "refused", never "cancel" (opus review of step 9c, NIT).
+    function test_refusalLine() {
+        compare(JSON.parse(Prompter.refusalLine("p9")), {type: "answer", id: "p9", result: "refused"});
+        compare(Prompter.refusalLine("p09"), "", "an id the bridge never sends");
+        compare(Prompter.refusalLine(""), "");
+    }
+
+    function test_diskRole() {
+        const r = parse(prompt({requester: {role: "disk", name: "", desktopId: "", icon: "", path: "/usr/lib/grassfield/grassfield-askpass", identified: true, onBehalf: true}}));
+        verify(r.ok, r.reason);
+        compare(r.message.requester.role, "disk");
     }
 
     function test_utf8Length() {

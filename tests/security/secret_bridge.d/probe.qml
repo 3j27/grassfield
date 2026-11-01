@@ -8,7 +8,9 @@ import qs.security.secret
 // to the real shell modules; offscreen, no compositor). PROBE_MODE:
 //   client  PrompterClient on PROBE_SOCKET, answering as a user would by the request's title: "answer-ok" (the password
 //           "pw-<id>", or ok for a confirmation), "answer-cancel", "answer-twice" (a second answer must be refused),
-//           "answer-late" (after the bridge withdrew it: refused), "leave" (no answer);
+//           "answer-late" (after the bridge withdrew it: refused), "leave" (no answer); an nm request (step 9c) by its SSID,
+//           "answer-ok" (the password "pw-<id>"; for enterprise a name "user-<id>" too, which the client must not send) or
+//           "answer-cancel";
 //   agent   the real SecretAgent with a SheetQueue, its dev socket PROBE_SOCKET; prints its dev state (devState) when it
 //           changes.
 // Prints "probe: <event>" lines; the test reads them and the fake bridge's PASS/FAIL lines.
@@ -28,16 +30,25 @@ ShellRoot {
 
     function answerAs(request: var): void {
         const c = root.client;
+        if (request.kind === "nm") {
+            const ssid = request.network.ssid;
+            root.log("prompted " + request.id + " nm " + request.network.security);
+            if (ssid === "answer-ok")
+                root.log("answer " + request.id + " " + c.answer(request.id, true, "pw-" + request.id, false, request.network.security === "enterprise" ? "user-" + request.id : null));
+            else if (ssid === "answer-cancel")
+                root.log("answer " + request.id + " " + c.answer(request.id, false, null, false, null));
+            return;
+        }
         const title = request.texts.title;
         const password = request.kind === "password" ? "pw-" + request.id : null;
         const choice = request.choice !== null && request.choice.chosen;
         root.log("prompted " + request.id + " " + request.kind + " " + request.requester.role + " " + title);
         if (title === "answer-ok")
-            root.log("answer " + request.id + " " + c.answer(request.id, true, password, choice));
+            root.log("answer " + request.id + " " + c.answer(request.id, true, password, choice, null));
         else if (title === "answer-cancel")
-            root.log("answer " + request.id + " " + c.answer(request.id, false, null, choice));
+            root.log("answer " + request.id + " " + c.answer(request.id, false, null, choice, null));
         else if (title === "answer-twice")
-            root.log("answer " + request.id + " " + c.answer(request.id, true, password, choice) + " second=" + c.answer(request.id, true, "again", choice));
+            root.log("answer " + request.id + " " + c.answer(request.id, true, password, choice, null) + " second=" + c.answer(request.id, true, "again", choice, null));
         else if (title === "answer-late")
             lateTimer.pending = request;
     }
@@ -50,7 +61,7 @@ ShellRoot {
         onTriggered: {
             const r = pending;
             pending = null;
-            root.log("late answer " + r.id + " " + root.client.answer(r.id, true, "pw-" + r.id, false));
+            root.log("late answer " + r.id + " " + root.client.answer(r.id, true, "pw-" + r.id, false, null));
         }
     }
 

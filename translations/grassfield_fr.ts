@@ -5497,6 +5497,29 @@
     </message>
 </context>
 <context>
+    <name>GrassfieldAskpass</name>
+    <message>
+        <source>Enter a password to unlock the disk.</source>
+        <translation>Saisissez un mot de passe pour déverrouiller le disque.</translation>
+    </message>
+    <message>
+        <source>Enter a password to unlock the disk “%1”.</source>
+        <translation>Saisissez un mot de passe pour déverrouiller le disque «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Encrypted Disk</source>
+        <translation>Disque chiffré</translation>
+    </message>
+    <message>
+        <source>Unlock</source>
+        <translation>Déverrouiller</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+</context>
+<context>
     <name>GrassfieldJobUiDelegate</name>
     <message>
         <source>The operation can’t be completed.</source>
@@ -10307,6 +10330,10 @@
 <context>
     <name>SecretSheet</name>
     <message>
+        <source>Username: %1</source>
+        <translation>Nom d’utilisateur&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>Password</source>
         <translation>Mot de passe</translation>
     </message>
@@ -10339,6 +10366,10 @@
         <translation>Robustesse du mot de passe&#xa0;: élevée</translation>
     </message>
     <message>
+        <source>Show password</source>
+        <translation>Afficher le mot de passe</translation>
+    </message>
+    <message>
         <source>Cancel</source>
         <translation>Annuler</translation>
     </message>
@@ -10346,9 +10377,17 @@
         <source>OK</source>
         <translation>OK</translation>
     </message>
+    <message>
+        <source>Join</source>
+        <translation>Rejoindre</translation>
+    </message>
 </context>
 <context>
     <name>SecretSheetModel</name>
+    <message>
+        <source>Requested by NetworkManager</source>
+        <translation>Demandé par NetworkManager</translation>
+    </message>
     <message>
         <source>This request arrived at %1, while the screen was locked. Click the alert to answer it.</source>
         <translation>Cette demande est arrivée à %1, pendant que l’écran était verrouillé. Cliquez sur l’alerte pour y répondre.</translation>
@@ -10370,6 +10409,10 @@
         <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour y répondre&#xa0;: aucune touche ne répond à une confirmation avant cela.</translation>
     </message>
     <message>
+        <source>This request arrived at %1. Click the alert to type the password: nothing typed elsewhere goes into it.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour saisir le mot de passe&#xa0;: rien de ce qui est tapé ailleurs n’y entre.</translation>
+    </message>
+    <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.</source>
         <translation>Cette demande est arrivée à %1, au moment où l’écran a été déverrouillé. Cliquez sur l’alerte pour y répondre.</translation>
     </message>
@@ -10388,6 +10431,30 @@
     <message>
         <source>SSH</source>
         <translation>SSH</translation>
+    </message>
+    <message>
+        <source>Disks</source>
+        <translation>Disques</translation>
+    </message>
+    <message>
+        <source>Wi-Fi</source>
+        <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WPA3 password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WPA3.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WEP password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WEP.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires WPA2 enterprise credentials.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite des identifiants WPA2 entreprise.</translation>
+    </message>
+    <message>
+        <source>The Wi-Fi network “%1” requires a WPA2 password.</source>
+        <translation>Le réseau Wi-Fi «&#xa0;%1&#xa0;» nécessite un mot de passe WPA2.</translation>
     </message>
     <message>
         <source>An unidentified program asks you to confirm</source>
@@ -10424,6 +10491,10 @@
     <message>
         <source>The program sent this message. It is not verified:</source>
         <translation>Le programme a envoyé ce message. Il n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>A WPA2 password has 8 to 63 characters, or 64 hexadecimal digits.</source>
+        <translation>Un mot de passe WPA2 compte de 8 à 63 caractères, ou 64 chiffres hexadécimaux.</translation>
     </message>
     <message>
         <source>The passwords do not match. Type the new password again in both fields.</source>

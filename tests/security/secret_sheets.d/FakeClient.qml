@@ -14,23 +14,48 @@ QtObject {
     property string nameState: "owned"
     property int openCount: 0
     property var open: ({})
-    // Every answer sent: {id, ok, password, choice, line}.
+    // Every answer sent: {id, ok, password, choice, identity, line}.
     property var answers: []
 
     signal prompted(var request)
     signal withdrawn(string id)
     signal lost
 
-    function answer(id: string, ok: bool, password: var, choice: bool): bool {
+    function answer(id: string, ok: bool, password: var, choice: bool, identity: var): bool {
         if (!Object.prototype.hasOwnProperty.call(fake.open, id))
             return false;
-        const line = Prompter.answerLine(fake.open[id], ok, password, choice);
+        const line = Prompter.answerLine(fake.open[id], ok, password, choice, identity);
         if (line === "")
             return false;
         delete fake.open[id];
         fake.openCount = Object.keys(fake.open).length;
-        fake.answers.push({id: id, ok: ok, password: password, choice: choice, line: line});
+        fake.answers.push({id: id, ok: ok, password: password, choice: choice, identity: identity, line: line});
         return true;
+    }
+
+    // The shell's refusal (its bound): "refused", once per open request (Prompter.refusalLine).
+    function refuse(id: string): bool {
+        if (!Object.prototype.hasOwnProperty.call(fake.open, id))
+            return false;
+        const line = Prompter.refusalLine(id);
+        if (line === "")
+            return false;
+        delete fake.open[id];
+        fake.openCount = Object.keys(fake.open).length;
+        fake.answers.push({id: id, ok: false, password: null, choice: false, identity: null, line: line});
+        return true;
+    }
+
+    // A NetworkManager request (kind nm, step 9c) as the bridge sends it, parsed by the real parser (WPA2 by default).
+    function promptNetwork(id: string, network: var): var {
+        const m = {type: "prompt", id: id, kind: "nm", network: Object.assign({ssid: "Home", security: "wpa", identity: ""}, network || {})};
+        const parsed = Prompter.parseBridgeLine(JSON.stringify(m), true);
+        if (!parsed.ok)
+            throw new Error(parsed.reason);
+        fake.open[id] = parsed.message;
+        fake.openCount = Object.keys(fake.open).length;
+        fake.prompted(parsed.message);
+        return parsed.message;
     }
 
     // A request as the bridge sends it, parsed by the real parser (keyring by default).
