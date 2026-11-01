@@ -10,6 +10,7 @@ import "ClientChrome.js" as ClientChrome
 import "Layout.js" as Layout
 import "V2.js" as V2
 import "../dock/Geometry.js" as DockGeometry
+import "../platform/WindowTiling.js" as WindowTiling
 
 // Overview surface, one per screen: a full-screen layer-shell overlay below the menu bar with a
 // Spaces bar on top and the windows of the output's current workspace laid out.
@@ -347,11 +348,17 @@ Variants {
             return -1;
         }
 
+        // A drop of window `key` on Desktop tile `index` moves it: not on "+", the Desktop shown, a Split View Desktop, nor for a
+        // member of one (WindowTiling.dropAllowed, ADR-0036 D72).
+        function dropAllowed(key: string, index: int): bool {
+            const info = win.byKey[key];
+            const tile = win.tiles[index];
+            return !!info && !!tile && !tile.plus && !tile.active && WindowTiling.dropAllowed(TilingLink.splits, info.address, tile.id);
+        }
+
         function dropWindow(key: string, index: int): void {
-            const info = byKey[key];
-            const tile = tiles[index];
-            if (info && tile && !tile.plus && !tile.active)
-                Compositor.moveGroupToSpace(info.address, tile.id); // with its tile group (TL29)
+            if (win.dropAllowed(key, index))
+                Compositor.moveGroupToSpace(win.byKey[key].address, win.tiles[index].id); // with its tile group (TL29)
         }
 
         // Used by the controller's arrow-key navigation: the window next to `key` in a direction on this output ("" none).
@@ -594,7 +601,7 @@ Variants {
                         required property int index
 
                         readonly property bool isPlus: modelData.plus === true
-                        readonly property bool dropTarget: win.dragKey !== "" && win.dropIndex === index && !isPlus && !modelData.active
+                        readonly property bool dropTarget: win.dragKey !== "" && win.dropIndex === index && win.dropAllowed(win.dragKey, index)
                         readonly property bool focused: win.spaceFocus === index
                         readonly property int count: win.tiles.length - 1
                         readonly property real rowWidth: count * Tokens.overviewTileWidth + Math.max(0, count - 1) * Tokens.overviewTileGap

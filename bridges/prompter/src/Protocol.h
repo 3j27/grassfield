@@ -31,6 +31,7 @@
 #include <QStringList>
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -85,6 +86,15 @@ namespace gf::prompter {
     long decodeJsonString(const char* raw, std::size_t size, char* out, std::size_t capacity);
 
     // --- shell -> bridge ---------------------------------------------------------------------------------------------
+
+    // The complete lines at the start of `buffer` (`length` bytes read from the shell, the last line possibly incomplete):
+    // each is handed to `handle` without its newline, then wiped with its newline before the next one is handed (a password
+    // answer must not stay behind); the incomplete rest is moved to the start and the bytes it leaves behind are wiped too.
+    // Returns the rest's length.
+    // `handle` returns false when the connection was dropped (whoever dropped it wiped the buffer): nothing more is read,
+    // moved or wiped, and 0 is returned. Pure; the bridge's reading of the socket (Bridge::onClientReadable) and the unit
+    // tests use it (the integrator's review of PR #95: the line wiping had no test).
+    std::size_t takeLines(char* buffer, std::size_t length, const std::function<bool(std::string_view line)>& handle);
 
     enum class ParseStatus {
         Ok,        // a message the bridge understands

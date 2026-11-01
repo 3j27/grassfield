@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
+#include <string.h>
 
 namespace gf::prompter {
 
@@ -406,6 +408,25 @@ namespace gf::prompter {
             i += len;
         }
         return static_cast<long>(n);
+    }
+
+    std::size_t takeLines(char* buffer, std::size_t length, const std::function<bool(std::string_view line)>& handle) {
+        std::size_t start = 0;
+        while (true) {
+            const void* newline = std::memchr(buffer + start, '\n', length - start);
+            if (!newline)
+                break;
+            const std::size_t end = static_cast<std::size_t>(static_cast<const char*>(newline) - buffer);
+            if (!handle(std::string_view(buffer + start, end - start)))
+                return 0; // dropped: the buffer was wiped by whoever dropped the connection
+            explicit_bzero(buffer + start, end - start + 1);
+            start = end + 1;
+        }
+        if (start > 0) {
+            std::memmove(buffer, buffer + start, length - start);
+            explicit_bzero(buffer + (length - start), start);
+        }
+        return length - start;
     }
 
     bool validRequestId(const QString& id) {
