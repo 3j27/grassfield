@@ -4,7 +4,8 @@ import Grassfield.Ui
 
 // grassfield-portal's Open and Save panels (ADR-0035 D-4; docs/specs/system-dialogs.md section 1): one FilePanel for each
 // OpenFile, SaveFile or SaveFiles of xdg-desktop-portal, and for each ChooseApplication (D-5, step 5b: Choose Application is an
-// Open panel in the Applications location). Loaded by apps/portal/src/main.cpp at the first request of either, with Files'
+// Open panel in the Applications location); and one PrintSheet for each PreparePrint (D-7, step 6a: its Save as PDF… is the
+// Save panel above, asked through FileChooser). Loaded by apps/portal/src/main.cpp at the first request of either, with Files'
 // backend (`app`, a FilesApp) and the portal's (`host`, FileChooser; `appHost`, AppChooser): a panel is the Files browser,
 // its views, sidebar, Glance and KIO sheets.
 QtObject {
@@ -14,6 +15,9 @@ QtObject {
     required property var host
     // AppChooser (apps/portal/src/appchooser.h): its panels are kept in `panels` under "app:<id>" (its request ids are its own).
     property var appHost: null
+    // Print (apps/portal/src/print.h; ADR-0035 D-7, steps 6a and 6b): its print sheets (PrintSheet.qml), by its request ids.
+    property var printHost: null
+    property var sheets: ({})
     // Dev plumbing (GRASSFIELD_PORTAL_TEST_ANSWER, dev sessions only): "accept" or "cancel" answers each panel once it has
     // drawn (the integration test drives the real process this way).
     property string testAnswer: ""
@@ -60,6 +64,24 @@ QtObject {
             const panel = root.panels[root.key(id, true)];
             if (panel)
                 panel.recommended = applications;
+        }
+    }
+
+    property Component sheetComponent: Component {
+        PrintSheet {}
+    }
+
+    property Connections printRequests: Connections {
+        target: root.printHost
+        function onOpened(id: int, sheet: var): void {
+            root.openSheet(id, sheet);
+        }
+        function onClosed(id: int): void {
+            root.dismissSheet(id);
+        }
+        // A document's job is being sent (step 6b): the sheet goes now, the request when the job is sent.
+        function onDismissed(id: int): void {
+            root.dismissSheet(id);
         }
     }
 
@@ -135,6 +157,37 @@ QtObject {
             root.app.prompts.reply(id, {
                 button: "stop"
             });
+    }
+
+    // The print sheet for request `id` of Print.
+    function openSheet(id: int, request: var): void {
+        const sheet = root.sheetComponent.createObject(root, {
+            host: root.printHost,
+            manager: root,
+            requestId: id,
+            request: request
+        });
+        if (!sheet) {
+            console.warn("grassfield-portal: cannot make a print sheet:", root.sheetComponent.errorString());
+            root.printHost.fail(id);
+            return;
+        }
+        const next = Object.assign({}, root.sheets);
+        next[id] = sheet;
+        root.sheets = next;
+        root.printHost.present(id, sheet);
+    }
+
+    // The request ended (answered, closed by the application, or sent to x-d-p-gtk): its sheet goes.
+    function dismissSheet(id: int): void {
+        const sheet = root.sheets[id];
+        if (!sheet)
+            return;
+        const next = Object.assign({}, root.sheets);
+        delete next[id];
+        root.sheets = next;
+        sheet.visible = false;
+        sheet.destroy();
     }
 
     function springStarted(tab: var): void {

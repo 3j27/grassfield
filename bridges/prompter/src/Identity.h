@@ -10,12 +10,16 @@
 // belong to root and are not writable by group or others, and the process is not being traced (a tracer can run any code
 // in it). A trusted executable is then:
 // - "keyring" for /usr/bin/gnome-keyring-daemon, "gnupg" for /usr/bin/pinentry-gnome3 and /usr/bin/gpg-agent, "ssh" for
-//   /usr/lib/gcr-ssh-agent: they ask on another program's behalf, and any program of the user can make them ask with
-//   text of its own (gpg-connect-agent, running pinentry-gnome3, ssh-add), so the row names the program that asks, never
-//   a guarantee about the text under it, which the shell shows as another program's unverified words; "disk" for
-//   /usr/lib/grassfield/grassfield-askpass, udiskie's password command (step 9c), which any program can run with a disk
-//   name of its own, likewise; "kio" for /usr/lib/kf6/kioworker, KIO's worker executable (step 9e), which runs whatever worker
-//   plugin its command line names, likewise;
+//   /usr/lib/gcr-ssh-agent, for a process in the bridge's own mount and user namespaces (as an app's: the integrator's
+//   review of PR #95, NIT; their user units use no namespace): they ask on another program's behalf, and any program of
+//   the user can make them ask with text of its own (gpg-connect-agent, running pinentry-gnome3, ssh-add), so the row
+//   names the program that asks, never a guarantee about the text under it, which the shell shows as another program's
+//   unverified words; "disk" for /usr/lib/grassfield/grassfield-askpass, udiskie's password command (step 9c), which any
+//   program can run with a disk name of its own, likewise, in any namespaces (decision 9-26, amended: udiskie's unit runs
+//   it in namespaces of its own, and the check would protect nothing for a helper anyone can run); "kio" for
+//   /usr/lib/kf6/kioworker, KIO's worker executable (step 9e), which runs whatever worker plugin its command line names,
+//   likewise, in the bridge's namespaces, and only while every file it maps executable is trusted, as for an app below
+//   (the security review of step 9e, MINOR-2: a plugin from the user's files would borrow the row otherwise);
 // - "app" with a desktop entry's name and icon when exactly one entry of /usr/share/applications (a root-owned regular
 //   file) runs exactly that executable: its Exec line is the program and field codes only, so an interpreter, a wrapper or
 //   a launcher with arguments never lends its entry to whatever it runs; and every file mapped executable in the process
@@ -39,6 +43,7 @@
 #include <QPair>
 #include <QString>
 
+#include <functional>
 #include <optional>
 #include <sys/types.h>
 
@@ -93,6 +98,7 @@ namespace gf::prompter {
     struct KnownCaller {
         QString path;
         QString role;
+        bool    trustedCodeOnly = false; // the role only for a process that maps nothing but trusted code (kioworker)
     };
 
     // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg; gcr-ssh-agent -> ssh; grassfield-askpass -> disk;
@@ -126,7 +132,8 @@ namespace gf::prompter {
     qint64 tracerPid(const QByteArray& status);
 
     // The role of `exe` among `known` (the same file, by device and inode, as a trusted path of the list); empty when none.
-    QString knownRole(const FileId& exe, const QList<KnownCaller>& known, uid_t owner, const QString& top);
+    // *trustedCodeOnly (when given) says whether that role needs runsTrustedCodeOnly.
+    QString knownRole(const FileId& exe, const QList<KnownCaller>& known, uid_t owner, const QString& top, bool* trustedCodeOnly = nullptr);
 
     // What the kernel says about the caller.
     struct ExeFacts {
@@ -153,11 +160,17 @@ namespace gf::prompter {
         QHash<quint64, QPair<quint32, quint32>> devices = selfMountDevices();
     };
 
+    // The process runs nothing but trusted code: in the bridge's mount and user namespaces, its mappings read whole, each file
+    // it maps executable a trusted path naming, by device and inode, the very file it maps.
+    bool runsTrustedCodeOnly(const ExeFacts& facts, const Where& where);
+
     // The requester for those facts (texts flattened and capped).
     RequesterView requesterFor(const ExeFacts& facts, const Where& where = Where());
 
     // The facts behind a pidfd (sameUser is left false: the caller sets it from the bus). `withCode` false reads the
     // executable only (for a journal line), not its namespaces, tracer and mappings.
-    ExeFacts exeFactsOfPidfd(int pidfd, bool withCode = true);
+    // `beforeRecheck` (tests only) runs after every read and before the pidfd's liveness is checked again: a process that
+    // ends there must read as unidentified (the integrator's review of PR #95: the re-check had no test).
+    ExeFacts exeFactsOfPidfd(int pidfd, bool withCode = true, const std::function<void()>& beforeRecheck = {});
 
 } // namespace gf::prompter

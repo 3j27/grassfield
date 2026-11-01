@@ -527,6 +527,16 @@ QtObject {
     readonly property int dockSeparatorSpace: 17
     // Separator line: the separator colour at 0.3 (was the generic 0.16), macOS about -34 % luminance; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockSeparatorOpacity: 0.3
+    // own value: the room between an app tile's edge and the live graph Activity Monitor gives it (View > Dock Icon, ADR-0038 AM62) [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property int dockTileGraphInset: 3
+    // own value: the graph's dark plate over the tile, opaque enough for its bars to read over any icon (AM62) [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property real dockTileGraphFillOpacity: 0.88
+    // AM62: CPU Usage is a gauge of ten segments [ref: docs/specs/activity.md]
+    readonly property int dockTileGraphSegments: 10
+    // own value: the gap between two bars or two segments of the tile's graph [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property int dockTileGraphGap: 1
+    // own value: a CPU Usage gauge segment that is not lit, white on the graph's dark plate [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property real dockTileGraphUnlitOpacity: 0.18
 
     // task spec: pointer dwell before a hot corner fires [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int hotCornerDwellMs: 150
@@ -685,6 +695,20 @@ QtObject {
     readonly property int panelForceQuitWidth: 380
     // an app's icon in a Force Quit row: the menu row height less 6, unchanged value, was a literal offset in ForceQuitPanel.qml (ADR-0039 step 3, the literals guard)
     readonly property int panelForceQuitIconSize: 18
+    // estimate: three tiles of panel.sharePickerTileWidth with their gaps inside a sheet's padding (the system screen-sharing picker shows its displays and windows as a grid of thumbnails); no measured value yet, F1 sign-off pending (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerWidth: 620
+    // estimate: a thumbnail wide enough to tell windows apart, three to a row of panel.sharePickerWidth; no measured value yet (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerTileWidth: 176
+    // estimate: panel.sharePickerTileWidth at 16:10, the box a display or a window is fitted into with its own aspect (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerThumbHeight: 110
+    // the 16:10 box of panel.sharePickerThumbHeight, the aspect a thumbnail takes until its capture has a size (ADR-0035 D-6, step 7a)
+    readonly property real panelSharePickerThumbAspect: 1.6
+    // an app's icon in a thumbnail's place when the window has no capture source: the size of an alert's symbol (panel.alertIconGlyph), unchanged (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerIconSize: 48
+    // the smallest area Selection shares, in the display's logical pixels either way: a click or a slip of the pointer is no area (ADR-0035 D-6, step 7b)
+    readonly property int panelSharePickerMinArea: 16
+    // rows of tiles shown before the grid scrolls, so that the sheet stays smaller than a laptop's display (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerRows: 2
     // the glyphs of a Control Center appearance choice: the menu icon size plus 4, unchanged value, was a literal offset in AppearanceSection.qml (ADR-0039 step 3, the literals guard)
     readonly property int panelAppearanceGlyphSize: 18
     // F1 gap 6: 2x1 module height 63 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
@@ -2335,6 +2359,16 @@ QtObject {
     readonly property int filesPanelLabelWidth: 96
     // estimate: the Save As field and the Where pop-up of the Save panel [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelFieldWidth: 300
+    // estimate: the print sheet without its preview (step 6a), the width of macOS's print panel's settings column and its margins [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintSheetWidth: 480
+    // estimate: the print sheet's pop-ups (Printer, Pages, Paper Size, Two-Sided, Colour), as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintFieldWidth: 240
+    // estimate: the print sheet's preview column for a document sent first (step 6b), left of the settings as in macOS's print panel: the page area and its margins [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPreviewWidth: 300
+    // estimate: the page area of the print sheet's preview (a portrait A4 or US Letter page fills its height) [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPreviewHeight: 360
+    // estimate: the compact "PDF" pull-down at the bottom left of the print sheet, its label and chevron, as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPdfMenuWidth: 76
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
     // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
@@ -3270,6 +3304,15 @@ QtObject {
     // estimate: between a settings group's lines [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSettingsLineGap: 8
 
+    // the light dimming slurp lays over the screen while the crosshair shows, and the fill of the boxes a click can pick (the same, so the veil is even; the box under the pointer takes the selection's fill and border), read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
+    readonly property string captureVeil: "#0000002E"
+    // the fill of the area being dragged, a light veil as the system's selection rectangle (ADR-0035 D-10, step 8); estimate
+    readonly property string captureSelection: "#FFFFFF24"
+    // the outline of the area being dragged, a near-white hairline (ADR-0035 D-10, step 8); estimate
+    readonly property string captureBorder: "#FFFFFFE6"
+    // the outline's width in pixels, a hairline (ADR-0035 D-10, step 8)
+    readonly property int captureBorderWidth: 1
+
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4
 
@@ -3425,4 +3468,68 @@ QtObject {
     readonly property int activitySwatchSize: 8
     // own value: the samples a graph shows, two minutes at Very Often and ten at Normally (AM29) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityHistorySamples: 120
+    // estimate: an Inspect window, the widest Statistics row ("Involuntary Context Switches:" and its count) with room for a path (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectWidth: 480
+    // estimate: an Inspect window, its header, the tabs and the sixteen Statistics rows without scrolling when no value wraps (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectHeight: 640
+    // estimate: an Inspect window's header and its three tabs on one line (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectMinWidth: 380
+    // estimate: an Inspect window's header, the tabs, a few rows and the Quit button (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectMinHeight: 360
+    // own value: the labels' column of an Inspect window's rows at least; it widens to its longest label (French ones run longer), right-aligned against the values as macOS's inspectors [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectLabelWidth: 120
+    // own value: the room an Inspect window's labels always leave to the values (a path or a command wraps in it) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectValueMinWidth: 140
+    // own value: App History (Windows 11's, AM67) shows its five columns without a scroll at this width; no macOS counterpart [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryWidth: 720
+    // own value: App History's caption, its pop-up and about twelve rows [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryHeight: 440
+    // own value: App History's name column and its four figures still readable [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryMinWidth: 480
+    // own value: App History's caption, its pop-up and a few rows [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryMinHeight: 280
+    // own value: App History's name column (icon and app name); the figures share the rest [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryNameWidth: 200
+    // own value: the Performance window (Windows 11's, AM66) shows its sidebar, a large graph and two columns of figures without a scroll; no macOS counterpart [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceWidth: 860
+    // own value: the Performance window's large graph, the composition bar and its figures [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceHeight: 600
+    // own value: the sidebar and a readable graph [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceMinWidth: 640
+    // own value: the sidebar's first rows, the graph and a few figures [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceMinHeight: 440
+    // own value: a resource's small graph, its name, model and value on two lines [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceSidebarWidth: 230
+    // own value: a sidebar row's live graph (Windows 11's thumbnails are about this wide) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceSidebarGraphWidth: 64
+    // own value: a sidebar row's graph and its three lines of text [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceSidebarRowHeight: 56
+    // own value: the selected resource's large graph [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceGraphHeight: 200
+    // own value: one logical processor's small graph (CPU, Logical Processors; CPU History) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceTileHeight: 56
+    // own value: the narrowest small graph; the grid fits as many per row as the width allows [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceTileMinWidth: 120
+    // own value: Memory's composition bar [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceBarHeight: 14
+    // own value: the narrowest column of label and value pairs under the graph; as many columns as fit [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceFigureWidth: 260
+    // estimate: a logical processor's bar in CPU Usage (AM71; macOS's narrow lit columns, no capture measured yet) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageBarWidth: 12
+    // estimate: CPU Usage's bars, twenty segments of 5 with their gaps [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageBarHeight: 120
+    // estimate: the lit segments of a CPU Usage bar (macOS draws segments, not a fill) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageSegments: 20
+    // own value: between two CPU Usage bars [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageGap: 4
+    // own value: CPU Usage's narrowest width, its title beside the window controls (a machine of few processors) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageMinWidth: 190
+    // estimate: CPU History (AM72), two columns of small graphs [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuHistoryWidth: 420
+    // estimate: CPU History, about five rows of small graphs before a scroll [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuHistoryHeight: 360
+    // estimate: GPU History (AM72), one graph per GPU [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityGpuHistoryWidth: 360
+    // estimate: GPU History, two GPUs' graphs [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityGpuHistoryHeight: 220
 }

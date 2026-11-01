@@ -51,8 +51,9 @@ public:
 
     // org.freedesktop.impl.portal.Request.Close at `handle`.
     void close(const QString &handle);
-    // How long no request has been open, in ms (0 while one is).
-    qint64 quietFor() const;
+    // How long no request has been open, in ms (0 while one is, or while the subclass keeps something for a call to come:
+    // Print's tokens).
+    virtual qint64 quietFor() const;
     // Every host has had no request for `ms` (the process may quit).
     static bool quiet(const QList<const RequestHost *> &hosts, int ms);
     // For the QML: the window made for request `id`, before it is shown. It is given the application's id, made the child of
@@ -60,6 +61,9 @@ public:
     Q_INVOKABLE void present(int id, QObject *window);
     // The window for `id` cannot be made: the call goes to x-d-p-gtk now.
     Q_INVOKABLE void fail(int id);
+    // The window of `id`, hidden meanwhile (the print sheet while its Save panel is up), shown again as present() first showed it:
+    // under the application's id (Qt's Wayland platform makes a new toplevel at each show; review of step 6a, MINOR 6).
+    Q_INVOKABLE void reshow(int id);
     // For the QML: the window for `id` waits for another one to go (one alert at a time, as macOS shows them): no deadline runs
     // until present() (integrator nested pass of 1745c0c, MINOR 5).
     Q_INVOKABLE void queue(int id);
@@ -103,13 +107,17 @@ protected:
     virtual void ended(int id) { Q_UNUSED(id) }
     // Request `id` has just been sent to x-d-p-gtk (after its call): what the subclass must send after it can go now.
     virtual void forwarded(int id) { Q_UNUSED(id) }
+    // Whether request `id` can still go to x-d-p-gtk as it came (Print: not once part of a document on a pipe was read, which
+    // x-d-p-gtk would get truncated; security review of step 6b, MINOR 6). When it cannot, forward() ends it without an answer.
+    virtual bool forwardable(int id) { Q_UNUSED(id) return true; }
+    // The idle time starts again now, when no request is open (a subclass's own reason to stay has just gone).
+    void armIdle();
 
     QDBusConnection m_bus;
 
 private:
     struct Request;
     void closeForwarded(int id, int tries);
-    void armIdle();
     // Ends request `id` without the user's answer (see Limits::failAsError).
     void endWithoutAnswer(int id);
     void replyFailed(const QDBusMessage &message, const char *why);

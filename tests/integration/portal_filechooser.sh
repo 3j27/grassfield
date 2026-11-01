@@ -23,7 +23,12 @@
 #  8 Open With through the frontend (OpenFile with "ask" on a text file, two scratch applications for text/plain, one the default):
 #    Choose Application answers the default (its last choice, selected), the frontend starts it with the document and counts
 #    the choice in its permission store; Cancel starts nothing (A-OW1 through the real frontend)
-# Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal, and the built backend (GRASSFIELD_PORTAL, or
+#  9 Print through the frontend as GTK makes it, over a scratch CUPS scheduler (tests/integration/print-cups.sh, when a cupsd
+#    the user can run is there): the print sheet over its default queue prints, the application gets GTK's settings with the
+#    printer and one copy (GTK must not make them) and a token, and Print with the token sends the document there with the two
+#    copies asked (A-PR1, A-PR2 without the nested session); 9b, step 6b: Print with no token (libportal's callers): the sheet
+#    over the document, its pages counted by the backend's confined child, prints it there as it was sent
+# Needs dbus-daemon, python3 with PyGObject, /usr/lib/xdg-desktop-portal (and for 9 a scratch CUPS: print-cups.sh), and the built backend (GRASSFIELD_PORTAL, or
 # apps/portal/build-direct.sh with g++, Qt 6 and KDE Frameworks 6) with the Grassfield.I18n plugin (ui/i18n/build-direct.sh);
 # the runtime part SKIPs without them, and when libdbus cannot reach the bus.
 set -uo pipefail
@@ -31,7 +36,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/portal-filechooser.XXXXXX")
 # The private bus (start_bus, stop_bus, owned, start_service, wait_until), shared with portal_settings.sh.
 . "$root/tests/integration/portal-bus.sh"
-stop_all() { stop_bus; wait 2>/dev/null; rm -rf "$tmp"; }
+stop_all() { stop_bus; declare -F stop_cups >/dev/null && stop_cups; wait 2>/dev/null; rm -rf "$tmp"; }
 trap stop_all EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -42,14 +47,14 @@ name=org.freedesktop.impl.portal.desktop.grassfield
 unit=$pk/systemd/grassfield-portal.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser, Access and AppChooser (D-5)"
-check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;" "$2" && grep -qx "Name=$1" "$3" &&
+desc="the .portal file, the D-Bus service file and the unit name the same bus name and program; FileChooser, Access, AppChooser (D-5) and Print (D-7)"
+check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.Access;org.freedesktop.impl.portal.AppChooser;org.freedesktop.impl.portal.Print;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal" "$3" && grep -qx "SystemdService=grassfield-portal.service" "$3" &&
   grep -qx "BusName=$1" "$4" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-portal" "$4"' _ "$name" \
   "$pk/xdg/xdg-desktop-portal/portals/grassfield.portal" "$pk/dbus/$name.service" "$unit"
-desc="the session's routing sends FileChooser, Access and AppChooser to grassfield, then gtk"
+desc="the session's routing sends FileChooser, Access, AppChooser and Print to grassfield, then gtk"
 check bash -c 'grep -qx "org.freedesktop.impl.portal.FileChooser=grassfield;gtk" "$1" && grep -qx "org.freedesktop.impl.portal.Access=grassfield;gtk" "$1" &&
-  grep -qx "org.freedesktop.impl.portal.AppChooser=grassfield;gtk" "$1"' _ \
+  grep -qx "org.freedesktop.impl.portal.AppChooser=grassfield;gtk" "$1" && grep -qx "org.freedesktop.impl.portal.Print=grassfield;gtk" "$1"' _ \
   "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf"
 desc="the unit: Type=dbus, no Restart (D-Bus activation), only in the Grassfield session, clears GTK_USE_PORTAL and QT_QPA_PLATFORMTHEME, hardened, every place the user may write writable (4b-12)"
 check bash -c 'for l in Type=dbus ConditionEnvironment=GRASSFIELD_SESSION=1 "UnsetEnvironment=GTK_USE_PORTAL QT_QPA_PLATFORMTHEME" \
@@ -127,6 +132,11 @@ value() { python3 -I -c 'import json,sys; d=json.loads(sys.stdin.read()); print(
 starts() { wc -l <"$d/backend.starts" 2>/dev/null || echo 0; }
 # The backend's process is gone (or a zombie): backend.sh writes its pid before it execs the backend.
 exited() { [[ ! -e /proc/$1 ]] || grep -q '^State:[[:space:]]*Z' "/proc/$1/status" 2>/dev/null; }
+
+printdoc() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" print "$@"; }
+printfirst() { DBUS_SESSION_BUS_ADDRESS=$bus python3 -I "$client" print-first "$@"; }
+# The scratch CUPS scheduler of scenario 9 (cups_ready, start_cups, stop_cups).
+. "$root/tests/integration/print-cups.sh"
 
 # Preflight: libdbus reaches a private bus.
 mkdir -p "$tmp/pre/services"
@@ -293,6 +303,52 @@ if [[ -x $store ]]; then
   stop_bus
 else
   echo "SKIP: 8 needs xdg-permission-store ($store)"
+fi
+
+# 9 --------------------------------------------------------------------------------------------------------------------
+# Print (D-7, step 6a): an application's Print… through the frontend as GTK makes it: PreparePrint shows the print sheet over the
+# scratch scheduler's default queue, the sheet prints (its test answer), the application gets GTK's settings and a token, and
+# Print with the token sends the document to that queue with the copies asked.
+# A scheduler that is there but does not start fails the scenario with why; only a missing one skips it.
+cupsdir=$tmp/cups
+if ! cups_ready; then
+  echo "SKIP: 9 needs a cupsd the user can run (GF_TEST_CUPSD), lpadmin and python3"
+elif ! start_cups "$cupsdir"; then
+  desc="9 the scratch scheduler starts [$(cups_failure "$cupsdir")]"
+  check false
+  stop_cups
+else
+  scenario print accept "" "" real "CUPS_SERVER=localhost:$cups_port" || exit 1
+  printf '%%PDF-1.4\n%% a page\n%%%%EOF\n' >"$d/document.pdf"
+  out=$(printdoc "$d/document.pdf" 30)
+  got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.Print \(.*config\)" "$d/frontend.log" | sort -u)
+  desc="9 the frontend routes Print to the Grassfield backend [$got]"
+  check bash -c '[[ $1 == *"grassfield.portal for org.freedesktop.impl.portal.Print"* ]]' _ "$got"
+  desc="9 the print sheet prints on the default queue: response 0, GTK's settings with the printer and one copy for GTK to make, a token [$out]"
+  check test "$(value '[d["prepare"].get("response"), d["prepare"]["results"]["settings"].get("printer"), d["prepare"]["results"]["settings"].get("n-copies"), d["prepare"]["results"].get("token", 0) > 0]' <<<"$out")" = '[0, "Office", "1", true]'
+  desc="9 ... Print with the token: response 0 [$(value 'd.get("print")' <<<"$out")]"
+  check test "$(value 'd.get("print", {}).get("response")' <<<"$out")" = "0"
+  wait_until 15 bash -c 'CUPS_SERVER=localhost:$1 lpstat -W completed -o Office | grep -q Office' _ "$cups_port"
+  job=$(CUPS_SERVER=localhost:$cups_port lpstat -W completed -o Office | awk 'NR == 1 {print $1}')
+  copies=$(CUPS_SERVER=localhost:$cups_port ipptool -tv "ipp://localhost:$cups_port/jobs/${job##*-}" get-job-attributes.test 2>/dev/null |
+    sed -n 's/^ *copies (integer) = //p')
+  document=$(ls "$cupsdir/spool"/d*-001 2>/dev/null | head -1)
+  desc="9 ... the scheduler has the job ($job) with its two copies and the document the application made [copies $copies]"
+  check bash -c '[[ -n $1 && $2 == 2 && -n $3 ]] && cmp -s "$3" "$4"' _ "$job" "$copies" "$document" "$d/document.pdf"
+  # 9b (step 6b): Print with no token, as libportal's callers make it: the sheet over the document (read into the backend's
+  # private file, its pages counted by the backend's confined child), the sheet's test answer prints it at once; the job reaches
+  # the scheduler with the document as it was sent.
+  out=$(printfirst "$root/tests/fixtures/print/two-pages.pdf" 30)
+  desc="9b a document sent first: the sheet prints it, response 0 [$out]"
+  check test "$(value 'd.get("print", {}).get("response")' <<<"$out")" = "0"
+  desc="9b ... the backend kept it and its child counted its two pages [$(grep -o 'a document of [0-9]* pages to print' "$d/backend.log" | tail -1)]"
+  check grep -q "a document of 2 pages to print" "$d/backend.log"
+  wait_until 15 bash -c '[[ $(CUPS_SERVER=localhost:$1 lpstat -W completed -o Office | wc -l) -ge 2 ]]' _ "$cups_port"
+  second=$(ls "$cupsdir/spool"/d*-001 2>/dev/null | sort | tail -1)
+  desc="9b ... the scheduler has a second job with the document as it was sent [$second]"
+  check bash -c '[[ -n $1 && $1 != "$2" ]] && cmp -s "$1" "$3"' _ "$second" "$document" "$root/tests/fixtures/print/two-pages.pdf"
+  stop_bus
+  stop_cups
 fi
 
 exit "$fail"

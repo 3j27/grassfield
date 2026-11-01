@@ -1,0 +1,5 @@
+# Software Update (ADR-0033 s5, owner decision SU-M2): the primary group of grassfield-update-migrate.service, the unit in
+# which grassfield-update-helper runs an update's Omarchy migrations as the person who chose Update Now. No one is a member:
+# the kernel lets a process open another's /proc entries or attach to it only when all its uids and gids match, so none of
+# that person's other processes can reach into the unit. The helper refuses the unit if this group has a member.
+g grassfield-update - -

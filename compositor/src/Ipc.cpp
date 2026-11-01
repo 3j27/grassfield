@@ -500,6 +500,45 @@ namespace gf::ipc {
             return 1;
         }
 
+        // Pushes the result of hl.dsp.window.fullscreen({ mode = <mode> }): Hyprland's own dispatcher, the one the Full Screen and
+        // Zoom keys of bindings.lua dispatched before window_size. Pushes nothing if it can't be obtained (bindings.lua then falls
+        // back to that dispatcher itself). Only trivially destructible values live in this frame (Lua reports errors with
+        // longjmp).
+        int pushFullscreenDispatcher(lua_State* L, const char* mode) {
+            const int top = lua_gettop(L);
+
+            const int hlType = lua_getglobal(L, "hl");
+            if (hlType != LUA_TTABLE && hlType != LUA_TUSERDATA) {
+                lua_settop(L, top);
+                return 0;
+            }
+            const int dspType = lua_getfield(L, -1, "dsp");
+            if (dspType != LUA_TTABLE && dspType != LUA_TUSERDATA) {
+                lua_settop(L, top);
+                return 0;
+            }
+            const int windowType = lua_getfield(L, -1, "window");
+            if (windowType != LUA_TTABLE && windowType != LUA_TUSERDATA) {
+                lua_settop(L, top);
+                return 0;
+            }
+            if (lua_getfield(L, -1, "fullscreen") != LUA_TFUNCTION) {
+                lua_settop(L, top);
+                return 0;
+            }
+            lua_createtable(L, 0, 1);
+            lua_pushstring(L, mode);
+            lua_setfield(L, -2, "mode");
+            if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+                lua_settop(L, top);
+                return 0;
+            }
+
+            lua_replace(L, top + 1); // result replaces `hl`
+            lua_settop(L, top + 1);
+            return 1;
+        }
+
         int luaHello(lua_State* L) {
             helloNoThrow();
             return pushNoOpDispatcher(L);
@@ -541,6 +580,26 @@ namespace gf::ipc {
                 tiler::tileRequest(address.view(), place.view());
             });
             return pushNoOpDispatcher(L);
+        }
+
+        // hl.plugin.grassfield.window_size(mode): the Full Screen and Zoom keys (bindings.lua; ADR-0040 step 1b's review: they
+        // zoomed About This Computer, whose Window menu greys Zoom and Enter Full Screen). Returns Hyprland's own
+        // hl.dsp.window.fullscreen({ mode = mode }), or a no-op when the focused window is of fixed size and not in that mode
+        // (tiler::sizeKeyActs). Untrusted: the mode is copied with a fixed limit and parsed strictly; anything else is a no-op.
+        int luaWindowSize(lua_State* L) {
+            const auto mode = readString<16>(L, 1);
+            bool       act  = false;
+            bool       zoom = false;
+            guarded("hl.plugin.grassfield.window_size", [&] {
+                const auto parsed = mode.ok ? tiling::parseSizeMode(mode.view()) : std::nullopt;
+                if (!parsed) {
+                    logRequest(Log::WARN, "window_size: rejected: the mode must be \"fullscreen\" or \"maximized\"");
+                    return;
+                }
+                zoom = *parsed == tiling::SizeMode::Maximized;
+                act  = tiler::sizeKeyActs(*parsed);
+            });
+            return act ? pushFullscreenDispatcher(L, zoom ? "maximized" : "fullscreen") : pushNoOpDispatcher(L);
         }
 
         // hl.plugin.grassfield.arrange(json): a layout of the catalogue filled with windows (docs/specs/tiling.md TL6).
@@ -621,17 +680,21 @@ namespace gf::ipc {
             return pushNoOpDispatcher(L);
         }
 
-        // hl.plugin.grassfield.unsplit(address): Exit Full Screen of a window of a Split View Desktop (TL33). Untrusted: the
-        // address is compared with the live windows.
+        // hl.plugin.grassfield.unsplit(address[, how]): a window leaves its Split View Desktop (TL33): Move Window to Desktop
+        // ("desktop", or no second argument: Exit Full Screen, D44), Make Window Full Screen ("fullscreen") or Replace Tiled
+        // Window ("replace"; step 6d, ADR-0036 D71). Untrusted: the address is compared with the live windows, `how` with
+        // those three words.
         int luaUnsplit(lua_State* L) {
             const auto address = readString<24>(L, 1);
+            const bool hasHow  = !lua_isnoneornil(L, 2);
+            const auto how     = readString<16>(L, 2);
             guarded("hl.plugin.grassfield.unsplit", [&] {
-                if (!address.ok) {
+                if (!address.ok || (hasHow && !how.ok)) {
                     logRequest(Log::WARN, "unsplit: rejected: invalid arguments");
-                    tiler::unsplitRequest(""); // posts the refusal (reason invalid, or locked)
+                    tiler::unsplitRequest("", "invalid"); // posts the refusal (reason invalid, or locked)
                     return;
                 }
-                tiler::unsplitRequest(address.view());
+                tiler::unsplitRequest(address.view(), hasHow ? how.view() : std::string_view{});
             });
             return pushNoOpDispatcher(L);
         }
@@ -762,7 +825,8 @@ namespace gf::ipc {
         s.luaGroupFrontRegistered    = tiler::ready() && addLua(gfc::kLuaGroupFront, luaGroupFront); // only with the tile records
         s.luaSplitRegistered         = tiler::ready() && addLua(gfc::kLuaSplit, luaSplit);           // only with the tile records
         s.luaUnsplitRegistered       = tiler::ready() && addLua(gfc::kLuaUnsplit, luaUnsplit);
-        bool ok                 = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
+        s.luaWindowSizeRegistered    = addLua(gfc::kLuaWindowSize, luaWindowSize); // without it bindings.lua uses Hyprland's own
+        bool ok                = s.luaHelloRegistered && s.luaMinimizeRegistered && s.luaRestoreRegistered && s.luaConfigRegistered;
 
         s.hyprctlCommand = HyprlandAPI::registerHyprCtlCommand(s.handle, SHyprCtlCommand{.name = std::string{gfc::kHyprctlCommand}, .exact = true, .fn = hyprctlGrassfield});
         if (!s.hyprctlCommand) {
@@ -813,6 +877,7 @@ namespace gf::ipc {
         removeLua(s.luaGroupFrontRegistered, gfc::kLuaGroupFront);
         removeLua(s.luaSplitRegistered, gfc::kLuaSplit);
         removeLua(s.luaUnsplitRegistered, gfc::kLuaUnsplit);
+        removeLua(s.luaWindowSizeRegistered, gfc::kLuaWindowSize);
         if (s.hyprctlCommand) {
             HyprlandAPI::unregisterHyprCtlCommand(s.handle, s.hyprctlCommand);
             s.hyprctlCommand.reset();

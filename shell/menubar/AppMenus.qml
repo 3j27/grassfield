@@ -83,6 +83,8 @@ Singleton {
             focusedWindow: focusedHere,
             fullscreen: focusedHere ? focusedHere.fullscreen : false,
             inSplit: focusedHere ? Compositor.inSplit(focusedHere) : false,
+            canSplitRows: Compositor.canSplitRows,
+            splitPair: focusedHere ? Compositor.splitPair(focusedHere) : false,
             maximized: focusedHere ? Compositor.isZoomed(focusedHere, rev) : false,
             windowSpaceId: focusedHere ? Compositor.spaceOf(focusedHere) : 0,
             othersCount: hasApp ? Compositor.othersCount(appId, rev) : 0,
@@ -96,6 +98,7 @@ Singleton {
             splitBlocked: Compositor.splitBlocked,
             splittable: focusedHere ? Compositor.fitsHalf(focusedHere) : true,
             fixedSize: focusedHere ? Compositor.fixedSize(focusedHere) : false,
+            fit: focusedHere ? Compositor.fitOf(focusedHere) : null,
             outputs: focusedHere ? Compositor.otherOutputs(focusedHere) : []
         };
     }
@@ -145,6 +148,12 @@ Singleton {
             break;
         case "exitSplit":
             Compositor.unsplit(ctx.focusedWindow);
+            break;
+        case "splitFullscreen":
+            Compositor.unsplit(ctx.focusedWindow, "fullscreen");
+            break;
+        case "splitReplace":
+            Compositor.unsplit(ctx.focusedWindow, "replace");
             break;
         case "tile":
             Compositor.tile(ctx.focusedWindow, item.place);

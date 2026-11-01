@@ -1,5 +1,6 @@
 import QtQml
 import Grassfield.Ui
+import "../../platform/WindowTiling.js" as WindowTiling
 
 // Application menu models (T0, docs/specs/menubar.md). Pure: builds menu item arrays from a
 // plain context object, so it is unit-tested without a compositor (tests/unit/tst_appmenumodel.qml).
@@ -10,7 +11,9 @@ import Grassfield.Ui
 //       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int, canTile?: bool (plugin "window-tiling"),
 //       canArrange?: bool (plugin "tiling-arrange"), outputs?: [{name, model, builtIn}] (the other outputs, plugin "tile-hover"),
 //       canLayouts?: bool (plugin "tiling-layouts"), outputClass?: string (WindowTiling.outputClass, the popover's Layouts section),
-//       fixedSize?: bool (the window is of fixed size, the plugin's "fixed": Zoom, Enter Full Screen and tiling greyed)}
+//       fixedSize?: bool (the window is of fixed size, the plugin's "fixed": Zoom, Enter Full Screen and tiling greyed),
+//       fit?: {zones, places} (ADR-0036 D69, WindowTiling.fitOf / parseHover: the places, arrangements and Layouts zones the
+//       window does not fit are greyed, never hidden; absent: everything fits, the plugin still refuses)}
 // Items: {id, text, shortcut?, glyph?, enabled?, checked?, separator?, header?, alternate?, submenu?, ...payload}; AppMenus.run()
 // performs them. The tiling popover's model (tilingPopover) shares the tiling rows (docs/specs/tiling.md TL23, TL25).
 QtObject {
@@ -177,35 +180,72 @@ QtObject {
     }
 
     // The Layouts section (TL27, owner decisions T1a, T1f): the layouts of an output class, each a miniature screen whose zones
-    // the window can take; greyed when it cannot be tiled now. [{id, text, zones, enabled}]; [] for an unknown class.
-    function layoutsSection(outputClass: string, enabled: bool): var {
+    // the window can take; greyed when it cannot be tiled now. `fit` {zones, places} (ADR-0036 D69): the zones the window does
+    // not fit are listed in `disabledZones` (indices, greyed in the glyph and refused), and a layout none of whose zones fits is
+    // greyed whole. [{id, text, zones, disabledZones, enabled}]; [] for an unknown class.
+    function layoutsSection(outputClass: string, enabled: bool, fit: var): var {
         const ids = root.classLayouts[outputClass] || [];
-        return ids.filter(id => root.layoutZones[id] !== undefined).map(id => ({id: id, text: root.layoutNames[id], zones: root.layoutZones[id], enabled: enabled}));
+        return ids.filter(id => root.layoutZones[id] !== undefined).map(id => {
+            const zones = root.layoutZones[id];
+            const disabledZones = zones.map((z, i) => WindowTiling.zoneFits(fit, z) ? -1 : i).filter(i => i >= 0);
+            return {id: id, text: root.layoutNames[id], zones: zones, disabledZones: disabledZones, enabled: enabled && disabledZones.length < zones.length};
+        });
+    }
+
+    // ADR-0036 D69: a place the window fits (Fill and Center always), and an arrangement whose first zone (the window's own) it
+    // fits; `fit` {zones, places} from the plugin (WindowTiling.fitOf, parseHover), null when not known.
+    function placeFits(fit: var, place: string): bool {
+        return WindowTiling.placeFits(fit, place);
+    }
+
+    function arrangeFits(fit: var, layout: string): bool {
+        const zones = root.layoutZones[layout];
+        return !zones || WindowTiling.zoneFits(fit, zones[0]);
+    }
+
+    // The popover's rows in full screen (Exit Full Screen) or on a Split View Desktop: Exit Full Screen, or with the plugin's
+    // tiling-split-rows (step 6d, ADR-0036 D71) the macOS Split View rows: Move Window to Desktop (Exit Full Screen's effect,
+    // D44), Make Window Full Screen, and Replace Tiled Window while the other half holds a window (`splitPair`).
+    function exitRows(ctx: var): var {
+        const glyph = {zones: [], own: -1};
+        if (ctx.inSplit !== true)
+            return [{id: "fullscreen", text: qsTr("Exit Full Screen"), glyph: glyph, enabled: true}];
+        if (ctx.canSplitRows !== true)
+            return [{id: "exitSplit", text: qsTr("Exit Full Screen"), glyph: glyph, enabled: true}];
+        return [
+            {id: "exitSplit", text: qsTr("Move Window to Desktop"), glyph: glyph, enabled: true},
+            {id: "splitFullscreen", text: qsTr("Make Window Full Screen"), glyph: glyph, enabled: true},
+            {id: "splitReplace", text: qsTr("Replace Tiled Window"), glyph: glyph, enabled: ctx.splitPair === true}
+        ];
     }
 
     // The tiling popover of the zoom light (TL23): ctx {alt, tileable, canArrange, canLayouts, canSplit, splitBlocked, splittable,
-    // outputClass, fullscreen, inSplit, outputs} (`splittable` false: the window does not fit half of its output, TL8).
+    // outputClass, fullscreen, inSplit, outputs, fit} (`splittable` false: the window does not fit half of its output, TL8; `fit`
+    // the places, arrangements and Layouts zones it does not fit, greyed: ADR-0036 D69).
     // {sections: [{title, items}], layouts, rows}: the glyph sections Move & Resize and Fill & Arrange (with
     // Alt: the quarters, Center, Right & Left and Right & Quarters), the Layouts section of the window's output class (with the
     // plugin's tiling-layouts, layoutsSection), then Full Screen (fullScreenRow) and one Move to <display> row per other output;
-    // in full screen or on a Split View Desktop only Exit Full Screen. The glyphs of a window that cannot be tiled now are greyed.
+    // in full screen or on a Split View Desktop only the ways out (exitRows). The glyphs of a window that cannot be tiled now
+    // are greyed. ctx also takes canSplitRows and splitPair (step 6d, D71).
     function tilingPopover(ctx: var): var {
         if (ctx.fullscreen || ctx.inSplit)
-            return {sections: [], layouts: [], rows: [{id: ctx.inSplit ? "exitSplit" : "fullscreen", text: qsTr("Exit Full Screen"), glyph: {zones: [], own: -1}, enabled: true}]};
+            return {sections: [], layouts: [], rows: root.exitRows(ctx)};
         const can = ctx.tileable === true;
         const arrange = can && ctx.canArrange === true;
         const places = ctx.alt ? ["top-left", "top-right", "bottom-left", "bottom-right"] : ["left", "right", "top", "bottom"];
+        const fit = ctx.fit || null;
+        const arranged = layout => root.arrangeItem(layout, arrange && root.arrangeFits(fit, layout));
         return {
             sections: [
-                {title: qsTr("Move & Resize"), items: places.map(p => root.tileItem(p, can))},
+                {title: qsTr("Move & Resize"), items: places.map(p => root.tileItem(p, can && root.placeFits(fit, p)))},
                 {title: qsTr("Fill & Arrange"), items: [
                         root.tileItem(ctx.alt ? "center" : "fill", can),
-                        root.arrangeItem(ctx.alt ? "right-left" : "left-right", arrange),
-                        root.arrangeItem(ctx.alt ? "right-quarters" : "left-quarters", arrange),
-                        root.arrangeItem("quarters", arrange)
+                        arranged(ctx.alt ? "right-left" : "left-right"),
+                        arranged(ctx.alt ? "right-quarters" : "left-quarters"),
+                        arranged("quarters")
                     ]}
             ],
-            layouts: ctx.canLayouts === true ? root.layoutsSection(ctx.outputClass, can) : [],
+            layouts: ctx.canLayouts === true ? root.layoutsSection(ctx.outputClass, can, fit) : [],
             rows: [root.fullScreenRow(ctx.canSplit === true, can && ctx.splitBlocked !== true && ctx.splittable !== false)].concat(root.moveToOutputItems(ctx.outputs, can))
         };
     }
@@ -302,7 +342,12 @@ QtObject {
         // tiling items (macOS greys them for a window that cannot be resized); Unzoom and Exit Full Screen still bring it back.
         const fixed = ctx.fixedSize === true;
         const canTile = canAct && ctx.canTile === true && !ctx.fullscreen && !ctx.maximized && ctx.inSplit !== true && !fixed;
-        const arrange = (layout, quarters) => Object.assign(root.arrangeItem(layout, canTile), {alternate: root.arrangeItem(quarters, canTile)});
+        // ADR-0036 D69: the places and arrangements the window does not fit are greyed with their keys (the plugin refuses
+        // them from the keys too), never hidden.
+        const fit = ctx.fit || null;
+        const place = p => root.tileItem(p, canTile && root.placeFits(fit, p));
+        const arranged = layout => root.arrangeItem(layout, canTile && root.arrangeFits(fit, layout));
+        const arrange = (layout, quarters) => Object.assign(arranged(layout), {alternate: arranged(quarters)});
         const arrangeRows = ctx.canArrange === true ? [
             {separator: true},
             {header: true, text: qsTr("Arrange")},
@@ -310,7 +355,7 @@ QtObject {
             arrange("right-left", "right-quarters"),
             arrange("top-bottom", "top-quarters"),
             arrange("bottom-top", "bottom-quarters"),
-            root.arrangeItem("quarters", canTile)
+            arranged("quarters")
         ] : [];
         const tiling = ctx.canTile === true ? [
             root.tileItem("fill", canTile),
@@ -318,16 +363,16 @@ QtObject {
             {separator: true},
             {id: "moveResize", text: qsTr("Move & Resize"), enabled: canTile, submenu: [
                     {header: true, text: qsTr("Halves")},
-                    root.tileItem("left", canTile),
-                    root.tileItem("right", canTile),
-                    root.tileItem("top", canTile),
-                    root.tileItem("bottom", canTile),
+                    place("left"),
+                    place("right"),
+                    place("top"),
+                    place("bottom"),
                     {separator: true},
                     {header: true, text: qsTr("Quarters")},
-                    root.tileItem("top-left", canTile),
-                    root.tileItem("top-right", canTile),
-                    root.tileItem("bottom-left", canTile),
-                    root.tileItem("bottom-right", canTile)
+                    place("top-left"),
+                    place("top-right"),
+                    place("bottom-left"),
+                    place("bottom-right")
                 ].concat(arrangeRows, [
                     {separator: true},
                     root.tileItem("previous", canTile)
@@ -339,7 +384,13 @@ QtObject {
         // the tiling items, while Stages shows its strip (D47) and for a window that does not fit half of its output (`splittable`
         // false, D57).
         const canSplit = canTile && ctx.splitBlocked !== true && ctx.splittable !== false;
-        const fullScreen = ctx.inSplit === true ? [{id: "exitSplit", text: qsTr("Exit Full Screen"), enabled: canAct}] : [
+        // On a Split View Desktop, with the plugin's tiling-split-rows, Make Window Full Screen and Replace Tiled Window follow
+        // (D71; Replace only while the other half holds a window).
+        const splitRows = ctx.canSplitRows === true ? [
+            {id: "splitFullscreen", text: qsTr("Make Window Full Screen"), enabled: canAct},
+            {id: "splitReplace", text: qsTr("Replace Tiled Window"), enabled: canAct && ctx.splitPair === true}
+        ] : [];
+        const fullScreen = ctx.inSplit === true ? [{id: "exitSplit", text: qsTr("Exit Full Screen"), enabled: canAct}].concat(splitRows) : [
             {id: "fullscreen", text: ctx.fullscreen ? qsTr("Exit Full Screen") : qsTr("Enter Full Screen"), shortcut: root.shortcuts.fullscreen, enabled: canAct && (ctx.fullscreen || !fixed)}
         ].concat(ctx.canSplit === true ? [{id: "fullScreenTile", text: qsTr("Full Screen Tile"), enabled: canSplit, submenu: [root.splitItem("left", canSplit), root.splitItem("right", canSplit)]}] : []);
 

@@ -233,6 +233,17 @@ void RequestHost::present(int id, QObject *object)
     QGuiApplication::setDesktopFileName(own);
 }
 
+void RequestHost::reshow(int id)
+{
+    const auto r = m_requests.value(id);
+    if (!r || r->state == Request::State::Forwarded || !r->window)
+        return;
+    const QString own = QGuiApplication::desktopFileName();
+    QGuiApplication::setDesktopFileName(windowAppId(r->appId));
+    r->window->show();
+    QGuiApplication::setDesktopFileName(own);
+}
+
 void RequestHost::fail(int id)
 {
     if (!isOpen(id))
@@ -301,6 +312,11 @@ void RequestHost::forward(int id)
     const auto r = m_requests.value(id);
     if (!r || r->state == Request::State::Forwarded)
         return;
+    if (!forwardable(id)) {
+        qWarning("grassfield-portal: the request cannot go to x-d-p-gtk as it came; it ends without an answer");
+        endWithoutAnswer(id);
+        return;
+    }
     r->state = Request::State::Forwarded;
     r->deadline.stop();
     // The window, if any, goes; the same call, with the same handle and options, goes to x-d-p-gtk.

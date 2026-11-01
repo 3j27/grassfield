@@ -6,11 +6,14 @@
 # bus that is not a private test bus. Test passwords only.
 #  1 refusals at start: outside a session, a development run on a bus that is not a private test bus or without --socket,
 #    a socket directory that is a symlink, a --peer-unit that is not a service name in a session
-#  2 the socket's directory is 0700 and the socket 0600; the bridge is not dumpable; the name is not taken without a shell
+#  2 the socket's directory is 0700 and the socket 0600; the bridge is not dumpable; the name is not taken without a shell,
+#    and a request that reaches the bridge (by its unique name) with no shell connected at all is answered "cancelled" at once
 #  3 a socket peer outside the expected unit is refused (the fake shell runs outside --peer-unit grassfield-shell.service),
 #    and ten more at once leave one line in the bridge's output;
 #    a second shell connection is refused while one is connected; a hello of another version closes the connection
-#  4 the shell's hello: the bridge owns org.gnome.keyring.SystemPrompter
+#  4 a connected shell that has not said hello: the bridge does not take the name yet, and a request that reaches the
+#    bridge meanwhile (by its unique name) is answered "cancelled" at once (no shell ready); the shell's hello: the bridge
+#    owns org.gnome.keyring.SystemPrompter
 #  5 a password from a real gcr client through the sx-aes-1 exchange: the prompt names the caller from its pidfd (the client's
 #    interpreter, a root-owned program without its own desktop entry: "unidentified" with its path), its text flattened, the
 #    check box, the answer's choice back to the client; a confirmation, accepted and refused
@@ -40,12 +43,25 @@
 # 12 queued behind a holder that owns the name first (the stock gcr-prompter for 10 s after its last prompt): "queued",
 #    then "owned" once the holder exits
 # 13 no test password in the bridge's journal output
+#
+#   tests/security/prompter_bridge.sh              PASS / FAIL lines, exit 0 when all pass
+#   tests/security/prompter_bridge.sh --mutants    also mutants of the bridge's guards (the integrator's review of PR #95: the
+#                                                  name only after the hello, the line wiping, the answer without a shell, the
+#                                                  pidfd's re-check, the known callers' namespaces: every known caller exempt,
+#                                                  or the disk helper not, decision 9-26 amended), each built and run against
+#                                                  the unit tests and this scenario; every one must be caught
 # Needs g++ with the Qt 6 Core and gcr-4 headers (or GRASSFIELD_PROMPTER: a built bridge), dbus-daemon, dbus-send, python3
 # with PyGObject and the Gcr 4 introspection data; SKIPs without them, when libdbus cannot reach the bus, and when this
 # process has no cgroup of its own to stand for the shell's unit.
 set -uo pipefail
 umask 077
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
+mutants=0
+case ${1:-} in
+  "") ;;
+  --mutants) mutants=1 ;;
+  *) echo "usage: prompter_bridge.sh [--mutants]" >&2; exit 2 ;;
+esac
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/prompter-bridge.XXXXXX")
 # Unix socket paths stay under 108 bytes: the bus and the bridge's socket live in a short directory of their own.
 d=$(mktemp -d /tmp/gfp.XXXXXX)
@@ -169,6 +185,10 @@ check bash -c '[[ $(stat -c %u /proc/$1/environ) == 0 ]]' _ "$main_pid"
 sleep 0.3
 desc="without a shell the bridge does not take $name"
 check unowned
+bridge_name=$(sed -n 's/^grassfield-prompter: .* prompter\/1 on \(:[0-9.]*\) (development.*/\1/p' "$d/main.log")
+client noshell password --title "No shell" --prompter "$bridge_name"
+desc="a request that reaches the bridge (by its unique name) with no shell connected is answered \"cancelled\" at once"
+check wait_until 10 bash -c 'grep -q "^cancelled" "$1" && grep -q "a password request answered \"cancelled\": no shell" "$2"' _ "$d/noshell.out" "$d/main.log"
 
 # --- 3 who may connect ---------------------------------------------------------------------------------------------------
 start_bridge strict --socket "$d/run/grassfield/strict.sock" --peer-unit grassfield-shell.service
@@ -205,6 +225,12 @@ check wait_until 5 grep -q "^#closed" "$d/early.shell"
 
 # --- 4 hello: the name -------------------------------------------------------------------------------------------------
 shell_up s "$sock"
+sleep 0.5
+desc="a connected shell that has not said hello: the bridge does not take $name yet"
+check unowned
+client silent password --title "Before hello" --prompter "$bridge_name"
+desc="...and a request that reaches it meanwhile is answered \"cancelled\" at once (no shell ready)"
+check wait_until 10 grep -q "^cancelled" "$d/silent.out"
 say s hello
 desc="after the shell's hello the bridge owns $name (and tells the shell)"
 check wait_until 5 owned_by "$main_pid"
@@ -240,7 +266,6 @@ desc="a confirmation refused by the shell: the client gets \"cancel\""
 check wait_until 10 grep -qx cancel "$d/c3.out"
 
 # A caller cannot choose who it is: it names the bridge's own connection, the sheet still shows the caller's executable.
-bridge_name=$(sed -n 's/^grassfield-prompter: .* prompter\/1 on \(:[0-9.]*\) (development.*/\1/p' "$d/main.log")
 before=$(lines s '"type":"prompt"')
 client cf forge --caller "$bridge_name"
 wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $2 ]]' _ "$d/s.shell" "$before"
@@ -438,4 +463,51 @@ check bash -c '! grep -q -e "correct horse" -e pin-0451 -e batch-p -e invented-s
 kill "$main_pid" 2>/dev/null
 desc="the bridge stops on SIGTERM and removes its socket"
 check wait_until 5 bash -c '[[ ! -e $1 ]]' _ "$sock"
+
+if ((mutants)); then
+  # Each mutant removes one guard (file under bridges/prompter/src, text that occurs once, replacement; \n a newline): its
+  # bridge and unit tests are built from a copy, then the unit tests and this scenario run; one of them must fail.
+  while IFS= read -r spec; do
+    [[ -n $spec ]] || continue
+    IFS='#' read -r -a f <<<"$spec"
+    mname=${f[0]}
+    m=$tmp/mut
+    rm -rf "$m"
+    mkdir -p "$m/bridges" "$m/apps" "$m/tests/unit"
+    cp -a "$root/bridges/prompter" "$m/bridges/"
+    cp -a "$root/tests/unit/prompter" "$m/tests/unit/"
+    cp "$root/apps/runmode.h" "$root/apps/testbus.h" "$m/apps/"
+    mkdir -p "$m/ui/i18n"
+    cp "$root/ui/i18n/translationloader.h" "$m/ui/i18n/" # grassfield-askpass's (step 9c)
+    cp "$root/VERSION" "$m/VERSION"
+    git -C "$m" init -q
+    if ! python3 -I - "$m/bridges/prompter/src/${f[1]}" "${f[2]}" "${f[3]}" <<'PY'; then echo "MUTANT $mname: NOT APPLIED"; fail=1; continue; fi
+import sys
+p, a, b = sys.argv[1], sys.argv[2].replace("\\n", "\n"), sys.argv[3].replace("\\n", "\n")
+s = open(p).read()
+if s.count(a) != 1:
+    sys.exit(3)
+open(p, "w").write(s.replace(a, b))
+PY
+    if ! { bash "$m/bridges/prompter/build-direct.sh" --out "$m/bin" && bash "$m/bridges/prompter/build-direct.sh" --tests --out "$m/bin"; } >"$m/build.log" 2>&1; then
+      echo "MUTANT $mname: DOES NOT BUILD"; fail=1; continue
+    fi
+    if ! "$m/bin/prompter-unit-tests" --gtest_brief=1 >"$m/unit.log" 2>&1; then
+      echo "MUTANT $mname: CAUGHT by the unit tests"
+    elif ! GRASSFIELD_PROMPTER="$m/bin/grassfield-prompter" bash "$0" >"$m/run.log" 2>&1; then
+      echo "MUTANT $mname: CAUGHT by this scenario ($(grep -c '^FAIL' "$m/run.log") failing)"
+    else
+      echo "MUTANT $mname: NOT CAUGHT"; fail=1
+    fi
+    rm -rf "$m"
+  done <<'EOF_MUTANTS'
+name-before-hello#Bridge.cpp#            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));#            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));\n            wantName(true);
+lines-not-wiped#Protocol.cpp#            explicit_bzero(buffer + start, end - start + 1);#            ;
+rest-not-wiped#Protocol.cpp#            explicit_bzero(buffer + (length - start), start);#            ;
+answered-without-a-shell#Bridge.cpp#            return;\n        if (m_client < 0 || !m_ready) {\n            log(#            return;\n        if (false) {\n            log(
+pidfd-not-rechecked#Identity.cpp#        facts.alive = pidfdAlive(pidfd);#        facts.alive = true;
+every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n            // KIO's worker runs a plugin from any path#            // KIO's worker runs a plugin from any path
+disk-not-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))#            if (!facts.sameNamespaces)
+EOF_MUTANTS
+fi
 exit $fail

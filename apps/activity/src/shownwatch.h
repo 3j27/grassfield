@@ -14,17 +14,22 @@ namespace activity {
 // comes from what the compositor sends: Hyprland suspends every window whose workspace is not shown (xdg_toplevel's
 // `suspended` state; Grassfield's minimize moves the window to special:minimized), and Qt's Wayland client then reports
 // the window not exposed. Qt's Minimized state is for the platforms that keep it: on Wayland Qt reverts it at once.
+// An Inspect window follows the same rule (AM57): `shown` is called with the window's state at each change.
 class ShownWatch : public QObject
 {
 public:
-    ShownWatch(QWindow *window, ActivityApp *backend)
+    ShownWatch(QWindow *window, std::function<void(bool)> shown)
         : QObject(window)
         , m_window(window)
-        , m_backend(backend)
+        , m_shown(std::move(shown))
     {
         window->installEventFilter(this);
         connect(window, &QWindow::visibilityChanged, this, [this] { update(); });
         update();
+    }
+    ShownWatch(QWindow *window, ActivityApp *backend)
+        : ShownWatch(window, [backend](bool shown) { backend->setWindowShown(shown); })
+    {
     }
 
     bool eventFilter(QObject *watched, QEvent *event) override
@@ -37,11 +42,11 @@ public:
 private:
     void update()
     {
-        m_backend->setWindowShown(m_window->isVisible() && m_window->isExposed() && m_window->visibility() != QWindow::Minimized);
+        m_shown(m_window->isVisible() && m_window->isExposed() && m_window->visibility() != QWindow::Minimized);
     }
 
     QWindow *m_window;
-    ActivityApp *m_backend;
+    std::function<void(bool)> m_shown;
 };
 
 // AM1, AD34: a second launch's activation. Qt's next activation request takes the token (xdg-activation-v1) and the window

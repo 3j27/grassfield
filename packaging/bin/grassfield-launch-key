@@ -3,7 +3,9 @@
 # the keys to this script. The target is resolved when the key is pressed, from the desktop entries and the user's default
 # applications (xdg-mime), never from a package name. A key with no target here does nothing.
 #
-#   grassfield-launch-key calculator|mail|web|files|settings|music
+#   grassfield-launch-key calculator|mail|web|files|settings|music|activity
+#
+# `activity` is Ctrl+Shift+Esc (ADR-0038 AQ6, AM64): Activity Monitor, which brings its window forward when it runs (AM1).
 #
 # Test hook: GRASSFIELD_LAUNCH_DRY_RUN=1 prints the resolved desktop entry id instead of starting it (empty line: no target).
 
@@ -87,8 +89,9 @@ case $kind in
   files) id=org.grassfield.Files.desktop ;;
   settings) id=org.grassfield.Settings.desktop ;;
   music) id=$(default_for audio/mpeg) ;;
+  activity) id=org.grassfield.Activity.desktop ;;
   *)
-    echo "usage: grassfield-launch-key calculator|mail|web|files|settings|music" >&2
+    echo "usage: grassfield-launch-key calculator|mail|web|files|settings|music|activity" >&2
     exit 2
     ;;
 esac

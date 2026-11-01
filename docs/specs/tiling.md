@@ -4,9 +4,10 @@ Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (P
 (PR #31: popover, Window menu and keys, TL22-TL26); step 4 is split in three pull requests (ADR-0036 D25): 4a merged
 (PR #35: the Layouts section, its number keys and the suggestions, TL27, TL28), 4b merged (PR #38: tile groups, TL29), 4c
 merged (PR #42: the shared edge, TL30); step 5 merged (PR #43: Settings > Desktop & Dock > Windows, TL32); step 6 is split
-in two, then four (ADR-0036 D40, D40 amended, D63): 6a merged (PR #48: the Split View Desktop, TL33), 6b merged (PR #56:
-the separator's reset and the swap), 6c on its branch (full screen's reveal, Dock and green button; windows gathered after
-an unplug), 6d not built. Below, "Today" is the state before step 1. A requirement
+in two, then five (ADR-0036 D40, D40 amended, D63, D70): 6a merged (PR #48: the Split View Desktop, TL33), 6b merged (PR
+#56: the separator's reset and the swap), 6c merged (PR #70: full screen's reveal, Dock and green button; windows gathered
+after an unplug), 6d on its branch (the Split View rows, the Overview's drop rule), 6e not built (the titles hidden and
+revealed at the top). Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -134,6 +135,20 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
   the protocol maximum too). The minimum is never under Hyprland's own floor, `MIN_WINDOW_SIZE` (20 px, what its resizes
   fall back to): an app that states no minimum is not squeezed to a 1 px frame (integrator review of a6d04df).
+  Since ADR-0036 D69 (capture defect of 2026-10-30: Quarters at 1440 x 900 with Settings, 420 px tall at least, came out
+  with shifted rows) a window is placed only in a zone it fits, its minimum with its titlebar band inside the zone's frame
+  as the glyph shows it (a half beside a neighbour: the TL7 frame): the popover and the Window menu grey the places,
+  arrangements and Layouts zones it does not fit (`unfitZones`, ADR-0007), `tile`, `arrange` and a pick refuse them, a drag
+  shows no preview there (a place on the frame `tile` applies, a half beside a neighbour included: `unfitPlaces`),
+  an arrangement's fill gives each remaining zone the topmost window that fits it (a zone no window
+  fits stays empty) and the suggestion offers only windows that fit. Fill and Center are always offered. The make-room
+  above now serves windows already placed whose work area shrinks (the margins switch, the Dock). The shell as built
+  (review of D69): greyed, never hidden, as macOS greys a tile it cannot make. The popover reads the event's lists
+  (WindowTiling.parseHover `fit`): a place by `unfitPlaces`, an arrangement by its first zone (the window's own) in
+  `unfitZones`, a Layouts zone by itself (TileGlyph `disabledZones`: fainter, no pointer, no press, no number key), a layout
+  none of whose zones fits greyed whole; the Window menu reads the reply's per-window lists when it opens (TilingLink
+  `unfitZones`, Compositor.fitOf) and greys those Halves, Quarters and Arrange items, their key texts kept; the keys
+  themselves reach the plugin, which refuses them.
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
@@ -295,7 +310,12 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   A window of fixed size (minimum = maximum on both axes, core `fixedSize`; About This Computer, ADR-0040 step 1b) posts
   no `tile-hover` from its zoom light, which its app draws disabled, and `tile_popover` (Super+Ctrl+L) is refused for it:
   nothing opens, on hover or click (integrator nested pass of 85c2c10, scenario 6). The reply lists such windows
-  (`fixed`); `tests/compositor/tiling.sh` case `fixed`.
+  (`fixed`); `tests/compositor/tiling.sh` case `fixed`. Its review: the plugin's own titlebar draws that zoom light
+  disabled too (grey, no glyph) and its click, Alt-click and a double-click set to Zoom do nothing, unless the window is
+  zoomed or in full screen already (core `lightAvailable`; case `fixed bar`); Super+Alt+F (Zoom) and Super+Ctrl+F (Full
+  Screen) leave it alone the same way: `bindings.lua` asks the plugin's `window_size(mode)` at each press, which returns
+  Hyprland's own dispatcher or a no-op (core `sizeKeyActs`; Hyprland's dispatcher as before without the plugin;
+  `tests/compositor/size_keys.sh`, case `fixed keys`).
 - **TL25** Window menu (T0, `AppMenuModel.qml`, M26-M28): Minimize, Zoom, Fill, Center, —, Move & Resize ›, Full Screen
   Tile › (T4), —, Enter Full Screen, —, Move to Desktop ›, —, Bring All to Front, —, the windows. Move & Resize › has the
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt
@@ -530,9 +550,14 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   output goes away, a floating window left off every output comes back centred on the work area of its Desktop's output at
   its size, at most the area's (core `strayFrame`, `gatheredFrame`; not a full-screen, Stages strip or minimized window).
   The picker's deadline for the plugin's reply is 6 s (D68); a reply adopts a Split View's picker unless it answers the
-  shell's own ask (`WindowTiling.replyPicker`), so an earlier ask still open never hides a new Split View's picker. Step 6d: the titles hidden and revealed at the top of a Split
-  View Desktop, the Split View rows (Replace Tiled Window, Move Window to Desktop, Make Window Full Screen) and the Overview's
-  drop targets for a Split View Desktop.
+  shell's own ask (`WindowTiling.replyPicker`), so an earlier ask still open never hides a new Split View's picker.
+  Step 6d as built (ADR-0036 D70-D72): with the plugin's `tiling-split-rows`, a Split View window's tiling popover offers
+  Move Window to Desktop (Exit Full Screen's effect, D44), Make Window Full Screen (back home, in full screen there) and
+  Replace Tiled Window (only with two members: back home without showing it, the other keeps its half and waits, the picker
+  offering the windows of that Desktop but the one replaced); the Window menu adds the last two after Exit Full Screen. All
+  through `unsplit(address[, how])` (core `unsplitHow`, `withoutWindow`), refused while locked. The Overview takes no window
+  onto a Split View Desktop and drags no member out of one (`WindowTiling.dropAllowed`). Step 6e: the titles hidden and
+  revealed at the top of a Split View Desktop, the revealed bar taking a member's drag (D59) as well as its lights.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover

@@ -12,8 +12,8 @@ FocusScope {
     required property var backend
     readonly property var table: root.backend.table
     readonly property var columns: root.backend.shownColumns
-    // AM13, AM49: the views whose rows have levels, a disclosure triangle before the name of a row that has rows under it.
-    readonly property bool outline: root.backend.view === "tree" || root.backend.view === "byGpu"
+    // AM13, AM49, AM65: the views whose rows have levels, a disclosure triangle before the name of a row that has rows under it.
+    readonly property bool outline: root.backend.view === "tree" || root.backend.view === "byGpu" || root.backend.view === "byType"
     readonly property int pageRows: Math.max(1, Math.floor(list.height / Tokens.activityRowHeight))
     // A column's width while its edge is dragged (key → width); written to activity.json when the drag ends.
     property var liveWidths: ({})
@@ -22,6 +22,8 @@ FocusScope {
 
     // A row's context menu (AM50): the window opens its action menu at (x, y) in this item, the row selected first.
     signal contextMenuRequested(real x, real y)
+    // AM57: a row double-clicked (a process, not a group's header), by its index in the table.
+    signal rowActivated(int row)
 
     function baseWidth(column: var): real {
         if (root.liveWidths[column.key] !== undefined)
@@ -271,6 +273,7 @@ FocusScope {
             required property bool expandable
             required property bool expanded
             required property bool group
+            required property bool notResponding
 
             readonly property bool emphasized: row.selected && list.activeFocus
             readonly property color foreground: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
@@ -329,9 +332,11 @@ FocusScope {
                             rotation: row.expanded ? 90 : 0
                         }
 
+                        // A process's icon, and an app's on its header (AM65); a GPU's or a kind's header has none.
                         Image {
                             id: glyph
-                            visible: cell.isName && !row.group
+                            readonly property bool shown: cell.isName && (!row.group || row.icon !== "")
+                            visible: glyph.shown
                             x: Tokens.spacingSm + Tokens.spacingXs + cell.lead
                             anchors.verticalCenter: parent.verticalCenter
                             width: Tokens.activityIconSize
@@ -345,8 +350,8 @@ FocusScope {
 
                         Text {
                             textFormat: Text.PlainText
-                            anchors.left: cell.isName && !row.group ? glyph.right : parent.left
-                            anchors.leftMargin: cell.isName ? (row.group ? Tokens.spacingSm + Tokens.spacingXs + cell.lead : Tokens.spacingXs) : Tokens.spacingSm
+                            anchors.left: glyph.shown ? glyph.right : parent.left
+                            anchors.leftMargin: cell.isName ? (!glyph.shown ? Tokens.spacingSm + Tokens.spacingXs + cell.lead : Tokens.spacingXs) : Tokens.spacingSm
                             anchors.right: parent.right
                             anchors.rightMargin: Tokens.spacingSm
                             anchors.verticalCenter: parent.verticalCenter
@@ -354,7 +359,8 @@ FocusScope {
                             // AM17: a name is elided in the middle; the other values at their end.
                             elide: cell.isName ? Text.ElideMiddle : Text.ElideRight
                             text: row.cells[cell.index] ?? ""
-                            color: row.foreground
+                            // AM27: a process that does not respond has its name in the destructive colour (macOS).
+                            color: cell.isName && row.notResponding && !row.emphasized ? Appearance.colors.danger : row.foreground
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyBodySize
                             font.weight: row.group ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
@@ -385,6 +391,10 @@ FocusScope {
                         return;
                     }
                     root.table.click(row.index, mouse.modifiers);
+                }
+                onDoubleClicked: mouse => {
+                    if (mouse.button === Qt.LeftButton && !row.group)
+                        root.rowActivated(row.index);
                 }
             }
         }

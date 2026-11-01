@@ -333,15 +333,32 @@ ShellRoot {
     }
 
     // GF-083: a package update leaves the old shell and compositor plugin running until the next login (macOS: "Restart to
-    // finish installing"). One notice per run; nothing is shown while the versions are unknown.
+    // finish installing"). One notice per run; nothing is shown while the versions are unknown. While an Update Now run goes
+    // on, the notice waits for its end, which says what finishes the update (a restart covers the log out, ADR-0033 s3.7):
+    // onRunEnded below. A run still going on after an hour (its runner gone) no longer holds it.
     UpdateNotice {
         id: updateNotice
         property bool announced: false
-        onUpdatePendingChanged: {
-            if (updatePending && !announced) {
-                announced = true;
-                Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version."));
+        function announce(): void {
+            if (!updatePending || announced)
+                return;
+            if (SoftwareUpdate.runningOp !== "" && !updateNoticeHeld.expired) {
+                updateNoticeHeld.start();
+                return;
             }
+            announced = true;
+            Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version."));
+        }
+        onUpdatePendingChanged: announce()
+    }
+
+    Timer {
+        id: updateNoticeHeld
+        property bool expired: false
+        interval: 60 * 60 * 1000
+        onTriggered: {
+            expired = true;
+            updateNotice.announce();
         }
     }
 
@@ -368,6 +385,36 @@ ShellRoot {
                 Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
             else if (kind === "toolkit")   // ADR-0041 step 2b (U31): no package name in the sentence (the service logs them)
                 Notifications.postInternalAction(qsTr("Log out to finish updating"), qsTr("Some updates finish when you log out. Log out and back in to use them."), open);
+        }
+
+        // The end of an Update Now run (U33): one notice whose click opens the pane. A restart or a log out is not posted when
+        // Settings' window is in front: its end sheet asks it there (U29). The restart and the log out are GF-083's notice
+        // too: it is never posted after them, and a notice it held for the run is posted after any other end.
+        function onRunEnded(kind: string): void {
+            updateNoticeHeld.stop();
+            updateNoticeHeld.expired = false;   // the next run holds GF-083's notice again
+            const finishing = kind === "restart" || kind === "logout";
+            if (finishing)
+                updateNotice.announced = true;
+            const settings = Compositor.frontAppId === "org.grassfield.Settings"
+                && Compositor.frontToplevel !== Compositor.taggedToplevel("org.grassfield.Settings", "info");
+            const open = () => SettingsApp.openSection("software-update");
+            const notices = {
+                "restart": [qsTr("Restart to finish updating"), qsTr("The updates are installed. Restart when you're ready.")],
+                "logout": [qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Log out and back in to use the new version.")],
+                "migrations": [qsTr("Some of Omarchy's last steps need its terminal"), qsTr("The updates are installed. Open Software Update to finish them.")],
+                "aur": [qsTr("Updates installed"), qsTr("Apps from the AUR are updated in Omarchy's terminal. Open Software Update to update them.")],
+                "installed": [qsTr("Updates installed"), qsTr("This computer is up to date.")],
+                "bootimage": [qsTr("Don't restart this computer yet"), qsTr("The update could not prepare the computer's startup files. Open Software Update for details.")],
+                "incompatible": [qsTr("This update needs a newer version of Grassfield"), qsTr("Software Update checks again later and tells you when it's ready.")],
+                "terminal": [qsTr("This update needs Omarchy's terminal"), qsTr("Open Software Update to continue it in Omarchy's terminal.")],
+                "stopped": [qsTr("The update stopped before it finished"), qsTr("Open Software Update to try again.")],
+                "failed": [qsTr("The update could not be installed"), qsTr("Open Software Update to see why.")]
+            };
+            const notice = notices[kind];
+            if (notice && !(finishing && settings))
+                Notifications.postInternalAction(notice[0], notice[1], open);
+            updateNotice.announce();
         }
     }
 
@@ -497,9 +544,11 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing NotResponding
-    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing TilingHover makes it listen
+    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3), SharePicker its target "picker" for the
+    // screen-sharing picker's stand-in (D-6); referencing TilingHover makes it listen
     // to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22); referencing TilingSuggest makes it
     // listen to the suggestions that follow a layout or an arrangement (TL28); referencing SoftwareUpdate starts its automatic
-    // checks and registers its IPC target "update" (ADR-0033 d.7).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count)
+    // checks and registers its IPC target "update" (ADR-0033 d.7); referencing ActivityLink registers its IPC target "activity"
+    // and writes Activity Monitor's projection while the app's window is open (ADR-0038 AM60, AM61).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "share picker", SharePicker.current === null ? "idle" : "open", "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder")
 }

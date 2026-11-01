@@ -96,6 +96,7 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Files"),
     QT_TRANSLATE_NOOP("Bindings", "Grassfield Settings"),
     QT_TRANSLATE_NOOP("Bindings", "Music"),
+    QT_TRANSLATE_NOOP("Bindings", "Activity Monitor"),
     QT_TRANSLATE_NOOP("Bindings", "Mute"),
     QT_TRANSLATE_NOOP("Bindings", "Volume up"),
     QT_TRANSLATE_NOOP("Bindings", "Volume down"),

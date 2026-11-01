@@ -146,7 +146,7 @@ Singleton {
     }
 
     // The windows Hyprland reported, as {pid and cls (from its list: 0 and "" until it was read for that window), title (live,
-    // from its events)} (NotResponding).
+    // from its events), idleInhibit (its list's inhibitingIdle)} (NotResponding, Activity Monitor's projection).
     function knownWindows(): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         return all.map(t => {
@@ -154,9 +154,16 @@ Singleton {
             return {
                 pid: d && d.pid ? d.pid : 0,
                 cls: d && d.class ? d.class : "",
-                title: t.title ?? ""
+                title: t.title ?? "",
+                idleInhibit: !!(d && d.inhibitingIdle === true)
             };
         });
+    }
+
+    // The toplevel handles Hyprland reported, in knownWindows()' order (AM61: the windows `activity quit` closes).
+    function knownToplevels(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => t.wayland);
     }
 
     // Activate (focus, un-minimize) a toplevel through the protocol. A window parked by hide()
@@ -622,6 +629,8 @@ Singleton {
     // Full Screen › Left or Right of Screen and Exit Full Screen of a window of a Split View Desktop: the plugin's split and
     // unsplit. Nothing without the capability, nothing while locked.
     readonly property bool canSplit: Capabilities.has("tiling-split")
+    // Step 6d (ADR-0036 D71): unsplit's Make Window Full Screen and Replace Tiled Window (a plugin before 6d would ignore them).
+    readonly property bool canSplitRows: Capabilities.has("tiling-split-rows")
     // ADR-0036 D47: while Stages shows its strip the plugin refuses Left and Right of Screen; the rows are greyed.
     readonly property bool splitBlocked: root.stagesAvailable && Settings.windowsStages
 
@@ -649,6 +658,12 @@ Singleton {
         return WindowTiling.isFixed(TilingLink.fixed, addressOf(toplevel));
     }
 
+    // The zones and the places the window does not fit, {zones, places} (ADR-0036 D69; from the plugin's last reply: not known
+    // yet, nothing is greyed and the plugin still refuses what does not fit).
+    function fitOf(toplevel: var): var {
+        return WindowTiling.fitOf(TilingLink.unfitZones, addressOf(toplevel));
+    }
+
     // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.
     function splitShown(screenName: string): bool {
         const mon = monitorByName(screenName);
@@ -674,14 +689,21 @@ Singleton {
         return sent;
     }
 
-    // Exit Full Screen of a window of a Split View Desktop (D44): back to its Desktop and box; the other window fills alone.
-    // Refused while locked; false without the capability or for an invalid window.
-    function unsplit(toplevel: var): bool {
+    // A window of a Split View Desktop leaves it. Exit Full Screen and Move Window to Desktop (D44, `how` "desktop" or none):
+    // back to its Desktop and box, the other window fills alone; Make Window Full Screen ("fullscreen") then full screen there;
+    // Replace Tiled Window ("replace": its half waits for the window picked, D71). Refused while locked; false without the
+    // capability (the rows' without tiling-split-rows), or for an invalid window or `how`.
+    function unsplit(toplevel: var, how: var): bool {
         if (SessionState.refuses("windows unsplit"))
             return false;
-        if (!root.canSplit)
+        if (!root.canSplit || !WindowTiling.unsplitAllowed(how, root.canSplitRows))
             return false;
-        return dispatchRequest(Minimized.unsplitCall(addressOf(toplevel)));
+        return dispatchRequest(Minimized.unsplitCall(addressOf(toplevel), how));
+    }
+
+    // The window's Split View Desktop holds two windows: Replace Tiled Window has a window to keep (D71).
+    function splitPair(toplevel: var): bool {
+        return WindowTiling.splitPair(TilingLink.splits, addressOf(toplevel));
     }
 
     // D43: the picker of a Split View Desktop ended without a second window (services/TilingSuggest): the window `address`

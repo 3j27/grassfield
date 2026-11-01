@@ -174,7 +174,11 @@ namespace gf::tiling {
     };
     std::string_view hoverStateName(HoverState state); // its "state" in the event
     // `splittable`: the window fits one half of its output's Split View (TL33; the popover greys Left and Right of Screen).
-    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false);
+    // enter and open also carry "unfitZones" and "unfitPlaces" (always, [] when it fits everything): the zones and the places it
+    // does not fit (unfitZones, unfitPlaces, D69; the popover greys the arrangements and Layouts zones, and the places, that
+    // would put it there). Under kMaxEventBytes even with every offered zone and every place listed.
+    std::string tileHoverJson(uint64_t address, HoverState state, const Rect& light = {}, bool tileable = false, bool splittable = false,
+                              std::span<const std::string> unfitZones = {}, std::span<const std::string> unfitPlaces = {});
 
     // The output a window belongs to after the plugin moved it (its titlebar drag, a tile): the one under the middle of
     // its box, as Hyprland's own move decides (CDragStateController::mouseMove); nullopt off every output (it keeps its
@@ -630,12 +634,79 @@ namespace gf::tiling {
     // refuses to tile it.
     bool fixedSize(const Constraints& c);
 
+    // The Full Screen and Zoom keys (Super+Ctrl+F, Super+Alt+F; config/hypr/grassfield/bindings.lua asks the plugin's
+    // window_size at each press, ADR-0040 step 1b's review): Hyprland's fullscreen modes by the names its dispatcher takes,
+    // "fullscreen" and "maximized" (strict; nullopt for anything else).
+    enum class SizeMode : uint8_t {
+        Fullscreen,
+        Maximized,
+    };
+    std::optional<SizeMode> parseSizeMode(std::string_view name);
+    // Whether such a key acts on the focused window, as the Window menu has it: a window of fixed size (`fixed`) only leaves
+    // the mode it is in (`inMode`: Exit Full Screen, Unzoom); any other window toggles as Hyprland's dispatcher does.
+    bool sizeKeyActs(bool fixed, bool inMode);
+
+    // ---- what a window fits (ADR-0036 D69: D57's model for every place and arrangement) ----
+
+    // A window with limits `c` fits zone `zone` of `area`: fitsFrame on the zone's frame as its glyph shows it (zoneFrame). The
+    // plugin places a window only in a zone it fits (a place, a zone of the Layouts section, an arrangement's every member),
+    // so an arrangement is always the catalogue's equal zones, never shifted rows or columns (capture defect of 2026-10-30:
+    // Quarters at 1440 x 900 with a window 420 px tall at least). fitFrames' make-room stays for windows already placed when
+    // their work area shrinks (a margins switch, the Dock).
+    bool fitsZone(const Constraints& c, const Zone& zone, const Area& area);
+
+    // The zones a window may be asked into, each once: the places' zones (TL4) in Place order, then the catalogue's (TL5) in
+    // its order; not Fill's whole area (Fill always takes the window as far as its minimum allows) nor Center (no zone).
+    std::span<const Zone> offeredZones();
+
+    // A zone as the shell names it: its twelfths "x,y,w,h" (the token array of its glyph, joined by ",").
+    std::string zoneName(const Zone& zone);
+
+    // The names (zoneName) of the zones of offeredZones() that a window with limits `c` does not fit in `area` (fitsZone), in
+    // that order: the "unfitZones" of the tile-hover event and of the state reply (the shell greys those places, arrangements
+    // and Layouts zones).
+    std::vector<std::string> unfitZones(const Constraints& c, const Area& area);
+
+    // The frame `place` gives a window before its limits, exactly as tile() applies it (TL4, TL7): its zone's frame; for a
+    // half, the rest of the work area beside a tiled neighbour that holds the other side (halfBesideNeighbour over
+    // `neighbourFrames`, the frames of the other Tiled or Resizing windows of that output's Desktop). Not for Center (no zone).
+    Rect placeStartFrame(Place place, const Area& area, std::span<const Rect> neighbourFrames = {});
+
+    // The places (nameOf, in Place order) a window with limits `c` does not fit, each on the frame tile() applies
+    // (placeStartFrame); never Fill or Center (always offered). The "unfitPlaces" of the tile-hover event and of the state
+    // reply: the shell greys those places (halves, quarters, thirds) in the popover and the Window menu, and unfitZones keeps
+    // the arrangements and the Layouts zones, which place every member afresh on the plain zone frames (review of D69, MINOR
+    // 1: a half beside a tiled neighbour is narrower than the half zone).
+    std::vector<std::string> unfitPlaces(const Constraints& c, const Area& area, std::span<const Rect> neighbourFrames = {});
+
+    // One window's unfitZones and unfitPlaces for the state reply (the Window menu reads it again when it opens, as D57's
+    // "unfit").
+    struct WindowFit {
+        uint64_t                 address = 0;
+        std::vector<std::string> zones;
+        std::vector<std::string> places;
+    };
+
     // The id of a new Desktop: one past the highest regular workspace id of `ids` (special and named ones are negative), as
     // the Overview's "+" does (ADR-0036 D41); 1 when there is none.
     int64_t nextDesktopId(std::span<const int64_t> ids);
 
     // The zone of the "left-right" layout a side of the Full Screen tile takes: "left" 0, "right" 1; nullopt otherwise.
     std::optional<int> splitZone(std::string_view side);
+
+    // How a window leaves its Split View Desktop (unsplit's second argument, step 6d, ADR-0036 D71): Move Window to Desktop
+    // ("desktop", or nothing: D44), Make Window Full Screen ("fullscreen": then full screen on that Desktop), Replace Tiled
+    // Window ("replace": its half waits for another window, the picker offering the windows of that Desktop but it).
+    enum class Unsplit : uint8_t {
+        Desktop,
+        Fullscreen,
+        Replace,
+    };
+    std::optional<Unsplit> unsplitHow(std::string_view text);
+
+    // A Replace Tiled Window's suggestion: `sg` without the window it replaced (it went back to the Desktop the picker offers
+    // windows from); nullopt when no window is left to offer (the other member then fills alone, D43).
+    std::optional<Suggestion> withoutWindow(std::optional<Suggestion> sg, uint64_t window);
 
     // The Split View Desktop `workspace` is, or nullptr.
     const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace);
@@ -682,8 +753,10 @@ namespace gf::tiling {
     // The reply of `hyprctl grassfield-tiling`: "splits" the Split View Desktops with their members and whether one waits for
     // its second window (TL33), "unfit" the windows that do not fit half of their output (the Window menu greys their Full
     // Screen Tile, D57), "fixed" the windows of fixed size (fixedSize: the Window menu greys their Zoom and tiling items),
-    // "suggestion" null without one.
+    // "unfitZones" the windows that do not fit some offered zone with those zones (always present; the Window menu greys those
+    // Halves, Quarters and Arrange items, D69), "suggestion" null without one.
     std::string stateJson(uint64_t generation, std::span<const StateOutput> outputs, const Suggestion* suggestion = nullptr,
-                          std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {}, std::span<const uint64_t> fixed = {});
+                          std::span<const SplitDesk> splits = {}, std::span<const uint64_t> unfit = {}, std::span<const uint64_t> fixed = {},
+                          std::span<const WindowFit> unfitZones = {});
 
 } // namespace gf::tiling

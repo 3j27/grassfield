@@ -282,8 +282,10 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   `screen:`/`region:` output listed by `hyprctl -j monitors`, a region inside that output's logical size. Anything else prints
   nothing.
 - SP4 one picker at a time: a request while a picker is open gets `busy` (cancelled).
-- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on every monitor, or
-  the shell's crash-recovery marker, the test of `packaging/shims/omarchy-shell:64-74`) and the shell answers `locked`; either
+- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on any monitor, or
+  the shell's crash-recovery marker read as the shell reads it, `shell/security/LockMachine.js`: only `unlocked` or
+  `unlocked sleeps=<n>` is unlocked, and only while `<n>` is the machine's count of suspends or that count cannot be read) and
+  the shell answers `locked`; either
   way the request is cancelled and no picker shows, Grassfield's or stock. Every error counts as locked: `hyprctl` failing or
   silent for 1 s, output that is not the expected JSON, no monitor, a marker file that exists but cannot be read.
 - SP6 the panel: tabs "Entire Screen" (one live thumbnail per display, the display's name), "Window" (live thumbnails of the
@@ -292,8 +294,9 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   picker cannot know which app); "Remember this choice" unticked at every opening, whatever `--allow-token` says (owner
   decision Q14); Cancel / Share (default once something is selected); double-click shares at once.
 - SP7 keyboard: arrows move in the grid, Return shares, Esc cancels, Cmd-1/2/3 switch tabs.
-- SP8 the recording indicator in the menu bar while Hyprland reports an active screencast; its menu says what is shared (a
-  display or a window), not which app shares it (Hyprland's events carry only the source).
+- SP8 the recording indicator in the menu bar while an app shares through the portal (xdph's PipeWire streams, ADR-0035 7-9:
+  Hyprland's screencast event comes from every capture, the shell's thumbnails too); its menu says what is shared (the
+  picker's choice for that stream when it made one), not which app shares it.
 - SP9 no acknowledgement within 1 s and the session not locked: the stand-in removes the socket file, then execs the stock
   picker (a late `accepted` finds no socket and shows nothing).
 
@@ -313,10 +316,67 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   that display).
 - A-SP6 (L1) shell stopped, session unlocked: the stock picker opens.
 
+### Built in step 7a (ADR-0035 7-1 to 7-8)
+- **Stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` (`python3 -I`) and `hyprland-preview-share-picker`, Omarchy's name, which runs it with `--stock-name`.
+  - `env-grassfield` puts that directory first in the systemd user manager's PATH, where xdph runs.
+- **Shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, plus the dev hooks `status` and `choose`).
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`.
+- **The channel as built (SP2, SP2b):**
+  - The stand-in's first line on the socket is `<id> list <json>`: xdph's windows as `{handle, class, title, address}`. The address is Hyprland's, in hex, or `""`. The titles never go into a command line (7-2).
+  - The shell opens the panel when that line arrives, at most 2 s after `accepted`; otherwise it closes the connection and shows nothing.
+  - The shell's answer is `<id> <flags>/screen:<output>` or `<id> <flags>/window:<handle>`.
+  - Lines with another id are ignored. A line longer than 4096 bytes, or one that is not ASCII, cancels.
+  - `request` answers `refused` to an id that is not 128-bit lowercase hex, or a socket that is not `<128-bit hex>.sock` directly in `$XDG_RUNTIME_DIR/grassfield/picker/`. The stand-in, which always uses that form, then treats it like a missing shell.
+- **The panel (SP6, SP7):**
+  - "Share Your Screen", "An app wants to share your screen. Choose what it can see.", and Entire Screen / Window as a segmented control.
+  - A grid of live thumbnails, three to a row, two rows before it scrolls.
+  - Windows are grouped by app name, then sorted by title. A window without an address, or one the shell does not know, shows its app's icon.
+  - Remember this choice is unticked at every opening.
+  - Cancel and Share. Share is dimmed until a tile is chosen; nothing is selected at first (7-3).
+  - Arrows move in the grid, Return shares, Esc cancels, Cmd-1 and Cmd-2 switch the tabs, and a double-click shares.
+  - Nothing answers keys or clicks for `panel.alertArmMs` after the panel shows, or after the last key pressed meanwhile (7-8);
+    Esc and Cancel always cancel.
+- **Cancelled:**
+  - when another popup takes the panel's place or a click lands outside it (7-5);
+  - when the session locks;
+  - when the stand-in's end closes (it gave up, or xdph ended: the stand-in notices xdph's end of stdout closing).
+- **Not in 7a:** Selection, the recording indicator and the greying of protected windows came in step 7b, below.
+- **Tests:**
+  - `tests/shell/share_picker.sh`: A-SP1, A-SP2, A-SP2b and A-SP3 against fakes, with a copy of xdph 1.4.1's parser.
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms; case 13: a failed connection (no socket file, a refused one, a stand-in that gave up because the shell's answer took over 1 s) does not stop the next request from showing its panel, and no request's socket is left once it ended; cases 1 and 2: the panel (loaded as the Overlay loads it) opens with Remember this choice unticked and unarmed, and is armed after `panel.alertArmMs` with Remember still unticked, though xdph passed `--allow-token` (review of PR #83, MINOR 1).
+  - `tests/unit/tst_sharepicker.qml`.
+  - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
+
+### Built in step 7b (ADR-0035 7-9 to 7-14)
+- **Selection (SP6):** a third tab (Cmd-3).
+  - The chosen display's live preview, with a display chooser when there are several; a drag on it marks the area.
+  - The area must be at least `panel.sharePickerMinArea` either way, and its size shows under the preview ("640 × 360 on DP-1").
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels. An area past the display is never answered, by the shell or by the stand-in.
+- **Windows that hide from capture (SP6):** Hyprland's effective `no_screen_share`, asked with `hyprctl -j getprop` for every listed window when the panel opens (16 at a time, 1 s each at most). Such a window is greyed with "This window can't be shared" and never answered; no window is answered before Hyprland's answers have come. A query that cannot run greys none (Hyprland still blacks such a window out: 7-13).
+- **The recording indicator (SP8):** a status item, `screen-share`, while xdph has a stream (a PipeWire video node named `xdg-desktop-portal-hyprland`); it never gives way when the status area is crowded.
+  - Its menu has one row per share, named by what the picker chose for it ("Entire screen: DP-1", "Window: …", "Part of DP-1"), best effort: one new stream and one choice answered in the last 3 s. Otherwise "Screen or window" (a share an app restored with its token, or two at once).
+  - Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) the indicator stays in view: its glyph on its own capsule of the band's glass at the bar's right inset, coming as the bar leaves and going as it comes back (7-14). It takes no click; the top edge brings the bar back.
+- **Tests:**
+  - `tst_sharepicker.qml`.
+  - `share_picker_ipc.sh`, cases 9-12 (11 with a private PipeWire and a stream made as xdph makes it, `share_picker_ipc.d/fake-xdph-stream.c`; 12 with the getprop answers held by gate files).
+  - `share_picker_nested.sh`, check 5.
+  - `tst_barhide.qml`: the indicator while the bar is away (7-14).
+  - The indicator in a real share (Chromium) is the integrator's.
+
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
-3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
-requesting app.
+4 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
+requesting app. A shell that hangs with its panel open leaves the panel drawn: the stand-in gives up after 15 s, and if the
+app asks again the stock picker opens beside the frozen panel (only the stock picker can answer). The indicator shows shares
+made through the portal only: a recorder that captures without it (wf-recorder, OBS's own Wayland capture) is not shown
+(7-9), and any PipeWire client can light it by naming a video node after xdph (nothing is shared then). An area is drawn on a
+preview: about 3 logical pixels of a 1920-pixel display per preview pixel (7-10). A row of the indicator's menu can name another
+app's choice when an app restores a share with its token within 3 s of the picker answering a different app that has not
+started its stream yet (7-12). While the bar is away the indicator's capsule is drawn on the display, so a share of that
+display shows it (7-14).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 
@@ -348,7 +408,8 @@ Dock menu shows "Application Not Responding" and Force Quit in place of Quit; Fo
 ### Acceptance criteria
 - A-NR1 (L0, `tests/shell/hyprland_dialog.sh`) the stand-in with fake `qs`, `hyprctl` and stock dialog: en and fr texts
   parsed, titles with " - ", a leading "-" or a newline, a class with " - "; ambiguous (two processes, an app named to
-  match another split), other-locale, malformed, refused, unanswered (1-s deadline) calls exec the stock dialog with the
+  match another split), other-locale, malformed, refused, unanswered (10-s deadline, ADR-0035 decision 3-16: a slow shell
+  under load is waited for, no shell ends the call at once) calls exec the stock dialog with the
   same pid and arguments; spawned by a double fork as Hyprland spawns it, the pipe stays open after "ok" and ends when the
   stand-in is killed; the texts match the installed Hyprland. (L0, `tests/shell/anr_ipc.sh`) the stand-in through the real `qs ipc` to
   the real service in an offscreen Quickshell: marked, cleared within 1 s, the shell's own refusals, a rename that lifts an
@@ -399,7 +460,7 @@ PASS, fail closed where a secret is involved, nothing logged). Step 9a builds th
 its unit; step 9b the shell's queue and secret sheets for gcr's `password` and `confirm` prompts (ADR-0035 "Delivered in
 step 9b", decisions 9-15 to 9-22); step 9c udiskie's helper and the NetworkManager agent (planned as 9d, merged into 9c by
 this step's brief; ADR-0035 "Delivered in step 9c", decisions 9-25 to 9-35); step 9e KIO's password server (ADR-0035
-"Delivered in step 9e", decisions 9-36 to 9-49).
+"Delivered in step 9e", decisions 9-36 to 9-50).
 From 9b the shell connects in the session: gcr's prompts (gnome-keyring, pinentry-gnome3, gcr-ssh-agent) are drawn by the
 shell; from 9c also an encrypted removable disk's password (udiskie) and NetworkManager's Wi-Fi secrets; from 9e the
 passwords of network locations that KIO asks for (Files, the D-4 panel, any KF6 app); from step 10 BlueZ's pairing steps (section 8),
@@ -429,7 +490,10 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
   entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "KIO" for KIO's worker executable
-  `/usr/lib/kf6/kioworker` (role `kio`, step 9e); anything
+  `/usr/lib/kf6/kioworker` (role `kio`, step 9e, only while every file it maps executable is trusted: security review of
+  step 9e, MINOR-2), each only for a process in the bridge's own mount and user namespaces (as an app's row: the
+  integrator's review of PR #95); "Disks" for udiskie's helper `grassfield-askpass` in any namespaces (udiskie's unit runs
+  it in its own, decision 9-26 amended); anything
   else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
   as plain text, flattened and capped, in the secondary style, framed and introduced as the caller's; `warning` in red in that
   frame (step 9b, decision 9-18: under the field it read as the sheet's own error); a secure field (`password-new`: New and
@@ -484,38 +548,47 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   nm-applet runs the VPN plugin's auth dialog, which this one does not), so a VPN that needs secrets at connect time fails,
   as it does today.
 - SC9 KIO network passwords (ADR-0035 D-12 b; built in step 9e: `bridges/prompter/src/KioServer.{h,cpp}`, `KioAuth.{h,cpp}`,
-  decisions 9-36 to 9-49): the bridge serves `org.kde.KPasswdServer` at `/modules/kpasswdserver` (`checkAuthInfoAsync`,
+  decisions 9-36 to 9-50): the bridge serves `org.kde.KPasswdServer` at `/modules/kpasswdserver` (`checkAuthInfoAsync`,
   `queryAuthInfoAsync`, `addAuthInfo`, `removeAuthInfo`, the two result signals; KIO's types, its AuthInfo
   `(ysssssssssbbbba{s(siv)})` read with bounds; the LEGACY `ay` methods not served) and holds `org.kde.kpasswdserver6`
   (flags 0: queued behind kiod6 when kiod6 holds it, replaced by nobody) only while a shell that draws kind `kio` is
-  connected; it keeps kpasswdserver's rules (sequence numbers, the session cache and its quirks, one prompt per window and
-  per server, checks that wait for a query of their server, the user's Cancel kept, a changed name moving its entry) and
-  shows the server sheet: "Enter your name and password for the server “%1”." (a host name only, 9-42), who asked from the
-  caller's credentials ("Requested by KIO for an app" for KIO's worker, an app's name, or an unidentified program and its
-  executable, 9-43), the realm framed as the server's unverified words, the name field (read-only or absent as the caller
-  says; a field of its own, unlike a network's read-only username), the password field (no Show password), Remember this
-  password (offered when the caller offers it; off at first, on when the keyring already holds one, 9-41), a line under it
-  when the keyring that would keep it has no password ("Your keyring has no password: a password remembered here is stored
-  unencrypted on this computer.", known only for gnome-keyring, 9-45),
-  Cancel / Connect (a password, and a name when asked, 9-47); after a failed login "The name or password was not accepted.
-  Try again." (the worker's own message never shown, 9-40); always held until a click past the guard (9-38). Remembered
-  passwords go to the Secret Service through libsecret (schema `org.grassfield.NetworkPassword`, 9-44), never through
-  KWallet's API, only when the user ticked Remember; in the Grassfield session the Secret Service stays gnome-keyring's
-  (ADR-0035 Q17-b); bridge down → D-Bus activation starts kiod6 (KDE's dialog, as before).
+  connected, or while kiod6 runs without it (9-36); it keeps kpasswdserver's rules (sequence numbers, the session cache and
+  its quirks, one prompt per window and per server, checks that wait for a query of their server, the user's Cancel kept, a
+  changed name moving its entry) and shows the server sheet: "Enter your name and password for the server “%1”." (a host
+  name only, 9-42), who asked from the caller's credentials ("Requested by KIO for an app" for KIO's worker running only
+  trusted code, an app's name, or an unidentified program and its executable, 9-43), the realm framed as the server's
+  unverified words, the name field (read-only or absent as the caller says; a field of its own, unlike a network's read-only
+  username), the password field (no Show password), Remember this password (offered when the caller offers it; off at first,
+  on when the keyring already holds one, 9-41), a line under it when the keyring that would keep it has no password ("Your
+  keyring has no password: a password remembered here is stored unencrypted on this computer.", known only for
+  gnome-keyring, 9-45), Cancel / Connect (a password, and a name when asked, 9-47); after a failed login "The name or
+  password was not accepted. Try again." (the worker's own message never shown, 9-40); always held until a click past the
+  guard (9-38). Remembered passwords go to the Secret Service through libsecret (schema `org.grassfield.NetworkPassword`,
+  9-44), never through KWallet's API, only when the user ticked Remember; in the Grassfield session the Secret Service stays
+  gnome-keyring's (ADR-0035 Q17-b); bridge down or no shell → D-Bus activation starts kiod6 (KDE's dialog, as before),
+  except after kiod6 started while the bridge held the name: kiod6 never takes it then (it registers its names only when it
+  starts), so the bridge keeps it and answers "nothing" at once until kiod6 leaves the bus (9-36, security review of step
+  9e, MINOR-1).
 - SC9b results go to the caller only (counter-review of PR #13, minor; built in step 9e): kpasswdserver broadcasts
   `checkAuthInfoAsyncResult` and `queryAuthInfoAsyncResult`, credentials included, to every listener on the session bus (KIO
   `src/core/org.kde.KPasswdServer.xml:4-15`, `src/kpasswdserver/kpasswdserver.cpp:330, 852, 883`); the bridge sends each
   result as a signal addressed to the caller's unique name (`g_dbus_connection_emit_signal` with a destination, after the
   method reply that gave the requestId), which KIO's real client receives unchanged (`tests/security/kio_passwd.sh`). A
   cached credential goes only to the connection that asks; any same-user process can still ask for one by its URL, as with
-  kpasswdserver today (upstream protocol, known limitation).
+  kpasswdserver today (upstream protocol, known limitation). Addressing keeps results from match rules and eavesdropping,
+  not from a bus monitor: a same-user process that calls `BecomeMonitor` (the session bus allows it to any connection of
+  its user) sees every message, a targeted result and its password included, as it sees every other secret on the session
+  bus (the reviewer's probe; known limitation, security review of step 9e, NIT-1).
 - SC9c never blocks on itself (counter-review of PR #13, minor; built in step 9e): storing into a locked keyring makes
   gnome-keyring ask through gcr's prompter, which is the bridge. The bridge therefore stores with libsecret's asynchronous
   calls (`secret_password_storev_binary` with a callback on its GLib main context), answers `addAuthInfo` at once, looks
   remembered passwords up asynchronously too (a check unlocks the keyring when an item is there; a query searches without
   unlocking), and makes no synchronous call that can cause a prompt; the unlock prompt then takes its turn in the queue
   (`kio_passwd.sh`: addAuthInfo answered in milliseconds with the keyring locked, the unlock prompt in the shell, other
-  calls answered meanwhile).
+  calls answered meanwhile). A call that may hold one of gnome-keyring's unlock prompts is never cancelled while that
+  Secret Service runs (gnome-keyring 51.1 aborts when an unlock prompt waiting behind another is dismissed); a store holds
+  one of 8 places for at most 120 s; the stores and searches sent to a Secret Service that leaves the bus end at once
+  (ADR-0035 9-50).
 - SC10 the Secret Service handover (ADR-0035 D-12, owner decision Q17-b, step 2c; `grassfield-secrets-handover`, a user unit
   the session starts before the shell). Nothing for the user to do. At the session's start a ksecretd left over from an
   earlier session that still holds `org.freedesktop.secrets` is made to quit, so apps opened from the Dock find the keychain;
@@ -694,8 +767,11 @@ Rules (fail closed: no answer is ever invented):
   the name is released), A-SC3 and A-SC3b for the requester the bridge sends (a caller that names another connection in
   its own properties, a caller that exits, an executable the user can write: `tests/unit/prompter`,
   `tests/security/prompter_bridge.sh`), the bound of 8 of A-SC2 and A-SC6's mutants of the bridge (the uid and cgroup check,
-  the caller checks, the bound, the buffer wiping); the sheets, the queue's keyboard rule and the polkit sheet's place in
-  the queue are step 9b's.
+  the caller checks, the bound); the sheets, the queue's keyboard rule and the polkit sheet's place in the queue are step
+  9b's. The buffer wiping of A-SC6 had no test in step 9a (the integrator's review of PR #94); since the review of PR #95
+  the line handling is `takeLines` (`Protocol.h`), unit-tested, and `prompter_bridge.sh --mutants` kills its two wipes
+  (`lines-not-wiped`, `rest-not-wiped`), with the name taken before the hello, the answer without a shell, the pidfd's
+  re-check and the known callers' namespaces; `tests/fuzz/prompter_protocol.sh` fuzzes the same reading.
 - Step 9b covers A-SC2 (`tests/security/secret_sheets.sh`: the polkit sheet keeps the keyboard while a gcr request arrives,
   which shows after, held, and the reverse; a withdrawn request never shows; the ninth cancelled), A-SC3 for the sheet (a
   caller whose text says "Authentication required" gets the secret sheet's title with the bridge's requester, no lock or shield
@@ -754,7 +830,12 @@ Rules (fail closed: no answer is ever invented):
   and a KIO sheet) answered "nothing" at once; wrong answers; the shell's refusal (no cancelled entry); a changed name and
   the old URL's next query; no name field; `<NoAuthPrompt>`; the caller leaving; the shell leaving (the client answered, the
   name released, kiod6's stand-in activated); no shell or a shell without kind `kio`: the name not held, kiod6's stand-in
-  activated or keeping it; oversized AuthInfo and the LEGACY method refused; no test password in the bridge's output;
+  activated or keeping it; KDE's real kiod6 started while the bridge holds the name (kept with no shell and a check
+  answered at once, taken by a bridge started then, released when kiod6 goes); a worker plugin of the user's run by
+  the real kioworker shown as an unidentified program; the keychain's calls (a remembered entry in memory only while its
+  window lives, gnome-keyring up when a check's caller leaves while its unlock prompt waits behind a store's, a store's
+  place freed after its time, gnome-keyring killed: the waiting stores end); oversized AuthInfo and the LEGACY method
+  refused; no test password in the bridge's output;
   `--mutants`: 14 of the server, among them a broadcast result, a requester trusted without its credentials, a synchronous
   store, Remember ignored and the kinds gate, and 6 of the cache key and the cache against the unit tests, all caught), the
   server sheet (`tests/security/secret_sheets.sh`: held, Connect's rule, Remember and the keyring's line, a fixed name, the
@@ -805,7 +886,8 @@ traced process and to one that maps code from untrusted files (`LD_PRELOAD`, `LD
 since it was loaded), which also leaves an app unidentified after an upgrade of its libraries until it restarts. The
 mapped files are compared by device and inode with the files their paths name, and only for a process in the bridge's
 own mount and user namespaces (opus counter-review of step 9a, MINOR-C: a user namespace lets a process bind-mount its
-own file over a trusted path); a trusted app that runs code of the user's through its own scripting maps no untrusted
+own file over a trusted path; the known callers need those namespaces too since the integrator's review of PR #95, so a
+known program run in a sandbox of its own shows as "Unidentified program", save "Disks", decision 9-26 amended); a trusted app that runs code of the user's through its own scripting maps no untrusted
 file (`emacs --batch -l`, `nvim -l`, an app's plugin interpreter) and still gets the app's row. The gcr
 protocol is unauthenticated: its exchange protects the
 password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
@@ -813,11 +895,16 @@ with the original app named only when the caller's text names it); copies of the
 remembered network passwords are as safe as the keyring that holds them (Omarchy's default keyring is unencrypted; the
 sheet says so only for gnome-keyring, whose file format tells, ADR-0035 9-45); a
 same-user process can ask the bridge for a cached network password by its URL, as it can ask kpasswdserver today (SC9b),
-and can make KIO's worker ask for a server of its own choosing (the row says "KIO", the server is the address the worker
-connects to, 9-42, 9-43); step 9e: a kiod6 started while no shell drew the sheet (a shell restart, a KF6 app's SSL check
-that started kiod6 for its other names) keeps `org.kde.kpasswdserver6` for the session, and KIO asks in KDE's dialog
-until kiod6 exits (the journal says the bridge is queued, 9-36); for 1 s after the shell goes, KIO requests get "nothing"
-(9-37); a KIO request is held until a click, even right after the user's own click on a network location (9-38); the sheet
+and can make KIO's worker ask for a server of its own choosing (the row says "KIO" only while the worker runs nothing but
+trusted code, and the server is the host the request names, never proof of where anything connects, 9-42, 9-43); step
+9e: a kiod6 started while no shell drew the sheet (a shell restart, a KF6 app's SSL check that started kiod6 for its other
+names) keeps `org.kde.kpasswdserver6` for the session, and KIO asks in KDE's dialog until kiod6 exits (the journal says
+the bridge is queued, 9-36); a kiod6 started while the bridge held the name never takes it, so with no shell KIO's
+requests get "nothing" at once until kiod6 exits, never KDE's dialog (9-36); for 1 s after the shell goes, KIO requests
+get "nothing" (9-37); gnome-keyring 51.1 itself aborts when a client dismisses an unlock prompt waiting behind another,
+and its queue of unlock prompts stalls after a dismissal (the bridge never dismisses one; a store whose prompt stalls
+gives its place up after 120 s, 9-50); a KIO request is held until a click, even right after the user's own click on a
+network location (9-38); the sheet
 has no domain field (a domain the caller sent goes back unchanged) and no anonymous option, and an account with an empty
 password cannot be entered (9-47); an entry of the session cache tied to a window id lives for the bridge's life, as in
 kiod6 (9-39); KIO's workers other than ftp, a real Files window and a real keyring prompt on screen are not verified; GDBus
@@ -837,10 +924,13 @@ queued meanwhile (opus review of step 9b, NIT-1); a shared or captured
 output is black while a secret or authorization sheet is up (the layer covers the output, decision 9-22); the strength meter
 reads the length only (decision 9-17); the nested scenario (A-SC7) and the sheet's look are not verified; step 9c:
 "Disks" names `grassfield-askpass`, which any program of the user can run with a disk name and a passphrase destination of
-its own (the text under the row is shown as unverified, SC3b), and a passphrase udiskie refuses is not asked again (udiskie
+its own (the text under the row is shown as unverified, SC3b); with `LD_PRELOAD`, or its executable remapped to the
+helper's in namespaces of its own, such a program chooses the whole text under the row (title, message and description),
+not only the disk name (decision 9-26, amended after the integrator's review of PR #96), and a passphrase udiskie refuses is not asked again (udiskie
 2.7.0 reports the failure, which `--no-notify` hides; the disk stays locked until it is plugged in again); the helper's
 identification inside udiskie's sandbox (`PrivateUsers=self`) relies on the bridge reading `/proc/<pid>/exe` across that
-user namespace, checked here outside a sandbox only; the NetworkManager agent stores no secret: a connection whose secrets
+user namespace, checked here with the installed helper in a user and mount namespace that `unshare` makes, not under
+systemd's own sandbox; the NetworkManager agent stores no secret: a connection whose secrets
 are agent-owned (`psk-flags=1`, as some editors make them) is asked for its password at every connection, and its
 `SaveSecrets` is refused so that another agent may store them; system-owned secrets the agent returns are kept by
 NetworkManager only when the user has its `settings.modify.system` (or `modify.own`) permission without authentication
@@ -968,7 +1058,8 @@ backend left only Qt's idiom.
 The print sheet attaches to the document's window: a preview of the pages on the left (page arrows under it), on the right
 Printer, Presets, Copies, Pages (All, From–to, Selection), then Paper Size, Orientation, Scale, Two-Sided and the printer's
 options in collapsible sections; at the bottom "PDF" (a menu: Save as PDF…, Open in Preview) and Cancel / Print (default).
-The last-used printer and settings are remembered per app.
+The last printer used is shown first; Last Used Settings, a preset of the Presets menu shared by every application, brings the
+last print's settings back (ADR-0035 6-18).
 
 ### Functional requirements
 - PR1 `PreparePrint`: the sheet without preview (the document is not sent yet), every option the destination reports through
@@ -976,7 +1067,7 @@ The last-used printer and settings are remembered per app.
   for the matching `Print` call.
 - PR2 `Print` with a valid token: submits the document fd to the chosen CUPS destination with the chosen options, no UI; without
   a token: the full sheet with the preview of the document (Qt PDF for PDF, the first page of PostScript as an image when it can
-  be rendered, else "No preview").
+  be rendered, else "No preview"; step 6b sends a document that is not a PDF to x-d-p-gtk instead, ADR-0035 6-12).
 - PR3 "Save as PDF…" opens the D-4 save panel and writes the document there (PDF input) instead of printing.
 - PR4 no printer: the sheet says "No printers available" with "Add Printer…" (opens Settings > Printers).
 - PR5 never blocks: CUPS calls run off the UI thread with deadlines (a dead network printer never freezes the sheet); the UI
@@ -989,10 +1080,86 @@ The last-used printer and settings are remembered per app.
   Grassfield sheet (screenshot).
 - A-PR3 F1 against the reference print sheet captures (both appearances).
 
+### Built in step 6a (ADR-0035 6-1 to 6-9)
+- PR1 done without Presets and the printer's own options (6b): Printer (the application's last printer, else the default; Add
+  Printer… last), Copies (up to what the printer takes), Pages (All Pages; Current Page and Selection when the application has
+  them; a range typed "1-3, 5", Print dimmed until it reads), Paper Size (the printer's, its default first shown, 6-8),
+  Orientation, Scale, and Two-Sided (Off, Long-Edge Binding, Short-Edge Binding) and Colour (Colour, Black & White) when the
+  printer has them; another printer chosen dims Print until its options are read. The answer: GTK's settings (strings, with
+  one copy: GTK 3 would render the copies itself) and page setup (doubles, no PPD name), and a token good once, for its
+  application, for five minutes, that keeps the backend running while it lives (6-4, 6-5).
+- PR2 with a token done: the job, named after the application, carries the copies, collation, paper, two sides and colour,
+  never the pages, scale or orientation GTK already applied (6-4); only a PDF, sent as one, at most 2 GiB; a job the printer
+  refuses is response 2. Without a token: x-d-p-gtk's dialog (6b).
+- PR3 done: Save as PDF… (a button, 6-3) opens D-4's Save panel through FileChooser with the application's name for the file;
+  Cancel there brings the sheet back, under the application's id. Only a PDF, at most 2 GiB, is written, only in the folder the
+  Save panel's answer named (resolved then), never through a link: the folder opened with `O_NOFOLLOW` all the way from "/", a
+  temporary file made there with `O_EXCL | O_NOFOLLOW`, synced and renamed over the name (a link at the name is replaced; a file
+  that may not be written stays) (6-3). The application never gets the path (its `output-uri` is `file:///dev/null`).
+- PR4 done: "No Printers Available" (or "Printers Not Responding"), Add Printer… opens Settings > Printers, Print dimmed, Save
+  as PDF kept.
+- PR5 done: CUPS's calls run on threads of their own with deadlines (listing 3 s and its own 2, a printer's options 8 s and 2,
+  a job's connection 10 s and 30 s without progress, from its first request) and libcups' cancel flag; a sheet that cannot show sends the call to
+  x-d-p-gtk (RequestHost).
+- A-PR1: `tests/unit/portal/tst_printlogic.cpp` (both directions with GTK's names and types; the CUPS options; what reaches
+  CUPS: PWG paper names, the document's type, the job's name), `tests/unit/portal/tst_print.cpp` (the D-Bus interface with
+  fakes: tokens, Save as PDF through the Save panel and never through a link, no printer, another printer, the forward; the
+  writer: links at the name and in the folder's path, a failed last step, the size limit, permissions kept),
+  `tests/integration/print_cups.sh` (libcups against a scratch cupsd: printers, options, a job with its options kept on it, a
+  printer language refused before any job). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9 (the real frontend, the sheet's test answer, the
+  job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
+- `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
+
+### Built in step 6b (ADR-0035 6-10 to 6-30)
+- PR2 without a token done: Print with no sheet before it (libportal's callers) opens the sheet with the document's preview on
+  the left, one page at a time with "‹ 1 of N ›" and Page Up / Page Down (6-14); Orientation and Scale are not offered (the
+  document is laid out), Pages is All Pages or a range, which the printer applies (`page-ranges`), and the paper of the
+  document's first page is chosen where the printer has it (6-13). The document is kept in an unlinked private file on disk
+  (the user's cache folder), within one 2 GiB budget for every document waiting (6-11, 6-21), and its pages are drawn by a
+  confined child of grassfield-portal (Qt PDF; Landlock: reading under /usr only; a measured seccomp allow-list: no socket,
+  program, process, lock, ioctl, nor any act on another process; setsid, the locale's variables only, 512 MiB, one child at a
+  time, one thread when it confines itself; an unlisted call answers ENOSYS; raw pixels read back; no preview when the
+  confinement cannot be installed) (6-10, 6-20, 6-25 to 6-27). The sheet may print as soon as the document is kept, its preview
+  coming apart, and the document's own paper chosen with the first printer's options, or suggested when its size comes after
+  them (6-13, 6-28). Print sends the job at once from that file and the sheet goes (6-15); a document that is not a PDF goes to
+  x-d-p-gtk as it came, or fails when it came on a pipe, as does one whose sheet does not show in time once part of a pipe was
+  read (6-12, 6-24); one the full budget refuses goes to x-d-p-gtk as it came when it is a file (6-28).
+- PR3 done with macOS's "PDF" pull-down (6-16): Save as PDF… (6-3's Save panel and writer) and Open in Preview: a private copy
+  in `$XDG_CACHE_HOME/grassfield/preview` (a name within 255 bytes; the copies older than a day, or beyond 16, removed), written
+  as Save as PDF writes, opened in Preview started as the Dock starts an application (`systemd-run --expand-environment=no`)
+  (6-17, 6-22). In both flows.
+- PR1 done with the Presets (6-18): Default Settings and Last Used Settings (one for every printer, kept in grassfield-portal's
+  state when Print sends a job: two sides, colour, collation and the printer's own options, never the copies, pages, paper,
+  orientation or scale), the sheet opening on Last Used Settings when there are some; and with a printer's own options (6-19):
+  Feed From, Media Type and Quality in "Media & Quality", Output Bin and Finishing in "Printer Options", disclosure sections
+  closed at first, only what the printer reports with two values or more, its defaults first (the user's lpoptions, else the
+  queue's), each value sent as CUPS takes it, only one the printer listed and only when the queue would not apply it by itself
+  (the user's lpoptions value goes; 6-23); the standard finishings named in the UI language.
+- A-PR1 extended: `tst_printlogic.cpp` (options, page ranges, Open in Preview, presets and their JSON, file names within 255
+  bytes), `tst_print.cpp` (the confinement against the security review's probes, the child's environment and session, the
+  private file and its budget, the pages drawn by the child, a document sent first through the D-Bus interface, one that is not
+  a PDF, one on a pipe never sent on truncated, Open in Preview and its copies' bounds, Last Used Settings, a printer's
+  options), `print_cups.sh` (the scratch scheduler reports the queue's
+  own options with their names and defaults, and keeps them on the job), `tst_printsheet.qml` (the Presets, the sections, the
+  PDF pull-down, the preview and its pages). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9b (Print with
+  no token through the real frontend: the sheet, the backend's child counting the pages, the job in the scratch scheduler with
+  the document as sent). Evince or a libportal application in a nested session, and A-PR3, are the integrator's.
+
 ### Known limitations
 Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, Electron and Qt apps keep their dialogs); no
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
-Settings.
+Settings. Step 6b: no named presets (Save Current Settings as Preset…), no Layout (pages per sheet) or Paper Handling (page
+order, odd or even pages) sections, and a PPD's vendor options with no IPP name are not shown (the printer's defaults apply);
+a document sent first that is not a PDF gets x-d-p-gtk's dialog; the preview needs Landlock (a kernel from 5.13 with Landlock
+enabled, as Arch's is) and x86_64 or aarch64 (the allow-list is measured on x86_64 only), else it says "No Preview" and the
+document still prints; the child can still learn a path's metadata (whether a file exists, its size, times and mode; never its
+contents: Landlock does not cover stat); Open in Preview's copies stay in the user's cache folder for up to a day (16 at most), where an
+application allowed to read that folder can read them; a finishing that is neither standard nor named by CUPS is shown as its
+keyword in English words. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
+a GTK 3 application asking for n copies gets n × n (GTK renders the n copies its answer names and x-d-p-gtk's job asks for n
+again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes to the folder the Save panel's answer named as
+it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that
+moment (6-3). A raw print queue passes a document's bytes to the device as they are (6-4).
 
 ## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9; built in step 10, decisions 10-1 to 10-16)
 A security module (the secret sheets fed by grassfield-prompter, "BlueZ pairing" in the amended rule, owner decision Q12): R12
@@ -1173,3 +1340,55 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
 - A worker's message box whose job's delegate is deleted before the user answers goes unanswered, and KIO's notification
   queue then waits for it, holding the later message boxes of Files' workers (`usernotificationhandler.cpp:43-54`); KIO's
   own widget handler behaves the same way.
+
+
+## 10. Screenshots (inventory O1, O2, P8; ADR-0035 D-10, owner decision Q4; built in step 8)
+
+### macOS reference behavior
+Shift-Cmd-3 captures the screen, and Shift-Cmd-4 a selection: a drag captures an area, and the window mode captures a window.
+The picture is saved to the Desktop as "Screenshot <date> at <time>.png". Shift-Cmd-5 opens the capture toolbar. Grassfield
+gives the toolbar its own chantier; until then it does the selection (8-1).
+
+### Functional requirements
+- SC1 Shift-Cmd-3 captures every display, one picture each, as macOS does (8-4). Shift-Cmd-4, Shift-Cmd-5 and Print capture a
+  selection: a crosshair over the live screen in Grassfield's colours (`capture.*`: an even veil; the window or display
+  under the pointer outlined).
+  - A drag captures that area.
+  - A click captures the window drawn on top under the pointer (on a workspace with a fullscreen or zoomed window, that
+    window or one pinned over it), or the display under it when no window is there (the Desktop, the menu bar, the Dock).
+  - Esc, or a second press while the crosshair shows, cancels without saving; only this helper's crosshair is cancelled.
+- SC2 Each file is saved on the Desktop as macOS names it, translated (the next display's " (2)"), and never overwrites a
+  file; the Desktop never shows a picture being written. The Desktop is xdg-user-dir's, never the home folder.
+- SC3 The focused display's picture, or the selection, is copied to the clipboard as PNG.
+- SC4 A notice shows the picture, as the shell's ordinary banner (then in the Notification Center). A click or its "Open in
+  Preview" button opens the capture's pictures in Grassfield's Preview for 2 minutes; then the notice goes. The next capture
+  closes it first, so no picture shows the notice of the one before.
+- SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session binds the keys; the nested session never
+  captures the owner's screen.
+
+### Acceptance criteria
+- A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp 1.5.0: the smallest box for a
+  click, a click outside every box cancelled; notify-send's output ending before it does, under its own name in /proc):
+  every display for the screen, the focused one first; a drag, a click on a window, on a window behind a larger one in
+  front (opened without the focus), with the pointer unread or gone from slurp's box, with a hand that moved a pixel, on a
+  pinned Picture-in-Picture window over the focused one, on a fullscreen window and the windows pinned or opened over it,
+  on a display only, and outside every display, with fixtures that carry every field Hyprland gives, in its stacking
+  order; the windows then the displays as slurp's boxes, in the veil's colour; the last capture's notice closed before the
+  next, the crosshair not waiting for it, the picture waiting; SIGTERM while the notice waits; Esc and a
+  second press (only this helper's slurp); slurp's colours equal to the tokens; the names in English and French and
+  " (2)"; every name a capture can take in the next 30 s already there (a picture, a link out of the home folder, a
+  dangling link): the next free ones taken, nothing overwritten or followed; no hidden file left; the Desktop's fallbacks, and one that cannot be written (no traceback); the clipboard; the
+  notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
+  closing its notice), gdbus without notify-send (a PATH of the fakes only, so the machine's own notify-send is never
+  reached); Preview through `uwsm-app`; failures leave no file.
+- A-SC2 (L0) `tests/shell/session_services.sh`: the four bindings call `grassfield-capture`, never `omarchy-capture`.
+- A-SC3 (L2, owner) in the real session: Shift-Cmd-3 and Shift-Cmd-4 with a drag and a click on a window; the file on the
+  Desktop and in the clipboard; the notice and Preview.
+
+### Known limitations
+A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click on a window captures the window's
+own box, without Grassfield's title bar; a click on the title bar itself captures the window behind it or the display
+(8-5). Without notify-send (libnotify is optional), the last capture's notice is not closed before the next. While the crosshair shows, slurp outlines the smallest box under the pointer,
+which can be a window behind a larger one; the picture is the window drawn on top under the pointer, as Hyprland draws them. The notification settings list the helper under its translated
+name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
+the toolbar's options are the later chantier's.

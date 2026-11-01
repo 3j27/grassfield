@@ -8,7 +8,9 @@
 #  1 refusals: wrong arguments, standard output a terminal (exit 2, nothing asked)
 #  2 the shell's sheet gets a password prompt from the helper: the requester the bridge resolves ("disk" for the installed
 #    /usr/lib/grassfield/grassfield-askpass, else "unidentified" with the path of the binary run), the helper's text with
-#    the disk's name flattened (a line feed and a direction override in it); while it waits the helper allows no core file
+#    the disk's name flattened (a line feed and a direction override in it); while it waits the helper allows no core file;
+#    the installed helper run in a user and mount namespace of its own (as udiskie's unit runs it, PrivateUsers=self) is
+#    still "disk" (decision 9-26, amended; SKIP for a development build or without unprivileged user namespaces)
 #  3 the passphrase the shell answers is written once, followed by a newline, nothing else, exit 0 (what udiskie reads)
 #  4 Cancel: exit 1, nothing written; the shell going away: exit 1, nothing written
 #  5 French: the helper's text in French with the French catalog (a development run's catalog directory)
@@ -153,6 +155,22 @@ ${rlo}gnp.exe"
   check bash -c '[[ $(cat "$1") == 0 ]] && printf "luks pass 1\n" | cmp -s - "$2"' _ "$d/a1.rc" "$d/a1.out"
   desc="...and never to standard error"
   check bash -c '! grep -q "luks pass" "$1"' _ "$d/a1.err"
+  # In a user unit, ProtectSystem=, ProtectHome= and PrivateTmp= make systemd set up a user namespace that maps the user
+  # only (PrivateUsers=self), then a mount namespace (decision 9-26, amended); unshare makes the same two.
+  local ns=(unshare --user --mount --map-user="$(id -u)" --map-group="$(id -g)" --)
+  if [[ $expected_role == disk ]] && "${ns[@]}" true 2>/dev/null; then
+    n=$(prompts s)
+    ask a6 /dev/sdz6 "${ns[@]}"
+    wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $2 ]]' _ "$d/s.shell" "$n"
+    desc="the installed helper in a user and mount namespace of its own (udiskie's sandbox) is still \"disk\", on someone's behalf"
+    check test "$(last_prompt s '"|".join(str(x) for x in (r["role"], r["onBehalf"], r["path"]))')" = "disk|True|$expected_path"
+    say s "answer last cancel"
+    wait_until 10 test -s "$d/a6.rc"
+  elif [[ $expected_role == disk ]]; then
+    echo "SKIP: askpass in namespaces of its own: no unprivileged user and mount namespace here"
+  else
+    echo "SKIP: askpass in namespaces of its own: a development build (only the installed helper is \"disk\")"
+  fi
 
   # --- 4 cancel, the shell gone ----------------------------------------------------------------------------------------
   n=$(prompts s)

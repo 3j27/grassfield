@@ -35,9 +35,12 @@ FocusScope {
         canSplit: Compositor.canSplit,
         splitBlocked: Compositor.splitBlocked,
         splittable: Popups.data.splittable === true,
+        fit: Popups.data.fit !== undefined ? Popups.data.fit : WindowTiling.noFit(),
         outputClass: Compositor.outputClassOf(Popups.screenName),
         fullscreen: root.fullscreen,
         inSplit: root.inSplit,
+        canSplitRows: Compositor.canSplitRows,
+        splitPair: root.toplevel ? Compositor.splitPair(root.toplevel) : false,
         outputs: Compositor.otherOutputs(root.toplevel)
     })
     // The Layouts section in rows of this many layouts, as the glyph sections.
@@ -47,13 +50,18 @@ FocusScope {
     readonly property var entries: {
         const out = [];
         root.content.sections.forEach((section, s) => section.items.forEach((item, c) => out.push({key: "s" + s + ":" + c, line: "s" + s, column: c, enabled: item.enabled !== false, item: item})));
-        root.content.layouts.forEach((layout, l) => layout.zones.forEach((zone, z) => out.push({
+        // A zone the window does not fit (ADR-0036 D69: the layout's disabledZones) is shown unavailable, as macOS greys a tile it
+        // cannot make.
+        root.content.layouts.forEach((layout, l) => layout.zones.forEach((zone, z) => {
+                    const zoneEnabled = layout.enabled !== false && (layout.disabledZones || []).indexOf(z) < 0;
+                    out.push({
                         key: "l" + l + ":" + z,
                         line: "l" + Math.floor(l / root.layoutColumns),
                         column: l % root.layoutColumns + z / 10,
-                        enabled: layout.enabled !== false,
-                        item: {id: "zone", layout: layout.id, zone: z, enabled: layout.enabled !== false}
-                    })));
+                        enabled: zoneEnabled,
+                        item: {id: "zone", layout: layout.id, zone: z, enabled: zoneEnabled}
+                    });
+                }));
         root.content.rows.forEach((item, r) => out.push({key: "r" + r, line: "r" + r, column: 0, enabled: item.enabled !== false, item: item}));
         return out;
     }
@@ -159,6 +167,12 @@ FocusScope {
         case "exitSplit":
             Compositor.unsplit(window);
             break;
+        case "splitFullscreen":
+            Compositor.unsplit(window, "fullscreen");
+            break;
+        case "splitReplace":
+            Compositor.unsplit(window, "replace");
+            break;
         case "moveToOutput":
             Compositor.moveToOutput(window, item.output);
             break;
@@ -235,9 +249,11 @@ FocusScope {
         const digit = root.content.layouts.length > 0 ? TilingNav.digitOf(event.key, event.nativeScanCode) : 0;
         if (digit > 0) {
             const pick = TilingNav.numberPick(root.content.layouts, root.pickedLayout, digit);
-            if (pick.zone >= 0)
-                root.run({id: "zone", layout: root.content.layouts[pick.picked].id, zone: pick.zone, enabled: true});
-            else
+            if (pick.zone >= 0) {
+                const picked = root.content.layouts[pick.picked];
+                // A zone the window does not fit stays unavailable from the keyboard too (ADR-0036 D69): run() ignores it.
+                root.run({id: "zone", layout: picked.id, zone: pick.zone, enabled: (picked.disabledZones || []).indexOf(pick.zone) < 0});
+            } else
                 root.pickedLayout = pick.picked;
             event.accepted = true;
             return;
@@ -435,6 +451,7 @@ FocusScope {
                             own: root.pickedLayout === layoutCell.index || layoutCell.zoneHere < 0 ? layoutCell.modelData.zones.length : layoutCell.zoneHere
                             numbered: root.pickedLayout === layoutCell.index
                             interactive: layoutCell.enabledHere
+                            disabledZones: layoutCell.modelData.disabledZones || []
                             zoneNames: layoutCell.modelData.zones.map((z, i) => qsTr("%1, zone %2 of %3").arg(layoutCell.modelData.text).arg(i + 1).arg(layoutCell.modelData.zones.length))
                             color: layoutCell.enabledHere ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Tokens.materialDisabledOpacity)
                             onZoneHovered: zone => {
@@ -443,7 +460,10 @@ FocusScope {
                                 else if (layoutCell.zoneHere >= 0)
                                     root.current = -1;
                             }
-                            onZoneClicked: zone => root.run({id: "zone", layout: layoutCell.modelData.id, zone: zone, enabled: true})
+                            onZoneClicked: zone => {
+                                if ((layoutCell.modelData.disabledZones || []).indexOf(zone) < 0)
+                                    root.run({id: "zone", layout: layoutCell.modelData.id, zone: zone, enabled: true});
+                            }
                         }
                     }
                 }

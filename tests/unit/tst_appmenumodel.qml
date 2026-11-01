@@ -257,6 +257,50 @@ TestCase {
         compare(model.tilingPopover({alt: true, tileable: true, canArrange: true, canLayouts: true, outputClass: "small", fullscreen: false, outputs: []}).layouts.length, 4);
     }
 
+    // ADR-0036 D69 (capture defect: Quarters at 1440 x 900 with Settings): the popover greys, never hides, the places, the
+    // arrangements and the Layouts zones the window does not fit; Fill and Center stay; a layout none of whose zones fits is
+    // greyed whole.
+    function test_tilingPopoverGreysWhatTheWindowDoesNotFit() {
+        const fit = {zones: ["0,0,6,6", "6,0,6,6", "0,6,6,6", "6,6,6,6", "0,0,12,6", "0,6,12,6"], places: ["top-left", "top-right", "bottom-left", "bottom-right", "top", "bottom"]};
+        const p = alt => model.tilingPopover({alt: alt, tileable: true, canArrange: true, canLayouts: true, outputClass: "small", fullscreen: false, outputs: [], fit: fit});
+        const plain = p(false);
+        compare(plain.sections[0].items.map(i => i.place + ":" + i.enabled).join(","), "left:true,right:true,top:false,bottom:false", "the halves it does not fit greyed");
+        compare(plain.sections[1].items.map(i => (i.place || i.layout) + ":" + i.enabled).join(","), "fill:true,left-right:true,left-quarters:true,quarters:false",
+                "Quarters greyed: its first zone, the window's own, is a quarter; Left & Quarters keeps the half for it");
+        const alt = p(true);
+        verify(alt.sections[0].items.every(i => !i.enabled), "every quarter greyed, still shown");
+        compare(alt.sections[0].items.length, 4);
+        verify(alt.sections[1].items[0].enabled, "Center stays");
+        const layouts = plain.layouts;
+        compare(layouts.map(l => l.id + ":" + l.enabled + ":" + l.disabledZones.join("+")).join(","), "left-right:true:,wide-left:true:,left-quarters:true:1+2,quarters:false:0+1+2+3",
+                "the zones it does not fit; a layout with none it fits greyed whole");
+        // Nothing known (an older plugin): nothing greyed.
+        const free = model.tilingPopover({alt: false, tileable: true, canArrange: true, canLayouts: true, outputClass: "small", fullscreen: false, outputs: []});
+        verify(free.sections.every(s => s.items.every(i => i.enabled)));
+        verify(free.layouts.every(l => l.enabled && l.disabledZones.length === 0));
+    }
+
+    // D69: the Window menu greys the Halves, Quarters and Arrange items the window does not fit, with their keys (the plugin
+    // refuses those keys); a place beside a neighbour (the places list) apart from its zone (an arrangement's).
+    function test_windowMenuGreysWhatTheWindowDoesNotFit() {
+        const fit = {zones: ["0,0,6,6", "6,0,6,6", "0,6,6,6", "6,6,6,6"], places: ["top-left", "top-right", "bottom-left", "bottom-right", "left"]};
+        const items = model.windowMenu(ctx({canTile: true, canArrange: true, fit: fit}));
+        const sub = items.find(i => i.id === "moveResize").submenu;
+        const state = place => sub.find(i => i.place === place).enabled;
+        verify(!state("left"), "Left beside a neighbour does not fit");
+        verify(state("right") && state("top") && state("bottom"));
+        verify(["top-left", "top-right", "bottom-left", "bottom-right"].every(q => !state(q)), "the quarters greyed, still listed");
+        const arrange = layout => sub.find(i => i.layout === layout);
+        verify(arrange("left-right").enabled, "Left & Right: its half zone fits");
+        verify(!arrange("quarters").enabled, "Quarters greyed");
+        verify(arrange("left-right").alternate.enabled, "Left & Quarters keeps the half for the window");
+        verify(arrange("top-bottom").enabled);
+        verify(items.find(i => i.id === "tile" && i.place === "fill").enabled, "Fill stays");
+        verify(items.find(i => i.id === "tile" && i.place === "center").enabled, "Center stays");
+        compare(arrange("quarters").shortcut, model.windowMenu(ctx({canTile: true, canArrange: true})).find(i => i.id === "moveResize").submenu.find(i => i.layout === "quarters").shortcut,
+                "a greyed item keeps its key shown");
+    }
+
     // TL33 (step 6a): with the plugin's tiling-split the Full Screen row is the submenu Entire Screen, Left of Screen, Right of
     // Screen; the halves greyed for a window that cannot be tiled now; on a Split View Desktop only Exit Full Screen, which
     // sends the window back (exitSplit).
@@ -338,6 +382,32 @@ TestCase {
         verify(model.windowMenu(ctx({canTile: true, canSplit: true})).find(i => i.id === "minimize").enabled, "elsewhere Minimize stays");
         verify(!model.windowMenu(ctx({canTile: true, fullscreen: true})).find(i => i.id === "minimize").enabled, "D61: not minimized in full screen either");
         verify(!model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, focusedWindow: null})).find(i => i.id === "exitSplit").enabled);
+    }
+
+    // Step 6d (ADR-0036 D71): with the plugin's tiling-split-rows, a Split View window's popover offers the macOS rows, and the
+    // Window menu adds Make Window Full Screen and Replace Tiled Window after Exit Full Screen; Replace only while the other half
+    // holds a window. Without the feature, Exit Full Screen alone as before.
+    function test_splitViewRows() {
+        const pop = c => model.tilingPopover(Object.assign({alt: false, tileable: true, canArrange: true, canSplit: true, fullscreen: false, inSplit: true, outputs: []}, c));
+        const rows = pop({canSplitRows: true, splitPair: true}).rows;
+        compare(rows.map(i => i.id + ":" + i.text).join(","), "exitSplit:Move Window to Desktop,splitFullscreen:Make Window Full Screen,splitReplace:Replace Tiled Window");
+        verify(rows.every(i => i.enabled), "two windows: every row");
+        const lone = pop({canSplitRows: true, splitPair: false}).rows;
+        compare(lone.map(i => i.enabled).join(","), "true,true,false", "one window: nothing to keep, Replace greyed");
+        compare(pop({canSplitRows: false, splitPair: true}).rows.map(i => i.id + ":" + i.text).join(","), "exitSplit:Exit Full Screen", "without the feature: as before");
+        compare(pop({canSplitRows: true, splitPair: true, inSplit: false, fullscreen: true}).rows.map(i => i.id).join(","), "fullscreen", "in full screen: Exit Full Screen only");
+        verify(pop({canSplitRows: true, splitPair: true}).rows.every(i => i.glyph && i.glyph.own === -1 && i.glyph.zones.length === 0), "rows without a glyph");
+        const menu = model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, canSplitRows: true, splitPair: true}));
+        const all = ids(menu);
+        compare(all.slice(all.indexOf("exitSplit"), all.indexOf("exitSplit") + 3).join(","), "exitSplit,splitFullscreen,splitReplace");
+        compare(menu.find(i => i.id === "splitFullscreen").text, "Make Window Full Screen");
+        compare(menu.find(i => i.id === "splitReplace").text, "Replace Tiled Window");
+        verify(menu.find(i => i.id === "splitFullscreen").enabled && menu.find(i => i.id === "splitReplace").enabled);
+        verify(!model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, canSplitRows: true, splitPair: false})).find(i => i.id === "splitReplace").enabled, "one window: Replace greyed");
+        const away = model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, canSplitRows: true, splitPair: true, focusedWindow: null}));
+        verify(!away.find(i => i.id === "splitFullscreen").enabled && !away.find(i => i.id === "splitReplace").enabled, "no window: greyed");
+        compare(ids(model.windowMenu(ctx({canTile: true, canSplit: true, inSplit: true, splitPair: true}))).indexOf("splitReplace"), -1, "without the feature: no rows");
+        compare(ids(model.windowMenu(ctx({canTile: true, canSplit: true, canSplitRows: true, splitPair: true}))).indexOf("splitFullscreen"), -1, "not on a Split View Desktop: no rows");
     }
 
     function test_windowCommandsAreGreyWhenTheAppIsNamedFromStagesOnly() {

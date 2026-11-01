@@ -41,6 +41,8 @@ a154bb5fd33ad3288be4783557887a7207176e9d05bc72585c30e27fea8e3e7b bin/omarchy-sna
 dae1379216754e372f749ce4a4f3232b20225d08e2d0784d7607bba113ebbc62 bin/omarchy-update-system-pkgs-when-conflicted packaging/pacman/grassfield-update-helper
 aa56714de498170cf9460923dc1047dd89dcc3b08e21809ad2d764ebd1553fed bin/omarchy-update-pacman-guard packaging/pacman/grassfield-update-helper
 d72930596e608ef47004fbf444b2088b5b9a3bf94e4fdfa26b2507eadcedad99 bin/omarchy-update-analyze-logs packaging/pacman/grassfield-update-helper
+# Step 5 (SU-M2, ADR-0033 s5): grassfield-update-helper's GU_MIGRATE_LOOP copies omarchy-migrate's run loop (the same in
+# v4.0.4 and v4.0.6), restricted to an update's own migrations by name: a change of that loop is ported or rejected there.
 0c14cb7853174d5289172496e22c1bd444b20c00c1aefd589e1faa3ae6941abe bin/omarchy-migrate packaging/pacman/grassfield-update-helper,packaging/bin/grassfield-update-run
 edc8148e37bf0b43957f59f8aba7d3c6bfaf8b40d43f0199ba7bf05ae5c908a5 bin/omarchy-update-mise packaging/bin/grassfield-update-run
 fa72062dc1aedb99f4e33fcbde98a2d21b7d3ff058fb8148080396c23bcd740d bin/omarchy-update-aur-pkgs packaging/bin/grassfield-update-run

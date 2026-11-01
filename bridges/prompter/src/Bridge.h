@@ -69,6 +69,7 @@ namespace gf::prompter {
             int              btTimeoutMs = bt::kAnswerTimeoutMs;
             // gnome-keyring's keyrings directory, where the KIO server reads whether a keyring has a password (step 9e).
             QString keyringDirectory;
+            int     kioStoreTimeoutMs = 0; // how long a keychain store holds its place (0: KioServer::kStoreTimeoutMs)
         };
 
         Bridge(GDBusConnection* bus, Options options);

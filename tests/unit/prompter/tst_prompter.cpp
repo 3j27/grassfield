@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <memory>
 #include <string>
+#include <vector>
 #include <sys/socket.h>
 #include <sched.h>
 #include <sys/mman.h>
@@ -587,6 +588,36 @@ TEST(PrompterAskpass, WritesEverythingOrFails) {
     ::close(fds[1]);
 }
 
+// The integrator's review of PR #95: every line the shell sent is wiped once handled, before the next one is, and so are
+// the bytes the incomplete rest leaves behind when it moves to the start.
+TEST(PrompterProtocol, LinesAreHandledThenWiped) {
+    std::string       buffer = "{\"a\":\"one\"}\n{\"b\":\"two\"}\nrest";
+    std::string       copy   = buffer;
+    std::vector<std::string> seen;
+    bool              earlierWiped = true;
+    const std::size_t left = takeLines(buffer.data(), buffer.size(), [&](std::string_view line) {
+        for (const char* p = buffer.data(); p < line.data(); ++p)
+            earlierWiped = earlierWiped && *p == '\0';
+        seen.emplace_back(line);
+        return true;
+    });
+    EXPECT_EQ(seen, (std::vector<std::string>{"{\"a\":\"one\"}", "{\"b\":\"two\"}"}));
+    EXPECT_TRUE(earlierWiped) << "a handled line stays in the buffer while the next one is handled";
+    ASSERT_EQ(left, 4u);
+    EXPECT_EQ(buffer.substr(0, 4), "rest");
+    EXPECT_EQ(buffer.substr(4), std::string(copy.size() - 4, '\0')) << "the handled lines and the moved bytes are wiped";
+    // No complete line: nothing handled, nothing moved.
+    std::string partial = "{\"half";
+    EXPECT_EQ(takeLines(partial.data(), partial.size(), [](std::string_view) { return true; }), partial.size());
+    EXPECT_EQ(partial, "{\"half");
+    // A handler that drops the connection: nothing more is handled, moved or wiped (the dropper wiped the buffer).
+    std::string dropped = "x\ny\nz";
+    int         calls   = 0;
+    EXPECT_EQ(takeLines(dropped.data(), dropped.size(), [&](std::string_view) { return ++calls < 1; }), 0u);
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(dropped, "x\ny\nz");
+}
+
 // --- the bound ---------------------------------------------------------------------------------------------------------
 
 TEST(PrompterRequests, AtMostEightAndIdsNeverReused) {
@@ -944,8 +975,14 @@ TEST_F(PrompterTrust, EntriesThatDoNotCount) {
 
 TEST(PrompterIdentityList, KiosWorkerIsTheKioRole) {
     bool found = false;
-    for (const KnownCaller& k : knownCallers())
-        found = found || (k.path == QStringLiteral("/usr/lib/kf6/kioworker") && k.role == QStringLiteral("kio"));
+    for (const KnownCaller& k : knownCallers()) {
+        found = found || (k.path == QStringLiteral("/usr/lib/kf6/kioworker") && k.role == QStringLiteral("kio") && k.trustedCodeOnly);
+        // The other known callers keep their role with extra code (decision 9-14); only the worker, which loads a plugin
+        // from any path, needs trusted code (the security review of step 9e, MINOR-2).
+        if (k.role != QStringLiteral("kio")) {
+            EXPECT_FALSE(k.trustedCodeOnly) << k.path.toStdString();
+        }
+    }
     EXPECT_TRUE(found);
 }
 
@@ -963,6 +1000,24 @@ TEST_F(PrompterTrust, KnownCallersAskOnSomeoneElsesBehalf) {
     EXPECT_TRUE(keyring.identified);
     EXPECT_TRUE(keyring.onBehalf);
     EXPECT_TRUE(keyring.name.isEmpty()); // the shell names the role in its own words
+    // In namespaces of its own, a known program is not named (the integrator's review of PR #95, NIT)...
+    ExeFacts elsewhere       = facts(bin(QStringLiteral("keyringd")));
+    elsewhere.sameNamespaces = false;
+    EXPECT_EQ(requesterFor(elsewhere, where()).role, QStringLiteral("unidentified"));
+    // ...save the disk helper, which udiskie's unit runs in namespaces of its own (decision 9-26, amended); its path, its
+    // file by device and inode and the trace check still hold.
+    Where diskWhere = where();
+    diskWhere.known = {{bin(QStringLiteral("keyringd")), QStringLiteral("disk")}};
+    const RequesterView disk = requesterFor(elsewhere, diskWhere);
+    EXPECT_EQ(disk.role, QStringLiteral("disk"));
+    EXPECT_TRUE(disk.identified);
+    EXPECT_TRUE(disk.onBehalf);
+    ExeFacts otherFile = elsewhere;
+    otherFile.file     = fileIdOf(bin(QStringLiteral("editor"))); // the path names another file than the one it runs
+    EXPECT_EQ(requesterFor(otherFile, diskWhere).role, QStringLiteral("unidentified"));
+    ExeFacts traced = elsewhere;
+    traced.traced   = true;
+    EXPECT_EQ(requesterFor(traced, diskWhere).role, QStringLiteral("unidentified"));
 }
 
 TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
@@ -1009,6 +1064,40 @@ TEST_F(PrompterTrust, AnAppsNameNeedsOnlyTrustedCodeInItsProcess) {
     ExeFacts keyringPlugins = facts(bin(QStringLiteral("keyringd")));
     keyringPlugins.code.append(CodeMapping{QStringLiteral("/home/u/.local/lib/evil.so"), 0, 1, 7});
     EXPECT_EQ(requesterFor(keyringPlugins, where()).role, QStringLiteral("keyring"));
+}
+
+// KIO's worker loads whatever plugin its command line names, from any path (KIO 6.31.0 kioworker.cpp:49-65): its row is
+// lent only while every file it maps executable is trusted (the security review of step 9e, MINOR-2).
+TEST_F(PrompterTrust, KiosWorkerRowNeedsOnlyTrustedCode) {
+    writeFile(bin(QStringLiteral("worker")), "#!/bin/sh\n", 0755);
+    writeFile(m_top + QStringLiteral("/usr/bin/kio_ftp.so"), "\x7f" "ELF", 0644);
+    const CodeMapping plugin = fileMapping(m_top + QStringLiteral("/usr/bin/kio_ftp.so"), selfMountDevices());
+    ASSERT_NE(plugin.inode, 0u);
+    Where w = where();
+    w.known.append(KnownCaller{bin(QStringLiteral("worker")), QStringLiteral("kio"), true});
+    ExeFacts worker = facts(bin(QStringLiteral("worker")));
+    worker.code.append(plugin);
+    const RequesterView kio = requesterFor(worker, w);
+    EXPECT_EQ(kio.role, QStringLiteral("kio"));
+    EXPECT_TRUE(kio.identified);
+    EXPECT_TRUE(kio.onBehalf);
+    // A plugin from the user's files, a replaced one, other namespaces, mappings not read: an unidentified program, the
+    // worker's executable named.
+    ExeFacts foreign = worker;
+    foreign.code.append(CodeMapping{QStringLiteral("/home/u/evil.so"), plugin.major, plugin.minor, plugin.inode});
+    const RequesterView borrowed = requesterFor(foreign, w);
+    EXPECT_EQ(borrowed.role, QStringLiteral("unidentified"));
+    EXPECT_FALSE(borrowed.identified);
+    EXPECT_EQ(borrowed.path, bin(QStringLiteral("worker")));
+    ExeFacts replaced = worker;
+    replaced.code.last().inode += 1;
+    EXPECT_EQ(requesterFor(replaced, w).role, QStringLiteral("unidentified"));
+    ExeFacts elsewhere       = worker;
+    elsewhere.sameNamespaces = false;
+    EXPECT_EQ(requesterFor(elsewhere, w).role, QStringLiteral("unidentified"));
+    ExeFacts unread  = worker;
+    unread.codeKnown = false;
+    EXPECT_EQ(requesterFor(unread, w).role, QStringLiteral("unidentified"));
 }
 
 TEST(PrompterIdentity, MapsAndStatusParsing) {
@@ -1171,6 +1260,118 @@ TEST(PrompterIdentity, AFileBindMountedOverATrustedPathInAnotherNamespaceIsSeen)
         }
     }
     EXPECT_TRUE(seen) << "the bind-mounted file was not found among the child's mappings";
+}
+
+// The integrator's review of PR #95 (NIT): a known caller is named only in the bridge's own mount and user namespaces, as
+// an app: a real child in namespaces of its own running a known program reads as unidentified.
+TEST(PrompterIdentity, AKnownCallerInNamespacesOfItsOwnIsUnidentifiedSaveTheDiskHelper) {
+    if (!rootOwnsSystemFiles())
+        GTEST_SKIP() << "/usr/bin is not root's here";
+    int ready[2];
+    ASSERT_EQ(::pipe2(ready, O_CLOEXEC), 0);
+    const uid_t uid   = ::getuid();
+    const gid_t gid   = ::getgid();
+    const pid_t child = ::fork();
+    if (child == 0) {
+        ::close(ready[0]);
+        auto put = [](const char* path, const std::string& text) {
+            const int  f  = ::open(path, O_WRONLY);
+            const bool ok = f >= 0 && ::write(f, text.data(), text.size()) == static_cast<ssize_t>(text.size());
+            if (f >= 0)
+                ::close(f);
+            return ok;
+        };
+        if (::unshare(CLONE_NEWUSER | CLONE_NEWNS) != 0 || !put("/proc/self/setgroups", "deny")
+            || !put("/proc/self/uid_map", "0 " + std::to_string(uid) + " 1") || !put("/proc/self/gid_map", "0 " + std::to_string(gid) + " 1"))
+            ::_exit(3);
+        (void)!::write(ready[1], "r", 1); // the pipe closes at the exec (O_CLOEXEC)
+        ::execl("/usr/bin/sleep", "sleep", "5", static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    ASSERT_GT(child, 0);
+    ::close(ready[1]);
+    char       byte = 0;
+    const bool up   = ::read(ready[0], &byte, 1) == 1;
+    ::close(ready[0]);
+    if (!up) {
+        int status = 0;
+        ::waitpid(child, &status, 0);
+        GTEST_SKIP() << "no user and mount namespace here (child exit " << WEXITSTATUS(status) << ")";
+    }
+    const int pidfd = pidfdOpen(child);
+    ASSERT_GE(pidfd, 0);
+    ExeFacts facts;
+    for (int i = 0; i < 300 && facts.path != QLatin1String("/usr/bin/sleep"); ++i) {
+        facts = exeFactsOfPidfd(pidfd);
+        ::usleep(10000);
+    }
+    ::close(pidfd);
+    ::kill(child, SIGKILL);
+    ::waitpid(child, nullptr, 0);
+    ASSERT_EQ(facts.path, QStringLiteral("/usr/bin/sleep"));
+    EXPECT_TRUE(facts.alive);
+    EXPECT_FALSE(facts.sameNamespaces);
+    facts.sameUser = true;
+    facts.traced   = false; // whatever the child's status said: only the namespaces differ
+    Where w;
+    w.applications = QStringLiteral("/nonexistent");
+    w.known        = {{QStringLiteral("/usr/bin/sleep"), QStringLiteral("keyring")}};
+    const RequesterView r = requesterFor(facts, w);
+    EXPECT_EQ(r.role, QStringLiteral("unidentified"));
+    EXPECT_EQ(r.path, QStringLiteral("/usr/bin/sleep"));
+    // The disk helper is named there all the same (decision 9-26, amended: udiskie's unit runs it in namespaces of its own).
+    Where disk = w;
+    disk.known = {{QStringLiteral("/usr/bin/sleep"), QStringLiteral("disk")}};
+    const RequesterView d = requesterFor(facts, disk);
+    EXPECT_EQ(d.role, QStringLiteral("disk"));
+    EXPECT_TRUE(d.identified);
+    EXPECT_TRUE(d.onBehalf);
+    facts.sameNamespaces = true;
+    EXPECT_EQ(requesterFor(facts, w).role, QStringLiteral("keyring")) << "the same facts in the bridge's namespaces";
+}
+
+// The integrator's review of PR #95: a process that ends after the reads and before the pidfd is checked again reads as
+// unidentified (its PID may already be another process's), whatever the reads found.
+TEST(PrompterIdentity, AProcessThatEndsBeforeTheRecheckIsForgotten) {
+    const pid_t child = ::fork();
+    if (child == 0) {
+        ::execl("/usr/bin/sleep", "sleep", "5", static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    ASSERT_GT(child, 0);
+    const int pidfd = pidfdOpen(child);
+    if (pidfd < 0) {
+        ::kill(child, SIGKILL);
+        ::waitpid(child, nullptr, 0);
+        GTEST_SKIP() << "no pidfd_open on this kernel";
+    }
+    ExeFacts before;
+    for (int i = 0; i < 300 && before.path != QLatin1String("/usr/bin/sleep"); ++i) {
+        before = exeFactsOfPidfd(pidfd);
+        ::usleep(10000);
+    }
+    ASSERT_EQ(before.path, QStringLiteral("/usr/bin/sleep"));
+    ASSERT_TRUE(before.alive);
+    bool           ended = false;
+    const ExeFacts after = exeFactsOfPidfd(pidfd, true, [&] {
+        ::kill(child, SIGKILL);
+        ::waitpid(child, nullptr, 0);
+        ended = true;
+    });
+    ::close(pidfd);
+    ASSERT_TRUE(ended);
+    EXPECT_FALSE(after.alive);
+    EXPECT_TRUE(after.path.isEmpty());
+    EXPECT_FALSE(after.file.valid);
+    EXPECT_TRUE(after.code.isEmpty());
+    EXPECT_FALSE(after.codeKnown);
+    EXPECT_FALSE(after.sameNamespaces);
+    EXPECT_TRUE(after.traced);
+    ExeFacts asKnown = after;
+    asKnown.sameUser = true;
+    Where w;
+    w.known = {{QStringLiteral("/usr/bin/sleep"), QStringLiteral("gnupg")}};
+    EXPECT_EQ(requesterFor(asKnown, w).role, QStringLiteral("unidentified"));
 }
 
 TEST(PrompterIdentity, ProcessesThroughTheirPidfd) {

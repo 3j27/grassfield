@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace gf::tiler {
 
@@ -92,9 +93,25 @@ namespace gf::tiler {
     // nested pass of 85c2c10); the reply's "fixed" lists it.
     bool fixedSize(const PHLWINDOW& w);
 
+    // hl.plugin.grassfield.window_size(mode), the Full Screen and Zoom keys (core sizeKeyActs): whether Hyprland's own
+    // fullscreen dispatcher in that mode may act on the focused window now. False for a window of fixed size that is not
+    // in that mode (the Window menu greys Enter Full Screen and Zoom for it); true with no focused window (Hyprland's
+    // dispatcher then does nothing itself).
+    bool sizeKeyActs(tiling::SizeMode mode);
+
     // `w` can be tiled now and fits either half of its output's Split View (TL33, TL8): the tile-hover event's "splittable" (the
     // popover greys Left and Right of Screen otherwise; split refuses it).
     bool splittable(const PHLWINDOW& w);
+
+    // The zones (core zoneName) `w` does not fit on its output's Desktop (core unfitZones, ADR-0036 D69): the tile-hover
+    // event's "unfitZones" (the popover greys those places, arrangements and Layouts zones; tile, arrange and a drag's preview
+    // refuse them). Empty for a window on no output.
+    std::vector<std::string> unfitZones(const PHLWINDOW& w);
+
+    // The places (core nameOf) `w` does not fit on its output's Desktop, each on the frame tile() would give it (core
+    // unfitPlaces over placeStartFrame: a half beside a tiled neighbour is the rest beside it, TL7): the tile-hover event's
+    // "unfitPlaces" (the popover and the Window menu grey those places). Empty for a window on no output.
+    std::vector<std::string> unfitPlaces(const PHLWINDOW& w);
 
     // hl.plugin.grassfield.move_to(address, output) (TL23, TL26): `w` onto another output: a tiled window into the same place,
     // zone or sides there, any other at the same relative place (core moveToArea); it takes that output's Desktop. Untrusted:
@@ -124,7 +141,12 @@ namespace gf::tiler {
     // its home Desktop, shown: into its tile there from before the split when that zone is still free, else at its box from
     // before tiling; the other member fills the Split View Desktop alone, and one left without a member ends. Refused while
     // locked (reason "locked") and for a window that is no member of a Split View Desktop ("invalid").
-    void unsplitRequest(std::string_view address);
+    // Step 6d (ADR-0036 D71), `how` (core unsplitHow; empty is "desktop"): "fullscreen" (Make Window Full Screen) puts it in
+    // full screen on that Desktop once there; "replace" (Replace Tiled Window) moves it there without showing it: the Split
+    // View Desktop stays shown, its other member keeps its half and waits again, the suggestion offering the windows of that
+    // Desktop but the one replaced (none: the other fills alone, D43); refused ("invalid") without a second member. Any other
+    // `how`: "invalid".
+    void unsplitRequest(std::string_view address, std::string_view how = {});
 
     // `w` is a member of a Split View Desktop (one of its two windows, whatever its state; another window there is none, D52):
     // its titlebar drag does nothing (D46; step 6b swaps the two), nor do the tiling keys, Arrange or an edge double-click,
@@ -164,8 +186,9 @@ namespace gf::tiler {
     void tileRequest(std::string_view address, std::string_view place);
 
     // hl.plugin.grassfield.arrange(json) (core parseArrange): a layout of the catalogue filled with the given windows, then
-    // with the next tileable windows in stacking order (TL6). Untrusted; a refused request posts reason "invalid" (or
-    // "locked") and changes nothing.
+    // with the next tileable windows in stacking order (TL6) that fit their zone (D69: each zone takes the topmost one that
+    // fits it). A given window that does not fit its zone is refused. Untrusted; a refused request posts reason "invalid"
+    // (or "locked") and changes nothing.
     void arrangeRequest(std::string_view json);
 
     // The margins setting changed: every tiled window is placed again from its zone (TL2).

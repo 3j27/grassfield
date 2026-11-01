@@ -446,6 +446,36 @@ TestCase {
         compare(WindowTiling.splitPicker(waiting, sg("a1", 3), {address: "b2", gen: 3}), sg("a1", 3), "another window was dismissed");
     }
 
+    // Step 6d (ADR-0036 D72): the Overview takes no window onto a Split View Desktop, and no member out of one.
+    function test_dropAllowedKeepsSplitViewsWhole() {
+        const splits = [{workspace: 4, output: "DP-1", home: 1, windows: ["a1", "b2"], waiting: false}];
+        verify(WindowTiling.dropAllowed(splits, "c3", 2), "an ordinary window onto an ordinary Desktop");
+        verify(!WindowTiling.dropAllowed(splits, "c3", 4), "onto a Split View Desktop");
+        verify(!WindowTiling.dropAllowed(splits, "0xA1", 2), "a member, the address in any case");
+        verify(!WindowTiling.dropAllowed(splits, "b2", 4));
+        verify(WindowTiling.dropAllowed([], "a1", 4), "no Split View Desktop");
+        verify(WindowTiling.dropAllowed(null, "a1", 4));
+    }
+
+    // Step 6d (ADR-0036 D71): Replace Tiled Window keeps the other window; the rows' unsplit needs tiling-split-rows.
+    function test_splitPairAndUnsplitAllowed() {
+        const split = (windows) => ({workspace: 4, output: "DP-1", home: 1, windows: windows, waiting: false});
+        verify(WindowTiling.splitPair([split(["a1", "b2"])], "0xA1"), "two windows, the address in any case");
+        verify(!WindowTiling.splitPair([split(["a1"])], "a1"), "one window");
+        verify(!WindowTiling.splitPair([split(["a1", "b2"])], "c3"), "no member");
+        verify(!WindowTiling.splitPair(null, "a1"));
+        compare(WindowTiling.splitPair([split(["a1", "b2"])], ""), false, "a boolean");
+        for (const how of [undefined, "", "desktop"])
+            verify(WindowTiling.unsplitAllowed(how, false), String(how) + ": Exit Full Screen always");
+        verify(WindowTiling.unsplitAllowed("fullscreen", true));
+        verify(WindowTiling.unsplitAllowed("replace", true));
+        verify(!WindowTiling.unsplitAllowed("fullscreen", false), "a plugin before 6d would send it home");
+        verify(!WindowTiling.unsplitAllowed("replace", false));
+        verify(!WindowTiling.unsplitAllowed("replace", 1), "the feature as a boolean");
+        for (const how of ["zoom", "Replace", null, 0])
+            verify(!WindowTiling.unsplitAllowed(how, true), String(how));
+    }
+
     // Integrator re-review of 29db357, MAJOR 1: a notice names no window; within an earlier ask's deadline (6 s, D68) a new
     // Split View's notice was taken as that ask's answer and its picker never showed.
     function test_answersAskedIsTheAwaitedSuggestionOnly() {
@@ -487,6 +517,57 @@ TestCase {
         verify(WindowTiling.fitsHalf(["a1"], "b2"), "not listed: it fits");
         verify(WindowTiling.fitsHalf(null, "a1"), "not known: it fits (the plugin still refuses)");
         verify(WindowTiling.fitsHalf(["a1"], ""), "no window");
+    }
+
+    // ADR-0036 D69 (capture defect of 2026-10-30): the tile-hover event carries the zones and the places the window does not
+    // fit; the popover greys them. An older plugin, leave, and any malformed list give nothing greyed.
+    function test_parseHoverReadsWhatTheWindowDoesNotFit() {
+        const open = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"tileable":true,'
+            + '"unfitZones":["0,0,6,6","6,0,6,6",7,""],"unfitPlaces":["top-left","left",null]}');
+        compare(JSON.stringify(open.fit), JSON.stringify({zones: ["0,0,6,6", "6,0,6,6"], places: ["top-left", "left"]}), "strings only");
+        const older = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"enter","x":0,"y":0,"w":14,"h":14,"tileable":true}');
+        compare(JSON.stringify(older.fit), JSON.stringify({zones: [], places: []}), "an older plugin: everything offered");
+        const leave = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"leave","unfitZones":["0,0,6,6"]}');
+        compare(JSON.stringify(leave.fit), JSON.stringify({zones: [], places: []}), "leave carries nothing");
+        const odd = WindowTiling.parseHover('{"v":"gfc/1","type":"tile-hover","address":"1","state":"open","x":0,"y":0,"w":14,"h":14,"unfitZones":"0,0,6,6","unfitPlaces":{"a":1}}');
+        compare(JSON.stringify(odd.fit), JSON.stringify({zones: [], places: []}), "not lists");
+        const many = [];
+        for (let i = 0; i < 100; ++i)
+            many.push("0,0," + i + ",6");
+        compare(WindowTiling.fitNames(many).length, WindowTiling.kMaxFitNames, "bounded");
+        compare(WindowTiling.fitNames(["x".repeat(WindowTiling.kMaxFitName + 1), "left"]).join(), "left", "an overlong name left out");
+    }
+
+    // D69: a place is greyed by the places list, an arrangement or a Layouts zone by the zones list (by its twelfths, as the
+    // glyph tokens hold them); Fill and Center are always offered; nothing known: everything offered.
+    function test_placesAndZonesFit() {
+        const fit = {zones: ["0,0,6,6", "0,0,12,6"], places: ["top-left", "left"]};
+        compare(WindowTiling.zoneKey([6, 0, 6, 12]), "6,0,6,12");
+        compare(WindowTiling.zoneKey("0,0,6,6"), "", "not a zone");
+        verify(!WindowTiling.placeFits(fit, "top-left"));
+        verify(!WindowTiling.placeFits(fit, "left"), "a half beside a neighbour, listed apart from its zone");
+        verify(WindowTiling.placeFits(fit, "right"));
+        verify(WindowTiling.placeFits({zones: [], places: ["fill", "center"]}, "fill"), "Fill is always offered");
+        verify(WindowTiling.placeFits({zones: [], places: ["center"]}, "center"), "Center too");
+        verify(WindowTiling.placeFits(null, "top-left"), "not known: offered (the plugin still refuses)");
+        verify(!WindowTiling.zoneFits(fit, [0, 0, 6, 6]), "the quarter zone");
+        verify(WindowTiling.zoneFits(fit, [0, 0, 6, 12]), "the half zone fits although the Left place does not");
+        verify(WindowTiling.zoneFits(null, [0, 0, 6, 6]));
+        verify(WindowTiling.zoneFits(fit, null), "no zone");
+    }
+
+    // gfc1-reply: the reply's unfitZones, per window, for the Window menu.
+    function test_parseUnfitZonesReadsEachWindow() {
+        const reply = '{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"splits":[],"unfit":[],"fixed":[],'
+            + '"unfitZones":[{"address":"A1","zones":["0,0,6,6"],"places":["top-left"]},{"address":"xyz","zones":["0,0,6,6"]},7,{"address":"0xbeef","zones":"no"}],"suggestion":null}';
+        const all = WindowTiling.parseUnfitZones(reply);
+        compare(JSON.stringify(all), JSON.stringify({a1: {zones: ["0,0,6,6"], places: ["top-left"]}, beef: {zones: [], places: []}}), "a malformed entry or list left out");
+        compare(JSON.stringify(WindowTiling.fitOf(all, "0xA1")), JSON.stringify({zones: ["0,0,6,6"], places: ["top-left"]}), "any address form");
+        compare(JSON.stringify(WindowTiling.fitOf(all, "b2")), JSON.stringify({zones: [], places: []}), "not listed: it fits everything");
+        compare(JSON.stringify(WindowTiling.fitOf(null, "a1")), JSON.stringify({zones: [], places: []}), "not known");
+        compare(JSON.stringify(WindowTiling.parseUnfitZones('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"suggestion":null}')), "{}", "an older plugin lists none");
+        for (const bad of ["", "not json", "null", '{"v":"gfc/2","type":"tiling","unfitZones":[]}', '{"v":"gfc/1","type":"tile-hover","unfitZones":[]}'])
+            compare(WindowTiling.parseUnfitZones(bad), null, bad);
     }
 
     // ADR-0040 step 1b (nested pass of 85c2c10, scenario 6): the windows of fixed size, whose zoom light is disabled.
