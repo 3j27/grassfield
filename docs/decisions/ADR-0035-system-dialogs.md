@@ -1400,6 +1400,12 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   bind-mount only in namespaces of its own. What remains, in the spec's known limitations: a trusted app running code of
   the user's through its own scripting maps no untrusted file (`emacs --batch -l`, `nvim -l`, an app's plugin
   interpreter) and still gets the app's row.
+  **Amended after the integrator's review of PR #95 (NIT, hardening).** A known caller ("Keyring", "GnuPG", "SSH") is named
+  only for a process in the bridge's own mount and user namespaces, as an app: a process in namespaces of its own can make
+  a trusted path name other files there. The mapped-code check stays an app's only ((c) above). Their user units
+  (`gnome-keyring-daemon.service`, `gcr-ssh-agent.service`, `gpg-agent.service`) use no namespace option, so nothing
+  changes for them. Tests: `tst_prompter.cpp` (`KnownCallersAskOnSomeoneElsesBehalf`, and a real child in a user and mount
+  namespace of its own running a known program: unidentified); mutant `known-caller-in-any-namespace`.
 
 **Delivered in step 9b (the shell's queue and secret sheets; udiskie is 9c, the NetworkManager agent 9d, KIO's password
 server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31").
@@ -1454,6 +1460,21 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
   (an unheld confirmation answered by one stray key) by 9-23; MINOR-1 (an empty new password sent by one stray Return) by
   9-24; NIT-1 (a polkit request arriving during a linger keeps the earlier place) recorded in 9-15 and the spec's known
   limitations; NIT-2 (the shell reads whatever serves the socket path) in the spec's known limitations.
+- **The integrator's opus security review of PR #95: FAIL on gate Q1 only** (no security defect): qmllint on the owner's
+  toolchain (Qt 6.11.2, Quickshell 0.3.1) reports `signal-handler-parameters` on `PrompterClient.qml`'s `onError`
+  (`Socket.error` carries a `QLocalSocket::LocalSocketError`, a type that qmllint does not know there): the line is wrapped
+  in `qmllint disable/enable signal-handler-parameters`, as the shell's other such handlers; no other handler of the step
+  takes a C++-typed parameter. The container's Qt 6.12 does not report it (not reproduced here). Folded in, from the review of
+  PR #94 (step 9a's code, which failed closed; these paths had no test): `tests/security/prompter_bridge.sh` checks that a
+  connected shell gets no name before its hello and that a request reaching the bridge with no shell, or before the hello,
+  is answered "cancelled" at once (`prompter-client.py --prompter`); the bridge's line handling moves to `takeLines`
+  (`Protocol.h`), whose wiping of every handled line and of the bytes the rest leaves behind is unit-tested; the pidfd's
+  re-check after the reads is unit-tested through a seam (`exeFactsOfPidfd`'s `beforeRecheck`, tests only); known callers
+  now need the bridge's mount and user namespaces too (9-14 amended); `tests/fuzz/prompter_protocol.sh` fuzzes the shell's
+  side of the protocol (libFuzzer when clang++ is there, else a mutation loop under GCC's ASan and UBSan); `tests/ci/import_graph.py`
+  checks that `shell/shell.qml` alone imports `qs.security.secret`; `prompter_bridge.sh --mutants` builds and runs six
+  mutants of these guards (the name before the hello, the two wipes, the answer without a shell, the re-check, the known
+  callers' namespaces), each caught. 9-23 gains the integrator's decision on one click on OK.
 
 **Decisions of step 9b** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user).
 - **9-15. How does the polkit sheet join the one queue?** Quickshell 0.3 hands the agent one request at a time (a new one
@@ -1528,7 +1549,10 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
   the alert to answer it: no key answers a confirmation before that."), never a new mechanism; (b) would also swallow what
   the user was typing elsewhere. After the click, OK has the focus and Return answers, as on macOS. Tests: `secret_sheets.sh`
   test_19 (Space, Return and Enter with OK focused send nothing; a click within the guard gives nothing; past it Return
-  answers), test_14 amended; mutant `confirm-not-held`.
+  answers), test_14 amended; mutant `confirm-not-held`. **Decided by the integrator on 2026-11-01** (review of PR #95,
+  closest to macOS: a pairing sheet's Connect button): one click on OK, past the 500 ms guard, confirms a confirmation sheet
+  (the click both lets the alert take the keyboard and presses OK); within the guard it answers nothing. Test:
+  `secret_sheets.sh` test_21.
 - **9-24. Can a stray Return send an empty new password?** (opus review of step 9b, MINOR-1.) Question: Return in New took
   both fields at once, so one Return on an untouched New and Verify sheet answered with an empty password (gcr then stores
   passwords unencrypted). **Choice:** Return in New only moves the focus to Verify and hands nothing over

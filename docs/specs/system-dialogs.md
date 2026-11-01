@@ -424,7 +424,8 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   "Authentication required"; a fixed top row with the requester's icon and name that only the bridge fills, from the pidfd of
   `GetConnectionCredentials` (`ProcessFD` → PID → `/proc/<pid>/exe`, the pidfd checked alive after the read; trusted only when
   the executable and its parent directories are root-owned and not writable by the user, mapped only to a root-owned desktop
-  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers; anything
+  entry; "Keyring" for gnome-keyring, "GnuPG" for gpg-agent, "SSH" for gcr-ssh-agent, "Network" for KIO's workers, each only
+  for a process in the bridge's own mount and user namespaces (as an app's row: the integrator's review of PR #95); anything
   else, or no `ProcessFD`, "Unidentified program" and the path); then the caller's `title`, `message`, `description`
   as plain text, flattened and capped, in the secondary style, framed and introduced as the caller's; `warning` in red in that
   frame (step 9b, decision 9-18: under the field it read as the sheet's own error); a secure field (`password-new`: New and
@@ -602,8 +603,11 @@ Rules (fail closed: no answer is ever invented):
   the name is released), A-SC3 and A-SC3b for the requester the bridge sends (a caller that names another connection in
   its own properties, a caller that exits, an executable the user can write: `tests/unit/prompter`,
   `tests/security/prompter_bridge.sh`), the bound of 8 of A-SC2 and A-SC6's mutants of the bridge (the uid and cgroup check,
-  the caller checks, the bound, the buffer wiping); the sheets, the queue's keyboard rule and the polkit sheet's place in
-  the queue are step 9b's.
+  the caller checks, the bound); the sheets, the queue's keyboard rule and the polkit sheet's place in the queue are step
+  9b's. The buffer wiping of A-SC6 had no test in step 9a (the integrator's review of PR #94); since the review of PR #95
+  the line handling is `takeLines` (`Protocol.h`), unit-tested, and `prompter_bridge.sh --mutants` kills its two wipes
+  (`lines-not-wiped`, `rest-not-wiped`), with the name taken before the hello, the answer without a shell, the pidfd's
+  re-check and the known callers' namespaces; `tests/fuzz/prompter_protocol.sh` fuzzes the same reading.
 - Step 9b covers A-SC2 (`tests/security/secret_sheets.sh`: the polkit sheet keeps the keyboard while a gcr request arrives,
   which shows after, held, and the reverse; a withdrawn request never shows; the ninth cancelled), A-SC3 for the sheet (a
   caller whose text says "Authentication required" gets the secret sheet's title with the bridge's requester, no lock or shield
@@ -655,7 +659,8 @@ traced process and to one that maps code from untrusted files (`LD_PRELOAD`, `LD
 since it was loaded), which also leaves an app unidentified after an upgrade of its libraries until it restarts. The
 mapped files are compared by device and inode with the files their paths name, and only for a process in the bridge's
 own mount and user namespaces (opus counter-review of step 9a, MINOR-C: a user namespace lets a process bind-mount its
-own file over a trusted path); a trusted app that runs code of the user's through its own scripting maps no untrusted
+own file over a trusted path; the known callers need those namespaces too since the integrator's review of PR #95, so a
+known program run in a sandbox of its own shows as "Unidentified program"); a trusted app that runs code of the user's through its own scripting maps no untrusted
 file (`emacs --batch -l`, `nvim -l`, an app's plugin interpreter) and still gets the app's row. The gcr
 protocol is unauthenticated: its exchange protects the
 password on the bus from passive listeners only (`gcr/gcr-secret-exchange.c`); the requester shown is the D-Bus caller (gnome-keyring or gpg-agent for most prompts,
