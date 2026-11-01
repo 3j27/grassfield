@@ -553,6 +553,20 @@ of the session, never in a terminal.
   activations through a real transaction, the service's sandbox against `qs ipc`), `ipc_inventory.sh` (Qt's tools).
 - Review: the integrator's nested pass (a `pacman -S --noconfirm <small package>` in a terminal: one or two checks in the
   journal, none as root; a display trial while a transaction runs: the reload waits, then goes).
+- Review round 1 (2026-11-01, the integrator's opus review of 69757ef: FAIL, five majors): the two tokens were written
+  into the generated `Tokens.qml` by hand (now in `ui/tokens/tokens.json`, a `sessionConfig` group, the file
+  regenerated); a comment line of the helper held both "qs ipc" and "call must not", which `ipc_inventory.sh` read as
+  a caller "must.not" (reworded); `FileView.reload()` reads later even with `blockLoading`, so the first reload after
+  pacman took its lock went straight through (`waitForJob()` after `reload()` makes the read the one judged, as the
+  display trial's probe reads its files); the helper asked after a fixed 5 s with pacman still running (a terminal
+  `pacman -Syu` takes no Omarchy lock), so U31's "Log out to finish updating" could show mid-transaction and a log out
+  would stop it: the helper now waits while `/var/lib/pacman/db.lck` exists, at most 30 min (the unit's start timeout
+  past it), then settles, then asks once (tested with a fake lock: nothing while it exists, one call once it is gone,
+  one call after the bound); the knob test ran the real `qs ipc` with the inherited `GRASSFIELD_SESSION=1`, which on
+  the owner's machine would have reached the live shell: it runs with `GRASSFIELD_SESSION` unset for the dev-session
+  cases and against a fake `qs` on a private PATH for the real-session case (the fake logs the exact command). Minor: a
+  mutant refusing the origin `system` passed every test: `software_update_service.sh` now asks `update check system`
+  over IPC (ok, one run) beside `user` (ok) and `bogus` (refused).
 
 ### Step 2d as built (2026-11-01, the branch of the stability lane; the extension notice without a command)
 - The two degraded notices shown without the opt-in setting (`stale-manual`: "Grassfield was updated. Click to update

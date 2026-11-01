@@ -39,7 +39,10 @@ Singleton {
     function pacmanLocked(): bool {
         if (root.pacmanLockPath === "")
             return false;
+        // reload() alone reads later, even with blockLoading (the integrator's review of 69757ef: the first reload after
+        // the lock appeared still read "no such file"); waitForJob() makes this read the one judged.
         lockFile.reload();
+        lockFile.waitForJob();
         return lockFile.loadError !== FileViewError.FileNotFound;
     }
 

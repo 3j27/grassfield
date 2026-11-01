@@ -1,8 +1,9 @@
 [Unit]
 Description=Grassfield: ask the shell for a Software Update check (pacman's database changed)
 Documentation=file:///usr/share/doc/grassfield/README.md
-# Started by grassfield-pacman-watch.path (ADR-0041 step 2b, U31): it waits for a transaction's burst to settle, then asks
-# the shell once (`qs ipc ... call update check system`, read-only: the shell runs its own checker as the user).
+# Started by grassfield-pacman-watch.path (ADR-0041 step 2b, U31): it waits while pacman holds its database lock (the
+# transaction still runs; at most 30 min), lets the burst settle, then asks the shell once (`qs ipc ... call update check
+# system`, read-only: the shell runs its own checker as the user).
 PartOf=graphical-session.target
 After=graphical-session.target
 Requisite=graphical-session.target
@@ -16,10 +17,11 @@ StartLimitBurst=20
 Type=oneshot
 Slice=session.slice
 ExecStart=/usr/lib/grassfield/grassfield-pacman-watch
-TimeoutStartSec=30
+# The helper's wait for the lock (30 min at most) plus its settle and call.
+TimeoutStartSec=1900
 # Quickshell's option variables cleared, as every `qs ipc` caller of the session does (a stray QS_MANIFEST made `qs ipc -p`
 # exit 108: the re-review of bf9e280), and the helper's test knobs: nothing in the session's environment redirects the call.
-UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_PACMAN_WATCH_SETTLE GRASSFIELD_PACMAN_WATCH_IPC
+UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_PACMAN_WATCH_LOCK GRASSFIELD_PACMAN_WATCH_LOCK_WAIT GRASSFIELD_PACMAN_WATCH_SETTLE GRASSFIELD_PACMAN_WATCH_IPC
 # Hardening: it sleeps, then connects to the shell's IPC socket under XDG_RUNTIME_DIR, nothing else.
 NoNewPrivileges=yes
 ProtectSystem=strict

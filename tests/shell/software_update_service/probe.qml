@@ -23,7 +23,8 @@ import qs.overlay
 //   t  ADR-0041 step 2b (U31): a toolkit package installed before the session's start asks for nothing; one installed
 //      after it is announced once as "toolkit" and the pending log out is written with its reason and the list; a later
 //      update in the same session announces nothing more and the log out stays due
-//   k  IPC (the script calls `qs ipc ... update check bogus|user` once "ipc-ready" is printed): bogus refused, user ran
+//   k  IPC (the script calls `qs ipc ... update check bogus|user|system` once "ipc-ready" is printed): bogus refused,
+//      user and system ran one check each
 // Prints "software-update-service: PASS" or FAIL <why>.
 ShellRoot {
     id: root
@@ -383,12 +384,13 @@ ShellRoot {
         }, () => {
             root.callsAtIpc = root.callsLast;
             console.log("software-update-service: ipc-ready");
-            when(() => calls().length > root.callsAtIpc, finish);
+            // The script asks `bogus` (refused: no run), `user` and `system` (ADR-0041 U31): two runs.
+            when(() => calls().length >= root.callsAtIpc + 2, finish);
         });
     }
 
     function finish(): void {
-        root.check(calls().length === root.callsAtIpc + 1, "k: `update check user` over IPC ran one check (" + (calls().length - root.callsAtIpc) + ")");
+        root.check(calls().length === root.callsAtIpc + 2, "k: `update check user` and `update check system` over IPC ran one check each, `bogus` none (" + (calls().length - root.callsAtIpc) + ")");
         console.log(root.failure === "" ? "software-update-service: PASS" : "software-update-service: FAIL " + root.failure);
         Qt.quit();
     }

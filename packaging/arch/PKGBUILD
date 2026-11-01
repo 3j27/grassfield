@@ -284,6 +284,12 @@ package_grassfield-desktop() {
     "$root/packaging/pacman/grassfield-update-helper" "$root/packaging/pacman/grassfield-channel-scriptlet"
   install -m644 -t "$pkgdir/usr/lib/grassfield/" "$root/packaging/pacman/grassfield-channel.sh"
   install -Dm644 "$root/packaging/pacman/org.grassfield.packages.policy" "$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
+  # Owner decision SU-M2 (ADR-0033 s5; OPUS SECURITY REVIEW): the sudo of Omarchy's migrations that grassfield-update-helper
+  # runs, alone in its folder (the first of their PATH), the polkit rule that lets their unit alone start root units, and
+  # that unit's primary group (no member; pacman's sysusers hook creates it).
+  install -Dm755 "$root/packaging/pacman/grassfield-update-sudo" "$pkgdir/usr/lib/grassfield/update-sudo/sudo"
+  install -Dm644 "$root/packaging/pacman/49-grassfield-update.rules" "$pkgdir/usr/share/polkit-1/rules.d/49-grassfield-update.rules"
+  install -Dm644 "$root/packaging/pacman/grassfield-update.sysusers" "$pkgdir/usr/lib/sysusers.d/grassfield-update.conf"
   install -Dm644 -t "$pkgdir/usr/share/grassfield/pacman/" "$srcdir/pacman/repository.conf" "$srcdir/pacman/grassfield-stable.conf" \
     "$srcdir/pacman/grassfield-beta.conf" "$srcdir/pacman/grassfield-signing-key.asc"
   install -Dm755 "$root/packaging/pacman/pre-refresh-pacman" "$pkgdir/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman"

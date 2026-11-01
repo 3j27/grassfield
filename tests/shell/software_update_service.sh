@@ -62,10 +62,12 @@ done
 ipc() { env -u QS_CONFIG_PATH -u QS_CONFIG_NAME -u QS_MANIFEST -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DBUS_SESSION_BUS_ADDRESS \
   XDG_RUNTIME_DIR="$tmp/runtime" timeout 10 qs ipc -p "$root/tests/shell/software_update_service/probe.qml" call update check "$1" 2>&1; }
 if grep -q "software-update-service: ipc-ready" "$out"; then
-  desc="IPC: update check bogus -> refused (only the origins user and omarchy)"
+  desc="IPC: update check bogus -> refused (only the origins user, omarchy and system)"
   check test "$(ipc bogus)" == refused
   desc="IPC: update check user -> ok"
   check test "$(ipc user)" == ok
+  desc="IPC: update check system -> ok (ADR-0041 U31: grassfield-pacman-watch's origin)"
+  check test "$(ipc system)" == ok
 else
   echo "FAIL: the probe never got ready for the IPC step"
   fail=1
