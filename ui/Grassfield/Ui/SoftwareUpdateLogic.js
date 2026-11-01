@@ -210,6 +210,15 @@ function withAnnounced(file, items) {
     return Object.assign({}, f, {announced: f.announced.concat((items || []).map(n => n.id)).slice(-MAX_ANNOUNCED)});
 }
 
+// The file with this session's toolkit announcement (U31) marked as made: the end of an Update Now run that asks for a
+// restart or a log out says what finishes the update, and a restart covers the log out (ADR-0033 s3.7), so the toolkit's
+// "Log out to finish updating" is not posted after it (one update, one notice: the integrator's review of b6fdedf). The
+// pane's log out row stays the checker's (`toolkitLogout`).
+function withToolkitCovered(file, sessionStartMs) {
+    const id = "toolkit " + String(sessionStartMs);
+    return normalize(file).announced.indexOf(id) >= 0 ? normalize(file) : withAnnounced(file, [{id: id}]);
+}
+
 // Two flags: `pending`, GF-083's own log out (Grassfield itself was updated in this session); `toolkit`, a toolkit package
 // replaced under the session (U31). The pane words its row by them: "Log out to finish updating Grassfield" for the first,
 // "Log out to finish updating" for the second alone.

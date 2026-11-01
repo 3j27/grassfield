@@ -74,7 +74,11 @@ Singleton {
         if (run.op !== root.runningOp)
             return;
         root.runningOp = "";
-        root.runEnded(SoftwareUpdateLogic.runNotice(run));
+        const kind = SoftwareUpdateLogic.runNotice(run);
+        // Its restart or log out covers the toolkit's log out in this session (U31): that notice is not posted after it.
+        if ((kind === "restart" || kind === "logout") && root.loaded)
+            root.save(SoftwareUpdateLogic.withToolkitCovered(root.file, root.sessionStartedAt));
+        root.runEnded(kind);
     }
 
     readonly property string statePath: Mode.stateDir + "/software-update.json"

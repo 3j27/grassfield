@@ -388,6 +388,7 @@ ShellRoot {
         // too: it is never posted after them, and a notice it held for the run is posted after any other end.
         function onRunEnded(kind: string): void {
             updateNoticeHeld.stop();
+            updateNoticeHeld.expired = false;   // the next run holds GF-083's notice again
             const finishing = kind === "restart" || kind === "logout";
             if (finishing)
                 updateNotice.announced = true;

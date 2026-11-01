@@ -1093,6 +1093,14 @@ check-i18n 0 unfinished. Not verified here: the notice in a real session (the in
 headless test loads).
 
 ## Review history
+Software Update step 4 (PR #82), the integrator's opus review of b6fdedf: **PASS on its own**; with #77 merged first
+(ADR-0041 step 2b, U31), three things before the merge, answered in the next commits:
+- main merged; this PR's rule renumbered U33 (#77 took U31, #89 U32), the catalog keeping both sides' messages;
+- **minor:** with Settings closed, #77's toolkit "Log out to finish updating" could follow the run's "Restart to finish
+  updating" at the next automatic check. The run's restart or log out now marks this session's toolkit announcement made
+  (`withToolkitCovered`; the pane's row stays); a unit test and a step of the service test;
+- **nit:** a run still going on after an hour stopped holding GF-083's notice for good; the next run's end resets it.
+
 Software Update step 4 (PR #82), an independent opus review of 9dbacaa7 while the integrator was away (read-only, mutants on
 copies): **PASS**, no BLOCKER or MAJOR; five minors and six nits, answered in the next commit:
 - **Minor 1**, step r did not test what it claimed: the same end written again was overwritten before it was read, and two

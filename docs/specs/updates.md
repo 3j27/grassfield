@@ -279,7 +279,10 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   U29 asks it; every other end is (the pane may show another section, and About This Computer has no pane). Nothing for a
   run that installed nothing (up to date), a dialog cancelled or refused, or a run that had already ended when the shell
   started. GF-083's "Log out to finish updating" waits while a run goes on and is never posted after the run's restart or
-  log out (a restart covers the log out, ADR-0033 s3.7); a run still going on after an hour no longer holds it. The shell
+  log out (a restart covers the log out, ADR-0033 s3.7); a run still going on after an hour no longer holds it, and the
+  next run holds it again. The run's restart or log out also covers U31's "Log out to finish updating" for a toolkit
+  replaced under the session: a later check in the same session does not post it (one update, one notice); the pane's row
+  stays. The shell
   watches the runner's state in its runtime folder (made 0700 first, as the runner makes it); a dev session watches its own
   folder (ADR-0019 `UPDATE_RUN_DIR`).
 

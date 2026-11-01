@@ -20,7 +20,7 @@ import qs.overlay
 //   i  busy: the file is not changed
 //   w  a waiter whose own answer is update-running again: the next one waits for waitRetryMs (no loop)
 //   r  Update Now's runs (U33): a run found already ended is not announced; one seen going on is, once, by its outcome; a
-//      cancelled one is not
+//      cancelled one is not; a restart at the end covers the toolkit's log out in the session (U31), another end does not
 //   j  GF-083's pending logout written to the file
 //   t  ADR-0041 step 2b (U31): a toolkit package installed before the session's start asks for nothing; one installed
 //      after it is announced once as "toolkit" and the pending log out is written with its reason and the list; a later
@@ -340,6 +340,11 @@ ShellRoot {
                 root.run(b, "done", "done", "restart");
                 when(() => root.runEnds.length > 0, () => {
                     root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart"]), "r: its end is announced once, as a restart (" + root.runEnds + ")");
+                    // The restart covers the toolkit's log out in this session (U31: its notice is not posted after it).
+                    const covered = "toolkit " + SoftwareUpdate.sessionStartedAt;
+                    root.check(SoftwareUpdate.file.announced.indexOf(covered) >= 0, "r: the restart covers the toolkit's log out in this session (" + covered + " marked)");
+                    // Step t tests the toolkit's own notice in this same session: the mark is taken back (test plumbing).
+                    SoftwareUpdate.save(Object.assign({}, SoftwareUpdate.file, {announced: SoftwareUpdate.file.announced.filter(id => id !== covered)}));
                     // The same end written again, read alone (the pause): no second notice.
                     root.run(b, "done", "done", "restart");
                     pause.next = () => {
@@ -357,6 +362,7 @@ ShellRoot {
                                     root.run(d, "done", "incompatible", "");
                                     when(() => root.runEnds.length > 2, () => {
                                         root.check(JSON.stringify(root.runEnds) === JSON.stringify(["restart", "", "incompatible"]), "r: an incompatible one is announced (" + JSON.stringify(root.runEnds) + ")");
+                                        root.check(SoftwareUpdate.file.announced.indexOf("toolkit " + SoftwareUpdate.sessionStartedAt) < 0, "r: an end that asks for no restart covers nothing");
                                         stepJ();
                                     });
                                 });

@@ -108,6 +108,20 @@ TestCase {
         return answer(state, {toolkit: {record: true, packages: [{name: "qt6-base", installed: "6.12.0-1", installedAt: at, built: "6.11.2-1", moved: moved}]}});
     }
 
+    // U33 with U31: the end of an Update Now run that asks for a restart (or a log out) covers the toolkit's log out in this
+    // session: its notice is not posted after it, in this session only (the integrator's review of b6fdedf).
+    function test_aRunsRestartCoversTheToolkitsLogOut() {
+        const start = Logic.timeOf("2026-10-28T10:00:00Z");
+        const a = toolkitAnswer("up-to-date", "2026-10-28T11:00:00Z", true);
+        compare(Logic.news(Logic.normalize(null), a, start).map(n => n.kind), ["toolkit"], "without a run's end, the toolkit is announced");
+        const covered = Logic.withToolkitCovered(Logic.normalize(null), start);
+        compare(covered.announced, ["toolkit " + start]);
+        compare(Logic.news(covered, a, start).map(n => n.kind), [], "after a run's restart: nothing more to post");
+        verify(Logic.toolkitLogout(a, start), "the log out stays due for the pane's row");
+        compare(Logic.withToolkitCovered(covered, start).announced, ["toolkit " + start], "marked once");
+        compare(Logic.news(covered, a, start + 1).map(n => n.kind), ["toolkit"], "another session is not covered");
+    }
+
     function test_aToolkitReplacedUnderTheSessionAsksForALogOutOnce() {
         const start = Logic.timeOf("2026-10-28T10:00:00Z");
         const signature = "ab12cd_" + Math.floor(start / 1000) + "_42";
