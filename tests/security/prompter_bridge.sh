@@ -47,7 +47,8 @@
 #   tests/security/prompter_bridge.sh              PASS / FAIL lines, exit 0 when all pass
 #   tests/security/prompter_bridge.sh --mutants    also mutants of the bridge's guards (the integrator's review of PR #95: the
 #                                                  name only after the hello, the line wiping, the answer without a shell, the
-#                                                  pidfd's re-check, the known callers' namespaces), each built and run against
+#                                                  pidfd's re-check, the known callers' namespaces: every known caller exempt,
+#                                                  or the disk helper not, decision 9-26 amended), each built and run against
 #                                                  the unit tests and this scenario; every one must be caught
 # Needs g++ with the Qt 6 Core and gcr-4 headers (or GRASSFIELD_PROMPTER: a built bridge), dbus-daemon, dbus-send, python3
 # with PyGObject and the Gcr 4 introspection data; SKIPs without them, when libdbus cannot reach the bus, and when this
@@ -476,6 +477,8 @@ if ((mutants)); then
     cp -a "$root/bridges/prompter" "$m/bridges/"
     cp -a "$root/tests/unit/prompter" "$m/tests/unit/"
     cp "$root/apps/runmode.h" "$root/apps/testbus.h" "$m/apps/"
+    mkdir -p "$m/ui/i18n"
+    cp "$root/ui/i18n/translationloader.h" "$m/ui/i18n/" # grassfield-askpass's (step 9c)
     cp "$root/VERSION" "$m/VERSION"
     git -C "$m" init -q
     if ! python3 -I - "$m/bridges/prompter/src/${f[1]}" "${f[2]}" "${f[3]}" <<'PY'; then echo "MUTANT $mname: NOT APPLIED"; fail=1; continue; fi
@@ -498,12 +501,13 @@ PY
     fi
     rm -rf "$m"
   done <<'EOF_MUTANTS'
-name-before-hello#Bridge.cpp#            send(helloMessage(bridgeKinds()));#            send(helloMessage(bridgeKinds()));\n            wantName(true);
+name-before-hello#Bridge.cpp#            send(helloMessage(bridgeKinds(m_nm != nullptr)));#            send(helloMessage(bridgeKinds(m_nm != nullptr)));\n            wantName(true);
 lines-not-wiped#Protocol.cpp#            explicit_bzero(buffer + start, end - start + 1);#            ;
 rest-not-wiped#Protocol.cpp#            explicit_bzero(buffer + (length - start), start);#            ;
-answered-without-a-shell#Bridge.cpp#        if (m_client < 0 || !m_ready) {#        if (false) {
+answered-without-a-shell#Bridge.cpp#            return;\n        if (m_client < 0 || !m_ready) {\n            log(#            return;\n        if (false) {\n            log(
 pidfd-not-rechecked#Identity.cpp#        facts.alive = pidfdAlive(pidfd);#        facts.alive = true;
-known-caller-in-any-namespace#Identity.cpp#            if (!facts.sameNamespaces)\n                return r;\n            r.role       = role;#            r.role       = role;
+every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n            r.role       = role;#            r.role       = role;
+disk-not-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))#            if (!facts.sameNamespaces)
 EOF_MUTANTS
 fi
 exit $fail
