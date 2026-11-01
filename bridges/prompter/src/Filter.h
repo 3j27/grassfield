@@ -72,8 +72,17 @@ namespace gf::prompter {
 
     struct FilterState {
         CallerBook book{limits::kPromptsPerCaller};
-        // The PromptReady calls gcr sent and that are not answered yet: serial -> (destination, callback path); bounded.
+        // The PromptReady calls gcr sent and that are not answered yet: serial -> (destination, callback path), and the
+        // other way round (gcr has at most one PromptReady in flight per callback). An entry goes with the answer, with
+        // gcr's PromptDone for the same callback, with its caller, or with the name; bounded (final check of step 9a, NIT).
         QHash<quint32, QPair<QString, QString>> readyCalls;
+        QHash<QPair<QString, QString>, quint32> readyBySlot;
+        void forgetReady(const QPair<QString, QString>& slot);
+        void forgetReadyOf(const QString& destination);
+        void clearReady() {
+            readyCalls.clear();
+            readyBySlot.clear();
+        }
     };
 
     // What the filter decides for one incoming message. It takes `message` and returns what GDBus dispatches: the same

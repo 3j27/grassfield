@@ -134,11 +134,13 @@ namespace gf::prompter {
                 const gchar* oldOwner = nullptr;
                 const gchar* newOwner = nullptr;
                 g_variant_get(body, "(&s&s&s)", &name, &oldOwner, &newOwner);
-                if (name[0] == ':' && newOwner[0] == '\0')
+                if (name[0] == ':' && newOwner[0] == '\0') {
                     book.gone(QString::fromUtf8(name));
+                    state.forgetReadyOf(QString::fromUtf8(name));
+                }
                 if (self && *self && std::strcmp(name, kPrompterName) == 0 && std::strcmp(oldOwner, self) == 0 && std::strcmp(newOwner, self) != 0) {
                     book.clear();
-                    state.readyCalls.clear();
+                    state.clearReady();
                 }
             }
             return message;
@@ -147,9 +149,10 @@ namespace gf::prompter {
         if (type == G_DBUS_MESSAGE_TYPE_METHOD_RETURN || type == G_DBUS_MESSAGE_TYPE_ERROR) {
             const auto it = state.readyCalls.find(g_dbus_message_get_reply_serial(message));
             if (it != state.readyCalls.end()) {
-                if (type == G_DBUS_MESSAGE_TYPE_ERROR && it->first == sender)
-                    book.stop(it->first, it->second);
-                state.readyCalls.erase(it);
+                const QPair<QString, QString> slot = it.value();
+                if (type == G_DBUS_MESSAGE_TYPE_ERROR && slot.first == sender)
+                    book.stop(slot.first, slot.second);
+                state.forgetReady(slot);
             }
             return message;
         }
@@ -197,12 +200,36 @@ namespace gf::prompter {
         const char* member      = g_dbus_message_get_member(message);
         if (!destination || !path)
             return;
+        const QPair<QString, QString> slot{QString::fromUtf8(destination), QString::fromUtf8(path)};
         if (g_strcmp0(member, "PromptDone") == 0) {
-            state.book.stop(QString::fromUtf8(destination), QString::fromUtf8(path));
+            state.book.stop(slot.first, slot.second);
+            state.forgetReady(slot); // gcr cancels its own PromptReady when it ends the prompt: no answer may ever come
         } else if (g_strcmp0(member, "PromptReady") == 0) {
+            state.forgetReady(slot);
             if (state.readyCalls.size() >= kReadyCalls)
-                state.readyCalls.clear(); // counts may then stay until their caller leaves: they only hold that caller back
-            state.readyCalls.insert(g_dbus_message_get_serial(message), {QString::fromUtf8(destination), QString::fromUtf8(path)});
+                state.clearReady(); // counts may then stay until their caller leaves: they only hold that caller back
+            const quint32 serial = g_dbus_message_get_serial(message);
+            state.readyCalls.insert(serial, slot);
+            state.readyBySlot.insert(slot, serial);
+        }
+    }
+
+    void FilterState::forgetReady(const QPair<QString, QString>& slot) {
+        const auto it = readyBySlot.find(slot);
+        if (it == readyBySlot.end())
+            return;
+        readyCalls.remove(it.value());
+        readyBySlot.erase(it);
+    }
+
+    void FilterState::forgetReadyOf(const QString& destination) {
+        for (auto it = readyBySlot.begin(); it != readyBySlot.end();) {
+            if (it.key().first == destination) {
+                readyCalls.remove(it.value());
+                it = readyBySlot.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 

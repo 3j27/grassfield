@@ -10,9 +10,9 @@
 // - The well-known name org.gnome.keyring.SystemPrompter is requested only while a shell is connected and has said hello,
 //   without ALLOW_REPLACEMENT (no process can take it away) and queued behind an owner that holds it already (the stock
 //   gcr-prompter frees it 10 s after its last prompt); it is released when the shell goes, so the stock prompter is
-//   activated for the next prompt, as today, and every open gcr prompt is closed then (its caller saw the name go and
-//   will never stop it: counter-review of step 9a, MINOR-A). A request that reaches the bridge with no shell is answered
-//   "cancelled".
+//   activated for the next prompt, as today, and every open gcr prompt is closed then, in a later main loop turn (its
+//   caller saw the name go and will never stop it: counter-review of step 9a, MINOR-A; never from inside gcr's own
+//   callbacks: final check, MAJOR). A request that reaches the bridge with no shell is answered "cancelled".
 // - The shell connects to a private socket (Peer.h: this user, the expected unit's cgroup) and speaks prompter/1
 //   (Protocol.h). One shell at a time.
 // - Each request is identified (Identity.h) before the shell sees it; at most limits::kRequests are outstanding, the next
@@ -99,6 +99,11 @@ namespace gf::prompter {
         void identified(const QString& id, GfPrompt* prompt, const RequesterView& requester);
         void cancelRequest(const QString& id, bool tellShell);
         void cancelAll(bool tellShell);
+
+        // dropClient's closing of gcr's open prompts, in a later main loop turn (never inside gcr's callbacks).
+        void            closeOpenPromptsLater();
+        static gboolean closeBatch(gpointer data);
+        static void     unrefLater(GfPrompt* prompt);
 
         void wantName(bool want);
         void refreshName();
