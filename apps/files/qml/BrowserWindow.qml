@@ -911,7 +911,8 @@ Window {
         // A search location's scope and filter rows (ADR-0027).
         ScopeBar {
             id: scopeBar
-            anchors.top: toolbarRule.bottom
+            // Right under the toolbar (Finder-Search: the pills 6 pt below it), the hidden rule's point not added.
+            anchors.top: toolbarRule.opacity > 0 ? toolbarRule.bottom : tabBar.bottom
             width: parent.width
             height: implicitHeight
             app: win.app
