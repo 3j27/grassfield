@@ -16,7 +16,9 @@
 #  4 the SSID is plain text (a line feed and a direction override flattened)
 #  5 NoSecrets without a sheet: no interaction allowed (flags 0, USER_REQUESTED alone), VPN, an EAP method that takes a
 #    certificate's password, a wired connection
-#  6 the user's Cancel: UserCanceled; NetworkManager's CancelGetSecrets: the shell gets "cancel", the call AgentCanceled
+#  6 the user's Cancel: UserCanceled; NetworkManager's CancelGetSecrets: the shell gets "cancel", the call AgentCanceled;
+#    it withdraws only the request whose connection path and setting name both match (two others outstanding, one of the
+#    same connection with another setting, one of the same setting on another connection)
 #  7 a caller that is not the owner of org.freedesktop.NetworkManager gets PermissionDenied and the shell sees nothing;
 #    its CancelGetSecrets cancels nothing
 #  8 SaveSecrets is refused (Failed: nothing is stored here), DeleteSecrets succeeds
@@ -253,6 +255,26 @@ scenario_body() {
   say s "answer $cid ok too-late-psk"
   desc="...and a late answer is ignored"
   check wait_until 5 grep -q "answer to $cid ignored: not outstanding" "$d/main.log"
+  # Only the request whose connection path AND setting name match is withdrawn (the integrator's review of PR #96, m27).
+  n=$(prompts s)
+  say nm "get m1 802-11-wireless-security 0x1 path=40 ssid=MatchOne"
+  wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $2 ]]' _ "$d/s.shell" "$n"
+  local mid1 mid2 mid3
+  mid1=$(last_id s)
+  say nm "get m2 802-1x 0x1 path=40 keymgmt=wpa-eap eap=peap identity=alice ssid=MatchOne"
+  wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $(($2 + 1)) ]]' _ "$d/s.shell" "$n"
+  mid2=$(last_id s)
+  say nm "get m3 802-11-wireless-security 0x1 path=41 ssid=MatchThree"
+  wait_until 10 bash -c '[[ $(grep -c "\"type\":\"prompt\"" "$1") -gt $(($2 + 2)) ]]' _ "$d/s.shell" "$n"
+  mid3=$(last_id s)
+  say nm "cancel m1"
+  wait_until 10 grep -qx "m1 cancel ok" "$d/nm.nm"
+  sleep 0.5
+  desc="CancelGetSecrets withdraws only the request whose connection path and setting both match [$mid1 $mid2 $mid3]"
+  check bash -c 'grep -q "{\"id\":\"$2\",\"type\":\"cancel\"}" "$1" && grep -qx "m1 error org.freedesktop.NetworkManager.SecretAgent.AgentCanceled" "$3" && ! grep -q "{\"id\":\"$4\",\"type\":\"cancel\"}" "$1" && ! grep -q "{\"id\":\"$5\",\"type\":\"cancel\"}" "$1" && ! grep -q "^m2 error\|^m3 error" "$3"' _ "$d/s.shell" "$mid1" "$d/nm.nm" "$mid2" "$mid3"
+  say s "answer $mid2 cancel"
+  say s "answer $mid3 cancel"
+  wait_until 10 bash -c 'grep -qx "m2 error org.freedesktop.NetworkManager.SecretAgent.UserCanceled" "$1" && grep -qx "m3 error org.freedesktop.NetworkManager.SecretAgent.UserCanceled" "$1"' _ "$d/nm.nm"
 
   # --- 7 a caller that is not NetworkManager ----------------------------------------------------------------------------
   nm_up att --attacker
@@ -434,6 +456,8 @@ stays-registered-without-a-shell#NmAgent.cpp#        endAll(nm::kErrorNoSecrets,
 vpn-asked#NmSecrets.cpp#        if (setting == "vpn")#        if (setting == "never")
 asked-without-interaction#NmSecrets.cpp#        if (!interactionAllowed(flags))#        if (false)
 cancel-ignored#NmAgent.cpp#                endWith(request, nm::kErrorAgentCanceled, QStringLiteral("NetworkManager cancelled it"), true);#                ;
+cancel-by-path-only (m27, the integrator's review of PR 96)#NmAgent.cpp#            if (!request->ended && request->path == path && request->setting == setting) {#            if (!request->ended && request->path == path) {
+cancel-by-setting-only#NmAgent.cpp#            if (!request->ended && request->path == path && request->setting == setting) {#            if (!request->ended && request->setting == setting) {
 registered-for-any-shell#Bridge.cpp#                m_nm->setWanted(m_kinds.contains(QStringLiteral("nm")));#                m_nm->setWanted(true);
 user-cancel-as-nosecrets#Bridge.cpp#                m_nm->refuse(request, nm::kErrorUserCanceled, QStringLiteral("the user cancelled"));#                m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("the user cancelled"));
 name-accepted#Bridge.cpp#        else if (answer.hasIdentity)\n            wrong = QStringLiteral("a name where none is asked");#        else if (false)\n            wrong = QStringLiteral("a name where none is asked");
