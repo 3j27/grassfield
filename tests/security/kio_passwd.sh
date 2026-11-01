@@ -209,7 +209,9 @@ print(items[0].retrieve_secret_sync(None).get_text() if items and not items[0].g
   if ((have_keyring)); then
     gk_up --unlock || { echo "FAIL: gnome-keyring starts on the private bus"; fail=1; have_keyring=0; }
   fi
-  "${env_base[@]}" GRASSFIELD_DEV=1 "$bridge" --socket "$sock" --peer-unit "$leaf" --kio-store-timeout-ms 4000 >"$d/bridge.log" 2>&1 &
+  # Leaks are not judged when 20 stops this bridge: libsecret never completes the calls sent to the gnome-keyring 21 kills,
+  # cancelled or not (decision 9-50); every other sanitizer report still is.
+  "${env_base[@]}" GRASSFIELD_DEV=1 ASAN_OPTIONS=detect_leaks=0 "$bridge" --socket "$sock" --peer-unit "$leaf" --kio-store-timeout-ms 4000 >"$d/bridge.log" 2>&1 &
   local bridge_pid=$!
   pids+=("$bridge_pid")
   wait_until 5 test -S "$sock"
