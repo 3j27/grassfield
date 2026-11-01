@@ -108,8 +108,8 @@ Singleton {
     // data through the stills like the backdrops (without them: off, from 0, nothing given back); a surface takes the first
     // two once (LockView).
     readonly property bool moving: root.stills ? root.stills.moving : false
-    // Set by Idle (its displayOff): the displays are off, the clouds hold where they are. Display only; nothing on the lock
-    // path reads it.
+    // Set by Idle (its displayOff): the displays are off, the clouds hold where they are (LockView.motionHeld, which also holds
+    // them once the session is unlocked, should a surface outlive the unlock). Display only; nothing on the lock path reads it.
     property bool displaysOff: false
     function motionOf(output: string): real {
         return root.stills ? root.stills.motionOf(output) : 0;
@@ -613,7 +613,7 @@ Singleton {
                 avatarSource: root.avatarReady
                 offeredBackdrop: root.backdrops >= 0 ? root.backdropOf(surface.screen ? surface.screen.name : "") : null
                 moving: root.moving
-                displaysOff: root.displaysOff
+                motionHeld: root.displaysOff || !controller.locked
                 motionStart: root.motionOf(surface.screen ? surface.screen.name : "")
                 onMotionRestChanged: root.restMotion(surface.screen ? surface.screen.name : "", view.motionRest)
                 resumes: root.resumes

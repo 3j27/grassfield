@@ -258,8 +258,11 @@ and IQ-B3 here changes the palette only, not which controls read it.
     clouds where the last lock left them (`WallpaperState.motionOf`, per output, kept for the session, 0 at start).
   - Lock screen (`shell/security`, display only; opus security review): `LockView` takes `wallpaper.moving` and that
     position once at creation (through `LockStills` and `Lock.qml`); the artwork's own Timer moves them while the backdrop
-    is the artwork, not while releasing, not under Reduce Motion, and not while Idle has the displays off (`Lock.displaysOff`,
-    set from Idle's `displayOff`). When the release fade starts they slow down linearly to a stop within it
+    is the artwork, not while releasing, not under Reduce Motion, not while Idle has the displays off (`Lock.displaysOff`,
+    set from Idle's `displayOff`) and not once unlocked (`LockView.motionHeld`; the start position is taken until they
+    first move). Opus security review of bdc11b2d: **PASS**; its two MINORs (the tests' patterns, three mutants) and three
+    NITs are fixed in the next commit, each mutant now killed. When the release fade starts they slow down linearly to a
+    stop within it
     (`Easing.OutQuad` over the controller's `releaseMs`; `WallpaperConfig.lockMotionRest`), and `Lock.qml` gives that frame
     to the desktop at once (`restMotion`, in a `try`), so the desktop under the lock is the frame the lock rests on. The
     release never waits for it, and the lock path (`lock`, `engage`, `release`, `restore`) reads none of it.

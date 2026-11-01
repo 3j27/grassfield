@@ -107,24 +107,37 @@ Item {
     // ---- the moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f) ----
     // Display only, like the rest of this view. With wallpaper.moving (`moving`, taken at creation like the name), the
     // artwork's clouds move here and nowhere else, as macOS's moving wallpapers do: from where the desktop's still picture left
-    // them (`motionStart`, taken at creation), while the backdrop is the artwork, not under Reduce Motion and not while the
-    // displays are off (`displaysOff`, from Idle: they hold there), by the artwork's own Timer (wallpaper.movingFrameMs
-    // steps). When the release fade starts they slow down linearly to a stop within it (Easing.OutQuad from the running speed,
+    // them (`motionStart`, taken until they first move: a surface whose output is known only after its creation starts from
+    // that output's clouds), while the backdrop is the artwork, not under Reduce Motion and not while `motionHeld` (Lock.qml:
+    // the displays are off, or the session is unlocked; they hold where they are), by the artwork's own Timer
+    // (wallpaper.movingFrameMs steps). When the release fade starts they slow down linearly to a stop within it (Easing.OutQuad from the running speed,
     // WallpaperConfig.lockMotionRest) at `motionRest`, which Lock.qml gives the desktop at once as its still picture: the
     // desktop under the lock is the frame the lock comes to rest on. Nothing waits for it (the release is the controller's
     // timer), and a lock request during the fade lets them move on from there.
     property bool moving: false
     property real motionStart: 0
-    property bool displaysOff: false
+    property bool motionHeld: false
     property bool frozenMoving: false
+    // The clouds have moved (or the release started): `motionStart` is no longer taken.
+    property bool motionTaken: false
     // -1 until a release fade starts.
     property real motionRest: -1
-    readonly property bool motionPlays: root.frozenMoving && root.backdrop !== null && root.backdrop.kind === "art" && !root.releasing && !Appearance.reduceMotion && !root.displaysOff
+    readonly property bool motionPlays: root.frozenMoving && root.backdrop !== null && root.backdrop.kind === "art" && !root.releasing && !Appearance.reduceMotion && !root.motionHeld
+
+    onMotionPlaysChanged: {
+        if (root.motionPlays)
+            root.motionTaken = true;
+    }
+    onMotionStartChanged: {
+        if (root.frozenMoving && !root.motionTaken)
+            lockArt.motionMs = root.motionStart;
+    }
 
     onReleasingChanged: {
         motionStop.stop();
         if (!root.releasing || !root.frozenMoving)
             return;
+        root.motionTaken = true;
         const fade = Appearance.duration(Tokens.lockFadeOutMs);
         const rest = WallpaperConfig.lockMotionRest(lockArt.motionMs, lockArt.movingOn && root.backdrop !== null && root.backdrop.kind === "art" && !Appearance.reduceMotion, fade);
         root.motionRest = rest;

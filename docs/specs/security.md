@@ -991,10 +991,13 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   (`Lock.resumed`, T-14), and the moving artwork's clouds (below).
 - **The moving artwork** (ADR-0040 step 9, as the integrator decided in the review of e067f26f, after P1 measured 3.70 %
   with the clouds moving on the desktop): with `wallpaper.moving`, the Grassfield artwork's clouds move on the lock screen
-  only, as macOS's moving wallpapers do; the desktop draws them still. `LockView` takes the setting and where the desktop's
-  clouds rest (`WallpaperState.motionOf`, through `LockStills` and `Lock.qml`'s `moving` and `motionOf`: display data, without
-  the stills off and from 0) once, at creation; they move by the artwork's own `wallpaper.movingFrameMs` Timer while the
-  backdrop is the artwork, not while releasing and not under Reduce Motion. When the release fade starts they slow down
+  only, as macOS's moving wallpapers do; the desktop draws them still. `LockView` takes the setting once, at creation, and
+  where the desktop's clouds rest until they first move (a surface whose output is known only after its creation starts
+  from that output's clouds) (`WallpaperState.motionOf`, through `LockStills` and `Lock.qml`'s `moving` and `motionOf`:
+  display data, without the stills off and from 0); they move by the artwork's own `wallpaper.movingFrameMs` Timer while the
+  backdrop is the artwork, not while releasing, not under Reduce Motion and not while `motionHeld`: `Lock.qml` holds them
+  while the displays are off (`Lock.displaysOff`, which Idle sets from its own `displayOff` in a change handler outside
+  `setDisplays`) and once the controller is unlocked, should a surface outlive the unlock (opus review of bdc11b2d). When the release fade starts they slow down
   linearly to a stop within it (`Easing.OutQuad` over `Appearance.duration(lock.fadeOutMs)`, the controller's `releaseMs`,
   from the running speed: `WallpaperConfig.lockMotionRest`, half the fade further on), and the view sets `motionRest`, which
   `Lock.qml` hands to the desktop at once (`restMotion`, in a `try`; `WallpaperState.setMotion`), so the desktop under the

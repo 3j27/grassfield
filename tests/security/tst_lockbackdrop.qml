@@ -175,24 +175,25 @@ TestCase {
     }
 
     // ADR-0040 step 9, as the integrator decided in the review of e067f26f: the moving artwork's clouds move on the lock only.
-    // Display only: taken at creation like the name, never on the lock path, played by the artwork's own Timer while the
-    // backdrop is the artwork (not while releasing, not under Reduce Motion), slowed to a stop within the release fade without
-    // anything waiting for it; where they rest goes back to the desktop through the stills, any failure caught.
+    // Display only: the setting taken at creation like the name, the start until they first move, never on the lock path,
+    // played by the artwork's own Timer while the backdrop is the artwork (not while releasing, not under Reduce Motion, not
+    // while held: the displays off or the session unlocked), slowed to a stop within the release fade without anything
+    // waiting for it; where they rest goes back to the desktop through the stills, any failure caught. (Opus review of
+    // bdc11b2d: the handlers are checked whole or to their end, MINOR 2.)
     function test_theCloudsMoveOnTheLockOnly() {
         const v = source("shell/security/lock/LockView.qml");
         verify(/Component\.onCompleted: \{\s*focusField\(\);/.test(v), "focus still first");
         verify(/root\.frozenMoving = root\.moving;\s*lockArt\.motionMs = root\.motionStart;/.test(v), "taken at creation");
         compare((v.match(/root\.frozenMoving = /g) || []).length, 1);
-        compare((v.match(/lockArt\.motionMs = /g) || []).length, 1);
-        verify(/readonly property bool motionPlays: root\.frozenMoving && root\.backdrop !== null && root\.backdrop\.kind === "art" && !root\.releasing && !Appearance\.reduceMotion && !root\.displaysOff/.test(v));
+        compare((v.match(/lockArt\.motionMs = /g) || []).length, 2, "at creation, and the start until they first move");
+        verify(/readonly property bool motionPlays: root\.frozenMoving && root\.backdrop !== null && root\.backdrop\.kind === "art" && !root\.releasing && !Appearance\.reduceMotion && !root\.motionHeld\n/.test(v));
+        compare(block(v, "onMotionPlaysChanged: {").replace(/\s+/g, " "), "onMotionPlaysChanged: { if (root.motionPlays) root.motionTaken = true; }");
+        compare(block(v, "onMotionStartChanged: {").replace(/\s+/g, " "), "onMotionStartChanged: { if (root.frozenMoving && !root.motionTaken) lockArt.motionMs = root.motionStart; }");
         const art = block(v, "WallpaperArt {");
         verify(/id: lockArt/.test(art) && /moving: root\.frozenMoving/.test(art) && /playing: root\.motionPlays/.test(art), art);
-        // The slow-down: within the fade, from where they are, and stopped when a lock request interrupts the release.
-        const onRelease = block(v, "onReleasingChanged: {");
-        verify(/^onReleasingChanged: \{\s*motionStop\.stop\(\);\s*if \(!root\.releasing \|\| !root\.frozenMoving\)\s*return;/.test(onRelease), onRelease);
-        verify(/const fade = Appearance\.duration\(Tokens\.lockFadeOutMs\);/.test(onRelease), "the same fade as the controller's releaseMs");
-        verify(/WallpaperConfig\.lockMotionRest\(lockArt\.motionMs, lockArt\.movingOn && root\.backdrop !== null && root\.backdrop\.kind === "art" && !Appearance\.reduceMotion, fade\)/.test(onRelease));
-        verify(/motionStop\.duration = fade;/.test(onRelease));
+        // The slow-down: within the fade (the controller's releaseMs), from where they are, and stopped when a lock request
+        // interrupts the release. The whole handler, so that nothing else (input, focus, the controller) can be added to it.
+        compare(block(v, "onReleasingChanged: {").replace(/\s+/g, " "), "onReleasingChanged: { motionStop.stop(); if (!root.releasing || !root.frozenMoving) return; root.motionTaken = true; const fade = Appearance.duration(Tokens.lockFadeOutMs); const rest = WallpaperConfig.lockMotionRest(lockArt.motionMs, lockArt.movingOn && root.backdrop !== null && root.backdrop.kind === \"art\" && !Appearance.reduceMotion, fade); root.motionRest = rest; if (rest > lockArt.motionMs) { motionStop.to = rest; motionStop.duration = fade; motionStop.start(); } }");
         compare((v.match(/root\.motionRest = /g) || []).length, 1, "written only when the fade starts");
         const anim = block(v, "NumberAnimation {\n        id: motionStop");
         verify(/target: lockArt/.test(anim) && /property: "motionMs"/.test(anim) && /easing\.type: Easing\.OutQuad/.test(anim), anim);
@@ -204,7 +205,8 @@ TestCase {
         verify(/readonly property bool moving: root\.stills \? root\.stills\.moving : false/.test(lock));
         verify(/function motionOf\(output: string\): real \{\s*return root\.stills \? root\.stills\.motionOf\(output\) : 0;\s*\}/.test(lock));
         verify(/function restMotion\(output: string, at: real\): void \{\s*try \{\s*if \(root\.stills && output !== "" && at >= 0\)\s*root\.stills\.restMotion\(output, at\);\s*\} catch \(e\) \{/.test(lock));
-        verify(/moving: root\.moving\s*displaysOff: root\.displaysOff\s*motionStart: root\.motionOf\(surface\.screen \? surface\.screen\.name : ""\)\s*onMotionRestChanged: root\.restMotion\(surface\.screen \? surface\.screen\.name : "", view\.motionRest\)/.test(lock));
+        verify(/^\s*moving: root\.moving\n\s*motionHeld: root\.displaysOff \|\| !controller\.locked\n\s*motionStart: root\.motionOf\(surface\.screen \? surface\.screen\.name : ""\)\n\s*onMotionRestChanged: root\.restMotion\(surface\.screen \? surface\.screen\.name : "", view\.motionRest\)\n/m.test(lock), "each line to its end");
+        compare((lock.match(/onMotionRestChanged/g) || []).length, 1);
         verify(!/WallpaperState/.test(lock), "Lock.qml itself reads no wallpaper state");
         verify(/property bool displaysOff: false/.test(lock));
         // Idle tells it the displays are off, outside its own display logic (setDisplays unchanged).
@@ -221,7 +223,7 @@ TestCase {
         const lock = source("shell/security/lock/Lock.qml");
         for (const fn of ["function lock(reason: string): string {", "function engage(): void {", "function release(): void {", "function restore(intent: bool, when: string): void {"]) {
             const b = block(lock, fn);
-            verify(!/backdrop|stills|Stills|avatarPreload|avatarReady|resumes|motion|moving/i.test(b), fn);
+            verify(!/backdrop|stills|Stills|avatarPreload|avatarReady|resumes|motion|moving|displaysOff|fromDim/i.test(b), fn);
         }
         // The backdrops only feed the view.
         compare((lock.match(/root\.backdropOf\(/g) || []).length, 1);
