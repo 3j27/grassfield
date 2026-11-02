@@ -81,6 +81,7 @@ QJsonObject OperationRecord::toJson() const
             {QStringLiteral("webUrl"), webUrl},
             {QStringLiteral("flatpak"), flatpak},
             {QStringLiteral("commits"), QJsonArray::fromStringList(commits)},
+            {QStringLiteral("fromCommits"), QJsonArray::fromStringList(fromCommits)},
             {QStringLiteral("startedAt"), startedAt.toUTC().toString(Qt::ISODate)}};
 }
 
@@ -111,6 +112,8 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
     r.flatpak = o.value(QStringLiteral("flatpak")).toString();
     for (const QJsonValue &v : o.value(QStringLiteral("commits")).toArray())
         r.commits.append(v.toString());
+    for (const QJsonValue &v : o.value(QStringLiteral("fromCommits")).toArray())
+        r.fromCommits.append(v.toString());
     r.startedAt = QDateTime::fromString(o.value(QStringLiteral("startedAt")).toString(), Qt::ISODate);
     const bool update = r.kind == QLatin1String("update");
     const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove") || (update && r.path == QLatin1String("flatpak"));
@@ -130,10 +133,14 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
     // with its app's alone when it updates one app, and a commit (or "") for each, a pinned one only on an app's ref.
     const bool refsOk = !r.packages.isEmpty() && r.packages.size() <= kMaxFlatpakUpdates
         && std::all_of(r.packages.cbegin(), r.packages.cend(), isFlatpakRef) && r.commits.size() == r.packages.size();
-    bool commitsOk = refsOk;
-    for (qsizetype i = 0; commitsOk && i < r.commits.size(); ++i)
-        commitsOk = r.commits.at(i).isEmpty() || (isFlatpakCommit(r.commits.at(i)) && isFlatpakAppRef(r.packages.at(i)));
-    if (!update && !r.commits.isEmpty())
+    // Each pinned ref's installed commit at plan time, when read ("" else); none without a pin. An older record has none.
+    bool commitsOk = refsOk && (r.fromCommits.isEmpty() || r.fromCommits.size() == r.packages.size());
+    for (qsizetype i = 0; commitsOk && i < r.commits.size(); ++i) {
+        const QString from = r.fromCommits.value(i);
+        commitsOk = (r.commits.at(i).isEmpty() || (isFlatpakCommit(r.commits.at(i)) && isFlatpakAppRef(r.packages.at(i))))
+            && (from.isEmpty() || (isFlatpakCommit(from) && !r.commits.at(i).isEmpty()));
+    }
+    if (!update && (!r.commits.isEmpty() || !r.fromCommits.isEmpty()))
         return std::nullopt;
     const bool flatpakOk = r.path == QLatin1String("flatpak")
         && (update ? commitsOk && (r.flatpak.isEmpty() || (isFlatpakAppRef(r.flatpak) && r.packages == QStringList{r.flatpak}))
@@ -159,6 +166,22 @@ QList<QStringList> flatpakUpdateCommands(const OperationRecord &record)
     // The rest after the pinned apps: a runtime an app's update already brought is "Nothing to update." (S31c, exit 0).
     if (!rest.isEmpty())
         out.append(base + QStringList{QStringLiteral("--")} + rest);
+    return out;
+}
+
+QList<std::pair<QString, QString>> flatpakUpdateGuards(const OperationRecord &record)
+{
+    // The pinned commands come first, in the refs' order (flatpakUpdateCommands), then at most one for the rest.
+    QList<std::pair<QString, QString>> out;
+    bool rest = false;
+    for (qsizetype i = 0; i < record.packages.size(); ++i) {
+        if (record.commits.value(i).isEmpty())
+            rest = true;
+        else
+            out.append({record.packages.at(i), record.fromCommits.value(i)});
+    }
+    if (rest)
+        out.append({QString(), QString()});
     return out;
 }
 
@@ -437,6 +460,7 @@ void Operations::startNext()
     m_firstExit.reset();
     m_flatpakOutput.clear();
     m_flatpakSteps.clear();
+    m_flatpakGuards.clear();
     writeRecord(m_current->record);
     if (helper) {
         startHelper(*m_current);
@@ -449,7 +473,8 @@ void Operations::startNext()
             // Its refs only (S31b: an app's runtime comes with it when the app needs the newer one), each pinned app on its
             // own (S32), one command after the other.
             m_flatpakSteps = flatpakUpdateCommands(r);
-            startFlatpak(m_flatpakSteps.takeFirst());
+            m_flatpakGuards = flatpakUpdateGuards(r);
+            startUpdateStep();
         } else {
             startFlatpak(r.kind == QLatin1String("install")
                              ? QStringList{QStringLiteral("install"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), kFlathubRemote, r.flatpak}
@@ -568,6 +593,43 @@ void Operations::startFlatpak(const QStringList &args)
     });
     m_runningSince = QDateTime::currentDateTimeUtc();
     p->start();
+}
+
+void Operations::startUpdateStep()
+{
+    if (!m_current || m_flatpakSteps.isEmpty())
+        return;
+    const QStringList args = m_flatpakSteps.takeFirst();
+    const std::pair<QString, QString> guard = m_flatpakGuards.isEmpty() ? std::pair<QString, QString>() : m_flatpakGuards.takeFirst();
+    const QString ref = guard.first;
+    const QString from = guard.second; // C++17: a structured binding is not captured by a lambda
+    if (from.isEmpty()) {
+        startFlatpak(args);
+        return;
+    }
+    // Its installed commit first (off the window's thread): another one than its plan read means it was updated outside the
+    // Store since (a terminal, another store), and the pinned commit may be older: it is left as it is, never downgraded.
+    FlatpakTools tools;
+    tools.flatpak = m_config.flatpak;
+    tools.env = m_config.flatpakEnv;
+    const QString id = m_current->record.id;
+    QPointer<Operations> self(this);
+    QThreadPool::globalInstance()->start([self, tools, args, ref, from, id] {
+        const QString installed = flatpakInstalledCommit(tools, ref);
+        QMetaObject::invokeMethod(self.data(), [self, args, ref, from, id, installed] {
+            if (!self || !self->m_current || self->m_current->record.id != id)
+                return;
+            if (installed == from) {
+                self->startFlatpak(args);
+                return;
+            }
+            self->m_output += (ref + QStringLiteral(": updated outside the Store since its plan; left as it is.\n")).toUtf8();
+            if (!self->m_flatpakSteps.isEmpty())
+                self->startUpdateStep();
+            else
+                self->conclude(0, QString());
+        });
+    });
 }
 
 void Operations::startTerminal(Item &item)
@@ -778,7 +840,7 @@ void Operations::processEnded(int exitCode, QProcess::ExitStatus status)
             m_process->deleteLater();
             m_process.clear();
             m_output += "\n";
-            startFlatpak(m_flatpakSteps.takeFirst());
+            startUpdateStep();
             return;
         } else if (m_current->record.kind == QLatin1String("remove") && code == 0) {
             // The app is gone: the runtimes no other app needs go too (SD27; a runtime installed by name stays, S26).
@@ -815,12 +877,19 @@ void Operations::readState(const OperationRecord &record, std::function<void(int
             // longer lists them (S31). No answer from flatpak: none is.
             total = int(record.packages.size());
             const std::optional<QList<FlatpakUpdate>> left = flatpak.flatpak.isEmpty() ? std::nullopt : listFlatpakUpdates(flatpak);
+            // A pinned ref installed with another commit than its plan read and than the pinned one was updated outside the
+            // Store: it is up to date as far as this update goes.
             for (qsizetype i = 0; i < record.packages.size() && !flatpak.flatpak.isEmpty(); ++i) {
                 const QString &ref = record.packages.at(i);
                 const QString commit = record.commits.value(i);
-                if (!commit.isEmpty() ? flatpakInstalledCommit(flatpak, ref) == commit
-                                      : left && std::none_of(left->cbegin(), left->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }))
+                const QString from = record.fromCommits.value(i);
+                if (!commit.isEmpty()) {
+                    const QString installed = flatpakInstalledCommit(flatpak, ref);
+                    if (!installed.isEmpty() && (installed == commit || (!from.isEmpty() && installed != from)))
+                        ++present;
+                } else if (left && std::none_of(left->cbegin(), left->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; })) {
                     ++present;
+                }
             }
         } else if (record.path == QLatin1String("flatpak")) {
             // The app in the user's installation after an install, gone after a removal (flatpak info --user).
@@ -994,6 +1063,7 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
         m_stopping = false;
         m_firstExit.reset();
         m_flatpakSteps.clear();
+        m_flatpakGuards.clear();
         emit changed();
         emit finished(record.app);
         if (m_queue.isEmpty())

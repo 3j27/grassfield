@@ -12573,8 +12573,12 @@
         <translation>Mise à jour de logiciels n’a pas pu rechercher de mises à jour. Ouvrez-la pour lancer la recherche.</translation>
     </message>
     <message>
+        <source>Checking what the update changes…</source>
+        <translation>Vérification de ce que change la mise à jour…</translation>
+    </message>
+    <message>
         <source>Checking what the updates change: %1 of %2 apps…</source>
-        <translation>Vérification de ce que changent les mises à jour&#xa0;: %1 apps sur %2…</translation>
+        <translation>Vérification de ce que changent les mises à jour&#xa0;: %1 sur %2 apps…</translation>
     </message>
     <message>
         <source>Checking Flathub for updates…</source>
