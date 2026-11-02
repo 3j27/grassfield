@@ -10660,6 +10660,10 @@
         <translation>Nom d’utilisateur&#xa0;: %1</translation>
     </message>
     <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
         <source>Password</source>
         <translation>Mot de passe</translation>
     </message>
@@ -10707,12 +10711,28 @@
         <source>Join</source>
         <translation>Rejoindre</translation>
     </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
+    </message>
 </context>
 <context>
     <name>SecretSheetModel</name>
     <message>
         <source>Requested by NetworkManager</source>
         <translation>Demandé par NetworkManager</translation>
+    </message>
+    <message>
+        <source>Your keyring has no password: a password remembered here is stored unencrypted on this computer.</source>
+        <translation>Votre trousseau n’a pas de mot de passe&#xa0;: un mot de passe mémorisé ici est enregistré sans chiffrement sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>The server describes this login as follows. It is not verified:</source>
+        <translation>Le serveur décrit ainsi cette connexion. Ce texte n’est pas vérifié&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Remember this password</source>
+        <translation>Mémoriser ce mot de passe</translation>
     </message>
     <message>
         <source>This request arrived at %1, while the screen was locked. Click the alert to answer it.</source>
@@ -10737,6 +10757,10 @@
     <message>
         <source>This request arrived at %1. Click the alert to type the password: nothing typed elsewhere goes into it.</source>
         <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour saisir le mot de passe&#xa0;: rien de ce qui est tapé ailleurs n’y entre.</translation>
+    </message>
+    <message>
+        <source>This request arrived at %1. Click the alert to type your name and password: nothing typed elsewhere goes into it.</source>
+        <translation>Cette demande est arrivée à %1. Cliquez sur l’alerte pour saisir votre nom et votre mot de passe&#xa0;: rien de ce qui est tapé ailleurs n’y entre.</translation>
     </message>
     <message>
         <source>This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.</source>
@@ -10765,6 +10789,30 @@
     <message>
         <source>Wi-Fi</source>
         <translation>Wi-Fi</translation>
+    </message>
+    <message>
+        <source>KIO</source>
+        <translation>KIO</translation>
+    </message>
+    <message>
+        <source>Enter your password for the server “%1”.</source>
+        <translation>Saisissez votre mot de passe pour le serveur «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Enter your name and password for the server “%1”.</source>
+        <translation>Saisissez votre nom et votre mot de passe pour le serveur «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Requested by KIO for an app</source>
+        <translation>Demandé par KIO pour une app</translation>
+    </message>
+    <message>
+        <source>Requested by an unidentified program</source>
+        <translation>Demandé par un programme non identifié</translation>
+    </message>
+    <message>
+        <source>Requested by %1</source>
+        <translation>Demandé par %1</translation>
     </message>
     <message>
         <source>The Wi-Fi network “%1” requires a WPA3 password.</source>
@@ -10819,12 +10867,20 @@
         <translation>Le programme a envoyé ce message. Il n’est pas vérifié&#xa0;:</translation>
     </message>
     <message>
+        <source>Type your name.</source>
+        <translation>Saisissez votre nom.</translation>
+    </message>
+    <message>
         <source>A WPA2 password has 8 to 63 characters, or 64 hexadecimal digits.</source>
         <translation>Un mot de passe WPA2 compte de 8 à 63 caractères, ou 64 chiffres hexadécimaux.</translation>
     </message>
     <message>
         <source>The passwords do not match. Type the new password again in both fields.</source>
         <translation>Les mots de passe ne correspondent pas. Tapez à nouveau le nouveau mot de passe dans les deux champs.</translation>
+    </message>
+    <message>
+        <source>The name or password was not accepted. Try again.</source>
+        <translation>Le nom ou le mot de passe n’a pas été accepté. Réessayez.</translation>
     </message>
     <message>
         <source>This password is too long.</source>

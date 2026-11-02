@@ -6,7 +6,8 @@ import qs.services
 // The secret sheets and the one queue (tests/security/secret_sheets.sh runs this as tst_sheets.qml beside the generated
 // agents): the real SecretAgent and AuthAgent (Quickshell types replaced, logic untouched), the real SecretSheet,
 // SecretSheetModel, AuthDialog, AuthDialogModel and SheetQueue, wired as shell.qml wires them; a fake prompter client and
-// mock polkit flows. Real key and mouse events. ADR-0035 D-9, master-prompt R12. Step 9c: NetworkManager's Wi-Fi alert.
+// mock polkit flows. Real key and mouse events. ADR-0035 D-9, master-prompt R12. Step 9c: NetworkManager's Wi-Fi alert. Step
+// 9e: KIO's server sheet.
 Item {
     id: top
     width: 800
@@ -602,6 +603,7 @@ Item {
             const name = named("secretIdentity");
             compare(name.visible, true);
             compare(name.text, "Username: alice");
+            compare(named("secretName").visible, false, "no name field: the server sheet's only");
             verify(name.textFormat === Text.PlainText && name.cursorPosition === undefined, "plain text, not a field");
             clickPastGuard();
             tryVerify(() => named("secretField").activeFocus);
@@ -671,9 +673,160 @@ Item {
             compare(named("secretField").reveal, false, "hidden again");
         }
 
+        // Step 9e (decision 9-38): a KIO request is the server sheet, always held; after a click past the guard the empty name
+        // field has the keys; Return in it moves on to the password; Connect needs both; the answer carries the name, the
+        // password and Remember, once.
+        function test_26_serverHeldThenConnect() {
+            client.promptServer("p1", {});
+            shown("p1");
+            compare(rig.secret.heldByLock, true, "always held");
+            compare(rig.secret.heldWhy, "server");
+            compare(rig.secret.sheet.takesKeys, false, "the keys stay where the user was typing");
+            verify(named("secretHeldNotice").text.indexOf("type your name and password: nothing typed elsewhere goes into it") >= 0);
+            compare(named("secretTitle").text, "Enter your name and password for the server “example.org”.");
+            compare(named("secretRequester").text, "Requested by KIO for an app");
+            compare(named("secretGlyph").name, "globe");
+            compare(named("secretCallerBlock").visible, false, "no realm, no caller text");
+            compare(named("secretName").visible, true);
+            compare(named("secretIdentity").visible, false, "no network username line");
+            compare(named("secretShowPassword").visible, false, "no Show password for a server");
+            compare(named("secretField").copyable, false, "the guard waits there too: a shown password is never copyable");
+            compare(named("secretChoice").visible, true);
+            compare(named("secretChoice").text, "Remember this password");
+            compare(named("secretKeyringNotice").visible, false, "a protected keyring: nothing said");
+            compare(named("secretOk").text, "Connect");
+            compare(named("secretOk").enabled, false);
+            // Offscreen, keys reach the fields even while held (the compositor withholds them in a session): even a name and
+            // a password are not sent before the click.
+            named("secretName").forceActiveFocus();
+            typeText("x");
+            named("secretField").forceActiveFocus();
+            typeText("early");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0, "no answer before the click past the guard");
+            verify(named("secretField").empty, "and the password field is emptied");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus, 3000, "a name is there: the password field first");
+            const name = named("secretName");
+            name.forceActiveFocus();
+            name.selectAll();
+            typeText("alice");
+            compare(rig.secret.model.loginName, "alice");
+            keyClick(Qt.Key_Return);
+            verify(named("secretField").activeFocus, "Return in the name moves on to the password");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 0, "Return with no password sends nothing");
+            typeText("pw");
+            compare(named("secretOk").enabled, true);
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", identity: "alice", password: "pw", choice: false});
+            tryVerify(() => !rig.secret.model.active);
+            compare(rig.secret.lingerWhy, "sent");
+        }
+
+        // Step 9e (decision 9-45): Remember already on (the keyring holds an item), the keyring without a password said under
+        // it; the name prefilled, so the password field has the keys; Remember unchecked by a click goes back as false.
+        function test_27_serverRememberAndKeyring() {
+            client.promptServer("p1", {name: "bob", remember: "on", keyring: "unprotected"});
+            shown("p1");
+            compare(named("secretChoice").checked, true);
+            compare(named("secretKeyringNotice").visible, true);
+            compare(named("secretKeyringNotice").text, "Your keyring has no password: a password remembered here is stored unencrypted on this computer.");
+            compare(named("secretName").text, "bob");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus, 3000, "the name is there: the password field first");
+            typeText("pw2");
+            mouseClick(named("secretChoice"));
+            compare(rig.secret.model.choice, false);
+            mouseClick(named("secretOk"));
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", identity: "bob", password: "pw2", choice: false});
+        }
+
+        // Step 9e: a name the caller fixed is shown and cannot be changed, and goes back unsaid; the realm is the server's
+        // unverified text, plain, in the caller's block; the title stays Grassfield's sentence.
+        function test_28_serverFixedNameAndRealm() {
+            client.promptServer("p1", {name: "alice", nameMode: "fixed", realm: "Staff <b>Area</b>", remember: "none", keyring: "unknown"});
+            shown("p1");
+            compare(named("secretTitle").text, "Enter your name and password for the server “example.org”.");
+            compare(named("secretCallerBlock").visible, true);
+            compare(named("secretCallerIntro").text, "The server describes this login as follows. It is not verified:");
+            compare(named("secretCaller_title").text, "Staff <b>Area</b>");
+            compare(named("secretCaller_title").textFormat, Text.PlainText);
+            compare(named("secretChoice").visible, false, "Remember not offered");
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            const name = named("secretName");
+            name.forceActiveFocus();
+            typeText("eve");
+            compare(name.text, "alice", "a fixed name cannot be changed");
+            named("secretField").forceActiveFocus();
+            typeText("pw3");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "pw3"});
+        }
+
+        // Step 9e (decision 9-40): a retry says so in Grassfield's words; no name field when the caller asks for none.
+        function test_29_serverRetryWithoutName() {
+            client.promptServer("p1", {nameMode: "none", retry: true});
+            shown("p1");
+            compare(named("secretTitle").text, "Enter your password for the server “example.org”.");
+            compare(named("secretError").visible, true);
+            compare(named("secretError").text, "The name or password was not accepted. Try again.");
+            compare(named("secretName").visible, false);
+            clickPastGuard();
+            tryVerify(() => named("secretField").activeFocus);
+            typeText("pin");
+            keyClick(Qt.Key_Return);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "ok", password: "pin", choice: false});
+        }
+
+        // Step 9e: a program the bridge cannot name: the warning glyph, its executable, the server still a field.
+        function test_30_serverUnidentified() {
+            client.promptServer("p1", {}, {role: "unidentified", path: "/home/u/.local/bin/evil", identified: false, onBehalf: false});
+            shown("p1");
+            compare(named("secretGlyph").name, "exclamationmark-triangle");
+            compare(named("secretRequester").text, "Requested by an unidentified program");
+            compare(named("secretPath").text, "/home/u/.local/bin/evil");
+            keyClick(Qt.Key_Escape);
+            compare(client.answers.length, 1, "Esc on the held sheet cancels");
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "cancel"});
+        }
+
+        // Step 9e: an empty name field takes the keys first after the click; Cancel answers "cancel" and nothing else.
+        function test_32_serverEmptyNameFirstAndCancel() {
+            client.promptServer("p1", {});
+            shown("p1");
+            clickPastGuard();
+            tryVerify(() => named("secretName").activeFocus, 3000, "the empty name first");
+            typeText("carol");
+            mouseClick(named("secretCancel"));
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p1", result: "cancel"});
+        }
+
+        // Step 9e (decision 9-42): a server that is not a host name never reaches a sheet (the client closes the connection on
+        // such a line: here the parser refuses it).
+        function test_31_serverFreeTextRefused() {
+            for (const bad of ["Your Bank", "example.org/login", "Example.org"]) {
+                let refused = false;
+                try {
+                    client.promptServer("p1", {}, {}, bad);
+                } catch (e) {
+                    refused = true;
+                }
+                verify(refused, bad);
+            }
+            wait(50);
+            compare(rig.secret.model.active, false);
+        }
+
         // Opus review of step 9c, MINOR: a password shown by Show password is never selectable or copyable: Select All and
         // Copy (and Cut) put nothing on the clipboard, a mouse drag selects nothing; the text stays in the field.
-        function test_26_shownPasswordNotCopyable() {
+        function test_33_shownPasswordNotCopyable() {
             client.promptNetwork("p1", {});
             shown("p1");
             clickPastGuard();
@@ -701,6 +854,21 @@ Item {
             other.text = "";
             other.paste();
             compare(other.text, "marker", "the clipboard never got the password");
+        }
+
+        // Merge of step 9c into 9e: a KIO request past the bound of 8 is refused like any secret request, "refused" (never a
+        // user's "cancel": the bridge then gives KIO's client nothing and caches no cancellation, decision 9-31), never shown.
+        function test_34_serverNinthRefused() {
+            for (let i = 1; i <= 8; i++)
+                client.prompt("p" + i, {});
+            client.promptServer("p9", {});
+            compare(rig.secret.requestCount, 8);
+            compare(client.answers.length, 1);
+            compare(JSON.parse(client.answers[0].line), {type: "answer", id: "p9", result: "refused"}, "the shell's refusal, never a user's cancel");
+            compare(rig.queue.secretCount, 8);
+            tryVerify(() => shownIds.length > 0, 3000, "the first request is shown");
+            wait(50);
+            compare(shownIds.indexOf("p9"), -1, "the server sheet was never shown");
         }
 
         // The caller's text is plain: markup is shown as typed, never rendered.

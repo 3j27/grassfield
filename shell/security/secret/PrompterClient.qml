@@ -27,8 +27,8 @@ Scope {
     readonly property string state: priv.state
     // The bridge's last word on org.gnome.keyring.SystemPrompter: "released", "queued", "owned", or "" before it said.
     readonly property string nameState: priv.nameState
-    // Requests sent by the bridge and not answered or withdrawn yet, by id: {kind, passwordNew, choice, security} (what an
-    // answer needs). Read by SecretAgent's dev state only through `openCount`.
+    // Requests sent by the bridge and not answered or withdrawn yet, by id: {kind, passwordNew, choice, security, nameMode,
+    // remember} (what an answer needs). Read by SecretAgent's dev state only through `openCount`.
     readonly property int openCount: priv.openCount
 
     signal prompted(var request)
@@ -50,7 +50,9 @@ Scope {
     // One answer to request `id`, once: "ok" (with the password for a password request) or "cancel". False when `id` is not
     // a request of this connection still open (already answered, withdrawn, never sent), when the line would be wrong
     // (Prompter.answerLine), or when the connection is not ready: nothing is sent then.
-    // `identity`: a name the user typed, for a kind that asks one (none does: never sent, Prompter.answerLine).
+    // `identity`: the name of a kio request whose sheet asked for one (step 9e), answered ok, else null; never sent for nm
+    // (NetworkManager keeps only secrets from a reply: opus review of step 9c); `choice`: a kio request's Remember this
+    // password.
     function answer(id: string, ok: bool, password: var, choice: bool, identity: var): bool {
         if (priv.state !== "ready" || priv.closing || !Object.prototype.hasOwnProperty.call(priv.open, id))
             return false;
@@ -161,7 +163,7 @@ Scope {
                 return;
             }
             const open = priv.open;
-            open[m.id] = {id: m.id, kind: m.kind, passwordNew: m.passwordNew, choice: m.choice, security: m.kind === "nm" ? m.network.security : ""};
+            open[m.id] = {id: m.id, kind: m.kind, passwordNew: m.passwordNew, choice: m.choice, security: m.kind === "nm" ? m.network.security : "", nameMode: m.kind === "kio" ? m.login.nameMode : "", remember: m.kind === "kio" ? m.login.remember : ""};
             priv.open = open;
             priv.openCount = Object.keys(open).length;
             root.prompted(m);

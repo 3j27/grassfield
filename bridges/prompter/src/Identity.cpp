@@ -238,14 +238,22 @@ namespace gf::prompter {
             // udiskie's password command in grassfield-automount.service (step 9c): any program of the user can run it with a
             // disk name of its own, so its text is another program's too (onBehalf).
             {QStringLiteral("/usr/lib/grassfield/grassfield-askpass"), QStringLiteral("disk")},
+            // KIO's worker executable (step 9e): KF6 apps start one per network location, and it runs whatever worker plugin
+            // its command line names, so any program of the user can make it ask, with a server of its own (onBehalf). It
+            // loads that plugin from any path (KIO 6.31.0 kioworker.cpp:49-65): the row only while it maps nothing but
+            // trusted code, KIO's own workers under /usr/lib/qt6/plugins/kf6/kio (the security review of step 9e, MINOR-2).
+            {QStringLiteral("/usr/lib/kf6/kioworker"), QStringLiteral("kio"), true},
         };
         return known;
     }
 
-    QString knownRole(const FileId& exe, const QList<KnownCaller>& known, uid_t owner, const QString& top) {
+    QString knownRole(const FileId& exe, const QList<KnownCaller>& known, uid_t owner, const QString& top, bool* trustedCodeOnly) {
         for (const KnownCaller& k : known) {
-            if (trustedPath(k.path, owner, top) && fileIdOf(k.path) == exe)
+            if (trustedPath(k.path, owner, top) && fileIdOf(k.path) == exe) {
+                if (trustedCodeOnly)
+                    *trustedCodeOnly = k.trustedCodeOnly;
                 return k.role;
+            }
         }
         return {};
     }
@@ -338,6 +346,19 @@ namespace gf::prompter {
         return -1;
     }
 
+    // An app's name is lent only to a process that runs nothing but trusted code (decision 9-14): it shares the bridge's mount
+    // and user namespaces, and each file it maps executable is a trusted path that names, by device and inode, the very file
+    // it maps (counter-review of step 9a, MINOR-C). KIO's worker's row likewise (step 9e, MINOR-2).
+    bool runsTrustedCodeOnly(const ExeFacts& facts, const Where& where) {
+        if (!facts.sameNamespaces || !facts.codeKnown || facts.code.isEmpty())
+            return false;
+        for (const CodeMapping& code : facts.code) {
+            if (!trustedPath(code.path, where.owner, where.top) || code.inode == 0 || !(fileMapping(code.path, where.devices) == code))
+                return false;
+        }
+        return true;
+    }
+
     RequesterView requesterFor(const ExeFacts& facts, const Where& where) {
         RequesterView r;
         r.path = flatten(facts.path, caps::kPath);
@@ -345,27 +366,25 @@ namespace gf::prompter {
             return r;
         if (!trustedPath(facts.path, where.owner, where.top) || !(fileIdOf(facts.path) == facts.file))
             return r;
-        if (const QString role = knownRole(facts.file, where.known, where.owner, where.top); !role.isEmpty()) {
+        bool codeChecked = false;
+        if (const QString role = knownRole(facts.file, where.known, where.owner, where.top, &codeChecked); !role.isEmpty()) {
             // Only in the bridge's mount and user namespaces, as an app (the integrator's review of PR #95, NIT): a process
             // in namespaces of its own can make a known path name other files there (decision 9-14, amended). Save the disk
             // helper (decision 9-26, amended): udiskie's unit runs it in namespaces of its own, and any program of the user
             // can run it in the bridge's anyway, so the check would protect nothing for it.
             if (!facts.sameNamespaces && role != QLatin1String("disk"))
                 return r;
+            // KIO's worker runs a plugin from any path: its row only for trusted code, in the bridge's namespaces too (the
+            // security review of step 9e, MINOR-2).
+            if (codeChecked && !runsTrustedCodeOnly(facts, where))
+                return r;
             r.role       = role;
             r.identified = true;
             r.onBehalf   = true;
             return r;
         }
-        // An app's name is lent only to a process that runs nothing but trusted code (decision 9-14): it shares the bridge's
-        // mount and user namespaces, and each file it maps executable is a trusted path that names, by device and inode,
-        // the very file it maps (counter-review of step 9a, MINOR-C).
-        if (!facts.sameNamespaces || !facts.codeKnown || facts.code.isEmpty())
+        if (!runsTrustedCodeOnly(facts, where))
             return r;
-        for (const CodeMapping& code : facts.code) {
-            if (!trustedPath(code.path, where.owner, where.top) || code.inode == 0 || !(fileMapping(code.path, where.devices) == code))
-                return r;
-        }
         if (const auto entry = desktopEntryFor(facts.file, where.applications, where.programDirs, where.owner, where.top)) {
             const QString name = flatten(entry->name, caps::kName);
             if (name.isEmpty())

@@ -10,7 +10,9 @@ FIFO (one per line, shell-quoted) and write what happens to FILE, one line each,
   get TAG SETTING FLAGS [key=value...]   GetSecrets on the registered agent (--attacker: on the agent named by `target`),
                                          for a Wi-Fi connection built from: keymgmt= (default wpa-psk), ssid= (text) or
                                          ssidhex= (bytes), wepidx=, authalg=, eap= (comma-separated), identity=, type=
-                                         (default 802-11-wireless), hints= (comma-separated); logs "TAG secrets <json>"
+                                         (default 802-11-wireless), hints= (comma-separated), path= (the connection's
+                                         number in its D-Bus path; default: one more than the requests so far); logs
+                                         "TAG secrets <json>"
                                          (what NetworkManager keeps: only secret properties of the connection's settings,
                                          as 1.58's validate_secret_flags and libnm's for_each_secret keep them) and, when
                                          the reply held anything else, "TAG dropped <setting.key,...>"; or "TAG error <D-Bus
@@ -190,7 +192,7 @@ def main():
         if op == "get":
             tag, setting, flags = rest[0], rest[1], int(rest[2], 0)
             opts = dict(w.split("=", 1) for w in rest[3:])
-            path = "/org/freedesktop/NetworkManager/Settings/%d" % (len(requests) + 1)
+            path = "/org/freedesktop/NetworkManager/Settings/%d" % int(opts.get("path", len(requests) + 1))
             requests[tag] = (path, setting)
             hints = opts["hints"].split(",") if opts.get("hints") else []
             con = connection(opts)

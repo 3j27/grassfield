@@ -58,6 +58,26 @@ QtObject {
         return parsed.message;
     }
 
+    // A KIO request (kind kio, step 9e) as the bridge sends it, parsed by the real parser (KIO's worker asking for
+    // example.org, an empty name to type, Remember off, a protected keyring by default).
+    function promptServer(id: string, login: var, requester: var, server: var): var {
+        const m = {
+            type: "prompt",
+            id: id,
+            kind: "kio",
+            requester: Object.assign({role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: true}, requester || {}),
+            server: server === undefined ? "example.org" : server,
+            login: Object.assign({name: "", nameMode: "edit", realm: "", retry: false, remember: "off", keyring: "protected"}, login || {})
+        };
+        const parsed = Prompter.parseBridgeLine(JSON.stringify(m), true);
+        if (!parsed.ok)
+            throw new Error(parsed.reason);
+        fake.open[id] = parsed.message;
+        fake.openCount = Object.keys(fake.open).length;
+        fake.prompted(parsed.message);
+        return parsed.message;
+    }
+
     // A request as the bridge sends it, parsed by the real parser (keyring by default).
     function prompt(id: string, over: var): var {
         const m = {

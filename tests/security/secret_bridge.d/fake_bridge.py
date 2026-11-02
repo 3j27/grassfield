@@ -14,7 +14,7 @@ Scenarios:
                  before hello, another protocol version and a duplicate id each close the connection; the next attempt
                  waits 1 s, then 2 s, then 4 s (no hello in between), and 1 s again after a hello
   bound          SecretAgent: nine requests; the ninth is refused at once ("refused", never a user's "cancel"), the others
-                 are not answered
+                 are not answered; two places freed, a third kio request is refused the same way
   session-socket SecretAgent in a real session: it connects to <socket> (the session's), never to <other socket> (a dev
                  socket it was given)
   nothing        no connection at all within 4 s on <socket>
@@ -139,9 +139,15 @@ def nm_prompt(n, ssid, security, identity=""):
     return {"type": "prompt", "id": "p%d" % n, "kind": "nm", "network": {"ssid": ssid, "security": security, "identity": identity}}
 
 
+def kio_prompt(n, server, name_mode="edit", remember="off", keyring="protected", name=""):
+    req = {"role": "kio", "name": "", "desktopId": "", "icon": "", "path": "/usr/lib/kf6/kioworker", "identified": True, "onBehalf": True}
+    return {"type": "prompt", "id": "p%d" % n, "kind": "kio", "requester": req, "server": server,
+            "login": {"name": name, "nameMode": name_mode, "realm": "", "retry": False, "remember": remember, "keyring": keyring}}
+
+
 def shell_hello(c, desc):
     h = c.json()
-    check(desc, isinstance(h, dict) and h.get("v") == "prompter/1" and h.get("type") == "hello" and h.get("kinds") == ["password", "confirm", "nm"]
+    check(desc, isinstance(h, dict) and h.get("v") == "prompter/1" and h.get("type") == "hello" and h.get("kinds") == ["password", "confirm", "nm", "kio"]
           and isinstance(h.get("shell"), str) and set(h) == {"v", "type", "shell", "kinds"}, repr(h))
 
 
@@ -150,7 +156,7 @@ def scenario_client(server):
     check("the shell connects", c is not None)
     if c is None:
         return
-    shell_hello(c, "the shell's hello is the first line, prompter/1, the kinds it draws (password, confirm, nm)")
+    shell_hello(c, "the shell's hello is the first line, prompter/1, the kinds it draws (password, confirm, nm, kio)")
     hello(c)
     c.send({"type": "name", "state": "owned"})
     c.send(prompt(1, "answer-ok"))
@@ -182,6 +188,17 @@ def scenario_client(server):
     c.send(nm_prompt(22, "answer-cancel", "wep"))
     a = c.json()
     check("an nm request cancelled carries nothing", a == {"type": "answer", "id": "p22", "result": "cancel"}, repr(a))
+    c.send(kio_prompt(23, "answer-ok.example"))
+    a = c.json()
+    check("a kio request answered ok carries the name, the password and Remember",
+          a == {"type": "answer", "id": "p23", "result": "ok", "identity": "user-p23", "password": "pw-p23", "choice": True}, repr(a))
+    c.send(kio_prompt(24, "answer-ok.example", name_mode="fixed", remember="none", keyring="unknown", name="alice"))
+    a = c.json()
+    check("a kio request with a fixed name and no Remember carries the password only",
+          a == {"type": "answer", "id": "p24", "result": "ok", "password": "pw-p24"}, repr(a))
+    c.send(kio_prompt(25, "answer-cancel.example"))
+    a = c.json()
+    check("a kio request cancelled carries nothing", a == {"type": "answer", "id": "p25", "result": "cancel"}, repr(a))
     extra = c.quiet(0.6)
     check("nothing else is sent (the late answer to p4 included)", extra == [], repr(extra))
     bad = prompt(7, "answer-ok")
@@ -241,6 +258,15 @@ def scenario_client(server):
     c.send(nm_prompt(30, "answer-ok", "wpa", "eve"))
     check("an nm prompt with a name for a WPA2 network closes the connection (never answered)", c.closed())
     c.close()
+    closed_at = time.monotonic()
+    c = reconnect("then 1 s again", 0.8, 1.5)
+    if c is None:
+        return
+    c.json()
+    hello(c)
+    c.send(kio_prompt(31, "Your Bank"))
+    check("a kio prompt whose server is not a host name closes the connection (never answered)", c.closed())
+    c.close()
 
 
 def scenario_bound(server):
@@ -261,6 +287,15 @@ def scenario_bound(server):
     c.send({"type": "cancel", "id": "p1"})
     extra = c.quiet(1.0)
     check("withdrawn requests are not answered", extra == [], repr(extra))
+    # Two places free again: two KIO requests fill them, a third is refused like any other kind ("refused": the bridge then
+    # gives KIO's client nothing and caches no cancellation).
+    c.send(kio_prompt(10, "leave.example"))
+    c.send(kio_prompt(11, "leave.example"))
+    c.send(kio_prompt(12, "leave.example"))
+    a = c.json()
+    check("a kio request past the bound is refused too", a == {"type": "answer", "id": "p12", "result": "refused"}, repr(a))
+    extra = c.quiet(1.0)
+    check("the two kio requests in the bound wait for the user", extra == [], repr(extra))
     c.close()
 
 

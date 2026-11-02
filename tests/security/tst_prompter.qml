@@ -4,7 +4,8 @@ import "../../shell/security/secret/Prompter.js" as Prompter
 
 // prompter/1, the shell's side (shell/security/secret/Prompter.js; ADR-0035 D-9, step 9b): the bridge's lines read strictly
 // (anything else closes the connection), the flattening rule of the bridge (decision 9-13), the answer lines, the socket
-// path's run-mode rule and the back-off; step 9c: NetworkManager's kind (nm), its length rule and answers, the disk role.
+// path's run-mode rule and the back-off; step 9c: NetworkManager's kind (nm), its length rule and answers, the disk role;
+// step 9e: KIO's kind (kio), its server rule, its answers, the kio role.
 TestCase {
     name: "Prompter"
 
@@ -157,11 +158,11 @@ TestCase {
         compare(JSON.parse(Prompter.answerLine(fresh, true, "", false)), {type: "answer", id: "p1", result: "ok", password: ""}, "an empty new password; no choice key without a check box");
         const confirm = parse(prompt({kind: "confirm", choice: null})).message;
         compare(JSON.parse(Prompter.answerLine(confirm, true, "x", false)), {type: "answer", id: "p1", result: "ok"}, "a confirmation carries no password");
-        compare(Prompter.answerLine({id: "p1", kind: "kio"}, true, "x", false), "", "an unknown kind");
+        compare(Prompter.answerLine({id: "p1", kind: "bluetooth"}, true, "x", false), "", "an unknown kind");
     }
 
     function test_hello_line() {
-        compare(JSON.parse(Prompter.helloLine("1.0\n")), {v: "prompter/1", type: "hello", shell: "1.0", kinds: ["password", "confirm", "nm"]});
+        compare(JSON.parse(Prompter.helloLine("1.0\n")), {v: "prompter/1", type: "hello", shell: "1.0", kinds: ["password", "confirm", "nm", "kio"]});
     }
 
     // --- step 9c: NetworkManager's kind and the disk role --------------------------------------------------------------
@@ -244,6 +245,88 @@ TestCase {
         const r = parse(prompt({requester: {role: "disk", name: "", desktopId: "", icon: "", path: "/usr/lib/grassfield/grassfield-askpass", identified: true, onBehalf: true}}));
         verify(r.ok, r.reason);
         compare(r.message.requester.role, "disk");
+    }
+
+    // --- step 9e: KIO's kind and the kio role -----------------------------------------------------------------------------
+
+    function kio(over, login, requester) {
+        return Object.assign({
+            type: "prompt",
+            id: "p9",
+            kind: "kio",
+            requester: Object.assign({role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: true}, requester || {}),
+            server: "example.org:2222",
+            login: Object.assign({name: "alice", nameMode: "edit", realm: "", retry: false, remember: "off", keyring: "protected"}, login || {})
+        }, over || {});
+    }
+
+    function test_serverPrompt() {
+        const r = parse(kio());
+        verify(r.ok, r.reason);
+        const m = r.message;
+        compare([m.id, m.kind, m.server, m.requester.role, m.requester.onBehalf], ["p9", "kio", "example.org:2222", "kio", true]);
+        compare([m.login.name, m.login.nameMode, m.login.realm, m.login.retry, m.login.remember, m.login.keyring], ["alice", "edit", "", false, "off", "protected"]);
+        compare([m.texts.title, m.texts.message, m.choice, m.passwordNew, m.strength], ["", "", null, false, false], "no caller text, no caller check box");
+        compare(parse(kio({}, {realm: "Staff
+‮Area", name: "bob​"})).message.login.realm, "Staff Area", "the realm flattened");
+        compare(parse(kio({}, {name: "bob​"})).message.login.name, "bob", "the name flattened");
+        for (const server of ["127.0.0.1", "[::1]:22", "my_nas", "host.example.", "xn--bcher-kva.example:21"])
+            verify(parse(kio({server: server})).ok, server);
+        const app = parse(kio({}, {}, {role: "app", name: "Files", desktopId: "grassfield-files.desktop", icon: "system-file-manager", path: "/usr/bin/grassfield-files", onBehalf: false}));
+        verify(app.ok, app.reason);
+        compare(app.message.requester.name, "Files");
+        const stranger = parse(kio({}, {remember: "none", keyring: "unknown"}, {role: "unidentified", path: "/home/u/evil", identified: false, onBehalf: false}));
+        verify(stranger.ok, stranger.reason);
+        verify(parse(kio({}, {nameMode: "none", name: ""})).ok, "no name field");
+        verify(parse(kio({}, {nameMode: "fixed"})).ok, "a name shown only");
+    }
+
+    function test_serverPromptRefused_data() {
+        return [
+            {tag: "free text as the server", p: kio({server: "Your Bank"})},
+            {tag: "a server with a path", p: kio({server: "example.org/login"})},
+            {tag: "an upper-case server", p: kio({server: "Example.org"})},
+            {tag: "an empty server", p: kio({server: ""})},
+            {tag: "a server over its cap", p: kio({server: "a".repeat(63) + ("." + "a".repeat(63)).repeat(4)})},
+            {tag: "a look-alike character", p: kio({server: "аpple.com"})},
+            {tag: "texts", p: kio({texts: {title: "Authentication required"}})},
+            {tag: "a choice of the caller's", p: kio({choice: {label: "Allow", chosen: true}})},
+            {tag: "missing login", p: (() => { const p = kio(); delete p.login; return p; })()},
+            {tag: "login extra key", p: kio({}, {password: "x"})},
+            {tag: "unknown name mode", p: kio({}, {nameMode: "guest"})},
+            {tag: "a name with no name field", p: kio({}, {nameMode: "none", name: "eve"})},
+            {tag: "retry a string", p: kio({}, {retry: "yes"})},
+            {tag: "unknown remember", p: kio({}, {remember: "always"})},
+            {tag: "a keyring state without Remember", p: kio({}, {remember: "none", keyring: "unprotected"})},
+            {tag: "unknown keyring", p: kio({}, {keyring: "encrypted"})},
+            {tag: "realm over its cap", p: kio({}, {realm: "r".repeat(257)})},
+            {tag: "an inconsistent requester", p: kio({}, {}, {onBehalf: false})},
+            {tag: "an unknown role", p: kio({}, {}, {role: "kiod"})},
+            {tag: "bad id", p: kio({id: "p0"})}
+        ];
+    }
+    function test_serverPromptRefused(d) {
+        verify(!parse(d.p).ok, d.tag);
+    }
+
+    function test_serverAnswerLines() {
+        const m = parse(kio()).message;
+        compare(JSON.parse(Prompter.answerLine(m, true, "pw", true, "bob")), {type: "answer", id: "p9", result: "ok", identity: "bob", password: "pw", choice: true});
+        compare(JSON.parse(Prompter.answerLine(m, false, "ignored", true, "ignored")), {type: "answer", id: "p9", result: "cancel"}, "a cancellation carries nothing");
+        compare(Prompter.answerLine(m, true, "", false, "bob"), "", "never an empty password");
+        compare(Prompter.answerLine(m, true, "pw", false, ""), "", "a name when the sheet asks for one");
+        compare(Prompter.answerLine(m, true, "x".repeat(4097), false, "bob"), "", "over 4096 bytes");
+        compare(Prompter.answerLine(m, true, "pw", false, "n".repeat(1025)), "", "a name over 1024 bytes");
+        const fixed = parse(kio({}, {nameMode: "fixed", remember: "none", keyring: "unknown"})).message;
+        compare(JSON.parse(Prompter.answerLine(fixed, true, "pw", true, "eve")), {type: "answer", id: "p9", result: "ok", password: "pw"}, "no name, no choice where none is asked");
+        const kept = {id: "p9", kind: "kio", passwordNew: false, choice: null, security: "", nameMode: "edit", remember: "on"};
+        compare(JSON.parse(Prompter.answerLine(kept, true, "pw", false, "bob")), {type: "answer", id: "p9", result: "ok", identity: "bob", password: "pw", choice: false}, "what the client keeps of it");
+    }
+
+    function test_kioRole() {
+        const r = parse(prompt({requester: {role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: true}}));
+        verify(r.ok, r.reason);
+        verify(!parse(prompt({requester: {role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: false}})).ok, "KIO's worker asks for others");
     }
 
     function test_utf8Length() {

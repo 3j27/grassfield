@@ -16,7 +16,10 @@
 //   names the program that asks, never a guarantee about the text under it, which the shell shows as another program's
 //   unverified words; "disk" for /usr/lib/grassfield/grassfield-askpass, udiskie's password command (step 9c), which any
 //   program can run with a disk name of its own, likewise, in any namespaces (decision 9-26, amended: udiskie's unit runs
-//   it in namespaces of its own, and the check would protect nothing for a helper anyone can run);
+//   it in namespaces of its own, and the check would protect nothing for a helper anyone can run); "kio" for
+//   /usr/lib/kf6/kioworker, KIO's worker executable (step 9e), which runs whatever worker plugin its command line names,
+//   likewise, in the bridge's namespaces, and only while every file it maps executable is trusted, as for an app below
+//   (the security review of step 9e, MINOR-2: a plugin from the user's files would borrow the row otherwise);
 // - "app" with a desktop entry's name and icon when exactly one entry of /usr/share/applications (a root-owned regular
 //   file) runs exactly that executable: its Exec line is the program and field codes only, so an interpreter, a wrapper or
 //   a launcher with arguments never lends its entry to whatever it runs; and every file mapped executable in the process
@@ -95,9 +98,11 @@ namespace gf::prompter {
     struct KnownCaller {
         QString path;
         QString role;
+        bool    trustedCodeOnly = false; // the role only for a process that maps nothing but trusted code (kioworker)
     };
 
-    // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg; gcr-ssh-agent -> ssh; grassfield-askpass -> disk.
+    // gnome-keyring-daemon -> keyring; pinentry-gnome3 and gpg-agent -> gnupg; gcr-ssh-agent -> ssh; grassfield-askpass -> disk;
+    // kioworker -> kio.
     const QList<KnownCaller>& knownCallers();
 
     // A file mapped executable: its path and the device (major:minor) and inode /proc/<pid>/maps gives for it.
@@ -127,7 +132,8 @@ namespace gf::prompter {
     qint64 tracerPid(const QByteArray& status);
 
     // The role of `exe` among `known` (the same file, by device and inode, as a trusted path of the list); empty when none.
-    QString knownRole(const FileId& exe, const QList<KnownCaller>& known, uid_t owner, const QString& top);
+    // *trustedCodeOnly (when given) says whether that role needs runsTrustedCodeOnly.
+    QString knownRole(const FileId& exe, const QList<KnownCaller>& known, uid_t owner, const QString& top, bool* trustedCodeOnly = nullptr);
 
     // What the kernel says about the caller.
     struct ExeFacts {
@@ -153,6 +159,10 @@ namespace gf::prompter {
         // The bridge's mounts (/proc/self/mountinfo), read when the requester is resolved.
         QHash<quint64, QPair<quint32, quint32>> devices = selfMountDevices();
     };
+
+    // The process runs nothing but trusted code: in the bridge's mount and user namespaces, its mappings read whole, each file
+    // it maps executable a trusted path naming, by device and inode, the very file it maps.
+    bool runsTrustedCodeOnly(const ExeFacts& facts, const Where& where);
 
     // The requester for those facts (texts flattened and capped).
     RequesterView requesterFor(const ExeFacts& facts, const Where& where = Where());
