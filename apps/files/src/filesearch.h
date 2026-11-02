@@ -92,6 +92,7 @@ public:
     explicit FileSearchRunner(QObject *parent = nullptr);
     ~FileSearchRunner() override;
 
+    // Both return at once: a superseded or stopped search finishes on its own thread (see stop()).
     void start(const FileSearch::Settings &settings);
     void stop();
 
@@ -100,6 +101,8 @@ signals:
     void done(int backend, bool limited, bool contentsUnavailable);
 
 private:
+    // How long the destructor waits for the search it cancelled (shutdown only).
+    static constexpr int kShutdownWaitMs = 200;
     QPointer<FileSearch> m_search;
     quint64 m_generation = 0;
 };

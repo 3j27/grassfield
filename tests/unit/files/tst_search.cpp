@@ -466,6 +466,58 @@ TEST(FileSearchRunner, ASupersededSearchReportsNothing)
     EXPECT_EQ(seen, QStringList{dir->filePath(QStringLiteral("new/new.txt"))});
 }
 
+TEST(FileSearchRunner, SupersedingASearchNeverWaitsForIt)
+{
+    QString why;
+    auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << why.toStdString();
+    // An index program that never answers: the search is inside it (it notices a cancel at its next poll, up to 50 ms).
+    const QString stuck = dir->filePath(QStringLiteral("localsearch"));
+    {
+        QFile f(stuck);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(("#!/bin/sh\ntouch '" + dir->filePath(QStringLiteral("started")) + "'\nexec sleep 30\n").toUtf8());
+    }
+    QFile::setPermissions(stuck, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    write(dir->filePath(QStringLiteral("new/new.txt")));
+    app();
+    FileSearchRunner runner;
+    QStringList seen;
+    int done = 0;
+    QObject::connect(&runner, &FileSearchRunner::found, &runner, [&](const QStringList &p) { seen += p; });
+    QObject::connect(&runner, &FileSearchRunner::done, &runner, [&](int, bool, bool) { ++done; });
+    qint64 total = 0;
+    for (int i = 0; i < 8; ++i) {
+        QFile::remove(dir->filePath(QStringLiteral("started")));
+        FileSearch::Settings slow;
+        slow.query.text = QStringLiteral("anything");
+        slow.root = dir->path();
+        slow.localsearch = stuck;
+        runner.start(slow);
+        QElapsedTimer wait;
+        wait.start();
+        while (!QFile::exists(dir->filePath(QStringLiteral("started"))) && wait.elapsed() < 5000)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        ASSERT_TRUE(QFile::exists(dir->filePath(QStringLiteral("started")))) << "the search is inside the program";
+        QElapsedTimer clock;
+        clock.start();
+        runner.stop();
+        total += clock.elapsed();
+    }
+    // The GUI thread never waits for the old search (it used to wait up to 200 ms each time).
+    EXPECT_LT(total, 60) << "eight stops";
+    FileSearch::Settings second;
+    second.query.folder = QUrl::fromLocalFile(dir->filePath(QStringLiteral("new")));
+    runner.start(second);
+    QElapsedTimer clock;
+    clock.start();
+    while (done == 0 && clock.elapsed() < 10000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    EXPECT_EQ(done, 1);
+    EXPECT_EQ(seen, QStringList{dir->filePath(QStringLiteral("new/new.txt"))}) << "nothing of the stopped searches arrives";
+}
+
 TEST(SavedSearchStore, SavesReplacesListsAndRemoves)
 {
     QString why;

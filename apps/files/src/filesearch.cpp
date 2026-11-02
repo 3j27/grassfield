@@ -316,7 +316,11 @@ FileSearchRunner::FileSearchRunner(QObject *parent)
 
 FileSearchRunner::~FileSearchRunner()
 {
+    // The runner's owner is going away: the one place a short wait is fine (stop() never waits).
+    FileSearch *search = m_search.data();
     stop();
+    if (search)
+        search->wait(kShutdownWaitMs);
 }
 
 void FileSearchRunner::start(const FileSearch::Settings &settings)
@@ -346,8 +350,8 @@ void FileSearchRunner::stop()
         return;
     disconnect(search, nullptr, this, nullptr);
     search->cancel();
-    // The walk checks the flag at every entry and a program wait every kPollMs: it ends at once. One stuck in a slow system
-    // call is left to finish and delete itself.
-    if (search->wait(200))
-        delete search;
+    // Never waited for here: a new search starts on the GUI thread, and a walk in a slow system call (or a program poll)
+    // can take longer than a frame to notice the flag. The superseded search ends by itself (it checks the flag at every
+    // entry and every kPollMs), emits nothing (no connection is left) and deletes itself when its thread has finished
+    // (the connection of its constructor).
 }
