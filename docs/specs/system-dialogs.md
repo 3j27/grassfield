@@ -16,7 +16,7 @@ measurements.
 ## Common rules (every surface of this spec)
 1. **Look.** Built on `Grassfield.Ui` only: the alert shape of `shell/overlay/Dialog.qml` (icon at the top left, bold title,
    left-aligned message, equal-width capsule buttons) or its sheet shape (title, content, hairline above a 64-pt footer, 24-pt
-   push buttons at the bottom right); the frame moves into `Grassfield.Ui` (a public type, `docs/specs/ui-api.md`) in the
+   sheet buttons at the bottom right: rounded rectangles, `Button.sheet`, as macOS 27's Print and Open sheets; ADR-0039 step 10); the frame moves into `Grassfield.Ui` (a public type, `docs/specs/ui-api.md`) in the
    first step whose surface lives outside the shell process. The panel material of ADR-0024 and the existing tokens
    (`Tokens.panelAlertWidth`, `radiusAlert`, `panelSheet*`, `radiusSheet`, `buttonHeight`, `alertButtonHeight`,
    `controlFocusOutline`). The blur behind a dialog in the shell's Overlay takes the corner the dialog draws

@@ -12,7 +12,7 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   window         an opaque app window: color.windowBackground and color.sidebarFill, bare and under a rimmed capsule's fill (the text
-                 colour at settings.fieldFillOpacity or settings.toolbarFillOpacity); the same at every transparency and wallpaper
+                 colour at toolbar.fieldFillOpacity or toolbar.capsuleFillOpacity); the same at every transparency and wallpaper
   accent         the solid accent colour
   selection      the solid selection colour: the light appearance's accent in the light appearance, color.selectionDark in the dark one (Appearance.accentedDark/Light,
                  Accent.withSelection), the fill of a selected row, a default button or a checked box
@@ -231,7 +231,7 @@ def backdrops(tok, role, appearance, t, wallpaper):
         for base_name in ("windowBackground", "sidebarFill"):
             base = tok.color(pal, appearance, base_name)
             out.append(base)
-            for opacity in ("settings.fieldFillOpacity", "settings.toolbarFillOpacity"):
+            for opacity in ("toolbar.fieldFillOpacity", "toolbar.capsuleFillOpacity"):
                 out.append(over(text, tok.path(opacity), base))
         return out
     if kind == "accent":
@@ -769,7 +769,7 @@ class ContrastTokens(unittest.TestCase):
             self.assertGreaterEqual(wcag(text, fill), 4.85 if light_text == (255, 255, 255) else 4.5, accent)
             self.assertEqual(text == (255, 255, 255), light_text == (255, 255, 255), accent)
 
-    GLASS_CLASSES = ("menu", "notification", "controls", "apps")
+    GLASS_CLASSES = ("menu", "notification", "controls", "apps", "gallery", "widgets")
 
     def test_glass_classes_hold_a2_over_any_backdrop(self):
         # ADR-0024 G-1 to G-3: a glass class whose backdrop the shell does not know takes the worst case; its text and secondary
@@ -868,6 +868,19 @@ class WindowSurfacePairs(unittest.TestCase):
             for bg, what in ((win, "the window"), (on_group, "a Settings group")):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
+
+    def test_dark_window_secondary_text_on_the_window_its_groups_and_its_sidebar(self):
+        # ADR-0039 Q3 (the owner, 2026-10-29: #A1A1A6, warm since ADR-0040's warm neutrals): the dark window's secondary text
+        # holds A2 where it is drawn, on the window, a group and the sidebar, and reads as secondary: the primary text keeps at
+        # least twice its contrast there (it had 10.7:1 against the text's 13.4:1, so subtitles read like titles).
+        ap = "dark"
+        fg = self.tok.color("colors", ap, "windowTextSecondary")
+        text = self.tok.color("colors", ap, "text")
+        for name, what in (("windowBackground", "the window"), ("groupFill", "a group"), ("sidebarFill", "the sidebar")):
+            bg = self.tok.color("colors", ap, name)
+            self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, dark: %.2f:1" % (what, wcag(fg, bg)))
+            self.assertGreaterEqual(wcag(text, bg) / wcag(fg, bg), 2.0,
+                                    "text %.2f:1 against secondary %.2f:1 on %s, dark" % (wcag(text, bg), wcag(fg, bg), what))
 
     def test_permission_alert_symbol_on_the_window(self):
         # grassfield-portal's permission alert (apps/files/qml/AccessAlert.qml): the frontend's symbolic icon, for an application

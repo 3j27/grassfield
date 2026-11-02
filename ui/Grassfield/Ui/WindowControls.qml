@@ -24,8 +24,8 @@ Item {
     property var window: null
     // "unified" or "titlebar".
     property string style: "unified"
-    // Follows the window; a host may override it.
-    property bool active: root.window ? root.window.active : true
+    // Follows the window (held key while a shell menu or the Control Center is open: Appearance.looksKey); a host may override it.
+    property bool active: root.window ? Appearance.looksKey(root.window, root.window.active) : true
     // A light the window cannot honour is grey and inert (minimize without the compositor plugin, ADR-0015 Q4).
     property bool canClose: true
     property bool canMinimize: true

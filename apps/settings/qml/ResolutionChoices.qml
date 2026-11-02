@@ -118,7 +118,7 @@ Item {
                 height: width
                 radius: Tokens.settingsDisplayChoiceRadius
                 color: Appearance.colors.windowBackground
-                border.width: 1
+                border.width: Tokens.appsBorderWidth
                 border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 clip: true
 
@@ -177,7 +177,7 @@ Item {
                 x: Tokens.settingsDisplayChoiceLineInset
                 y: Tokens.settingsDisplayChoiceLineY
                 width: cellItem.width - 2 * Tokens.settingsDisplayChoiceLineInset
-                height: 1
+                height: Tokens.appsBorderWidth
                 color: Appearance.withAlpha(Appearance.colors.separator, Tokens.settingsDisplayChoiceLineOpacity)
             }
 

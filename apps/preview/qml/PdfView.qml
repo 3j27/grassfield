@@ -59,6 +59,11 @@ FocusScope {
         }
     }
 
+    // The content has scrolled under the window's toolbar: the toolbar draws its rule (ADR-0039 D3, step 16). The page view is
+    // a TableView it does not expose, so past the first page (within it, the rule waits; NOT VERIFIED here: QtQuick.Pdf is not
+    // in the test container).
+    readonly property bool scrolled: view.currentPage > 0
+
     PdfMultiPageView {
         id: view
         anchors.fill: parent

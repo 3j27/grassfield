@@ -34,7 +34,7 @@ T.AbstractButton {
     }
 
     background: Rectangle {
-        radius: Tokens.radiusMenu
+        radius: Tokens.radiusGroup
         color: Appearance.colors.groupFill
         // Increase Contrast outlines the group, as SettingsGroup does.
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
@@ -50,7 +50,7 @@ T.AbstractButton {
 
         // Keyboard focus only (never after a click).
         FocusRing {
-            shapeRadius: Tokens.radiusMenu
+            shapeRadius: Tokens.radiusGroup
             visible: root.visualFocus
         }
     }

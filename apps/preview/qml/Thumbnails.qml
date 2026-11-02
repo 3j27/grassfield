@@ -20,6 +20,9 @@ ListView {
 
     onCurrentIndexChanged: root.positionViewAtIndex(root.currentIndex, ListView.Contain)
 
+    // The overlay scroll bar every list of the apps shows (ADR-0039 step 16).
+    ScrollBar.vertical: ScrollBar {}
+
     delegate: Item {
         id: cell
 
@@ -68,7 +71,8 @@ ListView {
             color: "transparent"
             radius: Tokens.radiusControl
             border.width: Tokens.controlFocusOutline
-            border.color: Appearance.colors.accent
+            // The accent while the window is key, neutral while it is not (macOS 27; ADR-0039 step 17).
+            border.color: Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
         }
 
         Text {

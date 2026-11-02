@@ -55,7 +55,7 @@ TestCase {
         const rows = Logic.menu([{id: "foot", name: "Foot"}], [{path: "/h/Docs/report.pdf", modified: 5}], texts);
         compare(rows.filter(r => !r.separator).map(r => r.id).join(","), "recentHeader,recentApp,recentHeader,recentDocument,recentClear");
         compare(rows[0].text, "Applications");
-        verify(rows[0].enabled === false, "headers are not choosable");
+        verify(rows[0].header === true, "headers are section titles, never chosen (ADR-0039 step 25)");
         compare(rows[1].appId, "foot");
         const doc = rows.find(r => r.id === "recentDocument");
         compare(doc.text, "report.pdf");

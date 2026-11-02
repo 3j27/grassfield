@@ -3,16 +3,16 @@ import Grassfield.Ui
 
 // Back and forward of a Files toolbar: one 72 x 36 capsule (macOS). The browser window's and the Open and Save panels'
 // (FilePanel.qml).
-Rectangle {
+// The toolbar's rimmed capsule, as Settings' (ADR-0039 step 23).
+RimmedCapsule {
     id: root
 
     // The BrowserTab it moves (null: both disabled).
     required property var tab
 
     width: navRow.width + Tokens.spacingXs
-    height: Tokens.filesToolbarCapsule
-    radius: height / 2
-    color: Appearance.buttonFill
+    height: Tokens.toolbarCapsule
+    fillOpacity: Tokens.toolbarCapsuleFillOpacity
     Accessible.role: Accessible.Grouping
     Accessible.name: qsTr("Navigation")
 
@@ -22,7 +22,7 @@ Rectangle {
 
         ToolButton {
             capsule: true
-            buttonSize: Tokens.filesToolbarGroupButton
+            buttonSize: Tokens.toolbarGroupButton
             iconName: "chevron-right"
             iconRotation: 180
             enabled: root.tab !== null && root.tab.canBack
@@ -32,7 +32,7 @@ Rectangle {
 
         ToolButton {
             capsule: true
-            buttonSize: Tokens.filesToolbarGroupButton
+            buttonSize: Tokens.toolbarGroupButton
             iconName: "chevron-right"
             enabled: root.tab !== null && root.tab.canForward
             accessibleName: qsTr("Forward")

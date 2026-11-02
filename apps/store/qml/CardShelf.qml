@@ -33,6 +33,11 @@ FocusScope {
         }
     }
 
+    // The keyboard's ring only, never after a click (ADR-0039 step 24, G7).
+    KeyFocus {
+        id: shelfFocus
+    }
+
     ListView {
         id: view
         width: root.width + Tokens.storeContentMargin
@@ -57,7 +62,7 @@ FocusScope {
 
             FocusRing {
                 shapeRadius: Tokens.storeCardRadius
-                visible: root.activeFocus && view.currentIndex === card.index
+                visible: shelfFocus.active && view.currentIndex === card.index
             }
         }
     }

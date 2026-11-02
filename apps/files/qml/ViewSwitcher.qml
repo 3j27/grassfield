@@ -24,16 +24,15 @@ Item {
     readonly property real fullWidth: root.viewModes.length * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding
 
     width: root.compact ? Tokens.filesViewPopupWidth : root.fullWidth
-    height: Tokens.filesToolbarCapsule
+    height: Tokens.toolbarCapsule
 
     // View switcher (macOS 27 Finder, measured on Finder-Home): four segments in a capsule, the selected view a pill
     // darker than the capsule, a rule between two views that are not selected.
-    Rectangle {
+    RimmedCapsule {
         visible: !root.compact
         width: root.viewModes.length * Tokens.filesViewSegmentWidth + 2 * Tokens.filesViewGroupPadding
-        height: Tokens.filesToolbarCapsule
-        radius: height / 2
-        color: Appearance.buttonFill
+        height: Tokens.toolbarCapsule
+        fillOpacity: Tokens.toolbarCapsuleFillOpacity
         Accessible.role: Accessible.Grouping
         Accessible.name: qsTr("View")
 
@@ -85,18 +84,17 @@ Item {
 
     // The switcher folded into one pop-up button while the search field is open or the title has no room
     // (Finder-Search): the current view's glyph and up and down chevrons; it opens View As.
-    Rectangle {
+    RimmedCapsule {
         visible: root.compact
         width: Tokens.filesViewPopupWidth
-        height: Tokens.filesToolbarCapsule
-        radius: height / 2
-        color: Appearance.buttonFill
+        height: Tokens.toolbarCapsule
+        fillOpacity: Tokens.toolbarCapsuleFillOpacity
 
         ToolButton {
             id: viewPopup
             anchors.fill: parent
             capsule: true
-            buttonSize: Tokens.filesToolbarCapsule
+            buttonSize: Tokens.toolbarCapsule
             enabled: root.tab !== null
             accessibleName: qsTr("View")
             onClicked: {

@@ -684,18 +684,17 @@ Window {
                 }
 
                 // Group By (Finder): a capsule with the groups glyph and a chevron; its menu groups and sorts the folder.
-                Rectangle {
+                RimmedCapsule {
                     width: Tokens.filesGroupButtonWidth
-                    height: Tokens.filesToolbarCapsule
-                    radius: height / 2
-                    color: Appearance.buttonFill
+                    height: Tokens.toolbarCapsule
+                    fillOpacity: Tokens.toolbarCapsuleFillOpacity
                     anchors.verticalCenter: parent.verticalCenter
 
                     ToolButton {
                         id: groupButton
                         anchors.fill: parent
                         capsule: true
-                        buttonSize: Tokens.filesToolbarCapsule
+                        buttonSize: Tokens.toolbarCapsule
                         enabled: win.tab !== null && win.tab.groupsShown
                         accessibleName: qsTr("Group By")
                         onClicked: {
@@ -727,18 +726,29 @@ Window {
                     }
                 }
 
-                ToolButton {
-                    id: actionButton
-                    accessibleName: qsTr("Action")
+                // Action in the toolbar's rimmed capsule, as macOS 27 Finder groups Share, Tags and Action (Finder-Home; Files
+                // has Action alone; ADR-0039 step 23).
+                RimmedCapsule {
+                    width: Tokens.toolbarCapsule
+                    height: Tokens.toolbarCapsule
+                    fillOpacity: Tokens.toolbarCapsuleFillOpacity
                     anchors.verticalCenter: parent.verticalCenter
-                    onClicked: {
-                        const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
-                        win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
-                    }
 
-                    ViewGlyph {
-                        anchors.centerIn: parent
-                        kind: "more"
+                    ToolButton {
+                        id: actionButton
+                        anchors.fill: parent
+                        capsule: true
+                        buttonSize: Tokens.toolbarCapsule
+                        accessibleName: qsTr("Action")
+                        onClicked: {
+                            const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
+                            win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                        }
+
+                        ViewGlyph {
+                            anchors.centerIn: parent
+                            kind: "more"
+                        }
                     }
                 }
 
@@ -865,7 +875,7 @@ Window {
                 width: parent.width - 2 * Tokens.spacingMd
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 text: {

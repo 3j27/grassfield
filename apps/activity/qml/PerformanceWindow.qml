@@ -132,7 +132,7 @@ Window {
                         elide: Text.ElideRight
                         text: modelData
                         color: resource.chosen && sidebar.activeFocus ? Appearance.colors.selectionText
-                             : index === 0 ? Appearance.colors.text : Appearance.colors.textSecondary
+                             : index === 0 ? Appearance.colors.text : Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: index === 0 ? Tokens.typographyBodySize : Tokens.typographyCaptionSize
                         font.weight: index === 0 ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
@@ -215,7 +215,7 @@ Window {
                     textFormat: Text.PlainText
                     elide: Text.ElideRight
                     text: root.detail.subtitle || ""
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
                 }
@@ -247,7 +247,7 @@ Window {
                     Text {
                         textFormat: Text.PlainText
                         text: big.modelData.title
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
                     }
@@ -334,7 +334,7 @@ Window {
                             textFormat: Text.PlainText
                             wrapMode: Text.Wrap
                             text: pair.modelData.label
-                            color: Appearance.colors.textSecondary
+                            color: Appearance.windowSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyBodySize
                         }

@@ -43,7 +43,6 @@
    {"file": "shell/overlay/Dialog.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/AppAboutPanel.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/SharePickerPanel.qml", "class": "secondary", "count": 3},
-   {"file": "shell/overlay/VolumeMenu.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/controlcenter/Caption.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/controlcenter/RadioRow.qml", "class": "secondary", "count": 1},
    {"file": "shell/overlay/controlcenter/ListRow.qml", "class": "secondary", "count": 1},
@@ -62,8 +61,7 @@
    {"file": "shell/widgets/builtin/nowplaying/NowPlaying.qml", "class": "secondary", "count": 3},
    {"file": "ui/Grassfield/Ui/Appearance.qml", "class": "secondary", "count": 1},
    {"file": "ui/Grassfield/Ui/MenuItem.qml", "class": "secondary", "count": 2},
-   {"file": "ui/Grassfield/Ui/PopupMenu.qml", "class": "secondary", "count": 1},
-   {"file": "shell/overlay/TilingPopover.qml", "class": "secondary", "count": 2},
+   {"file": "ui/Grassfield/Ui/MenuHeader.qml", "class": "secondary", "count": 1},
    {"file": "ui/Grassfield/Ui/SwatchRow.qml", "class": "secondary", "count": 1},
     {"file": "ui/Grassfield/Ui/Sheet.qml", "class": "secondary", "count": 1},
     {"file": "ui/Grassfield/Ui/SearchField.qml", "class": "secondary", "count": 2},
@@ -90,6 +88,7 @@
   {"id": "desktop label (white on opaque shadow core: ceiling)", "fg": "darkColors.text", "backdrop": "desktop-label", "kind": "text", "sites": []},
   {"id": "menu bar text and glyphs, light foreground (bare bar over a dark wallpaper)", "fg": "darkColors.barText", "backdrop": "bar-light-tone", "kind": "text", "sites": []},
   {"id": "menu bar text and glyphs, dark foreground (bare bar over a light wallpaper)", "fg": "lightColors.barText", "backdrop": "bar-dark-tone", "kind": "text", "sites": []},
+  {"id": "desktop label, dark foreground (over a light wallpaper: the menu bar's rule, ADR-0039 step 25)", "fg": "lightColors.barText", "backdrop": "bar-dark-tone", "kind": "text", "sites": []},
   {"id": "desktop label error (opaque shadow core: ceiling)", "fg": "darkColors.danger", "backdrop": "desktop-label", "kind": "text", "sites": [
    {"file": "shell/desktop/DesktopIcon.qml", "class": "danger", "count": 2}
   ]},
@@ -162,7 +161,7 @@
     {"file": "ui/Grassfield/Ui/RadioButton.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "ui/Grassfield/Ui/SegmentedControl.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "ui/Grassfield/Ui/SpinBox.qml", "class": "opacity-dynamic", "count": 1},
-    {"file": "ui/Grassfield/Ui/TextField.qml", "class": "opacity-dynamic", "count": 1}
+    {"file": "ui/Grassfield/Ui/TextField.qml", "class": "opacity-dynamic", "count": 2}
   ]},
   {"id": "disabled text in the text colour", "fg": "colors.text", "opacity": ["material.disabledOpacity"], "backdrop": "material", "kind": "text",
    "exempt": "disabled or inactive component: exempt from WCAG 1.4.3 (a menu row, the tiling popover's disabled layouts and rows)",
@@ -176,10 +175,10 @@
   {"id": "scroll bar thumb (text colour at the thumb opacity)", "fg": "colors.text", "opacity": ["control.scrollbarThumbOpacity"], "backdrop": "material", "kind": "icon", "exempt": "overlay scroll bar thumb: a redundant, transient position indicator (the view also scrolls by wheel, keys and touch); its contrast is listed, not asserted", "sites": [
     {"file": "ui/Grassfield/Ui/ScrollBar.qml", "class": "alpha", "count": 1}
   ]},
-  {"id": "neutral highlight of the tiling popover's layout glyphs, rows and suggestions (text colour at the hover opacity)", "fg": "colors.text", "opacity": ["material.hoverOpacity"], "backdrop": "material", "kind": "icon", "exempt": "the keyboard-current or hovered layout glyph or row of the tiling popover and window of its suggestions, a neutral fill where the menus use the accent (ADR-0039 G6, closed by step 12); the text on it is covered by 'text on material', whose backdrop already holds the stronger fill overlay (material.fillOpacity); the highlight's own contrast is listed, not asserted, and tracked in docs/specs/tiling.md Known limitations", "sites": [
-    {"file": "shell/overlay/TilingPopover.qml", "class": "alpha", "count": 2},
-    {"file": "shell/overlay/TilingSuggestions.qml", "class": "alpha", "count": 1}
+  {"id": "a window's toolbar title while the window is not key (text colour at the inactive opacity)", "fg": "colors.text", "opacity": ["window.inactiveTextOpacityLight"], "backdrop": "window", "kind": "text", "exempt": "disabled or inactive component: exempt from WCAG 1.4.3; macOS 27 dims an inactive window's toolbar title to 1.98:1 (light, black 0.28) and 2.73:1 (dark, white 0.32), measured on its release captures (ADR-0039 step 17); the key window's title is 'text on an app window'", "sites": [
+    {"file": "ui/Grassfield/Ui/UnifiedToolbar.qml", "class": "alpha", "count": 1}
   ]},
+  {"id": "neutral selection of an item on glass (the hover ink at the selection opacity)", "fg": "colors.hover", "opacity": ["material.selectionOpacity"], "backdrop": "material", "kind": "icon", "exempt": "the current tile of the switcher and of a stack's grid, an Overview minimized window under the pointer or the keys, the tiling suggestions' window: one role since ADR-0039 step 12 (G6), at macOS 27's own value (its App Switcher: black at 0.25, 1.8:1 on its glass), under the 3:1 a state indicator should reach, as macOS draws it; the keys' current item also carries the focus ring (step 7); the text on it is covered by 'text on material', whose backdrop holds the stronger fill overlay; listed, not asserted, and tracked in docs/specs/tiling.md Known limitations", "sites": []},
   {"id": "clipboard page border in Search (text colour at the fill opacity)", "fg": "colors.text", "opacity": ["material.fillOpacity"], "backdrop": "material", "kind": "icon", "exempt": "decoration: the hairline round the clipboard preview's page in Search; the page's own text carries the content and has its role; its contrast is listed, not asserted", "sites": [
     {"file": "shell/search/SearchPanel.qml", "class": "alpha", "count": 1}
   ]},

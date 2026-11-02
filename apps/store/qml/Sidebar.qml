@@ -10,6 +10,10 @@ FocusScope {
     id: root
 
     required property var win
+    // The selected row's fill: the measured neutral while the window is key, the inactive selection while it is not (ADR-0039
+    // step 24, as Settings' sidebar in step 17).
+    readonly property color selectionFill: Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.withAlpha(Appearance.colors.text, Tokens.storeSidebarSelectionOpacity)
+                                                              : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)
     // [{key, title, icon}]
     property var items: []
     property string selectedKey: ""
@@ -47,77 +51,41 @@ FocusScope {
         doubleClickAction: root.win.backend.titlebarDoubleClick
     }
 
-    RimmedCapsule {
-        id: searchBox
+    // The shared search field (ADR-0039 step 24: the rimmed 28-pt capsule with a clear button, Settings' field), centred in the
+    // 29-pt slot measured on macOS 27 Discover. Return searches (and asks the AUR, SR7), Down moves to the list, Escape clears
+    // the field and, once it is empty, leaves it for the list (SR6: the field lets that Escape through to its host here).
+    Item {
         x: Tokens.storeSidebarInset
         y: Tokens.storeSidebarSearchTop
         width: parent.width - 2 * Tokens.storeSidebarInset
         height: Tokens.storeSidebarSearchHeight
-
-        FocusRing {
-            visible: search.activeFocus
-            shapeRadius: searchBox.radius
+        Keys.onEscapePressed: event => {
+            list.forceActiveFocus();
+            event.accepted = true;
         }
 
-        Icon {
-            id: searchIcon
-            name: "search"
-            size: Tokens.menuIconSize
-            color: Appearance.colors.textSecondary
-            x: Tokens.spacingSm
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
-        TextInput {
+        SearchField {
             id: search
-            TextCursor {}
-            anchors {
-                left: searchIcon.right
-                leftMargin: Tokens.spacingSm
-                right: parent.right
-                rightMargin: Tokens.spacingSm
-                verticalCenter: parent.verticalCenter
-            }
-            clip: true
+            width: parent.width
+            anchors.verticalCenter: parent.verticalCenter
             activeFocusOnTab: true
             persistentSelection: true
-            color: Appearance.colors.text
-            selectionColor: Appearance.highlight
-            selectedTextColor: Appearance.highlightText
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyBodySize
             maximumLength: Tokens.storeSearchMaxLength
+            accessibleName: qsTr("Search apps")
             onTextEdited: root.queryEdited(text)
-            Accessible.role: Accessible.EditableText
-            Accessible.name: qsTr("Search apps")
-            Accessible.searchEdit: true
-
-            Keys.onPressed: event => {
-                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    root.queryAccepted();
-                    event.accepted = true;
-                } else if (event.key === Qt.Key_Escape) {
-                    // Esc clears the field, then leaves it (SR6).
-                    if (text !== "") {
-                        text = "";
-                        root.queryEdited("");
-                    } else {
-                        list.forceActiveFocus();
-                    }
-                    event.accepted = true;
-                } else if (event.key === Qt.Key_Down) {
-                    list.keyboardRing = true;
-                    list.forceActiveFocus();
-                    event.accepted = true;
-                }
+            onCleared: root.queryEdited("")
+            Keys.onReturnPressed: event => {
+                root.queryAccepted();
+                event.accepted = true;
             }
-
-            Text {
-                textFormat: Text.PlainText
-                visible: search.text === "" && !search.activeFocus
-                text: qsTr("Search")
-                color: Appearance.colors.textSecondary
-                font: search.font
+            Keys.onEnterPressed: event => {
+                root.queryAccepted();
+                event.accepted = true;
+            }
+            Keys.onDownPressed: event => {
+                list.keyboardRing = true;
+                list.forceActiveFocus();
+                event.accepted = true;
             }
         }
     }
@@ -180,7 +148,8 @@ FocusScope {
             Rectangle {
                 anchors.fill: parent
                 radius: Tokens.storeSidebarRowRadius
-                color: row.selected ? Appearance.withAlpha(Appearance.colors.text, Tokens.storeSidebarSelectionOpacity)
+                // A window that is not key draws its selection lighter, as Settings' (ADR-0039 steps 17 and 24).
+                color: row.selected ? root.selectionFill
                      : (hover.hovered ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
             }
 
@@ -268,13 +237,18 @@ FocusScope {
         Rectangle {
             anchors.fill: parent
             radius: Tokens.storeSidebarRowRadius
-            color: root.installedShown ? Appearance.withAlpha(Appearance.colors.text, Tokens.storeSidebarSelectionOpacity)
+            color: root.installedShown ? root.selectionFill
                  : (accountHover.hovered ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
         }
 
+        // The keyboard's ring only (ADR-0039 step 24, G7).
         FocusRing {
             shapeRadius: Tokens.storeSidebarRowRadius
-            visible: account.activeFocus
+            visible: accountFocus.active
+        }
+
+        KeyFocus {
+            id: accountFocus
         }
 
         Rectangle {

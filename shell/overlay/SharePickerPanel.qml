@@ -137,8 +137,22 @@ Dialog {
             height: Tokens.panelSharePickerRows * grid.cellHeight + 2 * Tokens.spacingSm
             radius: Tokens.radiusControl
             color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2) : Appearance.lightWellFill
-            border.width: grid.activeFocus || regionView.activeFocus ? Tokens.controlFocusOutline : 1
-            border.color: grid.activeFocus || regionView.activeFocus ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+            border.width: 1
+            border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+
+            // The well keeps its hairline; the shared ring goes round it while the grid or the region has the keyboard
+            // (ADR-0039 step 7, as Force Quit's list; the merge of #83 with #88, as #90 resolved it).
+            KeyFocus {
+                id: gridFocus
+                target: grid
+            }
+            KeyFocus {
+                id: regionFocus
+                target: regionView
+            }
+            FocusRing {
+                visible: gridFocus.active || regionFocus.active
+            }
 
             GridView {
                 id: grid

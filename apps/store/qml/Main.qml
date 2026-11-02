@@ -571,16 +571,16 @@ Window {
             leading: RimmedCapsule {
                 visible: root.canBack || root.canForward
                 width: navRow.width + Tokens.spacingXs
-                height: Tokens.filesToolbarCapsule
-                fillOpacity: Tokens.settingsToolbarFillOpacity
+                height: Tokens.toolbarCapsule
+                fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Navigation")
 
                 Rectangle {
                     anchors.centerIn: parent
                     width: parent.hairline
-                    height: Tokens.settingsToolbarDividerHeight
-                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                    height: Tokens.toolbarDividerHeight
+                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.toolbarDividerOpacity)
                 }
 
                 Row {
@@ -589,7 +589,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         iconRotation: 180
                         enabled: root.canBack
@@ -599,7 +599,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         enabled: root.canForward
                         accessibleName: qsTr("Forward")

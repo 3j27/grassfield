@@ -290,7 +290,10 @@ Scope {
             // Transparent by default (like macOS 26/27); `menubar.showBackground` restores the frosted band, and so does a wallpaper
             // strip over which neither tone reaches 4.5:1 (BarTone.assistOf, ADR-0016: shown on that output until the wallpaper changes).
             // Over a full-screen window the bar is drawn on that window's content, not on the wallpaper the tone was measured on: the frosted band then (macOS does the same).
+            // Reduce Transparency and Increase Contrast show the band too, as macOS does (ADR-0039 step 25): the opaque band under
+            // the first, the frosted one under the second.
             readonly property bool showBackground: Settings.menubarShowBackground || BarTone.assistOf(win.screen.name) || win.fullscreen
+                || Appearance.reduceTransparency || Appearance.increaseContrast
             // Without a background the bar sits on the wallpaper and its foreground adapts to the wallpaper strip under this
             // output's bar (BarTone, the macOS model): white text over a dark wallpaper, black over a light one, with a faint
             // shadow of the opposite colour (gate A2). On the material it is the appearance's text colour.
@@ -927,7 +930,9 @@ Scope {
                 y: win.slideY
                 width: parent.width
                 height: parent.height
-                opacity: win.dimOpacity * win.entrance
+                // Dimmed with the bar on a display that is not the active one, but never made see-through under Reduce
+                // Transparency (ADR-0039 step 25): the opaque band stays opaque, its content dims. It comes in with the bar.
+                opacity: (Appearance.reduceTransparency ? 1 : win.dimOpacity) * win.entrance
                 visible: win.showBackground
                 // ADR-0024: the band is glass like the other surfaces (the "menu" class: its target at the slider, raised to keep the
                 // text at 4.5:1 over the wallpaper strip), not the legacy clamped tint; the strip under the bar is what lies behind it.

@@ -7,10 +7,10 @@
 #include <string_view>
 
 namespace gf::theme::tokens {
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarBackgroundDark = 0x2A2824;
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    inline constexpr uint32_t kTitlebarBackgroundLight = 0xEFECE7;
+    // the compositor-drawn titlebar of server-side-decorated (third-party) windows, dark appearance: the window's own colour (color.dark.windowBackground), the owner's answer to ADR-0039 Q8 (a) of 2026-10-29, where it was a band of its own (#2A2824, the warm #28282C); a hairline under it (titlebar.rule*) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarBackgroundDark = 0x2B2925;
+    // the same, light appearance: the window's own colour (color.light.windowBackground, the warm white), ADR-0039 Q8 (a), where it was a grey band (#EFECE7, the warm #ECECEE: 236 on a white window) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarBackgroundLight = 0xFDFCF9;
     // window title on the dark titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr uint32_t kTitlebarTitleDark = 0xEFECE7;
     // window title on the light titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -35,6 +35,16 @@ namespace gf::theme::tokens {
     inline constexpr double kTitlebarPreviewRimOpacity = 0.22;
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     inline constexpr int kTitlebarPreviewRimWidth = 2;
+    // the hairline under the bar, light appearance: the apps' toolbar rule (color.light.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarRuleLight = 0x000000;
+    // its opacity: the apps' separator opacity in the light appearance (material.separatorOpacityLight) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr double kTitlebarRuleOpacityLight = 0.08;
+    // the hairline under the bar, dark appearance (color.dark.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr uint32_t kTitlebarRuleDark = 0xFFFFFF;
+    // its opacity: the apps' separator opacity in the dark appearance (material.separatorOpacity) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr double kTitlebarRuleOpacityDark = 0.16;
+    // its width, one point, as every separator (ADR-0039 D5) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    inline constexpr int kTitlebarRuleWidth = 1;
     // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
     inline constexpr int kWindowLightDiameter = 14;
     // ADR-0015 / f1-reference-gaps.md:103: gap between two light edges (pitch 23); plugin kButtonSpacing
@@ -77,6 +87,26 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowItemsGap = 8;
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     inline constexpr int kWindowItemsInset = 8;
+    // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr uint32_t kWindowEdgeDark = 0xFFFFFF;
+    // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr uint32_t kWindowEdgeLight = 0x000000;
+    // the active window's edge, dark appearance: unchanged from the config (rgba(ffffff26)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeActiveOpacityDark = 0.15;
+    // an inactive window's edge, dark appearance: unchanged from the config (rgba(ffffff14)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeInactiveOpacityDark = 0.08;
+    // the active window's edge, light appearance: macOS 27's contact edge, about black at 0.25 (measured 0.27 to 0.47 over its shadow in the release captures) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeActiveOpacityLight = 0.25;
+    // estimate: an inactive window's edge in the light appearance, at the dark appearance's inactive-to-active ratio (0.08 / 0.15) of 0.25, not measured [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    inline constexpr double kWindowEdgeInactiveOpacityLight = 0.13;
+    // a window that is not key, light appearance: its toolbar title and glyphs in the text colour at this opacity (macOS 27's inactive Finder and Settings: the title #B8B8B8 on white, the glyphs #B0B0B0 on #F0F0F0, black at 0.27-0.28; 512 Pixels release capture Finder-App-Switcher); an inactive control, exempt from WCAG 1.4.3 (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    inline constexpr double kWindowInactiveTextOpacityLight = 0.28;
+    // the same, dark appearance: macOS 27's inactive Settings title #747373 on #333131, white at 0.32 (512 Pixels release capture Apperance-Dark-Green) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    inline constexpr double kWindowInactiveTextOpacityDark = 0.32;
+    // a window that is not key, light appearance: its selection turns neutral, the hover ink at this opacity over its background with the label in the text colour (macOS 27's inactive Settings: #E8E7E6 on its #F3F2F1 sidebar, black at 0.045; 512 Pixels release capture Finder-App-Switcher) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    inline constexpr double kWindowInactiveSelectionOpacityLight = 0.045;
+    // estimate: the same, dark appearance (macOS's unemphasized dark selection, about #464646 on a #2B2B2B sidebar, white at 0.11; no dark macOS 27 inactive selection measured) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    inline constexpr double kWindowInactiveSelectionOpacityDark = 0.11;
     // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
     inline constexpr int kTilingEdge = 4;
     // logical px at the top and bottom of a free side edge where a drag tiles a quarter (kCorner before ADR-0036 step 1; compared with the owner's captures in nested, F1) [ref: docs/specs/tiling.md § Functional requirements]
@@ -121,6 +151,8 @@ namespace gf::theme::tokens {
     inline constexpr int kTilingSuggestTileWidth = 240;
     // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     inline constexpr double kTilingSuggestThumbAspect = 1.6;
+    // a tiling suggestion's window thumbnail rounded as the Overview's (overview.thumbRadius 10); it was square (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    inline constexpr int kTilingSuggestThumbRadius = 10;
     // estimate until measured in nested against the owner's captures: the middle of the stretch two windows of a tile group share along an edge where a drag resizes every window along it (pt; outside it the edge resizes one window, TL30; parity rows M43 and W18) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     inline constexpr int kTilingHandleLength = 120;
     // own value: the shared-edge handle is at least this wide across the edge (pt; the margin between tiled windows is 8; without margins the band takes half from each window, as Hyprland's border grab does, TL30) [ref: docs/specs/tiling.md § Functional requirements]

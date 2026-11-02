@@ -51,7 +51,8 @@ TestCase {
         nav.forceActiveFocus(Qt.MouseFocusReason);
         verify(nav.activeFocus);
         compare(nav.visualFocus, false);
-        compare(ring.border.width, 0);
+        // The shared FocusRing outside the item (ADR-0039 step 7): hidden, not thinned.
+        compare(ring.visible, false);
     }
 
     function test_keyboardFocusShowsTheRing() {
@@ -60,7 +61,10 @@ TestCase {
         const nav = loader.item;
         nav.forceActiveFocus(Qt.TabFocusReason);
         compare(nav.visualFocus, true);
+        verify(ringOf(nav).visible);
         compare(ringOf(nav).border.width, Tokens.controlFocusOutline);
+        // Outside the item, never inside its shape.
+        verify(ringOf(nav).x < 0 && ringOf(nav).width > nav.width, "ring " + ringOf(nav).x + ", " + ringOf(nav).width);
     }
 
     function test_knoblessSliderIsAWhiteFillOnADarkerTrack() {

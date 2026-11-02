@@ -238,9 +238,9 @@ Window {
             RimmedCapsule {
                 id: actionGroup
                 width: actionRow.width + Tokens.spacingXs
-                height: Tokens.filesToolbarCapsule
+                height: Tokens.toolbarCapsule
                 anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-                fillOpacity: Tokens.settingsToolbarFillOpacity
+                fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Process actions")
 
@@ -252,8 +252,8 @@ Window {
                         x: actionRow.x + stopButton.width + (index === 1 ? infoButton.width : 0) - width / 2
                         anchors.verticalCenter: parent.verticalCenter
                         width: actionGroup.hairline
-                        height: Tokens.settingsToolbarDividerHeight
-                        color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                        height: Tokens.toolbarDividerHeight
+                        color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.toolbarDividerOpacity)
                     }
                 }
 
@@ -263,9 +263,11 @@ Window {
 
                     ToolButton {
                         id: stopButton
+                        // The window's own tooltip names it (toolbarTip, AM3), with more than its name.
+                        tooltip: ""
                         objectName: "stopButton"
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "xmark-octagon"
                         enabled: root.backend.actions.canQuit
                         accessibleName: qsTr("Quit Process")
@@ -278,9 +280,11 @@ Window {
 
                     ToolButton {
                         id: infoButton
+                        // The window's own tooltip names it (toolbarTip, AM3), with more than its name.
+                        tooltip: ""
                         objectName: "infoButton"
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "info"
                         enabled: root.backend.canInspect
                         accessibleName: qsTr("Inspect Process")
@@ -293,9 +297,11 @@ Window {
 
                     ToolButton {
                         id: moreButton
+                        // The window's own tooltip names it (toolbarTip, AM3), with more than its name.
+                        tooltip: ""
                         objectName: "moreButton"
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "ellipsis-circle"
                         accessibleName: qsTr("Actions")
                         onClicked: {
@@ -361,7 +367,7 @@ Window {
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
                 text: root.backend.viewTitle
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 Accessible.role: Accessible.StaticText

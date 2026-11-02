@@ -100,6 +100,8 @@ namespace gf::theme {
         // this tint, as macOS's frosted pane), and its edge.
         Rgba previewTint;
         Rgba previewRim;
+        // The hairline under the bar (ADR-0039 Q8, step 21): the apps' toolbar rule, the bar itself the window's own colour.
+        Rgba rule;
     };
 
     constexpr TitlebarPalette titlebarPalette(Appearance appearance) {
@@ -112,20 +114,25 @@ namespace gf::theme {
                                        .title         = fromHex(tokens::kTitlebarTitleLight, titleAlpha),
                                        .inactiveLight = fromHex(tokens::kTitlebarInactiveButtonLight),
                                        .previewTint   = fromHex(tokens::kTitlebarPreviewTintLight, tintAlpha),
-                                       .previewRim    = fromHex(tokens::kTitlebarPreviewRimLight, rimAlpha)};
+                                       .previewRim    = fromHex(tokens::kTitlebarPreviewRimLight, rimAlpha),
+                                       .rule          = fromHex(tokens::kTitlebarRuleLight, static_cast<float>(tokens::kTitlebarRuleOpacityLight))};
             case Appearance::Dark:
             default:
                 return TitlebarPalette{.background    = fromHex(tokens::kTitlebarBackgroundDark),
                                        .title         = fromHex(tokens::kTitlebarTitleDark, titleAlpha),
                                        .inactiveLight = fromHex(tokens::kTitlebarInactiveButtonDark),
                                        .previewTint   = fromHex(tokens::kTitlebarPreviewTintDark, tintAlpha),
-                                       .previewRim    = fromHex(tokens::kTitlebarPreviewRimDark, rimAlpha)};
+                                       .previewRim    = fromHex(tokens::kTitlebarPreviewRimDark, rimAlpha),
+                                       .rule          = fromHex(tokens::kTitlebarRuleDark, static_cast<float>(tokens::kTitlebarRuleOpacityDark))};
         }
     }
 
     // The appearance until the shell says otherwise (hl.plugin.grassfield.config("appearance", "dark" | "light"), feature
     // "appearance"; Grassfield's default appearance is dark).
     inline constexpr Appearance kDefaultAppearance = Appearance::Dark;
+
+    // The width of the hairline under the bar (one point, ADR-0039 D5).
+    inline constexpr double kTitlebarRuleWidth = tokens::kTitlebarRuleWidth;
 
     // The width of the tiling preview's edge (logical px).
     inline constexpr double kTilePreviewRim = tokens::kTitlebarPreviewRimWidth;

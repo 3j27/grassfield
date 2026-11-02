@@ -816,7 +816,7 @@ SettingsPage {
                     Rectangle {
                         x: Tokens.settingsRowInset
                         width: parent.width - 2 * Tokens.settingsRowInset
-                        height: 1
+                        height: Tokens.appsBorderWidth
                         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                     }
 
@@ -879,7 +879,7 @@ SettingsPage {
                 x: -root.columnX
                 y: Math.max(preview.y + preview.height + Tokens.settingsWallpaperSeparatorPreviewGap, (buttons.height > 0 ? buttons.y + buttons.height : options.y + options.height) + Tokens.settingsWallpaperSeparatorGap)
                 width: root.width
-                height: 1
+                height: Tokens.appsBorderWidth
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
         }

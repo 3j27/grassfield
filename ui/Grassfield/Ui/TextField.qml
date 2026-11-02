@@ -52,6 +52,25 @@ T.TextField {
     TextCursor {}
     FocusGuard {}
 
+    // The placeholder, in the secondary colour while the field is empty: the template does not draw it (a style must), so a
+    // field's hint (a sheet's "~/Documents", Search) showed nothing (ADR-0039 step 14).
+    Text {
+        objectName: "placeholder"
+        x: root.leftPadding
+        y: root.topPadding
+        width: root.width - root.leftPadding - root.rightPadding
+        height: root.height - root.topPadding - root.bottomPadding
+        textFormat: Text.PlainText
+        text: root.placeholderText
+        font: root.font
+        color: root.placeholderTextColor
+        verticalAlignment: root.verticalAlignment
+        horizontalAlignment: root.horizontalAlignment
+        elide: Text.ElideRight
+        visible: root.length === 0 && root.preeditText === "" && (!root.activeFocus || root.horizontalAlignment !== Qt.AlignHCenter)
+        Accessible.ignored: true
+    }
+
     background: Rectangle {
         radius: root.fieldRadius
         color: root.fieldColor

@@ -50,7 +50,7 @@ TestCase {
         verify(/readonly property string current: WallpaperConfig\.groundFor\(root\.grounds, root\.firstScreen, Tokens\.sessionGround\)/.test(ground));
         const comp = source("shell/platform/Compositor.qml");
         verify(/readonly property string ground: Ground\.current/.test(comp) && /Minimized\.groundCall\(root\.ground\)/.test(comp), "the compositor gets the shown ground");
-        verify(/if \(answer === "ok"\)\s*Ground\.accepted = sock\.value;/.test(comp), "only an accepted ground is the cover's");
+        verify(/if \(sock\.what === "ground" && answer === "ok"\)\s*Ground\.accepted = sock\.value;/.test(comp), "only an accepted ground is the cover's");
         verify(/if \(!root\.groundKnown \|\| root\.groundRejected/.test(comp), "nothing pushed before the first screen reported (no flash at a restart)");
         verify(/duration: root\.fadeMs/.test(cover) && /readonly property int fadeMs: Appearance\.duration\(Tokens\.sessionExitFadeMs\)/.test(cover));
         // The compositor neither fades it (one owner of motion, ID-4) nor blurs it (it is opaque).

@@ -32,11 +32,18 @@ single instance.
    text highlight colour (`Appearance.highlight`, Settings > Appearance), as in Settings and Files. The title, the search
    field and the PDF's file names use the body size, which follows Text size; the document's own text is content and
    keeps its reading size (ADR-0039 step 3). The sidebar lists the files when more than one was given and the page
-   thumbnails of a PDF.
+   thumbnails of a PDF. The window's structure is every app's (ADR-0039 step 16): the sidebar edge to edge in the sidebar
+   fill, no dividing line (macOS 26's floating panel replaced, as ADR-0024 asks); the toolbar's groups and search circle
+   on the toolbar's rimmed capsules (`toolbar.capsule` 36) with 34-pt buttons (`toolbar.groupButton`); overlay scroll bars
+   on the image, the text and the sidebar's lists; a 1-px rule under the toolbar once the view's content has scrolled
+   under it (D3; a PDF past its first page).
 3. P3 Images (`ImageView.qml`): any format Qt can decode (`qt6-imageformats`, SVG through `qt6-svg`); fit (shrinks
    only) or zoom (0.05 to 16, Ctrl+wheel, pinch, + / - / 0 for 100 %, Ctrl+9 for Fit); rotation by quarter turns
    (Ctrl+R / Ctrl+L, view only); EXIF orientation applied; multi-page TIFF steps through pages (PgUp/PgDn, toolbar);
-   animated GIF and WebP play through `AnimatedImage`. Decoding goes through `image://preview/<frame>/<file index>`.
+   animated GIF and WebP play through `AnimatedImage`; under Reduce Motion they wait on their first frame with a play
+   control (a glass capsule at the bottom, Play / Pause), as macOS with "Auto-play animated images" off: Reduce Motion is
+   for the chrome, the content is the viewer's to play; the play ends with the setting's change or another file (ADR-0039
+   step 6). Decoding goes through `image://preview/<frame>/<file index>`.
 4. P4 PDF (`PdfView.qml`): QtPdf (`PdfMultiPageView`, pdfium, no JavaScript): continuous pages, zoom, fit to width,
    rotation, page navigation (PgUp/PgDn, Home/End, arrows turn pages, toolbar), thumbnails, text search (Ctrl+F,
    Enter next, Shift+Enter previous, Esc closes). Encrypted documents show a notice ("not supported yet").

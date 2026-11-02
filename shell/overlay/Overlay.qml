@@ -239,8 +239,9 @@ Variants {
 
             HoverHandler {
                 onPointChanged: {
+                    // The pointer switches menus here: what opens is the pointer's (Popups.openedByPointer).
                     if (hovered && strip.barInView)
-                        strip.bar.trackAt(point.position.x);
+                        Popups.withPointer(true, () => strip.bar.trackAt(point.position.x));
                 }
             }
 
@@ -252,7 +253,7 @@ Variants {
                     const onLight = mouse.button === Qt.LeftButton && popover !== null && popover.onLight(mouse.x, mouse.y);
                     switch (WindowTiling.stripPress(strip.barInView, onLight)) {
                     case "bar":
-                        strip.bar.pressAt(mouse.x, mouse.button === Qt.RightButton ? "right" : mouse.button === Qt.MiddleButton ? "middle" : "left");
+                        Popups.withPointer(true, () => strip.bar.pressAt(mouse.x, mouse.button === Qt.RightButton ? "right" : mouse.button === Qt.MiddleButton ? "middle" : "left"));
                         break;
                     case "green":
                         win.greenPress(mouse.x, mouse.y, mouse.button);

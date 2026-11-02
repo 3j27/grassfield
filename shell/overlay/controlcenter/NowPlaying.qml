@@ -21,7 +21,8 @@ Module {
         y: root.pad
         width: Tokens.panelCcArtSize
         height: width
-        radius: Tokens.radiusControl
+        // A cover art's corner, as macOS 27's Control Center (ADR-0039 step 13, G5).
+        radius: Tokens.radiusArtwork
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
         clip: true
 

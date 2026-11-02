@@ -2,12 +2,14 @@
 """Measures the plugin titlebar of one window on a GF-REF capture (tests/compositor/chrome.sh). No third-party modules.
 
 Usage: chrome_measure.py <capture.ppm> <surface x> <surface y> <surface w> <bar height> <close x> <minimize x> <zoom x>
-       <bar middle> [fill=<rrggbb>] [radius=<px>] [bar=<rrggbb>] [inactive=<rrggbb>]
+       <bar middle> [fill=<rrggbb>] [radius=<px>] [bar=<rrggbb>] [inactive=<rrggbb>] [rule=<rrggbb>]
 Positions in output pixels (scale 1): the surface box from `hyprctl clients`, the titlebar geometry from
 tests/compositor/titlebar_geometry.sh (button centres right of the surface's left edge, bar middle above its top edge).
 The corners are found where the fill colour starts: the titlebar's colour by default; without the plugin (bar height 0)
 the window's own content colour (fill=). radius= is the window's rounding, for the junction check. bar= and inactive=:
-the palette of the appearance measured (ui/tokens/tokens.json "titlebar"; the dark values below by default).
+the palette of the appearance measured (ui/tokens/tokens.json "titlebar"; the dark values below by default). rule=: the
+colour of the hairline the plugin draws in the bar's last row (titlebar.rule* over the bar, ADR-0039 step 21); without it
+the bar is measured to the surface.
 Prints key=value lines:
   <light>_cx <light>_cy   centre of the light (close, minimize, zoom), coverage-weighted, output px (pixel edges)
   <light>_d               diameter from the light's covered area
@@ -21,9 +23,12 @@ Prints key=value lines:
   junction_left/_right    (with radius=) pixels of the content's top corner squares that the rounding cuts away (outside
                           the corner curve) and that differ from the content next to them: the curve between bar and
                           content; 0 when the bar and the content join square
-  bar_rows                rows of bar colour right above the surface, 40 px left of its right edge
-  bar_bottom_gap          pixels of the bar's last row (30 px from either end) that are not bar colour
-  bar_left_gap            pixels of the bar's first column (below the corner) that are not bar colour
+  rule_rows               (with rule=) rows of the rule's colour right above the surface, 40 px left of its right edge
+  rule_colour             the colour of the row right above the surface there (rrggbb)
+  bar_rows                rows of bar colour above them (right above the surface without rule=)
+  bar_bottom_gap          pixels of the bar's last row (30 px from either end) that are not its colour: the rule's with
+                          rule=, the bar's without
+  bar_left_gap            pixels of the bar's first column (below the corner, above the rule) that are not bar colour
   corner_diag             first pixel of bar colour on the diagonal from the bar's top-left corner (-1: none)
   corner_diag_right       the same from the top-right corner
   radius_estimate         corner radius estimated from corner_diag (rounding_power 2.6; about +-2)
@@ -38,6 +43,7 @@ LIGHTS = {
     "zoom": (0x4F, 0xA6, 0x4F),
 }
 INACTIVE = (0x5A, 0x5A, 0x5E)  # ui/tokens/tokens.json titlebar.inactiveButtonDark (titlebarPalette(Dark).inactiveLight)
+RULE = None  # the hairline under the bar (option rule=; titlebar.rule* composited over the bar)
 ROUNDING_POWER = 2.6  # config/hypr/grassfield/looknfeel.lua decoration.rounding_power
 
 
@@ -159,16 +165,18 @@ def main():
         raise SystemExit(__doc__)
     img = Image(sys.argv[1])
     sx, sy, sw, bar_h, close_x, min_x, zoom_x, mid = (int(v) for v in sys.argv[2:10])
-    global BAR, INACTIVE  # the palette of the appearance measured (options bar= and inactive=, from the design tokens)
+    global BAR, INACTIVE, RULE  # the palette of the appearance measured (options bar=, inactive= and rule=, from the tokens)
     fill, radius = None, 0
     for option in sys.argv[10:]:
         key, _, value = option.partition("=")
-        if key in ("fill", "bar", "inactive"):
+        if key in ("fill", "bar", "inactive", "rule"):
             colour = (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
             if key == "fill":
                 fill = colour
             elif key == "bar":
                 BAR = colour
+            elif key == "rule":
+                RULE = colour
             else:
                 INACTIVE = colour
         elif key == "radius":
@@ -182,14 +190,23 @@ def main():
         out.update(measure_light(img, name, sx + ox, sy - mid))
 
     col = sx + sw - 40
+    last = img.at(col, sy - 1)
+    out["rule_colour"] = "%02x%02x%02x" % last if last else "none"
+    # The hairline in the bar's last row (ADR-0039 step 21), then the bar's own colour above it.
+    rule_rows = 0
+    if RULE is not None:
+        while rule_rows < 8 and close_to(img.at(col, sy - 1 - rule_rows), RULE, 8):
+            rule_rows += 1
+        out["rule_rows"] = rule_rows
     rows = 0
-    while rows < 200 and close_to(img.at(col, sy - 1 - rows), BAR, 8):
+    while rows < 200 and close_to(img.at(col, sy - 1 - rule_rows - rows), BAR, 8):
         rows += 1
     out["bar_rows"] = rows
 
     top = sy - bar_h
-    out["bar_bottom_gap"] = sum(1 for x in range(sx + 30, sx + sw - 30) if not close_to(img.at(x, sy - 1), BAR, 8))
-    out["bar_left_gap"] = sum(1 for y in range(top + 30, sy) if not close_to(img.at(sx, y), BAR, 8))
+    bottom = RULE if RULE is not None else BAR
+    out["bar_bottom_gap"] = sum(1 for x in range(sx + 30, sx + sw - 30) if not close_to(img.at(x, sy - 1), bottom, 8))
+    out["bar_left_gap"] = sum(1 for y in range(top + 30, sy - rule_rows) if not close_to(img.at(sx, y), BAR, 8))
 
     k = first_fill_on_diagonal(img, sx, top, 1, fill)
     out["corner_diag"] = k

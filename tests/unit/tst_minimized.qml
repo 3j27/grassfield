@@ -41,6 +41,53 @@ TestCase {
             compare(Minimized.groundCall(bad), "", String(bad));
     }
 
+    // The window edge per appearance (ADR-0039 step 6, C-4): the light appearance's is dark, the dark appearance's the config's
+    // own white hairline; a value that is not a colour or an alpha sends nothing.
+    function test_edgeCallIsBuiltPerAppearance() {
+        compare(Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight),
+                "function() hl.config({ general = { col = { active_border = \"rgba(00000040)\", inactive_border = \"rgba(00000021)\" } } }) end");
+        compare(Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark),
+                "function() hl.config({ general = { col = { active_border = \"rgba(ffffff26)\", inactive_border = \"rgba(ffffff14)\" } } }) end");
+        compare(Minimized.edgeCall("#000", 0.25, 0.13), "");
+        compare(Minimized.edgeCall("black", 0.25, 0.13), "");
+        compare(Minimized.edgeCall("#000000", 1.5, 0.13), "");
+        compare(Minimized.edgeCall("#000000", 0.25, NaN), "");
+        compare(Minimized.edgeCall("#000000\"; os.exit() --", 0.25, 0.13), "", "nothing but a colour reaches the Lua string");
+    }
+
+    function source(path) {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../" + path), false);
+        xhr.send();
+        verify(xhr.responseText.length > 0, path);
+        return xhr.responseText;
+    }
+
+    // A config reload restores the config's border: it must be the dark appearance's pair, which the shell then replaces in
+    // the light appearance.
+    function test_theConfigHoldsTheDarkEdge() {
+        const config = source("config/hypr/grassfield/looknfeel.lua");
+        const dark = Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark);
+        const active = /active_border = "(rgba\([0-9a-f]{8}\))"/.exec(dark)[1];
+        const inactive = /inactive_border = "(rgba\([0-9a-f]{8}\))"/.exec(dark)[1];
+        verify(config.indexOf('active_border = "' + active + '"') >= 0, "config active_border " + active);
+        verify(config.indexOf('inactive_border = "' + inactive + '"') >= 0, "config inactive_border " + inactive);
+    }
+
+    // The shell sends the edge of the appearance it shows, at start, on a change (debounced) and after a reload, as the blur
+    // (shell/platform/Compositor.qml needs Quickshell: read from its source).
+    function test_theShellPushesTheEdgeWithTheAppearance() {
+        const compositor = source("shell/platform/Compositor.qml").replace(/\/\/.*$/gm, "");
+        verify(/readonly property string edgeCall: Appearance\.dark\s*\?\s*Minimized\.edgeCall\(Tokens\.windowEdgeDark,[^:]*:\s*Minimized\.edgeCall\(Tokens\.windowEdgeLight,/.test(compositor),
+               "the call follows Appearance.dark");
+        verify(/onEdgeCallChanged: \{[^}]*edgeDebounce\.restart\(\)/.test(compositor), "a change is pushed (debounced)");
+        // The singleton's own start (the one that pushes the blur), not a socket's.
+        const starts = compositor.split("Component.onCompleted: {").slice(1).map(t => t.slice(0, t.indexOf("}")));
+        verify(starts.some(t => /pushBlur\(\);/.test(t) && /pushEdge\(\);/.test(t)), "pushed at start, with the blur");
+        const reload = compositor.slice(compositor.indexOf('event.name !== "configreloaded"'));
+        verify(/root\.pushEdge\(\);/.test(reload.slice(0, reload.indexOf("\n        }"))), "pushed after a config reload");
+    }
+
     // The answers are captured from Hyprland 0.56.2 (tests/compositor/blur_events.sh, request socket, `dispatch <function>`):
     // "ok" for a valid hl.config call, "error: ...: unknown config key '...'" for an unknown key.
     function test_blurAnswerReadsWhatHyprlandAnswered() {

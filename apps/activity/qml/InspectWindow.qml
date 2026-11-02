@@ -112,7 +112,7 @@ Window {
             textFormat: Text.PlainText
             wrapMode: Text.Wrap // a narrow window: the label on two lines rather than cut
             text: pair.label
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
         }
@@ -152,7 +152,7 @@ Window {
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 text: root.headerLabels[0]
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
@@ -241,7 +241,7 @@ Window {
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 text: root.inspection.filesNote
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
@@ -276,7 +276,7 @@ Window {
                             horizontalAlignment: Text.AlignRight
                             textFormat: Text.PlainText
                             text: String(line.modelData.fd)
-                            color: Appearance.colors.textSecondary
+                            color: Appearance.windowSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyBodySize
                             font.features: {"tnum": 1}

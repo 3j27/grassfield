@@ -68,9 +68,14 @@ ScrollPage {
                     }
                 }
 
+                // The keyboard's ring only (ADR-0039 step 24, G7).
                 FocusRing {
                     shapeRadius: Tokens.storeCategoryRadius
-                    visible: tile.activeFocus
+                    visible: tileFocus.active
+                }
+
+                KeyFocus {
+                    id: tileFocus
                 }
 
                 Icon {

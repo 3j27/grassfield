@@ -963,6 +963,10 @@ void CGrassfieldTitlebar::drawBar(const PHLWINDOW& w, const CBox& bar, float sca
     CBox clipBox = bar;
     addRect(bgBox.scale(scale).round(), bgColor, roundPx, power, clipBox.scale(scale).round());
 
+    // The hairline under the bar, the apps' toolbar rule: the bar is the window's own colour (ADR-0039 Q8, step 21).
+    CBox rule{bar.x, bar.y + bar.h - theme::kTitlebarRuleWidth, bar.w, theme::kTitlebarRuleWidth};
+    addRect(rule.scale(scale).round(), toColor(palette.rule, alpha), 0, power);
+
     // Buttons (owner-drawn circles): coloured on the active window, grey on the others; coloured again with their glyphs
     // while the pointer is over the group (macOS). On a full-screen window minimize stays grey (unavailable), and so does the
     // zoom light of a window of fixed size that is neither zoomed nor in full screen (core lightAvailable).

@@ -163,13 +163,17 @@ Item {
             hoverEnabled: root.holdInput
         }
 
+        // macOS 27 sheets (Print, Open): the window's corner (radius.sheet), the buttons 20 from the right and bottom edges
+        // (panel.sheetPadding, the shell's sheets' too; ADR-0039 step 10).
         T.Pane {
             id: pane
             anchors.fill: parent
-            padding: Tokens.spacingLg
+            padding: Tokens.panelSheetPadding
             implicitHeight: content.implicitHeight + topPadding + bottomPadding
 
+            // A text surface: the menus' class, as the shell's sheets (ADR-0039 step 22; the apps draw it opaque).
             background: Material {
+                glassClass: "menu"
                 radius: Tokens.radiusSheet
             }
 
@@ -274,6 +278,7 @@ Item {
 
                             Button {
                                 required property var modelData
+                                sheet: true
                                 text: modelData.text
                                 // A click leaves the keyboard where it was: Return stays the default button's.
                                 focusPolicy: Qt.TabFocus
@@ -282,13 +287,18 @@ Item {
                         }
                     }
 
+                    // Cancel and the default button: one width, the wider label's (macOS 27).
                     Row {
                         id: mainRow
+                        readonly property real pairWidth: Math.max(cancelButton.visible ? cancelButton.implicitWidth : 0, confirmButton.implicitWidth)
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
                         spacing: Tokens.spacingSm
 
                         Button {
+                            id: cancelButton
+                            sheet: true
+                            width: mainRow.pairWidth
                             visible: root.showCancel
                             text: root.cancelText
                             primary: root.returnCancels
@@ -297,6 +307,9 @@ Item {
                         }
 
                         Button {
+                            id: confirmButton
+                            sheet: true
+                            width: mainRow.pairWidth
                             text: root.confirmText
                             focusPolicy: Qt.TabFocus
                             primary: !root.destructive && !root.returnCancels

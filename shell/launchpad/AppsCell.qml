@@ -50,7 +50,8 @@ Item {
         radius: Tokens.launcherIconSize * Tokens.launcherHighlightRadiusScale
         color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
         border.width: Tokens.launcherSelectionWidth
-        border.color: Appearance.colors.accent
+        // The focus ring colour: the accent, or the text colour where the accent does not hold (ADR-0039 step 7).
+        border.color: Appearance.focusRingColor
     }
 
     TintedIcon {

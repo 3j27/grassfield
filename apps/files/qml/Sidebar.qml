@@ -193,7 +193,7 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Tokens.spacingXs
                 text: header.section === "favorites" ? qsTr("Favorites") : header.section === "tags" ? qsTr("Tags") : qsTr("Locations")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 font.weight: Tokens.typographyMenuBoldWeight
@@ -264,7 +264,7 @@ FocusScope {
             radius: width / 2
             color: entry.tagColor >= 0 ? TagColors.at(Tokens, entry.tagColor) : "transparent"
             border.width: entry.tagColor >= 0 ? 0 : Tokens.appsBorderWidth * 2
-            border.color: Appearance.colors.textSecondary
+            border.color: Appearance.windowSecondary
         }
 
         Text {
@@ -276,7 +276,7 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             text: DisplayName.text(entry.name)
             elide: Text.ElideRight
-            color: entry.mounted ? Appearance.colors.text : Appearance.colors.textSecondary
+            color: entry.mounted ? Appearance.colors.text : Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
             font.weight: entry.current ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight

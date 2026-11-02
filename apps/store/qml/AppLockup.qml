@@ -119,7 +119,8 @@ FocusScope {
         anchors.left: texts.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 1 / Math.max(1, Screen.devicePixelRatio)
+        // One point, as every separator of the apps (ADR-0039 D5, step 24; it was one device pixel).
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 

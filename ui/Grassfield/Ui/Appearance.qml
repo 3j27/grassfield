@@ -70,6 +70,21 @@ QtObject {
     // menus, sheets, tooltips and combo popups that Grassfield.Ui draws in an app, keep `colors.materialTint` (ADR-0024 lot 1).
     readonly property color windowFill: windowSurface ? colors.windowBackground : colors.materialTint
 
+    // A window that is not key (ADR-0039 step 17, measured on macOS 27): its selection turns neutral (the hover ink at
+    // inactiveSelectionOpacity over its background, the label in the text colour), its toolbar title and glyphs dim (the text
+    // colour at inactiveTextOpacity). Read with looksKey(item.Window.window, item.Window.active).
+    readonly property real inactiveSelectionOpacity: dark ? Tokens.windowInactiveSelectionOpacityDark : Tokens.windowInactiveSelectionOpacityLight
+    readonly property real inactiveTextOpacity: dark ? Tokens.windowInactiveTextOpacityDark : Tokens.windowInactiveTextOpacityLight
+    // The window that keeps its key look while a shell menu or the Control Center holds the keyboard (the integrator's macOS
+    // decision on #88, ADR-0039 step 17): the compositor then withdraws the window's activation, but only another window
+    // taking the focus makes it inactive. Set by the app from the shell's key-window file (apps/keywindow.h); null otherwise.
+    property var heldKeyWindow: null
+
+    // Whether a window draws as key: `active` (its Window.active), or it is the window held above.
+    function looksKey(window: var, active: bool): bool {
+        return active || (!!window && window === heldKeyWindow);
+    }
+
     // Secondary text drawn directly on the opaque window surface or on its group fill (Settings): the lighter app-only grey, as
     // macOS. Text on a field, tab or chip fill keeps `colors.textSecondary`, which holds 4.5:1 on those fills (A2); outside an
     // app window this is textSecondary, and Increase Contrast makes it the primary text colour.
@@ -124,6 +139,12 @@ QtObject {
         return pixelSize >= Tokens.typographyDisplayFrom ? displayFamily : fontFamily;
     }
     readonly property var curve: Tokens.motionCurveStandard
+    // One curve per role (ADR-0039 step 20): `curve` moves, `curveEnter` arrives, `curveExit` leaves (the compositor's windows
+    // and layers on the same curves, looknfeel.lua), `curvePanel` carries a panel or a sheet over motion.panel (Apple's default
+    // spring as a stand-in, Q6).
+    readonly property var curveEnter: Tokens.motionCurveEnter
+    readonly property var curveExit: Tokens.motionCurveExit
+    readonly property var curvePanel: Tokens.motionCurvePanel
 
     // Size-dependent tracking of Inter's "dynamic metrics" (the reference's optical tracking): em = a + b * e^(c * px),
     // returned in pixels for Text.font.letterSpacing. Larger text is set tighter, small text slightly looser.
@@ -157,7 +178,7 @@ QtObject {
     // GlassTint.gridRange) narrows the range to what lies under one surface. On any other output the backdrop is unknown and a
     // class takes the worst case.
     property var backdrops: ({})
-    readonly property var glassTargets: ({menu: Tokens.glassMenu, notification: Tokens.glassNotification, controls: Tokens.glassControls, apps: Tokens.glassApps})
+    readonly property var glassTargets: ({menu: Tokens.glassMenu, notification: Tokens.glassNotification, controls: Tokens.glassControls, apps: Tokens.glassApps, gallery: Tokens.glassGallery, widgets: Tokens.glassWidgets})
 
     // Tint alpha of a glass class at transparency t on an output (GlassTint.alpha): the class target at the default slider,
     // raised to keep the text and secondary text of the appearance at 4.5:1 over that output's backdrop, or over the part of it
@@ -166,6 +187,17 @@ QtObject {
         const known = backdrops[screenName] ?? null;
         const under = known && known.grid ? GlassTint.gridRange(known.grid, rect, Tokens.glassBackdropPad) : null;
         return glassAlphaOver(glassClass, t, under ?? known);
+    }
+
+    // Increase Contrast frosts every glass surface (ADR-0024 G-8): a tint alpha raised to glass.contrastFrost.
+    function frosted(a: real): real {
+        return increaseContrast ? Math.max(Tokens.glassContrastFrost, a) : a;
+    }
+
+    // The tint alpha of a small glass piece with no blur under it (a close capsule over a card's corner): its own alpha,
+    // opaque when the glass is (Reduce Transparency, or the slider at opaque), frosted by Increase Contrast (ADR-0039 step 22).
+    function fixedGlassAlpha(a: real): real {
+        return effectiveTransparency <= 0 ? 1 : frosted(a);
     }
 
     // The same over a backdrop range the host knows ({lumMin, lumMax}; null = the worst case, black to white).

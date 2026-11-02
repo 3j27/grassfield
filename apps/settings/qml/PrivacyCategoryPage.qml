@@ -76,9 +76,9 @@ SettingsPage {
             }
         }
 
-        SettingsRow {
+        EmptyListRow {
             visible: grants.loaded && root.apps.length === 0
-            title: qsTr("No apps have asked")
+            text: qsTr("No apps have asked")
         }
     }
 
@@ -130,15 +130,21 @@ SettingsPage {
                     }
                 }
 
-                SettingsRow {
+                EmptyListRow {
                     visible: grants.loaded && root.apps.length === 0
-                    title: qsTr("No saved choices")
+                    text: qsTr("No saved choices")
                 }
             }
 
+            // After a key only (ADR-0039 step 7).
+            KeyFocus {
+                id: listFocus
+                target: list
+            }
+
             FocusRing {
-                shapeRadius: Tokens.radiusMenu
-                visible: list.activeFocus
+                shapeRadius: Tokens.radiusGroup
+                visible: listFocus.active
             }
         }
 

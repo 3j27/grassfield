@@ -54,7 +54,7 @@ Item {
         x: -root.columnX
         y: Tokens.settingsDisplaySeparatorY - Tokens.settingsContentTop
         width: root.paneWidth
-        height: 1
+        height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -112,7 +112,7 @@ Item {
                     visible: entry.activeFocus
                     anchors.fill: parent
                     anchors.margins: -Tokens.controlFocusOutline
-                    radius: Tokens.radiusMenu
+                    radius: Tokens.radiusGroup
                     color: "transparent"
                     border.width: Tokens.controlFocusOutline
                     border.color: Appearance.focusRingColor

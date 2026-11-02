@@ -2,7 +2,8 @@ import QtQuick
 
 // A link drawn as underlined plain text (never rich text). It does not open anything itself: `activated` is the only way it
 // acts, from the pointer, Return, Enter, Space or an assistive technology's press, so the host decides how an address is
-// opened (as an argument vector, never a shell string). Visible keyboard focus: a ring around the text.
+// opened (as an argument vector, never a shell string). Visible keyboard focus: the shared ring around the text, after a key
+// only (KeyFocus; ADR-0039 step 7).
 Item {
     id: root
 
@@ -44,14 +45,18 @@ Item {
         text: root.text
     }
 
-    Rectangle {
+    KeyFocus {
+        id: keyFocus
+    }
+
+    // The ring keeps a little room around the text.
+    Item {
         anchors.fill: parent
         anchors.margins: -Tokens.spacingXs
-        radius: Tokens.radiusControl
-        color: "transparent"
-        visible: root.activeFocus
-        border.width: Tokens.controlFocusOutline
-        border.color: Appearance.focusRingColor
+
+        FocusRing {
+            visible: keyFocus.active
+        }
     }
 
     Text {

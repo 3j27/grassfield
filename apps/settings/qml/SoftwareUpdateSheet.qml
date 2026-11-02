@@ -102,7 +102,8 @@ Sheet {
         visible: root.topic === "notes" && root.notes.length > 0
         width: parent.width
         height: Tokens.settingsPickerListHeight
-        radius: Tokens.radiusMenu
+        // A group of Settings (radius.group, step 13's role; ADR-0039 step 26).
+        radius: Tokens.radiusGroup
         color: Appearance.colors.groupFill
         clip: true
 
@@ -162,7 +163,8 @@ Sheet {
         visible: root.topic === "others"
         width: parent.width
         height: Tokens.settingsPickerListHeight
-        radius: Tokens.radiusMenu
+        // A group of Settings (radius.group, step 13's role; ADR-0039 step 26).
+        radius: Tokens.radiusGroup
         color: Appearance.colors.groupFill
         clip: true
 

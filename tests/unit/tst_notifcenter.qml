@@ -136,4 +136,20 @@ TestCase {
         const r = CenterLogic.galleryRect(300, 90, galleryTokens, {left: 0, right: 0, bottom: 80});
         compare(r.height, 0);
     }
+
+    // Clear All is the Tab stop before the cards (ADR-0039 step 7; the review of #88: it was checked by grep only).
+    function test_clearAllIsTheTabStopBeforeTheCards() {
+        compare(CenterLogic.headStep("close", true, true), "head", "Tab from the close disc: Clear All");
+        compare(CenterLogic.headStep("panel", true, true), "head", "the first Tab: Clear All");
+        compare(CenterLogic.headStep("head", true, true), "firstCard", "Tab from Clear All: the top card");
+        compare(CenterLogic.headStep("head", false, true), "close", "Shift+Tab from Clear All: the close disc");
+        compare(CenterLogic.headStep("cardsStart", false, true), "head", "Shift+Tab out of the top card: Clear All");
+        compare(CenterLogic.headStep("cardsEnd", true, true), "edit", "Tab out of the last card: the edit button");
+        // Hidden or disabled (no notification to clear): the order skips it.
+        compare(CenterLogic.headStep("close", true, false), "firstCard");
+        compare(CenterLogic.headStep("panel", true, false), "firstCard");
+        compare(CenterLogic.headStep("cardsStart", false, false), "close");
+        compare(CenterLogic.headStep("panel", false, true), "close", "the first Shift+Tab: the last control");
+        compare(CenterLogic.headStep("close", false, true), "", "Shift+Tab from the close disc: Qt's own chain");
+    }
 }

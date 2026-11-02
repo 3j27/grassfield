@@ -668,7 +668,7 @@ Window {
             maximumLineCount: 1
             text: panel.shownMessage
             Accessible.name: panel.message
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyCaptionSize
         }
@@ -836,18 +836,17 @@ Window {
                             tab: tab
                         },
                         // The path pop-up: the shown folder; its menu lists the folders enclosing it (macOS panels).
-                        Rectangle {
+                        RimmedCapsule {
                             id: pathButton
                             width: Math.min(pathRow.implicitWidth + 2 * Tokens.spacingMd, Tokens.filesSearchWidth)
-                            height: Tokens.filesToolbarCapsule
-                            radius: height / 2
-                            color: Appearance.buttonFill
+                            height: Tokens.toolbarCapsule
+                            fillOpacity: Tokens.toolbarCapsuleFillOpacity
 
                             ToolButton {
                                 id: pathTool
                                 anchors.fill: parent
                                 capsule: true
-                                buttonSize: Tokens.filesToolbarCapsule
+                                buttonSize: Tokens.toolbarCapsule
                                 accessibleName: qsTr("Location: %1").arg(DisplayName.text(tab.title))
                                 onClicked: {
                                     const segments = tab.segments;
@@ -1071,7 +1070,7 @@ Window {
                 visible: panel.keysHeld
                 textFormat: Text.PlainText
                 text: qsTr("Click the panel to use the keyboard in it.")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
             }

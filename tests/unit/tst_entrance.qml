@@ -62,7 +62,8 @@ TestCase {
         verify(/win\.entranceKey = "menubar:" \+ win\.screen\.name;/.test(bar));
         // ID-6: the auto-hide starts where it rests, once the settings are final.
         verify(/function settleBar\(\): void \{\s*win\.hideMachine = AutoHide\.initial\(win\.autoHides\);\s*Entrance\.ready\(win\.entranceKey\);/.test(bar));
-        compare((bar.match(/opacity: win\.dimOpacity \* win\.entrance/g) || []).length, 2, "the band and the content fade in");
+        // The band stays opaque when dimmed under Reduce Transparency (ADR-0039 step 25), and fades in all the same.
+        compare((bar.match(/opacity: (?:\(Appearance\.reduceTransparency \? 1 : win\.dimOpacity\)|win\.dimOpacity) \* win\.entrance/g) || []).length, 2, "the band and the content fade in");
         verify(/armed: win\.entered/.test(bar), "P5 counts the entrance");
         const dock = source("shell/dock/Dock.qml");
         verify(/Entrance\.expect\("dock"\);/.test(dock));

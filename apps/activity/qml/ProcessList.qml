@@ -112,7 +112,7 @@ FocusScope {
                     horizontalAlignment: column.modelData.numeric ? Text.AlignRight : Text.AlignLeft
                     text: column.modelData.title
                     elide: Text.ElideRight
-                    color: column.active ? Appearance.colors.text : Appearance.colors.textSecondary
+                    color: column.active ? Appearance.colors.text : Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                     font.weight: column.active ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
@@ -126,7 +126,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "chevron-down"
                     size: Tokens.activityChevronSize
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     rotation: root.backend.sortDescending ? 0 : 180
                 }
 
@@ -203,6 +203,23 @@ FocusScope {
             list.forceActiveFocus();
             root.table.clearSelection();
         }
+    }
+
+    // A search that matches no process says so in the list, as Files' list does (ADR-0039 step 27's checklist).
+    Text {
+        objectName: "noResults"
+        anchors.centerIn: list
+        visible: list.count === 0 && String(root.backend.search || "") !== ""
+        width: list.width - 2 * Tokens.spacingLg
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.Wrap
+        textFormat: Text.PlainText
+        text: qsTr("No Results")
+        color: Appearance.windowSecondary
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.typographyBodySize
+        Accessible.role: Accessible.StaticText
+        Accessible.name: text
     }
 
     ListView {

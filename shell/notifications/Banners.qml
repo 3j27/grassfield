@@ -92,6 +92,9 @@ PanelWindow {
             enabled: !Appearance.reduceMotion
             NumberAnimation {
                 duration: Appearance.duration(Tokens.motionNormal)
+                // A move: the move curve (ADR-0039 step 20).
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curve
             }
         }
 

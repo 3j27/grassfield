@@ -16,6 +16,8 @@ Window {
     required property bool globalMenu
     // Section to open first (--section=<id> on the command line); "" opens Appearance.
     property string startSection: ""
+    // Drawn as key (ADR-0039 step 17): active, or held while a shell menu or the Control Center is open (Appearance.looksKey).
+    readonly property bool keyLook: Appearance.looksKey(root, root.active)
     readonly property alias searchField: search
     // ADR-0015: this window draws its own chrome (lights and toolbar below); the apps' tagger (apps/windowchrome.h)
     // names its role for the compositor, whose plugin then draws no titlebar on it.
@@ -229,6 +231,15 @@ Window {
         root.selectedId = root.navState.current;
     }
 
+    // Return in the search field: the first result opens and the list takes the keyboard.
+    function pickFirstResult(event: var): void {
+        list.keyboardRing = true;
+        if (root.filtered.length > 0)
+            root.select(root.filtered[0].id);
+        list.forceActiveFocus();
+        event.accepted = true;
+    }
+
     function focusSearch(): void {
         search.forceActiveFocus();
         search.selectAll();
@@ -287,84 +298,38 @@ Window {
             doubleClickAction: cfg.value("windows.titlebarDoubleClick")
         }
 
-        // A capsule search field, as wide as the selection, with the glass rims of macOS 27 (RimmedCapsule).
-        RimmedCapsule {
-            id: searchBox
+        // The search field, as wide as the selection: the shared SearchField (macOS 27's rimmed capsule, with a clear button;
+        // ADR-0039 step 14). Tab, Shift+Tab, Down and Return hand the focus to the list by the keyboard.
+        SearchField {
+            id: search
             x: Tokens.settingsSidebarInset
             y: sidebarToolbar.height + Tokens.spacingSm
             width: parent.width - 2 * Tokens.settingsSidebarInset
-            height: Tokens.settingsSearchHeight
+            activeFocusOnTab: true
+            accessibleName: qsTr("Search settings")
+            onTextChanged: root.query = text
 
-            FocusRing {
-                visible: search.activeFocus
-                shapeRadius: searchBox.radius
+            Keys.onTabPressed: event => {
+                list.keyboardRing = true;
+                event.accepted = false;
             }
-
-            Icon {
-                id: searchIcon
-                name: "search"
-                size: Tokens.menuIconSize
-                color: Appearance.colors.textSecondary
-                x: Tokens.spacingSm
-                anchors.verticalCenter: parent.verticalCenter
+            Keys.onBacktabPressed: event => {
+                list.keyboardRing = true;
+                event.accepted = false;
             }
-
-            TextInput {
-                id: search
-                TextCursor {}
-                anchors {
-                    left: searchIcon.right
-                    leftMargin: Tokens.spacingSm
-                    right: parent.right
-                    rightMargin: Tokens.spacingSm
-                    verticalCenter: parent.verticalCenter
-                }
-                clip: true
-                activeFocusOnTab: true
-                // The selection survives the global menu taking the keyboard (Edit > Cut/Copy act on it).
-                persistentSelection: true
-                color: Appearance.colors.text
-                selectionColor: Appearance.highlight
-                selectedTextColor: Appearance.highlightText
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-                onTextChanged: root.query = text
-                Accessible.role: Accessible.EditableText
-                Accessible.name: qsTr("Search settings")
-                Accessible.searchEdit: true
-
-                Keys.onPressed: event => {
-                    // Tab, Shift+Tab, Down and Return hand the focus to the list by the keyboard.
-                    if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab || event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                        list.keyboardRing = true;
-                    if (event.key === Qt.Key_Down) {
-                        list.forceActiveFocus();
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        if (root.filtered.length > 0)
-                            root.select(root.filtered[0].id);
-                        list.forceActiveFocus();
-                        event.accepted = true;
-                    } else if (event.key === Qt.Key_Escape && text !== "") {
-                        text = "";
-                        event.accepted = true;
-                    }
-                }
-
-                Text {
-                    textFormat: Text.PlainText
-                    visible: search.text === "" && !search.activeFocus
-                    text: qsTr("Search")
-                    color: Appearance.colors.textSecondary
-                    font: search.font
-                }
+            Keys.onDownPressed: event => {
+                list.keyboardRing = true;
+                list.forceActiveFocus();
+                event.accepted = true;
             }
+            Keys.onReturnPressed: event => root.pickFirstResult(event)
+            Keys.onEnterPressed: event => root.pickFirstResult(event)
         }
 
         ListView {
             id: list
             anchors {
-                top: searchBox.bottom
+                top: search.bottom
                 topMargin: Tokens.spacingMd
                 left: parent.left
                 right: parent.right
@@ -483,7 +448,8 @@ Window {
                     Rectangle {
                         anchors.fill: parent
                         radius: Tokens.settingsSidebarItemRadius
-                        color: entry.selected ? Appearance.colors.selection : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+                        // The accent while the window is key; neutral, the hover ink, while it is not (macOS 27; ADR-0039 step 17).
+                        color: entry.selected ? (root.keyLook ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)) : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                     }
 
                     // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
@@ -526,7 +492,7 @@ Window {
                         }
                         text: entry.modelData.title
                         elide: Text.ElideRight
-                        color: entry.selected ? Appearance.colors.selectionText : Appearance.colors.text
+                        color: entry.selected && root.keyLook ? Appearance.colors.selectionText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                         font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
@@ -575,16 +541,16 @@ Window {
             // Back and forward: one 72 x 36 glass capsule with a hairline between them (macOS 27).
             leading: RimmedCapsule {
                 width: navRow.width + Tokens.spacingXs
-                height: Tokens.filesToolbarCapsule
-                fillOpacity: Tokens.settingsToolbarFillOpacity
+                height: Tokens.toolbarCapsule
+                fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Navigation")
 
                 Rectangle {
                     anchors.centerIn: parent
                     width: parent.hairline
-                    height: Tokens.settingsToolbarDividerHeight
-                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                    height: Tokens.toolbarDividerHeight
+                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.toolbarDividerOpacity)
                 }
 
                 Row {
@@ -593,7 +559,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         iconRotation: 180
                         enabled: NavHistory.canBack(root.navState)
@@ -603,7 +569,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         enabled: NavHistory.canForward(root.navState)
                         accessibleName: qsTr("Forward")
@@ -666,7 +632,7 @@ Window {
             y: detailToolbar.height + Tokens.spacingLg
             width: parent.width - 2 * Tokens.spacingLg
             height: visible ? bannerLabel.implicitHeight + 2 * Tokens.spacingMd : 0
-            radius: Tokens.radiusMenu
+            radius: Tokens.radiusGroup
             // Destructive colour: the file is refused (or a change failed), nothing is written.
             color: Appearance.colors.destructive
             Accessible.role: Accessible.AlertMessage
@@ -687,6 +653,20 @@ Window {
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
             }
+        }
+
+        // The toolbar's edge: a hairline once the page's content has scrolled under the toolbar (ADR-0039 D3, Files' behaviour;
+        // until ADR-0024's scroll-edge glass), above the page.
+        Rectangle {
+            id: toolbarRule
+            objectName: "toolbarRule"
+            readonly property Flickable flick: page.item as Flickable
+            anchors.top: detailToolbar.bottom
+            width: parent.width
+            height: Tokens.appsBorderWidth
+            z: 1
+            visible: !banner.visible && toolbarRule.flick !== null && toolbarRule.flick.contentY > toolbarRule.flick.originY
+            color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
         Loader {

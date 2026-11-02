@@ -116,6 +116,14 @@ function focusRing(accent, tint, text, minContrast) {
     return contrast(accent, tint) >= minContrast ? accent : text;
 }
 
+// The white knob of a switch or a slider on its "on" fill, the selection colour (ADR-0039 step 11, D-Q4: switches, slider
+// fills, check boxes and default buttons share one fill, as macOS 27 draws them): outlined in the fill's mark colour where
+// white holds under `minContrast` there (the yellow and green fills, which keep dark marks: 2.02:1 and 2.52:1), so that its
+// edge reaches it (the mark colour holds 4.5:1 or more against its own fill).
+function knobOutlined(knob, fill, minContrast) {
+    return contrast(knob, fill) < minContrast;
+}
+
 // Increase Contrast (macOS Accessibility > Display): the secondary text colour is the primary one; the borders, separators and
 // fills are drawn stronger by the tokens that carry an `increaseContrast` value.
 function contrastBoost(palette, on) {

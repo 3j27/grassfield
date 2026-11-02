@@ -2907,6 +2907,14 @@
         <translation>Super+4</translation>
     </message>
     <message>
+        <source>Searching…</source>
+        <translation>Recherche…</translation>
+    </message>
+    <message>
+        <source>Loading…</source>
+        <translation>Chargement…</translation>
+    </message>
+    <message>
         <source>List</source>
         <translation>Liste</translation>
     </message>
@@ -3091,6 +3099,14 @@
     <message>
         <source>All</source>
         <translation>Toutes</translation>
+    </message>
+    <message>
+        <source>No apps in this category.</source>
+        <translation>Aucune app dans cette catégorie.</translation>
+    </message>
+    <message>
+        <source>No apps from this source in this category.</source>
+        <translation>Aucune app de cette source dans cette catégorie.</translation>
     </message>
 </context>
 <context>
@@ -5784,6 +5800,14 @@
     <message>
         <source>Image %1</source>
         <translation>Image %1</translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <source>Play</source>
+        <translation>Lecture</translation>
     </message>
 </context>
 <context>
@@ -9323,6 +9347,10 @@
         <translation>Colonnes</translation>
     </message>
     <message>
+        <source>No Results</source>
+        <translation>Aucun résultat</translation>
+    </message>
+    <message>
         <source>Processes</source>
         <translation>Processus</translation>
     </message>
@@ -10348,6 +10376,10 @@
         <source>Search</source>
         <translation>Recherche</translation>
     </message>
+    <message>
+        <source>Clear search</source>
+        <translation>Effacer la recherche</translation>
+    </message>
 </context>
 <context>
     <name>SearchField</name>
@@ -11282,10 +11314,6 @@
     <message>
         <source>Search apps</source>
         <translation>Rechercher des apps</translation>
-    </message>
-    <message>
-        <source>Search</source>
-        <translation>Rechercher</translation>
     </message>
     <message>
         <source>%1, %2</source>

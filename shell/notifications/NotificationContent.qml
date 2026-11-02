@@ -60,7 +60,8 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: Tokens.radiusDockIcon
+            // An app icon's corner at its size, no longer the Dock's (ADR-0039 step 13, G5).
+            radius: Tokens.notificationIconRadius
             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
             visible: appImage.status !== Image.Ready
         }

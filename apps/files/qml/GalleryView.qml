@@ -435,7 +435,7 @@ FocusScope {
         visible: strip.count === 0 && root.model && !root.model.loading
         text: root.tab.searchText !== "" ? qsTr("No Results") : root.model && root.model.error !== "" ? root.model.error : qsTr("This folder is empty.")
         wrapMode: Text.Wrap
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
     }

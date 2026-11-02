@@ -192,6 +192,73 @@ TestCase {
         verify(right <= m.width - Tokens.menuPadding - Tokens.menuItemPadding + 0.5, "right edge " + right + " in a menu " + m.width + " wide");
     }
 
+    // One section header for every menu (ADR-0039 step 8, G17): MenuHeader, PopupMenu's `header` rows and the shell's
+    // hand-built menus (the sound menu, the tiling popover) alike: a row tall, the caption size in bold, the secondary colour,
+    // at the leading edge of the rows below it, after the check column when the menu keeps one.
+    Component {
+        id: headedMenuComponent
+        PopupMenu {
+            model: [{header: true, text: "Section"}, {id: "a", text: "Checked row", checked: true}, {id: "b", text: "Plain row"}]
+        }
+    }
+
+    Component {
+        id: headedPlainMenuComponent
+        PopupMenu {
+            model: [{header: true, text: "Section"}, {id: "a", text: "Plain row"}]
+        }
+    }
+
+    function quickText(root, text) {
+        for (const child of root.children) {
+            if (String(child).indexOf("QQuickText") === 0 && child.text === text)
+                return child;
+            const found = quickText(child, text);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    function test_aHeaderStartsWithTheLabelsBelowIt_data() {
+        return [
+            {tag: "after the check column", component: headedMenuComponent, x: Tokens.menuCheckInset},
+            {tag: "at the plain inset", component: headedPlainMenuComponent, x: Tokens.menuItemPadding}
+        ];
+    }
+
+    function test_aHeaderStartsWithTheLabelsBelowIt(data) {
+        const m = createTemporaryObject(data.component, testCase);
+        wait(0);
+        const header = quickText(m, "Section");
+        const label = quickText(m, "Plain row");
+        verify(header !== null && label !== null);
+        compare(header.mapToItem(m, 0, 0).x, Tokens.menuPadding + data.x);
+        compare(header.mapToItem(m, 0, 0).x, label.mapToItem(m, 0, 0).x, "the header starts with the labels");
+        compare(header.parent.height, Tokens.menuItemHeight, "a row tall");
+        compare(header.font.pixelSize, Tokens.typographyCaptionSize);
+        compare(header.font.weight, Tokens.typographyMenuBoldWeight);
+        verify(Qt.colorEqual(header.color, Appearance.colors.textSecondary));
+        compare(header.parent.Accessible.role, Accessible.Heading);
+    }
+
+    Component {
+        id: headerComponent
+        MenuHeader {
+            width: 200
+        }
+    }
+
+    // A hand-built menu's header (the sound menu's Output) is the same one.
+    function test_aMenuHeaderStandsAlone() {
+        const plain = createTemporaryObject(headerComponent, testCase, {text: "Output"});
+        const checked = createTemporaryObject(headerComponent, testCase, {text: "Output", checkColumn: true});
+        compare(quickText(plain, "Output").x, Tokens.menuItemPadding);
+        compare(quickText(checked, "Output").x, Tokens.menuCheckInset);
+        compare(plain.implicitHeight, Tokens.menuItemHeight);
+        compare(checked.implicitWidth, Math.ceil(Tokens.menuCheckInset + quickText(checked, "Output").implicitWidth + Tokens.menuItemPadding));
+    }
+
     function test_highlightIsConcentricWithTheMenu() {
         const row = createTemporaryObject(itemComponent, testCase, {text: "Open", highlighted: true});
         let fill = null;
@@ -218,6 +285,19 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "a");
+        compare(activatedSpy.signalArguments[0][1], false, "chosen by the keyboard");
+    }
+
+    // How a row was chosen reaches the host (ADR-0039 step 8): a popup opened for it shows its ring after a key only.
+    function test_aClickIsThePointers() {
+        const m = makeMenu();
+        wait(50);
+        const p = centreOf(m, "Gamma");
+        const local = m.mapFromItem(null, p.x, p.y);
+        mouseClick(m, local.x, local.y);
+        compare(activatedSpy.count, 1);
+        compare(activatedSpy.signalArguments[0][0].id, "c");
+        compare(activatedSpy.signalArguments[0][1], true, "chosen by the pointer");
     }
 
     function test_escapeRequestsClose() {
@@ -250,6 +330,7 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "d2");
+        compare(activatedSpy.signalArguments[0][1], false, "the submenu passes the keyboard on");
     }
 
     // Swatch rows (Files colour tags): the keyboard reaches the row, Left/Right pick a swatch, Return activates the
@@ -273,6 +354,7 @@ TestCase {
         keyClick(Qt.Key_Return);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "tag:2");
+        compare(activatedSpy.signalArguments[0][1], false);
         // Down skips the disabled row.
         keyClick(Qt.Key_Down);
         compare(m.currentIndex, 3);
@@ -295,6 +377,7 @@ TestCase {
         mouseClick(m, p.x, p.y);
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "tag:1");
+        compare(activatedSpy.signalArguments[0][1], true);
     }
 
     // ---- pointer relay: press, drag, release with the pointer held by another surface (the menu bar) ----
@@ -346,6 +429,7 @@ TestCase {
         verify(m.releasePointer(p.x, p.y));
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "c");
+        compare(activatedSpy.signalArguments[0][1], true, "a release over the row is the pointer's");
         compare(closeSpy.count, 0);
     }
 
@@ -384,6 +468,7 @@ TestCase {
         verify(m.releasePointer(two.x, two.y));
         compare(activatedSpy.count, 1);
         compare(activatedSpy.signalArguments[0][0].id, "d2");
+        compare(activatedSpy.signalArguments[0][1], true, "the submenu passes the pointer on");
     }
 
     function test_relayReleaseOnASubmenuRowKeepsTheMenuOpen() {

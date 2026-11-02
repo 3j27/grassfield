@@ -13,6 +13,8 @@ Window {
     // The registrar is there (kept up to date by src/main.cpp): the window exports its menus to the global menu bar.
     required property bool globalMenu
 
+    // Drawn as key (ADR-0039 step 17): active, or held while a shell menu or the Control Center is open (Appearance.looksKey).
+    readonly property bool keyLook: Appearance.looksKey(win, win.active)
     property int current: win.backend.startIndex
     // Several files named on the command line show their list at once; the folder of a single image starts without it.
     property bool sidebarOpen: !win.backend.browsing
@@ -293,7 +295,8 @@ Window {
                 elide: Text.ElideMiddle
                 textFormat: Text.PlainText
                 text: win.title
-                color: Appearance.colors.text
+                // Dimmed while the window is not key (macOS 27; ADR-0039 step 17).
+                color: win.keyLook ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 font.weight: Tokens.typographyMenuBoldWeight
@@ -440,12 +443,13 @@ Window {
             Item {
                 id: searchBox
                 visible: win.view?.canSearch ?? false
-                width: win.searchOpen ? Tokens.previewSearchWidth : Tokens.previewToolbarCapsuleHeight
-                height: Tokens.previewToolbarCapsuleHeight
+                width: win.searchOpen ? Tokens.previewSearchWidth : Tokens.toolbarCapsule
+                height: Tokens.toolbarCapsule
 
-                Material {
+                // The toolbar's rimmed glass capsule, as the groups beside it (ADR-0039 step 16).
+                RimmedCapsule {
                     anchors.fill: parent
-                    radius: height / 2
+                    fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 }
 
                 ToolButton {
@@ -541,7 +545,9 @@ Window {
         Accessible.role: Accessible.Pane
         Accessible.name: qsTr("Info")
 
+        // A popover: the menus' class (ADR-0039 step 22).
         Material {
+            glassClass: "menu"
             anchors.fill: parent
             radius: Tokens.radiusMenu
         }
@@ -602,6 +608,19 @@ Window {
         }
     }
 
+    // The toolbar's edge: a hairline once the view's content has scrolled under the toolbar (ADR-0039 D3, as Files and
+    // Settings; until ADR-0024's scroll-edge glass).
+    Rectangle {
+        id: toolbarRule
+        objectName: "toolbarRule"
+        anchors.top: toolbar.bottom
+        width: parent.width
+        height: Tokens.appsBorderWidth
+        z: 2
+        visible: !win.slideshow && win.view !== null && win.view.scrolled === true
+        color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+    }
+
     // ---- sidebar -----------------------------------------------------------------------------------
 
     Item {
@@ -611,22 +630,16 @@ Window {
             bottom: parent.bottom
             left: parent.left
         }
-        width: win.showSidebar && !win.slideshow ? Tokens.previewSidebarWidth + Tokens.spacingSm : 0
+        width: win.showSidebar && !win.slideshow ? Tokens.previewSidebarWidth : 0
         visible: width > 0
         clip: true
 
-        // A floating panel inset from the window edges (macOS 26).
+        // Edge to edge and a step darker than the content, with no dividing line, as Settings' and Files' (macOS 27; ADR-0024
+        // replaced macOS 26's floating panel; ADR-0039 step 16).
         Rectangle {
             id: panel
-            anchors {
-                fill: parent
-                leftMargin: Tokens.spacingSm
-                bottomMargin: Tokens.spacingSm
-            }
-            radius: Tokens.radiusPanel
-            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-            border.width: 1
-            border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+            anchors.fill: parent
+            color: Appearance.colors.sidebarFill
             clip: true
 
             // Files: thumbnails of the images, names of the other kinds. Beside the page thumbnails of a PDF they are
@@ -655,6 +668,9 @@ Window {
                 onCurrentIndexChanged: fileList.positionViewAtIndex(fileList.currentIndex, ListView.Contain)
                 Component.onCompleted: fileList.positionViewAtIndex(fileList.currentIndex, ListView.Center)
 
+                // The overlay scroll bar every list of the apps shows (ADR-0039 step 16).
+                ScrollBar.vertical: ScrollBar {}
+
                 delegate: Item {
                     id: row
 
@@ -676,7 +692,7 @@ Window {
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
                         color: rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                         border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
-                        border.color: Appearance.colors.accent
+                        border.color: win.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                     }
 
                     Item {
@@ -738,7 +754,7 @@ Window {
                             color: "transparent"
                             radius: Tokens.radiusControl
                             border.width: Tokens.controlFocusOutline
-                            border.color: Appearance.colors.accent
+                            border.color: win.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                         }
                     }
 

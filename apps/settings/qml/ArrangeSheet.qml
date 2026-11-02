@@ -123,12 +123,22 @@ Sheet {
                 height: Math.max(Tokens.settingsDisplayMinSide, tile.size.h * area.view.k)
                 radius: Tokens.settingsDisplayRadius
                 color: Appearance.withAlpha(Appearance.colors.accent, Tokens.materialFillOpacity)
-                border.width: tile.activeFocus ? Tokens.controlFocusOutline : 1
-                border.color: tile.activeFocus ? Appearance.focusRingColor : Appearance.colors.separator
+                border.width: Tokens.appsBorderWidth
+                border.color: Appearance.colors.separator
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: Displays.isBuiltIn(tile.modelData) ? qsTr("Built-in Display") : (String(tile.modelData.model).trim() || tile.modelData.name)
                 Accessible.description: qsTr("At %1, %2").arg(tile.where.x).arg(tile.where.y)
+
+                // The shared ring outside the display, after a key only (ADR-0039 step 7).
+                KeyFocus {
+                    id: tileFocus
+                }
+
+                FocusRing {
+                    shapeRadius: Tokens.settingsDisplayRadius
+                    visible: tileFocus.active
+                }
 
                 // An arrow key puts the display on that side of the nearest other; with Shift it moves along its edge.
                 Keys.onPressed: event => {

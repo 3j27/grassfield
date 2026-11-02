@@ -52,7 +52,9 @@ FocusScope {
         }
     }
 
+    // Near-opaque glass (ADR-0024 section 2: the widgets' class, 0.92; ADR-0039 step 22).
     Material {
+        glassClass: "widgets"
         anchors.fill: parent
         visible: !root.flat
         radius: Tokens.widgetRadius
@@ -98,12 +100,14 @@ FocusScope {
         color: Appearance.colors.textSecondary
     }
 
-    Rectangle {
-        anchors.fill: parent
-        radius: Tokens.widgetRadius
-        color: "transparent"
-        border.width: root.activeFocus && root.interactive ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
+    // The shared ring outside the widget, after a key only (ADR-0039 step 7).
+    KeyFocus {
+        id: hostFocus
+    }
+
+    FocusRing {
+        shapeRadius: Tokens.widgetRadius
+        visible: hostFocus.active && root.interactive
     }
 
     TapHandler {

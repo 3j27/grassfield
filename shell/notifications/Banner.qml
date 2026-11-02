@@ -53,12 +53,13 @@ Item {
         }
     }
 
+    // A banner slides in on the panel motion (ADR-0039 Q6, step 20).
     Behavior on slide {
         enabled: !Appearance.reduceMotion
         NumberAnimation {
-            duration: Appearance.duration(Tokens.motionNormal)
+            duration: Appearance.duration(Tokens.motionPanel)
             easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.curve
+            easing.bezierCurve: Appearance.curvePanel
         }
     }
 
@@ -115,6 +116,8 @@ Item {
                     return;
                 if (card.dragX > root.width * Tokens.notificationDismissFraction)
                     Notifications.dismissBanner(root.key);
+                else if (Appearance.reduceMotion)
+                    card.dragX = 0;  // back in place at once, no glide (ADR-0039 step 6)
                 else
                     release.start();
             }
@@ -150,7 +153,7 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 radius: width / 2
-                color: Appearance.withAlpha(Appearance.colors.materialTint, Tokens.notificationCloseTintOpacity)
+                color: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.fixedGlassAlpha(Tokens.notificationCloseTintOpacity))
                 border.width: 1
                 border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
             }

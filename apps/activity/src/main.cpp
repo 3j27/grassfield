@@ -14,6 +14,7 @@
 #include "runmode.h"
 #include "shownwatch.h"
 #include "translationloader.h"
+#include "keywindow.h"
 #include "windowchrome.h"
 
 #ifndef GRASSFIELD_ACTIVITY_QML_DIR
@@ -39,6 +40,9 @@ int main(int argc, char *argv[])
     }
 
     QGuiApplication app(argc, argv);
+    // The app's static text is rasterised natively (ADR-0039 Q5, step 19): distance-field glyphs carry 8 to 20 % less ink than
+    // macOS's, so text read greyer and softer; no app text is scaled or animated (an item that is sets its own renderType).
+    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
     // Before any QML: no global menu item may hold Qt's first shortcut id (globalmenu.h).
     grassfield::apps::reserveFirstShortcutId(app);
     // ADR-0015: the window draws its own chrome (QML property gfChromeRole), tagged for the compositor plugin.
@@ -75,6 +79,8 @@ int main(int argc, char *argv[])
     activity::ActivityApp backend(options, grassfield::apps::runmode::stateDir() + QStringLiteral("/activity.json"));
 
     QQmlApplicationEngine engine;
+    // ADR-0039 step 17: the window keeps its key look while a shell menu or the Control Center holds the keyboard (keywindow.h).
+    new grassfield::apps::KeyWindow(&engine);
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH (the tree's ui/ in a dev session) is added
     // after it in reverse, so that its first entry is searched first (as the Store).
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));

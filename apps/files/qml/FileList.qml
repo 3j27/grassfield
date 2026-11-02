@@ -149,7 +149,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     text: column.modelData.title
                     elide: Text.ElideRight
-                    color: column.active ? Appearance.colors.text : Appearance.colors.textSecondary
+                    color: column.active ? Appearance.colors.text : Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                     font.weight: column.active ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
@@ -163,7 +163,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "chevron-down"
                     size: Tokens.filesChevronSize
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     rotation: root.tab.sortDescending ? 0 : 180
                 }
 
@@ -304,7 +304,7 @@ FocusScope {
             readonly property bool renaming: root.tab.isRenaming(root.model, row.url)
             readonly property bool emphasized: row.selected && list.activeFocus
             readonly property color foreground: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.text
-            readonly property color secondary: row.emphasized ? Appearance.colors.selectionText : Appearance.colors.textSecondary
+            readonly property color secondary: row.emphasized ? Appearance.colors.selectionText : Appearance.windowSecondary
 
             width: list.contentWidth
             height: Tokens.filesListRowHeight
@@ -538,7 +538,7 @@ FocusScope {
         width: list.width - 2 * Tokens.spacingLg
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
     }

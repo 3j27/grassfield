@@ -63,8 +63,13 @@ Item {
             }
         }
 
+        // After a key only (ADR-0039 step 7).
+        KeyFocus {
+            id: moreFocus
+        }
+
         FocusRing {
-            visible: more.activeFocus
+            visible: moreFocus.active
             shapeRadius: Tokens.radiusControl
         }
 

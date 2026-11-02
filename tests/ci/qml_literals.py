@@ -24,7 +24,8 @@ Math.max or Math.min, a `||` or `??` fallback, the right operand of `&&` (`shown
 term, an index and an argument of any other function are arithmetic or logic, not design values. Numbers from -1 to 1 are
 allowed (a hairline, a flag, an off state); for opacity and scale, only 0, 1 and -1 (states and a mirror). A binding written as
 a block (`width: { return wide ? 240 : 120 }`) or as a function it calls (`(function () { return 24; })()`) is read by the
-values it returns and the values of its locals (a for loop's counter and the functions it defines excepted).
+values it returns, a local it returns whole included (a factor, a for loop's counter and the functions it defines
+excepted).
 Anywhere in the code, outside comments:
   colour      "#rrggbb" in any quotes, Qt.rgba/hsla/hsva/rgb of literal numbers; in a colour binding, a named colour in any
               quotes ("white", "Red"; "transparent" is not a colour)
@@ -139,8 +140,9 @@ def opening_kind(head):
 
 BINDING_HEAD = re.compile(r"^\s*(?:(?:readonly|required|default)\s+)*(?:property\s+[\w.<>]+\s+)?[A-Za-z_][\w.]*\s*:\s*$")
 RETURN = re.compile(r"\breturn\b(?P<expr>[^;{}]*)")
-# A local's value in a binding's block (`const w = 24; return w`), a for loop's counter excepted.
-LOCAL = re.compile(r"\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=(?!=)(?P<expr>[^;{}]*)")
+# A local's value in a binding's block, read when the block returns that local whole (`const w = 24; return w`), not when the
+# local is a factor or a count (`const cols = 3; return cols * Tokens.x`), nor a for loop's counter.
+LOCAL = re.compile(r"\b(?:const|let|var)\s+(?P<name>[A-Za-z_$][\w$]*)\s*=(?!=)(?P<expr>[^;{}]*)")
 BINDING_PREFIX = re.compile(r"^\s*(?:(?:readonly|required|default)\s+)*(?:property\s+[\w.<>]+\s+)?[A-Za-z_][\w.]*\s*:")
 FUNCTION_OPEN = re.compile(r"(?:\bfunction\b\s*[\w$]*\s*\([^()]*\)|=>)\s*$")
 NESTED_FUNCTION = re.compile(r"(?:\bfunction\b\s*[\w$]*\s*\([^()]*\)|=>)\s*\{")
@@ -180,7 +182,9 @@ def statements(code):
     def returned():
         body = without_inner_functions("".join(block["text"]))
         values = [m for m in RETURN.finditer(body)]
-        values += [m for m in LOCAL.finditer(body) if not re.search(r"\bfor\s*\(\s*$", body[:m.start()])]
+        returned_whole = {m.group("expr").strip() for m in values}
+        values += [m for m in LOCAL.finditer(body)
+                   if m.group("name") in returned_whole and not re.search(r"\bfor\s*\(\s*$", body[:m.start()])]
         for m in values:
             if m.group("expr").strip():
                 out.append((block["head"] + m.group("expr"), block["head_lines"] + block["lines"][m.start("expr"):m.end("expr")]))
@@ -565,6 +569,7 @@ SAMPLES = {
     "inner function's return": ("Item {\n    width: {\n        const pick = function () { return 24; };\n        return pick() * Tokens.spacingSm;\n    }\n}", 0),
     "inner arrow's return": ("Item { height: { const f = r => { return 64; }; return rows.map(f).length * Tokens.menuItemHeight; } }", 0),
     "value through a local": ("Item { width: { const w = 24; return w; } }", 1),
+    "local as a count": ("Item { width: { const cols = 3; return cols * Tokens.settingsPickerWidth; } }", 0),
     "loop counter": ("Item { width: { let s = 0; for (let i = 2; i < n; i++) s += Tokens.spacingSm; return s; } }", 0),
     "called function": ("Item { width: (function () { return 24; })() }", 1),
     "backtick colour": ("Rectangle { color: `red` }", 1),

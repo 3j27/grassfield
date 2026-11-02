@@ -8,7 +8,7 @@ Rectangle {
     id: root
 
     // The fill: the text colour at this opacity (the toolbar group is a step lighter than the field, macOS 27).
-    property real fillOpacity: Tokens.settingsFieldFillOpacity
+    property real fillOpacity: Tokens.toolbarFieldFillOpacity
     readonly property real hairline: 1 / Math.max(1, Screen.devicePixelRatio)
 
     radius: height / 2
@@ -16,7 +16,7 @@ Rectangle {
     // Increase Contrast: the control outline of every shared control instead of the faint rim.
     border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : root.hairline
     border.color: Appearance.increaseContrast ? Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
-        : Appearance.withAlpha(Appearance.colors.shadow, Appearance.dark ? Tokens.settingsRimOpacityDark : Tokens.settingsRimOpacity)
+        : Appearance.withAlpha(Appearance.colors.shadow, Appearance.dark ? Tokens.toolbarRimOpacityDark : Tokens.toolbarRimOpacity)
 
     Rectangle {
         anchors.fill: parent
@@ -24,6 +24,6 @@ Rectangle {
         radius: height / 2
         color: "transparent"
         border.width: root.hairline
-        border.color: Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.settingsInnerRimOpacityDark : Tokens.settingsInnerRimOpacity)
+        border.color: Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.toolbarInnerRimOpacityDark : Tokens.toolbarInnerRimOpacity)
     }
 }

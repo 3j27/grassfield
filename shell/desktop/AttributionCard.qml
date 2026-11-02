@@ -72,7 +72,9 @@ FocusScope {
         }
     }
 
+    // A text surface: the menus' class (ADR-0039 step 22).
     Material {
+        glassClass: "menu"
         anchors.fill: parent
         radius: Tokens.radiusMenu
     }

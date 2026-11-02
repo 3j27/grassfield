@@ -291,9 +291,9 @@ SettingsPage {
             }
         }
 
-        SettingsRow {
+        EmptyListRow {
             visible: root.printers.length === 0
-            title: qsTr("No printers")
+            text: qsTr("No printers")
         }
     }
 

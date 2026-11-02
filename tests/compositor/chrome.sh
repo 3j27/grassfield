@@ -8,7 +8,8 @@
 # dispatcher calls (window move, focus) go through scripts/nestctl. Expected geometry: tests/compositor/titlebar_geometry.sh.
 #
 #   1 foot A (a third-party window), active, pointer away: the three lights at their centres (+-0.75 px), 14 px across
-#     (+-1), no glyph; the bar GF_TB_HEIGHT rows tall, flush with the window's left edge and the surface (no gap); its
+#     (+-1), no glyph; the bar GF_TB_HEIGHT rows tall, its last row the one-point hairline in the rule's colour (titlebar.rule*
+#     over the bar, ADR-0039 step 21), flush with the window's left edge and the surface (no gap); its
 #     top corners rounded like the window, radius 20 (ADR-0024: one radius for every window; inset of the first fill pixels
 #     on the corner's diagonal 5-7 px; a square corner gives 0-1; measured on Hyprland 0.56.2: 4 at radius 12, 8 at radius
 #     26, so about 6 at 20); the lights coloured; bar and
@@ -123,9 +124,17 @@ crops() { # <name> <x> <y> <w>: 2x crops (nearest neighbour) of the lights and o
 
 # The palette the titlebar is measured against: the design tokens of the appearance shown (ui/tokens/tokens.json "titlebar").
 token_hex() { jq -r --arg k "$1" '.titlebar[$k].value' "$root/ui/tokens/tokens.json" | tr -d '#'; }
+token_num() { jq -r --arg k "$1" '.titlebar[$k].value' "$root/ui/tokens/tokens.json"; }
+# The hairline in the bar's last row (ADR-0039 step 21): titlebar.rule<A> at titlebar.ruleOpacity<A> over the bar's colour.
+rule_hex() { # <Dark|Light>
+  python3 -I -c 'import sys
+bar, rule, a = sys.argv[1], sys.argv[2], float(sys.argv[3])
+print("".join("%02x" % round(int(rule[i:i + 2], 16) * a + int(bar[i:i + 2], 16) * (1 - a)) for i in (0, 2, 4)))' \
+    "$(token_hex "background$1")" "$(token_hex "rule$1")" "$(token_num "ruleOpacity$1")"
+}
 palette_for() { # <dark|light>
   local a=${1^}
-  palette_opts=("bar=$(token_hex "background$a")" "inactive=$(token_hex "inactiveButton$a")")
+  palette_opts=("bar=$(token_hex "background$a")" "inactive=$(token_hex "inactiveButton$a")" "rule=$(rule_hex "$a")")
 }
 palette_for Dark
 measure() { # <name> <x> <y> <w> [radius] -> key=value lines in $run/<name>.txt, loaded into m[...]
@@ -195,10 +204,10 @@ check_glyphs() { # <label> <0 = expect glyphs on all three | 1 = expect none>
   check "$label" "$ok" "dark glyph pixels: close ${m[close_glyph]}, minimize ${m[minimize_glyph]}, zoom ${m[zoom_glyph]}"
 }
 
-check_bar() { # <label>
+check_bar() { # <label>: the bar's colour, then its one-point hairline in the last row, the rule's colour (ADR-0039 step 21)
   local ok=0
-  ((m[bar_rows] == GF_TB_HEIGHT && m[bar_bottom_gap] == 0 && m[bar_left_gap] == 0)) || ok=1
-  check "$1: titlebar" "$ok" "${m[bar_rows]} rows of bar colour (expected $GF_TB_HEIGHT), gaps: bottom row ${m[bar_bottom_gap]} px, left column ${m[bar_left_gap]} px"
+  ((m[rule_rows] == 1 && m[bar_rows] + m[rule_rows] == GF_TB_HEIGHT && m[bar_bottom_gap] == 0 && m[bar_left_gap] == 0)) || ok=1
+  check "$1: titlebar" "$ok" "${m[bar_rows]} rows of bar colour and ${m[rule_rows]} of the rule (${m[rule_colour]}; expected $((GF_TB_HEIGHT - 1)) and 1), gaps: bottom row ${m[bar_bottom_gap]} px off the rule, left column ${m[bar_left_gap]} px"
 }
 
 check_junction() { # <label>: no curve where the content meets the bar (the content's own pixels fill the cut corners)
@@ -356,8 +365,8 @@ if [[ -x $settings ]]; then
     crops settings "$sx" "$sy" "$sw"
     measure settings "$sx" "$sy" "$sw" "$(rounding_of "$s_addr")"
     if ((plugin)); then
-      ((${m[bar_rows]:-1} == 0))
-      check "Settings (client chrome): no plugin bar above it" $? "${m[bar_rows]} rows of the plugin bar colour above the surface (expected 0)"
+      ((${m[bar_rows]:-1} == 0 && ${m[rule_rows]:-1} == 0))
+      check "Settings (client chrome): no plugin bar above it" $? "${m[bar_rows]} rows of the plugin bar colour and ${m[rule_rows]} of its rule above the surface (expected 0)"
     fi
     # The corner on the app's own top edge (its toolbar colour, measured with no plugin bar): the measurement above looks
     # for the plugin bar, absent by design here, and finds no corner (integrator run 2026-10-24: diagonal inset -1).

@@ -2,10 +2,11 @@ import QtQuick
 import QtQuick.Templates as T
 import Grassfield.Ui
 
-// A pull-down or context menu of the Store's window (as Settings' MoreButton): Grassfield's PopupMenu in a popup of the
-// window, closed by Esc or a click outside, the keyboard in the menu while it is open. `items`: [{id, text, enabled?,
-// destructive?, separator?}] as PopupMenu takes them; choosing one emits chosen(id). openAt(x, y): its top-left corner
-// in its parent's coordinates. The focus goes back to `focusBack` when it closes.
+// A pull-down or context menu of an app window (ADR-0039 step 24: the Store's, Settings' (…) button's and Activity Monitor's
+// one host): Grassfield's PopupMenu in a popup of the window, closed by Esc or a click outside, the keyboard in the menu while
+// it is open. `items`: [{id, text, enabled?, checked?, destructive?, separator?}] as PopupMenu takes them; choosing one emits
+// chosen(id). openAt(x, y): its top-left corner in its parent's coordinates. The focus goes back to `focusBack` when it
+// closes.
 T.Popup {
     id: root
 
