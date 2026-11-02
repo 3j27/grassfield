@@ -156,6 +156,11 @@ TestCase {
         function emptyTrash(): void {
             fakeApp.emptied++;
         }
+        // Delete Immediately (FP-52): what was really deleted.
+        property var deleted: []
+        function deletePermanently(urls: var): void {
+            fakeApp.deleted = fakeApp.deleted.concat([urls.map(u => String(u))]);
+        }
         property bool devSession: true
         property int tagRevision: 0
         property int folderStyleRevision: 0
@@ -496,6 +501,49 @@ TestCase {
         fakeApp.emptied = 0;
         tab.emptyTrash();
         compare(fakeApp.emptied, 0, "a dev session never empties a trash");
+    }
+
+    // Delete Immediately (⌥⌘⌫, FP-52) asks first, in a destructive sheet that says it can't be undone, and deletes only on the
+    // answer (review of PR #98, mutant M7: the deletion without the question).
+    function test_deleteImmediatelyAsksBeforeDeleting() {
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        const tab = browser.tab;
+        const folder = tab.folder;
+        fakeApp.deleted = [];
+        folder.selected = [0, 1];
+        tab.deleteImmediately();
+        compare(fakeApp.deleted, [], "nothing is deleted before the answer");
+        const sheet = test.shownSheet(browser.contentItem);
+        verify(sheet !== null, "a sheet asks");
+        verify(sheet.destructive, "a destructive sheet");
+        verify(sheet.message.indexOf("immediately") >= 0, sheet.message);
+        verify(sheet.message.indexOf("can’t undo") >= 0, "it says it cannot be undone: " + sheet.message);
+        sheet.cancel();
+        compare(fakeApp.deleted, [], "Cancel deletes nothing");
+        tab.deleteImmediately();
+        const again = test.shownSheet(browser.contentItem);
+        verify(again !== null);
+        compare(fakeApp.deleted, []);
+        again.confirm();
+        compare(fakeApp.deleted.length, 1, "the answer deletes");
+        compare(fakeApp.deleted[0].length, 2, "the selection, once");
+        // Nothing selected: nothing asked, nothing deleted.
+        folder.selected = [];
+        tab.deleteImmediately();
+        compare(test.shownSheet(browser.contentItem), null);
+        compare(fakeApp.deleted.length, 1);
+    }
+
+    function shownSheet(item: var): var {
+        if (item instanceof Sheet && item.shown)
+            return item;
+        for (let i = 0; i < item.children.length; i++) {
+            const found = test.shownSheet(item.children[i]);
+            if (found)
+                return found;
+        }
+        return null;
     }
 
     function test_applicationsLaunchAndFilesOpen() {
