@@ -178,12 +178,13 @@ TestCase {
 
     // The Privilege cell hugs its widest choice (inline, no bezel), so the Name column gets the rest within the window's one
     // content margin: a short user or group name ("chapdel", "staff") is shown in full, and only a long one elides. Known
-    // limit: in French, beside "Lecture et écriture", the group pop-up holds about 6 letters at the 264-pt window (F1 gap 17);
-    // Finder fits more with small table controls, which Grassfield's pop-up does not have yet (review of PR #98).
+    // limit: in French, beside "Lecture et écriture", the group pop-up has only a few letters at the 264-pt window (F1 gap 17;
+    // "cha…" on screen), so only the owner label and the absence of overlap are checked there; Finder fits more with small
+    // table controls, which Grassfield's pop-up does not have yet (review of PR #98, docs/specs/files.md FP-61).
     function test_aShortNameIsNotElided_data() {
         return [
             {tag: "English", me: "Me", groupRoom: 99, choices: [{id: "3", text: "Read & Write"}, {id: "1", text: "Read only"}, {id: "2", text: "Write only"}, {id: "0", text: "No Access"}]},
-            {tag: "French", me: "moi", groupRoom: 6, choices: [{id: "3", text: "Lecture et écriture"}, {id: "1", text: "Lecture seule"}, {id: "2", text: "Écriture seule"}, {id: "0", text: "Aucun accès"}]}
+            {tag: "French", me: "moi", groupRoom: 0, choices: [{id: "3", text: "Lecture et écriture"}, {id: "1", text: "Lecture seule"}, {id: "2", text: "Écriture seule"}, {id: "0", text: "Aucun accès"}]}
         ];
     }
 
