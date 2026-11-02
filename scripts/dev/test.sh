@@ -136,15 +136,19 @@ for dir in tests/shell/*/ tests/security/*/; do
   # Private runtime/cache dirs: works inside the Claude Code sandbox (no writes to /run/user or ~/.cache).
   mkdir -p -m 700 "$GRASSFIELD_TEST_TMP/runtime" "$GRASSFIELD_TEST_TMP/cache"
   # A test that loads the real notification singleton carries a `dev-session` marker file: it runs as a dev session
-  # (GRASSFIELD_DEV=1: no D-Bus server on the owner's bus) with its state and config under the scratch dir.
+  # (GRASSFIELD_DEV=1: no D-Bus server on the owner's bus) with its state and config under the scratch dir, its own
+  # (a settings file one test writes, e.g. notif_image_files, made the next one start on it: search_clipboard failed).
   dev_env=()
+  scratch=${dir%/}
+  scratch=${scratch//\//_}
+  mkdir -p -m 700 "$GRASSFIELD_TEST_TMP/state" "$GRASSFIELD_TEST_TMP/config"
   # A test that runs real, heavy work (the cursor builder) names its own limit in a `timeout` marker file (seconds).
   limit=60
   if [[ -f ${dir}timeout ]]; then
     limit=$(<"${dir}timeout")
     [[ $limit =~ ^[0-9]+$ ]] || { echo "FAIL: ${dir}timeout is not a number of seconds"; status=1; record "$layer" "${dir}shell.qml" fail; continue; }
   fi
-  [[ -f ${dir}dev-session ]] && dev_env=(-u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$GRASSFIELD_TEST_TMP/state" GRASSFIELD_CONFIG_HOME="$GRASSFIELD_TEST_TMP/config")
+  [[ -f ${dir}dev-session ]] && dev_env=(-u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$GRASSFIELD_TEST_TMP/state/$scratch" GRASSFIELD_CONFIG_HOME="$GRASSFIELD_TEST_TMP/config/$scratch")
   out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE "${dev_env[@]}" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" GRASSFIELD_LANG=en \
     XDG_RUNTIME_DIR="$GRASSFIELD_TEST_TMP/runtime" XDG_CACHE_HOME="$GRASSFIELD_TEST_TMP/cache" \
     timeout "$limit" qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; record "$layer" "${dir}shell.qml" fail; continue; }
