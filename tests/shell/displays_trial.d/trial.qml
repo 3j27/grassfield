@@ -36,8 +36,11 @@ ShellRoot {
     Connections {
         target: SessionConfig
 
+        // Only the lock step's own reload: every earlier reload is answered too once the fake is reached (the integrator's
+        // follow-up on #93: tickets 1 to 9 filled this list, so step 21 saw it non-empty and step 24 saw ten answers).
         function onAnswered(ticket: int, ok: bool): void {
-            root.lockAnswers.push(ticket + " " + ok);
+            if (root.lockTicket > 0 && ticket === root.lockTicket)
+                root.lockAnswers.push(ticket + " " + ok);
         }
     }
 

@@ -31,34 +31,43 @@ cp tests/shell/hypr_socket_errors.d/probe.qml "$tmp/cfg/shell.qml"
 ui/i18n/build-direct.sh >/dev/null
 
 # The fake Hyprland (Python's standard library only): the event socket from the start (Quickshell's Hyprland singleton
-# connects to it), the request socket only once the probe wrote `go` (before that a request meets no socket at all). Its
-# connections, in order: the first is closed without reading (a peer that hangs up), the second answers "ok", the third is
-# held silent for 2.5 s, past the probe's 1 s answer bound, then closed (a late hang-up on a socket judged already).
+# connects to it), the request socket only once the probe wrote `go` (before that a request meets no socket at all). The
+# probe writes it to Mode.stateDir, which is GRASSFIELD_STATE_HOME here: "$tmp/state/go" (the first version waited for it in
+# the instance directory, so the request socket never came: the integrator's follow-up on #104). Only `reload` requests are
+# the probe's: anything else (a JSON query of Quickshell's Hyprland module) gets "[]" and is not counted. The reloads, in
+# order: the first is closed without an answer (a peer that hangs up), the second answers "ok", the third is held silent for
+# 2.5 s, past the probe's 1 s answer bound, then closed (a late hang-up on a socket judged already).
 cat >"$tmp/fake.py" <<'PY'
 import os, socket, sys, threading, time
-base, log = sys.argv[1], sys.argv[2]
+base, log, go = sys.argv[1], sys.argv[2], sys.argv[3]
 count = 0
+lock = threading.Lock()
 def note(what):
     with open(log, "a") as f:
         f.write(what + "\n")
-def handle(c, n):
+def handle(c):
+    global count
+    data = c.recv(65536)
+    if not data.startswith(b"reload"):
+        c.sendall(b"[]"); c.close(); return
+    with lock:
+        count += 1
+        n = count
     if n == 1:
         c.close(); note("1 hangup")
     elif n == 2:
-        c.recv(65536); c.sendall(b"ok"); c.close(); note("2 answered")
+        c.sendall(b"ok"); c.close(); note("2 answered")
     else:
-        c.recv(65536); time.sleep(2.5); c.close(); note("%d late" % n)
+        time.sleep(2.5); c.close(); note("%d late" % n)
 def serve_requests():
-    global count
-    while not os.path.exists(os.path.join(base, "go")):
+    while not os.path.exists(go):
         time.sleep(0.05)
     s = socket.socket(socket.AF_UNIX)
     s.bind(os.path.join(base, ".socket.sock"))
     s.listen(16)
     while True:
         c, _ = s.accept()
-        count += 1
-        threading.Thread(target=handle, args=(c, count), daemon=True).start()
+        threading.Thread(target=handle, args=(c,), daemon=True).start()
 def serve_events():
     s = socket.socket(socket.AF_UNIX)
     s.bind(os.path.join(base, ".socket2.sock"))
@@ -70,7 +79,7 @@ def serve_events():
 threading.Thread(target=serve_events, daemon=True).start()
 serve_requests()
 PY
-python3 -I "$tmp/fake.py" "$rt/hypr/$sig" "$tmp/connections.log" &
+python3 -I "$tmp/fake.py" "$rt/hypr/$sig" "$tmp/connections.log" "$tmp/state/go" &
 fake=$!
 for _ in $(seq 50); do [[ -S $rt/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
 
