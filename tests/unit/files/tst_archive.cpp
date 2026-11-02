@@ -198,11 +198,25 @@ TEST(ArchiveJobs, HostileArchivesWriteNothingOutside)
     ASSERT_EQ(p.exitCode(), 0) << p.readAllStandardError().toStdString();
 
     const Result r = runJob(ArchiveJob::expand(bsdtar, work + QStringLiteral("/evil.tar")));
-    EXPECT_FALSE(QFileInfo::exists(dir->path() + QStringLiteral("/payload-out"))) << "nothing above the folder";
-    EXPECT_FALSE(QFileInfo::exists(work + QStringLiteral("/../payload-out")));
+    // An escape lands one level above the temporary folder, which is inside the archive's own folder: `work`. Without
+    // bsdtar's refusal of ".." (it is the absence of -P that keeps it) "payload-out" would be written right here.
+    EXPECT_FALSE(QFileInfo::exists(work + QStringLiteral("/payload-out"))) << "nothing in the archive's own folder from a ../ member";
+    EXPECT_FALSE(QFileInfo::exists(dir->path() + QStringLiteral("/payload-out"))) << "nor two folders up";
     EXPECT_TRUE(hiddenLeftovers(work).isEmpty()) << "no temporary folder left behind";
     if (r.ok) {
         EXPECT_TRUE(r.path.startsWith(work + QLatin1Char('/')));
+    }
+
+    // An absolute member name (written with -P, which only the archive's author has): extracting must not follow it.
+    const QString absolute = dir->path() + QStringLiteral("/absolute-out");
+    p.start(bsdtar, {QStringLiteral("-cPf"), work + QStringLiteral("/abs.tar"), QStringLiteral("-s"), QStringLiteral(",^payload$,") + absolute + QStringLiteral(",") , QStringLiteral("payload")});
+    ASSERT_TRUE(p.waitForFinished(10000));
+    ASSERT_EQ(p.exitCode(), 0) << p.readAllStandardError().toStdString();
+    const Result abs = runJob(ArchiveJob::expand(bsdtar, work + QStringLiteral("/abs.tar")));
+    EXPECT_FALSE(QFileInfo::exists(absolute)) << "an absolute member name is not written where it says";
+    EXPECT_TRUE(hiddenLeftovers(work).isEmpty());
+    if (abs.ok) {
+        EXPECT_TRUE(abs.path.startsWith(work + QLatin1Char('/')));
     }
 
     // Not an archive at all: a failure, the temporary folder removed.
