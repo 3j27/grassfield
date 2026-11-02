@@ -1607,6 +1607,57 @@
     </message>
 </context>
 <context>
+    <name>ArchiveJob</name>
+    <message>
+        <source>There isn’t enough space on the disk: “%1” was stopped.</source>
+        <translation>Il n’y a plus assez d’espace sur le disque : « %1 » a été arrêté.</translation>
+    </message>
+    <message>
+        <source>Compress and Expand need bsdtar (libarchive), which isn’t installed.</source>
+        <translation>Compresser et Décompresser ont besoin de bsdtar (libarchive), qui n’est pas installé.</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be created here.</source>
+        <translation>« %1 » ne peut pas être créé ici.</translation>
+    </message>
+    <message>
+        <source>“%1” takes too long to read.</source>
+        <translation>La lecture de « %1 » prend trop de temps.</translation>
+    </message>
+    <message>
+        <source>“%1” lists too many items.</source>
+        <translation>« %1 » contient trop d’éléments.</translation>
+    </message>
+    <message>
+        <source>Compress and Expand need bsdtar (libarchive), which can’t be started.</source>
+        <translation>Compresser et Décompresser ont besoin de bsdtar (libarchive), qui ne peut pas être démarré.</translation>
+    </message>
+    <message>
+        <source>“%1” couldn’t be created.</source>
+        <translation>« %1 » n’a pas pu être créé.</translation>
+    </message>
+    <message>
+        <source>“%1” couldn’t be expanded.</source>
+        <translation>« %1 » n’a pas pu être décompressé.</translation>
+    </message>
+    <message>
+        <source>“%1” is protected by a password: Files can’t expand it.</source>
+        <translation>« %1 » est protégé par un mot de passe : Fichiers ne peut pas le décompresser.</translation>
+    </message>
+    <message>
+        <source>There isn’t enough space on the disk to expand “%1”.</source>
+        <translation>Il n’y a pas assez d’espace sur le disque pour décompresser « %1 ».</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be expanded here.</source>
+        <translation>« %1 » ne peut pas être décompressé ici.</translation>
+    </message>
+    <message>
+        <source>“%1” holds nothing to expand.</source>
+        <translation>« %1 » ne contient rien à décompresser.</translation>
+    </message>
+</context>
+<context>
     <name>ArrangeSheet</name>
     <message>
         <source>Arrange Displays</source>
@@ -2743,6 +2794,10 @@
         <translation>%1 dossiers</translation>
     </message>
     <message>
+        <source>The original item can’t be found.</source>
+        <translation>L’élément original est introuvable.</translation>
+    </message>
+    <message>
         <source>Put Back</source>
         <translation>Remettre</translation>
     </message>
@@ -2827,14 +2882,6 @@
         <translation>Espace</translation>
     </message>
     <message>
-        <source>Cut</source>
-        <translation>Couper</translation>
-    </message>
-    <message>
-        <source>Ctrl+X</source>
-        <translation>Ctrl+X</translation>
-    </message>
-    <message>
         <source>Show in Enclosing Folder</source>
         <translation>Afficher dans le dossier parent</translation>
     </message>
@@ -2875,10 +2922,6 @@
         <translation>Afficher les fichiers cachés</translation>
     </message>
     <message>
-        <source>Ctrl+H</source>
-        <translation>Ctrl+H</translation>
-    </message>
-    <message>
         <source>Ctrl+Shift+P</source>
         <translation>Ctrl+Maj+P</translation>
     </message>
@@ -2917,6 +2960,78 @@
     <message>
         <source>List</source>
         <translation>Liste</translation>
+    </message>
+    <message>
+        <source>Rename %1 Items…</source>
+        <translation>Renommer %1 éléments…</translation>
+    </message>
+    <message>
+        <source>Compress “%1”</source>
+        <translation>Compresser « %1 »</translation>
+    </message>
+    <message>
+        <source>Compress %1 Items</source>
+        <translation>Compresser %1 éléments</translation>
+    </message>
+    <message>
+        <source>Make Alias</source>
+        <translation>Créer un alias</translation>
+    </message>
+    <message>
+        <source>Ctrl+Super+A</source>
+        <translation>Ctrl+Super+A</translation>
+    </message>
+    <message>
+        <source>Show Original</source>
+        <translation>Afficher l’original</translation>
+    </message>
+    <message>
+        <source>Ctrl+R</source>
+        <translation>Ctrl+R</translation>
+    </message>
+    <message>
+        <source>New Folder with Selection (%1 Items)</source>
+        <translation>Nouveau dossier avec la sélection (%1 éléments)</translation>
+    </message>
+    <message>
+        <source>Ctrl+Super+N</source>
+        <translation>Ctrl+Super+N</translation>
+    </message>
+    <message>
+        <source>Copy “%1” as Pathname</source>
+        <translation>Copier « %1 » en tant que chemin d’accès</translation>
+    </message>
+    <message>
+        <source>Copy %1 Items as Pathnames</source>
+        <translation>Copier %1 éléments en tant que chemins d’accès</translation>
+    </message>
+    <message>
+        <source>Ctrl+Alt+C</source>
+        <translation>Ctrl+Alt+C</translation>
+    </message>
+    <message>
+        <source>Services</source>
+        <translation>Services</translation>
+    </message>
+    <message>
+        <source>New Terminal at Folder</source>
+        <translation>Nouveau terminal au dossier</translation>
+    </message>
+    <message>
+        <source>Move %1 Items Here</source>
+        <translation>Déplacer %1 éléments ici</translation>
+    </message>
+    <message>
+        <source>Move Item Here</source>
+        <translation>Déplacer l’élément ici</translation>
+    </message>
+    <message>
+        <source>Ctrl+Alt+V</source>
+        <translation>Ctrl+Alt+V</translation>
+    </message>
+    <message>
+        <source>Ctrl+Shift+.</source>
+        <translation>Ctrl+Maj+.</translation>
     </message>
     <message>
         <source>Hide Preview</source>
@@ -2994,6 +3109,14 @@
         <translation>Grouper par</translation>
     </message>
     <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
+    </message>
+    <message>
+        <source>Tags…</source>
+        <translation>Tags…</translation>
+    </message>
+    <message>
         <source>Action</source>
         <translation>Action</translation>
     </message>
@@ -3030,6 +3153,14 @@
         <translation>%1, recherche en cours…</translation>
     </message>
     <message>
+        <source>Contents can’t be searched: the search index (localsearch) isn’t available.</source>
+        <translation>Le contenu ne peut pas être recherché : l’index de recherche (localsearch) n’est pas disponible.</translation>
+    </message>
+    <message>
+        <source>%1 (the search stopped early: add words or rules to narrow it)</source>
+        <translation>%1 (la recherche s’est arrêtée tôt : ajoutez des mots ou des règles pour l’affiner)</translation>
+    </message>
+    <message>
         <source>%1 (the search stopped early: the folder holds too many items)</source>
         <translation>%1 (recherche interrompue&#xa0;: le dossier contient trop d’éléments)</translation>
     </message>
@@ -3038,20 +3169,136 @@
         <translation>%1, %2 disponibles</translation>
     </message>
     <message>
-        <source>Go to the folder:</source>
-        <translation>Aller au dossier&#xa0;:</translation>
+        <source>Tags of “%1”</source>
+        <translation>Tags de « %1 »</translation>
     </message>
     <message>
-        <source>~/Documents, /usr/share or trash:/</source>
-        <translation>~/Documents, /usr/share ou trash:/</translation>
+        <source>Tags of %1 Items</source>
+        <translation>Tags de %1 éléments</translation>
     </message>
     <message>
-        <source>Go</source>
-        <translation>Aller</translation>
+        <source>Done</source>
+        <translation>OK</translation>
     </message>
     <message>
-        <source>The folder “%1” can’t be found.</source>
-        <translation>Le dossier «&#xa0;%1&#xa0;» est introuvable.</translation>
+        <source>Add Tags…</source>
+        <translation>Ajouter des tags…</translation>
+    </message>
+    <message>
+        <source>Add Tags</source>
+        <translation>Ajouter des tags</translation>
+    </message>
+    <message>
+        <source>Remove the tag %1</source>
+        <translation>Retirer le tag %1</translation>
+    </message>
+    <message>
+        <source>Rename %1 Items</source>
+        <translation>Renommer %1 éléments</translation>
+    </message>
+    <message>
+        <source>Rename</source>
+        <translation>Renommer</translation>
+    </message>
+    <message>
+        <source>Replace Text</source>
+        <translation>Remplacer le texte</translation>
+    </message>
+    <message>
+        <source>Add Text</source>
+        <translation>Ajouter du texte</translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation>Format</translation>
+    </message>
+    <message>
+        <source>Find</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Replace with</source>
+        <translation>Remplacer par</translation>
+    </message>
+    <message>
+        <source>Text</source>
+        <translation>Texte</translation>
+    </message>
+    <message>
+        <source>Text to add</source>
+        <translation>Texte à ajouter</translation>
+    </message>
+    <message>
+        <source>Where</source>
+        <translation>Position</translation>
+    </message>
+    <message>
+        <source>after name</source>
+        <translation>après le nom</translation>
+    </message>
+    <message>
+        <source>before name</source>
+        <translation>avant le nom</translation>
+    </message>
+    <message>
+        <source>Name Format</source>
+        <translation>Format du nom</translation>
+    </message>
+    <message>
+        <source>Name and Index</source>
+        <translation>Nom et index</translation>
+    </message>
+    <message>
+        <source>Name and Counter</source>
+        <translation>Nom et compteur</translation>
+    </message>
+    <message>
+        <source>Name and Date</source>
+        <translation>Nom et date</translation>
+    </message>
+    <message>
+        <source>Custom Format</source>
+        <translation>Format personnalisé</translation>
+    </message>
+    <message>
+        <source>Start at</source>
+        <translation>Commencer à</translation>
+    </message>
+    <message>
+        <source>Start numbers at</source>
+        <translation>Commencer la numérotation à</translation>
+    </message>
+    <message>
+        <source>Example: %1</source>
+        <translation>Exemple : %1</translation>
+    </message>
+    <message>
+        <source>Untitled Search</source>
+        <translation>Recherche sans titre</translation>
+    </message>
+    <message>
+        <source>Save Search</source>
+        <translation>Enregistrer la recherche</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>A saved search needs a name.</source>
+        <translation>Une recherche enregistrée a besoin d’un nom.</translation>
+    </message>
+    <message>
+        <source>A saved search named “%1” already exists. Save again to replace it.</source>
+        <translation>Une recherche enregistrée nommée « %1 » existe déjà. Enregistrez à nouveau pour la remplacer.</translation>
+    </message>
+    <message>
+        <source>Add To Sidebar</source>
+        <translation>Ajouter à la barre latérale</translation>
     </message>
 </context>
 <context>
@@ -3260,6 +3507,57 @@
     <message>
         <source>OK</source>
         <translation>OK</translation>
+    </message>
+</context>
+<context>
+    <name>ConnectWindow</name>
+    <message>
+        <source>Connect to Server</source>
+        <translation>Se connecter au serveur</translation>
+    </message>
+    <message>
+        <source>“%1” isn’t a server address Files can open (smb, sftp, ftp, webdav or nfs).</source>
+        <translation>« %1 » n’est pas une adresse de serveur que Fichiers peut ouvrir (smb, sftp, ftp, webdav ou nfs).</translation>
+    </message>
+    <message>
+        <source>Server Address</source>
+        <translation>Adresse du serveur</translation>
+    </message>
+    <message>
+        <source>smb://server/share, sftp://user@host</source>
+        <translation>smb://serveur/partage, sftp://utilisateur@hôte</translation>
+    </message>
+    <message>
+        <source>Recent Servers</source>
+        <translation>Serveurs récents</translation>
+    </message>
+    <message>
+        <source>Clear Recent Servers</source>
+        <translation>Effacer les serveurs récents</translation>
+    </message>
+    <message>
+        <source>Favorite Servers:</source>
+        <translation>Serveurs favoris :</translation>
+    </message>
+    <message>
+        <source>Favorite Servers</source>
+        <translation>Serveurs favoris</translation>
+    </message>
+    <message>
+        <source>Add to Favorite Servers</source>
+        <translation>Ajouter aux serveurs favoris</translation>
+    </message>
+    <message>
+        <source>Remove from Favorite Servers</source>
+        <translation>Retirer des serveurs favoris</translation>
+    </message>
+    <message>
+        <source>Browse</source>
+        <translation>Parcourir</translation>
+    </message>
+    <message>
+        <source>Connect</source>
+        <translation>Se connecter</translation>
     </message>
 </context>
 <context>
@@ -4689,12 +4987,164 @@
         <translation>dossier sans titre</translation>
     </message>
     <message>
+        <source>Aliases can only be made of items on this computer.</source>
+        <translation>Les alias ne peuvent être créés que pour des éléments de cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>%1 alias</source>
+        <translation>%1 alias</translation>
+    </message>
+    <message>
+        <source>The alias of “%1” couldn’t be made here.</source>
+        <translation>L’alias de « %1 » n’a pas pu être créé ici.</translation>
+    </message>
+    <message>
+        <source>New Folder with Selection needs items of the shown folder.</source>
+        <translation>Nouveau dossier avec la sélection demande des éléments du dossier affiché.</translation>
+    </message>
+    <message>
+        <source>New Folder With Items</source>
+        <translation>Nouveau dossier avec éléments</translation>
+    </message>
+    <message>
+        <source>“%1” couldn’t be moved into a new folder.</source>
+        <translation>« %1 » n’a pas pu être placé dans un nouveau dossier.</translation>
+    </message>
+    <message>
+        <source>Moving…</source>
+        <translation>Déplacement…</translation>
+    </message>
+    <message>
+        <source>A terminal can only open in a folder on this computer.</source>
+        <translation>Un terminal ne peut s’ouvrir que dans un dossier de cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>The terminal couldn’t be started (xdg-terminal-exec).</source>
+        <translation>Le terminal n’a pas pu être démarré (xdg-terminal-exec).</translation>
+    </message>
+    <message>
+        <source>Applications can’t be renamed here.</source>
+        <translation>Les applications ne peuvent pas être renommées ici.</translation>
+    </message>
+    <message>
         <source>The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.</source>
         <translation>Le nom «&#xa0;%1&#xa0;» ne peut pas être utilisé. Un nom ne peut pas être vide, «&#xa0;.&#xa0;» ou «&#xa0;..&#xa0;», contenir «&#xa0;/&#xa0;» ni dépasser 255 octets.</translation>
     </message>
     <message>
+        <source>Two items would both be named “%1”.</source>
+        <translation>Deux éléments seraient tous deux nommés « %1 ».</translation>
+    </message>
+    <message>
+        <source>The name “%1” is taken by another item being renamed. Rename them in two steps.</source>
+        <translation>Le nom « %1 » est pris par un autre élément en cours de renommage. Renommez-les en deux fois.</translation>
+    </message>
+    <message>
+        <source>No name would change.</source>
+        <translation>Aucun nom ne changerait.</translation>
+    </message>
+    <message>
+        <source>“%1” couldn’t be renamed: %2.</source>
+        <translation>« %1 » n’a pas pu être renommé : %2.</translation>
+    </message>
+    <message>
+        <source>Only items on this computer can be compressed.</source>
+        <translation>Seuls les éléments de cet ordinateur peuvent être compressés.</translation>
+    </message>
+    <message>
+        <source>Items of several folders can’t be compressed together.</source>
+        <translation>Des éléments de plusieurs dossiers ne peuvent pas être compressés ensemble.</translation>
+    </message>
+    <message>
+        <source>Compressing “%1”…</source>
+        <translation>Compression de « %1 »…</translation>
+    </message>
+    <message>
+        <source>Only archives on this computer can be expanded.</source>
+        <translation>Seules les archives de cet ordinateur peuvent être décompressées.</translation>
+    </message>
+    <message>
+        <source>Expanding “%1”…</source>
+        <translation>Décompression de « %1 »…</translation>
+    </message>
+    <message>
+        <source>An alias (a symbolic link) keeps its own permissions: change the original item’s.</source>
+        <translation>Un alias (un lien symbolique) garde ses propres autorisations : modifiez celles de l’élément original.</translation>
+    </message>
+    <message>
+        <source>System items can’t be changed here.</source>
+        <translation>Les éléments du système ne peuvent pas être modifiés ici.</translation>
+    </message>
+    <message>
+        <source>Only files and folders can be changed here.</source>
+        <translation>Seuls les fichiers et les dossiers peuvent être modifiés ici.</translation>
+    </message>
+    <message>
+        <source>You can only change the permissions of items you own. Changing others’ items needs an administrator, which Files doesn’t offer yet.</source>
+        <translation>Vous ne pouvez modifier que les autorisations des éléments qui vous appartiennent. Modifier ceux des autres demande un administrateur, ce que Fichiers ne propose pas encore.</translation>
+    </message>
+    <message>
+        <source>The permissions of “%1” couldn’t be changed.</source>
+        <translation>Les autorisations de « %1 » n’ont pas pu être modifiées.</translation>
+    </message>
+    <message>
+        <source>The permissions of “%1” couldn’t be changed: %2</source>
+        <translation>Les autorisations de « %1 » n’ont pas pu être modifiées : %2</translation>
+    </message>
+    <message>
+        <source>The group of “%1” couldn’t be changed: %2</source>
+        <translation>Le groupe de « %1 » n’a pas pu être modifié : %2</translation>
+    </message>
+    <message>
+        <source>Some items in “%1” weren’t changed: they belong to someone else or can’t be changed.</source>
+        <translation>Certains éléments de « %1 » n’ont pas été modifiés : ils appartiennent à quelqu’un d’autre ou ne peuvent pas être modifiés.</translation>
+    </message>
+    <message>
+        <source>The permissions couldn’t be changed: chmod can’t be started.</source>
+        <translation>Les autorisations n’ont pas pu être modifiées : chmod ne peut pas être démarré.</translation>
+    </message>
+    <message>
+        <source>%1 “%2”</source>
+        <translation>%1 « %2 »</translation>
+    </message>
+    <message>
+        <source>%1 “%2” to “%3”</source>
+        <translation>%1 « %2 » vers « %3 »</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
         <source>The name “%1” is already taken. Please choose a different name.</source>
         <translation>Le nom «&#xa0;%1&#xa0;» est déjà utilisé. Veuillez choisir un autre nom.</translation>
+    </message>
+    <message>
+        <source>Undo %1</source>
+        <translation>Annuler %1</translation>
+    </message>
+    <message>
+        <source>Redo %1</source>
+        <translation>Rétablir %1</translation>
+    </message>
+    <message>
+        <source>Make Alias</source>
+        <translation>Créer un alias</translation>
+    </message>
+    <message>
+        <source>Make Aliases</source>
+        <translation>Créer des alias</translation>
+    </message>
+    <message>
+        <source>New Folder with Selection</source>
+        <translation>Nouveau dossier avec la sélection</translation>
+    </message>
+    <message>
+        <source>Rename %1 Items</source>
+        <translation>Renommer %1 éléments</translation>
+    </message>
+    <message>
+        <source>Rename 1 Item</source>
+        <translation>Renommer 1 élément</translation>
     </message>
     <message>
         <source>copy</source>
@@ -4753,6 +5203,190 @@
         <translation>L’apparence de %1 dossiers n’a pas pu être modifiée : %2</translation>
     </message>
     <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Last opened date</source>
+        <translation>Date de dernière ouverture</translation>
+    </message>
+    <message>
+        <source>Last modified date</source>
+        <translation>Date de dernière modification</translation>
+    </message>
+    <message>
+        <source>Created date</source>
+        <translation>Date de création</translation>
+    </message>
+    <message>
+        <source>Name</source>
+        <translation>Nom</translation>
+    </message>
+    <message>
+        <source>Contents</source>
+        <translation>Contenu</translation>
+    </message>
+    <message>
+        <source>File size</source>
+        <translation>Taille du fichier</translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation>Tags</translation>
+    </message>
+    <message>
+        <source>is</source>
+        <translation>est</translation>
+    </message>
+    <message>
+        <source>is not</source>
+        <translation>n’est pas</translation>
+    </message>
+    <message>
+        <source>contains</source>
+        <translation>contient</translation>
+    </message>
+    <message>
+        <source>begins with</source>
+        <translation>commence par</translation>
+    </message>
+    <message>
+        <source>ends with</source>
+        <translation>se termine par</translation>
+    </message>
+    <message>
+        <source>is within last</source>
+        <translation>date de moins de</translation>
+    </message>
+    <message>
+        <source>is exactly</source>
+        <translation>est exactement le</translation>
+    </message>
+    <message>
+        <source>is before</source>
+        <translation>est avant le</translation>
+    </message>
+    <message>
+        <source>is after</source>
+        <translation>est après le</translation>
+    </message>
+    <message>
+        <source>is today</source>
+        <translation>est aujourd’hui</translation>
+    </message>
+    <message>
+        <source>is yesterday</source>
+        <translation>est hier</translation>
+    </message>
+    <message>
+        <source>is this week</source>
+        <translation>est cette semaine</translation>
+    </message>
+    <message>
+        <source>is this month</source>
+        <translation>est ce mois-ci</translation>
+    </message>
+    <message>
+        <source>is this year</source>
+        <translation>est cette année</translation>
+    </message>
+    <message>
+        <source>is greater than</source>
+        <translation>est supérieure à</translation>
+    </message>
+    <message>
+        <source>is less than</source>
+        <translation>est inférieure à</translation>
+    </message>
+    <message>
+        <source>days</source>
+        <translation>jours</translation>
+    </message>
+    <message>
+        <source>weeks</source>
+        <translation>semaines</translation>
+    </message>
+    <message>
+        <source>months</source>
+        <translation>mois</translation>
+    </message>
+    <message>
+        <source>years</source>
+        <translation>ans</translation>
+    </message>
+    <message>
+        <source>KB</source>
+        <translation>Ko</translation>
+    </message>
+    <message>
+        <source>MB</source>
+        <translation>Mo</translation>
+    </message>
+    <message>
+        <source>GB</source>
+        <translation>Go</translation>
+    </message>
+    <message>
+        <source>Any</source>
+        <translation>Tous</translation>
+    </message>
+    <message>
+        <source>Application</source>
+        <translation>Application</translation>
+    </message>
+    <message>
+        <source>Archive</source>
+        <translation>Archive</translation>
+    </message>
+    <message>
+        <source>Document</source>
+        <translation>Document</translation>
+    </message>
+    <message>
+        <source>Folder</source>
+        <translation>Dossier</translation>
+    </message>
+    <message>
+        <source>Image</source>
+        <translation>Image</translation>
+    </message>
+    <message>
+        <source>Movie</source>
+        <translation>Vidéo</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
+        <source>PDF</source>
+        <translation>PDF</translation>
+    </message>
+    <message>
+        <source>Presentation</source>
+        <translation>Présentation</translation>
+    </message>
+    <message>
+        <source>Spreadsheet</source>
+        <translation>Feuille de calcul</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>This search can’t be read.</source>
+        <translation>Cette recherche ne peut pas être lue.</translation>
+    </message>
+    <message>
+        <source>The saved search couldn’t be moved to the Trash.</source>
+        <translation>La recherche enregistrée n’a pas pu être placée dans la corbeille.</translation>
+    </message>
+    <message>
+        <source>The saved search couldn’t be changed.</source>
+        <translation>La recherche enregistrée n’a pas pu être modifiée.</translation>
+    </message>
+    <message>
         <source>“%1” is no longer there.</source>
         <translation>«&#xa0;%1&#xa0;» n’existe plus.</translation>
     </message>
@@ -4769,8 +5403,56 @@
         <translation>Impossible de faire pivoter «&#xa0;%1&#xa0;»&#xa0;: %2.</translation>
     </message>
     <message>
+        <source>Nothing was changed.</source>
+        <translation>Rien n’a été modifié.</translation>
+    </message>
+    <message>
+        <source> and %1 more</source>
+        <translation> et %1 de plus</translation>
+    </message>
+    <message>
+        <source>These stayed changed: %1. Undo puts them back.</source>
+        <translation>Ces éléments sont restés modifiés : %1. Annuler les remet en place.</translation>
+    </message>
+    <message>
         <source>Recents</source>
         <translation>Récents</translation>
+    </message>
+    <message>
+        <source>This Computer</source>
+        <translation>Cet ordinateur</translation>
+    </message>
+    <message>
+        <source>Searching “%1”</source>
+        <translation>Recherche dans « %1 »</translation>
+    </message>
+    <message>
+        <source>About 1 second</source>
+        <translation>Environ 1 seconde</translation>
+    </message>
+    <message>
+        <source>About %1 seconds</source>
+        <translation>Environ %1 secondes</translation>
+    </message>
+    <message>
+        <source>About 1 minute</source>
+        <translation>Environ 1 minute</translation>
+    </message>
+    <message>
+        <source>About %1 minutes</source>
+        <translation>Environ %1 minutes</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be undone: something has changed since.</source>
+        <translation>« %1 » ne peut pas être annulé : quelque chose a changé depuis.</translation>
+    </message>
+    <message>
+        <source>Part of it was undone; Undo again after fixing the items.</source>
+        <translation>Une partie a été annulée ; annulez de nouveau après avoir réglé les éléments.</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be redone: something has changed since.</source>
+        <translation>« %1 » ne peut pas être rétabli : quelque chose a changé depuis.</translation>
     </message>
     <message>
         <source>Links can’t carry tags.</source>
@@ -4823,6 +5505,14 @@
         <translation>Récents</translation>
     </message>
     <message>
+        <source>Searching “%1”</source>
+        <translation>Recherche dans « %1 »</translation>
+    </message>
+    <message>
+        <source>This Computer</source>
+        <translation>Cet ordinateur</translation>
+    </message>
+    <message>
         <source>Computer</source>
         <translation>Ordinateur</translation>
     </message>
@@ -4841,6 +5531,14 @@
     <message>
         <source>Tags are only searched in local folders.</source>
         <translation>Les tags ne sont recherchés que dans les dossiers locaux.</translation>
+    </message>
+    <message>
+        <source>This search can’t be read.</source>
+        <translation>Cette recherche ne peut pas être lue.</translation>
+    </message>
+    <message>
+        <source>The folder of this search can’t be found.</source>
+        <translation>Le dossier de cette recherche est introuvable.</translation>
     </message>
 </context>
 <context>
@@ -5316,8 +6014,64 @@
         <translation>Aucun</translation>
     </message>
     <message>
+        <source>New Folder with Selection (%1 Items)</source>
+        <translation>Nouveau dossier avec la sélection (%1 éléments)</translation>
+    </message>
+    <message>
+        <source>New Folder with Selection</source>
+        <translation>Nouveau dossier avec la sélection</translation>
+    </message>
+    <message>
+        <source>New Smart Folder</source>
+        <translation>Nouveau dossier intelligent</translation>
+    </message>
+    <message>
         <source>Other…</source>
         <translation>Autre…</translation>
+    </message>
+    <message>
+        <source>Tags…</source>
+        <translation>Tags…</translation>
+    </message>
+    <message>
+        <source>Rename %1 Items…</source>
+        <translation>Renommer %1 éléments…</translation>
+    </message>
+    <message>
+        <source>Compress %1 Items</source>
+        <translation>Compresser %1 éléments</translation>
+    </message>
+    <message>
+        <source>Compress “%1”</source>
+        <translation>Compresser « %1 »</translation>
+    </message>
+    <message>
+        <source>Compress</source>
+        <translation>Compresser</translation>
+    </message>
+    <message>
+        <source>Make Alias</source>
+        <translation>Créer un alias</translation>
+    </message>
+    <message>
+        <source>Show Original</source>
+        <translation>Afficher l’original</translation>
+    </message>
+    <message>
+        <source>Copy %1 Items as Pathnames</source>
+        <translation>Copier %1 éléments en tant que chemins d’accès</translation>
+    </message>
+    <message>
+        <source>Copy as Pathname</source>
+        <translation>Copier en tant que chemin d’accès</translation>
+    </message>
+    <message>
+        <source>Move %1 Items Here</source>
+        <translation>Déplacer %1 éléments ici</translation>
+    </message>
+    <message>
+        <source>Move Item Here</source>
+        <translation>Déplacer l’élément ici</translation>
     </message>
     <message>
         <source>Use Groups</source>
@@ -5396,8 +6150,20 @@
         <translation>Dossier parent</translation>
     </message>
     <message>
+        <source>Recent Folders</source>
+        <translation>Dossiers récents</translation>
+    </message>
+    <message>
+        <source>Clear Menu</source>
+        <translation>Effacer le menu</translation>
+    </message>
+    <message>
         <source>Go to Folder…</source>
         <translation>Aller au dossier…</translation>
+    </message>
+    <message>
+        <source>Connect to Server…</source>
+        <translation>Se connecter au serveur…</translation>
     </message>
     <message>
         <source>Find…</source>
@@ -5522,6 +6288,37 @@
     <message>
         <source>Refresh</source>
         <translation>Actualiser</translation>
+    </message>
+</context>
+<context>
+    <name>GoToFolderPanel</name>
+    <message>
+        <source>The folder “%1” can’t be found.</source>
+        <translation>Le dossier « %1 » est introuvable.</translation>
+    </message>
+    <message>
+        <source>Go to Folder</source>
+        <translation>Aller au dossier</translation>
+    </message>
+    <message>
+        <source>Folder path</source>
+        <translation>Chemin du dossier</translation>
+    </message>
+    <message>
+        <source>Folder path, ~/Documents or trash:/</source>
+        <translation>Chemin du dossier, ~/Documents ou trash:/</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Effacer</translation>
+    </message>
+    <message>
+        <source>Recents</source>
+        <translation>Récents</translation>
+    </message>
+    <message>
+        <source>Go to:</source>
+        <translation>Aller à :</translation>
     </message>
 </context>
 <context>
@@ -5873,6 +6670,78 @@
         <translation>%1 (%2 octets)</translation>
     </message>
     <message>
+        <source>Open with:</source>
+        <translation>Ouvrir avec :</translation>
+    </message>
+    <message>
+        <source>Open with</source>
+        <translation>Ouvrir avec</translation>
+    </message>
+    <message>
+        <source>%1 (default)</source>
+        <translation>%1 (par défaut)</translation>
+    </message>
+    <message>
+        <source>Use this application to open all documents like this one.</source>
+        <translation>Utiliser cette application pour ouvrir tous les documents de ce type.</translation>
+    </message>
+    <message>
+        <source>Change All…</source>
+        <translation>Tout modifier…</translation>
+    </message>
+    <message>
+        <source>%1 (Me)</source>
+        <translation>%1 (moi)</translation>
+    </message>
+    <message>
+        <source>everyone</source>
+        <translation>tout le monde</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>Groupe</translation>
+    </message>
+    <message>
+        <source>Privilege of %1</source>
+        <translation>Privilège de %1</translation>
+    </message>
+    <message>
+        <source>Mode %1</source>
+        <translation>Mode %1</translation>
+    </message>
+    <message>
+        <source>Apply to enclosed items…</source>
+        <translation>Appliquer aux éléments inclus…</translation>
+    </message>
+    <message>
+        <source>Change all similar documents to open with “%1”?</source>
+        <translation>Ouvrir tous les documents de ce type avec « %1 » ?</translation>
+    </message>
+    <message>
+        <source>This change applies to all documents of this kind (%1).</source>
+        <translation>Ce changement s’applique à tous les documents de ce type (%1).</translation>
+    </message>
+    <message>
+        <source>Continue</source>
+        <translation>Continuer</translation>
+    </message>
+    <message>
+        <source>The default application couldn’t be changed.</source>
+        <translation>L’application par défaut n’a pas pu être modifiée.</translation>
+    </message>
+    <message>
+        <source>Apply these permissions to the items in “%1”?</source>
+        <translation>Appliquer ces autorisations aux éléments de « %1 » ?</translation>
+    </message>
+    <message>
+        <source>The privileges of the owner, the group and everyone are given to everything in the folder. Folders, and files some class can already run, can be opened or run by those who can read them. Items that belong to someone else stay as they are.</source>
+        <translation>Les privilèges du propriétaire, du groupe et de tout le monde sont donnés à tout le contenu du dossier. Les dossiers, et les fichiers déjà exécutables par l’un d’eux, peuvent être ouverts ou exécutés par ceux qui peuvent les lire. Les éléments qui appartiennent à quelqu’un d’autre restent tels quels.</translation>
+    </message>
+    <message>
+        <source>OK</source>
+        <translation>OK</translation>
+    </message>
+    <message>
         <source>Where:</source>
         <translation>Emplacement&#xa0;:</translation>
     </message>
@@ -5897,18 +6766,6 @@
         <translation>Partage et permissions</translation>
     </message>
     <message>
-        <source>Owner:</source>
-        <translation>Propriétaire&#xa0;:</translation>
-    </message>
-    <message>
-        <source>Group:</source>
-        <translation>Groupe&#xa0;:</translation>
-    </message>
-    <message>
-        <source>Permissions:</source>
-        <translation>Permissions&#xa0;:</translation>
-    </message>
-    <message>
         <source>You can:</source>
         <translation>Vous pouvez&#xa0;:</translation>
     </message>
@@ -5923,6 +6780,10 @@
     <message>
         <source>No Access</source>
         <translation>Aucun accès</translation>
+    </message>
+    <message>
+        <source>Write only</source>
+        <translation>Écriture seule</translation>
     </message>
     <message>
         <source>Customize Folder…</source>
@@ -9547,6 +10408,17 @@
     </message>
 </context>
 <context>
+    <name>ProgressWindow</name>
+    <message>
+        <source>Copy</source>
+        <translation>Copie</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+</context>
+<context>
     <name>QObject</name>
     <message>
         <source>Files</source>
@@ -9704,10 +10576,80 @@
     </message>
 </context>
 <context>
+    <name>SavedSearches</name>
+    <message>
+        <source>A saved search needs a name.</source>
+        <translation>Une recherche enregistrée a besoin d’un nom.</translation>
+    </message>
+    <message>
+        <source>The saved searches folder can’t be created.</source>
+        <translation>Le dossier des recherches enregistrées ne peut pas être créé.</translation>
+    </message>
+</context>
+<context>
     <name>SaverView</name>
     <message>
         <source>dddd d MMMM</source>
         <translation>dddd d MMMM</translation>
+    </message>
+</context>
+<context>
+    <name>ScopeBar</name>
+    <message>
+        <source>Search scope</source>
+        <translation>Portée de la recherche</translation>
+    </message>
+    <message>
+        <source>Search:</source>
+        <translation>Rechercher :</translation>
+    </message>
+    <message>
+        <source>This Computer</source>
+        <translation>Cet ordinateur</translation>
+    </message>
+    <message>
+        <source>“%1”</source>
+        <translation>« %1 »</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>Add a search rule</source>
+        <translation>Ajouter une règle de recherche</translation>
+    </message>
+    <message>
+        <source>Search rule %1</source>
+        <translation>Règle de recherche %1</translation>
+    </message>
+    <message>
+        <source>Attribute</source>
+        <translation>Attribut</translation>
+    </message>
+    <message>
+        <source>Condition</source>
+        <translation>Condition</translation>
+    </message>
+    <message>
+        <source>Kind</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Value</source>
+        <translation>Valeur</translation>
+    </message>
+    <message>
+        <source>Tag name</source>
+        <translation>Nom du tag</translation>
+    </message>
+    <message>
+        <source>Unit</source>
+        <translation>Unité</translation>
+    </message>
+    <message>
+        <source>Remove this search rule</source>
+        <translation>Supprimer cette règle de recherche</translation>
     </message>
 </context>
 <context>
@@ -11426,6 +12368,14 @@
     <message>
         <source>Eject %1</source>
         <translation>Éjecter %1</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>Ouvrir</translation>
+    </message>
+    <message>
+        <source>Move to Trash</source>
+        <translation>Placer dans la corbeille</translation>
     </message>
     <message>
         <source>Eject</source>

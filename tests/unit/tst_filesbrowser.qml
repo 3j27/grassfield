@@ -147,6 +147,20 @@ TestCase {
         property bool canRedo: false
         property bool canPaste: false
         property int clipboardCount: 0
+        // Move Item Here and Empty Trash (decision F-6, FP-51): what was asked.
+        property var movedHere: []
+        property int emptied: 0
+        function moveHere(destination: url, folder: var): void {
+            fakeApp.movedHere = fakeApp.movedHere.concat([String(destination)]);
+        }
+        function emptyTrash(): void {
+            fakeApp.emptied++;
+        }
+        // Delete Immediately (FP-52): what was really deleted.
+        property var deleted: []
+        function deletePermanently(urls: var): void {
+            fakeApp.deleted = fakeApp.deleted.concat([urls.map(u => String(u))]);
+        }
         property bool devSession: true
         property int tagRevision: 0
         property int folderStyleRevision: 0
@@ -182,6 +196,38 @@ TestCase {
         function sameUrl(a: url, b: url): bool {
             return String(a) === String(b);
         }
+        // Search, the Go menu and the file commands (ADR-0027, FP-75..FP-79): nothing searched or remembered here.
+        property var savedSearches: []
+        property var recentFolders: []
+        signal folderCompletions(string text, var matches)
+        function isFileSearch(target: url): bool {
+            return String(target).startsWith("grassfield-search:");
+        }
+        function searchQuery(target: url): var {
+            const t = String(target);
+            if (!t.startsWith("grassfield-search:"))
+                return {valid: false};
+            return {valid: true, text: decodeURIComponent(t.substring(t.indexOf("q=") + 2)), folder: "", criteria: []};
+        }
+        function searchUrl(query: var): url {
+            return "grassfield-search:/?q=" + encodeURIComponent(query.text || "");
+        }
+        function noteFolder(target: url): void {
+        }
+        function completeFolder(text: string, base: url): void {
+        }
+        function completedText(text: string, base: url, match: string): string {
+            return text;
+        }
+        function standardFolder(which: string): url {
+            return "";
+        }
+        function placeShortcut(kind: string, target: url): string {
+            return "";
+        }
+        function linkTarget(target: url): url {
+            return "";
+        }
         function isRecents(target: url): bool {
             return false;
         }
@@ -214,6 +260,21 @@ TestCase {
             return "";
         }
         function applyFolderStyle(urls: var, color: string, glyph: string): void {
+        }
+        // Get Info's Sharing & Permissions (ADR-0028): nothing to edit here.
+        signal permissionsChanged(url url)
+        function permissionsOf(target: url): var {
+            return {valid: false};
+        }
+        property var jobs: []
+        function mimeTypeOf(target: url): string {
+            return "text/plain";
+        }
+        function defaultApplication(mimeType: string): string {
+            return "";
+        }
+        function setDefaultApplication(mimeType: string, storageId: string): bool {
+            return true;
         }
         function directorySize(target: url, done: var): void {
         }
@@ -389,6 +450,102 @@ TestCase {
 
     // Opening in the Applications location starts the application (double-click, File > Open, Ctrl+Down) and never hands the
     // virtual url to FilesApp.open; in a folder of files nothing is launched.
+    // Search as you type (ADR-0027): the search location comes once typing rests, a refinement replaces it in the history,
+    // and emptying the field goes back to the folder the search started from.
+    function test_searchAsYouType() {
+        const files = test.openFiles(false);
+        const tab = files.windows[0].tab;
+        const start = String(tab.url);
+        const depth = tab.history.length;
+        tab.setSearch("aq");
+        compare(String(tab.url), start, "nothing until typing rests");
+        tryCompare(tab, "fileSearch", true, 2000);
+        compare(tab.searchText, "aq");
+        compare(String(tab.searchOrigin), start, "the folder it started from");
+        compare(tab.history.length, depth + 1, "one entry for the search");
+        tab.setSearch("aqua");
+        tryVerify(() => String(tab.url).endsWith("q=aqua"), 2000, "refined in place");
+        compare(tab.history.length, depth + 1, "no new entry per refinement");
+        compare(tab.searchText, "aqua", "the field keeps what was typed");
+        tab.setSearch("");
+        compare(String(tab.url), start, "emptied: back to the folder");
+        verify(!tab.fileSearch);
+        compare(tab.history.length, depth, "the search left the history");
+        compare(tab.searchText, "");
+    }
+
+    // Decision F-6: no Cut for files; Move Item Here moves the copied items into the shown folder. Empty Trash is never
+    // offered in a dev session (ADR-0011), whatever asks for it.
+    function test_moveItemHereAndNoCut() {
+        const files = test.openFiles(false);
+        const tab = files.windows[0].tab;
+        const folder = tab.folder;
+        folder.selected = [0];
+        const items = tab.itemMenu(folder);
+        verify(!items.some(i => i.id === "cut"), "no Cut for files");
+        verify(items.some(i => i.id === "copyPath"), "Copy as Pathname");
+        fakeApp.canPaste = true;
+        fakeApp.clipboardCount = 2;
+        const background = tab.backgroundMenu(folder);
+        const move = background.find(i => i.id === "moveHere");
+        verify(move !== undefined, "Move Item Here in the folder's menu");
+        compare(move.text, "Move 2 Items Here");
+        fakeApp.movedHere = [];
+        tab.runAction("moveHere", folder);
+        compare(fakeApp.movedHere, [String(folder.url)]);
+        fakeApp.canPaste = false;
+        fakeApp.clipboardCount = 0;
+        folder.selected = [];
+
+        verify(fakeApp.devSession);
+        fakeApp.emptied = 0;
+        tab.emptyTrash();
+        compare(fakeApp.emptied, 0, "a dev session never empties a trash");
+    }
+
+    // Delete Immediately (⌥⌘⌫, FP-52) asks first, in a destructive sheet that says it can't be undone, and deletes only on the
+    // answer (review of PR #98, mutant M7: the deletion without the question).
+    function test_deleteImmediatelyAsksBeforeDeleting() {
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        const tab = browser.tab;
+        const folder = tab.folder;
+        fakeApp.deleted = [];
+        folder.selected = [0, 1];
+        tab.deleteImmediately();
+        compare(fakeApp.deleted, [], "nothing is deleted before the answer");
+        const sheet = test.shownSheet(browser.contentItem);
+        verify(sheet !== null, "a sheet asks");
+        verify(sheet.destructive, "a destructive sheet");
+        verify(sheet.message.indexOf("immediately") >= 0, sheet.message);
+        verify(sheet.message.indexOf("can’t undo") >= 0, "it says it cannot be undone: " + sheet.message);
+        sheet.cancel();
+        compare(fakeApp.deleted, [], "Cancel deletes nothing");
+        tab.deleteImmediately();
+        const again = test.shownSheet(browser.contentItem);
+        verify(again !== null);
+        compare(fakeApp.deleted, []);
+        again.confirm();
+        compare(fakeApp.deleted.length, 1, "the answer deletes");
+        compare(fakeApp.deleted[0].length, 2, "the selection, once");
+        // Nothing selected: nothing asked, nothing deleted.
+        folder.selected = [];
+        tab.deleteImmediately();
+        compare(test.shownSheet(browser.contentItem), null);
+        compare(fakeApp.deleted.length, 1);
+    }
+
+    function shownSheet(item: var): var {
+        if (item instanceof Sheet && item.shown)
+            return item;
+        for (let i = 0; i < item.children.length; i++) {
+            const found = test.shownSheet(item.children[i]);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
     function test_applicationsLaunchAndFilesOpen() {
         const files = test.openFiles(false);
         const tab = files.windows[0].tab;

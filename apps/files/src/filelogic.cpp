@@ -130,59 +130,87 @@ int compareEntries(const SortEntry &a, const SortEntry &b, SortKey key, bool des
     return byName != 0 ? byName : QString::compare(a.name, b.name);
 }
 
-namespace
+KindCategory kindCategoryOf(const QStringList &mimeTypes, bool isDir)
 {
-// Kind categories (the Finder's Group By Kind), matched against the MIME type and its ancestors in order.
-QString kindCategory(const SortEntry &e)
-{
-    if (e.isDir)
-        return tr("Folders");
+    if (isDir)
+        return KindCategory::Folder;
     struct Rule {
-        const char *title;
+        KindCategory category;
         QStringList exact;
         QStringList prefixes;
     };
     static const QList<Rule> rules = {
-        {QT_TRANSLATE_NOOP("FileLogic", "PDF Documents"), {QStringLiteral("application/pdf")}, {}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Presentations"),
+        {KindCategory::Pdf, {QStringLiteral("application/pdf")}, {}},
+        {KindCategory::Presentation,
          {QStringLiteral("application/vnd.oasis.opendocument.presentation"), QStringLiteral("application/vnd.ms-powerpoint"),
           QStringLiteral("application/x-iwork-keynote-sffkey")},
          {QStringLiteral("application/vnd.openxmlformats-officedocument.presentationml.")}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Spreadsheets"),
+        {KindCategory::Spreadsheet,
          {QStringLiteral("application/vnd.oasis.opendocument.spreadsheet"), QStringLiteral("application/vnd.ms-excel"),
           QStringLiteral("text/csv"), QStringLiteral("text/tab-separated-values")},
          {QStringLiteral("application/vnd.openxmlformats-officedocument.spreadsheetml.")}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Images"), {}, {QStringLiteral("image/")}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Movies"), {}, {QStringLiteral("video/")}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Music"), {}, {QStringLiteral("audio/")}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Applications"),
+        {KindCategory::Image, {}, {QStringLiteral("image/")}},
+        {KindCategory::Movie, {}, {QStringLiteral("video/")}},
+        {KindCategory::Music, {}, {QStringLiteral("audio/")}},
+        {KindCategory::Application,
          {QStringLiteral("application/x-desktop"), QStringLiteral("application/x-executable"), QStringLiteral("application/vnd.appimage"),
           QStringLiteral("application/x-pie-executable")},
          {}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Archives"),
+        {KindCategory::Archive,
          {QStringLiteral("application/zip"), QStringLiteral("application/x-tar"), QStringLiteral("application/gzip"),
           QStringLiteral("application/x-7z-compressed"), QStringLiteral("application/x-xz"), QStringLiteral("application/x-bzip2"),
           QStringLiteral("application/zstd"), QStringLiteral("application/vnd.rar"), QStringLiteral("application/x-rar"),
           QStringLiteral("application/x-compressed-tar"), QStringLiteral("application/x-cd-image")},
          {}},
-        {QT_TRANSLATE_NOOP("FileLogic", "Documents"),
+        {KindCategory::Document,
          {QStringLiteral("application/rtf"), QStringLiteral("application/msword"), QStringLiteral("application/vnd.oasis.opendocument.text"),
           QStringLiteral("application/epub+zip"), QStringLiteral("text/plain")},
          {QStringLiteral("application/vnd.openxmlformats-officedocument.wordprocessingml."), QStringLiteral("text/")}},
     };
-    for (const QString &type : e.mimeTypes) {
+    for (const QString &type : mimeTypes) {
         for (const Rule &rule : rules) {
             if (rule.exact.contains(type))
-                return tr(rule.title);
+                return rule.category;
             for (const QString &prefix : rule.prefixes) {
                 if (type.startsWith(prefix))
-                    return tr(rule.title);
+                    return rule.category;
             }
         }
     }
-    return QString();
+    return KindCategory::Other;
 }
 
+QString kindCategoryTitle(KindCategory category)
+{
+    switch (category) {
+    case KindCategory::Folder:
+        return tr("Folders");
+    case KindCategory::Pdf:
+        return tr("PDF Documents");
+    case KindCategory::Presentation:
+        return tr("Presentations");
+    case KindCategory::Spreadsheet:
+        return tr("Spreadsheets");
+    case KindCategory::Image:
+        return tr("Images");
+    case KindCategory::Movie:
+        return tr("Movies");
+    case KindCategory::Music:
+        return tr("Music");
+    case KindCategory::Application:
+        return tr("Applications");
+    case KindCategory::Archive:
+        return tr("Archives");
+    case KindCategory::Document:
+        return tr("Documents");
+    case KindCategory::Other:
+        break;
+    }
+    return tr("Other");
+}
+
+namespace
+{
 Group dateGroup(const QDateTime &when, const QDateTime &now, const QLocale &locale)
 {
     if (!when.isValid())
@@ -233,8 +261,8 @@ Group groupOf(const SortEntry &e, GroupBy by, const QDateTime &now, const QLocal
         return {1, folded};
     }
     case GroupBy::Kind: {
-        const QString category = kindCategory(e);
-        return category.isEmpty() ? Group{1, tr("Other")} : Group{0, category};
+        const KindCategory category = kindCategoryOf(e.mimeTypes, e.isDir);
+        return Group{category == KindCategory::Other ? 1 : 0, kindCategoryTitle(category)};
     }
     case GroupBy::Application:
         if (e.isDir)

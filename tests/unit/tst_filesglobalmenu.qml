@@ -64,6 +64,14 @@ TestCase {
         function colorTagStates(urls: var): var {
             return [];
         }
+        // The Go menu (FP-75): no recent folder, no shortcut of its own; no alias selected.
+        property var recentFolders: []
+        function placeShortcut(kind: string, target: url): string {
+            return "";
+        }
+        function linkTarget(target: url): url {
+            return "";
+        }
         // Applications that could open the files: always one, so that only the menu's own rule can empty the list.
         function applicationsFor(urls: var): var {
             return [{storageId: "editor", name: "Editor"}];
@@ -89,7 +97,7 @@ TestCase {
         property var app: fakeApp
         property var manager: fakeManager
         property bool tabBarVisible: false
-        property var tab: ({canBack: false, canForward: false, segments: [], sortKey: 2, sortDescending: true, groupBy: 8})
+        property var tab: ({canBack: false, canForward: false, segments: [], sortKey: 2, sortDescending: true, groupBy: 8, selection: () => []})
         property var folder: folder
         property var tabs: []
         property int currentIndex: 0

@@ -20,6 +20,9 @@
 
 #include "folderstylestore.h"
 #include "folderviews.h"
+#include "savedsearches.h"
+#include "archivejob.h"
+#include "batchops.h"
 #include "tagstore.h"
 
 #include <functional>
@@ -71,6 +74,9 @@ class FilesApp : public QObject
     Q_PROPERTY(int clipboardCount READ clipboardCount NOTIFY clipboardChanged)
     Q_PROPERTY(QString activity READ activity NOTIFY activityChanged)
     Q_PROPERTY(int activityPercent READ activityPercent NOTIFY activityChanged)
+    // The progress window (FP-68, Finder-Copy): [{id, title, detail, percent}] of the running copies, moves and deletions,
+    // the newest last; cancelJob(id) stops one (KIO undoes nothing of what is done).
+    Q_PROPERTY(QVariantList jobs READ jobs NOTIFY jobsChanged)
     // Persisted preferences (QSettings "Grassfield/Files").
     Q_PROPERTY(QString viewMode READ viewMode WRITE setViewMode NOTIFY prefsChanged)
     Q_PROPERTY(int sortKey READ sortKey WRITE setSortKey NOTIFY prefsChanged)
@@ -142,6 +148,12 @@ public:
     int clipboardCount() const;
     QString activity() const { return m_activity; }
     int activityPercent() const { return m_activityPercent; }
+    QVariantList jobs() const { return m_jobList; }
+    Q_INVOKABLE void cancelJob(int id);
+    // Open With > Change All… (FP-65): `storageId` becomes the default application of the item's type (mimeapps.list).
+    Q_INVOKABLE QString mimeTypeOf(const QUrl &url) const;
+    Q_INVOKABLE QString defaultApplication(const QString &mimeType) const;
+    Q_INVOKABLE bool setDefaultApplication(const QString &mimeType, const QString &storageId);
 
     QString viewMode() const;
     void setViewMode(const QString &mode);
@@ -244,9 +256,11 @@ public:
     // Operations. `folder` (a FolderModel, may be null) selects the created items when they appear.
     Q_INVOKABLE void copyToClipboard(const QList<QUrl> &urls, bool cut);
     Q_INVOKABLE void paste(const QUrl &destination, QObject *folder);
+    // Move Item Here (⌥⌘V, decision F-6): the copied items moved into `destination` (undoable); Files has no Cut.
+    Q_INVOKABLE void moveHere(const QUrl &destination, QObject *folder);
     Q_INVOKABLE void trash(const QList<QUrl> &urls);
     Q_INVOKABLE void restore(const QList<QUrl> &urls);
-    // Only for items inside trash:/ (the UI confirms first).
+    // Delete Immediately: any item (the UI confirms first).
     Q_INVOKABLE void deletePermanently(const QList<QUrl> &urls);
     // The UI confirms first. Never called by automated tests.
     Q_INVOKABLE void emptyTrash();
@@ -256,6 +270,43 @@ public:
     // never from a look at the disk on the GUI thread).
     Q_INVOKABLE void makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback);
     Q_INVOKABLE void rename(const QUrl &url, const QString &newName, QObject *folder);
+
+    // File commands (docs/specs/files.md FP-54..FP-59, FP-64, FP-79). Make Alias: a symbolic link "<name> alias" next to
+    // each local item, to its absolute path (a macOS alias survives a move; a link does not: limit). Show Original: the
+    // item a local link points to (invalid when it is no link or its target is gone).
+    Q_INVOKABLE void makeAlias(const QList<QUrl> &urls, QObject *folder);
+    Q_INVOKABLE QUrl linkTarget(const QUrl &url) const;
+    // New Folder with Selection: "New Folder With Items" in `directory` (every item must be in it), the items moved into
+    // it (local folder: all or nothing, ONE undo step; a server's folder: KIO jobs, two steps), then the new folder
+    // renamed in place.
+    Q_INVOKABLE void newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory, QObject *folder);
+    // Copy as Pathname: the local paths, one per line, as text.
+    Q_INVOKABLE void copyPaths(const QList<QUrl> &urls);
+    // New Terminal at Folder (decision F-7): the session's terminal (xdg-terminal-exec) opened in a local folder. Nothing
+    // of the folder is run: the terminal is an application the user chose.
+    Q_INVOKABLE void openTerminal(const QUrl &folder);
+    // Rename N Items (RenameLogic): options {mode, find, replaceWith, addText, where, format, customFormat, startAt}. The
+    // preview is the new names; renameItems returns "" or why nothing was renamed. Local items: all renamed or none (a
+    // failure part-way puts back what was done), ONE undo step; items on a server are renamed one by one through KIO.
+    Q_INVOKABLE QStringList renamePreview(const QList<QUrl> &urls, const QVariantMap &options) const;
+    Q_INVOKABLE QString renameItems(const QList<QUrl> &urls, const QVariantMap &options, QObject *folder);
+    // Compress and Expand (ADR-0029, ArchiveJob): local items of one folder into a zip there; an archive next to itself.
+    Q_INVOKABLE bool isArchive(const QUrl &url) const;
+    Q_INVOKABLE void compress(const QList<QUrl> &urls, QObject *folder);
+    Q_INVOKABLE void expand(const QUrl &archive, QObject *folder);
+    Q_INVOKABLE void cancelArchives();
+    // Get Info's Sharing & Permissions (ADR-0028 option 1: the user's own items, no privilege). permissionsOf gives
+    // {valid, mode, modeText, owner, group, isDir, editable, reason, groups (the user's groups), access: [owner, group,
+    // others] (PermissionLogic::Access)}. A symbolic link, an item off the local disks or under /proc, /sys or /dev, and an
+    // item someone else owns are shown and not editable, `reason` says why (the administrator path waits for its review).
+    // Changes go through the item pinned by an O_PATH descriptor (its /proc/self/fd entry), never a path looked up again;
+    // permissionsChanged(url) then asks the window to read the item again (what the system reports, not what was asked).
+    Q_INVOKABLE QVariantMap permissionsOf(const QUrl &url) const;
+    Q_INVOKABLE void setAccess(const QUrl &url, int who, int access);
+    Q_INVOKABLE void setGroup(const QUrl &url, const QString &group);
+    // Apply to enclosed items (confirmed by the window): the folder's privileges to everything in it, with chmod's + and -
+    // operators (ADR-0028 probe 12: special bits kept); items of other users are left as they are and counted.
+    Q_INVOKABLE void applyToEnclosed(const QUrl &url);
     Q_INVOKABLE void duplicate(const QList<QUrl> &urls, QObject *folder);
     // Drag and drop: move on the same filesystem, copy across filesystems or with Ctrl/Alt held.
     Q_INVOKABLE void drop(const QList<QUrl> &urls, const QUrl &destination, QObject *folder);
@@ -300,6 +351,70 @@ public:
     // folder, as in the Finder). Nothing happens when no drag is over `window`.
     Q_INVOKABLE void refreshDrag(QObject *window);
     Q_INVOKABLE QString searchedTag(const QUrl &url) const;
+
+    // Search (ADR-0027, SearchLogic): a query is {valid, text, folder (a local folder URL, empty for this computer),
+    // criteria: [{attribute, op, value, unit}]}, a search location its URL.
+    Q_INVOKABLE bool isFileSearch(const QUrl &url) const;
+    Q_INVOKABLE QVariantMap searchQuery(const QUrl &url) const;
+    Q_INVOKABLE QUrl searchUrl(const QVariantMap &query) const;
+    // The criteria rows' pop-ups, labels translated: [{key, label}] of the attributes; the operators of an attribute
+    // [{key, label, value}] (value: "none" | "text" | "number" | "date" | "kind" | "tag"); the units of an attribute
+    // [{key, label}] (days… for dates, KB… for sizes, none otherwise); the kinds [{key, label}] ("any" first).
+    Q_INVOKABLE QVariantList searchAttributes() const;
+    Q_INVOKABLE QVariantList searchOperators(const QString &attribute) const;
+    Q_INVOKABLE QVariantList searchUnits(const QString &attribute) const;
+    Q_INVOKABLE QVariantList searchKinds() const;
+    // A new row for an attribute: its first operator and a usable value (Kind: any; dates: within the last 7 days).
+    Q_INVOKABLE QVariantMap searchCriterion(const QString &attribute) const;
+    // A date row's value is an ISO day ("2026-10-31"); the field shows it in the locale's short format and reads it back
+    // from that format or ISO ("" when it is no date).
+    Q_INVOKABLE QString searchDateText(const QString &iso) const;
+    Q_INVOKABLE QString searchDateValue(const QString &text) const;
+    Q_INVOKABLE QString searchToday() const;
+    // Saved searches (the Finder's smart folders): [{name, url, sidebar, file}] by name.
+    Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
+    QVariantList savedSearches() const;
+    // Saves the search location `search` as `name` ("" or why not; a search of that name is replaced).
+    Q_INVOKABLE QString saveSearch(const QString &name, const QUrl &search, bool sidebar);
+    Q_INVOKABLE bool hasSavedSearch(const QString &name) const;
+    Q_INVOKABLE void removeSavedSearch(const QString &file);
+    Q_INVOKABLE void setSavedSearchInSidebar(const QString &file, bool on);
+
+    // The Go menu (FP-75..FP-77, NavLogic). The Finder's shortcut of a sidebar place ("" for none).
+    Q_INVOKABLE QString placeShortcut(const QString &kind, const QUrl &url) const;
+    // The Go menu's standard places: "desktop", "documents", "downloads" (XDG user folders), "computer" (the root folder),
+    // "network" (remote:/, invalid without a KIO network worker).
+    Q_INVOKABLE QUrl standardFolder(const QString &which) const;
+    // Go to Folder: lists the local folders matching `text` (relative text in `base`) off the GUI thread, so a slow mount
+    // never freezes the window; folderCompletions(text, matches) answers the latest request only, matches
+    // [{name, url, parts}] (parts: the path's folder names), at most kMaxCompletions.
+    static constexpr int kMaxCompletions = 50;
+    static constexpr int kMaxCompletionScan = 5000;
+    Q_INVOKABLE void completeFolder(const QString &text, const QUrl &base);
+    // The text once `match` completes it ("~/D" + "Downloads" -> "~/Downloads/").
+    Q_INVOKABLE QString completedText(const QString &text, const QUrl &base, const QString &match) const;
+    // Go to Folder's destination for the typed text (NavLogic::goToTarget): {folder, select}; a file opens its folder
+    // with the file selected; an empty folder when nothing is there.
+    Q_INVOKABLE QVariantMap goToTarget(const QString &text, const QUrl &base) const;
+    // Go > Recent Folders and Go to Folder's list while its field is empty: the folders shown last, newest first
+    // ([{url}], at most kMaxRecentFolders; local folders and servers, never a search, the Trash or Recents).
+    static constexpr int kMaxRecentFolders = 10;
+    Q_PROPERTY(QVariantList recentFolders READ recentFolders NOTIFY recentFoldersChanged)
+    QVariantList recentFolders() const;
+    Q_INVOKABLE void noteFolder(const QUrl &url);
+    Q_INVOKABLE void clearRecentFolders();
+    // Connect to Server (decision F-9): an address's URL (invalid: refused), the servers connected to lately and the
+    // favourite servers, kept in QSettings servers/* without any password.
+    static constexpr int kMaxServers = 20;
+    Q_INVOKABLE QUrl serverUrl(const QString &text) const;
+    Q_PROPERTY(QStringList recentServers READ recentServers NOTIFY serversChanged)
+    Q_PROPERTY(QStringList favoriteServers READ favoriteServers NOTIFY serversChanged)
+    QStringList recentServers() const;
+    QStringList favoriteServers() const;
+    Q_INVOKABLE void noteServer(const QUrl &url);
+    Q_INVOKABLE bool addFavoriteServer(const QString &text);
+    Q_INVOKABLE void removeFavoriteServer(int index);
+    Q_INVOKABLE void clearRecentServers();
     // Remove from Sidebar (macOS): hides the tag from the sidebar's Tags section for good (tags/hidden); files keep it
     // and it stays usable. Setting that tag in Files again lists it again.
     Q_INVOKABLE void forgetTag(const QString &tag);
@@ -342,6 +457,12 @@ signals:
     // A drag from another application ended over `window`: it left or was canceled (`dropped` false: what it
     // spring-loaded goes back) or was dropped there (it stays, whichever view took the drop).
     void outsideDragEnded(QObject *window, bool dropped);
+    void savedSearchesChanged();
+    void folderCompletions(const QString &text, const QVariantList &matches);
+    void recentFoldersChanged();
+    void serversChanged();
+    void permissionsChanged(const QUrl &url);
+    void jobsChanged();
 
 protected:
     // Remembers the last drag move over each window (refreshDrag).
@@ -349,6 +470,23 @@ protected:
 
 private:
     void track(KJob *job, const QString &activity);
+    // The progress window's rows (FP-68): what each tracked job did so far.
+    struct JobProgress {
+        quint64 id = 0;
+        QString activity;
+        // KIO's own words for what it does now ("Copying", "Moving", "Deleting": its translation) and on what.
+        QString verb;
+        QString item;
+        QString destination;
+        qulonglong processed = 0;
+        qulonglong total = 0;
+        qulonglong speed = 0;
+        int percent = -1;
+    };
+    QHash<KJob *, JobProgress> m_progress;
+    quint64 m_nextJobId = 1;
+    QTimer m_progressTimer;
+    void publishJobs();
     void readAppearance();
     QString configFile() const;
     // Adds `tag` to, or removes it from, each item (TagLogic::applyTag keeps every other entry as stored); reports
@@ -375,6 +513,11 @@ private:
     // Before m_places: Grassfield's KIO delegate is in place before the first job (the Trash listing) starts.
     KioPrompts *m_prompts = nullptr;
     PlacesModel *m_places = nullptr;
+    SavedSearches *m_savedSearches = nullptr;
+    quint64 m_completionGeneration = 0;
+    // Stored lists read back: valid URLs only, bounded.
+    QStringList storedUrls(const QString &key, int max) const;
+    void publishSavedSearches();
     QSettings m_settings;
     QFileSystemWatcher m_watcher;
     bool m_dark = true;
@@ -394,7 +537,24 @@ private:
     QString m_folderColor = QStringLiteral("theme");
     QString m_activity;
     int m_activityPercent = -1;
+    // Commands made of several local operations (BatchOps) that are one undo step, kept by Files and ordered against KIO's
+    // own commands by serial number (KIO::FileUndoManager::newCommandSerialNumber); m_redoKinds is which of the two the
+    // newest undone command belongs to (true: ours), so redo goes back in the order undo went.
+    struct CustomCommand {
+        quint64 serial = 0;
+        QString text;
+        BatchOps::Steps steps;
+    };
+    void recordCustom(const QString &text, const BatchOps::Steps &steps);
+    bool customUndoIsNext() const;
+    QList<CustomCommand> m_undoCustom;
+    QList<CustomCommand> m_redoCustom;
+    QList<bool> m_redoKinds;
     QList<QPointer<KJob>> m_jobs;
+    QList<QPointer<ArchiveJob>> m_archiveJobs;
+    QVariantList m_jobList;
+    void startArchiveJob(ArchiveJob *job, const QString &activity, QObject *folder);
+    void archiveActivityEnded();
     QStringList m_knownTags;
     // Tags removed from the sidebar (not listed again when seen), persisted as tags/hidden.
     QStringList m_hiddenTags;

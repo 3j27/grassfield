@@ -2331,6 +2331,8 @@ QtObject {
     readonly property int filesInfoIconSize: 64
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesInfoLabelWidth: 100
+    // estimate: Get Info's Privilege pop-up hugs its widest choice but not below this (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
+    readonly property int filesInfoPrivilegeMinWidth: 96
     // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesCustomizeWindowWidth: 440
     // estimate: Customize Folder window height (preview, colour row, custom colour, symbol grid and field, buttons) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
@@ -2557,6 +2559,100 @@ QtObject {
     readonly property int filesToolbarTitleMinWidth: 120
     // macOS 27 Finder: the up and down chevrons' marks centred 3 above and below the middle [ref: docs/specs/files.md § Views and selection]
     readonly property int filesViewPopupChevronOffset: 3
+    // macOS 27 Finder-Search: the scope bar from the toolbar to its hairline, 64 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeBarHeight: 32
+    // macOS 27 Finder-Search: the This Mac pill and the Save and + buttons, 40 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopePillHeight: 20
+    // macOS 27 Finder-Search: the pill's text 26 to 29 px inside its edges at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopePillPadding: 13
+    // macOS 27 Finder-Search: the pill's and buttons' corners round over 6 to 7 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property real filesScopePillRadius: 3.5
+    // macOS 27 Finder-Search: "Search:" to the first pill and pill to pill, 16 px at 2x (+-1) [ref: docs/specs/files.md § Search]
+    readonly property int filesScopePillGap: 8
+    // macOS 27 Finder-Search: the chosen pill 223 on the white window (the text colour at 12.5%) [ref: docs/specs/files.md § Search]
+    readonly property real filesScopePillOpacity: 0.125
+    // macOS 27 Finder-Search: Save is its text and 24.5 px each side at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeButtonPadding: 12
+    // macOS 27 Finder-Search: the + button, 64 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeAddWidth: 32
+    // macOS 27 Finder-Search: Save to +, 4 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeButtonGap: 2
+    // macOS 27 Finder-Search: + to the window edge, 20 px at 2x [ref: docs/specs/files.md § Search]
+    readonly property int filesScopeTrailingInset: 10
+    // estimate: a filter row as tall as the scope bar (no capture of the Finder's + rows) [ref: docs/specs/files.md § Search]
+    readonly property int filesCriteriaRowHeight: 32
+    // estimate: the text and number fields of a filter row (no capture of the Finder's + rows) [ref: docs/specs/files.md § Search]
+    readonly property int filesCriteriaValueWidth: 160
+    // estimate: ms typing rests before the search starts again (the Finder searches as one types) [ref: docs/specs/files.md § Search]
+    readonly property int filesSearchDelay: 250
+    // macOS 27 Finder-Go-To-Folder: the panel, 920 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoPanelWidth: 460
+    // macOS 27 Finder-Go-To-Folder: the panel, 366 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoPanelHeight: 183
+    // macOS 27 Finder-Go-To-Folder: the corner rounds over about 33 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoPanelRadius: 17
+    // macOS 27 Finder-Go-To-Folder: the field row to its hairline, 69 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoFieldHeight: 35
+    // macOS 27 Finder-Go-To-Folder: the typed text and the clear button 33 px inside the panel at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoFieldInset: 16
+    // macOS 27 Finder-Go-To-Folder: the typed text's capitals 22 px tall at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoFieldTextSize: 16
+    // macOS 27 Finder-Go-To-Folder: the clear button, 28 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoClearSize: 14
+    // macOS 27 Finder-Go-To-Folder: hairline to the first row, 66 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoHeaderHeight: 33
+    // macOS 27 Finder-Go-To-Folder: "Go to:" centred 43 px below the hairline at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property real filesGoHeaderCenter: 21.5
+    // macOS 27 Finder-Go-To-Folder: a row, 44 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoRowHeight: 22
+    // macOS 27 Finder-Go-To-Folder: the chosen row 20 px inside the panel at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoRowInset: 10
+    // macOS 27 Finder-Go-To-Folder: the row's text 18 px inside the chosen row at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesGoRowTextInset: 9
+    // macOS 27 Finder-Go-To-Folder: the list area 250 under the white field row (the text colour at 2%) [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property real filesGoListOpacity: 0.02
+    // macOS 27 Finder-Connect-to-Server: the window, 972 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectWindowWidth: 486
+    // macOS 27 Finder-Connect-to-Server: the window below its 32-pt title bar, 403 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectWindowHeight: 202
+    // macOS 27 Finder-Connect-to-Server: the field, list and buttons 40 px inside the window at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectInset: 20
+    // macOS 27 Finder-Connect-to-Server: a Favorite Servers row, 38 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectRowHeight: 19
+    // macOS 27 Finder-Connect-to-Server: the list shows four rows [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectListRows: 4
+    // macOS 27 Finder-Connect-to-Server: the history pop-up button inside the field, 48 px at 2x [ref: docs/specs/files.md § Go menu and Linux power, the macOS way]
+    readonly property int filesConnectHistoryWidth: 24
+    // macOS 27 Finder-Search: the Tags button's glyph, 37 x 36 px at 2x [ref: docs/specs/files.md § Toolbar, sidebar and chrome]
+    readonly property int filesTagGlyphSize: 18
+    // macOS 27 Finder-Copy: the copy window, 808 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressWindowWidth: 404
+    // macOS 27 Finder-Copy: below the title bar, 112 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressRowHeight: 56
+    // macOS 27 Finder-Copy: the document icon, 64 px box at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressIconSize: 32
+    // macOS 27 Finder-Copy: the icon 46 px inside the window at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressIconInset: 23
+    // macOS 27 Finder-Copy: the title, bar and detail 124 px inside the window at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressTextInset: 62
+    // macOS 27 Finder-Copy: the title centred 19 px below the title bar at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressTitleCenter: 9.5
+    // macOS 27 Finder-Copy: the bar centred 47.5 px below the title bar at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressBarCenter: 23.75
+    // macOS 27 Finder-Copy: the detail centred 79.5 px below the title bar at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressDetailCenter: 39.75
+    // macOS 27 Finder-Copy: the bar, 16 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressBarHeight: 8
+    // macOS 27 Finder-Copy: the bar ends 67 px before the window edge at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressBarEnd: 33.5
+    // macOS 27 Finder-Copy: the stop button, 22 px at 2x [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressStopSize: 11
+    // macOS 27 Finder-Copy: the stop button 27 px inside the window edge at 2x [ref: docs/specs/files.md § File operations]
+    readonly property real filesProgressStopInset: 13.5
+    // estimate: ms Go to Folder waits for the typed text's completions after a Return before it resolves the text as it stands [ref: docs/specs/files.md § File operations]
+    readonly property int filesGoReturnWait: 300
+    // estimate: ms a copy runs before its window shows (a quick copy shows none) [ref: docs/specs/files.md § File operations]
+    readonly property int filesProgressShowDelay: 700
 
     // estimate: ms a Show Desktop press waits for Hyprland to answer the window-list refresh before it records the window positions
     readonly property int showDesktopRefreshMs: 150

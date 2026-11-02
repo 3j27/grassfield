@@ -545,7 +545,7 @@ FocusScope {
         textFormat: Text.PlainText
         anchors.centerIn: parent
         visible: root.model !== null && root.model.count === 0 && !root.model.loading
-        text: root.tab.searchText !== "" ? qsTr("No Results") : root.model && root.model.error !== "" ? root.model.error : qsTr("This folder is empty.")
+        text: root.tab.searchText !== "" || (root.model && root.model.isFileSearch && root.model.error === "") ? qsTr("No Results") : root.model && root.model.error !== "" ? root.model.error : qsTr("This folder is empty.")
         width: parent.width - 2 * Tokens.spacingLg
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap

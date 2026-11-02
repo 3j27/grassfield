@@ -2,10 +2,10 @@ import QtQuick
 import QtQuick.Templates as T
 import Grassfield.Ui
 
-// The search field of a Files toolbar (it filters the shown folder): a 36-pt circle that expands to a capsule while it has the
-// focus or text (macOS). The browser window's and the Open and Save panels' (FilePanel.qml). The toolbar's rimmed capsule
-// (step 14's RimmedCapsule: the group's fill while a button, the field's once open), the shared focus ring outside it, and
-// the shared field's clear button (ADR-0039 step 23).
+// The search field of a Files toolbar: a 36-pt circle that expands to a capsule while it has the focus or text (macOS).
+// The browser window's searches (ADR-0027: BrowserTab.setSearch shows a search location); the Open and Save panels'
+// (FilePanel.qml) filters the shown folder. The toolbar's rimmed capsule (step 14's RimmedCapsule: the group's fill while a
+// button, the field's once open), the shared focus ring outside it, and the shared field's clear button (ADR-0039 step 23).
 RimmedCapsule {
     id: root
 
@@ -14,12 +14,14 @@ RimmedCapsule {
 
     // Open: it has the focus or text.
     readonly property bool expanded: search.activeFocus || search.text !== ""
+    // Its width when open (the browser window widens it while a search is shown: FP-22).
+    property real expandedWidth: Tokens.filesSearchWidth
 
     function focusField(): void {
         search.forceActiveFocus();
     }
 
-    width: expanded ? Tokens.filesSearchWidth : Tokens.toolbarCapsule
+    width: expanded ? root.expandedWidth : Tokens.toolbarCapsule
     height: Tokens.toolbarCapsule
     fillOpacity: expanded ? Tokens.toolbarFieldFillOpacity : Tokens.toolbarCapsuleFillOpacity
 
@@ -73,7 +75,7 @@ RimmedCapsule {
         text: root.tab ? root.tab.searchText : ""
         onTextEdited: root.tab.setSearch(text)
         Accessible.role: Accessible.EditableText
-        Accessible.name: qsTr("Search in this folder")
+        Accessible.name: root.tab && root.tab.chooser ? qsTr("Search in this folder") : qsTr("Search")
         Accessible.searchEdit: true
 
         Keys.onPressed: event => {
@@ -82,6 +84,8 @@ RimmedCapsule {
                 root.tab.focusView();
                 event.accepted = true;
             } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                if (!root.tab.chooser)
+                    root.tab.flushSearch();
                 if (root.tab.activeFolder.count > 0 && root.tab.activeFolder.selectedCount === 0)
                     root.tab.activeFolder.select(0, 0);
                 root.tab.focusView();

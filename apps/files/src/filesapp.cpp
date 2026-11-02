@@ -1,23 +1,30 @@
 #include "filesapp.h"
 #include "applicationslogic.h"
+#include "archivelogic.h"
 #include "appscope.h"
 #include "chromecaps.h"
 #include "autoappearance.h"
 
 #include "filelogic.h"
 #include "launchguard.h"
+#include "navlogic.h"
+#include "permissionlogic.h"
 #include "foldermodel.h"
 #include "folderstylelogic.h"
 #include "imagerotate.h"
 #include "kioprompts.h"
 #include "placesmodel.h"
 #include "recents.h"
+#include "renamelogic.h"
+#include "searchlogic.h"
 #include "taglogic.h"
 #include "tagstore.h"
 
 #include <QClipboard>
 #include <QDateTime>
+#include <QLocale>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -28,13 +35,21 @@
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QPair>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QThread>
 #include <QWindow>
 
 #include <memory>
+
+#include <fcntl.h>
+#include <grp.h>
+#include <pwd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <KApplicationTrader>
 #include <KDirNotify>
@@ -46,6 +61,7 @@
 #include <KIO/FileUndoManager>
 #include <KIO/JobUiDelegateFactory>
 #include <KIO/MkdirJob>
+#include <KIO/DesktopExecParser>
 #include <KIO/OpenUrlJob>
 #include <KIO/Paste>
 #include <KIO/PasteJob>
@@ -160,9 +176,22 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(undo, &KIO::FileUndoManager::redoAvailable, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::undoTextChanged, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::redoTextChanged, this, &FilesApp::undoChanged);
+    // A new command of KIO's ends the redo history, ours included (KIO clears its own).
+    connect(undo, &KIO::FileUndoManager::jobRecordingStarted, this, [this] {
+        m_redoCustom.clear();
+        m_redoKinds.clear();
+        emit undoChanged();
+    });
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &FilesApp::clipboardChanged);
     connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, &FilesApp::focusWindowChanged);
     connect(m_places, &PlacesModel::error, this, &FilesApp::operationFailed);
+    m_savedSearches = new SavedSearches(QString(), this);
+    connect(m_savedSearches, &SavedSearches::changed, this, &FilesApp::publishSavedSearches);
+    publishSavedSearches();
+    // The progress window's rows are published at most four times a second (KIO reports every few kilobytes).
+    m_progressTimer.setSingleShot(true);
+    m_progressTimer.setInterval(250);
+    connect(&m_progressTimer, &QTimer::timeout, this, &FilesApp::publishJobs);
     qApp->installEventFilter(this);
 
     // Appearance follows grassfield.json like every Grassfield surface (read only).
@@ -333,24 +362,72 @@ QString FilesApp::homePath() const
     return QDir::homePath();
 }
 
+// Whether Undo would take Files' own newest command rather than KIO's (the newer of the two by serial number).
+bool FilesApp::customUndoIsNext() const
+{
+    auto *kio = KIO::FileUndoManager::self();
+    return !m_undoCustom.isEmpty() && (!kio->isUndoAvailable() || m_undoCustom.last().serial > kio->currentCommandSerialNumber());
+}
+
+namespace
+{
+// What the user is told after a command stopped part-way: all was put back, or these items stayed changed (and Undo, which
+// the caller keeps for them, puts them back).
+QString rollbackNote(const BatchOps::Steps &stayed)
+{
+    if (stayed.isEmpty())
+        return FilesApp::tr("Nothing was changed.");
+    QStringList names;
+    for (const BatchOps::Step &step : stayed) {
+        if (names.size() < 3)
+            names << QStringLiteral("“%1”").arg(FileLogic::displayName(QFileInfo(step.to).fileName()));
+    }
+    QString list = names.join(QStringLiteral(", "));
+    if (stayed.size() > names.size())
+        list += FilesApp::tr(" and %1 more").arg(stayed.size() - names.size());
+    return FilesApp::tr("These stayed changed: %1. Undo puts them back.").arg(list);
+}
+} // namespace
+
 bool FilesApp::canUndo() const
 {
-    return KIO::FileUndoManager::self()->isUndoAvailable();
+    return !m_undoCustom.isEmpty() || KIO::FileUndoManager::self()->isUndoAvailable();
 }
 
 QString FilesApp::undoText() const
 {
+    if (customUndoIsNext())
+        return tr("Undo %1").arg(m_undoCustom.last().text);
     return KIO::FileUndoManager::self()->undoText();
 }
 
 bool FilesApp::canRedo() const
 {
-    return KIO::FileUndoManager::self()->isRedoAvailable();
+    // The redo history is the undone commands of Files (m_redoKinds): a command made after an undo ends it, whatever KIO
+    // still keeps on its own redo stack.
+    if (m_redoKinds.isEmpty())
+        return false;
+    return m_redoKinds.last() ? !m_redoCustom.isEmpty() : KIO::FileUndoManager::self()->isRedoAvailable();
 }
 
 QString FilesApp::redoText() const
 {
+    if (m_redoKinds.isEmpty())
+        return {};
+    if (m_redoKinds.last())
+        return m_redoCustom.isEmpty() ? QString() : tr("Redo %1").arg(m_redoCustom.last().text);
     return KIO::FileUndoManager::self()->redoText();
+}
+
+void FilesApp::recordCustom(const QString &text, const BatchOps::Steps &steps)
+{
+    if (steps.isEmpty())
+        return;
+    // A new command ends the redo history; KIO's own redo stack stays but is never reached again (m_redoKinds is empty).
+    m_redoCustom.clear();
+    m_redoKinds.clear();
+    m_undoCustom.append({KIO::FileUndoManager::self()->newCommandSerialNumber(), text, steps});
+    emit undoChanged();
 }
 
 bool FilesApp::canPaste() const
@@ -682,6 +759,13 @@ QVariantList FilesApp::pathSegments(const QUrl &url) const
         out.append(QVariantMap{{QStringLiteral("label"), tr("Recents")}, {QStringLiteral("url"), url}});
         return out;
     }
+    // A search: one segment, its title (the path bar shows the selected result's path instead: BrowserWindow).
+    if (SearchLogic::isSearchUrl(url)) {
+        const auto query = SearchLogic::fromUrl(url);
+        const QString scope = query && !query->inComputer() ? QFileInfo(query->folder.toLocalFile()).fileName() : tr("This Computer");
+        out.append(QVariantMap{{QStringLiteral("label"), tr("Searching “%1”").arg(FileLogic::displayName(scope))}, {QStringLiteral("url"), url}});
+        return out;
+    }
     // A tag search: the segments of its folder, then the tag.
     const bool search = TagLogic::isSearchUrl(url);
     const QUrl folder = search ? TagLogic::searchFolder(url) : url;
@@ -800,6 +884,16 @@ void FilesApp::open(const QList<QUrl> &urls)
         emit operationFailed(tr("“%1” was not opened: it is a program or script, and Files never runs programs from a folder. To run it on purpose, use a terminal.").arg(FileLogic::displayName(refusedName)));
     else if (refused > 1)
         emit operationFailed(tr("%1 items were not opened: Files never runs programs, scripts or app launchers from a folder.").arg(refused));
+    // An archive opens by expanding next to itself (the Finder's Archive Utility, ADR-0029); Open With still offers the
+    // applications that read it.
+    for (auto it = allowed.begin(); it != allowed.end();) {
+        if (isArchive(*it) && QFileInfo(it->toLocalFile()).isFile()) {
+            expand(*it, nullptr);
+            it = allowed.erase(it);
+        } else {
+            ++it;
+        }
+    }
     if (allowed.isEmpty() && webLinks.isEmpty())
         return;
     if (launchingBlocked()) {
@@ -872,6 +966,28 @@ void FilesApp::openWith(const QString &storageId, const QList<QUrl> &urls)
     }
     if (launchingBlocked()) {
         emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
+        return;
+    }
+    // A terminal application (Terminal=true: nvim, htop…) runs in the session's terminal (decision F-7, FP-80):
+    // KIO would look for KDE's terminal setting (konsole, absent on Omarchy). Its command line is KIO's own (the field
+    // codes filled with the items), behind xdg-terminal-exec, in the application scope the Apps grid uses.
+    if (service->terminal()) {
+        KService::Ptr plain(new KService(*service));
+        plain->setTerminal(false);
+        KIO::DesktopExecParser parser(*plain, urls);
+        const QStringList command = parser.resultingArguments();
+        if (command.isEmpty()) {
+            emit operationFailed(tr("“%1” could not be started.").arg(FileLogic::displayName(service->name())));
+            return;
+        }
+        const QStringList argv = grassfield::apps::scopedCommand(QStringLiteral("xdg-terminal-exec"), command, grassfield::apps::scopedLaunch());
+        QProcess process;
+        process.setProgram(argv.first());
+        process.setArguments(argv.mid(1));
+        if (!urls.isEmpty() && urls.first().isLocalFile())
+            process.setWorkingDirectory(QFileInfo(urls.first().toLocalFile()).absolutePath());
+        if (!process.startDetached())
+            emit operationFailed(tr("“%1” could not be started.").arg(FileLogic::displayName(service->name())));
         return;
     }
     auto *job = new KIO::ApplicationLauncherJob(service, this);
@@ -1151,16 +1267,12 @@ void FilesApp::deletePermanently(const QList<QUrl> &urls)
 {
     if (refuseApplicationItems(urls))
         return;
-    QList<QUrl> trashed;
-    for (const QUrl &u : urls) {
-        if (u.scheme() == QLatin1String("trash"))
-            trashed << u;
-    }
-    if (trashed.isEmpty())
+    // Delete Immediately (⌥⌘⌫, FP-52): any item, in the Trash or not (the window confirmed first); never undoable.
+    if (urls.isEmpty())
         return;
-    KIO::DeleteJob *job = KIO::del(trashed, KIO::HideProgressInfo);
+    KIO::DeleteJob *job = KIO::del(urls, KIO::HideProgressInfo);
     attachDelegate(job);
-    track(job, countText(tr("Deleting 1 item…"), tr("Deleting %1 items…"), trashed.size()));
+    track(job, countText(tr("Deleting 1 item…"), tr("Deleting %1 items…"), urls.size()));
 }
 
 void FilesApp::emptyTrash()
@@ -1194,6 +1306,592 @@ void FilesApp::newFolder(const QUrl &directory, QObject *folder)
         if (auto *f = asFolder(target))
             f->expect(url, true);
     });
+}
+
+void FilesApp::makeAlias(const QList<QUrl> &urls, QObject *folder)
+{
+    if (refuseApplicationItems(urls))
+        return;
+    QPointer<QObject> target = folder;
+    // One command, one undo step: the aliases made are kept together (one that cannot be made is told, the others stay).
+    BatchOps::Steps made;
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile()) {
+            emit operationFailed(tr("Aliases can only be made of items on this computer."));
+            continue;
+        }
+        const QFileInfo info(url.toLocalFile());
+        const QString dir = info.absolutePath();
+        // The Finder's "report.txt alias", "report.txt alias 2"… The new file's own name (not a message: kept exactly as the
+        // original's, never cleaned for display).
+        const QString original = info.fileName();
+        const QString name = FileLogic::uniqueName(tr("%1 alias").arg(original), [&dir](const QString &n) {
+            return QFileInfo::exists(dir + QLatin1Char('/') + n) || QFileInfo(dir + QLatin1Char('/') + n).isSymLink();
+        });
+        const QString link = dir + QLatin1Char('/') + name;
+        const BatchOps::Step step{BatchOps::Step::Kind::Link, info.absoluteFilePath(), link};
+        if (!BatchOps::apply({step})) {
+            emit operationFailed(tr("The alias of “%1” couldn’t be made here.").arg(FileLogic::displayName(info.fileName())));
+            continue;
+        }
+        made.append(step);
+        if (auto *f = asFolder(target))
+            f->expect(QUrl::fromLocalFile(link), false);
+    }
+    recordCustom(made.size() == 1 ? tr("Make Alias") : tr("Make Aliases"), made);
+}
+
+QUrl FilesApp::linkTarget(const QUrl &url) const
+{
+    if (!url.isLocalFile())
+        return {};
+    const QFileInfo info(url.toLocalFile());
+    if (!info.isSymLink())
+        return {};
+    const QString target = info.symLinkTarget();
+    return !target.isEmpty() && QFileInfo::exists(target) ? QUrl::fromLocalFile(target) : QUrl();
+}
+
+void FilesApp::newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory, QObject *folder)
+{
+    if (urls.isEmpty() || refuseApplicationItems(urls) || refuseApplicationItems({directory}))
+        return;
+    for (const QUrl &url : urls) {
+        if (!sameUrl(url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash), directory)) {
+            emit operationFailed(tr("New Folder with Selection needs items of the shown folder."));
+            return;
+        }
+    }
+    const QString name = FileLogic::uniqueName(tr("New Folder With Items"), [&directory](const QString &n) { return nameTaken(directory, n); });
+    const QUrl url = childUrl(directory, name);
+    QPointer<QObject> target = folder;
+    bool local = directory.isLocalFile();
+    for (const QUrl &u : urls)
+        local = local && u.isLocalFile();
+    if (local) {
+        // The folder and the moves are ONE command: made together or not at all, undone with one step (the Finder's).
+        BatchOps::Steps steps{{BatchOps::Step::Kind::Mkdir, QString(), url.toLocalFile()}};
+        QList<QPair<QUrl, QUrl>> pairs;
+        for (const QUrl &u : urls) {
+            const QUrl to = childUrl(url, u.fileName());
+            steps.append({BatchOps::Step::Kind::Rename, u.toLocalFile(), to.toLocalFile()});
+            pairs.append({u, to});
+        }
+        // A look left at this path by a folder that went away outside Files must not apply to the new folder.
+        m_folderStyles.dropEntry(url.toLocalFile());
+        const QStringList pending = beginStyleMoves(urls);
+        BatchOps::Failure failure;
+        if (!BatchOps::apply(steps, &failure)) {
+            // A revert that failed leaves part of it done: the folders that did move keep their look, and that part is a command
+            // of its own, so Undo can put it back.
+            QList<QPair<QUrl, QUrl>> kept;
+            for (const auto &pair : std::as_const(pairs)) {
+                for (const BatchOps::Step &step : std::as_const(failure.applied)) {
+                    if (step.from == pair.first.toLocalFile())
+                        kept.append(pair);
+                }
+            }
+            styleMovedAll(kept);
+            endStyleMoves(pending);
+            recordCustom(tr("New Folder with Selection"), failure.applied);
+            emit operationFailed(tr("“%1” couldn’t be moved into a new folder.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())) + QLatin1Char(' ') + rollbackNote(failure.applied));
+            return;
+        }
+        styleMovedAll(pairs);
+        endStyleMoves(pending);
+        recordCustom(tr("New Folder with Selection"), steps);
+        if (auto *f = asFolder(target))
+            f->expect(url, true);
+        return;
+    }
+    KIO::MkdirJob *mkdir = KIO::mkdir(url);
+    attachDelegate(mkdir);
+    KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Mkdir, {}, url, mkdir);
+    connect(mkdir, &KJob::result, this, [this, mkdir, urls, url, target] {
+        if (mkdir->error()) {
+            emit operationFailed(mkdir->errorString());
+            return;
+        }
+        if (url.isLocalFile())
+            m_folderStyles.dropEntry(url.toLocalFile());
+        KIO::CopyJob *move = KIO::move(urls, url);
+        attachDelegate(move);
+        KIO::FileUndoManager::self()->recordCopyJob(move);
+        track(move, tr("Moving…"));
+        connect(move, &KJob::result, this, [move, url, target] {
+            if (!move->error()) {
+                if (auto *f = asFolder(target))
+                    f->expect(url, true);
+            }
+        });
+    });
+}
+
+void FilesApp::copyPaths(const QList<QUrl> &urls)
+{
+    QStringList paths;
+    for (const QUrl &url : urls)
+        paths << (url.isLocalFile() ? url.toLocalFile() : url.toDisplayString(QUrl::RemovePassword | QUrl::PreferLocalFile));
+    if (!paths.isEmpty())
+        QGuiApplication::clipboard()->setText(paths.join(QLatin1Char('\n')));
+}
+
+void FilesApp::openTerminal(const QUrl &folder)
+{
+    if (!folder.isLocalFile() || !QFileInfo(folder.toLocalFile()).isDir()) {
+        emit operationFailed(tr("A terminal can only open in a folder on this computer."));
+        return;
+    }
+    if (launchingBlocked()) {
+        emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
+        return;
+    }
+    // Decision F-7: the session's terminal, never KIO's konsole lookup; the folder is only its working directory.
+    const QStringList argv = grassfield::apps::scopedCommand(QStringLiteral("xdg-terminal-exec"), {}, grassfield::apps::scopedLaunch());
+    QProcess process;
+    process.setProgram(argv.first());
+    process.setArguments(argv.mid(1));
+    process.setWorkingDirectory(folder.toLocalFile());
+    if (!process.startDetached())
+        emit operationFailed(tr("The terminal couldn’t be started (xdg-terminal-exec)."));
+}
+
+namespace
+{
+RenameLogic::Options renameOptions(const QVariantMap &map)
+{
+    RenameLogic::Options o;
+    o.mode = RenameLogic::Mode(qBound(0, map.value(QStringLiteral("mode")).toInt(), 2));
+    o.find = map.value(QStringLiteral("find")).toString();
+    o.replaceWith = map.value(QStringLiteral("replaceWith")).toString();
+    o.addText = map.value(QStringLiteral("addText")).toString();
+    o.where = RenameLogic::Where(qBound(0, map.value(QStringLiteral("where")).toInt(), 1));
+    o.format = RenameLogic::Format(qBound(0, map.value(QStringLiteral("format")).toInt(), 2));
+    o.customFormat = map.value(QStringLiteral("customFormat")).toString();
+    o.startAt = qBound(0, map.value(QStringLiteral("startAt"), 1).toInt(), 1000000000);
+    return o;
+}
+} // namespace
+
+QStringList FilesApp::renamePreview(const QList<QUrl> &urls, const QVariantMap &options) const
+{
+    QStringList names;
+    QList<bool> dirs;
+    for (const QUrl &url : urls) {
+        names << url.fileName();
+        dirs << (url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir());
+    }
+    return RenameLogic::newNames(names, dirs, renameOptions(options), QDateTime::currentDateTime());
+}
+
+QString FilesApp::renameItems(const QList<QUrl> &urls, const QVariantMap &options, QObject *folder)
+{
+    if (refuseApplicationItems(urls))
+        return tr("Applications can’t be renamed here.");
+    QStringList names;
+    QStringList folders;
+    for (const QUrl &url : urls) {
+        names << url.fileName();
+        folders << url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).toString();
+    }
+    const QStringList next = renamePreview(urls, options);
+    QString which;
+    switch (RenameLogic::check(names, next, folders, &which)) {
+    case RenameLogic::Problem::None:
+        break;
+    case RenameLogic::Problem::InvalidName:
+        return tr("The name “%1” can’t be used. Names can’t be empty, “.” or “..”, contain “/”, or be longer than 255 bytes.").arg(FileLogic::displayName(which));
+    case RenameLogic::Problem::Duplicate:
+        return tr("Two items would both be named “%1”.").arg(FileLogic::displayName(which));
+    case RenameLogic::Problem::TakenInBatch:
+        return tr("The name “%1” is taken by another item being renamed. Rename them in two steps.").arg(FileLogic::displayName(which));
+    case RenameLogic::Problem::NothingChanges:
+        return tr("No name would change.");
+    }
+    QList<int> changed;
+    bool local = true;
+    for (int i = 0; i < urls.size(); ++i) {
+        if (next.at(i) == names.at(i))
+            continue;
+        changed << i;
+        local = local && urls.at(i).isLocalFile();
+    }
+    if (changed.size() < 2 || !local) {
+        // One item: the single rename (one KIO step). Items on a server: one KIO job each (no all-or-nothing there).
+        for (int i : std::as_const(changed))
+            rename(urls.at(i), next.at(i), folder);
+        return QString();
+    }
+    // Every target is looked at first: a name already taken on the disk refuses the whole command.
+    BatchOps::Steps steps;
+    QList<QPair<QUrl, QUrl>> pairs;
+    for (int i : std::as_const(changed)) {
+        const QUrl parent = urls.at(i).adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
+        const QUrl to = childUrl(parent, next.at(i));
+        if (QFileInfo(to.toLocalFile()).isSymLink() || localExists(to) || nameTaken(parent, next.at(i), names.at(i)))
+            return tr("The name “%1” is already taken. Please choose a different name.").arg(FileLogic::displayName(next.at(i)));
+        steps.append({BatchOps::Step::Kind::Rename, urls.at(i).toLocalFile(), to.toLocalFile()});
+        pairs.append({urls.at(i), to});
+    }
+    // All renamed or none (a failure part-way puts back what was done), and one undo step.
+    QList<QUrl> sources;
+    for (const auto &pair : std::as_const(pairs))
+        sources << pair.first;
+    const QStringList pending = beginStyleMoves(sources);
+    BatchOps::Failure failure;
+    if (!BatchOps::apply(steps, &failure)) {
+        // The folders that did move keep their look (as in a complete rename), and what stayed renamed is one undo step.
+        QList<QPair<QUrl, QUrl>> kept;
+        for (const auto &pair : std::as_const(pairs)) {
+            for (const BatchOps::Step &step : std::as_const(failure.applied)) {
+                if (step.from == pair.first.toLocalFile())
+                    kept.append(pair);
+            }
+        }
+        styleMovedAll(kept);
+        endStyleMoves(pending);
+        recordCustom(countText(tr("Rename 1 Item"), tr("Rename %1 Items"), failure.applied.size()), failure.applied);
+        return tr("“%1” couldn’t be renamed: %2.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName()), QString::fromLocal8Bit(strerror(failure.error))) + QLatin1Char(' ') + rollbackNote(failure.applied);
+    }
+    styleMovedAll(pairs);
+    endStyleMoves(pending);
+    recordCustom(countText(tr("Rename 1 Item"), tr("Rename %1 Items"), changed.size()), steps);
+    QPointer<QObject> target = folder;
+    for (const auto &pair : std::as_const(pairs)) {
+        if (auto *f = asFolder(target))
+            f->expect(pair.second, false);
+    }
+    return QString();
+}
+
+bool FilesApp::isArchive(const QUrl &url) const
+{
+    return url.isLocalFile() && ArchiveLogic::isArchive(url.fileName());
+}
+
+void FilesApp::startArchiveJob(ArchiveJob *job, const QString &activity, QObject *folder)
+{
+    m_archiveJobs.append(job);
+    m_activity = activity;
+    m_activityPercent = -1;
+    emit activityChanged();
+    QPointer<QObject> target = folder;
+    connect(job, &ArchiveJob::finished, this, [this, job, target](bool ok, const QString &error, const QString &result) {
+        if (!ok && !error.isEmpty())
+            emit operationFailed(error);
+        if (ok) {
+            if (auto *f = asFolder(target))
+                f->expect(QUrl::fromLocalFile(result), false);
+        }
+        m_archiveJobs.removeAll(job);
+        job->deleteLater();
+        archiveActivityEnded();
+    });
+    job->start();
+}
+
+void FilesApp::archiveActivityEnded()
+{
+    m_archiveJobs.removeIf([](const QPointer<ArchiveJob> &p) { return p.isNull(); });
+    if (m_jobs.isEmpty() && m_archiveJobs.isEmpty()) {
+        m_activity.clear();
+        m_activityPercent = -1;
+        emit activityChanged();
+    }
+}
+
+void FilesApp::compress(const QList<QUrl> &urls, QObject *folder)
+{
+    if (urls.isEmpty() || refuseApplicationItems(urls))
+        return;
+    const QString dir = urls.first().isLocalFile() ? QFileInfo(urls.first().toLocalFile()).absolutePath() : QString();
+    QStringList names;
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile() || QFileInfo(url.toLocalFile()).absolutePath() != dir) {
+            emit operationFailed(dir.isEmpty() || !url.isLocalFile() ? tr("Only items on this computer can be compressed.")
+                                                                    : tr("Items of several folders can’t be compressed together."));
+            return;
+        }
+        names << QFileInfo(url.toLocalFile()).fileName();
+    }
+    auto *job = ArchiveJob::compress(QStandardPaths::findExecutable(QStringLiteral("bsdtar")), dir, names, this);
+    startArchiveJob(job, tr("Compressing “%1”…").arg(FileLogic::displayName(job->subject())), folder);
+}
+
+void FilesApp::expand(const QUrl &archive, QObject *folder)
+{
+    if (!isArchive(archive) || !QFileInfo(archive.toLocalFile()).isFile()) {
+        emit operationFailed(tr("Only archives on this computer can be expanded."));
+        return;
+    }
+    auto *job = ArchiveJob::expand(QStandardPaths::findExecutable(QStringLiteral("bsdtar")), archive.toLocalFile(), this);
+    startArchiveJob(job, tr("Expanding “%1”…").arg(FileLogic::displayName(job->subject())), folder);
+}
+
+void FilesApp::cancelArchives()
+{
+    const auto jobs = m_archiveJobs;
+    for (const QPointer<ArchiveJob> &job : jobs) {
+        if (job)
+            job->cancel();
+    }
+}
+
+namespace
+{
+QString userName(uid_t uid)
+{
+    const passwd *pw = getpwuid(uid);
+    return pw ? QString::fromLocal8Bit(pw->pw_name) : QString::number(uid);
+}
+
+QString groupName(gid_t gid)
+{
+    const group *gr = getgrgid(gid);
+    return gr ? QString::fromLocal8Bit(gr->gr_name) : QString::number(gid);
+}
+
+// The groups the user belongs to (by name), the item's group first when it is one of them.
+QStringList userGroups()
+{
+    QStringList out;
+    const int n = getgroups(0, nullptr);
+    std::vector<gid_t> ids(std::max(n, 0));
+    if (n > 0 && getgroups(n, ids.data()) == n) {
+        for (gid_t id : ids)
+            out << groupName(id);
+    }
+    const QString primary = groupName(getegid());
+    if (!out.contains(primary))
+        out.prepend(primary);
+    out.removeDuplicates();
+    return out;
+}
+
+bool systemPath(const QString &path)
+{
+    for (const char *root : {"/proc", "/sys", "/dev"}) {
+        const QString r = QString::fromLatin1(root);
+        if (path == r || path.startsWith(r + QLatin1Char('/')))
+            return true;
+    }
+    return false;
+}
+
+// The item pinned (O_PATH | O_NOFOLLOW): -1 when it is gone, a link, or no folder or regular file.
+int pinItem(const QString &path, struct stat *st)
+{
+    const int fd = ::open(QFile::encodeName(path).constData(), O_PATH | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0)
+        return -1;
+    if (::fstat(fd, st) != 0 || !(S_ISDIR(st->st_mode) || S_ISREG(st->st_mode))) {
+        ::close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+QByteArray procName(int fd)
+{
+    return QByteArrayLiteral("/proc/self/fd/") + QByteArray::number(fd);
+}
+} // namespace
+
+QVariantMap FilesApp::permissionsOf(const QUrl &url) const
+{
+    if (!url.isLocalFile())
+        return {{QStringLiteral("valid"), false}};
+    const QString path = url.toLocalFile();
+    struct stat st{};
+    if (::lstat(QFile::encodeName(path).constData(), &st) != 0)
+        return {{QStringLiteral("valid"), false}};
+    const unsigned mode = st.st_mode & 07777;
+    const bool isDir = S_ISDIR(st.st_mode);
+    QString reason;
+    if (S_ISLNK(st.st_mode))
+        reason = tr("An alias (a symbolic link) keeps its own permissions: change the original item’s.");
+    else if (systemPath(path))
+        reason = tr("System items can’t be changed here.");
+    else if (!isDir && !S_ISREG(st.st_mode))
+        reason = tr("Only files and folders can be changed here.");
+    else if (st.st_uid != geteuid())
+        reason = tr("You can only change the permissions of items you own. Changing others’ items needs an administrator, which Files doesn’t offer yet.");
+    QVariantList access;
+    for (int who = 0; who < 3; ++who)
+        access << int(PermissionLogic::accessOf(mode, PermissionLogic::Who(who)));
+    return {{QStringLiteral("valid"), true},
+            {QStringLiteral("mode"), int(mode)},
+            {QStringLiteral("modeText"), PermissionLogic::modeText(mode)},
+            {QStringLiteral("owner"), userName(st.st_uid)},
+            {QStringLiteral("group"), groupName(st.st_gid)},
+            {QStringLiteral("ownedByMe"), st.st_uid == geteuid()},
+            {QStringLiteral("isDir"), isDir},
+            {QStringLiteral("editable"), reason.isEmpty()},
+            {QStringLiteral("reason"), reason},
+            {QStringLiteral("groups"), reason.isEmpty() ? userGroups() : QStringList()},
+            {QStringLiteral("access"), access}};
+}
+
+void FilesApp::setAccess(const QUrl &url, int who, int access)
+{
+    if (!permissionsOf(url).value(QStringLiteral("editable")).toBool() || who < 0 || who > 2 || access < 0 || access > 3)
+        return;
+    struct stat st{};
+    const int fd = pinItem(url.toLocalFile(), &st);
+    if (fd < 0 || st.st_uid != geteuid()) {
+        if (fd >= 0)
+            ::close(fd);
+        emit operationFailed(tr("The permissions of “%1” couldn’t be changed.").arg(FileLogic::displayName(url.fileName())));
+        emit permissionsChanged(url);
+        return;
+    }
+    const unsigned mode = PermissionLogic::withAccess(st.st_mode & 07777, PermissionLogic::Who(who), PermissionLogic::Access(access), S_ISDIR(st.st_mode));
+    const int rc = ::chmod(procName(fd).constData(), mode);
+    const int error = errno;
+    ::close(fd);
+    if (rc != 0)
+        emit operationFailed(tr("The permissions of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(url.fileName()), QString::fromLocal8Bit(strerror(error))));
+    org::kde::KDirNotify::emitFilesChanged({url});
+    emit permissionsChanged(url);
+}
+
+void FilesApp::setGroup(const QUrl &url, const QString &groupNameText)
+{
+    if (!permissionsOf(url).value(QStringLiteral("editable")).toBool() || !userGroups().contains(groupNameText))
+        return;
+    const group *gr = getgrnam(QFile::encodeName(groupNameText).constData());
+    if (!gr)
+        return;
+    const gid_t gid = gr->gr_gid;
+    struct stat st{};
+    const int fd = pinItem(url.toLocalFile(), &st);
+    if (fd < 0 || st.st_uid != geteuid()) {
+        if (fd >= 0)
+            ::close(fd);
+        emit permissionsChanged(url);
+        return;
+    }
+    // The owner stays (-1); a user may give their item to a group they belong to.
+    const int rc = ::chown(procName(fd).constData(), uid_t(-1), gid);
+    const int error = errno;
+    ::close(fd);
+    if (rc != 0)
+        emit operationFailed(tr("The group of “%1” couldn’t be changed: %2").arg(FileLogic::displayName(url.fileName()), QString::fromLocal8Bit(strerror(error))));
+    org::kde::KDirNotify::emitFilesChanged({url});
+    emit permissionsChanged(url);
+}
+
+void FilesApp::applyToEnclosed(const QUrl &url)
+{
+    const QVariantMap p = permissionsOf(url);
+    if (!p.value(QStringLiteral("editable")).toBool() || !p.value(QStringLiteral("isDir")).toBool())
+        return;
+    const QVariantList access = p.value(QStringLiteral("access")).toList();
+    const QString ops = PermissionLogic::recursiveOperators(PermissionLogic::Access(access.value(0).toInt()), PermissionLogic::Access(access.value(1).toInt()),
+                                                            PermissionLogic::Access(access.value(2).toInt()));
+    // The system's chmod (ADR-0028 probe 12): it never follows the links it meets inside the folder; the folder itself was
+    // checked above to be no link. The user's own rights only: items of others fail and are reported.
+    auto *process = new QProcess(this);
+    process->setProgram(QStringLiteral("/usr/bin/chmod"));
+    process->setArguments({QStringLiteral("-R"), QStringLiteral("--"), ops, url.toLocalFile()});
+    process->setStandardInputFile(QProcess::nullDevice());
+    process->setStandardOutputFile(QProcess::nullDevice());
+    connect(process, &QProcess::finished, this, [this, process, url](int code, QProcess::ExitStatus status) {
+        if (status != QProcess::NormalExit || code != 0)
+            emit operationFailed(tr("Some items in “%1” weren’t changed: they belong to someone else or can’t be changed.").arg(FileLogic::displayName(url.fileName())));
+        org::kde::KDirNotify::emitFilesChanged({url});
+        emit permissionsChanged(url);
+        process->deleteLater();
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            emit operationFailed(tr("The permissions couldn’t be changed: chmod can’t be started."));
+            process->deleteLater();
+        }
+    });
+    process->start();
+}
+
+void FilesApp::publishJobs()
+{
+    QVariantList list;
+    QList<JobProgress> rows = m_progress.values();
+    std::sort(rows.begin(), rows.end(), [](const JobProgress &a, const JobProgress &b) { return a.id < b.id; });
+    for (const JobProgress &p : std::as_const(rows)) {
+        // Finder-Copy: "Copying “name” to “Desktop”", then "41.9 MB of 111.6 MB – About 10 seconds".
+        QString title = p.activity;
+        if (!p.verb.isEmpty() && !p.item.isEmpty())
+            title = p.destination.isEmpty() ? tr("%1 “%2”").arg(p.verb, FileLogic::displayName(p.item))
+                                            : tr("%1 “%2” to “%3”").arg(p.verb, FileLogic::displayName(p.item), FileLogic::displayName(p.destination));
+        QString detail;
+        if (p.total > 0) {
+            detail = tr("%1 of %2").arg(formatSize(qint64(p.processed)), formatSize(qint64(p.total)));
+            if (p.speed > 0 && p.total > p.processed) {
+                const qulonglong seconds = (p.total - p.processed) / p.speed;
+                detail += QStringLiteral(" – ")
+                          + (seconds < 2    ? tr("About 1 second")
+                             : seconds < 60 ? tr("About %1 seconds").arg(seconds)
+                             : seconds < 120 ? tr("About 1 minute")
+                                             : tr("About %1 minutes").arg(seconds / 60 + 1));
+            }
+        }
+        const int percent = p.total > 0 ? int(qMin<qulonglong>(100, p.processed * 100 / p.total)) : p.percent;
+        list.append(QVariantMap{{QStringLiteral("id"), int(p.id)}, {QStringLiteral("title"), title}, {QStringLiteral("detail"), detail}, {QStringLiteral("percent"), percent}});
+    }
+    if (list == m_jobList)
+        return;
+    m_jobList = list;
+    emit jobsChanged();
+}
+
+void FilesApp::cancelJob(int id)
+{
+    for (auto it = m_progress.cbegin(); it != m_progress.cend(); ++it) {
+        if (int(it->id) == id) {
+            // A stopped job reports ERR_USER_CANCELED, which track() never shows as an error.
+            it.key()->kill(KJob::EmitResult);
+            return;
+        }
+    }
+}
+
+void FilesApp::moveHere(const QUrl &destination, QObject *folder)
+{
+    if (refuseApplicationItems({destination}))
+        return;
+    const QList<QUrl> urls = KioDialogs::pastableItems(QGuiApplication::clipboard()->mimeData());
+    if (urls.isEmpty() || refuseApplicationItems(urls) || refuseTwin(this, destination, urls))
+        return;
+    KIO::CopyJob *job = KIO::move(urls, destination, KIO::HideProgressInfo);
+    attachDelegate(job);
+    KIO::FileUndoManager::self()->recordCopyJob(job);
+    track(job, countText(tr("Moving 1 item…"), tr("Moving %1 items…"), urls.size()));
+    QPointer<QObject> target = folder;
+    connect(job, &KIO::CopyJob::copyingDone, this, [target](KIO::Job *, const QUrl &, const QUrl &to, const QDateTime &, bool, bool) {
+        if (auto *f = asFolder(target))
+            f->expect(to, false);
+    });
+}
+
+QString FilesApp::mimeTypeOf(const QUrl &url) const
+{
+    return QMimeDatabase().mimeTypeForUrl(url).name();
+}
+
+QString FilesApp::defaultApplication(const QString &mimeType) const
+{
+    const KService::Ptr service = KApplicationTrader::preferredService(mimeType);
+    return service ? service->storageId() : QString();
+}
+
+bool FilesApp::setDefaultApplication(const QString &mimeType, const QString &storageId)
+{
+    const KService::Ptr service = KService::serviceByStorageId(storageId);
+    if (!service || mimeType.isEmpty() || !QMimeDatabase().mimeTypeForName(mimeType).isValid())
+        return false;
+    // The user's mimeapps.list (XDG): the Finder's Change All… for every document of this type.
+    KApplicationTrader::setPreferredService(mimeType, service);
+    return true;
 }
 
 void FilesApp::makeFolder(const QUrl &directory, const QString &name, const QJSValue &callback)
@@ -1343,8 +2041,8 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
         trash(urls);
         return;
     }
-    // Recents is a list, not a place: nothing can be dropped into it.
-    if (Recents::isRecentsUrl(destination))
+    // Recents and search results are lists, not places: nothing can be dropped into them.
+    if (Recents::isRecentsUrl(destination) || SearchLogic::isSearchUrl(destination))
         return;
     // A drop on a tag search (its background, its path segment) tags the items, like a drop on the sidebar tag.
     if (TagLogic::isSearchUrl(destination)) {
@@ -1422,12 +2120,69 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
 
 void FilesApp::undo()
 {
-    KIO::FileUndoManager::self()->undo();
+    auto *kio = KIO::FileUndoManager::self();
+    if (!customUndoIsNext()) {
+        if (kio->isUndoAvailable()) {
+            m_redoKinds.append(false);
+            kio->undo();
+        }
+        return;
+    }
+    // One of Files' own commands (Rename N Items, Make Alias, New Folder with Selection): all its steps revert, or none.
+    const CustomCommand command = m_undoCustom.last();
+    BatchOps::Failure failure;
+    if (!BatchOps::apply(BatchOps::inverse(command.steps), &failure)) {
+        // The command stays on the stack. When a revert failed too, part of it is undone: what is still done stays its steps.
+        const int undone = int(failure.applied.size());
+        if (undone > 0)
+            m_undoCustom.last().steps = command.steps.mid(0, command.steps.size() - undone);
+        emit operationFailed(tr("“%1” can’t be undone: something has changed since.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())) + QLatin1Char(' ')
+                             + (undone > 0 ? tr("Part of it was undone; Undo again after fixing the items.") : tr("Nothing was changed.")));
+        emit undoChanged();
+        return;
+    }
+    m_undoCustom.removeLast();
+    m_redoCustom.append(command);
+    m_redoKinds.append(true);
+    emit undoChanged();
 }
 
 void FilesApp::redo()
 {
-    KIO::FileUndoManager::self()->redo();
+    if (m_redoKinds.isEmpty())
+        return;
+    auto *kio = KIO::FileUndoManager::self();
+    if (!m_redoKinds.last()) {
+        m_redoKinds.removeLast();
+        if (kio->isRedoAvailable())
+            kio->redo();
+        emit undoChanged();
+        return;
+    }
+    if (m_redoCustom.isEmpty()) {
+        m_redoKinds.removeLast();
+        emit undoChanged();
+        return;
+    }
+    const CustomCommand command = m_redoCustom.last();
+    BatchOps::Failure failure;
+    if (!BatchOps::apply(command.steps, &failure)) {
+        QString note = tr("Nothing was changed.");
+        if (!failure.applied.isEmpty()) {
+            // Part of it is done and stays: it is a command of its own now (Undo puts it back) and the rest of the redo is gone.
+            m_redoCustom.removeLast();
+            m_redoKinds.removeLast();
+            m_undoCustom.append({KIO::FileUndoManager::self()->newCommandSerialNumber(), command.text, failure.applied});
+            note = rollbackNote(failure.applied);
+        }
+        emit operationFailed(tr("“%1” can’t be redone: something has changed since.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())) + QLatin1Char(' ') + note);
+        emit undoChanged();
+        return;
+    }
+    m_redoCustom.removeLast();
+    m_redoKinds.removeLast();
+    m_undoCustom.append(command);
+    emit undoChanged();
 }
 
 void FilesApp::directorySize(const QUrl &url, const QJSValue &callback)
@@ -1725,6 +2480,447 @@ bool FilesApp::isTagSearch(const QUrl &url) const
     return TagLogic::isSearchUrl(url);
 }
 
+bool FilesApp::isFileSearch(const QUrl &url) const
+{
+    return SearchLogic::isSearchUrl(url);
+}
+
+QVariantMap FilesApp::searchQuery(const QUrl &url) const
+{
+    const auto query = SearchLogic::fromUrl(url);
+    if (!query)
+        return {{QStringLiteral("valid"), false}};
+    QVariantList criteria;
+    for (const SearchLogic::Criterion &c : query->criteria) {
+        criteria.append(QVariantMap{{QStringLiteral("attribute"), SearchLogic::attributeKey(c.attribute)},
+                                    {QStringLiteral("op"), SearchLogic::opKey(c.op)},
+                                    {QStringLiteral("value"), c.value},
+                                    {QStringLiteral("unit"), c.unit}});
+    }
+    return {{QStringLiteral("valid"), true},
+            {QStringLiteral("text"), query->text},
+            {QStringLiteral("folder"), query->folder},
+            {QStringLiteral("criteria"), criteria}};
+}
+
+QUrl FilesApp::searchUrl(const QVariantMap &map) const
+{
+    SearchLogic::Query query;
+    query.text = map.value(QStringLiteral("text")).toString();
+    const QUrl folder = map.value(QStringLiteral("folder")).toUrl();
+    if (folder.isLocalFile())
+        query.folder = folder.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments);
+    for (const QVariant &v : map.value(QStringLiteral("criteria")).toList()) {
+        const QVariantMap row = v.toMap();
+        const auto attribute = SearchLogic::attributeFromKey(row.value(QStringLiteral("attribute")).toString());
+        const auto op = SearchLogic::opFromKey(row.value(QStringLiteral("op")).toString());
+        if (!attribute || !op || !SearchLogic::takesOp(*attribute, *op))
+            continue;
+        query.criteria.append({*attribute, *op, row.value(QStringLiteral("value")).toString(), row.value(QStringLiteral("unit")).toString()});
+    }
+    return SearchLogic::toUrl(query);
+}
+
+QVariantList FilesApp::searchAttributes() const
+{
+    using SearchLogic::Attribute;
+    // The Finder's order of the first pop-up.
+    const QList<QPair<Attribute, QString>> labels = {
+        {Attribute::Kind, tr("Kind")},           {Attribute::Opened, tr("Last opened date")}, {Attribute::Modified, tr("Last modified date")},
+        {Attribute::Created, tr("Created date")}, {Attribute::Name, tr("Name")},              {Attribute::Contents, tr("Contents")},
+        {Attribute::Size, tr("File size")},      {Attribute::Tags, tr("Tags")},
+    };
+    QVariantList out;
+    for (const auto &[a, label] : labels)
+        out.append(QVariantMap{{QStringLiteral("key"), SearchLogic::attributeKey(a)}, {QStringLiteral("label"), label}});
+    return out;
+}
+
+QVariantList FilesApp::searchOperators(const QString &attribute) const
+{
+    using SearchLogic::Attribute;
+    using SearchLogic::Op;
+    const auto a = SearchLogic::attributeFromKey(attribute);
+    if (!a)
+        return {};
+    auto label = [&](Op op) -> QString {
+        switch (op) {
+        case Op::Is:
+            return tr("is");
+        case Op::IsNot:
+            return tr("is not");
+        case Op::Contains:
+            return tr("contains");
+        case Op::BeginsWith:
+            return tr("begins with");
+        case Op::EndsWith:
+            return tr("ends with");
+        case Op::WithinLast:
+            return tr("is within last");
+        case Op::Exactly:
+            return tr("is exactly");
+        case Op::Before:
+            return tr("is before");
+        case Op::After:
+            return tr("is after");
+        case Op::Today:
+            return tr("is today");
+        case Op::Yesterday:
+            return tr("is yesterday");
+        case Op::ThisWeek:
+            return tr("is this week");
+        case Op::ThisMonth:
+            return tr("is this month");
+        case Op::ThisYear:
+            return tr("is this year");
+        case Op::Greater:
+            return tr("is greater than");
+        case Op::Less:
+            return tr("is less than");
+        }
+        return QString();
+    };
+    auto valueKind = [&](Op op) -> QString {
+        switch (*a) {
+        case Attribute::Kind:
+            return QStringLiteral("kind");
+        case Attribute::Tags:
+            return QStringLiteral("tag");
+        case Attribute::Size:
+            return QStringLiteral("number");
+        case Attribute::Opened:
+        case Attribute::Modified:
+        case Attribute::Created:
+            return op == Op::WithinLast ? QStringLiteral("number")
+                   : (op == Op::Exactly || op == Op::Before || op == Op::After) ? QStringLiteral("date")
+                                                                               : QStringLiteral("none");
+        case Attribute::Name:
+        case Attribute::Contents:
+            return QStringLiteral("text");
+        }
+        return QStringLiteral("none");
+    };
+    QVariantList out;
+    for (const Op op : SearchLogic::operatorsFor(*a))
+        out.append(QVariantMap{{QStringLiteral("key"), SearchLogic::opKey(op)}, {QStringLiteral("label"), label(op)}, {QStringLiteral("value"), valueKind(op)}});
+    return out;
+}
+
+QVariantList FilesApp::searchUnits(const QString &attribute) const
+{
+    const auto a = SearchLogic::attributeFromKey(attribute);
+    if (!a)
+        return {};
+    auto unit = [](const char *key, const QString &label) { return QVariantMap{{QStringLiteral("key"), QString::fromLatin1(key)}, {QStringLiteral("label"), label}}; };
+    switch (*a) {
+    case SearchLogic::Attribute::Opened:
+    case SearchLogic::Attribute::Modified:
+    case SearchLogic::Attribute::Created:
+        return {unit("days", tr("days")), unit("weeks", tr("weeks")), unit("months", tr("months")), unit("years", tr("years"))};
+    case SearchLogic::Attribute::Size:
+        return {unit("KB", tr("KB")), unit("MB", tr("MB")), unit("GB", tr("GB"))};
+    default:
+        return {};
+    }
+}
+
+QVariantList FilesApp::searchKinds() const
+{
+    using FileLogic::KindCategory;
+    // The Finder's Kind pop-up, in its order (Linux types: Executable and Text are Application and Document here).
+    const QList<QPair<QString, QString>> kinds = {
+        {QStringLiteral("any"), tr("Any")},
+        {SearchLogic::kindKey(KindCategory::Application), tr("Application")},
+        {SearchLogic::kindKey(KindCategory::Archive), tr("Archive")},
+        {SearchLogic::kindKey(KindCategory::Document), tr("Document")},
+        {SearchLogic::kindKey(KindCategory::Folder), tr("Folder")},
+        {SearchLogic::kindKey(KindCategory::Image), tr("Image")},
+        {SearchLogic::kindKey(KindCategory::Movie), tr("Movie")},
+        {SearchLogic::kindKey(KindCategory::Music), tr("Music")},
+        {SearchLogic::kindKey(KindCategory::Pdf), tr("PDF")},
+        {SearchLogic::kindKey(KindCategory::Presentation), tr("Presentation")},
+        {SearchLogic::kindKey(KindCategory::Spreadsheet), tr("Spreadsheet")},
+        {SearchLogic::kindKey(KindCategory::Other), tr("Other")},
+    };
+    QVariantList out;
+    for (const auto &[key, label] : kinds)
+        out.append(QVariantMap{{QStringLiteral("key"), key}, {QStringLiteral("label"), label}});
+    return out;
+}
+
+QVariantMap FilesApp::searchCriterion(const QString &attribute) const
+{
+    const auto a = SearchLogic::attributeFromKey(attribute);
+    if (!a)
+        return {};
+    const SearchLogic::Op op = SearchLogic::operatorsFor(*a).constFirst();
+    QString value;
+    QString unit;
+    switch (*a) {
+    case SearchLogic::Attribute::Kind:
+        value = QStringLiteral("any");
+        break;
+    case SearchLogic::Attribute::Opened:
+    case SearchLogic::Attribute::Modified:
+    case SearchLogic::Attribute::Created:
+        value = QStringLiteral("7");
+        unit = QStringLiteral("days");
+        break;
+    case SearchLogic::Attribute::Size:
+        unit = QStringLiteral("KB");
+        break;
+    default:
+        break;
+    }
+    return {{QStringLiteral("attribute"), attribute}, {QStringLiteral("op"), SearchLogic::opKey(op)}, {QStringLiteral("value"), value}, {QStringLiteral("unit"), unit}};
+}
+
+QString FilesApp::searchDateText(const QString &iso) const
+{
+    const QDate day = QDate::fromString(iso.trimmed(), Qt::ISODate);
+    return day.isValid() ? QLocale().toString(day, QLocale::ShortFormat) : QString();
+}
+
+QString FilesApp::searchDateValue(const QString &text) const
+{
+    const QString t = text.trimmed();
+    QDate day = QLocale().toDate(t, QLocale::ShortFormat);
+    if (!day.isValid())
+        day = QDate::fromString(t, Qt::ISODate);
+    // A two-digit year reads as this century (Qt reads "31/10/26" as 1926).
+    if (day.isValid() && day.year() < 1970 && !t.contains(QString::number(day.year())))
+        day = day.addYears(100);
+    return day.isValid() ? day.toString(Qt::ISODate) : QString();
+}
+
+QString FilesApp::searchToday() const
+{
+    return QDate::currentDate().toString(Qt::ISODate);
+}
+
+QString FilesApp::placeShortcut(const QString &kind, const QUrl &url) const
+{
+    const QStringList xdg = {QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
+                             QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation),
+                             QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)};
+    return NavLogic::placeShortcut(kind, url.isLocalFile() ? url.toLocalFile() : QString(), QDir::homePath(), xdg);
+}
+
+QUrl FilesApp::standardFolder(const QString &which) const
+{
+    if (which == QLatin1String("desktop"))
+        return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DesktopLocation));
+    if (which == QLatin1String("documents"))
+        return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
+    if (which == QLatin1String("downloads"))
+        return QUrl::fromLocalFile(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
+    if (which == QLatin1String("computer"))
+        return QUrl::fromLocalFile(QStringLiteral("/"));
+    if (which == QLatin1String("network") && m_places && m_places->networkAvailable())
+        return QUrl(QStringLiteral("remote:/"));
+    return {};
+}
+
+void FilesApp::completeFolder(const QString &text, const QUrl &base)
+{
+    const quint64 generation = ++m_completionGeneration;
+    const NavLogic::CompletionTarget target = NavLogic::completionTarget(text, base.isLocalFile() ? base.toLocalFile() : QString(), QDir::homePath());
+    if (target.folder.isEmpty()) {
+        emit folderCompletions(text, {});
+        return;
+    }
+    const bool hidden = showHidden();
+    const QPointer<FilesApp> self(this);
+    // Listed on a thread of its own: a folder on a slow or hung mount never blocks the window (the answer is then
+    // dropped by the next request's generation).
+    QThread *thread = QThread::create([self, generation, text, target, hidden]() {
+        QStringList names;
+        QDirIterator it(target.folder, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden);
+        for (int seen = 0; it.hasNext() && seen < kMaxCompletionScan; ++seen) {
+            it.next();
+            names.append(it.fileName());
+        }
+        const QStringList matches = NavLogic::folderMatches(names, target.prefix, hidden, kMaxCompletions);
+        QMetaObject::invokeMethod(
+            qApp,
+            [self, generation, text, target, matches]() {
+                if (!self || generation != self->m_completionGeneration)
+                    return;
+                QVariantList out;
+                const QStringList parts = target.folder.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+                for (const QString &name : matches) {
+                    const QString path = target.folder == QStringLiteral("/") ? QLatin1Char('/') + name : target.folder + QLatin1Char('/') + name;
+                    out.append(QVariantMap{{QStringLiteral("name"), name},
+                                           {QStringLiteral("url"), QUrl::fromLocalFile(path)},
+                                           {QStringLiteral("parts"), QStringList(parts) << name}});
+                }
+                emit self->folderCompletions(text, out);
+            },
+            Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+}
+
+QString FilesApp::completedText(const QString &text, const QUrl &base, const QString &match) const
+{
+    return NavLogic::completedText(NavLogic::completionTarget(text, base.isLocalFile() ? base.toLocalFile() : QString(), QDir::homePath()), match);
+}
+
+QVariantMap FilesApp::goToTarget(const QString &text, const QUrl &base) const
+{
+    const NavLogic::GoToTarget target = NavLogic::goToTarget(locationUrl(text, base));
+    return {{QStringLiteral("folder"), target.folder}, {QStringLiteral("select"), target.select}};
+}
+
+QStringList FilesApp::storedUrls(const QString &key, int max) const
+{
+    QStringList out;
+    for (const QString &s : m_settings.value(key).toStringList()) {
+        const QUrl url(s, QUrl::StrictMode);
+        if (url.isValid() && !url.scheme().isEmpty() && !out.contains(s))
+            out.append(s);
+        if (out.size() >= max)
+            break;
+    }
+    return out;
+}
+
+QVariantList FilesApp::recentFolders() const
+{
+    QVariantList out;
+    for (const QString &s : storedUrls(QStringLiteral("go/recentFolders"), kMaxRecentFolders))
+        out.append(QVariantMap{{QStringLiteral("url"), QUrl(s)}});
+    return out;
+}
+
+void FilesApp::noteFolder(const QUrl &url)
+{
+    // Folders one goes back to: local folders and servers; never a search, the Trash, Recents or the Applications list.
+    const QString scheme = url.scheme();
+    if (scheme != QLatin1String("file") && !NavLogic::serverUrl(url.toString()).isValid())
+        return;
+    const QString clean = url.adjusted(QUrl::StripTrailingSlash | QUrl::NormalizePathSegments | QUrl::RemovePassword).toString();
+    const QStringList before = storedUrls(QStringLiteral("go/recentFolders"), kMaxRecentFolders);
+    const QStringList after = NavLogic::pushRecent(before, clean, kMaxRecentFolders);
+    if (after == before)
+        return;
+    m_settings.setValue(QStringLiteral("go/recentFolders"), after);
+    emit recentFoldersChanged();
+}
+
+void FilesApp::clearRecentFolders()
+{
+    m_settings.remove(QStringLiteral("go/recentFolders"));
+    emit recentFoldersChanged();
+}
+
+QUrl FilesApp::serverUrl(const QString &text) const
+{
+    return NavLogic::serverUrl(text);
+}
+
+QStringList FilesApp::recentServers() const
+{
+    return storedUrls(QStringLiteral("servers/recent"), kMaxServers);
+}
+
+QStringList FilesApp::favoriteServers() const
+{
+    return storedUrls(QStringLiteral("servers/favorites"), kMaxServers);
+}
+
+void FilesApp::noteServer(const QUrl &url)
+{
+    const QUrl clean = NavLogic::serverUrl(url.toString());
+    if (!clean.isValid())
+        return;
+    m_settings.setValue(QStringLiteral("servers/recent"), NavLogic::pushRecent(recentServers(), clean.toString(), kMaxServers));
+    emit serversChanged();
+}
+
+bool FilesApp::addFavoriteServer(const QString &text)
+{
+    const QUrl url = NavLogic::serverUrl(text);
+    if (!url.isValid())
+        return false;
+    QStringList favorites = favoriteServers();
+    if (!favorites.contains(url.toString()) && favorites.size() < kMaxServers)
+        favorites.append(url.toString());
+    m_settings.setValue(QStringLiteral("servers/favorites"), favorites);
+    emit serversChanged();
+    return true;
+}
+
+void FilesApp::removeFavoriteServer(int index)
+{
+    QStringList favorites = favoriteServers();
+    if (index < 0 || index >= favorites.size())
+        return;
+    favorites.removeAt(index);
+    m_settings.setValue(QStringLiteral("servers/favorites"), favorites);
+    emit serversChanged();
+}
+
+void FilesApp::clearRecentServers()
+{
+    m_settings.remove(QStringLiteral("servers/recent"));
+    emit serversChanged();
+}
+
+QVariantList FilesApp::savedSearches() const
+{
+    QVariantList out;
+    for (const SavedSearches::Entry &e : m_savedSearches->entries()) {
+        out.append(QVariantMap{{QStringLiteral("name"), e.saved.name},
+                               {QStringLiteral("url"), SearchLogic::toUrl(e.saved.query)},
+                               {QStringLiteral("sidebar"), e.saved.sidebar},
+                               {QStringLiteral("file"), e.file}});
+    }
+    return out;
+}
+
+QString FilesApp::saveSearch(const QString &name, const QUrl &search, bool sidebar)
+{
+    const auto query = SearchLogic::fromUrl(search);
+    if (!query)
+        return tr("This search can’t be read.");
+    return m_savedSearches->save({name, *query, sidebar});
+}
+
+bool FilesApp::hasSavedSearch(const QString &name) const
+{
+    const QString wanted = name.trimmed();
+    for (const SavedSearches::Entry &e : m_savedSearches->entries()) {
+        if (FileLogic::sameName(e.saved.name, wanted))
+            return true;
+    }
+    return false;
+}
+
+void FilesApp::removeSavedSearch(const QString &file)
+{
+    if (!m_savedSearches->remove(file))
+        emit operationFailed(tr("The saved search couldn’t be moved to the Trash."));
+}
+
+void FilesApp::setSavedSearchInSidebar(const QString &file, bool on)
+{
+    if (!m_savedSearches->setSidebar(file, on))
+        emit operationFailed(tr("The saved search couldn’t be changed."));
+}
+
+void FilesApp::publishSavedSearches()
+{
+    QList<PlacesModel::SavedSearch> sidebar;
+    for (const SavedSearches::Entry &e : m_savedSearches->entries()) {
+        if (e.saved.sidebar)
+            sidebar.append({e.saved.name, SearchLogic::toUrl(e.saved.query), e.file});
+    }
+    m_places->setSavedSearches(sidebar);
+    emit savedSearchesChanged();
+}
+
 bool FilesApp::eventFilter(QObject *watched, QEvent *event)
 {
     if (!watched->isWindowType())
@@ -1839,6 +3035,52 @@ void FilesApp::track(KJob *job, const QString &activity)
     m_activity = activity;
     m_activityPercent = -1;
     emit activityChanged();
+    JobProgress progress;
+    progress.id = m_nextJobId++;
+    progress.activity = activity;
+    m_progress.insert(job, progress);
+    m_progressTimer.start();
+    connect(job, &KJob::description, this, [this, job](KJob *, const QString &title, const QPair<QString, QString> &source, const QPair<QString, QString> &destination) {
+        auto it = m_progress.find(job);
+        if (it == m_progress.end())
+            return;
+        it->verb = title;
+        it->item = QUrl(source.second).fileName();
+        const QUrl to(destination.second);
+        it->destination = to.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).fileName();
+        if (!m_progressTimer.isActive())
+            m_progressTimer.start();
+    });
+    connect(job, &KJob::processedAmountChanged, this, [this, job](KJob *, KJob::Unit unit, qulonglong amount) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end() && unit == KJob::Bytes) {
+            it->processed = amount;
+            if (!m_progressTimer.isActive())
+                m_progressTimer.start();
+        }
+    });
+    connect(job, &KJob::totalAmountChanged, this, [this, job](KJob *, KJob::Unit unit, qulonglong amount) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end() && unit == KJob::Bytes)
+            it->total = amount;
+    });
+    connect(job, &KJob::speed, this, [this, job](KJob *, unsigned long speed) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end())
+            it->speed = speed;
+    });
+    connect(job, &KJob::percentChanged, this, [this, job](KJob *, unsigned long percent) {
+        auto it = m_progress.find(job);
+        if (it != m_progress.end()) {
+            it->percent = int(percent);
+            if (!m_progressTimer.isActive())
+                m_progressTimer.start();
+        }
+    });
+    connect(job, &QObject::destroyed, this, [this, job] {
+        m_progress.remove(job);
+        publishJobs();
+    });
     connect(job, &KJob::percentChanged, this, [this, job](KJob *, unsigned long percent) {
         if (!m_jobs.isEmpty() && m_jobs.last() == job) {
             m_activityPercent = int(percent);
@@ -1850,8 +3092,10 @@ void FilesApp::track(KJob *job, const QString &activity)
             emit operationFailed(job->errorString());
         m_jobs.removeAll(job);
         m_jobs.removeIf([](const QPointer<KJob> &p) { return p.isNull(); });
-        m_activity = m_jobs.isEmpty() ? QString() : m_activity;
+        m_activity = m_jobs.isEmpty() && m_archiveJobs.isEmpty() ? QString() : m_activity;
         m_activityPercent = -1;
         emit activityChanged();
+        m_progress.remove(job);
+        publishJobs();
     });
 }

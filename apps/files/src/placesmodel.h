@@ -63,6 +63,13 @@ public:
 
     // The Tags section (stored tag names, display order).
     void setTags(const QStringList &tags);
+    // Saved searches shown in Favorites (the Finder's smart folders added to the sidebar): {name, search location, file}.
+    struct SavedSearch {
+        QString name;
+        QUrl url;
+        QString file;
+    };
+    void setSavedSearches(const QList<SavedSearch> &searches);
 
 signals:
     void trashEmptyChanged();
@@ -75,7 +82,7 @@ private:
         QString name;
         QUrl url;
         QString iconName;
-        QString kind; // "recents" | "folder" | "applications" | "volume" | "network" | "trash" | "tag"
+        QString kind; // "recents" | "folder" | "applications" | "savedSearch" | "volume" | "network" | "trash" | "tag"
         QString udi;
         bool mounted = true;
         bool ejectable = false;
@@ -94,6 +101,7 @@ private:
 
     QList<Place> m_places;
     QStringList m_tags;
+    QList<SavedSearch> m_savedSearches;
     KCoreDirLister *m_trashLister = nullptr;
     bool m_trashEmpty = true;
     DiskProbe m_disk;

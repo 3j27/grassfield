@@ -173,6 +173,18 @@ void PlacesModel::relist()
         places.append(p);
     }
 
+    // Saved searches the user added to the sidebar, after the folders (the Finder's Favorites).
+    for (const SavedSearch &search : std::as_const(m_savedSearches)) {
+        Place p;
+        p.section = QStringLiteral("favorites");
+        p.name = search.name;
+        p.url = search.url;
+        p.iconName = symbolic(QStringLiteral("folder-saved-search"), QStringLiteral("folder-symbolic"));
+        p.kind = QStringLiteral("savedSearch");
+        p.tag = search.file;
+        places.append(p);
+    }
+
     Place computer;
     computer.section = QStringLiteral("locations");
     computer.name = tr("Computer");
@@ -291,6 +303,18 @@ QHash<int, QByteArray> PlacesModel::roleNames() const
             {IconNameRole, "iconName"}, {KindRole, "kind"},     {UdiRole, "udi"},
             {MountedRole, "mounted"},   {EjectableRole, "ejectable"}, {BusyRole, "busy"},
             {TagRole, "tag"},           {TagColorRole, "tagColor"},   {UnavailableRole, "unavailable"}};
+}
+
+void PlacesModel::setSavedSearches(const QList<SavedSearch> &searches)
+{
+    const bool same = searches.size() == m_savedSearches.size()
+                      && std::equal(searches.cbegin(), searches.cend(), m_savedSearches.cbegin(), [](const SavedSearch &a, const SavedSearch &b) {
+                             return a.name == b.name && a.url == b.url && a.file == b.file;
+                         });
+    if (same)
+        return;
+    m_savedSearches = searches;
+    relist();
 }
 
 void PlacesModel::setTags(const QStringList &tags)

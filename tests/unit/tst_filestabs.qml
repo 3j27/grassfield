@@ -15,6 +15,8 @@ TestCase {
 
     QtObject {
         id: fakeApp
+        // The copy window's rows (FilesApp.jobs): none here.
+        property var jobs: []
         property int processId: 4242
         property url newWindowUrl: "file:///sandbox"
         property var dropped: []
@@ -71,6 +73,8 @@ TestCase {
     // What Main.qml (the window and tab manager) reads of FilesApp.
     QtObject {
         id: mainApp
+        // The copy window's rows (FilesApp.jobs): none here.
+        property var jobs: []
         property bool dark: false
         property bool reduceMotion: false
         property string accentColor: "multicolor"

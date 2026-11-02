@@ -2,12 +2,23 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 
-// Path bar: the location as clickable segments (home or the root first). Segments accept drops. Each segment is a Tab stop that
-// Space or Return opens, with the shared ring on keyboard focus (ADR-0039 step 23).
+// Path bar: the location as clickable segments (home or the root first). Segments accept drops. In a search location the
+// bar shows the path of the selected result instead (Finder-Search); its last segment shows the item in its folder. Each
+// segment is a Tab stop that Space or Return opens, with the shared ring on keyboard focus (ADR-0039 step 23).
 Item {
     id: root
 
     property var tab: null
+    // The selected search result's path (one item selected in a search location), else null.
+    readonly property var resultSegments: {
+        const t = root.tab;
+        if (!t || !t.fileSearch || !t.activeFolder || t.activeFolder.selectedCount !== 1)
+            return null;
+        const urls = t.selection();
+        return urls.length === 1 ? t.app.pathSegments(urls[0]) : null;
+    }
+    // A search with no result selected shows no path (Finder-Search).
+    readonly property var shownSegments: root.resultSegments ?? (root.tab && !root.tab.fileSearch ? root.tab.segments : [])
 
     implicitHeight: Tokens.filesPathBarHeight
     Accessible.role: Accessible.ToolBar
@@ -39,13 +50,20 @@ Item {
             spacing: Tokens.spacingXs
 
             Repeater {
-                model: root.tab ? root.tab.segments : []
+                model: root.shownSegments
 
                 delegate: Row {
                     id: segment
                     required property var modelData
                     required property int index
-                    readonly property bool last: root.tab && segment.index === root.tab.segments.length - 1
+                    readonly property bool last: segment.index === root.shownSegments.length - 1
+                    // A search result's own segment: shown in its folder rather than opened as a location.
+                    function activate(): void {
+                        if (root.resultSegments && segment.last)
+                            root.tab.showInEnclosingFolder();
+                        else
+                            root.tab.navigate(segment.modelData.url, true);
+                    }
 
                     height: row.height
                     spacing: Tokens.spacingXs
@@ -66,7 +84,7 @@ Item {
                         Accessible.role: Accessible.Button
                         Accessible.name: DisplayName.text(segment.modelData.label)
                         Accessible.focusable: true
-                        Accessible.onPressAction: root.tab.navigate(segment.modelData.url, true)
+                        Accessible.onPressAction: segment.activate()
                         // A segment off the bar's visible part scrolls in with the focus.
                         onActiveFocusChanged: {
                             if (!segmentButton.activeFocus)
@@ -81,7 +99,7 @@ Item {
                         }
                         Keys.onPressed: event => {
                             if (ActivationKeys.activation(event.key)) {
-                                root.tab.navigate(segment.modelData.url, true);
+                                segment.activate();
                                 event.accepted = true;
                             }
                         }
@@ -133,7 +151,7 @@ Item {
                             id: mouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: root.tab.navigate(segment.modelData.url, true)
+                            onClicked: segment.activate()
                         }
                     }
                 }

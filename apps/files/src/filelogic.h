@@ -60,6 +60,13 @@ struct Group {
     QString title;
 };
 
+// The Kind categories of Group By and of the search's Kind filter (Finder's kinds that Linux types can serve), matched
+// against a MIME type and the types it inherits from, in that order; folders are Folder whatever their type.
+enum class KindCategory { Other = 0, Folder, Pdf, Presentation, Spreadsheet, Image, Movie, Music, Application, Archive, Document };
+KindCategory kindCategoryOf(const QStringList &mimeTypes, bool isDir);
+// The category's plural title ("Images"; "Other" for Other).
+QString kindCategoryTitle(KindCategory category);
+
 // The group of an entry: Name by first letter ("#" for digits and symbols, first); Kind by category (Applications,
 // Archives, Documents, Folders, Images, Movies, Music, PDF Documents, Presentations, Spreadsheets, then Other); Application
 // by name (folders first, Other last); dates newest first (Today, Yesterday, Previous 7 Days, Previous 30 Days, the months

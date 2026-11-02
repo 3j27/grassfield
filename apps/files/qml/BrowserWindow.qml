@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TagColors.js" as TagColors
 import "TabsLogic.js" as TabsLogic
 
 // A Files window: sidebar, toolbar (back/forward, title, view switcher, Action menu, search), tab bar
@@ -34,7 +35,7 @@ Window {
     readonly property bool compactViews: {
         if (searchCapsule.expanded)
             return true;
-        const trailing = viewSwitcher.fullWidth + Tokens.filesGroupButtonWidth + actionButton.width + searchCapsule.width + 3 * Tokens.spacingSm;
+        const trailing = viewSwitcher.fullWidth + Tokens.filesGroupButtonWidth + tagsButton.width + actionButton.width + searchCapsule.width + 4 * Tokens.spacingSm;
         const room = toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - trailing - Tokens.windowItemsInset;
         return room < Math.min(titleMetrics.advanceWidth, Tokens.filesToolbarTitleMinWidth);
     }
@@ -235,8 +236,38 @@ Window {
 
     function goToFolder(): void {
         goSheet.focusBack = win.tab ? win.tab.view : null;
-        goSheet.setField("");
         goSheet.open();
+    }
+
+    function goToStandardFolder(which: string): void {
+        const url = win.app.standardFolder(which);
+        if (String(url) !== "")
+            win.tab.navigate(url, true);
+    }
+
+    // Go > Connect to Server… (FP-77): its own window, one per browser window, connected to this window's tab.
+    property var connectWindow: null
+    function connectToServer(): void {
+        if (!win.connectWindow) {
+            win.connectWindow = connectComponent.createObject(win, {app: win.app, browser: win});
+            if (!win.connectWindow) {
+                console.warn("grassfield-files: cannot create Connect to Server:", connectComponent.errorString());
+                return;
+            }
+        }
+        win.connectWindow.show();
+        win.connectWindow.raise();
+        win.connectWindow.requestActivate();
+    }
+
+    Component {
+        id: connectComponent
+        ConnectWindow {}
+    }
+
+    // File > New Smart Folder (Finder): a new window on an empty search of this computer, the + ready for its rules.
+    function newSmartFolder(): void {
+        win.manager.newWindow(win.app.searchUrl({text: "", folder: "", criteria: []}), null);
     }
 
     function focusSearch(): void {
@@ -408,10 +439,24 @@ Window {
         onActivated: win.tab.copySelection(false)
         onActivatedAmbiguously: activated()
     }
+    // Decision F-6: Cmd+X does nothing to files (as in the Finder); Move Item Here moves the copied items.
     Shortcut {
-        sequence: "Ctrl+X"
+        sequence: "Ctrl+Alt+V"
         enabled: !win.childIsKey
-        onActivated: win.tab.copySelection(true)
+        onActivated: win.tab.moveHere()
+        onActivatedAmbiguously: activated()
+    }
+    // Empty Trash from anywhere (Shift+Cmd+Backspace) and Delete Immediately (Alt+Cmd+Backspace), both confirmed.
+    Shortcut {
+        sequence: "Ctrl+Shift+Backspace"
+        enabled: !win.childIsKey && !win.app.devSession && !win.app.places.trashEmpty
+        onActivated: win.tab.emptyTrash()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+Backspace"
+        enabled: !win.childIsKey && win.folder !== null && win.folder.selectedCount > 0
+        onActivated: win.tab.deleteImmediately()
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -458,6 +503,12 @@ Window {
         onActivatedAmbiguously: activated()
     }
     Shortcut {
+        sequence: "Ctrl+Alt+N"
+        enabled: !win.childIsKey
+        onActivated: win.newSmartFolder()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
         sequence: "Ctrl+F"
         enabled: !win.childIsKey
         onActivated: searchCapsule.focusField()
@@ -487,10 +538,62 @@ Window {
         onActivated: win.tab.navigate(win.app.applicationsUrl(), true)
         onActivatedAmbiguously: activated()
     }
+    // The Go menu's places (Finder): Desktop, Documents, Downloads, Computer, Network (decision F-1: no Utilities folder).
+    Instantiator {
+        model: [{keys: "Ctrl+Shift+D", place: "desktop"}, {keys: "Ctrl+Shift+O", place: "documents"}, {keys: "Ctrl+Alt+L", place: "downloads"},
+                {keys: "Ctrl+Shift+C", place: "computer"}, {keys: "Ctrl+Shift+K", place: "network"}]
+
+        delegate: Shortcut {
+            required property var modelData
+            sequence: modelData.keys
+            enabled: !win.childIsKey && win.tab !== null
+            onActivated: win.goToStandardFolder(modelData.place)
+            onActivatedAmbiguously: activated()
+        }
+    }
+    // Show Hidden Files (Finder's Shift+Cmd+.; Ctrl+H stays for the PC habit).
     Shortcut {
+        // Shift+. types ">" on most layouts: both spellings, as the Open and Save panels (FilePanel.qml).
+        sequences: ["Ctrl+Shift+.", "Ctrl+>"]
+        enabled: !win.childIsKey
+        onActivated: win.app.showHidden = !win.app.showHidden
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+K"
+        enabled: !win.childIsKey
+        onActivated: win.connectToServer()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        // Finder's Show Original (⌘R) when one alias is selected; otherwise Ctrl+R reloads, as F5 (the PC habit).
         sequences: ["Ctrl+R", "F5"]
         enabled: !win.childIsKey
-        onActivated: win.tab.folder.reload()
+        onActivated: {
+            const urls = win.tab.selection();
+            if (urls.length === 1 && String(win.app.linkTarget(urls[0])) !== "")
+                win.tab.showOriginal();
+            else
+                win.tab.folder.reload();
+        }
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Meta+A"
+        enabled: !win.childIsKey && win.folder !== null && win.folder.selectedCount > 0
+        onActivated: win.app.makeAlias(win.tab.selection(), win.folder)
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Meta+N"
+        enabled: !win.childIsKey
+        onActivated: win.tab.newFolderWithSelection()
+        onActivatedAmbiguously: activated()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+C"
+        enabled: !win.childIsKey && win.folder !== null && win.folder.selectedCount > 0
+        onActivated: win.app.copyPaths(win.tab.selection())
         onActivatedAmbiguously: activated()
     }
     Shortcut {
@@ -726,37 +829,75 @@ Window {
                     }
                 }
 
-                // Action in the toolbar's rimmed capsule, as macOS 27 Finder groups Share, Tags and Action (Finder-Home; Files
-                // has Action alone; ADR-0039 step 23).
+                // Tags and Action in the toolbar's rimmed capsule, as macOS 27 Finder groups Share, Tags and Action (Finder-Home;
+                // Files has no Share; ADR-0039 step 23). Tags: the colour tags of the selection, and Tags… for named ones
+                // (FP-21, FP-63).
                 RimmedCapsule {
-                    width: Tokens.toolbarCapsule
+                    width: 2 * Tokens.toolbarCapsule
                     height: Tokens.toolbarCapsule
                     fillOpacity: Tokens.toolbarCapsuleFillOpacity
                     anchors.verticalCenter: parent.verticalCenter
 
-                    ToolButton {
-                        id: actionButton
+                    Row {
                         anchors.fill: parent
-                        capsule: true
-                        buttonSize: Tokens.toolbarCapsule
-                        accessibleName: qsTr("Action")
-                        onClicked: {
-                            const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
-                            win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+
+                        ToolButton {
+                            id: tagsButton
+                            capsule: true
+                            buttonSize: Tokens.toolbarCapsule
+                            accessibleName: qsTr("Tags")
+                            enabled: win.tab !== null && win.folder !== null && win.folder.selectedCount > 0 && !win.folder.isTrash && !win.folder.isApplications
+                            onClicked: {
+                                const p = tagsButton.mapToItem(null, 0, tagsButton.height + Tokens.spacingXs);
+                                const items = [win.tab.tagRow(win.folder), {separator: true}, {id: "tagsEditor", text: qsTr("Tags…")}];
+                                win.menuLayer.open(items, p.x, p.y, id => {
+                                    if (id === "tagsEditor")
+                                        win.editTags(win.tab.selection());
+                                    else
+                                        win.tab.runAction(id, win.folder);
+                                }, win.tab.view, false);
+                            }
+
+                            ViewGlyph {
+                                anchors.centerIn: parent
+                                kind: "tag"
+                                size: Tokens.filesTagGlyphSize
+                                color: tagsButton.foreground
+                            }
                         }
 
-                        ViewGlyph {
-                            anchors.centerIn: parent
-                            kind: "more"
+                        ToolButton {
+                            id: actionButton
+                            capsule: true
+                            buttonSize: Tokens.toolbarCapsule
+                            accessibleName: qsTr("Action")
+                            onClicked: {
+                                const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
+                                win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                            }
+
+                            ViewGlyph {
+                                anchors.centerIn: parent
+                                kind: "more"
+                            }
                         }
                     }
                 }
 
-                // Search field (filters the current folder).
+                // Search field (ADR-0027): while a search is shown it takes the toolbar's free width, the title keeping its
+                // own (Finder-Search, FP-22).
                 SearchCapsule {
                     id: searchCapsule
                     anchors.verticalCenter: parent.verticalCenter
                     tab: win.tab
+                    expandedWidth: {
+                        if (!win.tab || !win.tab.fileSearch)
+                            return Tokens.filesSearchWidth;
+                        const others = Tokens.filesViewPopupWidth + Tokens.filesGroupButtonWidth + tagsButton.width + actionButton.width + 4 * Tokens.spacingSm;
+                        const title = Math.min(titleMetrics.advanceWidth, Math.max(Tokens.filesToolbarTitleMinWidth, toolbar.width / 3));
+                        const room = toolbar.width - toolbar.titleStart - title - Tokens.windowItemsGap - others - Tokens.windowItemsInset;
+                        return Math.max(Tokens.filesSearchWidth, Math.floor(room));
+                    }
                 }
             }
         }
@@ -776,14 +917,27 @@ Window {
             anchors.top: tabBar.bottom
             width: parent.width
             height: Tokens.appsBorderWidth
-            opacity: win.tabBarVisible || (win.tab !== null && win.tab.scrolled) ? 1 : 0
+            // A search's scope bar draws its own hairline below; none between it and the toolbar (Finder-Search).
+            opacity: win.tabBarVisible || (win.tab !== null && win.tab.scrolled && !scopeBar.visible) ? 1 : 0
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
+        }
+
+        // A search location's scope and filter rows (ADR-0027).
+        ScopeBar {
+            id: scopeBar
+            // Right under the toolbar (Finder-Search: the pills 6 pt below it), the hidden rule's point not added.
+            anchors.top: toolbarRule.opacity > 0 ? toolbarRule.bottom : tabBar.bottom
+            width: parent.width
+            height: implicitHeight
+            app: win.app
+            tab: win.tab
+            onSaveRequested: win.openSaveSearch()
         }
 
         // Error banner
         Rectangle {
             id: banner
-            anchors.top: toolbarRule.bottom
+            anchors.top: scopeBar.bottom
             anchors.topMargin: visible ? Tokens.spacingSm : 0
             x: Tokens.spacingMd
             width: parent.width - 2 * Tokens.spacingMd
@@ -846,7 +1000,8 @@ Window {
         PathBar {
             id: pathBar
             anchors.bottom: statusBar.top
-            visible: win.app.pathBarShown
+            // A search shows the selected result's path (Finder-Search, FP-74) whatever View > Show Path Bar says.
+            visible: win.app.pathBarShown || (win.tab !== null && win.tab.fileSearch)
             width: parent.width
             height: visible ? Tokens.filesPathBarHeight : 0
             tab: win.tab
@@ -856,7 +1011,8 @@ Window {
         Item {
             id: statusBar
             anchors.bottom: parent.bottom
-            visible: win.app.statusBarShown || win.notice !== "" || win.app.activity !== ""
+            // The copy window takes KIO's jobs (FP-68, decision F-11); Compress and Expand still report here.
+            visible: win.app.statusBarShown || win.notice !== "" || (win.app.activity !== "" && win.app.jobs.length === 0)
             width: parent.width
             height: visible ? Tokens.filesStatusBarHeight : 0
             Accessible.role: Accessible.StatusBar
@@ -890,9 +1046,13 @@ Window {
                         return f.isSearch ? qsTr("Searching…") : qsTr("Loading…");
                     const total = f.count === 1 ? qsTr("1 item") : qsTr("%1 items").arg(f.count);
                     const items = f.selectedCount > 0 ? qsTr("%1 of %2 selected").arg(f.selectedCount).arg(total) : total;
-                    // A tag search: still running, or stopped by its bounds (TagSearch) before the whole folder was seen.
+                    // A search: still running, or stopped by its bounds (TagSearch, FileSearch) before it saw everything.
                     if (f.isSearch && f.loading)
                         return qsTr("%1, searching…").arg(items);
+                    if (f.isFileSearch && f.searchContentsUnavailable)
+                        return qsTr("Contents can’t be searched: the search index (localsearch) isn’t available.");
+                    if (f.isFileSearch && f.searchLimited)
+                        return qsTr("%1 (the search stopped early: add words or rules to narrow it)").arg(items);
                     if (f.isSearch && f.searchLimited)
                         return qsTr("%1 (the search stopped early: the folder holds too many items)").arg(items);
                     return f.freeSpace >= 0 ? qsTr("%1, %2 available").arg(items).arg(win.app.formatSize(f.freeSpace)) : items;
@@ -901,19 +1061,10 @@ Window {
         }
     }
 
-    Sheet {
+    GoToFolderPanel {
         id: goSheet
-        title: qsTr("Go to the folder:")
-        withField: true
-        placeholder: qsTr("~/Documents, /usr/share or trash:/")
-        confirmText: qsTr("Go")
-        confirmHandler: text => {
-            const url = win.app.resolveLocation(text, win.tab.url);
-            if (String(url) === "")
-                return qsTr("The folder “%1” can’t be found.").arg(text);
-            win.tab.navigate(url, true);
-            return "";
-        }
+        app: win.app
+        tab: win.tab
     }
 
     Sheet {
@@ -921,12 +1072,295 @@ Window {
         destructive: true
     }
 
+    // Tags… (FP-63): the named tags of the selection, each removable, and a field that adds one (a colour's name gives
+    // the colour tag, FilesApp.addTypedTag); the colour dots stay in the menus.
+    property var tagUrls: []
+    function editTags(urls: var): void {
+        if (urls.length === 0)
+            return;
+        win.tagUrls = urls;
+        tagField.text = "";
+        tagsSheet.open();
+        tagField.forceActiveFocus();
+    }
+
+    Sheet {
+        id: tagsSheet
+        title: win.tagUrls.length === 1 ? qsTr("Tags of “%1”").arg(DisplayName.text(String(win.tagUrls[0]).substring(String(win.tagUrls[0]).lastIndexOf("/") + 1))) : qsTr("Tags of %1 Items").arg(win.tagUrls.length)
+        message: win.tagUrls.length > 0 ? win.app.tagsUnavailable(win.tagUrls) : ""
+        confirmText: qsTr("Done")
+        showCancel: false
+        focusBack: win.tab ? win.tab.view : null
+        confirmHandler: () => {
+            if (tagField.text.trim() !== "")
+                win.app.addTypedTag(win.tagUrls, tagField.text);
+            return "";
+        }
+
+        Column {
+            spacing: Tokens.spacingSm
+
+            TextField {
+                id: tagField
+                width: Tokens.filesGoPanelWidth - 2 * Tokens.spacingLg
+                placeholderText: qsTr("Add Tags…")
+                accessibleName: qsTr("Add Tags")
+                enabled: win.tagUrls.length > 0 && win.app.tagsUnavailable(win.tagUrls) === ""
+                onAccepted: {
+                    if (tagField.text.trim() === "")
+                        return;
+                    win.app.addTypedTag(win.tagUrls, tagField.text);
+                    tagField.text = "";
+                }
+            }
+
+            // The tags the items carry (every item's, once each): a click on × removes one from all of them.
+            Flow {
+                width: tagField.width
+                spacing: Tokens.spacingXs
+
+                Repeater {
+                    model: {
+                        win.app.tagRevision;
+                        const all = [];
+                        for (let i = 0; i < win.tagUrls.length; i++) {
+                            const names = win.app.tagNamesOf(win.tagUrls[i]);
+                            for (let j = 0; j < names.length; j++) {
+                                if (all.indexOf(names[j]) < 0)
+                                    all.push(names[j]);
+                            }
+                        }
+                        return all;
+                    }
+
+                    delegate: Rectangle {
+                        id: chip
+                        required property string modelData
+                        width: chipRow.implicitWidth + 2 * Tokens.spacingSm
+                        height: Tokens.controlButtonHeight
+                        radius: height / 2
+                        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Remove the tag %1").arg(chip.modelData)
+                        Accessible.onPressAction: win.app.removeTag(win.tagUrls, chip.modelData)
+
+                        Row {
+                            id: chipRow
+                            anchors.centerIn: parent
+                            spacing: Tokens.spacingXs
+
+                            Rectangle {
+                                visible: win.app.tagColor(chip.modelData) >= 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Tokens.filesTagDotSize
+                                height: width
+                                radius: width / 2
+                                color: visible ? TagColors.at(Tokens, win.app.tagColor(chip.modelData)) : "transparent"
+                            }
+
+                            Text {
+                                textFormat: Text.PlainText
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: win.app.tagName(chip.modelData)
+                                color: Appearance.colors.text
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyCaptionSize
+                            }
+
+                            Icon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                name: "close-glyph"
+                                size: Tokens.menuIconSize - Tokens.spacingXs
+                                color: Appearance.windowSecondary
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -Tokens.spacingXs
+                                    onClicked: win.app.removeTag(win.tagUrls, chip.modelData)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Rename N Items… (FP-57, the Finder's sheet): Replace Text, Add Text or Format, with the first new name as example.
+    property var renameUrls: []
+    property var renameModel: null
+    function renameItems(urls: var, model: var): void {
+        if (urls.length === 0)
+            return;
+        win.renameUrls = urls;
+        win.renameModel = model;
+        renameMode.value = "0";
+        renameFind.text = "";
+        renameWith.text = "";
+        renameAdd.text = "";
+        renameCustom.text = "";
+        renameStart.text = "1";
+        renameSheet.open();
+        renameFind.forceActiveFocus();
+    }
+
+    readonly property var renameOptions: ({
+        mode: parseInt(renameMode.value), find: renameFind.text, replaceWith: renameWith.text, addText: renameAdd.text,
+        where: parseInt(renameWhere.value), format: parseInt(renameFormat.value), customFormat: renameCustom.text,
+        startAt: parseInt(renameStart.text) || 0
+    })
+
+    Sheet {
+        id: renameSheet
+        title: qsTr("Rename %1 Items").arg(win.renameUrls.length)
+        confirmText: qsTr("Rename")
+        focusBack: win.tab ? win.tab.view : null
+        confirmHandler: () => win.app.renameItems(win.renameUrls, win.renameOptions, win.renameModel)
+
+        Column {
+            spacing: Tokens.spacingSm
+
+            ComboBox {
+                id: renameMode
+                accessibleName: qsTr("Rename")
+                model: [{id: "0", text: qsTr("Replace Text")}, {id: "1", text: qsTr("Add Text")}, {id: "2", text: qsTr("Format")}]
+                value: "0"
+                onPicked: id => renameMode.value = id
+            }
+
+            Row {
+                visible: renameMode.value === "0"
+                spacing: Tokens.spacingSm
+                TextField {
+                    id: renameFind
+                    width: Tokens.filesCriteriaValueWidth
+                    placeholderText: qsTr("Find")
+                    accessibleName: qsTr("Find")
+                }
+                TextField {
+                    id: renameWith
+                    width: Tokens.filesCriteriaValueWidth
+                    placeholderText: qsTr("Replace with")
+                    accessibleName: qsTr("Replace with")
+                }
+            }
+
+            Row {
+                visible: renameMode.value === "1"
+                spacing: Tokens.spacingSm
+                TextField {
+                    id: renameAdd
+                    width: Tokens.filesCriteriaValueWidth
+                    placeholderText: qsTr("Text")
+                    accessibleName: qsTr("Text to add")
+                }
+                ComboBox {
+                    id: renameWhere
+                    accessibleName: qsTr("Where")
+                    model: [{id: "0", text: qsTr("after name")}, {id: "1", text: qsTr("before name")}]
+                    value: "0"
+                    onPicked: id => renameWhere.value = id
+                }
+            }
+
+            Column {
+                visible: renameMode.value === "2"
+                spacing: Tokens.spacingSm
+                Row {
+                    spacing: Tokens.spacingSm
+                    ComboBox {
+                        id: renameFormat
+                        accessibleName: qsTr("Name Format")
+                        model: [{id: "0", text: qsTr("Name and Index")}, {id: "1", text: qsTr("Name and Counter")}, {id: "2", text: qsTr("Name and Date")}]
+                        value: "0"
+                        onPicked: id => renameFormat.value = id
+                    }
+                    ComboBox {
+                        accessibleName: qsTr("Where")
+                        model: renameWhere.model
+                        value: renameWhere.value
+                        onPicked: id => renameWhere.value = id
+                    }
+                }
+                Row {
+                    spacing: Tokens.spacingSm
+                    TextField {
+                        id: renameCustom
+                        width: Tokens.filesCriteriaValueWidth
+                        placeholderText: qsTr("Custom Format")
+                        accessibleName: qsTr("Custom Format")
+                    }
+                    TextField {
+                        id: renameStart
+                        width: Tokens.filesCriteriaValueWidth / 2
+                        visible: renameFormat.value !== "2"
+                        placeholderText: qsTr("Start at")
+                        accessibleName: qsTr("Start numbers at")
+                        inputMethodHints: Qt.ImhDigitsOnly
+                        validator: IntValidator {
+                            bottom: 0
+                        }
+                    }
+                }
+            }
+
+            Text {
+                textFormat: Text.PlainText
+                width: Tokens.filesGoPanelWidth - 2 * Tokens.spacingLg
+                elide: Text.ElideMiddle
+                readonly property var preview: renameSheet.shown ? win.app.renamePreview(win.renameUrls.slice(0, 1), win.renameOptions) : []
+                text: qsTr("Example: %1").arg(preview.length > 0 ? DisplayName.text(preview[0]) : "")
+                color: Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+            }
+        }
+    }
+
+    // Save (the scope bar): a name and Add To Sidebar (the Finder's Save sheet; its Where pop-up has one place here, the
+    // saved searches folder, so it is not shown). A name in use asks once; saving it again replaces that search.
+    function openSaveSearch(): void {
+        if (!win.tab || !win.tab.fileSearch)
+            return;
+        saveSheet.replacing = "";
+        saveSheet.setField(win.tab.savedSearch ? win.tab.savedSearch.name : (win.tab.searchText.trim() !== "" ? win.tab.searchText.trim() : qsTr("Untitled Search")));
+        sidebarCheck.checked = win.tab.savedSearch ? win.tab.savedSearch.sidebar : true;
+        saveSheet.open();
+    }
+
+    Sheet {
+        id: saveSheet
+        property string replacing: ""
+        title: qsTr("Save Search")
+        withField: true
+        placeholder: qsTr("Name")
+        confirmText: qsTr("Save")
+        focusBack: win.tab ? win.tab.view : null
+        confirmHandler: text => {
+            const name = text.trim();
+            if (name === "")
+                return qsTr("A saved search needs a name.");
+            const own = win.tab.savedSearch && win.tab.savedSearch.name === name;
+            if (!own && win.app.hasSavedSearch(name) && saveSheet.replacing !== name) {
+                saveSheet.replacing = name;
+                return qsTr("A saved search named “%1” already exists. Save again to replace it.").arg(name);
+            }
+            return win.app.saveSearch(name, win.tab.url, sidebarCheck.checked);
+        }
+
+        CheckBox {
+            id: sidebarCheck
+            text: qsTr("Add To Sidebar")
+            accessibleName: text
+        }
+    }
+
     // KIO's questions (a name that exists, a certificate…), in the window Main.qml places them in. One sheet at a time, as
     // AppKit queues a window's sheets and holds them while a menu is open: a question waits while Go to Folder, a
     // confirmation or a menu is open, and comes after.
     KioSheets {
         prompts: win.app.prompts ?? null
-        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !menuLayer.visible
+        shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !renameSheet.shown && !tagsSheet.shown && !menuLayer.visible
         focusBack: win.tab ? win.tab.view : null
     }
 

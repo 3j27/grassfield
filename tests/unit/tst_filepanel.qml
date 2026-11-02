@@ -258,6 +258,35 @@ TestCase {
         function sameUrl(a: url, b: url): bool {
             return String(a) === String(b);
         }
+        // Search, the Go menu and the file commands (ADR-0027, FP-75..FP-79): nothing searched or remembered here.
+        property var savedSearches: []
+        property var recentFolders: []
+        signal folderCompletions(string text, var matches)
+        function isFileSearch(target: url): bool {
+            return String(target).startsWith("grassfield-search:");
+        }
+        function searchQuery(target: url): var {
+            return {valid: false};
+        }
+        function searchUrl(query: var): url {
+            return "grassfield-search:/?q=" + encodeURIComponent(query.text || "");
+        }
+        function noteFolder(target: url): void {
+        }
+        function completeFolder(text: string, base: url): void {
+        }
+        function completedText(text: string, base: url, match: string): string {
+            return text;
+        }
+        function standardFolder(which: string): url {
+            return "";
+        }
+        function placeShortcut(kind: string, target: url): string {
+            return "";
+        }
+        function linkTarget(target: url): url {
+            return "";
+        }
         function isRecents(target: url): bool {
             return false;
         }

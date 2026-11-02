@@ -109,6 +109,19 @@ Platform.MenuBar {
             onTriggered: bar.tab.newFolder()
         }
         Platform.MenuItem {
+            text: bar.count > 1 ? qsTr("New Folder with Selection (%1 Items)").arg(bar.count) : qsTr("New Folder with Selection")
+            shortcut: "Ctrl+Meta+N"
+            enabled: bar.keysHere && bar.writable && bar.count > 0 && !bar.inTrash && !bar.folder.isSearch
+            onTriggered: bar.tab.newFolderWithSelection()
+        }
+        // A smart folder: an empty search in a new window, its rules added with + (ADR-0027).
+        Platform.MenuItem {
+            text: qsTr("New Smart Folder")
+            shortcut: "Ctrl+Alt+N"
+            enabled: bar.keysHere
+            onTriggered: bar.win.newSmartFolder()
+        }
+        Platform.MenuItem {
             text: qsTr("New Tab")
             shortcut: "Ctrl+T"
             enabled: bar.keysHere
@@ -188,21 +201,43 @@ Platform.MenuBar {
             onTriggered: bar.tab.getInfo()
         }
         Platform.MenuItem {
+            text: qsTr("Tags…")
+            enabled: bar.keysHere && bar.count > 0 && !bar.inTrash && bar.folder !== null && !bar.folder.isApplications
+            onTriggered: bar.win.editTags(bar.tab.selection())
+        }
+        Platform.MenuItem {
             text: qsTr("Customize Folder…")
             enabled: bar.tab !== null && bar.customizeEnabled
             onTriggered: bar.tab.customizeSelection()
         }
         Platform.MenuItem {
-            text: qsTr("Rename")
-            shortcut: "F2"
-            enabled: bar.keysHere && bar.count === 1 && bar.editable
-            onTriggered: bar.tab.renameSelection()
+            text: bar.count > 1 ? qsTr("Rename %1 Items…").arg(bar.count) : qsTr("Rename")
+            shortcut: bar.count > 1 ? "" : "F2"
+            enabled: bar.keysHere && bar.count > 0 && bar.editable
+            onTriggered: bar.count > 1 ? bar.win.renameItems(bar.tab.selection(), bar.folder) : bar.tab.renameSelection()
+        }
+        Platform.MenuItem {
+            text: bar.count > 1 ? qsTr("Compress %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Compress “%1”").arg(bar.firstName) : qsTr("Compress")
+            enabled: bar.keysHere && bar.count > 0 && !bar.inTrash && bar.folder !== null && !bar.folder.isSearch && String(bar.folder.url).startsWith("file:")
+            onTriggered: bar.app.compress(bar.tab.selection(), bar.folder)
         }
         Platform.MenuItem {
             text: qsTr("Duplicate")
             shortcut: "Ctrl+D"
             enabled: bar.keysHere && bar.count > 0 && bar.writable && !bar.inTrash
             onTriggered: bar.tab.duplicateSelection()
+        }
+        Platform.MenuItem {
+            text: qsTr("Make Alias")
+            shortcut: "Ctrl+Meta+A"
+            enabled: bar.keysHere && bar.count > 0 && bar.writable && !bar.inTrash && String(bar.folder.url).startsWith("file:")
+            onTriggered: bar.app.makeAlias(bar.tab.selection(), bar.folder)
+        }
+        Platform.MenuItem {
+            text: qsTr("Show Original")
+            shortcut: "Ctrl+R"
+            enabled: bar.keysHere && bar.count === 1 && String(bar.app.linkTarget(bar.tab.selection()[0])) !== ""
+            onTriggered: bar.tab.showOriginal()
         }
         Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Glance at %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Glance at “%1”").arg(bar.firstName) : qsTr("Glance")
@@ -240,17 +275,20 @@ Platform.MenuBar {
             enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable)
             onTriggered: bar.tab.trashSelection()
         }
+        // Delete Immediately (⌥⌘⌫, FP-52): any item, confirmed.
         Platform.MenuItem {
             text: qsTr("Delete Immediately…")
-            visible: bar.inTrash
-            enabled: bar.count > 0
+            shortcut: "Ctrl+Alt+Backspace"
+            enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable)
             onTriggered: bar.tab.deleteImmediately()
         }
-        // A dev session never empties a trash (ADR-0011), like the folder menu.
+        // Empty Trash (⇧⌘⌫) from anywhere, the Finder's app-menu item exported here (decision F-10). A dev session never
+        // empties a trash (ADR-0011), like the folder menu.
         Platform.MenuItem {
             text: qsTr("Empty Trash…")
-            visible: bar.inTrash && !bar.app.devSession
-            enabled: !bar.app.places.trashEmpty
+            shortcut: "Ctrl+Shift+Backspace"
+            visible: !bar.app.devSession
+            enabled: bar.keysHere && !bar.app.places.trashEmpty
             onTriggered: bar.tab.emptyTrash()
         }
         Platform.MenuSeparator {}
@@ -279,22 +317,30 @@ Platform.MenuBar {
         }
         Platform.MenuSeparator {}
         Platform.MenuItem {
-            text: qsTr("Cut")
-            shortcut: "Ctrl+X"
-            enabled: bar.keysHere && bar.count > 0 && bar.editable
-            onTriggered: bar.tab.copySelection(true)
-        }
-        Platform.MenuItem {
             text: bar.count > 1 ? qsTr("Copy %1 Items").arg(bar.count) : bar.count === 1 ? qsTr("Copy “%1”").arg(bar.firstName) : qsTr("Copy")
             shortcut: "Ctrl+C"
             enabled: bar.keysHere && bar.count > 0
             onTriggered: bar.tab.copySelection(false)
+        }
+        // Finder's Copy as Pathname (⌥⌘C; the Finder shows it while ⌥ is held): the paths as text.
+        Platform.MenuItem {
+            text: bar.count > 1 ? qsTr("Copy %1 Items as Pathnames").arg(bar.count) : qsTr("Copy as Pathname")
+            shortcut: "Ctrl+Alt+C"
+            enabled: bar.keysHere && bar.count > 0
+            onTriggered: bar.app.copyPaths(bar.tab.selection())
         }
         Platform.MenuItem {
             text: bar.app.clipboardCount > 1 ? qsTr("Paste %1 Items").arg(bar.app.clipboardCount) : qsTr("Paste")
             shortcut: "Ctrl+V"
             enabled: bar.keysHere && bar.app.canPaste && bar.writable
             onTriggered: bar.tab.paste()
+        }
+        // Decision F-6: no Cut for files; the copied items move here instead (the Finder shows it while ⌥ is held).
+        Platform.MenuItem {
+            text: bar.app.clipboardCount > 1 ? qsTr("Move %1 Items Here").arg(bar.app.clipboardCount) : qsTr("Move Item Here")
+            shortcut: "Ctrl+Alt+V"
+            enabled: bar.keysHere && bar.app.canPaste && bar.writable
+            onTriggered: bar.tab.moveHere()
         }
         Platform.MenuItem {
             text: qsTr("Select All")
@@ -402,7 +448,7 @@ Platform.MenuBar {
         }
         MenuCheckItem {
             text: qsTr("Show Hidden Files")
-            shortcut: "Ctrl+H"
+            shortcut: "Ctrl+Shift+."
             enabled: bar.keysHere
             on: bar.app.showHidden
             onChosen: bar.app.showHidden = !bar.app.showHidden
@@ -496,7 +542,7 @@ Platform.MenuBar {
 
                 visible: kind !== "tag"
                 text: bar.label(name)
-                shortcut: kind === "recents" ? "Ctrl+Shift+F" : kind === "applications" ? "Ctrl+Shift+A" : bar.app.sameUrl(url, Qt.url("file://" + bar.app.homePath)) ? "Ctrl+Shift+H" : ""
+                shortcut: bar.app.placeShortcut(kind, url)
                 enabled: bar.keysHere
                 onTriggered: bar.win.openPlace(index, url, mounted)
             }
@@ -506,11 +552,44 @@ Platform.MenuBar {
             onObjectRemoved: (index, object) => goMenu.removeItem(object as Platform.MenuItem)
         }
         Platform.MenuSeparator {}
+        // Recent Folders (Finder): the folders shown last, then Clear Menu.
+        Platform.Menu {
+            id: recentFoldersMenu
+            title: qsTr("Recent Folders")
+            enabled: bar.app.recentFolders.length > 0
+
+            Instantiator {
+                model: bar.app.recentFolders
+
+                delegate: Platform.MenuItem {
+                    required property var modelData
+
+                    readonly property var segments: bar.app.pathSegments(modelData.url)
+                    text: bar.label(segments.length > 0 ? segments[segments.length - 1].label : String(modelData.url))
+                    onTriggered: bar.tab.navigate(modelData.url, true)
+                }
+
+                onObjectAdded: (index, object) => recentFoldersMenu.insertItem(index, object as Platform.MenuItem)
+                onObjectRemoved: (index, object) => recentFoldersMenu.removeItem(object as Platform.MenuItem)
+            }
+            Platform.MenuSeparator {}
+            Platform.MenuItem {
+                text: qsTr("Clear Menu")
+                onTriggered: bar.app.clearRecentFolders()
+            }
+        }
+        Platform.MenuSeparator {}
         Platform.MenuItem {
             text: qsTr("Go to Folder…")
             shortcut: "Ctrl+Shift+G"
             enabled: bar.keysHere
             onTriggered: bar.win.goToFolder()
+        }
+        Platform.MenuItem {
+            text: qsTr("Connect to Server…")
+            shortcut: "Ctrl+K"
+            enabled: bar.keysHere
+            onTriggered: bar.win.connectToServer()
         }
     }
 }

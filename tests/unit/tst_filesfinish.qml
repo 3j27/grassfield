@@ -181,8 +181,8 @@ TestCase {
 
     function test_theWindowsSecondaryText_data() {
         // ColumnView, FileList and PrintSheet followed once #67 merged.
-        return ["AccessAlert", "BrowserWindow", "ColumnView", "CustomizeFolderWindow", "FileList", "FilePanel", "GalleryView", "IconView",
-                "InfoWindow", "KioSheets", "PathBar", "PreviewPane", "PrintSheet", "SearchCapsule", "Sidebar", "TabBar"].map(n => ({tag: n, path: "apps/files/qml/" + n + ".qml"}));
+        return ["AccessAlert", "BrowserWindow", "ColumnView", "CustomizeFolderWindow", "FileList", "FilePanel", "GalleryView", "GoToFolderPanel", "IconView",
+                "InfoWindow", "KioSheets", "PathBar", "PreviewPane", "PrintSheet", "ProgressWindow", "ScopeBar", "SearchCapsule", "Sidebar", "TabBar"].map(n => ({tag: n, path: "apps/files/qml/" + n + ".qml"}));
     }
 
     function test_theWindowsSecondaryText(data) {
@@ -200,7 +200,8 @@ TestCase {
         const tab = source("apps/files/qml/BrowserTab.qml");
         verify(/id: loadingNote[\s\S]*?Tokens\.filesLoadingDelay[\s\S]*?Spinner \{/.test(tab), "a slow listing shows the shared spinner in the view");
         const win = source("apps/files/qml/BrowserWindow.qml");
-        verify(/RimmedCapsule \{[^}]*?\n\s*ToolButton \{\s*id: actionButton/.test(win), "Action in its capsule");
+        // Tags and Action share one capsule, as macOS 27 Finder groups Share, Tags and Action (Files has no Share).
+        verify(/RimmedCapsule \{[^}]*?\n\s*Row \{[^}]*?ToolButton \{\s*id: tagsButton[\s\S]*?ToolButton \{\s*id: actionButton/.test(win), "Tags and Action in their capsule");
         compare(win.indexOf("Appearance.buttonFill"), -1, "no plain capsule left in the toolbar");
         const tabs = source("apps/files/qml/TabBar.qml");
         verify(tabs.indexOf("!Appearance.reduceMotion") > 0 && tabs.indexOf("Easing.OutQuad") < 0, "the tabs do not slide under Reduce Motion, and move on the move curve");

@@ -29,6 +29,7 @@ class KJob;
 class ItemListModel;
 class OrgKdeKDirNotifyInterface;
 class SearchRunner;
+class FileSearchRunner;
 
 namespace ImageSize
 {
@@ -82,6 +83,12 @@ class FolderModel : public QSortFilterProxyModel
     // Recents (Recents::locationUrl): a search-like flat list of the recently used files; isSearch is true too.
     Q_PROPERTY(bool isRecents READ isRecents NOTIFY urlChanged)
     Q_PROPERTY(bool searchLimited READ searchLimited NOTIFY loadingChanged)
+    // A search location (SearchLogic, ADR-0027): the matches of a text and criteria in this computer or a folder; isSearch is
+    // true too. searchBackend: FileSearch::Backend of the last search (0 the file index, 1 plocate's names, 2 a walk);
+    // searchContentsUnavailable: a Contents row could not be answered (no file index).
+    Q_PROPERTY(bool isFileSearch READ isFileSearch NOTIFY urlChanged)
+    Q_PROPERTY(int searchBackend READ searchBackend NOTIFY loadingChanged)
+    Q_PROPERTY(bool searchContentsUnavailable READ searchContentsUnavailable NOTIFY loadingChanged)
     // The Open and Save panels (grassfield-portal, ADR-0035 D-4): {globs, mimeTypes, foldersOnly, single}, empty in Files.
     // Files the panel cannot take (a folder panel: every file; else those its filter, FileLogic::passesFilter, refuses) are
     // dimmed (role "dimmed") and never selected, as macOS dims them; `single` keeps at most one item selected. Folders are
@@ -159,6 +166,11 @@ public:
     bool isSearch() const;
     bool isRecents() const;
     bool searchLimited() const { return m_searchLimited; }
+    bool isFileSearch() const;
+    int searchBackend() const { return m_searchBackend; }
+    bool searchContentsUnavailable() const { return m_searchContentsUnavailable; }
+    // The folder a search stands for: a tag search's folder; a search's folder, or the root of "this computer".
+    QUrl searchBase() const;
     QVariantMap chooser() const { return m_chooser; }
     void setChooser(const QVariantMap &chooser);
     bool isApplications() const { return ApplicationsLogic::isLocationUrl(m_url); }
@@ -326,6 +338,7 @@ private:
 
     // Tag search.
     void startSearch();
+    void startFileSearch();
     void stopSearch();
     void watchChanges();
     void addResults(const QStringList &paths);
@@ -405,8 +418,11 @@ private:
     QFileSystemWatcher m_appsWatcher;
     QTimer m_appsTimer;
     SearchRunner *m_search = nullptr;
+    FileSearchRunner *m_fileSearch = nullptr;
     OrgKdeKDirNotifyInterface *m_notify = nullptr;
     bool m_searchLimited = false;
+    int m_searchBackend = 0;
+    bool m_searchContentsUnavailable = false;
 
     QVariantMap m_chooser;
     QStringList m_chooserGlobs;
