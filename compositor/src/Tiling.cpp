@@ -2124,7 +2124,7 @@ namespace gf::tiler {
         if (placeName == "zoom") {
             // ADR-0036 D78 (feature zoom-fill): Window > Zoom and the zoom light clicked under its open popover (D64).
             if (zoom(window, true) == tiling::ZoomStep::Refused)
-                logRequest(Log::INFO, "tile {:x}: zoom refused (a window of fixed size)", address);
+                logRequest(Log::INFO, "tile {:x}: zoom refused (fixed size, or its box from before cannot be put back)", address);
             return;
         }
         const auto place = tiling::parsePlace(placeName);
