@@ -5,7 +5,8 @@
 // valid texts mutated in the tree (byte flips, dictionary tokens, number extremes, invalid UTF-8, slices deleted,
 // duplicated or swapped, truncation, growth past the caps, splices) for GF_FUZZ_ITERATIONS rounds (default 2000) from
 // GF_FUZZ_SEED (default 1): the same seed gives the same inputs, so a finding reproduces. Properties: no crash (built with
-// ASan and UBSan by tests/fuzz/activity_fuzz.sh), a bounded time per call, the same answer when the same text is read
+// ASan and UBSan by tests/fuzz/activity_fuzz.sh), a bounded CPU time per call (the thread's own, which a loaded machine
+// does not inflate as it does wall-clock time), the same answer when the same text is read
 // twice, and each reader's promises on an accepted input (bounds, ranges, pids above 1). No libFuzzer, no dependency.
 #include "apphistory.h"
 #include "desktopapps.h"
@@ -18,7 +19,6 @@
 #include <QDir>
 #include <QTemporaryDir>
 
-#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -27,6 +27,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include <time.h>
 
 using namespace activity;
 
@@ -103,6 +105,18 @@ std::string mutate(Rng &r, std::string s, const std::vector<std::string> &corpus
     return s;
 }
 
+// The calling thread's CPU time, in milliseconds: what a call costs, whatever else the machine runs (the integrator's
+// review of the merge of #86: the wall-clock budget failed under load).
+double threadCpuMs()
+{
+    timespec t{};
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
+    return static_cast<double>(t.tv_sec) * 1e3 + static_cast<double>(t.tv_nsec) / 1e6;
+}
+
+// A call's CPU budget: far above any reader's cost (microseconds), far below a quadratic walk of a capped input.
+constexpr double kCallBudgetMs = 250;
+
 int failures = 0;
 void fail(const char *reader, const std::string &why, uint64_t seed, size_t iteration)
 {
@@ -115,21 +129,25 @@ using Reader = std::function<std::string(const std::string &input, std::string &
 void fuzz(const char *name, const std::vector<std::string> &corpus, size_t cap, uint64_t seed, size_t iterations, const Reader &read)
 {
     Rng r(seed ^ std::hash<std::string>{}(name)); // a reader's own sequence, the same each run (std::hash of a string is stable)
+    const int before = failures;
     for (size_t i = 0; i < iterations; ++i) {
         const std::string input = mutate(r, corpus[r.below(corpus.size())], corpus, cap);
         std::string broken;
-        const auto t0 = std::chrono::steady_clock::now();
+        const double t0 = threadCpuMs();
         const std::string first = read(input, broken);
-        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        const double ms = threadCpuMs() - t0;
         if (!broken.empty())
             fail(name, broken, seed, i);
-        if (ms > 250)
-            fail(name, "a call took " + std::to_string(ms) + " ms", seed, i);
+        if (ms > kCallBudgetMs)
+            fail(name, "a call took " + std::to_string(ms) + " ms of CPU", seed, i);
         std::string again;
         if (read(input, again) != first)
             fail(name, "two reads of one text differ", seed, i);
     }
-    std::printf("PASS: %s, %zu inputs\n", name, iterations);
+    if (failures == before)
+        std::printf("PASS: %s, %zu inputs\n", name, iterations);
+    else
+        std::printf("FAIL: %s, %d failure(s) in %zu inputs\n", name, failures - before, iterations);
 }
 
 } // namespace

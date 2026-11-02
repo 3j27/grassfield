@@ -15,7 +15,8 @@ import "Store.js" as Store
 // no other app needs go with it (SD27); for "Get Flatpak…" (SD24, from the settings), what Flatpak is, that Omarchy
 // installs it in its terminal, which asks for the password, and when Flathub's apps reach the launcher, then pacman's plan.
 // A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
-// or Cancel close it and nothing runs.
+// or Cancel close it and nothing runs. A Flatpak's update (step 4) asks only when it lets an app reach more than before, or
+// when that could not be read (SD25 for an update): otherwise it starts at once, as an update does on macOS.
 Sheet {
     id: root
 
@@ -26,6 +27,9 @@ Sheet {
     // detail} (StoreBackend::plan).
     property var plan: null
     readonly property bool removing: root.kind === "remove"
+    readonly property bool updating: root.kind === "update"
+    // An update asked for and not shown yet: its plan decides whether the sheet opens.
+    property bool pendingUpdate: false
     readonly property bool webApp: root.app.kind === "webapp"
     readonly property bool setup: root.app.kind === "setup"
     readonly property bool aur: root.app.kind === "aur"
@@ -43,19 +47,46 @@ Sheet {
         root.app = app;
         root.kind = kind;
         root.plan = null;
+        root.pendingUpdate = false;
         root.open();
         root.backend.plan(app.id, kind);
+    }
+
+    // Update (a Flatpak's, or the Flatpak group's Update All): its plan first, the sheet only when it has something to say.
+    function showUpdate(app: var): void {
+        if (root.visible)
+            return;
+        root.app = app;
+        root.kind = "update";
+        root.plan = null;
+        root.pendingUpdate = true;
+        root.backend.plan(app.id, "update");
     }
 
     Connections {
         target: root.backend
         function onPlanReady(app: string, kind: string, plan: var): void {
-            if (root.visible && app === root.app.id && kind === root.kind)
+            if (app !== root.app.id || kind !== root.kind)
+                return;
+            if (root.pendingUpdate) {
+                root.pendingUpdate = false;
                 root.plan = plan;
+                const quiet = plan.refusal === "" && (plan.widened || []).length === 0 && (plan.unknown || []).length === 0;
+                if (quiet)
+                    root.backend.update(app);
+                else
+                    root.open();
+            } else if (root.visible) {
+                root.plan = plan;
+            }
         }
     }
 
     title: {
+        if (root.updating && root.app.id === "store:flatpak-updates") // Update All of the Flatpak group: its own words
+            return root.refusal === "" ? qsTr("Update the Flatpak apps?") : qsTr("The Flatpak apps can't be updated now");
+        if (root.updating)
+            return root.refusal === "" ? qsTr("Update “%1”?").arg(root.appName) : qsTr("“%1” can't be updated now").arg(root.appName);
         if (root.refusal === "" && root.getFlatpak)
             return qsTr("Get Flatpak?");
         if (root.refusal === "")
@@ -81,6 +112,19 @@ Sheet {
     message: {
         if (!root.plan)
             return qsTr("Checking what this changes…");
+        if (root.updating) {
+            if (root.refusal !== "")
+                return root.plan.detail === "none" ? qsTr("There's nothing to update now.")
+                     : root.plan.detail === "queued" ? qsTr("It's already waiting to be updated.")
+                     : Store.getBlockText(root.plan.detail || "", "flatpak") || qsTr("The Store could not read what this would change.");
+            // What each update lets its app reach that it could not (SD25 for an update), and what could not be read.
+            const parts = (root.plan.widened || []).map(w => qsTr("After this update, “%1” can also reach: %2.").arg(w.name).arg(Store.accessWords(w.access).join(", ")));
+            if ((root.plan.unknown || []).length > 0)
+                parts.push(qsTr("What this update lets %1 reach could not be read.").arg((root.plan.unknown || []).join(", ")));
+            parts.push(root.app.id === "store:flatpak-updates" ? qsTr("They're updated in your own folder, for you alone, without administrator rights.")
+                                                               : qsTr("It's updated in your own folder, for you alone, without administrator rights."));
+            return parts.join("\n\n");
+        }
         switch (root.refusal) {
         case "":
             if (root.getFlatpak) {
@@ -156,6 +200,8 @@ Sheet {
         return qsTr("The Store could not read what this would change.");
     }
     confirmText: {
+        if (root.refusal === "" && root.updating)
+            return qsTr("Update");
         if (root.refusal === "")
             return root.removing ? qsTr("Uninstall") : root.aur ? qsTr("Install from the AUR") : qsTr("Install");
         return root.updateFirst ? qsTr("Update Now…") : qsTr("OK");
@@ -167,7 +213,9 @@ Sheet {
     confirmEnabled: root.plan !== null
 
     onAccepted: {
-        if (root.refusal === "") {
+        if (root.refusal === "" && root.updating) {
+            root.backend.update(root.app.id);
+        } else if (root.refusal === "") {
             if (root.removing)
                 root.backend.uninstall(root.app.id);
             else
@@ -187,7 +235,7 @@ Sheet {
     // Source, licence and sizes.
     Column {
         width: parent.width
-        visible: root.plan !== null && root.refusal === ""
+        visible: root.plan !== null && root.refusal === "" && !root.updating
         spacing: Tokens.storeInfoLineGap
 
         Repeater {
@@ -234,7 +282,7 @@ Sheet {
     ListView {
         id: list
         width: parent.width
-        visible: root.plan !== null && root.refusal === "" && root.packages.length > 0
+        visible: root.plan !== null && root.refusal === "" && !root.updating && root.packages.length > 0
         height: Math.min(root.packages.length, Tokens.storeSheetListMaxRows) * Tokens.storeSheetRowHeight
         clip: true
         interactive: contentHeight > height
@@ -284,7 +332,7 @@ Sheet {
         width: parent.width
         visible: text !== ""
         textFormat: Text.PlainText
-        text: root.plan && ["", "unavailable", "notOnAur", "repository", "outdated"].indexOf(root.refusal) < 0
+        text: root.plan && !root.updating && ["", "unavailable", "notOnAur", "repository", "outdated"].indexOf(root.refusal) < 0
               ? (root.refusal === "unfinished" ? (root.plan.unfinished || []).slice(0, 6).join("\n") : (root.plan.detail || "")) : ""
         wrapMode: Text.WrapAnywhere
         maximumLineCount: 6

@@ -116,7 +116,8 @@ if want headless && compgen -G "tests/security/tst_*.qml" >/dev/null; then
   qs_root=$(mktemp -d)
   ln -s "$root/shell" "$qs_root/qs"
   rc=0
-  QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || rc=1
+  # QML_XHR_ALLOW_FILE_READ: tst_lockbackdrop.qml reads the module's sources (as tests/unit does).
+  QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || rc=1
   rm -rf "$qs_root"
   ((rc == 0)) || status=1
   record_run headless "tests/security (qmltestrunner)" "$rc" "PASS"
@@ -347,6 +348,19 @@ if want logic; then
   python3 -I tests/ci/mark_places.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/mark_places.py "$rc" PASS
+  # The shipped wallpaper photographs (ADR-0040 step 2c): their one list, the pins, the PKGBUILD and the legal texts agree.
+  rc=0
+  python3 -I tests/ci/wallpaper_photos.py --selftest || rc=1
+  python3 -I tests/ci/wallpaper_photos.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/wallpaper_photos.py "$rc" PASS
+  # The login and boot themes (ADR-0042): the checks on planted mutants, then the themes and their package (draw only, the
+  # password only to sddm.login, two-step images on the ground, nothing activated by the package).
+  rc=0
+  python3 -I tests/ci/login_themes.py --selftest || rc=1
+  python3 -I tests/ci/login_themes.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/login_themes.py "$rc" PASS
   # Token source pointers (GF-095): the lint on samples, then every token of tokens.json.
   rc=0
   python3 -I tests/ci/token_sources.py || rc=1

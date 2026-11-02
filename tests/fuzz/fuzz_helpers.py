@@ -12,10 +12,11 @@ Scenarios (each prints one "[fuzz]" line and PASS/FAIL lines; a finding names th
                   locale names. Contract: a candidate's signal is a SIG name or empty, its cgroup is under the user's
                   app.slice, a described app has a name, a desktop id ends in .desktop and names a real file, a cgroup
                   state is one of four words, nothing raises.
-  session-end     packaging/bin/grassfield-session-end: `hyprctl -j clients` answers mutated. Contract: windows() is
-                  None or a list of (address, class, title) strings, close_windows() dispatches only
-                  hl.dsp.window.close for a 0x hex address and nothing else, app_names() returns strings,
-                  bounded_seconds() stays finite and inside its bounds.
+  session-end     packaging/bin/grassfield-session-end: `hyprctl -j clients` answers mutated, and the shell's answer to
+                  `session cover`. Contract: windows() is None or a list of (address, class, title) strings,
+                  close_windows() dispatches only hl.dsp.window.close for a 0x hex address and nothing else,
+                  app_names() returns strings, bounded_seconds() stays finite and inside its bounds, cover() waits
+                  once, between 0 and EXIT_WAIT seconds (ADR-0040 ID-10).
   battery-watch   packaging/bin/grassfield-battery-watch: sysfs files mutated. Contract: read_battery() is None or
                   (int, str); next_warning() and level_for() answer a level of 20, 10, 5 or None.
   anr-dialog      the client-matching program inside packaging/session-bin/hyprland-dialog, with `hyprctl -j clients`
@@ -50,7 +51,9 @@ import os
 import re
 import subprocess
 import sys
+import time
 import traceback
+import types
 import zlib
 
 sys.dont_write_bytecode = True
@@ -236,6 +239,9 @@ def session_end():
         return subprocess.CompletedProcess(argv, 0, state["stdout"], "")
 
     m.run = fake_run
+    # The exit cover's wait (ADR-0040 ID-10) sleeps through this stand-in, so a run costs no time and its wait is measured.
+    slept = []
+    m.time = types.SimpleNamespace(monotonic=time.monotonic, sleep=slept.append)
 
     def body(i):
         mut = sc.mutator
@@ -252,6 +258,11 @@ def session_end():
                 assert argv[:2] == ["hyprctl", "dispatch"] and len(argv) == 3 and dispatch.match(argv[2]), argv
         sec = m.bounded_seconds(mut.text(mut.rng.pick(["15", "0.5", "nan", "inf", "-1", "1e400", ""]), [], 64), 15.0, 1.0, 3600.0)
         assert isinstance(sec, float) and math.isfinite(sec) and 1.0 <= sec <= 3600.0, sec
+        # Whatever the shell answers to `session cover`, the helper waits once, between 0 and EXIT_WAIT seconds.
+        state["stdout"] = mut.text(mut.rng.pick(["400", "100", "1000", "0", "-5", "nan", "1e400", "999999", "", "ok"]), [], 64)
+        del slept[:]
+        assert m.cover() is True, "an answering shell puts the cover up"
+        assert len(slept) == 1 and isinstance(slept[0], float) and 0.0 <= slept[0] <= m.EXIT_WAIT, slept
         return ws is not None
 
     sc.run(body)

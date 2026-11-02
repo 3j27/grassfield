@@ -21,6 +21,8 @@ TestCase {
         compare(SaverModel.kindOf("clock"), "clock");
         compare(SaverModel.kindOf("slideshow"), "slideshow");
         compare(SaverModel.kindOf("wallpaperClock"), "wallpaperClock");
+        // ADR-0040 step 9: the moving Grassfield artwork.
+        compare(SaverModel.kindOf("moving"), "moving");
         compare(SaverModel.kindOf("aerial"), "artwork", "an unknown kind shows the artwork");
         compare(SaverModel.kindOf(undefined), "artwork");
     }

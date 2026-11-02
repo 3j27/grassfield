@@ -487,6 +487,16 @@ TestCase {
         test.shown(sheet);
         test.click(sheet, "Cancel");
         compare(fakePrompts.replies[2].button, "cancel");
+        // With Grassfield Store there (step 4): Search the Store, Finder's App Store button, answers "store".
+        const withStore = KioSheetsLogic.sheet({id: 67, kind: "noApplication", name: "a.gfnone", store: true});
+        compare(withStore.message, "Search Grassfield Store for an app that opens it, or choose an application on this computer.");
+        compare(withStore.extras, [{id: "store", text: "Search the Store"}]);
+        compare(withStore.confirmId, "choose", "Choose Application… stays the default");
+        compare(s.extras, [], "without the Store, no such button");
+        fakePrompts.current = Object.assign({}, request, {id: 68, store: true});
+        test.shown(sheet);
+        test.click(sheet, "Search the Store");
+        compare(fakePrompts.replies[3].button, "store");
     }
 
     // A worker's warning: Return never takes its action. With a Cancel it cancels; without one it gives the secondary

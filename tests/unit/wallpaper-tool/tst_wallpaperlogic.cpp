@@ -7,7 +7,9 @@
 #include <QElapsedTimer>
 #include <QColorSpace>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
+#include <QImageReader>
 #include <QImageWriter>
 #include <QPainter>
 #include <QTemporaryDir>
@@ -567,6 +569,112 @@ TEST(WallpaperTool, IccProfileIsConvertedToSrgb)
     QImage plainOut;
     ASSERT_EQ(loadPicture(plainPath, QSize(8, 8), Fit::Fill, &plainOut), Ok);
     EXPECT_EQ(plainOut.pixelColor(2, 2), QColor(255, 128, 0));
+}
+
+// ---- ADR-0040 step 2c: the shipped photographs, shrunk at build time (grassfield-wallpaper-shrink) ----
+
+TEST(WallpaperShrink, SizeKeepsTheAspectAndNeverGrows)
+{
+    EXPECT_EQ(shrunkSize(QSize(8364, 4850), 5120), QSize(5120, 2969));
+    EXPECT_EQ(shrunkSize(QSize(6000, 4000), 5120), QSize(5120, 3413));
+    EXPECT_EQ(shrunkSize(QSize(4608, 2592), 5120), QSize(4608, 2592)) << "a narrower photograph keeps its size";
+    EXPECT_EQ(shrunkSize(QSize(5120, 3000), 5120), QSize(5120, 3000));
+    EXPECT_EQ(shrunkSize(QSize(20000, 1), 5120), QSize(5120, 1)) << "never a zero height";
+    EXPECT_TRUE(shrunkSize(QSize(0, 0), 5120).isEmpty());
+    EXPECT_TRUE(shrunkSize(QSize(100, 100), 0).isEmpty());
+}
+
+TEST(WallpaperShrink, WritesASmallerJpegWithoutTheSourcesMetadata)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString src = dir.filePath(QStringLiteral("photo.jpg"));
+    {
+        QImage img = halves(600, 400);
+        img.setColorSpace(QColorSpace(QColorSpace::DisplayP3));
+        img.setText(QStringLiteral("Description"), QStringLiteral("camera-serial-12345"));
+        QImageWriter w(src, "jpeg");
+        w.setQuality(95);
+        ASSERT_TRUE(w.write(img));
+    }
+    {
+        QFile f(src);
+        ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+        ASSERT_TRUE(f.readAll().contains("camera-serial-12345")) << "the fixture carries a comment";
+    }
+    const QString dst = dir.filePath(QStringLiteral("out.jpg"));
+    QSize written;
+    ASSERT_EQ(shrinkPicture(src, dst, 300, 90, &written), Ok);
+    EXPECT_EQ(written, QSize(300, 200));
+    QImageReader r(dst);
+    EXPECT_EQ(r.format(), QByteArray("jpeg"));
+    EXPECT_EQ(r.size(), QSize(300, 200));
+    const QImage out = r.read();
+    ASSERT_FALSE(out.isNull());
+    EXPECT_TRUE(out.text().isEmpty()) << "no comment or text key goes with it";
+    EXPECT_FALSE(out.colorSpace().isValid()) << "no colour profile: sRGB is implied";
+    QFile f(dst);
+    ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+    EXPECT_FALSE(f.readAll().contains("camera-serial-12345"));
+    // The picture itself: red on the left, blue on the right.
+    EXPECT_GT(QColor(out.pixel(40, 100)).red(), 160);
+    EXPECT_GT(QColor(out.pixel(260, 100)).blue(), 160);
+}
+
+TEST(WallpaperShrink, ANarrowerPhotographKeepsItsSize)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString src = savePng(dir, QStringLiteral("small.png"), halves(200, 100));
+    const QString dst = dir.filePath(QStringLiteral("out.jpg"));
+    QSize written;
+    ASSERT_EQ(shrinkPicture(src, dst, 5120, 90, &written), Ok);
+    EXPECT_EQ(written, QSize(200, 100));
+    EXPECT_EQ(QImageReader(dst).size(), QSize(200, 100));
+}
+
+TEST(WallpaperShrink, TheOrientationIsAppliedAndNotKept)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString src = dir.filePath(QStringLiteral("rot.jpg"));
+    {
+        QImageWriter w(src, "jpeg");
+        w.setQuality(100);
+        w.setTransformation(QImageIOHandler::TransformationRotate90);
+        if (!w.write(halves(60, 20)))
+            GTEST_SKIP() << "this Qt cannot write an EXIF orientation: " << w.errorString().toStdString();
+    }
+    const QString dst = dir.filePath(QStringLiteral("out.jpg"));
+    QSize written;
+    ASSERT_EQ(shrinkPicture(src, dst, 100, 90, &written), Ok);
+    EXPECT_EQ(written, QSize(20, 60)) << "the displayed size";
+    QImageReader r(dst);
+    EXPECT_EQ(r.transformation(), QImageIOHandler::TransformationNone) << "the pixels are turned, no tag is left";
+    const QImage out = r.read();
+    EXPECT_NE(QColor(out.pixel(10, 5)).red() > 128, QColor(out.pixel(10, 55)).red() > 128);
+}
+
+TEST(WallpaperShrink, RefusesBadArgumentsAndBadSources)
+{
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString src = savePng(dir, QStringLiteral("ok.png"), halves(40, 20));
+    const QString dst = dir.filePath(QStringLiteral("out.jpg"));
+    EXPECT_EQ(shrinkPicture(src, dst, 0, 90), Usage);
+    EXPECT_EQ(shrinkPicture(src, dst, kMaxSide + 1, 90), Usage);
+    EXPECT_EQ(shrinkPicture(src, dst, 100, 0), Usage);
+    EXPECT_EQ(shrinkPicture(src, dst, 100, 101), Usage);
+    EXPECT_EQ(shrinkPicture(src, QString(), 100, 90), Usage);
+    EXPECT_EQ(shrinkPicture(dir.filePath(QStringLiteral("missing.jpg")), dst, 100, 90), NotFound);
+    QFile bad(dir.filePath(QStringLiteral("bad.jpg")));
+    ASSERT_TRUE(bad.open(QIODevice::WriteOnly));
+    bad.write("not a picture at all");
+    bad.close();
+    const ExitCode c = shrinkPicture(bad.fileName(), dst, 100, 90);
+    EXPECT_TRUE(c == Unreadable || c == Unsupported) << c;
+    EXPECT_EQ(shrinkPicture(src, dir.filePath(QStringLiteral("no/such/dir/out.jpg")), 100, 90), WriteFailed);
+    EXPECT_FALSE(QFileInfo::exists(dst)) << "nothing is written on a refusal";
 }
 
 int main(int argc, char **argv)

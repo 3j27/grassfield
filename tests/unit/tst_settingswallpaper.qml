@@ -25,6 +25,7 @@ TestCase {
             property string wallpaperTool: "/usr/lib/grassfield/grassfield-wallpaper"
             property string wallpaperCache: "/home/u/.cache/grassfield/wallpapers"
             property string picturesDir: "/home/u/Pictures"
+            property string wallpaperPhotosDir: ""
             property string wallpaperStatusFile: "/run/user/1000/grassfield/wallpaper-state.json"
             property string wallpaperRecentFile: "/home/u/.local/state/grassfield/wallpaper-recent.json"
             property var files: ({})
@@ -65,6 +66,9 @@ TestCase {
                     "wallpaper.shuffle": false,
                     "wallpaper.videoOnBattery": false,
                     "wallpaper.online.provider": "commons",
+                    "wallpaper.artwork": "grassfield",
+                    "wallpaper.artworkVariant": "timeOfDay",
+                    "wallpaper.moving": false,
                     "wallpaper.outputs": []
                 })
             property var writes: []
@@ -92,8 +96,8 @@ TestCase {
         }
     }
 
-    function make(values, files) {
-        const backend = createTemporaryObject(backendComponent, testCase, {files: files || {}});
+    function make(values, files, backendProps) {
+        const backend = createTemporaryObject(backendComponent, testCase, Object.assign({files: files || {}}, backendProps || {}));
         const store = createTemporaryObject(storeComponent, testCase);
         if (values)
             store.values = Object.assign({}, store.values, values);
@@ -188,7 +192,52 @@ TestCase {
         compare(at.y - line.mapToItem(t.page.contentItem, 0, 0).y, Tokens.settingsWallpaperTitleBaseline + Tokens.settingsWallpaperTilesTop);
         compare(at.x, Tokens.settingsContentMargin);
         art.activated(0);
-        compare(last(t.store), {"wallpaper.source": "builtin"});
+        compare(last(t.store), {"wallpaper.source": "builtin", "wallpaper.artwork": "grassfield"});
+    }
+
+    // ADR-0040 step 2: the four artworks, each tile in the current appearance; the chosen one's variant beside its name.
+    function test_theArtworks() {
+        const t = make({"wallpaper.source": "builtin", "wallpaper.artwork": "grassfield", "wallpaper.artworkVariant": "timeOfDay"});
+        const art = grid(t.page, "Grassfield");
+        compare(art.model.map(m => m.label), ["Grassfield", "Meadow", "Field Rows", "Ridgeline"]);
+        compare(art.model.map(m => m.selected), [true, false, false, false]);
+        const set = Appearance.dark ? "dark" : "light";
+        compare(art.model.map(m => m.variant), [set === "dark" ? "evening.dark" : "day.light", set, set, set]);
+        // The variant pop-up: Time of Day for the Grassfield artwork only.
+        const pop = find(t.page.contentItem, i => i.accessibleName === "Appearance of the wallpaper" && i.picked !== undefined);
+        verify(pop && pop.visible);
+        compare(pop.model.map(m => m.id), ["timeOfDay", "automatic", "light", "dark"]);
+        compare(pop.value, "timeOfDay");
+        pop.picked("dark");
+        compare(last(t.store), {"wallpaper.artworkVariant": "dark"});
+        // Another artwork: its name heads the group, no Time of Day, and Time of Day reads as Automatic there.
+        art.activated(1);
+        compare(last(t.store), {"wallpaper.source": "builtin", "wallpaper.artwork": "meadow"});
+        t.store.set("wallpaper.artworkVariant", "timeOfDay");
+        compare(t.page.headline, "Meadow");
+        compare(pop.model.map(m => m.id), ["automatic", "light", "dark"]);
+        compare(pop.value, "automatic");
+        // A picture: no variant pop-up.
+        t.page.usePicture(testCase.pictures[0]);
+        verify(!pop.visible);
+    }
+
+    // ADR-0040 step 9: the moving clouds, for the Grassfield artwork only, off by default.
+    function test_theMovingClouds() {
+        const t = make({"wallpaper.source": "builtin", "wallpaper.artwork": "grassfield"});
+        const sw = find(t.page.contentItem, i => i.accessibleName === "Moving clouds" && i.toggled !== undefined);
+        verify(sw && sw.visible);
+        verify(!sw.checked);
+        sw.toggled(true);
+        compare(last(t.store), {"wallpaper.moving": true});
+        verify(sw.checked);
+        // Another artwork, or a picture: no switch.
+        t.store.set("wallpaper.artwork", "meadow");
+        verify(!sw.visible);
+        t.store.set("wallpaper.artwork", "grassfield");
+        verify(sw.visible);
+        t.page.usePicture(testCase.pictures[0]);
+        verify(!sw.visible);
     }
 
     function test_showAllAndThumbnails() {
@@ -292,5 +341,82 @@ TestCase {
         use.clicked();
         compare(last(t.store), {"wallpaper.source": "online", "wallpaper.online.provider": "apod"});
         verify(!t.page.disclosing);
+    }
+
+    // ADR-0040 step 2c: the shipped photographs, from the list the package installs beside them (the repository's own here).
+    readonly property string photosDir: "/usr/share/grassfield/wallpapers/photos"
+
+    function photoFiles() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../packaging/arch/wallpaper-photos.json"), false);
+        xhr.send();
+        verify(xhr.responseText.length > 0, "packaging/arch/wallpaper-photos.json");
+        const files = {};
+        files[testCase.photosDir + "/photos.json"] = xhr.responseText;
+        return files;
+    }
+
+    function photosSection(page) {
+        return find(page.contentItem, i => i.title === "Photographs" && i.grid !== undefined);
+    }
+
+    function test_photographsAbsentWithoutTheirList() {
+        const t = make({}, {}, {wallpaperPhotosDir: testCase.photosDir});
+        const section = photosSection(t.page);
+        verify(section);
+        verify(!section.visible, "no list beside the pictures: no section");
+        compare(t.page.photos.length, 0);
+        // A backend without the property (an older one) reads as no photographs too.
+        compare(photosSection(make().page).visible, false);
+    }
+
+    function test_photographsSection() {
+        const t = make({}, photoFiles(), {wallpaperPhotosDir: testCase.photosDir});
+        const section = photosSection(t.page);
+        verify(section.visible);
+        const photos = grid(t.page, "Photographs");
+        compare(photos.model.length, 16);
+        compare(photos.model[0].label, WallpaperConfig.photoName(t.page.photos[0], t.page.language));
+        verify(["Golden Mist", "Brume dorée"].indexOf(photos.model[0].label) >= 0);
+        // The Photographs section comes right after the Grassfield artwork.
+        waitForRendering(t.page);
+        const art = grid(t.page, "Grassfield");
+        verify(photos.mapToItem(t.page.contentItem, 0, 0).y > art.mapToItem(t.page.contentItem, 0, 0).y);
+        verify(photos.mapToItem(t.page.contentItem, 0, 0).y < grid(t.page, "Folders and Pictures").mapToItem(t.page.contentItem, 0, 0).y);
+        // Only the drawn row's thumbnails are asked for, of the installed pictures.
+        const asked = t.backend.queries.filter(q => q.tag.indexOf("wp.thumb:" + testCase.photosDir + "/") === 0).length + t.page.thumbQueue.filter(p => p.indexOf(testCase.photosDir + "/") === 0).length;
+        compare(asked, photos.shown);
+        // Chosen: a picture for the shell, not added to Folders and Pictures.
+        photos.activated(2);
+        compare(last(t.store), {"wallpaper.source": "file", "wallpaper.path": testCase.photosDir + "/valley-fog.jpg"});
+        compare(t.backend.files["/home/u/.local/state/grassfield/wallpaper-recent.json"], undefined);
+        verify(photos.model[2].selected);
+        compare(t.page.headline, WallpaperConfig.photoName(t.page.photos[2], t.page.language));
+        // About This Wallpaper credits it as its licence asks (CC BY 4.0 section 3(a)(1); the integrator's review of e067f26f):
+        // the work's own title, the author's attribution line, the source, the licence and Grassfield's changes.
+        compare(t.page.aboutEntry.title, "Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322");
+        compare(t.page.aboutEntry.credit, "Jakub Hałun, CC BY 4.0, via Wikimedia Commons");
+        compare(t.page.aboutEntry.licenseShort, "CC BY 4.0");
+        const about = find(t.page.contentItem, i => i.caption === "About This Wallpaper");
+        verify(about);
+        tryVerify(() => about.parent.visible);
+        verify(find(about, i => i.title === "Title" && i.valueText === "Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322" && i.visible));
+        verify(find(about, i => i.title === "Credit" && i.valueText === "Jakub Hałun, CC BY 4.0, via Wikimedia Commons" && i.visible));
+        verify(!find(about, i => i.title === "Author" && i.visible), "a photograph's row is its credit");
+        verify(find(about, i => i.text === "CC BY 4.0" && i.target === "https://creativecommons.org/licenses/by/4.0/" && i.visible));
+        verify(find(about, i => i.title === "Changes" && i.valueText === "Resized and re-encoded by Grassfield, metadata removed" && i.visible));
+        verify(!find(about, i => i.title === "Last updated" && i.visible), "a photograph has no update time");
+        // Another picture: no attribution.
+        t.page.usePicture(testCase.pictures[0]);
+        compare(t.page.aboutEntry, null);
+        verify(!about.parent.visible);
+    }
+
+    function test_photographsUnderTheDevGuard() {
+        const t = make({}, photoFiles(), {wallpaperPhotosDir: testCase.photosDir, devSession: true, devRoot: "/w"});
+        const before = t.store.writes.length;
+        grid(t.page, "Photographs").activated(0);
+        compare(t.store.writes.length, before, "outside the worktree's .dev in a dev session: refused");
+        verify(t.page.refusal !== "");
     }
 }

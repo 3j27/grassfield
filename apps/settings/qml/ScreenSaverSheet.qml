@@ -57,7 +57,7 @@ Sheet {
     ChoicePicker {
         anchors.horizontalCenter: parent.horizontalCenter
         accessibleName: qsTr("Screen saver")
-        model: [{id: "artwork", text: qsTr("Grassfield")}, {id: "wallpaperClock", text: qsTr("Wallpaper")}, {id: "slideshow", text: qsTr("Slideshow")}, {id: "clock", text: qsTr("Clock")}]
+        model: [{id: "artwork", text: qsTr("Grassfield")}, {id: "wallpaperClock", text: qsTr("Wallpaper")}, {id: "slideshow", text: qsTr("Slideshow")}, {id: "clock", text: qsTr("Clock")}, {id: "moving", text: qsTr("Clouds")}]
         value: root.store.value("screensaver.kind")
         pictureWidth: Tokens.settingsAppearanceThumbWidth
         pictureHeight: Tokens.settingsAppearanceThumbHeight

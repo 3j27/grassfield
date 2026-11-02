@@ -103,6 +103,26 @@ TEST(AppStream, FlathubComponents)
     EXPECT_FALSE(gimp->verified);
 }
 
+// The document types a component opens (step 4, ADR-0035 5c-3): <provides><mediatype> and the older <mimetypes><mimetype>,
+// lower case, each once; what is not a media type, and the provides' other kinds, are left out.
+TEST(AppStream, MediaTypes)
+{
+    const QList<AppStreamComponent> list = parseAppStream(
+        "<components><component type=\"desktop-application\"><id>org.example.Viewer</id><pkgname>viewer</pkgname>"
+        "<provides><mediatype>image/png</mediatype><mediatype>Image/JPEG</mediatype><binary>viewer</binary><id>org.x.Old</id>"
+        "<mediatype>image/png</mediatype><mediatype>not a type</mediatype><mediatype>image/</mediatype></provides>"
+        "<mimetypes><mimetype>image/webp</mimetype><mimetype>application/x-../etc</mimetype></mimetypes>"
+        "</component><component type=\"desktop-application\"><id>org.example.Plain</id><pkgname>plain</pkgname></component></components>");
+    ASSERT_EQ(list.size(), 2);
+    EXPECT_EQ(list.at(0).id, QStringLiteral("org.example.Viewer")) << "a provided <id> is never the component's";
+    EXPECT_EQ(list.at(0).mediaTypes, (QStringList{QStringLiteral("image/png"), QStringLiteral("image/jpeg"), QStringLiteral("image/webp")}));
+    EXPECT_TRUE(list.at(1).mediaTypes.isEmpty());
+    EXPECT_TRUE(isMediaType(QStringLiteral("application/vnd.oasis.opendocument.text")));
+    EXPECT_TRUE(isMediaType(QStringLiteral("text/x-c++src")));
+    for (const char *bad : {"image", "image/", "/png", "Image/PNG", "image/png;x", "image/png\n", "a/b/c", "image/ png"})
+        EXPECT_FALSE(isMediaType(QLatin1String(bad))) << bad;
+}
+
 TEST(AppStream, ReadsEveryCatalogOfAFolder)
 {
     QTemporaryDir root;

@@ -39,7 +39,8 @@ FocusScope {
     // Context menu: kind "icon" | "desktop", position in window coordinates.
     property string menuKind: ""
     property point menuAt: Qt.point(0, 0)
-    // "About This Wallpaper" (the online daily picture's attribution) is open: a card anchored where the menu was.
+    // "About This Wallpaper" (the online daily picture's attribution, or a shipped photograph's) is open: a card anchored where
+    // the menu was.
     property bool aboutOpen: false
 
     readonly property real margin: Tokens.desktopIconMargin
@@ -110,6 +111,44 @@ FocusScope {
     activeFocusOnTab: false
     Accessible.role: Accessible.List
     Accessible.name: qsTr("Desktop")
+
+    // ---- the entrance (ADR-0040 step 6, ID-20): the icons appear with the menu bar and the Dock, in one fade, once their
+    // first layout is final (`ready`) ----
+    // Taken once, at creation (the screen is gone when a removed output destroys the view).
+    property string entranceKey: ""
+    property real entrance: Entrance.revealed ? 1 : 0
+    Behavior on entrance {
+        NumberAnimation {
+            duration: Appearance.duration(Tokens.sessionRevealMs)
+        }
+    }
+    opacity: entrance
+    // Final: the first layout is, or the icons are turned off in Settings (nothing to wait for).
+    readonly property bool entranceFinal: ready || (Settings.loaded && !Settings.desktopShowIcons)
+    onEntranceFinalChanged: {
+        if (entranceFinal && root.entranceKey !== "")
+            Entrance.ready(root.entranceKey);
+    }
+    Component.onCompleted: {
+        root.entranceKey = "icons:" + (screen ? screen.name : "");
+        Entrance.expect(root.entranceKey);
+        if (entranceFinal)
+            Entrance.ready(root.entranceKey);
+    }
+    Component.onDestruction: {
+        if (!Entrance.revealed)
+            Entrance.forget(root.entranceKey);
+    }
+
+    // No pointer input before the entrance: the icons are not visible yet (opacity does not stop clicks or drags).
+    MouseArea {
+        anchors.fill: parent
+        z: 1000
+        enabled: !Entrance.revealed
+        acceptedButtons: Qt.AllButtons
+        hoverEnabled: true
+        onWheel: wheel => wheel.accepted = true
+    }
 
     // Persist the slots handed out to icons that had none (new files, a smaller grid).
     onLayChanged: syncTimer.restart()
@@ -722,7 +761,7 @@ FocusScope {
                 bounds: menuPopup.contentItem
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
-                aboutWallpaper: WallpaperState.onlineShown(root.screen.name)
+                aboutWallpaper: WallpaperState.aboutEntry(root.screen.name) !== null
                 count: root.selectedNames.length
                 singleName: root.selectedNames.length === 1 ? root.selectedNames[0] : ""
                 pasteCount: files.clipboardPaths.length
@@ -779,6 +818,7 @@ FocusScope {
             id: aboutLoader
             active: root.aboutOpen
             sourceComponent: AttributionCard {
+                entry: WallpaperState.aboutEntry(root.screen.name) || ({})
                 onCloseRequested: root.closeAbout("esc")
             }
             onLoaded: (item as Item).forceActiveFocus()

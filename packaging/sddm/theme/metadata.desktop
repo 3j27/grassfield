@@ -1,0 +1,10 @@
+[SddmGreeterTheme]
+Name=Grassfield
+Description=Grassfield's login, in the lock screen's layout (ADR-0042)
+Author=Grassfield project
+License=MIT
+Type=sddm-theme
+Version=1.0
+MainScript=Main.qml
+ConfigFile=theme.conf
+QtVersion=6

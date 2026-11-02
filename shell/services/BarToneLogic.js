@@ -106,6 +106,44 @@ function update(tones, name, lum, lightBelow, darkAbove) {
     return next;
 }
 
+// ---- a crossfade between two artworks (ADR-0040 section 2, gate A2) ----
+
+function mixRgb(a, b, t) {
+    return {r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t};
+}
+
+// The colours of the strip under the bar for an artwork whose top is a gradient from `top` towards `next` ({r, g, b} 0..1),
+// the strip reaching the fraction `reach` of the way: its top, middle and bottom.
+function stripColours(top, next, reach) {
+    const r = Math.max(0, Math.min(1, reach));
+    return [0, 0.5, 1].map(k => mixRgb(top, next, r * k));
+}
+
+// True when the band must be on during a crossfade from artwork `from` to artwork `to` ({top, next, reach} each): the slots
+// blend in sRGB, and the tone in effect (`toneFrom` until the fraction `switchAt` of the fade, `toneTo` after) must reach
+// `needed` over the blended strip at every twentieth of the fade. Light text is white, dark text black (stripTone's model).
+function artFadeNeedsBand(from, to, toneFrom, toneTo, switchAt, needed) {
+    const a = stripColours(from.top, from.next, from.reach);
+    const b = stripColours(to.top, to.next, to.reach);
+    for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const tone = t < switchAt ? toneFrom : toneTo;
+        for (let k = 0; k < a.length; k++) {
+            const c = mixRgb(a[k], b[k], t);
+            const l = luminance(c.r, c.g, c.b);
+            if ((tone === "light" ? contrastRatio(1, l) : contrastRatio(0, l)) < needed)
+                return true;
+        }
+    }
+    return false;
+}
+
+// The luminance range of the two strips of such a fade (the band's glass raises its tint over it).
+function artFadeRange(from, to) {
+    const lums = stripColours(from.top, from.next, from.reach).concat(stripColours(to.top, to.next, to.reach)).map(c => luminance(c.r, c.g, c.b));
+    return {lumMin: Math.min(...lums), lumMax: Math.max(...lums)};
+}
+
 // ---- Dock running dot (the dot follows the appearance, the shelf tint is opaque enough per appearance: tests/unit/tst_bartone.qml) ----
 
 // sRGB channel (0..1) of a linear value.
