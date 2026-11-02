@@ -86,7 +86,7 @@ selection").
    Move to Trash (`KIO::trash`), Put Back (`KIO::restoreFromTrash`), Delete Immediately (only in `trash:/`,
    confirmed), Empty Trash (`KIO::emptyTrash`, confirmed), New Folder (`KIO::mkdir`, "untitled folder", inline
    rename), Rename (`KIO::moveAs`, inline, F2, base name preselected), Duplicate ("name copy.ext", `KIO::copyAs`),
-   drop (`KIO::move`/`copy`), undo/redo (`KIO::FileUndoManager`, Ctrl+Z / Ctrl+Shift+Z). Errors show in a banner.
+   drop (`KIO::move`/`copy`), undo/redo (`KIO::FileUndoManager`, Ctrl+Z / Ctrl+Shift+Z; one step per command: Rename N Items, Make Alias and New Folder with Selection are kept by Files as `BatchOps` commands, ordered against KIO's by `newCommandSerialNumber`, review of PR #98). Errors show in a banner.
    Pasting copies into the same folder makes duplicates instead of a conflict.
 7. F7 Opening: folders navigate; files open with `KIO::OpenUrlJob` (MIME associations, executables never run: app
    launchers, scripts and programs are refused by Files itself before KIO, `src/launchguard.h`, GF-070, see
@@ -396,7 +396,7 @@ installed (not built here).
 - Accessibility tree not verified with a screen reader (no AT-SPI bus in the nested session).
 - French catalog: `translations/grassfield_fr.ts` (gate I1, `just check-i18n`).
 
-- Combined PR 3–5: an alias is a symbolic link (it breaks when the original moves; Make Alias and its undo: not in Undo);
+- Combined PR 3–5: an alias is a symbolic link (it breaks when the original moves; Make Alias is undoable, one step per command: see the undo note below);
   Get Info changes only one's own items (ADR-0028's administrator path is not built); Open with has no per-document
   choice (Linux associates applications with types: the pop-up stages Change All…); Connect to Server's password dialog is
   kiod's (F-9); Compress makes zip only and Expand asks for no password (ADR-0029); the copy window shows no amounts for a
@@ -501,11 +501,11 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-51 | Move to Trash ⌘⌫, Put Back, Empty Trash ⇧⌘⌫ with the confirmation | done (combined PR 3–5): ⇧⌘⌫ from any folder, confirmed, never in a dev session; never run by tests (KIO empties the trash of every mounted volume, the owner's too) | Finder-Empty-Trash | KIO trash | — | 5 |
 | FP-52 | Delete Immediately ⌥⌘⌫ on any item (confirmed) | done (combined PR 3–5): ⌥⌘⌫ on any item, confirmed | none | `KIO::del` | — | 5 |
 | FP-53 | Duplicate ⌘D | done | — | `KIO::copyAs` | — | — |
-| FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | done (combined PR 3–5): ⌃⌘A makes "name alias", a symbolic link to the item's absolute path | none | symbolic link (`KIO::symlink`) | a macOS alias survives moves; a symbolic link does not | 4 |
+| FP-54 | Make Alias ⌃⌘A ("name alias"); ⌥⌘-drag makes an alias | done (combined PR 3–5): ⌃⌘A makes "name alias", a symbolic link to the item's absolute path; one Undo step for all the aliases of the command (review of PR #98) | none | symbolic link (`BatchOps`, no name ever replaced) | a macOS alias survives moves; a symbolic link does not | 4 |
 | FP-55 | Show Original ⌘R | done (combined PR 3–5): ⌘R on an alias selects its original (⌘R reloads otherwise; F5 always) | none | KFileItem link target | — | 4 |
 | FP-56 | Inline rename | done (Return, F2) | — | `KIO::moveAs` | — | 2 |
-| FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | done (combined PR 3–5): Replace Text, Add Text, Format with an example; checked before KIO renames anything (RenameLogic) | none | `KIO::batchRename` / moveAs per item | — | 4 |
-| FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | done (combined PR 3–5): ⌃⌘N moves the items into "New Folder With Items", renamed in place | none | `KIO::mkdir` + move | — | 4 |
+| FP-57 | Rename multiple items (Replace Text, Add Text, Format with index, counter or date) | done (combined PR 3–5): Replace Text, Add Text, Format with an example; checked before anything is renamed (RenameLogic, and every target on the disk); local items: all renamed or none (a failure part-way puts back what was done), ONE Undo step (review of PR #98); items on a server: one KIO job each, neither all-or-nothing nor one step | none | `BatchOps` (`renameat2` without replace) for local items, `KIO::moveAs` per item for a server | a server's batch is not atomic | 4 |
+| FP-58 | New Folder ⇧⌘N; New Folder with Selection ⌃⌘N | done (combined PR 3–5): ⌃⌘N moves the items into "New Folder With Items", renamed in place; a local folder: made and moved together or not at all, ONE Undo step (review of PR #98); a server's folder: two KIO jobs, two steps | none | `BatchOps` (local), `KIO::mkdir` + move (server) | a server's folder keeps two undo steps | 4 |
 | FP-59 | Compress (zip) and Expand (double-click an archive) | done (combined PR 3–5): ADR-0029; opening an archive expands it next to itself | none | `bsdtar` (libarchive) out of process (ADR-0029) | — | 4 |
 | FP-60 | Get Info ⌘I: General, More Info, Name & Extension, Comments, Open with + Change All…, Preview, Sharing & Permissions | partial (combined PR 3–5): General, tags, Customize Folder, Open with + Change All…, Sharing & Permissions editable for one's own items; Comments, Name & Extension, Preview: missing | Finder-Get-Info | KIO stat, `KIO::chmod`, `KIO::chown` | Locked: no user-level lock flag (`chattr +i` needs root, never); Stationery pad: n/a | 4 (permissions), 5 (Open with) |
 | FP-61 | Sharing & Permissions editable, the padlock for items you do not own | partial (combined PR 3–5): one's own items (owner, group, everyone, the group's pop-up, Apply to enclosed items…); the padlock stays closed for other items until the owner's pkexec check and the opus review of ADR-0028's privileged path | Finder-Get-Info | unprivileged: `KIO::chmod`/`KIO::chown`; privileged: ADR-0028 (polkit) | — | 4 |

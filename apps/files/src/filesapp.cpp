@@ -176,6 +176,12 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     connect(undo, &KIO::FileUndoManager::redoAvailable, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::undoTextChanged, this, &FilesApp::undoChanged);
     connect(undo, &KIO::FileUndoManager::redoTextChanged, this, &FilesApp::undoChanged);
+    // A new command of KIO's ends the redo history, ours included (KIO clears its own).
+    connect(undo, &KIO::FileUndoManager::jobRecordingStarted, this, [this] {
+        m_redoCustom.clear();
+        m_redoKinds.clear();
+        emit undoChanged();
+    });
     connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, &FilesApp::clipboardChanged);
     connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, &FilesApp::focusWindowChanged);
     connect(m_places, &PlacesModel::error, this, &FilesApp::operationFailed);
@@ -356,24 +362,52 @@ QString FilesApp::homePath() const
     return QDir::homePath();
 }
 
+// Whether Undo would take Files' own newest command rather than KIO's (the newer of the two by serial number).
+bool FilesApp::customUndoIsNext() const
+{
+    auto *kio = KIO::FileUndoManager::self();
+    return !m_undoCustom.isEmpty() && (!kio->isUndoAvailable() || m_undoCustom.last().serial > kio->currentCommandSerialNumber());
+}
+
 bool FilesApp::canUndo() const
 {
-    return KIO::FileUndoManager::self()->isUndoAvailable();
+    return !m_undoCustom.isEmpty() || KIO::FileUndoManager::self()->isUndoAvailable();
 }
 
 QString FilesApp::undoText() const
 {
+    if (customUndoIsNext())
+        return tr("Undo %1").arg(m_undoCustom.last().text);
     return KIO::FileUndoManager::self()->undoText();
 }
 
 bool FilesApp::canRedo() const
 {
-    return KIO::FileUndoManager::self()->isRedoAvailable();
+    // The redo history is the undone commands of Files (m_redoKinds): a command made after an undo ends it, whatever KIO
+    // still keeps on its own redo stack.
+    if (m_redoKinds.isEmpty())
+        return false;
+    return m_redoKinds.last() ? !m_redoCustom.isEmpty() : KIO::FileUndoManager::self()->isRedoAvailable();
 }
 
 QString FilesApp::redoText() const
 {
+    if (m_redoKinds.isEmpty())
+        return {};
+    if (m_redoKinds.last())
+        return m_redoCustom.isEmpty() ? QString() : tr("Redo %1").arg(m_redoCustom.last().text);
     return KIO::FileUndoManager::self()->redoText();
+}
+
+void FilesApp::recordCustom(const QString &text, const BatchOps::Steps &steps)
+{
+    if (steps.isEmpty())
+        return;
+    // A new command ends the redo history; KIO's own redo stack stays but is never reached again (m_redoKinds is empty).
+    m_redoCustom.clear();
+    m_redoKinds.clear();
+    m_undoCustom.append({KIO::FileUndoManager::self()->newCommandSerialNumber(), text, steps});
+    emit undoChanged();
 }
 
 bool FilesApp::canPaste() const
@@ -1259,6 +1293,8 @@ void FilesApp::makeAlias(const QList<QUrl> &urls, QObject *folder)
     if (refuseApplicationItems(urls))
         return;
     QPointer<QObject> target = folder;
+    // One command, one undo step: the aliases made are kept together (one that cannot be made is told, the others stay).
+    BatchOps::Steps made;
     for (const QUrl &url : urls) {
         if (!url.isLocalFile()) {
             emit operationFailed(tr("Aliases can only be made of items on this computer."));
@@ -1271,13 +1307,16 @@ void FilesApp::makeAlias(const QList<QUrl> &urls, QObject *folder)
             return QFileInfo::exists(dir + QLatin1Char('/') + n) || QFileInfo(dir + QLatin1Char('/') + n).isSymLink();
         });
         const QString link = dir + QLatin1Char('/') + name;
-        if (!QFile::link(info.absoluteFilePath(), link)) {
+        const BatchOps::Step step{BatchOps::Step::Kind::Link, info.absoluteFilePath(), link};
+        if (!BatchOps::apply({step})) {
             emit operationFailed(tr("The alias of “%1” couldn’t be made here.").arg(FileLogic::displayName(info.fileName())));
             continue;
         }
+        made.append(step);
         if (auto *f = asFolder(target))
             f->expect(QUrl::fromLocalFile(link), false);
     }
+    recordCustom(made.size() == 1 ? tr("Make Alias") : tr("Make Aliases"), made);
 }
 
 QUrl FilesApp::linkTarget(const QUrl &url) const
@@ -1303,10 +1342,38 @@ void FilesApp::newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory
     }
     const QString name = FileLogic::uniqueName(tr("New Folder With Items"), [&directory](const QString &n) { return nameTaken(directory, n); });
     const QUrl url = childUrl(directory, name);
+    QPointer<QObject> target = folder;
+    bool local = directory.isLocalFile();
+    for (const QUrl &u : urls)
+        local = local && u.isLocalFile();
+    if (local) {
+        // The folder and the moves are ONE command: made together or not at all, undone with one step (the Finder's).
+        BatchOps::Steps steps{{BatchOps::Step::Kind::Mkdir, QString(), url.toLocalFile()}};
+        QList<QPair<QUrl, QUrl>> pairs;
+        for (const QUrl &u : urls) {
+            const QUrl to = childUrl(url, u.fileName());
+            steps.append({BatchOps::Step::Kind::Rename, u.toLocalFile(), to.toLocalFile()});
+            pairs.append({u, to});
+        }
+        // A look left at this path by a folder that went away outside Files must not apply to the new folder.
+        m_folderStyles.dropEntry(url.toLocalFile());
+        const QStringList pending = beginStyleMoves(urls);
+        BatchOps::Failure failure;
+        if (!BatchOps::apply(steps, &failure)) {
+            endStyleMoves(pending);
+            emit operationFailed(tr("“%1” couldn’t be moved into a new folder. Nothing was changed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())));
+            return;
+        }
+        styleMovedAll(pairs);
+        endStyleMoves(pending);
+        recordCustom(tr("New Folder with Selection"), steps);
+        if (auto *f = asFolder(target))
+            f->expect(url, true);
+        return;
+    }
     KIO::MkdirJob *mkdir = KIO::mkdir(url);
     attachDelegate(mkdir);
     KIO::FileUndoManager::self()->recordJob(KIO::FileUndoManager::Mkdir, {}, url, mkdir);
-    QPointer<QObject> target = folder;
     connect(mkdir, &KJob::result, this, [this, mkdir, urls, url, target] {
         if (mkdir->error()) {
             emit operationFailed(mkdir->errorString());
@@ -1408,9 +1475,48 @@ QString FilesApp::renameItems(const QList<QUrl> &urls, const QVariantMap &option
     case RenameLogic::Problem::NothingChanges:
         return tr("No name would change.");
     }
+    QList<int> changed;
+    bool local = true;
     for (int i = 0; i < urls.size(); ++i) {
-        if (next.at(i) != names.at(i))
+        if (next.at(i) == names.at(i))
+            continue;
+        changed << i;
+        local = local && urls.at(i).isLocalFile();
+    }
+    if (changed.size() < 2 || !local) {
+        // One item: the single rename (one KIO step). Items on a server: one KIO job each (no all-or-nothing there).
+        for (int i : std::as_const(changed))
             rename(urls.at(i), next.at(i), folder);
+        return QString();
+    }
+    // Every target is looked at first: a name already taken on the disk refuses the whole command.
+    BatchOps::Steps steps;
+    QList<QPair<QUrl, QUrl>> pairs;
+    for (int i : std::as_const(changed)) {
+        const QUrl parent = urls.at(i).adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
+        const QUrl to = childUrl(parent, next.at(i));
+        if (QFileInfo(to.toLocalFile()).isSymLink() || localExists(to) || nameTaken(parent, next.at(i), names.at(i)))
+            return tr("The name “%1” is already taken. Please choose a different name.").arg(FileLogic::displayName(next.at(i)));
+        steps.append({BatchOps::Step::Kind::Rename, urls.at(i).toLocalFile(), to.toLocalFile()});
+        pairs.append({urls.at(i), to});
+    }
+    // All renamed or none (a failure part-way puts back what was done), and one undo step.
+    QList<QUrl> sources;
+    for (const auto &pair : std::as_const(pairs))
+        sources << pair.first;
+    const QStringList pending = beginStyleMoves(sources);
+    BatchOps::Failure failure;
+    if (!BatchOps::apply(steps, &failure)) {
+        endStyleMoves(pending);
+        return tr("“%1” couldn’t be renamed: %2. Nothing was renamed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName()), QString::fromLocal8Bit(strerror(failure.error)));
+    }
+    styleMovedAll(pairs);
+    endStyleMoves(pending);
+    recordCustom(tr("Rename %1 Items").arg(changed.size()), steps);
+    QPointer<QObject> target = folder;
+    for (const auto &pair : std::as_const(pairs)) {
+        if (auto *f = asFolder(target))
+            f->expect(pair.second, false);
     }
     return QString();
 }
@@ -1971,12 +2077,54 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
 
 void FilesApp::undo()
 {
-    KIO::FileUndoManager::self()->undo();
+    auto *kio = KIO::FileUndoManager::self();
+    if (!customUndoIsNext()) {
+        if (kio->isUndoAvailable()) {
+            m_redoKinds.append(false);
+            kio->undo();
+        }
+        return;
+    }
+    // One of Files' own commands (Rename N Items, Make Alias, New Folder with Selection): all its steps revert, or none.
+    const CustomCommand command = m_undoCustom.last();
+    BatchOps::Failure failure;
+    if (!BatchOps::apply(BatchOps::inverse(command.steps), &failure)) {
+        emit operationFailed(tr("“%1” can’t be undone: something has changed since. Nothing was changed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())));
+        return;
+    }
+    m_undoCustom.removeLast();
+    m_redoCustom.append(command);
+    m_redoKinds.append(true);
+    emit undoChanged();
 }
 
 void FilesApp::redo()
 {
-    KIO::FileUndoManager::self()->redo();
+    if (m_redoKinds.isEmpty())
+        return;
+    auto *kio = KIO::FileUndoManager::self();
+    if (!m_redoKinds.last()) {
+        m_redoKinds.removeLast();
+        if (kio->isRedoAvailable())
+            kio->redo();
+        emit undoChanged();
+        return;
+    }
+    if (m_redoCustom.isEmpty()) {
+        m_redoKinds.removeLast();
+        emit undoChanged();
+        return;
+    }
+    const CustomCommand command = m_redoCustom.last();
+    BatchOps::Failure failure;
+    if (!BatchOps::apply(command.steps, &failure)) {
+        emit operationFailed(tr("“%1” can’t be redone: something has changed since. Nothing was changed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())));
+        return;
+    }
+    m_redoCustom.removeLast();
+    m_redoKinds.removeLast();
+    m_undoCustom.append(command);
+    emit undoChanged();
 }
 
 void FilesApp::directorySize(const QUrl &url, const QJSValue &callback)

@@ -22,6 +22,7 @@
 #include "folderviews.h"
 #include "savedsearches.h"
 #include "archivejob.h"
+#include "batchops.h"
 #include "tagstore.h"
 
 #include <functional>
@@ -276,7 +277,8 @@ public:
     Q_INVOKABLE void makeAlias(const QList<QUrl> &urls, QObject *folder);
     Q_INVOKABLE QUrl linkTarget(const QUrl &url) const;
     // New Folder with Selection: "New Folder With Items" in `directory` (every item must be in it), the items moved into
-    // it through KIO (undoable), then the new folder renamed in place.
+    // it (local folder: all or nothing, ONE undo step; a server's folder: KIO jobs, two steps), then the new folder
+    // renamed in place.
     Q_INVOKABLE void newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory, QObject *folder);
     // Copy as Pathname: the local paths, one per line, as text.
     Q_INVOKABLE void copyPaths(const QList<QUrl> &urls);
@@ -284,7 +286,8 @@ public:
     // of the folder is run: the terminal is an application the user chose.
     Q_INVOKABLE void openTerminal(const QUrl &folder);
     // Rename N Items (RenameLogic): options {mode, find, replaceWith, addText, where, format, customFormat, startAt}. The
-    // preview is the new names; renameItems returns "" or why nothing was renamed.
+    // preview is the new names; renameItems returns "" or why nothing was renamed. Local items: all renamed or none (a
+    // failure part-way puts back what was done), ONE undo step; items on a server are renamed one by one through KIO.
     Q_INVOKABLE QStringList renamePreview(const QList<QUrl> &urls, const QVariantMap &options) const;
     Q_INVOKABLE QString renameItems(const QList<QUrl> &urls, const QVariantMap &options, QObject *folder);
     // Compress and Expand (ADR-0029, ArchiveJob): local items of one folder into a zip there; an archive next to itself.
@@ -534,6 +537,19 @@ private:
     QString m_folderColor = QStringLiteral("theme");
     QString m_activity;
     int m_activityPercent = -1;
+    // Commands made of several local operations (BatchOps) that are one undo step, kept by Files and ordered against KIO's
+    // own commands by serial number (KIO::FileUndoManager::newCommandSerialNumber); m_redoKinds is which of the two the
+    // newest undone command belongs to (true: ours), so redo goes back in the order undo went.
+    struct CustomCommand {
+        quint64 serial = 0;
+        QString text;
+        BatchOps::Steps steps;
+    };
+    void recordCustom(const QString &text, const BatchOps::Steps &steps);
+    bool customUndoIsNext() const;
+    QList<CustomCommand> m_undoCustom;
+    QList<CustomCommand> m_redoCustom;
+    QList<bool> m_redoKinds;
     QList<QPointer<KJob>> m_jobs;
     QList<QPointer<ArchiveJob>> m_archiveJobs;
     QVariantList m_jobList;

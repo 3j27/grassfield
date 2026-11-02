@@ -5111,6 +5111,38 @@
         <translation>Le nom «&#xa0;%1&#xa0;» est déjà utilisé. Veuillez choisir un autre nom.</translation>
     </message>
     <message>
+        <source>Undo %1</source>
+        <translation>Annuler %1</translation>
+    </message>
+    <message>
+        <source>Redo %1</source>
+        <translation>Rétablir %1</translation>
+    </message>
+    <message>
+        <source>Make Alias</source>
+        <translation>Créer un alias</translation>
+    </message>
+    <message>
+        <source>Make Aliases</source>
+        <translation>Créer des alias</translation>
+    </message>
+    <message>
+        <source>“%1” couldn’t be moved into a new folder. Nothing was changed.</source>
+        <translation>« %1 » n’a pas pu être placé dans un nouveau dossier. Rien n’a été modifié.</translation>
+    </message>
+    <message>
+        <source>New Folder with Selection</source>
+        <translation>Nouveau dossier avec la sélection</translation>
+    </message>
+    <message>
+        <source>“%1” couldn’t be renamed: %2. Nothing was renamed.</source>
+        <translation>« %1 » n’a pas pu être renommé : %2. Rien n’a été renommé.</translation>
+    </message>
+    <message>
+        <source>Rename %1 Items</source>
+        <translation>Renommer %1 éléments</translation>
+    </message>
+    <message>
         <source>copy</source>
         <translation>copie</translation>
     </message>
@@ -5121,6 +5153,14 @@
     <message>
         <source>“%1” can’t be moved or copied into itself.</source>
         <translation>«&#xa0;%1&#xa0;» ne peut pas être déplacé ou copié dans lui-même.</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be undone: something has changed since. Nothing was changed.</source>
+        <translation>« %1 » ne peut pas être annulé : quelque chose a changé depuis. Rien n’a été modifié.</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be redone: something has changed since. Nothing was changed.</source>
+        <translation>« %1 » ne peut pas être rétabli : quelque chose a changé depuis. Rien n’a été modifié.</translation>
     </message>
     <message>
         <source>Only files and folders can be tagged.</source>
@@ -5343,8 +5383,8 @@
         <translation>Cette recherche ne peut pas être lue.</translation>
     </message>
     <message>
-        <source>The saved search couldn’t be removed.</source>
-        <translation>La recherche enregistrée n’a pas pu être supprimée.</translation>
+        <source>The saved search couldn’t be moved to the Trash.</source>
+        <translation>La recherche enregistrée n’a pas pu être placée dans la corbeille.</translation>
     </message>
     <message>
         <source>The saved search couldn’t be changed.</source>
@@ -12314,8 +12354,8 @@
         <translation>Ouvrir</translation>
     </message>
     <message>
-        <source>Delete Saved Search</source>
-        <translation>Supprimer la recherche enregistrée</translation>
+        <source>Move to Trash</source>
+        <translation>Placer dans la corbeille</translation>
     </message>
     <message>
         <source>Eject</source>
