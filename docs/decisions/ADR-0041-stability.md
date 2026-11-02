@@ -582,6 +582,28 @@ of the session, never in a terminal.
   k sent `user` then `system` back to back, and a request made during a run joins it (U4): the probe logs every run that
   ends once it is ready (`ipc-run-done <n>`) and the script sends `system` only after the user run's line.
 
+### Step 2d as built (2026-11-01, the branch of the stability lane; the extension notice without a command)
+- The two degraded notices shown without the opt-in setting (`stale-manual`: "Grassfield was updated. Click to update
+  its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then.";
+  `mismatch-manual`: "It is not built for %1 yet, so window titlebars and minimize are unavailable. Click to build it,
+  then log out and back in.") no longer name `grassfield-compositor-rebuild` as a command to type (SP-6): they are
+  posted with `Notifications.postInternalAction`, whose click (the banner or the Center's entry, as Software Update's
+  notices open the pane) runs `shell.qml`'s `startExtensionRebuild("the notice")`, the same `--session` run the setting
+  starts (`grassfield-compositor-rebuild --session`, as the user, in the background, once per shell run; a second click
+  or a click while it runs starts nothing), and the result notice then says what is next ("Log out to finish updating"
+  with "The compositor extension was updated. Log out and back in to use it.", or "Compositor extension updated" when
+  it loaded into the running Hyprland). The setting keeps its default; the `-rebuilding` notices and the plain one
+  carry no click. The French entries follow. `ExtensionStatus.manualAction(key)` names the two keys (unit tested).
+- Still naming the command, on purpose: the two failure results ("The build tools are missing or another build is
+  running. Run grassfield-compositor-rebuild in a terminal to see why.", "The build failed. …"): a diagnosis, not a
+  recovery; the journal holds the reason too. A known limit under SP-6 until step 8 (crash reports) gives a place for it.
+- Tests: `tests/unit/tst_extensionstatus.qml` `test_theManualNoticesCarryTheRebuildAsTheirClick`. No offscreen test
+  drives a click on a shell notice today (the Notifications module's internal actions have none): the nested pass is
+  the check (a stale build and the setting off: the notice; a click: `--session` runs, the result notice follows).
+- Evidence (this container): qmllint 6.4 parses `shell.qml` and the test; the JS parses; `check-i18n.py --no-lupdate`
+  ok (3158 messages, 0 unfinished; the two old entries replaced by hand); `git diff --check` clean. NOT VERIFIED here:
+  `i18n-update.sh --check`, `tst_extensionstatus.qml` (QtTest), the click in nested.
+
 ### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
 Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.
 - `tests/integration/chaos.sh` (nested, bare): for each row of audit section 1.1 that the nested session can run (the
