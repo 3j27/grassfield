@@ -59,6 +59,7 @@
     "idleMinutes": 5,
     "displayOffBattery": 2,
     "displayOffPower": 10,
+    "requirePasswordAfterDisplayOff": "immediately",
     "showUser": true,
     "showMessage": false,
     "message": ""
@@ -155,6 +156,9 @@
     "online": {
       "provider": "commons"
     },
+    "artwork": "grassfield",
+    "artworkVariant": "timeOfDay",
+    "moving": false,
     "outputs": []
   }
 }

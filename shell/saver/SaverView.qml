@@ -5,8 +5,8 @@ import qs.services
 import "SaverModel.js" as SaverModel
 
 // One display's screen saver (ADR-0032), the owner's four, all Grassfield drawings: the artwork drifting slowly, the
-// wallpaper with a clock, a folder's pictures as a slideshow, a clock alone on black. Display only: no field, no prompt, no
-// window content. `active` while it is shown: the animations, the clock and the slideshow run only then. Reduce Motion: no
+// wallpaper with a clock, a folder's pictures as a slideshow, a clock alone on black; and the moving artwork (ADR-0040 step
+// 9). Display only: no field, no prompt, no window content. `active` while it is shown: the animations, the clock and the slideshow run only then. Reduce Motion: no
 // drift or pan; the slideshow crossfades and the clock alone jumps without moving.
 Rectangle {
     id: root
@@ -133,6 +133,15 @@ Rectangle {
         GrassfieldArtwork {
             anchors.fill: parent
         }
+    }
+
+    // ---- the moving Grassfield artwork (ADR-0040 IQ-W3 A, step 9): its clouds drift and its light changes while the saver
+    // is shown, without the pan; held still with Reduce Motion ----
+    GrassfieldArtwork {
+        anchors.fill: parent
+        visible: root.effectiveKind === "moving"
+        moving: true
+        playing: root.drifting && visible
     }
 
     // ---- the wallpaper with a clock ----

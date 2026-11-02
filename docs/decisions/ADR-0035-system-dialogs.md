@@ -718,7 +718,9 @@ panel), `tst_folderchooser.cpp`, `tst_fileskiosheets.qml`, `tst_filesglobalmenu.
   be a dead end. (The first reason given, "no store here", was wrong once main shipped Grassfield Store; corrected after the
   integrator's review of the step's pull request, a decision the integrator took under the owner's delegation of 2026-10-27:
   closest to macOS, no technical step for the user.) **Follow-up:** add "Search the Store" to this alert once the Store can
-  search by document type.
+  search by document type. **Done in Grassfield Store's step 4** (ADR-0037 SD34, SD35): the alert offers "Search the Store"
+  when the Store is installed and the type is well formed; it opens the Store (one per user) on the apps whose AppStream
+  says they open the type, then a parent type; the document stays closed and Choose Application… stays the default.
 - **5c-4. "Always Open With".** Options: (a) no box, as 5b-3; (b) a box that sets the type's default application
   (mimeapps.list); (c) a box that binds that document to the application. **Choice: (a)**: macOS's box binds that one document
   (a per-document setting that nothing here keeps, and no reader: KIO and the frontend look at the type); the type's default is Get
@@ -1394,7 +1396,10 @@ for it (`--no-block`), then the shell. `ui/tools/gen-gtk-themes.py` generates th
   `control.focusOutlineOpacity` (decision 2b-15), hover, pressed and border shades as the shell's overlays
   (`material.hoverOpacity`, `control.pressedOpacity`, `material.borderOpacity`), the selected tab's indicator at GTK's own
   width (`gtk.tabIndicatorWidth`, 4 px in both versions), visited links blue; no CSS colour function (GTK 3 and the owner's
-  GTK 4.22 read them alike).
+  GTK 4.22 read them alike). Since the owner's warm neutrals of 2026-10-30 (ADR-0040; the integrator's decision on #73)
+  every theme but `-hc` also lays the warm grounds: the window the appearance's `groupFill`, views, lists, menus and
+  popovers its `windowBackground`, header bars the plugin's title bar colour (`titlebar.background*`), text its `text`;
+  the `-hc` themes keep GTK's high-contrast grounds. Libadwaita apps do not read `gtk-theme` and keep their own.
 - **Tests.** Unit (`tests/unit/portal-settings`, 12 tests, plain and ASan/UBSan): values, the `auto` schedule, the accents
   from the tokens, the 36 theme names, the namespace filter, file changes signalled key by key, a malformed file keeping the
   last good settings, a FIFO (at start and later), a device symlink, a directory, a file over 1 MiB and an unreadable file

@@ -62,6 +62,21 @@ with tempfile.TemporaryDirectory() as out:
           f"the -hc themes import GTK's high-contrast stylesheets [{len(hc)}]")
     check(not copied, f"no stylesheet carries GTK's accent or a copy of GTK's theme (small, own rules only) {copied}")
     check(not functions, f"no colour function in any stylesheet {functions}")
+    # The warm grounds (ADR-0040, the owner's warm neutrals of 2026-10-30): every theme but -hc lays the appearance's window,
+    # view and title bar colours and its text colour, from the tokens, in both GTK versions; -hc keeps GTK's own grounds.
+    missing, hc_grounds = [], []
+    for name in names:
+        hc_theme, dark = "-hc" in name, name.endswith("-dark")
+        p = gen.palette(tokens, name.split("-")[1], dark)
+        for path in ("gtk-3.0/gtk.css", "gtk-4.0/gtk.css"):
+            text = (pathlib.Path(out) / name / path).read_text()
+            if hc_theme:
+                if "Grounds:" in text:
+                    hc_grounds.append(f"{name} {path}")
+            elif not all(p[k] in text for k in ("groundWindow", "groundView", "groundTitlebar", "ink")):
+                missing.append(f"{name} {path}")
+    check(not missing, f"every theme but -hc lays the warm grounds and text from the tokens {missing}")
+    check(not hc_grounds, f"the -hc themes keep GTK's high-contrast grounds {hc_grounds}")
 
 # The backgrounds the marks are drawn on: the Grassfield window (the shell's) and GTK's own window and view backgrounds under
 # each stylesheet (theme_bg_color, theme_base_color of GTK 3.24.52 and GTK 4.24.1: the same in both versions).
@@ -76,7 +91,7 @@ for name in gen.accent_names(tokens):
         for dark in (False, True):
             p = gen.palette(tokens, name, dark)
             theme = gen.theme_name(name, dark, hc)
-            grounds = [p["window"]] + GTK_BACKGROUNDS[dark, hc]
+            grounds = [p["window"]] + ([] if hc else [p["groundWindow"], p["groundView"]]) + GTK_BACKGROUNDS[dark, hc]
             on = lambda colour: min(gen.contrast(colour, g) for g in grounds)  # noqa: E731
             pairs = [("selection", gen.contrast(p["selection"], p["selectionText"]), 4.5),
                      ("highlight", gen.contrast(p["highlight"], p["highlightText"]), 4.5),
@@ -102,5 +117,15 @@ check(gen.contrast(green["accent"], green["window"]) < 3.0 and green["focus"] ==
 check(round(worst["Grassfield-green"], 2) == 2.32 and round(worst["Grassfield-green-hc"], 2) == 2.46,
       f"the light green thin marks: 2.32:1 at worst on GTK's window, 2.46:1 under high contrast (pinned) "
       f"[{worst['Grassfield-green']:.2f}, {worst['Grassfield-green-hc']:.2f}]")
+
+# The text on the warm grounds (window, views, header bars): 7:1 or more in both appearances, as the shell's text.
+low_text = []
+for dark in (False, True):
+    p = gen.palette(tokens, "multicolor", dark)
+    for ground in ("groundWindow", "groundView", "groundTitlebar"):
+        ratio = gen.contrast(p["ink"], p[ground])
+        if ratio < 7.0:
+            low_text.append(f"{'dark' if dark else 'light'} {ground} {ratio:.2f}")
+check(not low_text, f"the text holds 7:1 on every warm ground {low_text}")
 
 sys.exit(1 if failures else 0)

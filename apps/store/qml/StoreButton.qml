@@ -30,9 +30,12 @@ Item {
             return Store.getBlockText(root.actions ? root.actions.get : "source", root.app ? root.app.kind : "");
         if (root.state_ === "installed")
             return qsTr("This app has no window of its own.");
+        if (root.state_ === "update")
+            return Store.getBlockText(root.actions ? root.actions.update : "source", "flatpak");
         return "";
     }
-    readonly property bool canAct: root.backend !== null && !!root.host && ((root.state_ === "get" && root.blockText === "") || root.state_ === "open")
+    readonly property bool canAct: root.backend !== null && !!root.host
+                                   && (((root.state_ === "get" || root.state_ === "update") && root.blockText === "") || root.state_ === "open")
 
     implicitWidth: root.state_ === "progress" ? ring.implicitWidth : button.implicitWidth
     implicitHeight: button.implicitHeight
@@ -50,12 +53,15 @@ Item {
         hoverEnabled: true
         Accessible.role: Accessible.Button
         Accessible.name: root.state_ === "open" ? qsTr("Open %1").arg(root.appName)
-                       : root.state_ === "installed" ? qsTr("%1 is installed").arg(root.appName) : qsTr("Get %1").arg(root.appName)
+                       : root.state_ === "installed" ? qsTr("%1 is installed").arg(root.appName)
+                       : root.state_ === "update" ? qsTr("Update %1").arg(root.appName) : qsTr("Get %1").arg(root.appName)
         Accessible.description: root.blockText
 
         onClicked: {
             if (root.state_ === "get")
                 root.host.requestGet(root.app);
+            else if (root.state_ === "update")
+                root.host.requestUpdate(root.app);
             else if (root.state_ === "open")
                 root.host.launchApp(root.app);
         }

@@ -96,6 +96,13 @@ desc="login-check warns when the greeter theme changed in a way it does not know
 printf 'import QtQuick 2.0\nRectangle {}\n' >"$fx/usr/share/sddm/themes/omarchy/Main.qml"
 out=$(PATH="$tmp/fakebin:$PATH" chk)
 check bash -c 'grep -q "^WARN: theme .omarchy. selects sessions" <<<"$1"' _ "$out"
+desc="login-check knows Grassfield's own theme (ADR-0042) when the owner made it the current one"
+mkdir -p "$fx/usr/share/sddm/themes/grassfield"
+cp "$pk/sddm/theme/Main.qml" "$pk/sddm/theme/Strings.js" "$fx/usr/share/sddm/themes/grassfield/"
+printf '[Theme]\nCurrent=grassfield\n' >"$fx/etc/sddm.conf.d/zz-grassfield-theme.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c 'grep -q "^ok: login screen (logout): Grassfield.s theme selects .Grassfield (uwsm). first" <<<"$1" && ! grep -q "^WARN: theme" <<<"$1"' _ "$out"
+rm "$fx/etc/sddm.conf.d/zz-grassfield-theme.conf"
 desc="login-check warns when the drop-in is missing (login starts Omarchy)"
 rm "$fx/etc/sddm.conf.d/grassfield.conf"
 out=$(PATH="$tmp/fakebin:$PATH" chk)

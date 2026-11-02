@@ -45,7 +45,7 @@ namespace grassfield::store {
 // What store.json keeps of the operation in flight (version 1, key "operation").
 struct OperationRecord {
     QString id;      // 32 lowercase hexadecimal digits
-    QString kind;    // install, remove
+    QString kind;    // install, remove; update (a Flatpak's, step 4)
     QString path;    // helper, terminal, webapp
     QString app;     // the app's id
     QString name;    // the app's name, for the messages
@@ -57,12 +57,21 @@ struct OperationRecord {
     // terminal: the catalog's pins (ADR-0037 g), written to <op-id>.pins when it starts; not kept in store.json.
     QList<std::pair<QString, QString>> pins;
     QString webName, webUrl, webIcon; // webapp: the launcher's name (its file's), its URL, the icon file given
-    QString flatpak; // flatpak: the ref an install takes (app/<id>/<arch>/<branch>), or the app id a removal takes
+    // flatpak: the ref an install takes (app/<id>/<arch>/<branch>), or the app id a removal takes; an update names its refs
+    // (apps' and runtimes') in `packages` and its app's ref here when it updates one app ("" for all of them)
+    QString flatpak;
+    // flatpak update: the commit each ref of `packages` is pinned to (its plan checked that commit's access, SD33), "" for
+    // a ref updated to whatever Flathub serves (a runtime, or an app whose commit could not be read: the sheet said so).
+    QStringList commits;
     QDateTime startedAt;
 
     QJsonObject toJson() const;
     static std::optional<OperationRecord> fromJson(const QJsonObject &o);
 };
+
+// A Flatpak update's commands, in order (S32): each pinned app on its own (`--commit` takes one ref, S32d), then the
+// unpinned refs together; each `flatpak update --user --noninteractive [--commit=<c>] -- <refs>`.
+QList<QStringList> flatpakUpdateCommands(const OperationRecord &record);
 
 QString newOperationId();
 bool isOperationId(const QString &id);
@@ -217,6 +226,7 @@ private:
     bool m_stopping = false;   // stop(): the running Flatpak install was asked to stop
     std::optional<int> m_firstExit; // a Flatpak removal's own exit code, while `--unused` runs after it
     QByteArray m_flatpakOutput;     // what flatpak printed (1 MiB at most): its progress
+    QList<QStringList> m_flatpakSteps; // an update's commands still to run, each after the one before succeeded
 };
 
 } // namespace grassfield::store

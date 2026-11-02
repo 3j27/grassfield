@@ -46,6 +46,7 @@ FolderIcon 1.0 FolderIcon.qml
 PointerSize 1.0 PointerSize.js
 PointerColors 1.0 PointerColors.js
 WallpaperConfig 1.0 WallpaperConfig.js
+TimeOfDay 1.0 TimeOfDay.js
 GrassfieldArtwork 1.0 GrassfieldArtwork.qml
 DevicePicture 1.0 DevicePicture.qml
 MenuPlace 1.0 MenuPlace.js

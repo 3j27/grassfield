@@ -78,4 +78,5 @@ add MenuHeader
 add Spinner
 add ProgressRing
 add MenuPopup
+add TimeOfDay
 ```

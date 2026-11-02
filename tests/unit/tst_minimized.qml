@@ -34,6 +34,13 @@ TestCase {
         compare(Minimized.blurCall(NaN, 3), "");
     }
 
+    // The session's ground (ADR-0040 ID-2): only "#rrggbb" is ever interpolated into the Lua call.
+    function test_groundCallIsBuiltFromAHexColour() {
+        compare(Minimized.groundCall("#2F6D5F"), "function() hl.config({ misc = { background_color = \"rgba(2f6d5fff)\" } }) end");
+        for (const bad of ["", "2F6D5F", "#2F6D5", "#2F6D5FFF", "#2F6D5G", "#2F6D5F\") end os.exit() --", null, 0x2F6D5F])
+            compare(Minimized.groundCall(bad), "", String(bad));
+    }
+
     // The window edge per appearance (ADR-0039 step 6, C-4): the light appearance's is dark, the dark appearance's the config's
     // own white hairline; a value that is not a colour or an alpha sends nothing.
     function test_edgeCallIsBuiltPerAppearance() {

@@ -75,7 +75,7 @@ TestCase {
         const bar = source("shell/menubar/MenuBar.qml");
         verify(/readonly property bool showBackground: [^\n]*\n\s*\|\| Appearance\.reduceTransparency \|\| Appearance\.increaseContrast/.test(bar),
                "both settings show the band");
-        verify(bar.indexOf("opacity: Appearance.reduceTransparency ? 1 : win.dimOpacity") > 0, "the opaque band stays opaque when dimmed");
+        verify(bar.indexOf("opacity: (Appearance.reduceTransparency ? 1 : win.dimOpacity) * win.entrance") > 0, "the opaque band stays opaque when dimmed, and comes in with the bar");
     }
 
     function test_widgetsDoNotGrowUnderReduceMotion() {

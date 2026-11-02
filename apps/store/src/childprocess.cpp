@@ -24,6 +24,11 @@ void signalGroup(qint64 pid, int sig)
 ChildResult runChild(const QString &program, const QStringList &args, const ChildOptions &options)
 {
     ChildResult r;
+    const auto cancelled = [&options] { return options.cancel && options.cancel->load(); };
+    if (cancelled()) {
+        r.cancelled = true;
+        return r;
+    }
     QProcess p;
     p.setProgram(program);
     p.setArguments(args);
@@ -55,8 +60,9 @@ ChildResult runChild(const QString &program, const QStringList &args, const Chil
     };
     while (!p.waitForFinished(100)) {
         drain();
-        if (r.overflow || clock.elapsed() > options.timeoutMs) {
-            r.timedOut = !r.overflow;
+        r.cancelled = cancelled();
+        if (r.overflow || r.cancelled || clock.elapsed() > options.timeoutMs) {
+            r.timedOut = !r.overflow && !r.cancelled;
             signalGroup(pid, SIGTERM);
             if (!p.waitForFinished(5000)) {
                 signalGroup(pid, SIGKILL);

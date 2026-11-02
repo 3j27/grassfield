@@ -193,6 +193,8 @@ Item {
                 GrassfieldArtwork {
                     anchors.fill: parent
                     visible: tile.modelData.kind === "art"
+                    artwork: tile.modelData.artwork ?? "grassfield"
+                    variant: tile.modelData.variant ?? "evening.dark"
                 }
 
                 Image {

@@ -25,7 +25,8 @@ import qs.overlay
 //   t  ADR-0041 step 2b (U31): a toolkit package installed before the session's start asks for nothing; one installed
 //      after it is announced once as "toolkit" and the pending log out is written with its reason and the list; a later
 //      update in the same session announces nothing more and the log out stays due
-//   k  IPC (the script calls `qs ipc ... update check bogus|user` once "ipc-ready" is printed): bogus refused, user ran
+//   k  IPC (the script calls `qs ipc ... update check bogus|user|system` once "ipc-ready" is printed): bogus refused,
+//      user and system ran one check each
 // Prints "software-update-service: PASS" or FAIL <why>.
 ShellRoot {
     id: root
@@ -37,6 +38,10 @@ ShellRoot {
     property int step: 0
     property int callsAtIpc: 0
     property var runEnds: []
+    // Step k: once ready, every run that ends is logged ("ipc-run-done <n>"), so the script sends its second request only
+    // after the first run ended (a request made during a run joins it, U4, and k would count one run: round 2's nit).
+    property bool ipcReady: false
+    property int ipcRuns: 0
 
     function check(cond: bool, what: string): void {
         if (!cond && failure === "")
@@ -78,6 +83,13 @@ ShellRoot {
 
     Connections {
         target: SoftwareUpdate
+
+        function onCheckingChanged(): void {
+            if (root.ipcReady && !SoftwareUpdate.checking) {
+                root.ipcRuns++;
+                console.log("software-update-service: ipc-run-done " + root.ipcRuns);
+            }
+        }
 
         function onAnnounce(kind: string, version: string, installed: string): void {
             root.announced++;
@@ -451,13 +463,15 @@ ShellRoot {
             return stable;
         }, () => {
             root.callsAtIpc = root.callsLast;
+            root.ipcReady = true;
             console.log("software-update-service: ipc-ready");
-            when(() => calls().length > root.callsAtIpc, finish);
+            // The script asks `bogus` (refused: no run), `user` and `system` (ADR-0041 U31): two runs.
+            when(() => calls().length >= root.callsAtIpc + 2, finish);
         });
     }
 
     function finish(): void {
-        root.check(calls().length === root.callsAtIpc + 1, "k: `update check user` over IPC ran one check (" + (calls().length - root.callsAtIpc) + ")");
+        root.check(calls().length === root.callsAtIpc + 2, "k: `update check user` and `update check system` over IPC ran one check each, `bogus` none (" + (calls().length - root.callsAtIpc) + ")");
         console.log(root.failure === "" ? "software-update-service: PASS" : "software-update-service: FAIL " + root.failure);
         Qt.quit();
     }

@@ -100,6 +100,8 @@
    "exempt": "opacity only animates the show/hide, page crossfade, hover reveal or swipe of the surface and is 1 once it is shown; the rendered steady state is measured by contrast.sh",
    "sites": [
     {"file": "shell/launchpad/AppsWindow.qml", "class": "opacity-dynamic", "count": 4},
+    {"file": "shell/desktop/IconsView.qml", "class": "opacity-dynamic", "count": 2},
+    {"file": "shell/security/lock/LockView.qml", "class": "opacity-dynamic", "count": 8},
     {"file": "shell/notifications/Banner.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/notifications/NotificationList.qml", "class": "opacity-dynamic", "count": 2},
     {"file": "shell/osd/OsdWindow.qml", "class": "opacity-dynamic", "count": 1},
@@ -112,9 +114,9 @@
     {"file": "ui/Grassfield/Ui/Tooltip.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/notifications/NotificationCenter.qml", "class": "opacity-dynamic", "count": 2}
   ]},
-  {"id": "lock text on the scrim (date, clock, the user's message, name, error and notice lines)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
+  {"id": "lock text on the scrim (date, clock, the user's message, name, error and notice lines; the scrim's text bands at lock.dimOpacity, the clear band between them holds no text, ADR-0040 step 4a; the idle dim carried under them while they fade in, step 5)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [
    {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 6},
-   {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 2},
+   {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 4},
    {"file": "shell/security/lock/Lock.qml", "class": "backdrop", "count": 1}
   ]},
   {"id": "screen saver date and time over the dimmed wallpaper (ADR-0032: saver.wallpaperDimOpacity is lock.dimOpacity; the clock alone is the same text at saver.clockOnlyOpacity on black, far above 4.5:1)", "fg": "darkColors.text", "backdrop": "lock", "kind": "text", "sites": [

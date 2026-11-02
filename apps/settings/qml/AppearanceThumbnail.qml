@@ -18,15 +18,10 @@ Item {
         property bool dark: false
         readonly property var colors: desktop.dark ? Tokens.colorDark : Tokens.colorLight
 
+        // The Grassfield artwork in the appearance's own variant (ADR-0040 section 2, W-3: the dark one is drawn, not darkened).
         GrassfieldArtwork {
             anchors.fill: parent
-        }
-
-        // The dark appearance's wallpaper is the darker one.
-        Rectangle {
-            anchors.fill: parent
-            visible: desktop.dark
-            color: Appearance.withAlpha(Tokens.colorDark.shadow, Tokens.settingsAppearanceThumbDarkWallpaper)
+            variant: WallpaperConfig.artworkVariantFor("grassfield", "automatic", desktop.dark, "")
         }
 
         // The menu bar.

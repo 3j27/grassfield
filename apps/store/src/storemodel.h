@@ -45,6 +45,7 @@ struct StoreApp {
     QStringList screenshots;
     QStringList categories; // our catalog's category ids
     QStringList keywords;
+    QStringList mediaTypes; // the document types its AppStream says it opens (the search by type)
     bool installed = false;
     bool inCatalog = false;
     bool hasAppStream = false;
@@ -73,6 +74,10 @@ QList<StoreApp> buildModel(const ModelInputs &in);
 // The local search (SR6): name, keywords, summary and package name; name prefixes first. Case and accents are ignored.
 // Returns indexes into `apps`, best first, at most `limit`.
 QList<int> searchApps(const QList<StoreApp> &apps, const QString &query, const QString &language, int limit = 200);
+
+// The search by document type (ADR-0035 5c-3, step 4): the apps whose AppStream says they open `types`, the type asked first
+// then its parents in order (the MIME database's), exact matches first, then by name; at most `limit`.
+QList<int> appsForType(const QList<StoreApp> &apps, const QStringList &types, int limit = 200);
 
 // The apps of one of our categories: its own entries, and AppStream apps whose freedesktop categories it gathers.
 QList<int> appsInCategory(const QList<StoreApp> &apps, const QString &categoryId);

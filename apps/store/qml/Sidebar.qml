@@ -134,10 +134,13 @@ FocusScope {
             required property int index
             readonly property bool selected: row.modelData.key === root.selectedKey
 
+            // The number of apps with an update, on the Updates row (SR25: the Store's only count; no Dock badge, ST8).
+            readonly property int count: row.modelData.count || 0
+
             width: ListView.view.width
             height: Tokens.storeSidebarRowHeight
             Accessible.role: Accessible.ListItem
-            Accessible.name: row.modelData.title
+            Accessible.name: row.count > 0 ? qsTr("%1, %2").arg(row.modelData.title).arg(row.count) : row.modelData.title
             Accessible.selectable: true
             Accessible.selected: row.selected
             Accessible.onPressAction: root.picked(row.modelData.key)
@@ -172,7 +175,7 @@ FocusScope {
             Text {
                 x: Tokens.storeSidebarLabelX - Tokens.storeSidebarInset
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - x - Tokens.spacingSm
+                width: (count.visible ? count.x - Tokens.spacingSm : parent.width - Tokens.spacingSm) - x
                 textFormat: Text.PlainText
                 text: row.modelData.title
                 elide: Text.ElideRight
@@ -181,6 +184,21 @@ FocusScope {
                 font.pixelSize: Tokens.storeSidebarLabelSize
                 font.weight: row.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
                 font.letterSpacing: Appearance.tracking(Tokens.storeSidebarLabelSize)
+            }
+
+            Text {
+                id: count
+                anchors.right: parent.right
+                anchors.rightMargin: Tokens.spacingSm
+                anchors.verticalCenter: parent.verticalCenter
+                visible: row.count > 0
+                textFormat: Text.PlainText
+                text: row.count
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.storeSidebarLabelSize
+                font.letterSpacing: Appearance.tracking(Tokens.storeSidebarLabelSize)
+                font.features: {"tnum": 1}
             }
 
             HoverHandler {
