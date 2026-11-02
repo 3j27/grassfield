@@ -239,6 +239,42 @@ TestCase {
     }
 
     Component {
+        id: boxCanvasComponent
+
+        Canvas {
+            width: 96
+            height: 96
+            renderTarget: Canvas.Image
+            renderStrategy: Canvas.Immediate
+        }
+    }
+
+    // FolderIcon's box read (IconTile.boxOfCanvas) returns the same picture at every window pixel ratio (tests/shell/icontile_hidpi.sh runs this
+    // file at 1.25, 1.5 and 2): the squircle fixture covers 0.86 of the box, so the opaque share of the whole box is about 0.7, never the
+    // fraction of its top-left quadrant that the unscaled read took on a HiDPI output.
+    function test_boxReadIsTheSameAtEveryRatio() {
+        const canvas = createTemporaryObject(boxCanvasComponent, testCase);
+        const url = testCase.fixtureDir + "own-tile-squircle.svg";
+        canvas.loadImage(url);
+        tryVerify(() => canvas.isImageLoaded(url), 5000, "fixture loaded");
+        tryVerify(() => canvas.available, 5000, "canvas available");
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, 96, 96);
+        ctx.drawImage(url, 0, 0, 96, 96);
+        const box = IconTile.boxOfCanvas(ctx, 96, 0, 0, 96, 96);
+        let opaque = 0;
+        for (let i = 3; i < box.data.length; i += 4) {
+            if (box.data[i] >= 128)
+                opaque++;
+        }
+        // The last pixel of the box is the squircle's empty corner; the top-left quadrant of a scaled picture ends inside the tile.
+        const last = ((box.height - 1) * box.width + (box.width - 1)) * 4 + 3;
+        verify(box.data[last] < 128, "the far corner of the box is empty (read " + box.width + "x" + box.height + ")");
+        const share = opaque / (box.width * box.height);
+        verify(share > 0.6 && share < 0.8, "opaque share of the whole box " + share + " (box " + box.width + "x" + box.height + ")");
+    }
+
+    Component {
         id: prewarmComponent
 
         IconShapePrewarm {}

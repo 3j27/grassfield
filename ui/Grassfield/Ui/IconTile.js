@@ -116,6 +116,50 @@ function sideOfCanvas(ctx, n, t) {
     return measure(window(m), m, t).side;
 }
 
+// The box (x, y, w, h) of the picture just drawn by drawImage(source, 0, 0, n, n), as {data, width, height} RGBA, read in the pixels the
+// picture is really drawn in (see sideOfCanvas: a file URL covers the whole Canvas picture, at its ratio; an image://icon pixmap only its first
+// n x n pixels). The picture is scaled when something is drawn beyond the first n x n pixels and the box covers more than n pixels; otherwise
+// it is read as is (the former behaviour). A picture narrower than n / ratio of its box cannot be told from an unscaled one: it is read as is.
+function boxOfCanvas(ctx, n, x, y, w, h) {
+    const span = 4 * n;
+    const big = ctx.getImageData(0, 0, span, span).data;
+    // Something drawn outside the first n x n pixels (sampled every third pixel: a picture is not one pixel wide).
+    let extent = 0;
+    for (let j = 0; j < span; j += 3) {
+        for (let i = (j < n ? n : 0); i < span; i += 3) {
+            if (big[(j * span + i) * 4 + 3] >= 128)
+                extent = n + 2;
+        }
+    }
+    let k = 1;
+    if (extent > n + 1) {
+        ctx.globalCompositeOperation = "destination-over";
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, n, n);
+        const row = ctx.getImageData(0, 0, span, 1).data;
+        ctx.globalCompositeOperation = "source-over";
+        let cover = 0;
+        for (let i = 0; i < span; i++) {
+            if (row[i * 4 + 3] > 127)
+                cover = i + 1;
+        }
+        k = Math.max(1, cover / n);
+    }
+    const x0 = Math.floor(x * k), y0 = Math.floor(y * k);
+    const wp = Math.max(1, Math.min(Math.round(w * k), span - x0)), hp = Math.max(1, Math.min(Math.round(h * k), span - y0));
+    const out = new Array(wp * hp * 4);
+    for (let j = 0; j < hp; j++) {
+        for (let i = 0; i < wp; i++) {
+            const s = ((y0 + j) * span + x0 + i) * 4, d = (j * wp + i) * 4;
+            out[d] = big[s];
+            out[d + 1] = big[s + 1];
+            out[d + 2] = big[s + 2];
+            out[d + 3] = big[s + 3];
+        }
+    }
+    return {data: out, width: wp, height: hp};
+}
+
 // The scale of the artwork of an icon whose tile has the edge `side` (over the box): its tile coincides with the system plate, whose side is
 // 1 - 2 * inset. Clamped to the token range. A glyph or any other icon (side 0, null or undefined) keeps the glyph scale.
 function artScale(side, t) {

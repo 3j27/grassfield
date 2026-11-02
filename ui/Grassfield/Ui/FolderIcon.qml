@@ -153,7 +153,8 @@ Item {
                 const box = FolderStyle.glyphBox(probe.bucket, Tokens);
                 const x0 = Math.max(0, Math.floor(box[0])), y0 = Math.max(0, Math.floor(box[1]));
                 const w = Math.max(1, Math.min(probe.bucket, Math.ceil(box[2])) - x0), h = Math.max(1, Math.min(probe.bucket, Math.ceil(box[3])) - y0);
-                const data = ctx.getImageData(x0, y0, w, h);
+                // The Canvas keeps its picture at a pixel ratio of its own (HiDPI): the box is read where the picture really is.
+                const data = IconTile.boxOfCanvas(ctx, probe.bucket, x0, y0, w, h);
                 probe.finish(FolderStyle.sampleBox(data.data, data.width, data.height, 0, 0, data.width, data.height, Tokens.folderIconPlateSamples));
             }
 
