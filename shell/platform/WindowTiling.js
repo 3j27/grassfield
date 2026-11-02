@@ -469,6 +469,13 @@ function splitOfWindow(splits, address) {
     return a === "" ? null : (splits || []).find(d => d.windows.indexOf(a) >= 0) || null;
 }
 
+// Step 6e (ADR-0036 D73): window `address` is a member of a Split View Desktop and the plugin keeps its titlebar away
+// (`away`: Capabilities.has("tiling-split-titles"); a plugin before 6e still draws the strip above a member): the Overview lays
+// it out without a band.
+function splitTitleAway(splits, address, away) {
+    return away === true && splitOfWindow(splits, address) !== null;
+}
+
 // Step 6d (ADR-0036 D72): an Overview drop of window `address` on Desktop `spaceId`: refused onto a Split View Desktop (its
 // halves are its members': macOS takes no window dropped on a full-screen space) and for a member (its place is its half; Move
 // Window to Desktop is its way out).

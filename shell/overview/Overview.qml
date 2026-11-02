@@ -593,6 +593,21 @@ Scope {
             return "held";
         }
 
+        // Test hook (dev session only, VisualFixtures.dev, SEC-04; tiling step 6e, the follow-up of #78): window `address`
+        // dropped on Desktop `spaceId` by the open Overview's own drop path (OverviewWindow.dropWindow, ADR-0036 D72): "moved",
+        // "refused", or "absent" when no output's Overview shows both.
+        function dropProbe(address: string, spaceId: int): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            const all = windows.instances;
+            for (let i = 0; i < all.length; i++) {
+                const result = all[i].probeDrop(address, spaceId);
+                if (result !== "")
+                    return result;
+            }
+            return "absent";
+        }
+
         // Test hook (dev session only, VisualFixtures.dev, SEC-04): JSON {open, stage, thumbnailMode, profile,
         // screens: [{name, windows: [{address, appId, title, real, rect}], spaces, selected}]}. Rects are window-local pixels.
         function status(): string {

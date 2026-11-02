@@ -35,6 +35,13 @@ namespace gf::topClamp {
     // held below the menu bar (core/TopClamp heldMove); `surface` unchanged otherwise (or when not running).
     CBox heldMove(const PHLWINDOW& w, const CBox& surface, const Vector2D& pointer);
 
+    // The surface box `surface` of the floating window `w` with a titlebar band of `band` px above it, held below the menu
+    // bar of the output its frame's top edge is on (or, out of reach above the outputs, the nearest one below it: core
+    // outputFor); `surface` unchanged when it already is, or for a window in full screen or zoomed. Also after stop(): the
+    // tiler places with it the windows an unload takes out of a Split View (tiling.md TL33, step 6e: a member's titlebar
+    // was away, its surface at the output's top edge).
+    CBox belowMenuBar(const PHLWINDOW& w, const CBox& surface, double band);
+
     // From the plugin's pointer motion listener: the first motion of one of Hyprland's moves or resizes records the
     // window's box (a resize that did not move the top edge is never clamped); a motion outside a drag forgets it.
     void beforePointerMotion();

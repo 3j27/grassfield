@@ -62,10 +62,17 @@ done
 ipc() { env -u QS_CONFIG_PATH -u QS_CONFIG_NAME -u QS_MANIFEST -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u DBUS_SESSION_BUS_ADDRESS \
   XDG_RUNTIME_DIR="$tmp/runtime" timeout 10 qs ipc -p "$root/tests/shell/software_update_service/probe.qml" call update check "$1" 2>&1; }
 if grep -q "software-update-service: ipc-ready" "$out"; then
-  desc="IPC: update check bogus -> refused (only the origins user and omarchy)"
+  desc="IPC: update check bogus -> refused (only the origins user, omarchy and system)"
   check test "$(ipc bogus)" == refused
   desc="IPC: update check user -> ok"
   check test "$(ipc user)" == ok
+  # The next request must not join this run (U4: a request made during a check joins it, and the probe would count one
+  # run for two requests): the probe logs every run that ends once it is ready.
+  for _ in $(seq 1 100); do grep -q "software-update-service: ipc-run-done 1" "$out" && break; sleep 0.1; done
+  desc="IPC: the user request's run ended before the next request (the probe logged it)"
+  check grep -q "software-update-service: ipc-run-done 1" "$out"
+  desc="IPC: update check system -> ok (ADR-0041 U31: grassfield-pacman-watch's origin)"
+  check test "$(ipc system)" == ok
 else
   echo "FAIL: the probe never got ready for the IPC step"
   fail=1

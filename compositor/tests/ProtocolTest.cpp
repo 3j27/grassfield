@@ -294,12 +294,13 @@ TEST(Protocol, TilingSharedEdgeComesWithTilingArrange) {
 TEST(Protocol, TilingSplitComesWithTilingArrange) {
     EXPECT_EQ(kFeatureTilingSplit, "tiling-split");
     EXPECT_EQ(kFeatureTilingSplitRows, "tiling-split-rows") << "step 6d: unsplit's second argument, always with tiling-split";
+    EXPECT_EQ(kFeatureTilingSplitTitles, "tiling-split-titles") << "step 6e: a member's titlebar away, always after tiling-split-rows";
     EXPECT_EQ(kLuaSplit, "split");
     EXPECT_EQ(kLuaUnsplit, "unsplit");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge","tiling-split","tiling-split-rows"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge","tiling-split","tiling-split-rows","tiling-split-titles"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tiling-split","tiling-split-rows"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tiling-split","tiling-split-rows","tiling-split-titles"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling"]})")
         << "never without tiling-arrange";

@@ -1446,18 +1446,41 @@ TEST(TilingSplit, HowAWindowLeaves) {
 }
 
 TEST(TilingSplit, ReplaceOffersEveryWindowButTheOneReplaced) {
-    const Suggestion sg{.generation = 4, .asker = 0xa1, .layout = "left-right", .output = "GF-REF", .zones = {1}, .frames = {Rect{964, 0, 956, 1080}}, .windows = {0xb2, 0xc3, 0xd4}};
-    const auto       out = withoutWindow(sg, 0xc3);
-    ASSERT_TRUE(out.has_value());
-    EXPECT_EQ(out->windows, (std::vector<uint64_t>{0xb2, 0xd4})) << "the others, in their order";
-    EXPECT_EQ(out->asker, 0xa1U);
-    EXPECT_EQ(out->zones, std::vector<int>{1});
-    EXPECT_EQ(out->generation, 4U);
-    EXPECT_EQ(withoutWindow(sg, 0xe5)->windows.size(), 3U) << "a window not offered changes nothing";
-    Suggestion alone = sg;
-    alone.windows    = {0xc3};
-    EXPECT_FALSE(withoutWindow(alone, 0xc3).has_value()) << "nothing left to offer: no picker (the other member fills)";
-    EXPECT_FALSE(withoutWindow(std::nullopt, 0xc3).has_value());
+    EXPECT_EQ(offerWindows(std::vector<uint64_t>{0xb2, 0xc3, 0xd4}, 0xc3), (std::vector<uint64_t>{0xb2, 0xd4})) << "the others, in their order";
+    EXPECT_EQ(offerWindows(std::vector<uint64_t>{0xb2, 0xc3}, 0xe5), (std::vector<uint64_t>{0xb2, 0xc3})) << "a window not offered changes nothing";
+    EXPECT_EQ(offerWindows(std::vector<uint64_t>{0xb2, 0xc3}, 0), (std::vector<uint64_t>{0xb2, 0xc3})) << "0 excludes none";
+    EXPECT_TRUE(offerWindows(std::vector<uint64_t>{0xc3}, 0xc3).empty()) << "nothing left to offer: no picker (the other member fills)";
+    EXPECT_TRUE(offerWindows(std::vector<uint64_t>{}, 0xc3).empty());
+    EXPECT_EQ(offerWindows(std::vector<uint64_t>{0xb2, 0xb2, 0xc3}, 0), (std::vector<uint64_t>{0xb2, 0xc3})) << "each once";
+    // The follow-up of #78: the cap counts after the exclusion, so twelve stay offered when thirteen were candidates.
+    std::vector<uint64_t> many;
+    for (uint64_t i = 1; i <= kMaxSuggested + 1; ++i)
+        many.push_back(i);
+    const auto offered = offerWindows(many, 1);
+    ASSERT_EQ(offered.size(), kMaxSuggested);
+    EXPECT_EQ(offered.front(), 2U);
+    EXPECT_EQ(offered.back(), kMaxSuggested + 1);
+    EXPECT_EQ(offerWindows(many, 0).size(), kMaxSuggested) << "never more than kMaxSuggested";
+    EXPECT_EQ(offerWindows(many, 0).back(), kMaxSuggested) << "the first ones, in their order";
+}
+
+// Step 6e (ADR-0036 D73): a member's titlebar is away; the windows that joined or left a Split View have theirs refreshed.
+TEST(TilingSplit, TheWindowsThatJoinedOrLeftASplitView) {
+    const std::vector<SplitDesk> splits{{.workspace = 9, .output = "GF-REF", .home = 2, .members = {0xd4, 0xb2}},
+                                        {.workspace = 11, .output = "WAYLAND-1", .home = 4, .members = {0xa1}},
+                                        {.workspace = 12, .output = "WAYLAND-1", .home = 4, .members = {}}};
+    EXPECT_EQ(splitMembers(splits), (std::vector<uint64_t>{0xa1, 0xb2, 0xd4})) << "every member of every Split View, sorted";
+    EXPECT_TRUE(splitMembers({}).empty());
+    const std::vector<SplitDesk> twice{{.workspace = 9, .members = {0xb2, 0xb2}}, {.workspace = 11, .members = {0xb2}}};
+    EXPECT_EQ(splitMembers(twice), (std::vector<uint64_t>{0xb2})) << "each once";
+
+    const std::vector<uint64_t> before{0xa1, 0xb2, 0xd4};
+    EXPECT_TRUE(membersChanged(before, before).empty()) << "nothing joined or left: no titlebar is refreshed";
+    EXPECT_EQ(membersChanged(before, std::vector<uint64_t>{0xa1, 0xd4}), (std::vector<uint64_t>{0xb2})) << "one left: its bar comes back";
+    EXPECT_EQ(membersChanged(std::vector<uint64_t>{0xa1}, std::vector<uint64_t>{0xa1, 0xc3}), (std::vector<uint64_t>{0xc3})) << "one joined: its bar goes";
+    EXPECT_EQ(membersChanged(std::vector<uint64_t>{0xa1, 0xb2}, std::vector<uint64_t>{0xb2, 0xc3}), (std::vector<uint64_t>{0xa1, 0xc3})) << "both at once";
+    EXPECT_EQ(membersChanged(before, {}), before) << "every Split View ended";
+    EXPECT_EQ(membersChanged({}, before), before) << "a first Split View";
 }
 
 TEST(TilingSplit, SidesAndDesktops) {

@@ -128,9 +128,11 @@ Variants {
         property string layoutSignature: ""
 
         // The titlebar band of a window: the plugin's strip, or none for a window that draws its own chrome while the plugin
-        // advertises that it steps aside (ClientChrome.js; the tag is Hyprland's, set by the session rule gf-client-chrome).
+        // advertises that it steps aside (ClientChrome.js; the tag is Hyprland's, set by the session rule gf-client-chrome),
+        // nor for a Split View window whose titlebar the plugin keeps away (tiling step 6e, ADR-0036 D73).
         function bandOf(w: var): real {
-            return ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.overviewWindowTitlebarHeight);
+            const away = !!w && WindowTiling.splitTitleAway(TilingLink.splits, w.address, Compositor.splitTitlesAway);
+            return ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.overviewWindowTitlebarHeight, away);
         }
 
         // Window rectangles in this window's coordinates, laid out when the window ids, rects or
@@ -359,6 +361,19 @@ Variants {
         function dropWindow(key: string, index: int): void {
             if (win.dropAllowed(key, index))
                 Compositor.moveGroupToSpace(win.byKey[key].address, win.tiles[index].id); // with its tile group (TL29)
+        }
+
+        // Overview.dropProbe's share (a dev-session test hook; the follow-up of #78: the drop rule had no test past
+        // WindowTiling.dropAllowed): window `address` dropped on Desktop `spaceId` through this output's own drop path. "" when
+        // this output's Overview shows neither; else "moved" or "refused" (dropAllowed), dropWindow having run either way.
+        function probeDrop(address: string, spaceId: int): string {
+            const key = Object.keys(win.byKey).find(k => WindowTiling.hexAddress(k) === WindowTiling.hexAddress(address)) ?? "";
+            const index = win.tiles.findIndex(t => !t.plus && t.id === spaceId);
+            if (key === "" || index < 0)
+                return "";
+            const allowed = win.dropAllowed(key, index);
+            win.dropWindow(key, index);
+            return allowed ? "moved" : "refused";
         }
 
         // Used by the controller's arrow-key navigation: the window next to `key` in a direction on this output ("" none).

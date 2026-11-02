@@ -205,11 +205,11 @@ does not check its gate.
 | activity | quit | action | Activity Monitor's Quit of a process that owns windows (`apps/activity/src/actions.cpp`, through `shellIpcArgs()`; ADR-0038 AM52, AM61): closes the windows whose client is that pid, as the Dock's Quit (an xdg close: the app may ask to save); answers `ok`, `no-windows` (the app then sends SIGTERM itself) or `refused` (a pid of 1 or below); never kills, reads no title; a shell reaches its own compositor's windows only (a nested session's, the nested ones) |
 | picker | request | action | `packaging/session-bin/hyprland-share-picker`, the stand-in xdph runs as its screen-sharing picker (ADR-0035 D-6). Answers `accepted`, `busy` (one picker at a time), `locked` (refused while the session is locked, owner decision Q15) or `refused` (an id or socket not of the stand-in's form: a 128-bit hex id, a 128-bit hex name in `$XDG_RUNTIME_DIR/grassfield/picker/`); accepted, the shell connects to that socket only, shows the panel once the stand-in's window list has come, and answers one choice or a cancel there. The stand-in checks the answer again before xdph reads it (a listed window, a display Hyprland lists) |
 | picker | status, choose | dev | `status` returns the open request and xdph's window titles; `choose` answers the open panel as the user would (`tests/shell/share_picker_ipc.sh`) |
-| update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
+| update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane); `packaging/bin/grassfield-pacman-watch` from `grassfield-pacman-watch.service`, started by its path unit when pacman's local database changed (ADR-0041 U31: origin `system`, announced as a scheduled check is). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
-| overview | holdNextRelease, status | dev | `status` lists window titles and app ids |
+| overview | holdNextRelease, status, dropProbe | dev | `status` lists window titles and app ids; `dropProbe` (tiling step 6e, the follow-up of #78) runs the Overview's own drop of a window on a Desktop (ADR-0036 D72) and answers moved, refused or absent |
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
@@ -488,6 +488,14 @@ shell no longer relies on that alone:
   `SessionState.refuses` first, from the tiling popover and the Window menu (refused surfaces while locked). Replace Tiled
   Window's picker is the Split View picker of step 6a (its suggestion lists window addresses only). The Overview's drop rule
   only refuses drops.
+  Tiling step 6e (ADR-0036 D73-D76) adds no verb, event field or popup kind: the feature `tiling-split-titles` only tells the
+  shell's Overview to lay a Split View member out without a strip. A member's hidden titlebar is revealed and takes presses
+  by the full-screen path (P6): never while the session is locked (`revealable()`), never under a layer popup or an Overlay
+  layer, never a press of a button another device holds; its press and release are cancelled together. A member's drag by
+  its revealed bar ends the moment the lock engages (the member back in its half; its release, still owed, stays
+  cancelled and swaps nothing), and on another press or a pointer device gone. A window that leaves a Split View is placed
+  below the menu bar only once the session is unlocked (D73 amended, review of #99). The development hook `overview dropProbe`
+  (D76, the table above) answers "refused" outside development and only ever refuses or performs the Overview's own drop.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

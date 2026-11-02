@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <utility>
@@ -1437,13 +1438,15 @@ namespace gf::tiling {
         return std::nullopt;
     }
 
-    std::optional<Suggestion> withoutWindow(std::optional<Suggestion> sg, uint64_t window) {
-        if (!sg)
-            return std::nullopt;
-        std::erase(sg->windows, window);
-        if (sg->windows.empty())
-            return std::nullopt;
-        return sg;
+    std::vector<uint64_t> offerWindows(std::span<const uint64_t> candidates, uint64_t exclude) {
+        std::vector<uint64_t> out;
+        for (const auto id : candidates) {
+            if (out.size() >= kMaxSuggested)
+                break;
+            if (id != exclude && std::ranges::find(out, id) == out.end())
+                out.push_back(id);
+        }
+        return out;
     }
 
     const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace) {
@@ -1480,6 +1483,22 @@ namespace gf::tiling {
 
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on) {
         return std::erase_if(d.members, [on](uint64_t id) { return std::ranges::find(on, id) == on.end(); }) > 0;
+    }
+
+    std::vector<uint64_t> splitMembers(std::span<const SplitDesk> splits) {
+        std::vector<uint64_t> out;
+        for (const auto& d : splits)
+            out.insert(out.end(), d.members.begin(), d.members.end());
+        std::ranges::sort(out);
+        const auto [first, last] = std::ranges::unique(out);
+        out.erase(first, last);
+        return out;
+    }
+
+    std::vector<uint64_t> membersChanged(std::span<const uint64_t> before, std::span<const uint64_t> now) {
+        std::vector<uint64_t> out;
+        std::ranges::set_symmetric_difference(before, now, std::back_inserter(out));
+        return out;
     }
 
     SplitStep splitStep(size_t members, bool picking) {
