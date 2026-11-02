@@ -37,6 +37,7 @@ public:
     // Saves `saved` under a file named after it ("Name.json", "Name 2.json"... when taken by another search; the same
     // file when a search of that name exists, which is then replaced). Returns "" or why it failed.
     QString save(const SearchLogic::Saved &saved);
+    // Moves the search's file to the Trash (false, the file left in place, when the Trash cannot take it).
     bool remove(const QString &file);
     bool setSidebar(const QString &file, bool on);
     void reload();

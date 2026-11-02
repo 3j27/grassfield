@@ -2695,7 +2695,7 @@ bool FilesApp::hasSavedSearch(const QString &name) const
 void FilesApp::removeSavedSearch(const QString &file)
 {
     if (!m_savedSearches->remove(file))
-        emit operationFailed(tr("The saved search couldn’t be removed."));
+        emit operationFailed(tr("The saved search couldn’t be moved to the Trash."));
 }
 
 void FilesApp::setSavedSearchInSidebar(const QString &file, bool on)

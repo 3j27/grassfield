@@ -118,7 +118,8 @@ bool SavedSearches::remove(const QString &file)
     // Only a file this store listed, by its own name (never a path).
     for (const Entry &e : std::as_const(m_entries)) {
         if (e.file == file && !file.contains(QLatin1Char('/'))) {
-            const bool ok = QFile::remove(m_folder + QLatin1Char('/') + file);
+            // To the Trash, as the Finder does for a smart folder (Put Back brings it back); never deleted outright.
+            const bool ok = QFile::moveToTrash(m_folder + QLatin1Char('/') + file);
             reload();
             return ok;
         }

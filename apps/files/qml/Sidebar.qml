@@ -359,11 +359,11 @@ FocusScope {
                         const p = mouse.mapToItem(null, event.x, event.y);
                         root.openTagMenu(entry.tag, p.x, p.y);
                     } else if (entry.kind === "savedSearch" && !root.choosing) {
-                        // A saved search (Place.tag holds its file): Remove from Sidebar keeps it; Delete removes it.
+                        // A saved search (Place.tag holds its file): Remove from Sidebar keeps it; Move to Trash puts its file in the Trash.
                         const p = mouse.mapToItem(null, event.x, event.y);
                         root.tab.win.menuLayer.open([{id: "open", text: qsTr("Open")}, {separator: true},
                                                      {id: "unlist", text: qsTr("Remove from Sidebar")},
-                                                     {id: "delete", text: qsTr("Delete Saved Search")}], p.x, p.y, id => {
+                                                     {id: "delete", text: qsTr("Move to Trash")}], p.x, p.y, id => {
                             if (id === "open")
                                 root.openEntry(entry);
                             else if (id === "unlist")

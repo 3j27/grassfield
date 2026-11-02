@@ -525,6 +525,21 @@ TEST(SavedSearchStore, SavesReplacesListsAndRemoves)
     if (!dir)
         GTEST_SKIP() << why.toStdString();
     app();
+    // A search that is removed goes to the Trash: this one is the test's own, never the user's.
+    const QByteArray dataHome = qgetenv("XDG_DATA_HOME");
+    const QString trash = dir->filePath(QStringLiteral("xdg-data"));
+    QDir().mkpath(trash); // Qt's trash needs the data home to exist (it always does for the user)
+    qputenv("XDG_DATA_HOME", trash.toLocal8Bit());
+    struct Restore {
+        QByteArray value;
+        ~Restore()
+        {
+            if (value.isNull())
+                qunsetenv("XDG_DATA_HOME");
+            else
+                qputenv("XDG_DATA_HOME", value);
+        }
+    } restore{dataHome};
     const QString folder = dir->filePath(QStringLiteral("saved-searches"));
     SavedSearches store(folder);
     EXPECT_TRUE(store.entries().isEmpty()) << "no folder yet";
@@ -558,6 +573,9 @@ TEST(SavedSearchStore, SavesReplacesListsAndRemoves)
     EXPECT_FALSE(store.remove(QStringLiteral("Big.json"))) << "only a listed search is removed";
     EXPECT_FALSE(store.remove(QStringLiteral("../Invoices.json")));
     EXPECT_TRUE(store.remove(QStringLiteral("Invoices.json")));
+    EXPECT_FALSE(QFile::exists(folder + QStringLiteral("/Invoices.json")));
+    EXPECT_TRUE(QFile::exists(trash + QStringLiteral("/Trash/files/Invoices.json"))) << "in the Trash, not deleted";
+    EXPECT_TRUE(QFile::exists(trash + QStringLiteral("/Trash/info/Invoices.json.trashinfo"))) << "Put Back knows where it came from";
     ASSERT_EQ(store.entries().size(), 1);
     EXPECT_EQ(store.entries().first().saved.name, QStringLiteral("Big"));
     EXPECT_NE(store.save(Saved{}), QString()) << "a nameless search";
