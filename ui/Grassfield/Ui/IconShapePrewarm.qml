@@ -80,10 +80,10 @@ Item {
                     return;
                 const n = Tokens.iconModeOwnTileProbeSize;
                 const ctx = canvas.getContext("2d");
+                // The canvas keeps its picture at a pixel ratio of its own (see TintedIcon): all of it is read.
                 ctx.clearRect(0, 0, n, n);
                 ctx.drawImage(probe.key, 0, 0, n, n);
-                const data = ctx.getImageData(0, 0, n, n);
-                probe.finish(IconTile.measure(data.data, n, Tokens).side);
+                probe.finish(IconTile.sideOfCanvas(ctx, n, Tokens));
             }
 
             width: Tokens.iconModeOwnTileProbeSize

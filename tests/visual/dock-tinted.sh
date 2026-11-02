@@ -5,12 +5,13 @@
 source "$(dirname "$0")/lib.sh"
 APPEARANCES=${1:-"light dark"}
 MODES=${2:-"tinted default dark clear"}
-OUT=$VS_STATE/dock-tinted
+[[ -n ${3:-} ]] && export QT_SCALE_FACTOR=$3  # a HiDPI window pixel ratio for the shell (the shell is restarted by vs_session)
+OUT=$VS_STATE/dock-tinted${3:+-x$3}
 mkdir -p "$OUT"
 
 config() { # config APPEARANCE MODE
   mkdir -p "$VS_DEV/config"
-  printf '{"version":1,"appearance":"%s","lock":{"idleMinutes":0},"icons":{"mode":"%s","tint":"accent","folderColor":"accent"},"accent":{"color":"pink"},"dock":{"magnificationEnabled":true,"magnification":1.35,"size":39,"pinned":["foot","org.grassfield.Files","org.grassfield.Settings","org.grassfield.Preview"],"folders":[]}}\n' "$1" "$2" > "$VS_DEV/config/grassfield.json.tmp"
+  printf '{"version":1,"appearance":"%s","lock":{"idleMinutes":0},"icons":{"mode":"%s","tint":"accent","folderColor":"accent"},"accent":{"color":"pink"},"dock":{"magnificationEnabled":true,"magnification":1.35,"size":39,"pinned":["foot","org.grassfield.Files","org.grassfield.Settings","org.grassfield.Preview","chromium","org.grassfield.Store"],"folders":[]}}\n' "$1" "$2" > "$VS_DEV/config/grassfield.json.tmp"
   mv "$VS_DEV/config/grassfield.json.tmp" "$VS_DEV/config/grassfield.json"
   vs_sleep 2
 }

@@ -73,6 +73,49 @@ function measure(rgba, n, t) {
     return {tile: true, side: side, reason: "tile", fill: fill};
 }
 
+
+// The tile edge (0: not a tile) of the picture just drawn into the n x n box of a Canvas (Canvas.Image target) by drawImage(source, 0, 0, n, n).
+// A Canvas keeps its picture at a pixel ratio of its own (1 on a plain output, 2 on a HiDPI one) and what drawImage covers of it depends on
+// the source: a file URL is drawn over the whole picture, an image://icon pixmap over its first n x n pixels. Reading the first n x n pixels
+// only is right for the second and a quarter of the icon for the first (every icon "off centre": not a tile, a pale plate around a coloured
+// tile on every Dock icon). So the picture is read once, in a window of 4n pixels, and measured as the first n x n pixels and, when that is not
+// a tile, as the whole box at the ratio the canvas has (an opaque square painted UNDER the picture, "destination-over", tells how many pixels
+// the n x n box covers). A tile passes the strict shape test only in the right window; anything else stays 0.
+function sideOfCanvas(ctx, n, t) {
+    const span = 4 * n;
+    const big = ctx.getImageData(0, 0, span, span).data;
+    const window = m => {
+        const out = new Array(m * m * 4);
+        for (let y = 0; y < m; y++) {
+            for (let x = 0; x < m; x++) {
+                const s = (y * span + x) * 4, d = (y * m + x) * 4;
+                out[d] = big[s];
+                out[d + 1] = big[s + 1];
+                out[d + 2] = big[s + 2];
+                out[d + 3] = big[s + 3];
+            }
+        }
+        return out;
+    };
+    const first = measure(window(n), n, t);
+    if (first.tile)
+        return first.side;
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, n, n);
+    const row = ctx.getImageData(0, 0, span, 1).data;
+    ctx.globalCompositeOperation = "source-over";
+    let cover = 0;
+    for (let i = 0; i < span; i++) {
+        if (row[i * 4 + 3] > 127)
+            cover = i + 1;
+    }
+    const m = Math.min(span, cover);
+    if (m <= n + 1)
+        return 0;
+    return measure(window(m), m, t).side;
+}
+
 // The scale of the artwork of an icon whose tile has the edge `side` (over the box): its tile coincides with the system plate, whose side is
 // 1 - 2 * inset. Clamped to the token range. A glyph or any other icon (side 0, null or undefined) keeps the glyph scale.
 function artScale(side, t) {

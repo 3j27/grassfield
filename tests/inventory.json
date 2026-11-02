@@ -125,6 +125,7 @@
  {"path": "tests/shell/menu_grammar_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/startup_settle_wiring.sh", "layer": "logic"},
  {"path": "tests/shell/startup_settle.sh", "layer": "headless"},
+ {"path": "tests/shell/icontile_hidpi.sh", "layer": "headless"},
  {"path": "tests/shell/ux_mutants.sh", "layer": "logic"},
  {"path": "tests/unit/tst_showdesktop.qml", "layer": "headless"},
  {"path": "tests/unit/tst_showdesktopflow.qml", "layer": "headless"},

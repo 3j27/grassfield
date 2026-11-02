@@ -196,6 +196,48 @@ TestCase {
         compare(IconShape.busy, 0);
     }
 
+    // The icons of the Dock's apps in the installed grassfield-icons (only where the package is installed): the tile ones are read as
+    // tiles and drawn as ONE tile (scale > the glyph scale), the Files app icon (a folder) is not. tests/shell/icontile_hidpi.sh runs
+    // this file again at a window pixel ratio of 1.5 and 2, where every icon once read as "off centre": a pale plate around a
+    // coloured tile on every Dock icon.
+    function test_installedTileIconsAreTiles() {
+        const dir = "file:///usr/share/icons/grassfield-icons/";
+        const tiles = ["base/apps/scalable/chromium.svg", "base/apps/scalable/foot.svg", "scalable/apps/org.grassfield.Settings.svg", "scalable/apps/org.grassfield.Preview.svg"];
+        let seen = 0;
+        for (const rel of tiles) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", dir + rel, false);
+            try {
+                xhr.send();
+            } catch (e) {
+                continue;
+            }
+            if (xhr.status !== 200 && xhr.status !== 0 || xhr.responseText === "")
+                continue;
+            seen++;
+            Appearance.iconMode = "tinted";
+            const icon = createTemporaryObject(iconComponent, testCase, {source: dir + rel});
+            tryVerify(() => icon.shapeKnown, 5000, rel + " was not read");
+            verify(icon.ownTile, rel + " is a tile (side " + icon.tileSide + ")");
+            verify(icon.artScale > Tokens.iconModeSysGlyphScale, rel + ": one tile on the plate, not inside it (scale " + icon.artScale + ")");
+        }
+        if (seen === 0)
+            skip("grassfield-icons is not installed");
+        const files = new XMLHttpRequest();
+        files.open("GET", dir + "scalable/apps/org.grassfield.Files.svg", false);
+        try {
+            files.send();
+        } catch (e) {
+            return;
+        }
+        if (files.responseText === "")
+            return;
+        Appearance.iconMode = "tinted";
+        const folder = createTemporaryObject(iconComponent, testCase, {source: dir + "scalable/apps/org.grassfield.Files.svg"});
+        tryVerify(() => folder.shapeKnown, 5000, "the Files icon was not read");
+        verify(!folder.ownTile, "the Files app icon is a folder, not a tile");
+    }
+
     Component {
         id: prewarmComponent
 
