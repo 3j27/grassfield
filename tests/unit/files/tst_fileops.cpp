@@ -349,3 +349,54 @@ TEST_F(FileOps, UndoFollowsTheOrderOfTheCommandsWhoeverRecordedThem)
     EXPECT_FALSE(app.canRedo());
     EXPECT_TRUE(told.messages.isEmpty()) << told.messages.join(QLatin1Char('|')).toStdString();
 }
+
+// Go to Folder's Return (FP-76; review of PR #98): what is typed wins when it exists, so "/" and "~/" open the root and the home
+// folder themselves while the "Go to:" list of the same text has their subfolders; a partial name has no target (the panel then
+// completes it); a missing path has none and no match. The panel's use of this is tests/unit/tst_filesgoto.qml.
+TEST_F(FileOps, GoToFolderTargetsAreTheTypedFolderWhenItExists)
+{
+    FilesApp app(QList<QUrl>{});
+    const QString home = QDir::homePath(); // the scratch home of this binary
+    ASSERT_TRUE(QDir().mkpath(home + QStringLiteral("/Documents")));
+    ASSERT_TRUE(QDir().mkpath(home + QStringLiteral("/Desktop")));
+    write(home + QStringLiteral("/notes.txt"));
+    const QUrl base = url(home);
+    const auto folderOf = [&](const QString &text) { return app.goToTarget(text, base).value(QStringLiteral("folder")).toUrl(); };
+    const auto selectOf = [&](const QString &text) { return app.goToTarget(text, base).value(QStringLiteral("select")).toUrl(); };
+
+    EXPECT_EQ(folderOf(QStringLiteral("/")), url(QStringLiteral("/"))) << "the root itself, not /bin";
+    EXPECT_EQ(folderOf(QStringLiteral("~/")), url(home)) << "the home folder itself, not ~/Desktop";
+    EXPECT_EQ(folderOf(QStringLiteral("~")), url(home));
+    EXPECT_EQ(folderOf(QStringLiteral("~/Documents")), url(home + QStringLiteral("/Documents"))) << "an existing folder without a trailing slash";
+    EXPECT_EQ(folderOf(QStringLiteral("~/Documents/")), url(home + QStringLiteral("/Documents")));
+    EXPECT_EQ(folderOf(QStringLiteral("Documents")), url(home + QStringLiteral("/Documents"))) << "relative to the shown folder";
+    // A file opens its folder with the file selected.
+    EXPECT_EQ(folderOf(QStringLiteral("~/notes.txt")), url(home));
+    EXPECT_EQ(selectOf(QStringLiteral("~/notes.txt")), url(home + QStringLiteral("/notes.txt")));
+    // Partial or missing: no target (the panel completes the first, tells the second).
+    EXPECT_TRUE(folderOf(QStringLiteral("~/Doc")).isEmpty());
+    EXPECT_TRUE(folderOf(QStringLiteral("~/Nowhere")).isEmpty());
+    EXPECT_TRUE(folderOf(QStringLiteral("/nowhere/at/all")).isEmpty());
+    EXPECT_TRUE(folderOf(QString()).isEmpty());
+
+    // The list of the same texts: "~/" lists the home's subfolders (which is why Return must not take the first), "~/Doc"
+    // completes to Documents.
+    QStringList names;
+    QString answeredFor;
+    QObject::connect(&app, &FilesApp::folderCompletions, &app, [&](const QString &text, const QVariantList &matches) {
+        answeredFor = text;
+        names.clear();
+        for (const QVariant &m : matches)
+            names << m.toMap().value(QStringLiteral("name")).toString();
+    });
+    app.completeFolder(QStringLiteral("~/"), base);
+    ASSERT_TRUE(waitFor([&] { return answeredFor == QStringLiteral("~/"); }));
+    EXPECT_TRUE(names.contains(QStringLiteral("Desktop")));
+    EXPECT_TRUE(names.contains(QStringLiteral("Documents")));
+    app.completeFolder(QStringLiteral("~/Doc"), base);
+    ASSERT_TRUE(waitFor([&] { return answeredFor == QStringLiteral("~/Doc"); }));
+    EXPECT_EQ(names, QStringList{QStringLiteral("Documents")});
+    app.completeFolder(QStringLiteral("~/Nowhere"), base);
+    ASSERT_TRUE(waitFor([&] { return answeredFor == QStringLiteral("~/Nowhere"); }));
+    EXPECT_TRUE(names.isEmpty());
+}
