@@ -268,7 +268,10 @@ Scope {
                     const ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(url, 0, 0, width, height);
-                    const lum = BarTone.pixelsLuminance(ctx.getImageData(0, 0, width, Tokens.menubarToneSampleRows).data);
+                    // The canvas keeps its picture at the window's pixel ratio (1.25 on the owner's panel): the whole strip is read, not the
+                    // top-left width x rows pixels (about a fifth of it too little on a 1.25 output, half of it on a 2x one).
+                    const k = Math.max(1, win.devicePixelRatio);
+                    const lum = BarTone.pixelsLuminance(ctx.getImageData(0, 0, Math.round(width * k), Math.round(Tokens.menubarToneSampleRows * k)).data);
                     unloadImage(url);
                     // Not inside the paint: the bar's bindings must change outside the render sync.
                     Qt.callLater(() => BarTone.report(win.modelData.name, lum));
@@ -311,7 +314,10 @@ Scope {
                     const ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(grab.url, 0, 0, width, height);
-                    const grid = GlassTint.gridOf(ctx.getImageData(0, 0, width, height).data, width, height, Tokens.glassGridColumns, Tokens.glassGridRows, win.width, win.height);
+                    // The whole picture at the window's pixel ratio (see the tone probe above).
+                    const k = Math.max(1, win.devicePixelRatio);
+                    const gw = Math.round(width * k), gh = Math.round(height * k);
+                    const grid = GlassTint.gridOf(ctx.getImageData(0, 0, gw, gh).data, gw, gh, Tokens.glassGridColumns, Tokens.glassGridRows, win.width, win.height);
                     unloadImage(grab.url);
                     win.gridGrab = null;
                     // Not inside the paint: the glass bindings must change outside the render sync.

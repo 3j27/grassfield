@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The Dock's icons in every icon mode, light and dark appearance, with the owner's settings (pink accent, magnification 1.35,
-# size 39), pinned apps and a Downloads folder tile. Looks for an outer halo around a tile (docs/specs/ui.md "Icon shader").
+# size 39), pinned apps (no folder stack: `folders` is empty). Looks for an outer halo around a tile (docs/specs/ui.md "Icon shader").
 # Writes $VS_SHOTS/dock-tinted-<appearance>-<mode>.<lang>.png. Usage (bare command): tests/visual/dock-tinted.sh ["light dark"] ["tinted default dark clear"]
 source "$(dirname "$0")/lib.sh"
 APPEARANCES=${1:-"light dark"}

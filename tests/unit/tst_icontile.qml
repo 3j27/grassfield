@@ -238,40 +238,68 @@ TestCase {
         verify(!folder.ownTile, "the Files app icon is a folder, not a tile");
     }
 
-    Component {
-        id: boxCanvasComponent
 
-        Canvas {
-            width: 96
-            height: 96
-            renderTarget: Canvas.Image
-            renderStrategy: Canvas.Immediate
+    // The shape is read from the image's own pixels (createImageData), so an SVG and a PNG of another size measure alike at every ratio.
+    function test_svgAndPngMeasureAlike() {
+        const svg = testCase.read("own-tile-squircle.svg", "dark");
+        const png = testCase.read("own-tile-squircle-200.png", "dark");
+        verify(svg.ownTile && png.ownTile, "both are tiles (svg " + svg.tileSide + ", png " + png.tileSide + ")");
+        fuzzyCompare(png.tileSide, svg.tileSide, 0.03);
+    }
+
+    Component {
+        id: folderComponent
+
+        FolderIcon {
+            size: 48
+            folderGlyph: "★"
         }
     }
 
-    // FolderIcon's box read (IconTile.boxOfCanvas) returns the same picture at every window pixel ratio (tests/shell/icontile_hidpi.sh runs this
-    // file at 1.25, 1.5 and 2): the squircle fixture covers 0.86 of the box, so the opaque share of the whole box is about 0.7, never the
-    // fraction of its top-left quadrant that the unscaled read took on a HiDPI output.
-    function test_boxReadIsTheSameAtEveryRatio() {
-        const canvas = createTemporaryObject(boxCanvasComponent, testCase);
-        const url = testCase.fixtureDir + "own-tile-squircle.svg";
-        canvas.loadImage(url);
-        tryVerify(() => canvas.isImageLoaded(url), 5000, "fixture loaded");
-        tryVerify(() => canvas.available, 5000, "canvas available");
-        const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, 96, 96);
-        ctx.drawImage(url, 0, 0, 96, 96);
-        const box = IconTile.boxOfCanvas(ctx, 96, 0, 0, 96, 96);
-        let opaque = 0;
-        for (let i = 3; i < box.data.length; i += 4) {
-            if (box.data[i] >= 128)
-                opaque++;
+    // FolderIcon reads the pixels under the symbol from the image's own pixels: the box [0.33, 0.67] x [0.45, 0.79] of the fixture holds the white
+    // disc (about a third of it); a read of the wrong part of the picture (the top-left of a scaled backing: tests/shell/icontile_hidpi.sh runs
+    // this file at 1.05, 1.25, 1.5 and 2) holds none.
+    function test_folderPlateReadsTheSymbolBox() {
+        FolderPlate.reset();
+        const icon = createTemporaryObject(folderComponent, testCase, {source: testCase.fixtureDir + "blue-plate-white-glyph.svg"});
+        tryVerify(() => FolderPlate.samples[icon.rawKey] !== undefined, 5000, "the plate was read");
+        const s = FolderPlate.samples[icon.rawKey];
+        verify(s !== null, "samples");
+        let white = 0, total = 0;
+        for (let i = 0; i < s.length; i += 4) {
+            total++;
+            if (s[i] > 0.9 && s[i + 1] > 0.9 && s[i + 2] > 0.9 && s[i + 3] > 0.9)
+                white++;
         }
-        // The last pixel of the box is the squircle's empty corner; the top-left quadrant of a scaled picture ends inside the tile.
-        const last = ((box.height - 1) * box.width + (box.width - 1)) * 4 + 3;
-        verify(box.data[last] < 128, "the far corner of the box is empty (read " + box.width + "x" + box.height + ")");
-        const share = opaque / (box.width * box.height);
-        verify(share > 0.6 && share < 0.8, "opaque share of the whole box " + share + " (box " + box.width + "x" + box.height + ")");
+        verify(white / total > 0.15, "white share of the symbol box " + (white / total));
+    }
+
+    // Cost (load-sensitive: a budget measured on a quiet machine): one shape read (createImageData and the sampled measure) of a 200 px picture.
+    function test_aShapeReadIsCheap() {
+        const t0 = Date.now();
+        const icon = testCase.read("own-tile-squircle-200.png", "dark");
+        verify(icon.ownTile);
+        const x = new XMLHttpRequest();
+        const cores = (() => {
+            x.open("GET", "file:///proc/cpuinfo", false);
+            try {
+                x.send();
+            } catch (e) {
+                return 1;
+            }
+            return Math.max(1, x.responseText.split("\n").filter(l => l.startsWith("processor")).length);
+        })();
+        const l = new XMLHttpRequest();
+        l.open("GET", "file:///proc/loadavg", false);
+        let busy = false;
+        try {
+            l.send();
+            busy = parseFloat(l.responseText) > cores;
+        } catch (e) {
+            busy = false;
+        }
+        if (!busy)
+            verify(Date.now() - t0 < 1500, "the read took " + (Date.now() - t0) + " ms");
     }
 
     Component {

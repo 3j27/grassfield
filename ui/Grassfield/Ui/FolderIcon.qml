@@ -147,15 +147,11 @@ Item {
                 if (probe.key === "")
                     return;
                 const ctx = canvas.getContext("2d");
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(probe.url, 0, 0, probe.bucket, probe.bucket);
-                // Only the box under the symbol is read back.
-                const box = FolderStyle.glyphBox(probe.bucket, Tokens);
-                const x0 = Math.max(0, Math.floor(box[0])), y0 = Math.max(0, Math.floor(box[1]));
-                const w = Math.max(1, Math.min(probe.bucket, Math.ceil(box[2])) - x0), h = Math.max(1, Math.min(probe.bucket, Math.ceil(box[3])) - y0);
-                // The Canvas keeps its picture at a pixel ratio of its own (HiDPI): the box is read where the picture really is.
-                const data = IconTile.boxOfCanvas(ctx, probe.bucket, x0, y0, w, h);
-                probe.finish(FolderStyle.sampleBox(data.data, data.width, data.height, 0, 0, data.width, data.height, Tokens.folderIconPlateSamples));
+                // The image's own pixels (createImageData of the loaded url, never drawn: drawImage scales an image://icon pixmap by the
+                // output's ratio); only the box under the symbol, as fractions of the image, is sampled.
+                const img = ctx.createImageData(probe.url);
+                const box = FolderStyle.glyphBox(1, Tokens);
+                probe.finish(FolderStyle.sampleBox(img.data, img.width, img.height, box[0] * img.width, box[1] * img.height, box[2] * img.width, box[3] * img.height, Tokens.folderIconPlateSamples));
             }
 
             width: probe.bucket

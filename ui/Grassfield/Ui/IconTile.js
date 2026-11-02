@@ -73,91 +73,21 @@ function measure(rgba, n, t) {
     return {tile: true, side: side, reason: "tile", fill: fill};
 }
 
-
-// The tile edge (0: not a tile) of the picture just drawn into the n x n box of a Canvas (Canvas.Image target) by drawImage(source, 0, 0, n, n).
-// A Canvas keeps its picture at a pixel ratio of its own (1 on a plain output, 2 on a HiDPI one) and what drawImage covers of it depends on
-// the source: a file URL is drawn over the whole picture, an image://icon pixmap over its first n x n pixels. Reading the first n x n pixels
-// only is right for the second and a quarter of the icon for the first (every icon "off centre": not a tile, a pale plate around a coloured
-// tile on every Dock icon). So the picture is read once, in a window of 4n pixels, and measured as the first n x n pixels and, when that is not
-// a tile, as the whole box at the ratio the canvas has (an opaque square painted UNDER the picture, "destination-over", tells how many pixels
-// the n x n box covers). A tile passes the strict shape test only in the right window; anything else stays 0.
-function sideOfCanvas(ctx, n, t) {
-    const span = 4 * n;
-    const big = ctx.getImageData(0, 0, span, span).data;
-    const window = m => {
-        const out = new Array(m * m * 4);
-        for (let y = 0; y < m; y++) {
-            for (let x = 0; x < m; x++) {
-                const s = (y * span + x) * 4, d = (y * m + x) * 4;
-                out[d] = big[s];
-                out[d + 1] = big[s + 1];
-                out[d + 2] = big[s + 2];
-                out[d + 3] = big[s + 3];
-            }
-        }
-        return out;
-    };
-    const first = measure(window(n), n, t);
-    if (first.tile)
-        return first.side;
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, 0, n, n);
-    const row = ctx.getImageData(0, 0, span, 1).data;
-    ctx.globalCompositeOperation = "source-over";
-    let cover = 0;
-    for (let i = 0; i < span; i++) {
-        if (row[i * 4 + 3] > 127)
-            cover = i + 1;
-    }
-    const m = Math.min(span, cover);
-    if (m <= n + 1)
+// The tile edge (0: not a tile) of an image read with Canvas `createImageData(url)`: the image's own pixels ({width, height, data} RGBA, whatever the
+// output's scale, the window's ratio or the source: an image://icon pixmap, an SVG or a PNG file), never drawn on the canvas. The alpha
+// mask is sampled down to n x n (nearest, at the pixel centres: n * n reads whatever the image's size) and measured. 0 for an image
+// that is not square (a tile is) or empty.
+function sideOfImageData(img, n, t) {
+    const w = img.width, h = img.height;
+    if (!(w > 0) || !(h > 0) || Math.abs(w - h) > 0.03 * Math.max(w, h))
         return 0;
-    return measure(window(m), m, t).side;
-}
-
-// The box (x, y, w, h) of the picture just drawn by drawImage(source, 0, 0, n, n), as {data, width, height} RGBA, read in the pixels the
-// picture is really drawn in (see sideOfCanvas: a file URL covers the whole Canvas picture, at its ratio; an image://icon pixmap only its first
-// n x n pixels). The picture is scaled when something is drawn beyond the first n x n pixels and the box covers more than n pixels; otherwise
-// it is read as is (the former behaviour). A picture narrower than n / ratio of its box cannot be told from an unscaled one: it is read as is.
-function boxOfCanvas(ctx, n, x, y, w, h) {
-    const span = 4 * n;
-    const big = ctx.getImageData(0, 0, span, span).data;
-    // Something drawn outside the first n x n pixels (sampled every third pixel: a picture is not one pixel wide).
-    let extent = 0;
-    for (let j = 0; j < span; j += 3) {
-        for (let i = (j < n ? n : 0); i < span; i += 3) {
-            if (big[(j * span + i) * 4 + 3] >= 128)
-                extent = n + 2;
-        }
+    const mask = new Uint8Array(n * n * 4);
+    for (let y = 0; y < n; y++) {
+        const sy = Math.min(h - 1, Math.floor((y + 0.5) * h / n));
+        for (let x = 0; x < n; x++)
+            mask[(y * n + x) * 4 + 3] = img.data[(sy * w + Math.min(w - 1, Math.floor((x + 0.5) * w / n))) * 4 + 3];
     }
-    let k = 1;
-    if (extent > n + 1) {
-        ctx.globalCompositeOperation = "destination-over";
-        ctx.fillStyle = "#000000";
-        ctx.fillRect(0, 0, n, n);
-        const row = ctx.getImageData(0, 0, span, 1).data;
-        ctx.globalCompositeOperation = "source-over";
-        let cover = 0;
-        for (let i = 0; i < span; i++) {
-            if (row[i * 4 + 3] > 127)
-                cover = i + 1;
-        }
-        k = Math.max(1, cover / n);
-    }
-    const x0 = Math.floor(x * k), y0 = Math.floor(y * k);
-    const wp = Math.max(1, Math.min(Math.round(w * k), span - x0)), hp = Math.max(1, Math.min(Math.round(h * k), span - y0));
-    const out = new Array(wp * hp * 4);
-    for (let j = 0; j < hp; j++) {
-        for (let i = 0; i < wp; i++) {
-            const s = ((y0 + j) * span + x0 + i) * 4, d = (j * wp + i) * 4;
-            out[d] = big[s];
-            out[d + 1] = big[s + 1];
-            out[d + 2] = big[s + 2];
-            out[d + 3] = big[s + 3];
-        }
-    }
-    return {data: out, width: wp, height: hp};
+    return measure(mask, n, t).side;
 }
 
 // The scale of the artwork of an icon whose tile has the edge `side` (over the box): its tile coincides with the system plate, whose side is
