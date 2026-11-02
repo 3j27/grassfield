@@ -216,8 +216,10 @@ check bash -c 'grep -q "omarchy-hook post-boot" "$1" && grep -q "omarchy-powerpr
 # mount, network or kernel protection makes it add (PrivateUsers=self). CapabilityBoundingSet= in a user unit without one
 # fails every start at step CAPABILITIES (status 218): grassfield-prompter and grassfield-secrets-handover on rc1-16.
 desc="every Grassfield user unit with CapabilityBoundingSet= also has an option that gives it a user namespace"
+# The options are the list the prompter's unit must not have (above); a value of no, false or 0 gives no namespace.
 check bash -c 'for f in "$1"/*.service; do grep -q "^CapabilityBoundingSet=" "$f" || continue
-  grep -qE "^(PrivateUsers|PrivateTmp|PrivateDevices|PrivateNetwork|ProtectSystem|ProtectHome|ProtectKernelTunables|ProtectKernelModules|ProtectControlGroups)=" "$f" || { echo "  $f" >&2; exit 1; }
+  grep -E "^(PrivateUsers|PrivateTmp|PrivateDevices|PrivateNetwork|NetworkNamespacePath|PrivateIPC|IPCNamespacePath|PrivateMounts|PrivatePIDs|MountAPIVFS|BindLogSockets|BindPaths|BindReadOnlyPaths|TemporaryFileSystem|RootDirectory|RootImage|ExtensionDirectories|ExtensionImages|ProtectSystem|ProtectHome|ProtectProc|ProcSubset|ProtectKernelTunables|ProtectKernelModules|ProtectKernelLogs|ProtectControlGroups|ProtectClock|ProtectHostname|ReadWritePaths|ReadOnlyPaths|InaccessiblePaths|ExecPaths|NoExecPaths)=" "$f" |
+    grep -qvE "=(no|false|0|)$" || { echo "  $f" >&2; exit 1; }
 done' _ "$pk/systemd"
 
 exit $fail
