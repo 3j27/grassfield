@@ -42,40 +42,44 @@ start() { # <dev: 1 or 0>: the probe shell in the background, ready or not withi
   return 1
 }
 stop() { [[ -n $probe ]] && kill "$probe" 2>/dev/null; wait "$probe" 2>/dev/null; probe=""; }
-ask() { # <seconds> <function> [args]: the answer on stdout, timeout's exit code in $rc
-  local s=$1
-  shift
+# ask <answer file> <seconds> <function> [args]: the answer in the file, timeout's exit code in $rc. Never inside a command
+# substitution: a subshell's rc would not reach the checks (the integrator's review of f01a0b9f).
+ask() {
+  local out=$1 s=$2
+  shift 2
   rc=0
   env -u QS_CONFIG_PATH -u QS_CONFIG_NAME -u QS_MANIFEST -u WAYLAND_DISPLAY XDG_RUNTIME_DIR="$rt" \
-    timeout -k 0.5 "$s" qs ipc -p "$tmp/cfg" call capabilities "$@" 2>/dev/null || rc=$?
+    timeout -k 0.5 "$s" qs ipc -p "$tmp/cfg" call capabilities "$@" >"$out" 2>/dev/null || rc=$?
+  return 0
 }
+answer() { cat "$tmp/answer" 2>/dev/null; }
 
 if start 1; then
-  answer=$(ask 5 status)
-  desc="dev session: the question answers (\"$answer\")"
-  check test "$rc" = 0 -a -n "$answer"
-  ask 15 devBlock 4 >"$tmp/blocked" &
+  ask "$tmp/answer" 5 status
+  desc="dev session: the question answers (\"$(answer)\")"
+  check test "$rc" = 0 -a -n "$(answer)"
+  ask "$tmp/blocked" 15 devBlock 4 &
   blocker=$!
   sleep 0.5
-  ask 2 status >/dev/null
+  ask "$tmp/answer" 2 status
   desc="while devBlock holds the GUI thread the question gets no answer within 2 s (timeout's exit 124, a miss)"
   check test "$rc" = 124
   wait "$blocker"
   desc="devBlock answers once its 4 s are over"
-  check test "$(cat "$tmp/blocked")" = "blocked 4"
-  answer=$(ask 5 status)
+  check test "$(cat "$tmp/blocked" 2>/dev/null)" = "blocked 4"
+  ask "$tmp/answer" 5 status
   desc="after the block the question answers again"
-  check test "$rc" = 0 -a -n "$answer"
+  check test "$rc" = 0 -a -n "$(answer)"
   stop
 fi
 if start 0; then
   before=$(date +%s)
-  answer=$(ask 5 devBlock 4)
+  ask "$tmp/answer" 5 devBlock 4
   desc="outside a dev session devBlock is refused at once and blocks nothing"
-  check test "$rc" = 0 -a "$answer" = refused -a $(($(date +%s) - before)) -le 2
-  answer=$(ask 5 status)
+  check test "$rc" = 0 -a "$(answer)" = refused -a $(($(date +%s) - before)) -le 2
+  ask "$tmp/answer" 5 status
   desc="outside a dev session the question answers refused, which the probe takes as the shell alive"
-  check test "$rc" = 0 -a "$answer" = refused
+  check test "$rc" = 0 -a "$(answer)" = refused
   stop
 fi
 exit $fail

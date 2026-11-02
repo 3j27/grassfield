@@ -21,6 +21,12 @@
 # question, starts again from zero: the misses belong to one MainPID. A hang shorter than about 65 s is never killed (the
 # third miss comes 60 s after the first at the earliest); one longer than about 95 s always is.
 #
+# The bound includes starting the qs client itself. Under a loaded machine (the kernel's pressure stall information,
+# /proc/pressure: cpu `some avg10` at 40 % or more, or memory `some avg10` at 10 % or more) a healthy shell could miss 5 s
+# three times in a row, and that kill would count toward the loop detector; so the bound is 20 s while the machine is that
+# loaded (integrator's review of f01a0b9f). It is extended, never skipped: a shell that spins in a loop raises the pressure
+# itself on a small machine, and it must still be found. Unreadable pressure files leave the 5 s bound.
+#
 # Nothing here unlocks, starts or stops a unit: the one state change is that kill, and the compositor keeps the session
 # locked while the shell restarts (ext-session-lock; the restarted shell takes the lock back, docs/specs/security.md
 # "Lock survival"). No environment variable changes the bounds: the unit clears Quickshell's option variables, and the tests
@@ -30,7 +36,11 @@ unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
 me=grassfield-shell-watchdog
 unit=grassfield-shell.service
 answer=5
+answer_loaded=20
 misses_max=3
+# For tests only, which run a scratch copy of this script: a directory holding `cpu` and `memory` in /proc/pressure's format.
+# The unit clears it (UnsetEnvironment=), so in the session the kernel's own files are read.
+pressure=${GRASSFIELD_SHELL_WATCHDOG_PRESSURE:-/proc/pressure}
 say() { echo "$me: $*" >&2; }
 digits() { case ${1:-} in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 # The shell's main process while the unit runs it, else 0.
@@ -39,6 +49,8 @@ main_pid() {
     awk -F= '$1 == "ActiveState" { a = $2 } $1 == "SubState" { s = $2 } $1 == "MainPID" { p = $2 }
       END { if (a == "active" && s == "running" && p ~ /^[1-9][0-9]*$/) print p; else print 0 }'
 }
+# The integer part of `some avg10` of a /proc/pressure file (the share of the last 10 s in which a task waited), else nothing.
+avg10() { awk '$1 == "some" { for (i = 2; i <= NF; i++) if ($i ~ /^avg10=/) { v = substr($i, 7); print int(v); exit } }' "$1" 2>/dev/null; }
 # Monotonic hundredths of a second (/proc/uptime), which a wall-clock change never moves.
 uptime_cs() { awk '{ n = split($1, t, "."); printf "%d\n", t[1] * 100 + (n > 1 ? substr(t[2] "00", 1, 2) : 0) }' /proc/uptime 2>/dev/null; }
 
@@ -68,6 +80,11 @@ fi
 # out; --any-display lifts that, and the path still names one instance (grassfield-security-status does the same).
 display=""
 [ -n "${WAYLAND_DISPLAY:-}" ] || display="--any-display"
+cpu=$(avg10 "$pressure/cpu")
+memory=$(avg10 "$pressure/memory")
+if { digits "$cpu" && [ "$cpu" -ge 40 ]; } || { digits "$memory" && [ "$memory" -ge 10 ]; }; then
+  answer=$answer_loaded
+fi
 t0=$(uptime_cs)
 # shellcheck disable=SC2086  # $display is empty or one option
 timeout -k 1 "$answer" qs ipc $display -p /usr/share/grassfield/shell call capabilities status >/dev/null 2>&1
@@ -101,6 +118,11 @@ if [ "${was_pid:-}" = "$pid" ] && digits "${was_misses:-}" && [ "$was_misses" -l
 fi
 if [ "$misses" -ge "$misses_max" ]; then
   rm -f "$state"
+  # Read once more right before the kill: a shell that restarted since is a new process, never killed for the old one's
+  # misses (integrator's review of f01a0b9f).
+  if [ "$(main_pid)" != "$pid" ]; then
+    exit 0
+  fi
   say "the shell (pid $pid) did not answer within $answer s $misses times in a row: SIGKILL, so that its unit fails and restarts it"
   systemctl --user kill --kill-whom=main --signal=SIGKILL "$unit" || say "the kill failed"
   exit 0

@@ -753,7 +753,7 @@ Goal: no input a process reads from the system, a file or another process can cr
   `PartOf`/`Requisite=graphical-session.target`), started by `autostart.lua` with the session's other units and installed
   by the PKGBUILD. It starts `grassfield-shell-watchdog.service` (oneshot, hardened as the failure counter: AF_UNIX only,
   `ProtectSystem=strict`, `ReadWritePaths=%t`, no network, Quickshell's option variables cleared, the runtime directory
-  kept, 30 s start timeout, 128M and 16 tasks for the qs binary it runs), which runs
+  kept, 45 s start timeout, 128M and 16 tasks for the qs binary it runs), which runs
   `packaging/bin/grassfield-shell-watchdog`.
 - The question is the planned one, `capabilities status` on the shell's system path, and nothing in its answer is read:
   any answer, the `refused` the dev gate gives in a real session included, is the GUI thread answering (the IPC handlers
@@ -796,6 +796,18 @@ Goal: no input a process reads from the system, a file or another process can cr
   service's sandbox against the qs binary and the user manager), the nested proof.
 - Review: opus security (the probe kills the process that holds the lock; the dev hook's gate); the integrator's nested
   pass: `devBlock 120` → a restart within 100 s with the lock kept, `devBlock 20` → none.
+- Review round 1 (2026-11-02, PR #106, the integrator's opus review of f01a0b9f with a security lens: FAIL on its new
+  test; the probe itself held: only the shell's main process, a kill while locked fails closed, the thresholds, off in dev
+  and nested sessions). MAJOR: `shell_watchdog_hook.sh` set `rc` inside a command substitution, so `set -u` stopped it at
+  the first check on any machine with Quickshell: the answers go to a file now, `rc` stays in the test's shell (the
+  plumbing run against a Quickshell stand-in passes, and fails when the stand-in's hook does not hold the thread; with
+  Quickshell itself NOT VERIFIED here). MINOR, load: the 5 s bound includes starting the qs client, so on a loaded machine
+  a healthy shell could miss three times and that kill would count toward the loop detector: while `/proc/pressure/cpu`
+  `some avg10` is 40 % or more, or memory's 10 % or more, the bound is 20 s (the service's start timeout 45 s). Extended,
+  never skipped: a shell spinning in a loop raises the pressure itself on a small machine and must still be found
+  (`GRASSFIELD_SHELL_WATCHDOG_PRESSURE` points the tests at fixture files; the unit clears it). NIT: the MainPID is read
+  once more right before the kill; a shell that restarted since is not killed. `shell_watchdog.sh` 27 cases; mutants
+  caught: no extension, skipping under load, no read before the kill.
 
 ### Step 7: the known incidents as regressions, and the two open ones (T-8, I-2, I-3, I-4, I-5)
 - A package-upgrade simulation in nested: replace the installed-layout copy of `config/hypr` under a running session

@@ -285,7 +285,8 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   Acceptable until S4 (the old start limit gave the same state; opus security review of b1d826b), written here so that
   nobody takes a stopped shell for a locked one. A frozen shell (its GUI thread blocked, the process alive) fails nothing
   by itself: `grassfield-shell-watchdog.timer` (ADR-0041 step 6a) asks it `capabilities status` every 30 s and, after three
-  questions in a row of one MainPID left unanswered for 5 s, sends that process SIGKILL (`systemctl --user kill
+  questions in a row of one MainPID left unanswered for 5 s (20 s while the kernel's pressure files show a loaded machine),
+  sends that process SIGKILL (`systemctl --user kill
   --kill-whom=main`), so the unit fails and the path above applies: the restart, the sleep lock armed, the counter (a hang
   that repeats ends in its stop). The probe never stops or unlocks; the compositor keeps a lock across the restart.
   `tests/shell/shell_watchdog.sh`. Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime

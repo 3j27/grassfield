@@ -14,11 +14,11 @@ ConditionEnvironment=GRASSFIELD_SESSION=1
 Type=oneshot
 Slice=session.slice
 ExecStart=/usr/lib/grassfield/grassfield-shell-watchdog
-# The question's 5 s bound, its KILL a second later, two short systemctl calls: well under this.
-TimeoutStartSec=30
+# The question's bound (5 s, 20 s on a loaded machine), its KILL a second later, a few short systemctl calls: under this.
+TimeoutStartSec=45
 # Quickshell's option variables cleared, as for every caller of the shell's IPC in the session (a stray QS_MANIFEST made the
-# path selection exit 108: the re-review of bf9e280).
-UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
+# path selection exit 108: the re-review of bf9e280), and the helper's test variable: the kernel's pressure files are read.
+UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_SHELL_WATCHDOG_PRESSURE
 # The misses live in $XDG_RUNTIME_DIR/grassfield (0700, shared with the menu bridge and the failure counter, kept when
 # this unit ends).
 RuntimeDirectory=grassfield
