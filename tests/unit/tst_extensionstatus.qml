@@ -47,6 +47,18 @@ TestCase {
         compare(ExtensionStatus.degradedNotice(ExtensionStatus.parse(""), true, false), "absent");
     }
 
+    // ADR-0041 step 2d (SP-6): the two notices shown without the opt-in setting carry the rebuild as their click, the
+    // ones shown while the rebuild runs and the plain notice do not.
+    function test_theManualNoticesCarryTheRebuildAsTheirClick() {
+        verify(ExtensionStatus.manualAction("stale-manual"));
+        verify(ExtensionStatus.manualAction("mismatch-manual"));
+        for (const key of ["stale-rebuilding", "mismatch-rebuilding", "absent", "", "updated-built"])
+            verify(!ExtensionStatus.manualAction(key), key);
+        const stale = ExtensionStatus.parse("state=mismatch\nversion=v0.56.2\nreason=stale-build\n");
+        verify(ExtensionStatus.manualAction(ExtensionStatus.degradedNotice(stale, false, false)), "the setting off: the click");
+        verify(!ExtensionStatus.manualAction(ExtensionStatus.degradedNotice(stale, true, false)), "the setting on: the rebuild runs already");
+    }
+
     function test_aMatchingBuildThatIsNotLoadedGetsThePlainNotice() {
         compare(ExtensionStatus.notice(ExtensionStatus.parse("state=match\nversion=v0.56.2\npath=/usr/lib/grassfield/grassfield-compositor.so\n")), "absent");
     }
