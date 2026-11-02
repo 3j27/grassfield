@@ -747,6 +747,56 @@ Goal: no input a process reads from the system, a file or another process can cr
 - Integrator, nested: both proofs. Owner, real session: nothing specific.
 - Review: security (the probe restarts the process that holds the lock; the dev hook's gate); R13 for `compositor.lua`.
 
+### Step 6a as built (2026-11-02, the branch of the stability lane; the liveness probe)
+- `packaging/systemd/grassfield-shell-watchdog.timer`: `OnActiveSec=30s`, `OnUnitActiveSec=30s`, `AccuracySec=1s`
+  (systemd's default of a minute would let the probes slide up to a minute late), session-only (`ConditionEnvironment`,
+  `PartOf`/`Requisite=graphical-session.target`), started by `autostart.lua` with the session's other units and installed
+  by the PKGBUILD. It starts `grassfield-shell-watchdog.service` (oneshot, hardened as the failure counter: AF_UNIX only,
+  `ProtectSystem=strict`, `ReadWritePaths=%t`, no network, Quickshell's option variables cleared, the runtime directory
+  kept, 30 s start timeout, 128M and 16 tasks for the qs binary it runs), which runs
+  `packaging/bin/grassfield-shell-watchdog`.
+- The question is the planned one, `capabilities status` on the shell's system path, and nothing in its answer is read:
+  any answer, the `refused` the dev gate gives in a real session included, is the GUI thread answering (the IPC handlers
+  run there). So the function keeps its dev gate and nothing new is exposed; the IPC surface table names the caller. The
+  inventory accepts a session helper asking a dev function (it rejects only an action without a caller, a dev function
+  without its gate and a caller of a function that does not exist).
+- A miss is a question that ran into its 5 s bound (timeout's 124, or 137 once its KILL followed) and took that long. A
+  question that fails at once (no instance yet, a refused connection, a qs killed early by the unit's memory limit) or
+  just under the bound with an error is no evidence of a hang and counts nothing. The misses belong to one MainPID (the
+  state file `$XDG_RUNTIME_DIR/grassfield/shell-watchdog`, "<pid> <misses>", 0600, replaced by a rename, never written
+  through a link): a shell that restarted between two questions or during one starts from zero; an answer forgets them.
+  Nothing is asked while the unit is not active/running, nor once the compositor is gone (`session-gone`, as the failure
+  counter asks).
+- The third miss in a row sends SIGKILL to the hung main process only (`systemctl --user kill --kill-whom=main
+  --signal=SIGKILL grassfield-shell.service`, the plan's kill narrowed to the main process): the unit fails, Restart=always
+  brings the shell back within a second, OnFailure= arms the sleep lock and runs step 1a's counter (a hang that repeats
+  ends in the loop detector's stop); the unit's other processes get the restart's usual SIGTERM. The probe never stops,
+  restarts, starts or unlocks anything, and no environment variable moves its bounds.
+- Timing: the third miss comes 60 s after the first at the earliest, so a stall shorter than about 65 s is never killed,
+  and one longer than about 95 s (the first question up to 30 s after it began, plus 60 s, plus the 5 s bound) always is.
+  The plan's proof ("blocks the GUI thread 20 s → restart within 100 s") cannot hold as written: 20 s gives one miss at
+  most. The dev hook is `capabilities devBlock <seconds>` (1 to 300, `Mode.dev`, `refused` otherwise): the nested proof is
+  `devBlock 120` (the shell restarted within 100 s, the lock kept) and `devBlock 20` (no restart: a long but finite stall
+  survives).
+- Tests: `tests/shell/shell_watchdog.sh` (logic; the helper's scratch copy against a fake `qs` that answers, hangs, fails at
+  once, fails just under the bound, is killed at once or sees a restart during the question, and a fake `systemctl` that
+  reports the unit's state and logs every call: alive, two misses kept, an answer forgets them, the third miss kills once
+  with the exact command and nothing else, another MainPID starts from zero, a unit not running asks nothing, the session's
+  end asks nothing, a link at the state's path is not followed, the file modes; 23 cases, about 45 s);
+  `tests/shell/shell_watchdog_hook.sh` (headless: the real `Capabilities` offscreen answers, `devBlock 4` holds the thread
+  so a 2 s question times out, then it answers again; outside a dev session `devBlock` is refused at once and `status`
+  answers `refused`); `tests/shell/session_services.sh` (the two units, the autostart and PKGBUILD lines).
+- Evidence (this container; no Quickshell, no systemd user manager): `shell_watchdog.sh` exit 0 (23 PASS) and five mutants
+  of the helper caught (the threshold at 2, no exit-code guard, no elapsed-time guard, no restart check after the
+  question, a `systemctl restart` instead of the kill); `session_services.sh` exit 0; `shell_unit.sh` exit 0 (the qs caller
+  scan); the IPC inventory's reading of the caller and the row simulated (the helper calls `capabilities status`, the table
+  and the handler both name `status, devBlock`); inventory ok; i18n 0 bare literals; isolation ok; qmllint 6.4 parses
+  `Capabilities.qml` and the probe; `sh -n`; `git diff --check` clean. NOT VERIFIED here: `shell_watchdog_hook.sh` (no
+  Quickshell: SKIP), `ipc_inventory.sh` end to end (Qt's tools), the units under systemd (the timer's cadence, the
+  service's sandbox against the qs binary and the user manager), the nested proof.
+- Review: opus security (the probe kills the process that holds the lock; the dev hook's gate); the integrator's nested
+  pass: `devBlock 120` → a restart within 100 s with the lock kept, `devBlock 20` → none.
+
 ### Step 7: the known incidents as regressions, and the two open ones (T-8, I-2, I-3, I-4, I-5)
 - A package-upgrade simulation in nested: replace the installed-layout copy of `config/hypr` under a running session
   (unlink and recreate, as pacman does), then reload: no error bar, every bind present (I-2's proof made repeatable).

@@ -233,7 +233,7 @@ does not check its gate.
 | volume | up, down, mute | action | volume keys |
 | brightness | up, down | action | brightness keys |
 | keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
-| capabilities | status | dev | visual tests wait on it |
+| capabilities | status, devBlock | dev | visual tests wait on `status`; `packaging/bin/grassfield-shell-watchdog` asks `status` as the shell's liveness question (ADR-0041 step 6a) and reads no answer: any answer, this `refused` of a real session included, is the GUI thread answering, so the gate stays and nothing is returned to it. `devBlock` holds the GUI thread 1 to 300 s (the probe's nested proof) |
 | session | cover, lift | action | `packaging/bin/grassfield-session-end` once every window has gone (ADR-0040 ID-10): `cover` brings up the exit cover, one opaque fade to the ground over every output (it answers the fade's length and lifts itself after `session.exitCoverHoldMs`), `lift` takes it down when the session could not be ended. Neither ends the session; another process of the user can hide the desktop for that long at most |
 | session | state | dev | the exit cover's nested check (`shown` or `hidden`) |
 | security | state, heartbeat | action | the security process's own target (`shell/security.qml`, ADR-0041 step 1 S1, a second `qs` instance at `/usr/share/grassfield/shell/security.qml`): what it hosts (`starting` at S1) and a sequence number; read by `packaging/bin/grassfield-security-status` and the S1 measurements; never private state, nothing locks or unlocks |
@@ -283,7 +283,12 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   is `qs ipc` to the shell, `config/hypr/grassfield/bindings.lua:148`); only a sleep or the lid locks, because Omarchy's
   sleep lock stays armed and its stand-in, like `grassfield-lid`'s fallback, starts the shell again and asks it to lock.
   Acceptable until S4 (the old start limit gave the same state; opus security review of b1d826b), written here so that
-  nobody takes a stopped shell for a locked one. Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
+  nobody takes a stopped shell for a locked one. A frozen shell (its GUI thread blocked, the process alive) fails nothing
+  by itself: `grassfield-shell-watchdog.timer` (ADR-0041 step 6a) asks it `capabilities status` every 30 s and, after three
+  questions in a row of one MainPID left unanswered for 5 s, sends that process SIGKILL (`systemctl --user kill
+  --kill-whom=main`), so the unit fails and the path above applies: the restart, the sleep lock armed, the counter (a hang
+  that repeats ends in its stop). The probe never stops or unlocks; the compositor keeps a lock across the restart.
+  `tests/shell/shell_watchdog.sh`. Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
   model: a 10 s loop must end), `tests/security/sleep_lock_units.sh`. A stop through systemd is never restarted (systemd
   semantics): logout stops `graphical-session.target`,
   which stops the shell (`PartOf=`), and `Requisite=graphical-session.target` refuses a restart once the target is gone,

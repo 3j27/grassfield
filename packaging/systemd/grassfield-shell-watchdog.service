@@ -1,0 +1,48 @@
+[Unit]
+Description=Grassfield shell liveness probe: restart a shell that stopped answering
+Documentation=file:///usr/share/doc/grassfield/README.md
+# Started by grassfield-shell-watchdog.timer every 30 s (ADR-0041 step 6a, owner decision SQ-5 A). It asks the shell one
+# question (any answer is the shell's GUI thread answering); after three misses in a row of the same shell process it sends
+# that process SIGKILL through the user manager: the unit fails, Restart=always brings the shell back and step 1a's counter
+# counts the failure. It never unlocks: the compositor keeps a lock while the shell restarts.
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+
+[Service]
+Type=oneshot
+Slice=session.slice
+ExecStart=/usr/lib/grassfield/grassfield-shell-watchdog
+# The question's 5 s bound, its KILL a second later, two short systemctl calls: well under this.
+TimeoutStartSec=30
+# Quickshell's option variables cleared, as for every caller of the shell's IPC in the session (a stray QS_MANIFEST made the
+# path selection exit 108: the re-review of bf9e280).
+UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
+# The misses live in $XDG_RUNTIME_DIR/grassfield (0700, shared with the menu bridge and the failure counter, kept when
+# this unit ends).
+RuntimeDirectory=grassfield
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+# Hardening: it reads the shell unit's state, connects to the shell's IPC socket under XDG_RUNTIME_DIR, writes one small
+# file there and, at most, asks the user manager to kill one process: all over AF_UNIX path sockets, which PrivateNetwork=
+# leaves reachable. The question runs the whole qs binary: the memory and task limits leave it room (a qs killed early is
+# a question that failed at once, never a miss).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%t
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+MemoryMax=128M
+TasksMax=16
