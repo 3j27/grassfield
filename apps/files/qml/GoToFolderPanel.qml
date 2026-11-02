@@ -4,9 +4,10 @@ import Grassfield.Ui
 
 // Go to Folder (⇧⌘G, macOS 27 Finder-Go-To-Folder, FP-76): a panel over the window with the path field, the rest of the
 // first matching folder's name inline (Tab or → takes it), and a "Go to:" list of the matching folders (FilesApp
-// completeFolder, listed off the GUI thread); the recent folders while the field is empty. Return goes to the chosen
-// row, or to the typed location when nothing matches (a URL: trash:/, smb://…; a file: its folder, the file selected);
-// Esc or a click outside closes it.
+// completeFolder, listed off the GUI thread); the recent folders while the field is empty. Return goes to the typed
+// location when it exists (a folder: itself, so "/" and "~/" open the root and the home folder; a URL: trash:/, smb://…;
+// a file: its folder, the file selected); it goes to the chosen row only when the path is partial, or when an arrow key
+// chose that row. Esc or a click outside closes it.
 // Declare it as a child of the window's content; it fills it.
 Item {
     id: root
@@ -18,6 +19,8 @@ Item {
 
     property var matches: []
     property int chosen: 0
+    // An arrow key moved the choice: Return then goes to that row even when the typed path exists.
+    property bool picked: false
     property string errorText: ""
     readonly property bool shown: root.visible
     readonly property bool showingRecents: field.text === ""
@@ -39,6 +42,7 @@ Item {
         root.errorText = "";
         root.matches = [];
         root.chosen = 0;
+        root.picked = false;
         field.text = "";
         root.visible = true;
         field.forceActiveFocus();
@@ -57,33 +61,31 @@ Item {
         return [s];
     }
 
-    // A folder name as StyledText shows it literally.
-    function escaped(text: string): string {
-        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    }
-
     // The matched start of a row's last folder name, bold (Finder).
     function typedLength(): int {
         return field.text.length - (field.text.lastIndexOf("/") + 1);
     }
 
     function accept(): void {
+        const text = field.text.trim();
+        // What is typed wins when it exists (the Finder opens "/" and "~/" themselves, not their first subfolder), unless
+        // an arrow key chose a row. A file opens its folder with the file selected; a folder or a URL opens as it is.
+        if (text !== "" && !root.picked) {
+            const target = root.app.goToTarget(text, root.tab.url);
+            if (String(target.folder) !== "") {
+                root.go(target.folder);
+                if (String(target.select) !== "")
+                    root.tab.folder.expect(target.select, false);
+                return;
+            }
+        }
+        // A partial path completes to the chosen match (the recents, while the field is empty).
         if (root.rows.length > 0 && root.chosen >= 0 && root.chosen < root.rows.length) {
             root.go(root.rows[root.chosen].url);
             return;
         }
-        const text = field.text.trim();
-        if (text === "")
-            return;
-        // A file opens its folder with the file selected (the Finder); a folder or a URL opens as it is.
-        const target = root.app.goToTarget(text, root.tab.url);
-        if (String(target.folder) === "") {
+        if (text !== "")
             root.errorText = qsTr("The folder “%1” can’t be found.").arg(text);
-            return;
-        }
-        root.go(target.folder);
-        if (String(target.select) !== "")
-            root.tab.folder.expect(target.select, false);
     }
 
     function go(url: url): void {
@@ -108,6 +110,7 @@ Item {
                 return;
             root.matches = matches;
             root.chosen = 0;
+            root.picked = false;
         }
     }
 
@@ -161,6 +164,7 @@ Item {
                 Accessible.name: qsTr("Folder path")
                 onTextEdited: {
                     root.errorText = "";
+                    root.picked = false;
                     if (field.text === "")
                         root.matches = [];
                     else
@@ -176,9 +180,11 @@ Item {
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Down) {
                         root.chosen = Math.min(root.chosen + 1, root.rows.length - 1);
+                        root.picked = true;
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Up) {
                         root.chosen = Math.max(root.chosen - 1, 0);
+                        root.picked = true;
                         event.accepted = true;
                     } else if (event.key === Qt.Key_Tab || (event.key === Qt.Key_Right && field.cursorPosition === field.text.length && root.suffix !== "")) {
                         if (root.complete() || event.key === Qt.Key_Tab)
@@ -333,14 +339,28 @@ Item {
                                         font.pixelSize: Tokens.typographyBodySize
                                     }
 
-                                    // The typed start in bold, the rest regular (one run: no gap between them).
-                                    Text {
-                                        textFormat: Text.StyledText
-                                        text: part.bold > 0 ? "<b>" + root.escaped(part.modelData.substring(0, part.bold)) + "</b>" + root.escaped(part.modelData.substring(part.bold))
-                                                            : root.escaped(part.modelData)
-                                        color: row.chosen ? Appearance.highlightText : Appearance.colors.text
-                                        font.family: Appearance.fontFamily
-                                        font.pixelSize: Tokens.typographyBodySize
+                                    // The typed start in bold, the rest regular: two plain runs side by side (no rich text for a
+                                    // folder's name).
+                                    Row {
+                                        spacing: 0
+
+                                        Text {
+                                            textFormat: Text.PlainText
+                                            visible: part.bold > 0
+                                            text: part.modelData.substring(0, part.bold)
+                                            color: row.chosen ? Appearance.highlightText : Appearance.colors.text
+                                            font.family: Appearance.fontFamily
+                                            font.pixelSize: Tokens.typographyBodySize
+                                            font.bold: true
+                                        }
+
+                                        Text {
+                                            textFormat: Text.PlainText
+                                            text: part.modelData.substring(part.bold)
+                                            color: row.chosen ? Appearance.highlightText : Appearance.colors.text
+                                            font.family: Appearance.fontFamily
+                                            font.pixelSize: Tokens.typographyBodySize
+                                        }
                                     }
                                 }
                             }

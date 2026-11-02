@@ -97,6 +97,7 @@
  {"path": "tests/unit/tst_filesgrouped.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filescolumns.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesglobalmenu.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_filesgoto.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesinfoapp.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filessidebar.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesnav.qml", "layer": "headless"},
