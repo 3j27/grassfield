@@ -1,0 +1,39 @@
+#!/bin/sh
+# grassfield-pacman-watch: pacman's local database changed (grassfield-pacman-watch.path; ADR-0041 step 2b, U31). Wait while
+# pacman holds its database lock (/var/lib/pacman/db.lck: the transaction still runs; a check meanwhile would read a
+# half-done toolkit, and "Log out to finish updating" (U31) during a terminal transaction would invite a log out that stops
+# it), at most LOCK_WAIT seconds; then let the burst settle; then ask the shell once for a Software Update check
+# (`update check system`: not a user's check, so a toolkit package replaced under the session is announced). The shell
+# runs its own checker. Exit 0 whatever the shell answers (no shell: nothing to ask, and the scheduled checks still run).
+# Read-only; nothing runs as root.
+#   GRASSFIELD_PACMAN_WATCH_LOCK        the lock file waited for (default /var/lib/pacman/db.lck)   } read in a dev session
+#   GRASSFIELD_PACMAN_WATCH_LOCK_WAIT   seconds to wait for it at most (default 1800)              } only (GRASSFIELD_DEV=1
+#   GRASSFIELD_PACMAN_WATCH_SETTLE      seconds to let the burst settle (default 5)                } outside the session),
+#   GRASSFIELD_PACMAN_WATCH_IPC         the command run instead of qs ipc                          } as grassfield-lid's knobs
+set -u
+# The request must never be defeatable by the session's environment: a stray QS_MANIFEST or QS_CONFIG_NAME made
+# `qs ipc -p` exit 108 (re-review of bf9e280, M1); the unit clears the same, and the helper's knobs.
+unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
+lock=/var/lib/pacman/db.lck
+lock_wait=1800
+settle=5
+ipc=""
+if [ "${GRASSFIELD_DEV:-}" = 1 ] && [ "${GRASSFIELD_SESSION:-}" != 1 ]; then
+  lock=${GRASSFIELD_PACMAN_WATCH_LOCK:-$lock}
+  lock_wait=${GRASSFIELD_PACMAN_WATCH_LOCK_WAIT:-$lock_wait}
+  settle=${GRASSFIELD_PACMAN_WATCH_SETTLE:-$settle}
+  ipc=${GRASSFIELD_PACMAN_WATCH_IPC:-}
+fi
+# pacman creates the lock root's and unreadable (mode 0): -e (a stat, which the directory allows) sees it all the same.
+waited=0
+while [ -e "$lock" ] && [ "$waited" -lt "$lock_wait" ]; do
+  sleep 1
+  waited=$((waited + 1))
+done
+sleep "$settle"
+if [ -n "$ipc" ]; then
+  timeout -k 0.2 5 "$ipc" call update check system
+  exit 0
+fi
+timeout -k 0.2 5 qs ipc -p /usr/share/grassfield/shell call update check system
+exit 0
