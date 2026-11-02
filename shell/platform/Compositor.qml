@@ -1237,12 +1237,13 @@ Singleton {
             activate(top);
     }
 
-    // Zoom = the "maximized" fullscreen mode, toggled by a dispatch (the foreign-toplevel
-    // `maximized` request is ignored: windows.lua suppresses maximize events). Full screen = fullscreen
-    // (ADR-0002), through the foreign-toplevel protocol.
+    // Zoom is Fill (ADR-0036 D78): with the plugin's "zoom-fill" the plugin's zoom toggle (the window fills its work area as
+    // a tile, with the margins, and a second Zoom brings back its box from before); without it the "maximized" fullscreen
+    // mode, toggled by a dispatch (the foreign-toplevel `maximized` request is ignored: windows.lua suppresses maximize
+    // events). Full screen = fullscreen (ADR-0002), through the foreign-toplevel protocol.
     function toggleZoom(toplevel: var): void {
         const top = hyprlandToplevel(toplevel);
-        if (top && dispatchRequest(Minimized.fullscreenRequest(top.address, "maximized")))
+        if (top && dispatchRequest(Minimized.zoomRequest(top.address, Capabilities.has("zoom-fill"))))
             requestWindowRefresh();
     }
 
