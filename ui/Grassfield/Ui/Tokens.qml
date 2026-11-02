@@ -2331,6 +2331,8 @@ QtObject {
     readonly property int filesInfoIconSize: 64
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesInfoLabelWidth: 100
+    // estimate: Get Info's Privilege pop-up hugs its widest choice but not below this (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
+    readonly property int filesInfoPrivilegeMinWidth: 96
     // estimate: Customize Folder window (macOS 26 style panel: preview, colour row, symbol grid) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesCustomizeWindowWidth: 440
     // estimate: Customize Folder window height (preview, colour row, custom colour, symbol grid and field, buttons) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]

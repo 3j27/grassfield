@@ -118,7 +118,7 @@ Window {
     // The item's owner, group and privileges, read again after each change (what the system reports).
     property var permissions: root.isApplication ? ({valid: false}) : root.app.permissionsOf(root.info.url)
     readonly property bool permissionsShown: !root.isApplication && root.permissions.valid === true
-    readonly property var accessChoices: [
+    property var accessChoices: [
         {id: "3", text: qsTr("Read & Write")}, {id: "1", text: qsTr("Read only")}, {id: "2", text: qsTr("Write only")}, {id: "0", text: qsTr("No Access")}
     ]
 
@@ -351,7 +351,10 @@ Window {
             // Sharing & Permissions (Finder): Name and Privilege, one row each for the owner, the group and everyone.
             Column {
                 visible: root.permissionsShown
-                width: content.width
+                // The table runs a little wider than the sections' text, as Finder's does: the Name column keeps room for a
+                // short name next to a Privilege pop-up that hugs its widest choice (French: "Lecture et écriture").
+                x: -Tokens.spacingSm
+                width: content.width + 2 * Tokens.spacingSm
                 spacing: Tokens.spacingXs
                 Accessible.role: Accessible.Table
                 Accessible.name: qsTr("Sharing & Permissions")
@@ -366,11 +369,11 @@ Window {
                     delegate: Item {
                         id: permissionRow
                         required property var modelData
-                        width: content.width
+                        width: parent.width
                         height: privilege.implicitHeight
                         // The Name column takes what the Privilege column leaves (Finder's table): it never runs under it, and a
                         // long name elides.
-                        readonly property real nameWidth: Math.max(0, permissionRow.width - privilege.width - Tokens.spacingSm)
+                        readonly property real nameWidth: Math.max(0, permissionRow.width - privilege.width)
                         Accessible.role: Accessible.Row
                         Accessible.name: DisplayName.text(permissionRow.modelData.name)
 
@@ -403,6 +406,7 @@ Window {
                         ComboBox {
                             id: privilege
                             objectName: "privilege"
+                            minimumWidth: Tokens.filesInfoPrivilegeMinWidth
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             enabled: root.permissions.editable

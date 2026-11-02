@@ -161,6 +161,57 @@ TestCase {
         fakeApp.permissionsResult = {valid: false};
     }
 
+    TextMetrics {
+        id: metrics
+    }
+
+    function texts(item: var, out: var): var {
+        if (item.text !== undefined && item.elide !== undefined && item.visible)
+            out.push(item);
+        for (let i = 0; i < item.children.length; i++)
+            test.texts(item.children[i], out);
+        return out;
+    }
+
+    // The Privilege pop-up hugs its widest choice, so the Name column gets the rest: a short user or group name ("chapdel",
+    // "staff") is shown in full, in English and in French, and only a genuinely long one elides (review of PR #98).
+    function test_aShortNameIsNotElided_data() {
+        return [
+            {tag: "English", me: "Me", choices: [{id: "3", text: "Read & Write"}, {id: "1", text: "Read only"}, {id: "2", text: "Write only"}, {id: "0", text: "No Access"}]},
+            {tag: "French", me: "moi", choices: [{id: "3", text: "Lecture et écriture"}, {id: "1", text: "Lecture seule"}, {id: "2", text: "Écriture seule"}, {id: "0", text: "Aucun accès"}]}
+        ];
+    }
+
+    function test_aShortNameIsNotElided(data) {
+        for (const names of [{owner: "chapdel", group: "chapdel", long: false}, {owner: "chapdel", group: "staff", long: false}, {owner: "a-user-with-a-really-quite-long-account-name", group: "a-group-with-a-long-name-too", long: true}]) {
+            fakeApp.permissionsResult = {valid: true, mode: 420, modeText: "-rw-r--r--", owner: names.owner, group: names.group, ownedByMe: true, isDir: false,
+                                         editable: true, reason: "", groups: [names.group, "wheel"], access: [3, 1, 1]};
+            const win = createTemporaryObject(fileComponent, test, {accessChoices: data.choices});
+            verify(win);
+            win.show();
+            tryVerify(() => win.visible && win.contentItem.width > 0, 3000);
+            const privileges = test.items(win.contentItem, "privilege", []);
+            const group = test.items(win.contentItem, "groupChoice", []).find(i => i.visible);
+            const owner = test.items(win.contentItem, "nameText", []).find(i => i.visible && i.text.indexOf(names.owner) >= 0);
+            verify(group !== undefined && owner !== undefined && privileges.length === 3);
+            const groupText = test.texts(group, []).find(t => t.text === names.group || t.text.length > 0 && names.group.indexOf(t.text.replace("…", "")) === 0);
+            verify(groupText !== undefined, "the group pop-up shows its name");
+            for (const p of privileges)
+                verify(p.x >= group.x + group.width, data.tag + ": no overlap (" + (group.x + group.width) + " > " + p.x + ")");
+            // The owner row reads "chapdel (Me)" in English and "chapdel (moi)" in French (the catalog's own words): the French
+            // label is measured with the same font, since the test runs in English.
+            metrics.font = owner.font;
+            metrics.text = names.owner + " (" + data.me + ")";
+            if (names.long)
+                compare(owner.truncated, true, data.tag + " owner " + names.owner + " elides");
+            else
+                verify(metrics.advanceWidth <= owner.width, data.tag + " owner label " + metrics.advanceWidth + " fits the Name column " + owner.width);
+            compare(groupText.truncated, names.long, data.tag + " group " + names.group + (names.long ? " elides" : " is shown in full"));
+            win.destroy();
+        }
+        fakeApp.permissionsResult = {valid: false};
+    }
+
     function test_applicationInfoHasNoUndefinedThumbnail() {
         const win = createTemporaryObject(windowComponent, test);
         verify(win);

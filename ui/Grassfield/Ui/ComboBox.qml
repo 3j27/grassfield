@@ -13,6 +13,8 @@ T.ComboBox {
 
     property string value: ""
     property bool inline: false
+    // The least width of the button form (a pop-up that hugs its widest choice sets a smaller one).
+    property real minimumWidth: Tokens.settingsPickerWidth
     property string accessibleName: ""
     readonly property bool open: root.popup.visible
     // The list (a PopupMenu) of the open pop-up.
@@ -36,7 +38,7 @@ T.ComboBox {
     // Whole device pixels, so that the disc and the next control in a row stay on the pixel grid (a 3.5-pt inset stays 3.5 at 2x).
     readonly property real pixelRatio: Math.max(1, Screen.devicePixelRatio)
     implicitWidth: Math.ceil((root.inline ? widest + Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset
-        : Math.max(Tokens.settingsPickerWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm)) * root.pixelRatio) / root.pixelRatio
+        : Math.max(root.minimumWidth, widest + Tokens.spacingMd + Tokens.menuIconSize + Tokens.spacingSm + Tokens.spacingXs + Tokens.spacingSm)) * root.pixelRatio) / root.pixelRatio
     property real widest: 0
     function measureItems(): void {
         let w = 0;
