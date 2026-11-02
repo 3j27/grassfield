@@ -688,8 +688,10 @@ QtObject {
     readonly property int controlScrollbarWidth: 6
     // GF-085: shortest scroll bar thumb [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlScrollbarMinLength: 24
-    // GF-085: scroll bar while the view is still [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
-    readonly property real controlScrollbarIdleOpacity: 0.5
+    // macOS 27 overlay scroll bars: hidden while the view is still, shown while it scrolls or under the pointer (owner report 2026-11-02: a half-visible bar on a still Settings sidebar) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlScrollbarIdleOpacity: 0
+    // estimate, as the Apps launcher's scrollbarIdleMs: the overlay scroll bar stays this long after the view stops or the pointer leaves, then fades out over motion.normal (Reduce Motion caps it) [ref: docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int controlScrollbarHideDelayMs: 800
     // GF-085: scroll bar thumb (text colour alpha) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property real controlScrollbarThumbOpacity: 0.3
     // GF-085: dragged scroll bar thumb [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
