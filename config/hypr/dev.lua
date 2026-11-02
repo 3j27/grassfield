@@ -54,7 +54,11 @@ end
 
 -- Reference output for deterministic screenshots: 1920x1080 @ scale 1, like the reference machine panel.
 -- The visible WAYLAND-1 window is sized by the owner's session layout, so it can't be relied on.
-hl.monitor({ output = "GF-REF", mode = "1920x1080@60", position = "auto-right", scale = 1 })
+-- `nested-up.sh --ref-scale S` sets GRASSFIELD_REF_SCALE for a fractional run (the owner's panel is 1920x1080 at 1.25):
+-- only these values are accepted, anything else keeps 1.
+local ref_scales = { ["1"] = 1, ["1.25"] = 1.25, ["1.5"] = 1.5, ["1.75"] = 1.75, ["2"] = 2 }
+local ref_scale = ref_scales[os.getenv("GRASSFIELD_REF_SCALE") or "1"] or 1
+hl.monitor({ output = "GF-REF", mode = "1920x1080@60", position = "auto-right", scale = ref_scale })
 -- ADR-0031: Settings > Displays' choices, from the dev paths (GRASSFIELD_CONFIG_HOME, GRASSFIELD_STATE_HOME) only.
 local displays_ok, displays_err = pcall(require, "grassfield.displays")
 if not displays_ok then
