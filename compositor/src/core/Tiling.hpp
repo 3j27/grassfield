@@ -704,9 +704,10 @@ namespace gf::tiling {
     };
     std::optional<Unsplit> unsplitHow(std::string_view text);
 
-    // A Replace Tiled Window's suggestion: `sg` without the window it replaced (it went back to the Desktop the picker offers
-    // windows from); nullopt when no window is left to offer (the other member then fills alone, D43).
-    std::optional<Suggestion> withoutWindow(std::optional<Suggestion> sg, uint64_t window);
+    // The windows a suggestion offers (TL28, D26): `candidates` in their order (top first, then the minimized ones), each once,
+    // never `exclude` (Replace Tiled Window's window, back on the Desktop the picker offers windows from: D71; 0 excludes
+    // none), at most kMaxSuggested: the cap counts after the exclusion (the follow-up of #78: 11 offered with 12 or more).
+    std::vector<uint64_t> offerWindows(std::span<const uint64_t> candidates, uint64_t exclude);
 
     // The Split View Desktop `workspace` is, or nullptr.
     const SplitDesk* splitOf(std::span<const SplitDesk> splits, int64_t workspace);
@@ -732,6 +733,13 @@ namespace gf::tiling {
     // Keeps the members of `d` still on its workspace (`on`: the windows there now, in any state), in their order. True when
     // one left.
     bool pruneMembers(SplitDesk& d, std::span<const uint64_t> on);
+
+    // Step 6e (ADR-0036 D73): every member of the Split View Desktops `splits`, sorted, each once (their titlebars are away).
+    std::vector<uint64_t> splitMembers(std::span<const SplitDesk> splits);
+
+    // The windows that joined or left a Split View Desktop: in one of `before` and `now` (both from splitMembers) and not in
+    // the other, sorted. Their titlebars are refreshed (one goes, one comes back above its window).
+    std::vector<uint64_t> membersChanged(std::span<const uint64_t> before, std::span<const uint64_t> now);
 
     // What a Split View Desktop does after a change (TL33, ADR-0036 D43): with two members it stays; with one it fills it
     // alone, unless that window is still choosing its second one (`picking`: the suggestion of its Split View pending); with

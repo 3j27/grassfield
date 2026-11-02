@@ -36,6 +36,18 @@ TestCase {
         compare(ClientChrome.band({}, true, 32), 32);
     }
 
+    // Tiling step 6e (ADR-0036 D73): a Split View window whose titlebar the plugin keeps away has no band either.
+    function test_noBandAboveAWindowWhoseTitlebarIsAway() {
+        const own = {tags: ["grassfield-client-chrome*"]};
+        const other = {tags: []};
+        compare(ClientChrome.band(other, true, 32, true), 0);
+        compare(ClientChrome.band(other, false, 32, true), 0, "whatever the client-chrome feature says");
+        compare(ClientChrome.band(own, false, 32, true), 0);
+        compare(ClientChrome.band(other, true, 32, false), 32);
+        compare(ClientChrome.band(other, true, 32, 1), 32, "only true counts");
+        compare(ClientChrome.band(own, true, 32, false), 0, "client chrome as before");
+    }
+
     // Q4b --------------------------------------------------------------------------------------------------------------
 
     function test_capabilitiesFileLocation() {

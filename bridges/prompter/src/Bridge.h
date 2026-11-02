@@ -23,9 +23,12 @@
 //   the connection, which cancels every request and releases the name.
 // - NetworkManager's secrets (step 9c): a secret agent on the bridge's system bus connection (NmAgent.h), registered with
 //   NetworkManager only while a shell that draws kind "nm" is connected; its requests share the bound of 8 and the ids.
+// - KIO's network passwords (step 9e): org.kde.kpasswdserver6 on the bridge's session bus connection (KioServer.h), its name
+//   held only while a shell that draws kind "kio" is connected; its queries share the bound of 8 and the ids.
 // - Nothing the callers or the shell send is logged; the journal gets ids, kinds, requesters' roles and paths, and refusals.
 
 #include "Filter.h"
+#include "KioServer.h"
 #include "NmAgent.h"
 #include "Peer.h"
 #include "Prompt.h"
@@ -49,7 +52,7 @@ class QSocketNotifier;
 
 namespace gf::prompter {
 
-    class Bridge : public PromptSink, public NmAgent::Sink {
+    class Bridge : public PromptSink, public NmAgent::Sink, public KioServer::Sink {
       public:
         struct Options {
             QString socketPath;
@@ -59,6 +62,9 @@ namespace gf::prompter {
             // The system bus for the NetworkManager agent (step 9c); nullptr: no agent (NetworkManager gets NoSecrets).
             GDBusConnection* systemBus   = nullptr;
             int              nmTimeoutMs = nm::kAnswerTimeoutMs;
+            // gnome-keyring's keyrings directory, where the KIO server reads whether a keyring has a password (step 9e).
+            QString keyringDirectory;
+            int     kioStoreTimeoutMs = 0; // how long a keychain store holds its place (0: KioServer::kStoreTimeoutMs)
         };
 
         Bridge(GDBusConnection* bus, Options options);
@@ -81,6 +87,10 @@ namespace gf::prompter {
         QString submitNm(NmRequest* request) override;
         void    withdrawNm(const QString& id) override;
 
+        // KioServer::Sink
+        QString submitKio(KioRequest* request) override;
+        void    withdrawKio(const QString& id) override;
+
       private:
         struct Pending {
             GfPrompt*  prompt = nullptr; // a reference, held while outstanding
@@ -88,6 +98,7 @@ namespace gf::prompter {
             bool       sent   = false;   // the shell has it
             bool       choice = false;   // it was shown with a check box
             NmRequest* nm     = nullptr; // a NetworkManager request (kind "nm"; prompt is then nullptr), owned by m_nm
+            KioRequest* kio   = nullptr; // a KIO query (kind "kio"; prompt is then nullptr), owned by m_kio
         };
 
         static GcrPrompt* onNewPrompt(GcrSystemPrompter* prompter, gpointer self);
@@ -108,6 +119,7 @@ namespace gf::prompter {
         void protocolError(const QString& code, const QString& why, bool fatal);
         void onAnswer(const ShellLine& answer, std::string_view line);
         void onNmAnswer(const ShellLine& answer, std::string_view line, NmRequest* request);
+        void onKioAnswer(const ShellLine& answer, std::string_view line, KioRequest* request);
 
         void identified(const QString& id, GfPrompt* prompt, const RequesterView& requester);
         void cancelRequest(const QString& id, bool tellShell);
@@ -159,6 +171,7 @@ namespace gf::prompter {
         QString m_nameState  = QStringLiteral("released");
 
         std::unique_ptr<NmAgent> m_nm; // the NetworkManager agent, when a system bus was given
+        std::unique_ptr<KioServer> m_kio; // KIO's password server (step 9e)
     };
 
 } // namespace gf::prompter

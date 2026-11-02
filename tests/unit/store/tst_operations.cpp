@@ -979,6 +979,20 @@ TEST(Operations, FlatpakUpdateRecords)
     QJsonObject install = flatpakRecord(QStringLiteral("org.example.Notes"), QStringLiteral("install")).toJson();
     install.insert(QStringLiteral("commits"), QJsonArray{c1});
     EXPECT_FALSE(OperationRecord::fromJson(install)) << "commits are an update's";
+    // The installed commit its plan read, for a pinned ref only (none at all from an older record).
+    const QString c0(64, QLatin1Char('0'));
+    OperationRecord from = flatpakUpdate(QStringLiteral("all"), {notes, platform}, QString(), {c1, QString()});
+    from.fromCommits = {c0, QString()};
+    EXPECT_TRUE(OperationRecord::fromJson(from.toJson()));
+    from.fromCommits = {QString(), c0};
+    EXPECT_FALSE(OperationRecord::fromJson(from.toJson())) << "no installed commit without a pin";
+    from.fromCommits = {QStringLiteral("abc"), QString()};
+    EXPECT_FALSE(OperationRecord::fromJson(from.toJson())) << "not a commit";
+    from.fromCommits = {c0};
+    EXPECT_FALSE(OperationRecord::fromJson(from.toJson())) << "one per ref";
+    install.remove(QStringLiteral("commits"));
+    install.insert(QStringLiteral("fromCommits"), QJsonArray{c0});
+    EXPECT_FALSE(OperationRecord::fromJson(install)) << "an update's";
 
     // Its commands (S32d: --commit takes one ref): each pinned app alone, then the rest together.
     const QString paint = QStringLiteral("app/org.example.Paint/x86_64/stable");
@@ -990,6 +1004,10 @@ TEST(Operations, FlatpakUpdateRecords)
                                   base + QStringList{QStringLiteral("--"), platform}}));
     EXPECT_EQ(flatpakUpdateCommands(flatpakUpdate(QStringLiteral("all"), {notes, platform}, QString())),
               (QList<QStringList>{base + QStringList{QStringLiteral("--"), notes, platform}}));
+    // With each command, the ref it pins and the commit that ref must still have installed.
+    OperationRecord guarded = flatpakUpdate(QStringLiteral("all"), {notes, platform, paint}, QString(), {c1, QString(), c2});
+    guarded.fromCommits = {c0, QString(), QString()};
+    EXPECT_EQ(flatpakUpdateGuards(guarded), (QList<std::pair<QString, QString>>{{notes, c0}, {paint, QString()}, {QString(), QString()}}));
 }
 
 // An update runs flatpak update with its refs; it is done when a new check no longer lists them, never on the exit code
@@ -1103,13 +1121,34 @@ TEST(Operations, FlatpakUpdatePinned)
     EXPECT_TRUE(r.details.contains(QLatin1String("status 404")));
     EXPECT_FALSE(f.read(QStringLiteral("fcalls")).contains("-- " + platform.toUtf8())) << "nothing after the failed command";
 
+    // Updated outside the Store since its plan (another commit installed than the one its plan read): its pinned command is
+    // not run, so it is never put back to an older commit; it counts as done, and the rest runs.
+    ops.dismiss(QStringLiteral("store:flatpak-updates"));
+    QFile::remove(f.dir.filePath(QStringLiteral("failref")));
+    QFile::remove(f.dir.filePath(QStringLiteral("fcalls")));
+    const QString c0(64, QLatin1Char('0')), c3(64, QLatin1Char('c'));
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fcommits")),
+                         (notes + QLatin1Char(' ') + c3 + QLatin1Char('\n') + paint + QLatin1Char(' ') + c0 + QLatin1Char('\n')).toUtf8());
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fupdates")), listed);
+    storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "");
+    OperationRecord outside = flatpakUpdate(QStringLiteral("store:flatpak-updates"), {notes, paint, platform}, QString(), {c1, c2, QString()});
+    outside.fromCommits = {c0, c0, QString()};
+    ops.enqueue(outside);
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    EXPECT_TRUE(ops.results().isEmpty()) << ops.results().value(QStringLiteral("store:flatpak-updates")).outcome.toStdString();
+    const QByteArray outsideCalls = f.read(QStringLiteral("fcalls"));
+    EXPECT_FALSE(outsideCalls.contains("--commit=" + c1.toUtf8())) << "Notes kept its newer commit";
+    EXPECT_TRUE(outsideCalls.contains("--commit=" + c2.toUtf8() + " -- " + paint.toUtf8())) << "Paint still had its planned commit";
+    EXPECT_TRUE(outsideCalls.contains(update + "-- " + platform.toUtf8()));
+    EXPECT_TRUE(outsideCalls.startsWith("info --user --show-commit -- " + notes.toUtf8() + "\n")) << outsideCalls.constData();
+
     // Its installed commit is another one: not done.
     ops.dismiss(QStringLiteral("store:flatpak-updates"));
     QFile::remove(f.dir.filePath(QStringLiteral("failref")));
     storetest::writeFile(f.dir.filePath(QStringLiteral("fcommits")), (notes + QLatin1Char(' ') + c2 + QLatin1Char('\n')).toUtf8());
     storetest::writeFile(f.dir.filePath(QStringLiteral("fmode")), "stale");
     ops.enqueue(flatpakUpdate(QStringLiteral("org.example.Notes"), {notes}, notes, {c1}));
-    ASSERT_TRUE(waitFor([&] { return finished.count() == 3; }));
+    ASSERT_TRUE(waitFor([&] { return finished.count() == 4; }));
     EXPECT_EQ(ops.results().value(QStringLiteral("org.example.Notes")).outcome, QStringLiteral("notFinished"));
 }
 

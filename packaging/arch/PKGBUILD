@@ -44,7 +44,7 @@ license=(MIT)
 # the shell was built for (BUILD-DEPS, below), which Software Update's compatibility check reads (ADR-0033 s3.4).
 makedepends=(cmake ninja pkgconf hyprland hyprwayland-scanner gtest lua extra-cmake-modules qt6-declarative qt6-tools
              hyprcursor librsvg python dconf git wayland kio solid kcoreaddons kservice qt6-webengine qt6-multimedia
-             quickshell gcr-4)
+             quickshell gcr-4 libsecret)
 options=(!debug)
 # grassfield-icons (ADR-0017, owner decision 2026-10-23): ONE theme composed from two third-party themes by
 # packaging/arch/icons-compose.py (layers: our own icons, MacTahoe, Pebble, our device glyphs; Pebble folders and store
@@ -261,8 +261,10 @@ package_grassfield-desktop() {
   # libcups: grassfield-portal's print sheet asks CUPS for the printers and sends the jobs (ADR-0035 D-7, owner decision Q6);
   # already there with qt6-base and gtk3, declared since the backend links it.
   # gcr-4: libgcr-4, which grassfield-prompter links for gcr's system prompter protocol and its exchange (ADR-0035 D-9);
-  # already installed with gnome-keyring (probe P15), declared because Grassfield's own binary needs it.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons grassfield-wallpapers networkmanager bluez-utils wireplumber wl-clipboard grim slurp grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups gcr-4)
+  # already installed with gnome-keyring (probe P15), declared because Grassfield's own binary needs it. libsecret: the
+  # bridge's KIO password server keeps remembered network passwords in the Secret Service with it (ADR-0035 D-12 b, step
+  # 9e); already installed with gcr-4, declared for the same reason.
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons grassfield-wallpapers networkmanager bluez-utils wireplumber wl-clipboard grim slurp grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups gcr-4 libsecret)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.

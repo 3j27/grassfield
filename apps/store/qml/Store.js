@@ -424,7 +424,10 @@ function systemAction(u) {
 function flatpakUpdatesLine(f) {
     if (!f || !f.on)
         return "";
-    if (f.planning && f.planning.total > 0)
+    // One app: no count. More: "%1 of %2 apps", the noun plural in English and French whatever %1 (French: « %1 sur %2 apps »).
+    if (f.planning && f.planning.total === 1)
+        return qsTr("Checking what the update changes…");
+    if (f.planning && f.planning.total > 1)
         return qsTr("Checking what the updates change: %1 of %2 apps…").arg(f.planning.done).arg(f.planning.total);
     if (f.state === "checking")
         return qsTr("Checking Flathub for updates…");

@@ -7,6 +7,8 @@ from --commands (a FIFO the test writes to, one command per line):
   answer <id> ok <password>       a password answer ("last" as the id: the newest prompt seen)
   answer <id> ok-choice <password>  the same with "choice": true
   answer <id> ok-identity <identity> <password>  an nm answer with a name ("identity") and a password (step 9c)
+  answer <id> kio <name|-> <yes|no|-> <password>  a kio answer (step 9e): "identity" unless "-", "choice" (Remember this
+                                  password) unless "-", and the password
   answer <id> cancel              a cancel answer
   confirm <id> ok|cancel          a confirmation answer
   raw <text>                      <text> and a newline, as is
@@ -102,6 +104,13 @@ def main():
                     try:
                         if op == "hello":
                             send({"v": "prompter/1", "type": "hello", "shell": "test", "kinds": rest or ["password", "confirm"]})
+                        elif op == "answer" and rest[1] == "kio":
+                            msg = {"type": "answer", "id": target(rest[0]), "result": "ok", "password": " ".join(rest[4:])}
+                            if rest[2] != "-":
+                                msg["identity"] = rest[2]
+                            if rest[3] != "-":
+                                msg["choice"] = rest[3] == "yes"
+                            send(msg)
                         elif op == "answer" and rest[1] == "ok-identity":
                             send({"type": "answer", "id": target(rest[0]), "result": "ok", "identity": rest[2], "password": " ".join(rest[3:])})
                         elif op == "answer" and rest[1] in ("ok", "ok-choice"):

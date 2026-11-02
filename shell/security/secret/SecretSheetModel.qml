@@ -18,6 +18,14 @@ import "Prompter.js" as Prompter
 // A NetworkManager request (kind "nm", step 9c) is the macOS Wi-Fi alert: its title is Grassfield's sentence with the
 // network's SSID as a quoted field ("The Wi-Fi network “%1” requires a WPA2 password."), under it who asked (NetworkManager),
 // then the name field (enterprise), the password field, Show password, Cancel and Join. It has no caller text.
+//
+// A KIO request (kind "kio", step 9e) is the macOS server sheet: its title is Grassfield's sentence with the server as a quoted
+// field ("Enter your name and password for the server “%1”."), a host name only (never free text, decision 9-42); under it
+// who asked, from the bridge's requester (KIO's worker, an app, an unidentified program and its executable); the realm, the
+// server's own words, framed as unverified text; the name field (editable, shown only, or absent), the password field,
+// Remember this password (Grassfield's label) and, when the keyring that would keep it has no password, a line saying so
+// (decision 9-45); Cancel and Connect. A retry after a failed login says so in Grassfield's words (the worker's message is
+// never sent to the shell, decision 9-40).
 QtObject {
     id: root
 
@@ -30,7 +38,9 @@ QtObject {
     readonly property string kind: request ? request.kind : ""
     // NetworkManager's Wi-Fi secrets (step 9c).
     readonly property bool network: kind === "nm"
-    readonly property bool asksPassword: kind === "password" || network
+    // KIO's network passwords (step 9e).
+    readonly property bool server: kind === "kio"
+    readonly property bool asksPassword: kind === "password" || network || server
     readonly property bool passwordNew: asksPassword && request.passwordNew === true
     readonly property bool showsStrength: passwordNew && request.strength === true
     readonly property string role: request ? request.requester.role : ""
@@ -43,9 +53,21 @@ QtObject {
     // The app's theme icon name (a plain name only, the notification icons' rule), "" otherwise: the sheet then draws the
     // role's glyph.
     readonly property string appIcon: role === "app" && request ? NotificationPrefs.safeIconName(request.requester.icon) : ""
-    readonly property string glyph: role === "app" ? "apps" : role === "unidentified" ? "exclamationmark-triangle" : role === "network" ? "wifi-3" : role === "disk" ? "drive" : "key"
-    // Who asked, under a NetworkManager request's title (the program the bridge checked the call came from); "" otherwise.
-    readonly property string requesterDetail: network ? qsTr("Requested by NetworkManager") : ""
+    readonly property string glyph: role === "app" ? "apps" : role === "unidentified" ? "exclamationmark-triangle" : role === "network" ? "wifi-3" : role === "disk" ? "drive" : role === "kio" ? "globe" : "key"
+    // Who asked, under a NetworkManager request's title (the program the bridge checked the call came from) and a KIO
+    // request's (the bridge's requester); "" otherwise.
+    readonly property string requesterDetail: network ? qsTr("Requested by NetworkManager") : server ? serverRequesterOf(role, requesterName) : ""
+
+    // A KIO request's server (a host name and its port: a field of the title's sentence), its login: the name field's mode
+    // ("edit", "fixed": shown only, "none": no name field), Remember this password ("none": not offered), the keyring's
+    // protection, and whether the last name and password failed. The name typed (not a secret: the caller's name at
+    // first); KIO's client takes it back from the reply, unlike NetworkManager (decision 9-33), so it is sent for "edit".
+    readonly property string serverName: server ? request.server : ""
+    readonly property string nameMode: server ? request.login.nameMode : ""
+    readonly property bool asksName: server && nameMode !== "none"
+    readonly property bool nameReadOnly: nameMode === "fixed"
+    property string loginName: ""
+    readonly property string keyringNotice: server && request.login.remember !== "none" && request.login.keyring === "unprotected" ? qsTr("Your keyring has no password: a password remembered here is stored unencrypted on this computer.") : ""
 
     // The network of an nm request: its SSID (plain, a field of the title's sentence), its security, and for WPA2 Enterprise
     // the connection's username, shown read-only: NetworkManager keeps only secrets from an agent's reply, so a name typed
@@ -58,18 +80,20 @@ QtObject {
     property bool showPassword: false
 
     // The sheet's own title, Grassfield's words: who asks, and for what.
-    readonly property string title: network ? networkTitleOf(networkSecurity, networkSsid) : titleOf(role, requesterName, kind, passwordNew)
+    readonly property string title: server ? serverTitleOf(nameMode, serverName) : network ? networkTitleOf(networkSecurity, networkSsid) : titleOf(role, requesterName, kind, passwordNew)
     // The line that introduces the caller's text (spec SC3b): whose text it is.
-    readonly property string callerIntro: callerIntroOf(role, requesterName)
-    // The caller's own text: its title, message and description (plain lines, capped by the bridge and again here).
-    readonly property string callerTitle: request ? Prompter.flatten(request.texts.title, Prompter.CAPS.title) : ""
+    readonly property string callerIntro: server ? qsTr("The server describes this login as follows. It is not verified:") : callerIntroOf(role, requesterName)
+    // The caller's own text: its title, message and description (plain lines, capped by the bridge and again here); for a
+    // KIO request, its realm only.
+    readonly property string callerTitle: server ? Prompter.flatten(request.login.realm, Prompter.CAPS.realm) : request ? Prompter.flatten(request.texts.title, Prompter.CAPS.title) : ""
     readonly property string callerMessage: request ? Prompter.flatten(request.texts.message, Prompter.CAPS.message) : ""
     readonly property string callerDescription: request ? Prompter.flatten(request.texts.description, Prompter.CAPS.description) : ""
     readonly property string callerWarning: request ? Prompter.flatten(request.texts.warning, Prompter.CAPS.warning) : ""
     readonly property bool hasCallerText: callerTitle !== "" || callerMessage !== "" || callerDescription !== "" || callerWarning !== ""
-    // The check box (its label is the caller's text, attached to its control) and its state.
-    readonly property bool hasChoice: !!request && request.choice !== null
-    readonly property string choiceLabel: hasChoice ? Prompter.flatten(request.choice.label, Prompter.CAPS.choice) : ""
+    // The check box (its label is the caller's text, attached to its control; a KIO request's Remember this password is
+    // Grassfield's) and its state.
+    readonly property bool hasChoice: server ? request.login.remember !== "none" : !!request && request.choice !== null
+    readonly property string choiceLabel: !hasChoice ? "" : server ? qsTr("Remember this password") : Prompter.flatten(request.choice.label, Prompter.CAPS.choice)
     property bool choice: false
     // Our own message under the field (the passwords do not match, one is too long), else "".
     readonly property string error: priv.error
@@ -147,6 +171,8 @@ QtObject {
             return qsTr("This request arrived at %1. Click the alert to answer it: no key answers a confirmation before that.").arg(at);
         if (why === "network")
             return qsTr("This request arrived at %1. Click the alert to type the password: nothing typed elsewhere goes into it.").arg(at);
+        if (why === "server")
+            return qsTr("This request arrived at %1. Click the alert to type your name and password: nothing typed elsewhere goes into it.").arg(at);
         return qsTr("This request arrived at %1, just as the screen was unlocked. Click the alert to answer it.").arg(at);
     }
 
@@ -166,7 +192,31 @@ QtObject {
             return qsTr("Disks");
         if (role === "network")
             return qsTr("Wi-Fi");
+        if (role === "kio")
+            return qsTr("KIO");
         return role === "" ? "" : qsTr("Unidentified program");
+    }
+
+    // The server sheet's sentence (macOS's): the server is a field inside Grassfield's words.
+    function serverTitleOf(mode: string, name: string): string {
+        if (mode === "none")
+            return qsTr("Enter your password for the server “%1”.").arg(name);
+        return qsTr("Enter your name and password for the server “%1”.").arg(name);
+    }
+
+    // Who asked a KIO request, in Grassfield's words from the bridge's requester: KIO's worker asks for an app (and any
+    // program can make it ask), an app names itself, anything else is an unidentified program (its path under it).
+    function serverRequesterOf(role: string, name: string): string {
+        if (role === "kio")
+            return qsTr("Requested by KIO for an app");
+        if (role === "unidentified")
+            return qsTr("Requested by an unidentified program");
+        return qsTr("Requested by %1").arg(name);
+    }
+
+    // Connect may be pressed: a password (read as a length, never as text) and, when the sheet asks for one, a name.
+    function serverReady(passwordLength: int, nameLength: int): bool {
+        return server && canSubmit && passwordLength > 0 && (nameMode !== "edit" || nameLength > 0);
     }
 
     // The Wi-Fi alert's sentence (macOS's): the SSID is a field inside Grassfield's words, never the title itself.
@@ -199,7 +249,7 @@ QtObject {
         // A network request carries no caller text at all.
         if (role === "" || role === "network")
             return "";
-        if (role === "keyring" || role === "gnupg" || role === "ssh" || role === "disk")
+        if (role === "keyring" || role === "gnupg" || role === "ssh" || role === "disk" || role === "kio")
             return qsTr("Another program sent this message through %1. It is not verified:").arg(name);
         if (role === "app")
             return qsTr("%1 sent this message:").arg(name);
@@ -240,6 +290,22 @@ QtObject {
             clearRequested();
             return false;
         }
+        if (server) {
+            if (typeof password !== "string" || password.length === 0) {
+                clearRequested();
+                return false;
+            }
+            if (Prompter.utf8Length(password) > Prompter.MAX_PASSWORD_BYTES) {
+                priv.error = qsTr("This password is too long.");
+                clearRequested();
+                return false;
+            }
+            if (nameMode === "edit" && root.loginName === "") {
+                priv.error = qsTr("Type your name.");
+                clearRequested();
+                return false;
+            }
+        }
         if (network) {
             if (typeof password !== "string" || password.length === 0) {
                 clearRequested();
@@ -256,7 +322,7 @@ QtObject {
                 return false;
             }
         }
-        if (asksPassword && !network) {
+        if (asksPassword && !network && !server) {
             if (typeof password !== "string" || (password.length === 0 && !passwordNew)) {
                 clearRequested();
                 return false;
@@ -273,7 +339,7 @@ QtObject {
             }
         }
         priv.error = "";
-        root.answerRequested(true, asksPassword ? password : null, root.choice, null);
+        root.answerRequested(true, asksPassword ? password : null, root.choice, nameMode === "edit" ? root.loginName : null);
         clearRequested();
         return answered;
     }
@@ -295,9 +361,11 @@ QtObject {
 
     // A new request (or none): nothing typed or chosen carries over.
     onRequestChanged: {
-        priv.error = "";
+        // A KIO request after a failed login says so in Grassfield's words (decision 9-40).
+        priv.error = request && request.kind === "kio" && request.login.retry === true ? qsTr("The name or password was not accepted. Try again.") : "";
         if (request)
-            root.choice = request.choice !== null && request.choice.chosen === true;
+            root.choice = request.kind === "kio" ? request.login.remember === "on" : request.choice !== null && request.choice.chosen === true;
+        root.loginName = request && request.kind === "kio" ? request.login.name : "";
         clearRequested();
     }
 }

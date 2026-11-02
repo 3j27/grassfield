@@ -164,6 +164,8 @@ namespace gf::tiler {
             SEdgeScene                        edgeHoverScene;  // the edges hover looks up, kept while what they derive from holds
             std::vector<tiling::SplitDesk>    splits;          // TL33: the Split View Desktops the plugin made
             std::unordered_map<uint64_t, tiling::TileRecord> splitHomes; // TL33: a member's tile on its home Desktop before its split
+            std::vector<uint64_t>             chromeMembers;   // step 6e (D73): the members whose titlebars were last made to follow
+            std::vector<uint64_t>             backInReach;     // windows that left a Split View, their titlebar not in reach yet (locked, hidden)
         };
 
         // Constructed on first use inside a guarded call (R13).
@@ -629,7 +631,7 @@ namespace gf::tiler {
         // windows that can take them (D26): the tileable windows of that output's Desktop in the active stage, top first, then
         // the windows minimized from that output, the latest first; never one that holds a zone of that layout already.
         // nullopt when no zone is empty or no window fits (nothing is shown then).
-        std::optional<tiling::Suggestion> suggestionFor(uint64_t askerId, const PHLMONITOR& m) {
+        std::optional<tiling::Suggestion> suggestionFor(uint64_t askerId, const PHLMONITOR& m, uint64_t exclude = 0) {
             const auto& s      = st();
             const auto* asker  = s.book.find(askerId);
             const auto* layout = asker ? tiling::layoutById(asker->where.layout) : nullptr;
@@ -654,17 +656,18 @@ namespace gf::tiler {
             // A zone takes only a window that fits it (TL8: a Split View's other half since the nested pass of 1ee992e, MAJOR C;
             // every zone since D69, so that a pick never shifts the layout's rows or columns).
             const auto fits = [&](const PHLWINDOW& w) { return tiling::fitsFrame(constraintsOf(w), sg.frames.front()); };
-            for (auto it = all.rbegin(); it != all.rend() && sg.windows.size() < tiling::kMaxSuggested; ++it) {
+            std::vector<uint64_t> candidates;
+            for (auto it = all.rbegin(); it != all.rend(); ++it) {
                 const auto& w = *it;
                 if (w && w->m_workspace && w->m_workspace->m_id == from && placeable(w) && monitorOf(w) == m && !inLayout(idOf(w)) && fits(w))
-                    sg.windows.push_back(idOf(w));
+                    candidates.push_back(idOf(w));
             }
             for (const auto id : gf::minimizer::minimizedFrom(m->m_name)) {
-                if (sg.windows.size() >= tiling::kMaxSuggested)
-                    break;
                 if (const auto w = windowById(id); tileableKind(w) && !inLayout(id) && fits(w))
-                    sg.windows.push_back(id);
+                    candidates.push_back(id);
             }
+            // Capped after `exclude` is left out (core offerWindows; the follow-up of #78: Replace offered 11 of 12 or more).
+            sg.windows = tiling::offerWindows(candidates, exclude);
             if (sg.windows.empty())
                 return std::nullopt;
             return sg;
@@ -964,6 +967,50 @@ namespace gf::tiler {
         // windows that came back, a move released, an edge double-clicked, a key that may have changed Alt during a drag.
         // ---- the Full Screen tile (TL33) ----
 
+        // Step 6e (D73; the review of #99): a window that left a Split View any way (moved to another Desktop by a key, the
+        // plugin unloaded) gets its titlebar back where it can be reached: its frame, with the band it has again above it,
+        // below the menu bar of its output (a member's surface sat at the output's top edge: its bar came back above the
+        // output). A window back in a Split View meanwhile, in full screen or zoomed is left alone; a hidden one (minimized,
+        // on a special workspace) waits until it shows again (false: later). Unsplit's own places (its box from before, its
+        // tile) are below the menu bar already: nothing moves then.
+        bool titlebarBackInReach(const PHLWINDOW& w) {
+            if (!w)
+                return true; // closed
+            if (!w->m_isMapped || w->isHidden() || !w->m_workspace || w->m_workspace->m_isSpecialWorkspace)
+                return false;
+            if (fullscreenNow(w) || !tiling::movable(factsOf(w)) || !g_layoutManager || tiling::splitOfWindow(st().splits, idOf(w)))
+                return true;
+            const auto target = w->layoutTarget();
+            if (!target)
+                return true;
+            const CBox current = target->position();
+            const CBox held    = gf::topClamp::belowMenuBar(w, current, gf::chrome::bandOf(w));
+            if (!sameBox(held, current)) {
+                applySurface(w, held);
+                logRequest(Log::DEBUG, "split: {:x} left a Split View: its titlebar back below the menu bar, at {:.0f},{:.0f}", idOf(w), held.x, held.y);
+            }
+            return true;
+        }
+
+        // Step 6e (D73): a member's titlebar is away (CGrassfieldTitlebar::shouldShow reads inSplit) and no band is kept above
+        // it. The windows that joined or left a Split View Desktop since the last call have theirs refreshed: it goes, or comes
+        // back above the window, then in reach (titlebarBackInReach). After every change of the members (a split, a pick, an
+        // unsplit, splitCheck's prune).
+        void titlebarsFollowSplits() {
+            auto&      s       = st();
+            auto       now     = tiling::splitMembers(s.splits);
+            const auto changed = tiling::membersChanged(s.chromeMembers, now);
+            for (const auto id : changed) {
+                if (const auto w = windowById(id))
+                    CGrassfieldTitlebar::refreshWindow(w);
+                if (!std::ranges::binary_search(now, id))
+                    s.backInReach.push_back(id); // it left: its titlebar comes back where it can be reached
+            }
+            s.chromeMembers = std::move(now);
+            if (!gf::deferredFocus::sessionLocked()) // D55: nothing moves behind the lock; at the unlock's check instead
+                std::erase_if(s.backInReach, [](uint64_t id) { return titlebarBackInReach(windowById(id)); });
+        }
+
         // The Split View Desktop `workspace` got its second window, or its first one fills it: one window left alone is
         // filled from now on (D43).
         void settleSplit(int64_t workspace) {
@@ -1052,8 +1099,10 @@ namespace gf::tiler {
         // its members changed, also without a tile record changing (the shell reads `splits`).
         void splitCheck() {
             auto& s = st();
-            if (s.splits.empty() || !Desktop::windowState() || !State::workspaceState())
+            if (s.splits.empty() || !Desktop::windowState() || !State::workspaceState()) {
+                titlebarsFollowSplits();
                 return;
+            }
             bool                           changed = false;
             std::vector<tiling::SplitDesk> ended;
             for (auto& d : s.splits) {
@@ -1109,6 +1158,7 @@ namespace gf::tiler {
                     logRequest(Log::WARN, "split: going back to Desktop {} failed: {}", d.home, result.error().message);
             }
             std::erase_if(s.splitHomes, [&s](const auto& kv) { return !tiling::splitOfWindow(s.splits, kv.first); });
+            titlebarsFollowSplits();
             if (changed)
                 notify(tiling::Reason::Forgotten, true);
         }
@@ -1618,6 +1668,8 @@ namespace gf::tiler {
         s.memberDrag.reset();
         s.splits.clear(); // TL33: a Split View Desktop of a previous load is an ordinary Desktop now
         s.splitHomes.clear();
+        s.chromeMembers.clear();
+        s.backInReach.clear();
         if (!bus || !Desktop::windowState() || !State::monitorState() || !Fullscreen::controller())
             return false;
         auto& ev = bus->m_events;
@@ -1638,7 +1690,7 @@ namespace gf::tiler {
             // D67: the windows an unplug left off every output while locked are gathered then too.
             l.push_back(g_pSessionLockManager->m_events.unlock.listen([] {
                 gf::guarded("tiling session unlock", [] {
-                    if (!st().splits.empty() || st().gatherPending)
+                    if (!st().splits.empty() || st().gatherPending || !st().backInReach.empty())
                         scheduleAfter();
                 });
             }));
@@ -1666,6 +1718,24 @@ namespace gf::tiler {
         s.relayoutPending = false;
         s.gatherPending   = false;
         s.resuming.clear();
+        // Step 6e (D73, D75; the review of #99): the unload ends every Split View. A member dragged by its revealed bar goes back
+        // in its half first (the titlebars drop their gesture after this stop, when the tiler places nothing any more); then
+        // each member gets its titlebar band back below the menu bar (the unload drops the titlebars; a later load draws them
+        // again above the surface). Not while locked (D55).
+        if (const auto dragged = s.memberDrag.lock()) {
+            if (const auto* r = s.book.find(idOf(dragged)); r && tiling::splitOfWindow(s.splits, idOf(dragged)) && !gf::deferredFocus::sessionLocked())
+                applySurface(dragged, toCBox(r->box));
+        }
+        s.memberDrag.reset();
+        const auto members = tiling::splitMembers(s.splits);
+        s.splits.clear();
+        s.splitHomes.clear();
+        s.chromeMembers.clear();
+        s.backInReach.clear();
+        if (!gf::deferredFocus::sessionLocked()) {
+            for (const auto id : members)
+                titlebarBackInReach(windowById(id));
+        }
         s.book.clear(); // windows keep their boxes; groups are forgotten
         s.suggestion.reset();
         // TL30: a drag of a shared edge ends with the boxes the windows have (the book is cleared just above: no notice for
@@ -2120,6 +2190,7 @@ namespace gf::tiler {
         g_layoutManager->setTargetGeom(surface, target);
         s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = *zone},
                       m->m_name, id, 0);
+        titlebarsFollowSplits(); // its titlebar goes: no band above it in its half (D73)
         // The Split View always asks for its second window (whatever "Suggest windows to fill the rest of a layout" says):
         // from the Desktop the window came from. Nothing to suggest: it fills the Desktop alone (D43).
         s.suggestion = suggestionFor(idOf(w), m);
@@ -2193,7 +2264,7 @@ namespace gf::tiler {
                 // the Desktop the Split View came from but the one replaced; nothing to offer: it fills alone (D43).
                 const auto m = replace && d->members.size() == 1 ? splitMonitor(*d) : nullptr;
                 if (m && m->m_activeWorkspace && m->m_activeWorkspace->m_id == d->workspace) {
-                    s.suggestion = tiling::withoutWindow(suggestionFor(d->members.front(), m), idOf(w));
+                    s.suggestion = suggestionFor(d->members.front(), m, idOf(w));
                     d->waiting   = s.suggestion.has_value();
                     waits        = d->waiting;
                 }
@@ -2465,6 +2536,21 @@ namespace gf::tiler {
         }
         for (const auto i : zoneIndex)
             zones.push_back(layout->zones[static_cast<size_t>(i)]);
+        // TL33: a pick into the other half of a Split View Desktop makes that window its second member (the two are one tile
+        // group: the shared edge resizes both). Before its frame is fitted (nothing is refused from here on): a member has no
+        // band above it (step 6e, D73), so its half is filled from the output's top edge.
+        if (request->with) {
+            const auto d = std::ranges::find_if(s.splits, [&](const tiling::SplitDesk& x) {
+                return x.workspace == workspace->m_id && std::ranges::find(x.members, *request->with) != x.members.end();
+            });
+            if (d != s.splits.end()) {
+                for (const auto& w : windows) {
+                    if (std::ranges::find(d->members, idOf(w)) == d->members.end())
+                        d->members.push_back(idOf(w));
+                }
+                d->waiting = false;
+            }
+        }
         const auto frames = fitted(zones, windows, area);
         // The windows placed together form a tile group (TL6, T1d); one window alone has none; a pick joins the asker's (TL28).
         const uint64_t group = request->with ? s.book.joinGroup(*request->with) : windows.size() >= 2 ? s.book.newGroup() : 0;
@@ -2478,20 +2564,7 @@ namespace gf::tiler {
             s.book.placed(idOf(w), toRect(current), toRect(surface), band, tiling::Placement{.place = std::nullopt, .layout = std::string{layout->id}, .zone = zoneIndex[i]},
                           m->m_name, workspace->m_id, group);
         }
-        // TL33: a pick into the other half of a Split View Desktop makes that window its second member (the two are one tile
-        // group: the shared edge resizes both).
-        if (request->with) {
-            const auto d = std::ranges::find_if(s.splits, [&](const tiling::SplitDesk& x) {
-                return x.workspace == workspace->m_id && std::ranges::find(x.members, *request->with) != x.members.end();
-            });
-            if (d != s.splits.end()) {
-                for (const auto& w : windows) {
-                    if (std::ranges::find(d->members, idOf(w)) == d->members.end())
-                        d->members.push_back(idOf(w));
-                }
-                d->waiting = false;
-            }
-        }
+        titlebarsFollowSplits(); // a window picked into a Split View: its titlebar goes (D73)
         // TL28: the zones left empty in that layout, offered to the shell in the state reply until the next change (none while
         // "Suggest windows to fill the rest of a layout" is off, TL32).
         s.suggestion = state().tilingSuggestions ? suggestionFor(request->with ? *request->with : idOf(windows.front()), m) : std::nullopt;

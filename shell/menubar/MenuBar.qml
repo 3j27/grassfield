@@ -812,14 +812,14 @@ Scope {
             // qmllint disable missing-type
             // The band while any of it is in view, the indicator's piece while it shows (ADR-0035 7-14), both during the slide; the
             // band not before the entrance (a blurred strip under an invisible band would show the bar in two steps, review of 3a5e1b80).
-            BackgroundEffect.blurRegion: win.bandBlurred ? (win.pinnedBlurred ? bandAndPinnedRegion : blurRegion) : (win.pinnedBlurred ? pinnedRegion : null)
+            BackgroundEffect.blurRegion: win.entered && win.bandBlurred ? (win.pinnedBlurred ? bandAndPinnedRegion : blurRegion) : (win.pinnedBlurred ? pinnedRegion : null)
             // The bar, or only the top edge strip while it is away.
             mask: Region {
                 item: hitItem
             }
             // qmllint enable missing-type
 
-            readonly property bool bandBlurred: win.entered && win.showBackground && material.blurActive && win.hideMachine.visible > 0
+            readonly property bool bandBlurred: win.showBackground && material.blurActive && win.hideMachine.visible > 0
             readonly property bool pinnedBlurred: pinnedShare.visible && pinnedShare.blurActive
 
             Region {

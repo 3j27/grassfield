@@ -1197,6 +1197,8 @@ TEST(StoreBackend, Updates)
 
     // Ctrl+Q while an update runs, then the Store asked for again (SD35's hand-over; the integrator's MAJOR on #97): the
     // quit is off, and the update ends with the Store still there.
+    // The check an operation's end starts is over first (else it may read the list before it is written).
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("state")).toString().isEmpty(); }));
     storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), notesLine);
     backend.checkUpdates();
     ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().size() == 1 && !backend.updates().value(QStringLiteral("checking")).toBool(); }));
@@ -1217,6 +1219,28 @@ TEST(StoreBackend, Updates)
     ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
     EXPECT_FALSE(backend.quitPending());
     QFile::remove(s.path(QStringLiteral("fixture/slowupdate")));
+
+    // Updated outside the Store between its plan and its update (#97's merge note): the plan read the installed commit, and
+    // the pinned one (perhaps older) is not installed over the newer one; it counts as done.
+    // The check an operation's end starts is over first (else it may read the list before it is written).
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("state")).toString().isEmpty(); }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), notesLine);
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().size() == 1 && !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/commit-org.example.Notes")), QByteArray(64, '1') + "\n");
+    asked = int(plans.size());
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == asked + 1; }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/commit-org.example.Notes")), QByteArray(64, '2') + "\n");
+    QFile::remove(s.path(QStringLiteral("fixture/flatpak-calls")));
+    ASSERT_TRUE(backend.update(QStringLiteral("org.example.Notes")));
+    ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
+    QFile outside(s.path(QStringLiteral("fixture/flatpak-calls")));
+    ASSERT_TRUE(outside.open(QIODevice::ReadOnly));
+    const QByteArray outsideCalls = outside.readAll();
+    EXPECT_TRUE(outsideCalls.contains("info --user --show-commit -- " + notesRef.toUtf8() + "\n")) << outsideCalls.constData();
+    EXPECT_FALSE(outsideCalls.contains("update --user --noninteractive")) << outsideCalls.constData();
+    EXPECT_TRUE(backend.results().isEmpty());
     EXPECT_TRUE(backend.operations().isEmpty());
 
     // Check Now: the shell is asked; its answer is the file's new checkedAt.

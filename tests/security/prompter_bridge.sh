@@ -88,7 +88,7 @@ python3 -I -c 'import gi; gi.require_version("Gcr", "4"); from gi.repository imp
   || { echo "SKIP: prompter_bridge needs PyGObject with Gcr 4"; exit 0; }
 bridge=${GRASSFIELD_PROMPTER:-}
 if [[ -z $bridge ]]; then
-  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 2>/dev/null || { echo "SKIP: prompter_bridge needs g++, Qt 6 Core and gcr-4"; exit 0; }
+  command -v g++ >/dev/null && pkg-config --exists Qt6Core gcr-4 libsecret-1 2>/dev/null || { echo "SKIP: prompter_bridge needs g++, Qt 6 Core, gcr-4 and libsecret"; exit 0; }
   "$root/bridges/prompter/build-direct.sh" --out "$tmp/bin" >"$tmp/build.log" 2>&1 || { cat "$tmp/build.log"; echo "FAIL: the bridge builds"; exit 1; }
   bridge=$tmp/bin/grassfield-prompter
 fi
@@ -501,12 +501,12 @@ PY
     fi
     rm -rf "$m"
   done <<'EOF_MUTANTS'
-name-before-hello#Bridge.cpp#            send(helloMessage(bridgeKinds(m_nm != nullptr)));#            send(helloMessage(bridgeKinds(m_nm != nullptr)));\n            wantName(true);
+name-before-hello#Bridge.cpp#            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));#            send(helloMessage(bridgeKinds(m_nm != nullptr, m_kio != nullptr)));\n            wantName(true);
 lines-not-wiped#Protocol.cpp#            explicit_bzero(buffer + start, end - start + 1);#            ;
 rest-not-wiped#Protocol.cpp#            explicit_bzero(buffer + (length - start), start);#            ;
 answered-without-a-shell#Bridge.cpp#            return;\n        if (m_client < 0 || !m_ready) {\n            log(#            return;\n        if (false) {\n            log(
 pidfd-not-rechecked#Identity.cpp#        facts.alive = pidfdAlive(pidfd);#        facts.alive = true;
-every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n            r.role       = role;#            r.role       = role;
+every-known-caller-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))\n                return r;\n            // KIO's worker runs a plugin from any path#            // KIO's worker runs a plugin from any path
 disk-not-exempt#Identity.cpp#            if (!facts.sameNamespaces && role != QLatin1String("disk"))#            if (!facts.sameNamespaces)
 EOF_MUTANTS
 fi

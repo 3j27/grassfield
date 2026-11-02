@@ -72,7 +72,7 @@ TestCase {
         verify(/readonly property bool revealWanted: root\.settled && \(placed \|\| placedGivenUp\) && Entrance\.revealed/.test(dock));
         verify(/if \(entranceReady && isDockScreen\)\s*Entrance\.ready\("dock"\);/.test(dock));
         // The bar's blur and input wait for the entrance; its auto-hide is set again until and at it.
-        verify(/BackgroundEffect\.blurRegion: win\.bandBlurred \?/.test(bar) && /readonly property bool bandBlurred: win\.entered && /.test(bar));
+        verify(/BackgroundEffect\.blurRegion: win\.entered && /.test(bar));
         verify(/height: win\.entered \? BarHide\.inputHeight\(/.test(bar));
         verify(/onAutoHidesChanged: \{\s*if \(!win\.entered && win\.barFinal\)\s*win\.hideMachine = AutoHide\.initial\(win\.autoHides\);/.test(bar));
         // On its bound the latch waits for the wallpapers' own bound.
