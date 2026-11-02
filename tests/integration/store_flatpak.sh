@@ -16,7 +16,8 @@
 # and remote-info print every field, then abort on an assertion, which the Store tolerates, S28). Nothing reaches Flathub.
 # Then the Store's unit tests with STORE_TEST_FLATPAK=1: Flatpak.RealFlatpak drives that installation through the Store's
 # own code (AppStream, flatpak's plan on a pseudo-terminal, the facts, an install stopped, an install, a removal with
-# --unused); a skipped test is a failure here.
+# --unused); a skipped test is a failure here. Then an update (Store step 4, S31): Hello 1.2 installed by flatpak itself, 1.3
+# published, and Flatpak.RealUpdate with STORE_TEST_FLATPAK_UPDATE=1 (the Store's check, what the update adds, its command).
 set -uo pipefail
 
 IMAGE=archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
@@ -115,5 +116,24 @@ if grep -q 'SKIPPED' /tmp/tests.log && grep -q 'Flatpak.RealFlatpak' <(grep SKIP
   echo "FAIL: Flatpak.RealFlatpak was skipped"
   exit 1
 fi
-[[ $rc == 0 ]] && echo "PASS: store_flatpak" || echo "FAIL: store_flatpak"
-exit $(( rc == 0 ? 0 : 1 ))
+
+step "an update (step 4, S31): Hello 1.2 installed by flatpak itself, Hello 1.3 published (the same metadata)"
+flatpak install --user --noninteractive flathub org.example.Hello >/tmp/install.log 2>&1
+echo "  flatpak install -> exit $?"
+cd "$build" || exit 1
+printf '#!/bin/sh\necho hello 1.3\n' >app/files/bin/hello
+gunzip -f app/files/share/app-info/xmls/org.example.Hello.xml.gz
+sed -i 's/<release version="1.2"/<release version="1.3"/' app/files/share/app-info/xmls/org.example.Hello.xml
+gzip -f app/files/share/app-info/xmls/org.example.Hello.xml
+flatpak build-export --arch=x86_64 repo app stable >/dev/null && flatpak build-update-repo repo >/dev/null
+echo "  published -> exit $?"
+cd /work || exit 1
+STORE_TEST_FLATPAK_UPDATE=1 QT_QPA_PLATFORM=offscreen .dev/build/store-unit-tests --gtest_filter='Flatpak.RealUpdate' >/tmp/update.log 2>&1
+urc=$?
+grep -E '^\[ *(RUN|OK|FAILED|SKIPPED|PASSED) *\]|Failure|Expected|Which is|Value of' /tmp/update.log | sed 's/^/  /'
+if grep -q 'SKIPPED' /tmp/update.log; then
+  echo "FAIL: Flatpak.RealUpdate was skipped"
+  exit 1
+fi
+[[ $rc == 0 && $urc == 0 ]] && echo "PASS: store_flatpak" || echo "FAIL: store_flatpak"
+exit $(( rc == 0 && urc == 0 ? 0 : 1 ))

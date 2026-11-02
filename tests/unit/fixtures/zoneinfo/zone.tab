@@ -1,0 +1,6 @@
+# A few lines of tzdata 2026e's zone.tab (/usr/share/zoneinfo), the ones tests/unit/tst_timeofday.qml reads (ADR-0040 IQ-W1 C).
+NL	+5222+00454	Europe/Amsterdam
+CM	+0403+00942	Africa/Douala
+SE	+5920+01803	Europe/Stockholm
+SJ	+7800+01600	Arctic/Longyearbyen
+FR	+4852+00220	Europe/Paris

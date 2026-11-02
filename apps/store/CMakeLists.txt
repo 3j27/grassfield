@@ -40,7 +40,7 @@ target_include_directories(grassfield-store-backend PUBLIC ${CMAKE_CURRENT_SOURC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
 target_link_libraries(grassfield-store-backend PUBLIC Qt6::Core Qt6::Gui Qt6::Network ZLIB::ZLIB)
 
-add_executable(grassfield-store src/main.cpp src/screenshotprovider.cpp src/screenshotprovider.h)
+add_executable(grassfield-store src/main.cpp src/screenshotprovider.cpp src/screenshotprovider.h src/storeinstance.h)
 # windowchrome.h (ADR-0015): one Qt private header and the three xdg-toplevel-tag requests on libwayland-client.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WAYLAND_CLIENT REQUIRED IMPORTED_TARGET wayland-client)
@@ -77,9 +77,10 @@ if(GTest_FOUND)
         ../../tests/unit/store/tst_removal.cpp
         ../../tests/unit/store/tst_signature.cpp
         ../../tests/unit/store/tst_storebackend.cpp
+        ../../tests/unit/store/tst_storeinstance.cpp src/storeinstance.h
         ../../tests/unit/store/tst_storemodel.cpp
         ../../tests/unit/store/tst_storeview.cpp)
-    target_link_libraries(store-unit-tests PRIVATE grassfield-store-backend GTest::gtest GTest::gtest_main)
+    target_link_libraries(store-unit-tests PRIVATE grassfield-store-backend Qt6::DBus GTest::gtest GTest::gtest_main)
     target_compile_definitions(store-unit-tests PRIVATE STORE_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/store")
     add_test(NAME store-unit-tests COMMAND store-unit-tests)
 endif()

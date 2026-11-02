@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import Grassfield.Ui
 import "../../shell/services/BarToneLogic.js" as Logic
+import "../../ui/Grassfield/Ui/Artwork.js" as Artwork
 
 // Adaptive menu bar foreground: luminance of the wallpaper strip -> light or dark, hysteresis, one tone per output.
 TestCase {
@@ -290,5 +291,65 @@ TestCase {
     function test_dockDotColoursArePureTones() {
         compare(Tokens.colorDark.indicator, "#FFFFFF");
         compare(Tokens.colorLight.indicator, "#000000");
+    }
+
+    // ---- ADR-0040 step 2: a crossfade between two artworks (gate A2 inside the fade) ----
+
+    function rgbOf(hex) {
+        const c = Qt.color(hex);
+        return {r: c.r, g: c.g, b: c.b};
+    }
+
+    // An artwork's strip on a display 1080 pixels tall, as Wallpaper.qml reports it.
+    function strip(artwork, variant) {
+        const p = Artwork.palette(Tokens, artwork, variant);
+        return {top: rgbOf(p.tone.top), next: rgbOf(p.tone.next), reach: Tokens.menubarHeight / (p.tone.at * 1080)};
+    }
+
+    function toneOf(s) {
+        return Logic.decide(Logic.stripOfGradient(s.top, s.next, s.reach), "", lo, hi);
+    }
+
+    // The ADR's samples (t = 0, 0.25, 0.5, 0.75, 1): the tone in effect over the blended strip.
+    function passesAtSamples(a, b, switchAt) {
+        const ta = toneOf(a), tb = toneOf(b);
+        const sa = Logic.stripColours(a.top, a.next, a.reach), sb = Logic.stripColours(b.top, b.next, b.reach);
+        for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+            const tone = t < switchAt ? ta : tb;
+            for (let k = 0; k < sa.length; k++) {
+                const c = Logic.mixRgb(sa[k], sb[k], t);
+                const l = Logic.luminance(c.r, c.g, c.b);
+                if ((tone === "light" ? Logic.contrastRatio(1, l) : Logic.contrastRatio(0, l)) < Tokens.menubarToneNeededContrast)
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    function test_artFadeBand() {
+        const phases = ["dawn", "day", "evening", "night"];
+        let banded = [];
+        for (const set of ["light", "dark"]) {
+            for (let i = 0; i < 4; i++) {
+                const a = strip("grassfield", phases[i] + "." + set), b = strip("grassfield", phases[(i + 1) % 4] + "." + set);
+                const need = Logic.artFadeNeedsBand(a, b, toneOf(a), toneOf(b), 0.6, Tokens.menubarToneNeededContrast);
+                // Without the band, the tone in effect reads at every sample of the fade (A2).
+                if (!need)
+                    verify(passesAtSamples(a, b, 0.6), phases[i] + " to " + phases[(i + 1) % 4] + " " + set);
+                else
+                    banded.push(phases[i] + "-" + phases[(i + 1) % 4] + "." + set);
+            }
+        }
+        // The light Day is the one sky with dark text: the fade into it from Dawn needs the band (out of it into Evening each
+        // tone still reads where it is in effect); the dark set needs none.
+        compare(banded, ["dawn-day.light"]);
+        // An appearance switch at the midpoint: Day light <-> Day dark needs the band, Night light <-> Night dark does not.
+        const dl = strip("grassfield", "day.light"), dd = strip("grassfield", "day.dark");
+        verify(Logic.artFadeNeedsBand(dl, dd, toneOf(dl), toneOf(dd), 0.5, Tokens.menubarToneNeededContrast));
+        const nl = strip("grassfield", "night.light"), nd = strip("grassfield", "night.dark");
+        verify(!Logic.artFadeNeedsBand(nl, nd, toneOf(nl), toneOf(nd), 0.5, Tokens.menubarToneNeededContrast));
+        // The range of the band's glass spans both strips.
+        const r = Logic.artFadeRange(dl, dd);
+        verify(r.lumMin < r.lumMax);
     }
 }

@@ -20,6 +20,9 @@ Type=simple
 Slice=session.slice
 # Quickshell's own reload is off: package upgrades must not hot-reload a half-written tree (as the UI's unit).
 Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
+# Qt's "@2x" image lookup off, as in the UI's unit (review of cbd6ef05): a file:// picture is decoded from the path asked
+# for, never from a "<name>@2x.<ext>" beside it (the lock checks its wallpaper still by that path).
+Environment=QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING=1
 # The same cleared search paths and option variables as grassfield-shell.service (GF-115, the review of 360d6fa): a leaked
 # developer path or a stray QS_MANIFEST must not replace this process's QML either. tests/security/security_unit.sh keeps
 # the two lists identical; tests/security/shell_unit_env.sh derives the UI's from `qs --help`.

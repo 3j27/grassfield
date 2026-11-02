@@ -25,10 +25,15 @@ QtObject {
     // (faillock). The field is cleared and the session stays LOCKED (fail closed). Always false in a
     // real session, so authentication is unchanged there.
     property bool pamSuppressed: false
+    // ADR-0040 step 4b (IQ-T2 A): after a PAM success the lock's content fades out over this many ms while the session is
+    // still locked (state "releasing"); only then is unlockRequested emitted. 0: at once. A lock request, a lost lock or
+    // an abort during it brings the lock back, and the PAM success is spent (a new one is needed).
+    property int releaseMs: 0
 
     readonly property string lockState: priv.state
     readonly property bool locked: priv.state !== Machine.UNLOCKED
     readonly property bool authenticating: priv.state === Machine.AUTHENTICATING
+    readonly property bool releasing: priv.state === Machine.RELEASING
     readonly property bool canSubmit: priv.state === Machine.LOCKED && pamAvailable
     // True only while a submitted password waits for PAM's prompt (tests assert it drops).
     readonly property bool holdsSecret: priv.pending.length > 0
@@ -36,7 +41,7 @@ QtObject {
     readonly property string message: priv.message
     readonly property int failedAttempts: priv.failures
 
-    // Release the session lock: emitted once, after a PAM success only.
+    // Release the session lock: emitted once, after a PAM success and the release fade only.
     signal unlockRequested
     // An attempt failed (wrong password, PAM error, timeout): shake the field.
     signal failed
@@ -56,6 +61,13 @@ QtObject {
     property Timer timer: Timer {
         interval: root.authTimeout
         onTriggered: root.timedOut()
+    }
+
+    // The end of the release fade: a Timer (monotonic), never the view's animation, so a fade that does not run cannot hold
+    // the unlock back for ever, and nothing but this timer, armed by a PAM success, completes it.
+    property Timer releaseTimer: Timer {
+        interval: Math.max(0, root.releaseMs)
+        onTriggered: root.released()
     }
 
     // The state machine's state, read from its storage and not through a binding: decisions (lock requested before
@@ -83,6 +95,33 @@ QtObject {
         }
     }
 
+    // A lock request during the release fade (ADR-0040 step 4b): the content comes back, the session stays locked, and the
+    // spent PAM success unlocks nothing. Returns whether a release was interrupted.
+    function interruptRelease(): bool {
+        if (priv.state !== Machine.RELEASING)
+            return false;
+        releaseTimer.stop();
+        dispatch("request");
+        priv.message = "";
+        clearRequested();
+        return true;
+    }
+
+    function released(): void {
+        if (priv.state !== Machine.RELEASING)
+            return;
+        if (dispatch("released") === Machine.UNLOCKED)
+            unlocked();
+    }
+
+    function beginRelease(): void {
+        if (root.releaseMs <= 0) {
+            released();
+            return;
+        }
+        releaseTimer.restart();
+    }
+
     function lockAcquired(): void {
         dispatch("acquired");
     }
@@ -94,6 +133,8 @@ QtObject {
             timer.stop();
             priv.pending = "";
         }
+        // A release in progress is spent (ADR-0040 step 4b): re-acquire, a new PAM success will be needed.
+        releaseTimer.stop();
         dispatch("lost");
     }
 
@@ -184,8 +225,13 @@ QtObject {
             abortPam();
         timer.stop();
         priv.pending = "";
-        if (dispatch("fingerprint") === Machine.UNLOCKED)
-            unlocked();
+        if (dispatch("fingerprint") === Machine.RELEASING) {
+            priv.failures = 0;
+            priv.message = "";
+            priv.pamError = "";
+            clearRequested();
+            beginRelease();
+        }
     }
 
     // The user is typing again: drop the last error (never while an attempt is running).
@@ -208,8 +254,11 @@ QtObject {
         priv.pending = "";
         const state = dispatch(event);
         clearRequested();
-        if (state === Machine.UNLOCKED) {
-            unlocked();
+        if (state === Machine.RELEASING) {
+            priv.failures = 0;
+            priv.message = "";
+            priv.pamError = "";
+            beginRelease();
             return;
         }
         if (event === "failure")

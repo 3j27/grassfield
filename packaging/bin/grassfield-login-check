@@ -75,6 +75,10 @@ done
 qml=$root/usr/share/sddm/themes/$theme/Main.qml
 if [ -z "$theme" ] || [ ! -r "$qml" ]; then
   ok "SDDM theme '${theme:-default}' has no readable Main.qml here (nothing to check)"
+elif [ "$theme" = grassfield ] && grep -q 'Strings.pickSession' "$qml"; then
+  # Grassfield's own theme (ADR-0042, grassfield-login-themes): Strings.js picks "Grassfield (uwsm)" first, then the first
+  # "*uwsm*" session, then the remembered one; its Session button at the bottom goes to the next session.
+  ok "login screen (logout): Grassfield's theme selects 'Grassfield (uwsm)' first; its Session button chooses another"
 elif grep -q 'indexOf("uwsm")' "$qml"; then
   # Main.qml: sessionIndex is the first session whose name contains "uwsm"; only without such a session does it fall back to
   # sessionModel.lastIndex, the remembered one (SDDM RememberLastSession=true by default). The list order is SessionDir's.

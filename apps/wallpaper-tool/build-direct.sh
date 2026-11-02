@@ -4,6 +4,8 @@
 # Usage: apps/wallpaper-tool/build-direct.sh
 #        apps/wallpaper-tool/build-direct.sh --tests            (the logic unit tests: .dev/build/wallpaper-unit-tests)
 #        apps/wallpaper-tool/build-direct.sh --tests --asan     (the same with -fsanitize=address,undefined)
+#        apps/wallpaper-tool/build-direct.sh --shrink           (the build-only grassfield-wallpaper-shrink, ADR-0040 step 2c:
+#                                                               .dev/build/grassfield-wallpaper-shrink, used by scripts/dev/photos.sh)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(git -C "$here" rev-parse --show-toplevel)
@@ -25,6 +27,14 @@ if [[ ${1:-} == "--tests" ]]; then
     $(pkg-config --libs Qt6Core Qt6Gui) -lgtest -lgtest_main -pthread \
     -o "$out/wallpaper-unit-tests$suffix"
   echo "built $out/wallpaper-unit-tests$suffix"
+  exit 0
+fi
+
+if [[ ${1:-} == "--shrink" ]]; then
+  # shellcheck disable=SC2046
+  g++ "${cxxflags[@]}" -I"$here/src" $(pkg-config --cflags Qt6Core Qt6Gui) "$here/src/shrink.cpp" "$here/src/wallpaperlogic.cpp" \
+    $(pkg-config --libs Qt6Core Qt6Gui) -o "$out/grassfield-wallpaper-shrink"
+  echo "built $out/grassfield-wallpaper-shrink"
   exit 0
 fi
 

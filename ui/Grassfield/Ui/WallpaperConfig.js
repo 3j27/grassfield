@@ -6,6 +6,10 @@
 // grassfield.json goes through normalize(); an invalid field reads as its default, never as an error.
 
 const SOURCES = ["builtin", "color", "file", "folder", "video", "online"];
+// The Grassfield artworks (ADR-0040 step 2, ID-1) and the choice of variant: Time of Day (the Grassfield artwork only),
+// Automatic (by the appearance), Light, Dark.
+const ARTWORKS = ["grassfield", "meadow", "rows", "ridgeline"];
+const ARTWORK_VARIANTS = ["timeOfDay", "automatic", "light", "dark"];
 // Online daily pictures (ADR-0016 step 2): the Wikimedia Commons picture of the day and NASA's APOD. A provider is a name here
 // and a `fetch <provider>` subcommand of the helper.
 const ONLINE_PROVIDERS = ["commons", "apod"];
@@ -31,6 +35,9 @@ const WALLPAPER_DEFAULTS = {
     shuffle: true,
     videoOnBattery: false,
     online: {provider: "commons"},
+    artwork: "grassfield",
+    artworkVariant: "timeOfDay",
+    moving: false,
     outputs: []
 };
 
@@ -254,6 +261,9 @@ function normalize(raw) {
         shuffle: typeof r.shuffle === "boolean" ? r.shuffle : WALLPAPER_DEFAULTS.shuffle,
         videoOnBattery: typeof r.videoOnBattery === "boolean" ? r.videoOnBattery : WALLPAPER_DEFAULTS.videoOnBattery,
         online: {provider: isPlainObject(r.online) && oneOf(ONLINE_PROVIDERS, r.online.provider) ? r.online.provider : WALLPAPER_DEFAULTS.online.provider},
+        artwork: oneOf(ARTWORKS, r.artwork) ? r.artwork : WALLPAPER_DEFAULTS.artwork,
+        artworkVariant: oneOf(ARTWORK_VARIANTS, r.artworkVariant) ? r.artworkVariant : WALLPAPER_DEFAULTS.artworkVariant,
+        moving: typeof r.moving === "boolean" ? r.moving : WALLPAPER_DEFAULTS.moving,
         outputs: normalizeOutputs(r.outputs)
     };
     return settle(out);
@@ -281,7 +291,11 @@ function resolve(cfg, display) {
         interval: base.interval,
         shuffle: base.shuffle,
         videoOnBattery: base.videoOnBattery,
-        provider: base.online.provider
+        provider: base.online.provider,
+        // The artwork and its variant are chosen for every display (Settings > Wallpaper's Grassfield section, ADR-0040 step 2).
+        artwork: base.artwork,
+        artworkVariant: base.artworkVariant,
+        moving: base.moving
     };
     for (const entry of base.outputs) {
         if (!sameDisplay(entry.display, display))
@@ -909,4 +923,314 @@ function displayUrl(url) {
         return bare;
     }
     return HIDDEN.test(decoded) ? bare : decoded;
+}
+
+// ---- the shipped photographs (ADR-0040 step 2c) ----
+// photos.json beside the pictures (packaging/arch/wallpaper-photos.json, installed under /usr/share/grassfield/wallpapers/photos):
+// read by Settings > Wallpaper, later by the desktop's About This Wallpaper. A file installed by the package, still read as
+// untrusted: an entry with a field missing or of the wrong shape is left out, never shown half.
+const PHOTO_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_PHOTOS = 64;
+const MAX_PHOTO_TEXT = 512;
+
+function photoText(s) {
+    return typeof s === "string" && s.length > 0 && s.length <= MAX_PHOTO_TEXT && !HIDDEN.test(s);
+}
+
+// [{id, path, name: {en, fr}, title, author, credit, licenseShort, licenseUrl, sourceUrl}] from the manifest's text (`title`:
+// the work's own title, its Commons file name without the extension, which CC BY 2.0 and 3.0 ask for), the pictures at
+// `dir` + "/" + id + ".jpg"; [] for anything that is not a manifest. Each id once, at most MAX_PHOTOS.
+function parsePhotos(text, dir) {
+    let doc = null;
+    try {
+        doc = JSON.parse(text);
+    } catch (e) {
+        return [];
+    }
+    if (!doc || !Array.isArray(doc.photos) || validPath(dir) === false)
+        return [];
+    const out = [];
+    const seen = {};
+    for (const p of doc.photos) {
+        if (out.length >= MAX_PHOTOS)
+            break;
+        if (!p || typeof p.id !== "string" || !PHOTO_ID.test(p.id) || p.id.length > 64 || seen[p.id])
+            continue;
+        if (!p.name || !photoText(p.name.en) || !photoText(p.name.fr))
+            continue;
+        if (!photoText(p.author) || !photoText(p.credit) || !photoText(p.licenseShort) || !photoText(p.file))
+            continue;
+        if (linkOf(p.licenseUrl) === "" || linkOf(p.sourceUrl) === "")
+            continue;
+        seen[p.id] = true;
+        out.push({id: p.id, path: dir.replace(/\/+$/, "") + "/" + p.id + ".jpg", name: {en: p.name.en, fr: p.name.fr},
+            title: p.file.replace(/\.(?:jpe?g|png|tiff?|webp)$/i, ""), author: p.author, credit: p.credit, licenseShort: p.licenseShort,
+            licenseUrl: p.licenseUrl, sourceUrl: p.sourceUrl});
+    }
+    return out;
+}
+
+// A photograph's name in the language of `lang` (a locale name such as "fr_FR"): French for French, English otherwise.
+function photoName(photo, lang) {
+    return typeof lang === "string" && /^fr(?:[_-]|$)/.test(lang) ? photo.name.fr : photo.name.en;
+}
+
+// The photograph shown from `path`, or null.
+function photoAt(photos, path) {
+    return Array.isArray(photos) ? (photos.find(p => p.path === path) || null) : null;
+}
+
+// What "About This Wallpaper" shows for a photograph, as its licence asks to be credited (the integrator's review of e067f26f):
+// the work's own title (not Grassfield's name for it), the credit its author asked for with its copyright notice (Commons'
+// attribution line, its licence link written out once as the Licence row), the licence and its link, the source, and
+// `modified`: Grassfield changed the picture (resized, re-encoded, metadata removed: THIRD_PARTY.md). The fields of an online
+// entry, so one view serves both; `lang` is unused (the title is the work's own).
+function photoAbout(photo, lang) {
+    return photo ? {title: photo.title, credit: photoCredit(photo.credit), sourceUrl: photo.sourceUrl, licenseShort: photo.licenseShort,
+        licenseUrl: photo.licenseUrl, modified: true} : null;
+}
+
+// Commons' attribution line without the licence's address in angle brackets ("© A, CC BY 4.0 <https://…>, via Wikimedia
+// Commons" -> "© A, CC BY 4.0, via Wikimedia Commons"); the address is the Licence row's link.
+function photoCredit(credit) {
+    return typeof credit === "string" ? credit.replace(/\s*<https?:\/\/[^<>\s]*>/g, "") : "";
+}
+
+// What the desktop's "About This Wallpaper" shows for one output (ADR-0040 step 2c): `out` is the output's report (WallpaperState
+// .outputs[name]: {source, state, path}), `online` the online picture's ({entry}), `photos` the shipped list (parsePhotos). The
+// online picture's attribution while that output shows it, ready; the photograph's while it shows one of the list, ready; null
+// otherwise (the menu then has no About This Wallpaper).
+function aboutEntryOf(out, online, photos, lang) {
+    if (!out || out.state !== "ready")
+        return null;
+    if (out.source === "online")
+        return online && online.entry ? online.entry : null;
+    if (out.source === "file" && typeof out.path === "string" && out.path !== "")
+        return photoAbout(photoAt(photos, out.path), lang);
+    return null;
+}
+
+// ---- the artwork's variant (ADR-0040 section 2, IQ-W1 C) ----
+// The variant GrassfieldArtwork draws for `artwork` under the user's `choice` (wallpaper.artworkVariant), the appearance
+// (`dark`) and the phase of the day (TimeOfDay, "" while it is not known). Grassfield: Time of Day is the phase in the
+// appearance's set (Evening until the phase is known); Automatic is Day in the light appearance and Evening in the dark one;
+// Light is the light Day; Dark the dark Evening. The other artworks follow the appearance (Time of Day reads as Automatic)
+// unless Light or Dark is chosen.
+function artworkVariantFor(artwork, choice, dark, phase) {
+    const c = oneOf(ARTWORK_VARIANTS, choice) ? choice : WALLPAPER_DEFAULTS.artworkVariant;
+    const set = dark ? "dark" : "light";
+    if (artwork !== "grassfield" && oneOf(ARTWORKS, artwork))
+        return c === "light" || c === "dark" ? c : set;
+    if (c === "light")
+        return "day.light";
+    if (c === "dark")
+        return "evening.dark";
+    if (c === "automatic")
+        return dark ? "evening.dark" : "day.light";
+    return (["dawn", "day", "evening", "night"].indexOf(phase) >= 0 ? phase : "evening") + "." + set;
+}
+
+// ---- the first frame and the ground (ADR-0040 step 3, ID-2 and ID-3), the lock's backdrop (step 4a, ID-7) ----
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const STILL_NAME = /^[0-9a-f]{32}\.(jpg|png)$/;
+const ART_VARIANT = /^((dawn|day|evening|night)\.)?(light|dark)$/;
+
+// wallpaper.json "shown": per output, the last wallpaper that output showed. A picture {kind: "picture", file, strip, image,
+// mean, video} (`file` the prepared picture, or a video's poster with `video` true), the artwork {kind: "art"} or a colour
+// {kind: "color", color}; every record also names the artwork and variant the output would draw instead (`artwork`,
+// `variant`): the lock's fallback. Written by the desktop when a wallpaper is on screen; read back by the desktop's first
+// frame (stillOf) and by the lock (lockBackdropOf). At most 16 outputs.
+function shownRecord(saved, output) {
+    const all = isPlainObject(saved) && isPlainObject(saved.shown) ? saved.shown : {};
+    const r = typeof output === "string" && Object.prototype.hasOwnProperty.call(all, output) ? all[output] : null;
+    return isPlainObject(r) ? r : null;
+}
+
+// `file` when it is a plain cache name ("<32 hex>.jpg|png") directly in one of `dirs` (each an absolute path), else "".
+function cacheFile(file, dirs) {
+    if (typeof file !== "string")
+        return "";
+    const slash = file.lastIndexOf("/");
+    if (slash < 0 || !STILL_NAME.test(file.substring(slash + 1)))
+        return "";
+    const dir = file.substring(0, slash);
+    return dirs.some(d => validPath(d) && d.replace(/\/+$/, "") === dir) ? file : "";
+}
+
+// The last picture shown on `output` ({file, strip, image, mean}) for the desktop's first frame, or null. The file must be one
+// of the helper's own prepared pictures (a plain cache name in `preparedDir`): the shell decodes nothing else (ADR-0016). A
+// video's poster is not one (it waits for the feed). The statistics are kept only when they have the helper's shape.
+function stillOf(saved, output, preparedDir) {
+    const s = shownRecord(saved, output);
+    if (s === null || s.kind !== "picture" || s.video === true)
+        return null;
+    const file = cacheFile(s.file, [preparedDir]);
+    if (file === "")
+        return null;
+    const stats = v => isPlainObject(v) && typeof v.mean === "number" && typeof v.p5 === "number" && typeof v.p95 === "number" ? v : null;
+    const strip = isPlainObject(s.strip) && stats(s.strip.all) ? s.strip : null;
+    return {file: file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : ""};
+}
+
+// The stored state with `output`'s record set from the description now on screen (`art`: {artwork, variant}, what the output
+// would draw instead). A new object; at most 16 outputs are kept (the newest).
+function withShown(saved, output, desc, art) {
+    const base = isPlainObject(saved) ? saved : {};
+    const a = isPlainObject(art) ? art : {};
+    const r = {kind: "art", artwork: typeof a.artwork === "string" ? a.artwork : "grassfield", variant: typeof a.variant === "string" ? a.variant : "evening.dark"};
+    let keep = true;
+    if (desc && desc.kind === "picture" && typeof desc.url === "string" && desc.url.indexOf("file://") === 0) {
+        r.kind = "picture";
+        r.file = desc.url.substring(7);
+        r.video = typeof desc.video === "string" && desc.video !== "";
+        r.strip = desc.strip || null;
+        r.image = desc.image || null;
+        r.mean = typeof desc.mean === "string" ? desc.mean : "";
+    } else if (desc && desc.kind === "color" && validColor(desc.color)) {
+        r.kind = "color";
+        r.color = desc.color;
+    } else if (desc && desc.kind === "art") {
+        if (typeof desc.artwork === "string")
+            r.artwork = desc.artwork;
+        if (typeof desc.variant === "string")
+            r.variant = desc.variant;
+    } else {
+        keep = false;
+    }
+    // A fresh object, `output` last (the engine keeps a deleted key's place when it is added again): the oldest go first.
+    const old = isPlainObject(base.shown) ? base.shown : {};
+    const names = Object.keys(old).filter(n => n !== output);
+    const shown = {};
+    for (const n of names.slice(Math.max(0, names.length - (keep ? 15 : 16))))
+        shown[n] = old[n];
+    if (keep)
+        shown[output] = r;
+    return Object.assign({}, base, {shown: shown});
+}
+
+// What the lock draws behind its scrim on `output` (ADR-0040 step 4a, ID-7): {kind: "picture", file} (the prepared picture or a
+// video's poster: a plain cache name in `preparedDir` or `videoDir`), {kind: "color", color} or {kind: "art"}, each with the
+// artwork and variant to draw when the picture cannot be (the default for anything unknown); null when the output never showed
+// anything. The lock still checks the file itself (a regular file of bounded size whose real path is in the cache).
+function lockBackdropOf(saved, output, preparedDir, videoDir) {
+    const r = shownRecord(saved, output);
+    if (r === null)
+        return null;
+    const out = {kind: "art", file: "", color: "", artwork: ARTWORKS.indexOf(r.artwork) >= 0 ? r.artwork : "grassfield", variant: typeof r.variant === "string" && ART_VARIANT.test(r.variant) ? r.variant : "evening.dark"};
+    if (r.kind === "picture") {
+        out.file = cacheFile(r.file, [preparedDir, videoDir]);
+        if (out.file !== "")
+            out.kind = "picture";
+    } else if (r.kind === "color" && validColor(r.color)) {
+        out.kind = "color";
+        out.color = r.color;
+    }
+    return out;
+}
+
+// The lock's check of a still (ADR-0040 step 4a, shell/security/lock/LockStill.qml), pure. `text` is what
+// `realpath -m -- <preparedDir> <videoDir> <file>` printed: three lines, each path with its symbolic links resolved. The
+// file's real path when it is a plain cache name directly in the real prepared or video folder, else "".
+function lockStillReal(text) {
+    const lines = typeof text === "string" ? text.split("\n").filter(l => l !== "") : [];
+    if (lines.length !== 3)
+        return "";
+    return cacheFile(lines[2], [lines[0], lines[1]]);
+}
+
+// `stat --printf %f|%s`: the raw mode in hexadecimal and the size (no word, so no locale changes it). True for a regular
+// file of 1 to `maxBytes` bytes.
+function lockStillStatOk(text, maxBytes) {
+    const m = typeof text === "string" ? text.trim().match(/^([0-9a-fA-F]{1,8})\|(\d{1,20})$/) : null;
+    if (!m)
+        return false;
+    const size = Number(m[2]);
+    return (parseInt(m[1], 16) & 0xF000) === 0x8000 && size > 0 && size <= maxBytes;
+}
+
+// ---- the moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f) ----
+// Its clouds move on the lock screen only, as macOS's moving wallpapers do; the desktop draws them still. The position is in
+// milliseconds of motion (Artwork.cloudX, Artwork.lightAt), one per output: 0 until a lock moved them.
+
+// Where the clouds rest on `output` in a map {<output>: ms} (WallpaperState.motion): 0 for anything that is not a finite
+// number of at least 0.
+function motionIn(map, output) {
+    const v = isPlainObject(map) && typeof output === "string" ? map[output] : 0;
+    return typeof v === "number" && isFinite(v) && v >= 0 ? v : 0;
+}
+
+// The map with `output` resting at `at` (a new object; the map itself unchanged when either is not valid).
+function withMotion(map, output, at) {
+    const base = isPlainObject(map) ? map : {};
+    if (typeof output !== "string" || output === "" || typeof at !== "number" || !isFinite(at) || at < 0)
+        return base;
+    const out = Object.assign({}, base);
+    out[output] = at;
+    return out;
+}
+
+// Where the lock's clouds come to rest when its release fade starts (`at`: where they are). Moving, they slow down linearly to
+// a stop within the fade (`fadeMs`; Easing.OutQuad, whose starting speed is the running one, one ms of motion per ms): they
+// rest half the fade further on. Not moving, or no fade (Reduce Motion): where they are.
+function lockMotionRest(at, moving, fadeMs) {
+    const a = typeof at === "number" && isFinite(at) && at >= 0 ? at : 0;
+    return moving === true && typeof fadeMs === "number" && isFinite(fadeMs) && fadeMs > 0 ? a + fadeMs / 2 : a;
+}
+
+// What a wallpaper window shows as its first frame, before it maps (ADR-0040 ID-3): "feed" (the feed's first result, final:
+// it carries the phase and the appearance too), "still" (the output's last picture from wallpaper.json, until that result),
+// or "wait" (nothing yet: the window stays unmapped, at most wallpaper.firstShowTimeoutMs, then the artwork). A phase or an
+// appearance known before the feed's first result changes nothing; nothing is chosen before wallpaper.json was read.
+function firstFrameChoice(feedSeen, stateReady, hasStill) {
+    if (!stateReady)
+        return "wait";
+    if (feedSeen)
+        return "feed";
+    return hasStill ? "still" : "wait";
+}
+
+// The ground of `output` in `grounds` ({output name: "#RRGGBB"}), else `fallback`.
+function groundFor(grounds, output, fallback) {
+    return isPlainObject(grounds) && typeof output === "string" && Object.prototype.hasOwnProperty.call(grounds, output) && HEX.test(grounds[output]) ? grounds[output] : fallback;
+}
+
+// The stored state with display `key`'s carousel position set; every other key (the last wallpaper shown) kept. A new object.
+function withCarousel(saved, key, state) {
+    const base = isPlainObject(saved) ? saved : {};
+    const all = Object.assign({}, isPlainObject(base.displays) ? base.displays : {});
+    all[key] = state;
+    return Object.assign({}, base, {displays: all});
+}
+
+// The text of wallpaper.json: the carousel positions, the last wallpaper shown per output, the video crash markers
+// ([{path, at}], one per path) and the blocked videos; the empty ones left out.
+function stateText(saved, startingBy, blocked, now) {
+    const s = isPlainObject(saved) ? saved : {};
+    const o = {displays: isPlainObject(s.displays) ? s.displays : {}};
+    if (isPlainObject(s.shown) && Object.keys(s.shown).length > 0)
+        o.shown = s.shown;
+    const starting = [];
+    const by = isPlainObject(startingBy) ? startingBy : {};
+    for (const owner of Object.keys(by)) {
+        if (!starting.some(m => m.path === by[owner]))
+            starting.push({path: by[owner], at: now});
+    }
+    if (starting.length > 0)
+        o.videoStarting = starting;
+    const list = asArray(blocked, 16);
+    if (list !== null && list.length > 0)
+        o.videoBlocked = list;
+    return JSON.stringify(o, null, 2) + "\n";
+}
+
+// The ground of a description (ADR-0040 ID-2): a picture's mean colour, a colour itself, the artwork's ground; `fallback` (the
+// static default, session.ground) for anything else.
+function groundOf(desc, artGround, fallback) {
+    if (desc && desc.kind === "picture" && typeof desc.mean === "string" && HEX.test(desc.mean))
+        return desc.mean.toUpperCase();
+    if (desc && desc.kind === "color" && typeof desc.color === "string" && HEX.test(desc.color))
+        return desc.color.toUpperCase();
+    if (desc && desc.kind === "art" && typeof artGround === "string" && HEX.test(artGround))
+        return artGround.toUpperCase();
+    return fallback;
 }

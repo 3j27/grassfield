@@ -80,6 +80,7 @@ QJsonObject OperationRecord::toJson() const
             {QStringLiteral("webName"), webName},
             {QStringLiteral("webUrl"), webUrl},
             {QStringLiteral("flatpak"), flatpak},
+            {QStringLiteral("commits"), QJsonArray::fromStringList(commits)},
             {QStringLiteral("startedAt"), startedAt.toUTC().toString(Qt::ISODate)}};
 }
 
@@ -108,8 +109,11 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
     r.webName = o.value(QStringLiteral("webName")).toString();
     r.webUrl = o.value(QStringLiteral("webUrl")).toString();
     r.flatpak = o.value(QStringLiteral("flatpak")).toString();
+    for (const QJsonValue &v : o.value(QStringLiteral("commits")).toArray())
+        r.commits.append(v.toString());
     r.startedAt = QDateTime::fromString(o.value(QStringLiteral("startedAt")).toString(), Qt::ISODate);
-    const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove");
+    const bool update = r.kind == QLatin1String("update");
+    const bool kindOk = r.kind == QLatin1String("install") || r.kind == QLatin1String("remove") || (update && r.path == QLatin1String("flatpak"));
     const bool namesOk = !r.packages.isEmpty() && r.packages.size() <= 64 && std::all_of(r.packages.cbegin(), r.packages.cend(), isName);
     const bool helperOk = r.path == QLatin1String("helper") && namesOk;
     // A setup's recipe of the operation's own kind (e.5), or the AUR's command of that kind with the package names (b.2).
@@ -122,11 +126,40 @@ std::optional<OperationRecord> OperationRecord::fromJson(const QJsonObject &o)
         && r.packages == QStringList{kFlatpakPackage};
     const bool terminalOk = r.path == QLatin1String("terminal") && namesOk && (setupOk || aurOk || flatpakGetOk);
     const bool webOk = r.path == QLatin1String("webapp") && isWebAppName(r.webName);
-    // An install takes Flathub's ref, a removal the app id (b.3).
-    const bool flatpakOk = r.path == QLatin1String("flatpak") && (install ? isFlatpakAppRef(r.flatpak) : isFlatpakId(r.flatpak));
+    // An install takes Flathub's ref, a removal the app id (b.3); an update its refs (step 4: as many as a check lists),
+    // with its app's alone when it updates one app, and a commit (or "") for each, a pinned one only on an app's ref.
+    const bool refsOk = !r.packages.isEmpty() && r.packages.size() <= kMaxFlatpakUpdates
+        && std::all_of(r.packages.cbegin(), r.packages.cend(), isFlatpakRef) && r.commits.size() == r.packages.size();
+    bool commitsOk = refsOk;
+    for (qsizetype i = 0; commitsOk && i < r.commits.size(); ++i)
+        commitsOk = r.commits.at(i).isEmpty() || (isFlatpakCommit(r.commits.at(i)) && isFlatpakAppRef(r.packages.at(i)));
+    if (!update && !r.commits.isEmpty())
+        return std::nullopt;
+    const bool flatpakOk = r.path == QLatin1String("flatpak")
+        && (update ? commitsOk && (r.flatpak.isEmpty() || (isFlatpakAppRef(r.flatpak) && r.packages == QStringList{r.flatpak}))
+            : install ? isFlatpakAppRef(r.flatpak)
+                      : isFlatpakId(r.flatpak));
     if (!isOperationId(r.id) || !kindOk || !(helperOk || terminalOk || webOk || flatpakOk))
         return std::nullopt;
     return r;
+}
+
+QList<QStringList> flatpakUpdateCommands(const OperationRecord &record)
+{
+    const QStringList base{QStringLiteral("update"), QStringLiteral("--user"), QStringLiteral("--noninteractive")};
+    QList<QStringList> out;
+    QStringList rest;
+    for (qsizetype i = 0; i < record.packages.size(); ++i) {
+        const QString commit = record.commits.value(i);
+        if (commit.isEmpty())
+            rest.append(record.packages.at(i));
+        else
+            out.append(base + QStringList{QStringLiteral("--commit=") + commit, QStringLiteral("--"), record.packages.at(i)});
+    }
+    // The rest after the pinned apps: a runtime an app's update already brought is "Nothing to update." (S31c, exit 0).
+    if (!rest.isEmpty())
+        out.append(base + QStringList{QStringLiteral("--")} + rest);
+    return out;
 }
 
 QString newOperationId()
@@ -337,7 +370,7 @@ QVariantList Operations::list() const
                                {QStringLiteral("state"), QString::fromLatin1(states[int(i.state)])},
                                {QStringLiteral("blocked"), i.blocked},
                                {QStringLiteral("done"), i.done},
-                               {QStringLiteral("total"), int(i.record.plan.size())},
+                               {QStringLiteral("total"), int(i.record.kind == QLatin1String("update") ? i.record.packages.size() : i.record.plan.size())},
                                {QStringLiteral("stoppable"), i.record.path == QLatin1String("flatpak") && i.record.kind == QLatin1String("install")
                                                                  && i.state == State::Running && !m_stopping}});
     }
@@ -403,6 +436,7 @@ void Operations::startNext()
     m_stopping = false;
     m_firstExit.reset();
     m_flatpakOutput.clear();
+    m_flatpakSteps.clear();
     writeRecord(m_current->record);
     if (helper) {
         startHelper(*m_current);
@@ -411,9 +445,16 @@ void Operations::startNext()
     } else if (m_current->record.path == QLatin1String("flatpak")) {
         m_current->state = State::Running;
         const OperationRecord &r = m_current->record;
-        startFlatpak(r.kind == QLatin1String("install")
-                         ? QStringList{QStringLiteral("install"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), kFlathubRemote, r.flatpak}
-                         : QStringList{QStringLiteral("uninstall"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), QStringLiteral("--"), r.flatpak});
+        if (r.kind == QLatin1String("update")) {
+            // Its refs only (S31b: an app's runtime comes with it when the app needs the newer one), each pinned app on its
+            // own (S32), one command after the other.
+            m_flatpakSteps = flatpakUpdateCommands(r);
+            startFlatpak(m_flatpakSteps.takeFirst());
+        } else {
+            startFlatpak(r.kind == QLatin1String("install")
+                             ? QStringList{QStringLiteral("install"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), kFlathubRemote, r.flatpak}
+                             : QStringList{QStringLiteral("uninstall"), QStringLiteral("--user"), QStringLiteral("--noninteractive"), QStringLiteral("--"), r.flatpak});
+        }
     } else {
         startWebApp(*m_current);
     }
@@ -503,7 +544,7 @@ void Operations::startFlatpak(const QStringList &args)
         ::setpgid(0, 0);
         ::prctl(PR_SET_PDEATHSIG, SIGTERM);
     });
-    const bool install = m_current && m_current->record.kind == QLatin1String("install");
+    const bool install = m_current && m_current->record.kind != QLatin1String("remove"); // "Installing" or "Updating" lines
     connect(p, &QProcess::readyReadStandardOutput, this, [this, p, install] {
         const QByteArray out = p->readAllStandardOutput();
         if (m_output.size() < kMaxDetails)
@@ -511,7 +552,9 @@ void Operations::startFlatpak(const QStringList &args)
         if (m_flatpakOutput.size() < 1024 * 1024)
             m_flatpakOutput += out;
         if (m_current && !m_firstExit) {
-            const int done = qMin(flatpakSteps(m_flatpakOutput, install), int(m_current->record.plan.size()));
+            const int steps = m_current->record.kind == QLatin1String("update") ? int(m_current->record.packages.size())
+                                                                                 : int(m_current->record.plan.size());
+            const int done = qMin(flatpakSteps(m_flatpakOutput, install), steps);
             if (done != m_current->done) {
                 m_current->done = done;
                 emit changed();
@@ -729,6 +772,14 @@ void Operations::processEnded(int exitCode, QProcess::ExitStatus status)
     if (m_current && m_current->record.path == QLatin1String("flatpak")) {
         if (m_firstExit) {
             code = m_firstExit; // `--unused` ran after the removal: the removal's own code is the operation's
+        } else if (m_current->record.kind == QLatin1String("update") && code == 0 && !m_flatpakSteps.isEmpty()) {
+            // The next of the update's commands; a failed one ends it, its code the operation's (S32d).
+            m_process->disconnect(this);
+            m_process->deleteLater();
+            m_process.clear();
+            m_output += "\n";
+            startFlatpak(m_flatpakSteps.takeFirst());
+            return;
         } else if (m_current->record.kind == QLatin1String("remove") && code == 0) {
             // The app is gone: the runtimes no other app needs go too (SD27; a runtime installed by name stays, S26).
             m_firstExit = code;
@@ -758,7 +809,20 @@ void Operations::readState(const OperationRecord &record, std::function<void(int
     flatpak.env = m_config.flatpakEnv;
     QThreadPool::globalInstance()->start([self, record, pacman, applications, flatpak, then] {
         int present = 0, total = 0;
-        if (record.path == QLatin1String("flatpak")) {
+        if (record.path == QLatin1String("flatpak") && record.kind == QLatin1String("update")) {
+            // Never the exit code alone, which is 0 offline with nothing updated (S31d): a pinned ref is done when its
+            // installed commit is the pinned one (a newer one may be listed already, S32e), the others when a new check no
+            // longer lists them (S31). No answer from flatpak: none is.
+            total = int(record.packages.size());
+            const std::optional<QList<FlatpakUpdate>> left = flatpak.flatpak.isEmpty() ? std::nullopt : listFlatpakUpdates(flatpak);
+            for (qsizetype i = 0; i < record.packages.size() && !flatpak.flatpak.isEmpty(); ++i) {
+                const QString &ref = record.packages.at(i);
+                const QString commit = record.commits.value(i);
+                if (!commit.isEmpty() ? flatpakInstalledCommit(flatpak, ref) == commit
+                                      : left && std::none_of(left->cbegin(), left->cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }))
+                    ++present;
+            }
+        } else if (record.path == QLatin1String("flatpak")) {
             // The app in the user's installation after an install, gone after a removal (flatpak info --user).
             total = 1;
             const QString id = record.kind == QLatin1String("install") ? flatpakRefId(record.flatpak) : record.flatpak;
@@ -845,9 +909,12 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
         } else if (lostTrack) {
             result.outcome = QStringLiteral("lostTrack");
         } else if (flatpak) {
-            // Stopped by the user: what it finished stays (runtimes), nothing is half-installed; nothing to say but that. Else
-            // flatpak's own failure (its words in Details), or no exit code and nothing there.
+            // Stopped by the user: what it finished stays (runtimes), nothing is half-installed; nothing to say but that. An
+            // update whose commands did part of its refs before one failed or the Store ended: how many. Else flatpak's own
+            // failure (its words in Details), or no exit code and nothing there.
+            const bool partial = record.kind == QLatin1String("update") && present > 0 && present < total;
             result.outcome = stopped && present == 0 ? QStringLiteral("stopped")
+                : partial                          ? QStringLiteral("interrupted")
                 : exitCode && *exitCode != 0       ? QStringLiteral("failed")
                                                    : QStringLiteral("notFinished");
         } else if (didNotOpen && present == 0) {
@@ -926,6 +993,7 @@ void Operations::conclude(std::optional<int> exitCode, const QString &output)
         m_concluding = false;
         m_stopping = false;
         m_firstExit.reset();
+        m_flatpakSteps.clear();
         emit changed();
         emit finished(record.app);
         if (m_queue.isEmpty())

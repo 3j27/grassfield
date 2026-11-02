@@ -160,6 +160,50 @@ TestCase {
         compare(Store.updatesStatus({state: "busy"}), "Update in progress");
         compare(Store.updatesStatus({state: "unknown"}), "Software Update has not checked for updates yet.");
         compare(Store.updatesStatus(null), "Software Update has not checked for updates yet.");
+        // Step 4: what runs or is asked comes first.
+        compare(Store.updatesStatus({state: "available", running: true}), "Update in progress");
+        compare(Store.updatesStatus({state: "available", checking: true}), "Checking for updates…");
+        compare(Store.updatesStatus({state: "up-to-date", unfinished: 3}), "The last system update did not finish.");
+        compare(Store.updatesStatus({state: "up-to-date", checkedAt: "9:12", count: 1}), "Last checked 9:12.");
+        compare(Store.updatesStatus({state: "unknown", askFailed: true}), "Software Update couldn't check for updates. Open it to check.");
+    }
+
+    // The system's button on Updates (SD32): Update All… opens Software Update; Software Update… when only it can act.
+    function test_systemAction() {
+        compare(Store.systemAction({state: "available", others: 3}), "update");
+        compare(Store.systemAction({state: "up-to-date", others: 0, grassfield: {available: "1.0.1-1"}}), "update");
+        compare(Store.systemAction({state: "up-to-date", others: 0, unfinished: 1}), "update");
+        compare(Store.systemAction({state: "up-to-date", others: 0}), "");
+        compare(Store.systemAction({state: "blocking"}), "software");
+        compare(Store.systemAction({state: "not-set-up"}), "software");
+        compare(Store.systemAction({state: "available", others: 3, running: true}), "");
+        compare(Store.systemAction({state: "available", others: 3, checking: true}), "");
+        compare(Store.systemAction(null), "");
+    }
+
+    function test_flatpakUpdates() {
+        compare(Store.flatpakUpdatesLine({on: false}), "");
+        compare(Store.flatpakUpdatesLine({on: true, state: "checking"}), "Checking Flathub for updates…");
+        compare(Store.flatpakUpdatesLine({on: true, state: "failed"}), "Flathub's updates couldn't be checked. Check your connection to the internet, then try again.");
+        compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [], runtimes: 0}), "Your Flatpak apps are up to date.");
+        compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [], runtimes: 2}), "2 runtimes have an update.");
+        compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [{id: "a"}], runtimes: 2}), "");
+        // An update's plan reading each app's commit and access (SD33): counted, before anything else.
+        compare(Store.flatpakUpdatesLine({on: true, state: "checking", apps: [{id: "a"}], planning: {done: 2, total: 5}}), "Checking what the updates change: 2 of 5 apps…");
+        compare(Store.flatpakUpdatesLine({on: true, state: "", apps: [], runtimes: 1, planning: {done: 0, total: 0}}), "1 runtime has an update.");
+        compare(Store.getBlockText("checking", "flatpak"), "Checking what this update changes…");
+        compare(Store.buttonState({}, {installed: true, launcher: true, update: "checking"}, null), "update");
+        // The button: Update for an installed Flatpak with an update, never before Get.
+        compare(Store.buttonState({}, {installed: true, launcher: true, update: ""}, null), "update");
+        compare(Store.buttonState({}, {installed: true, launcher: true, update: "offline"}, null), "update");
+        compare(Store.buttonState({}, {installed: true, launcher: true, update: "none"}, null), "open");
+        compare(Store.buttonState({}, {installed: false, launcher: false, update: ""}, null), "get");
+        compare(Store.buttonText("update"), "Update");
+        // How an update ended: judged by a new check (S31d).
+        compare(Store.resultText({kind: "update", outcome: "notFinished"}), "The update did not finish. Check your connection to the internet, then try again.");
+        compare(Store.resultText({kind: "update", outcome: "interrupted", present: 1, total: 3}), "The update was interrupted: 1 of 3 were updated.");
+        compare(Store.resultText({kind: "update", outcome: "failed"}), "The update failed.");
+        compare(Store.resultText({kind: "update", outcome: ""}), "");
     }
 
     function test_host() {
