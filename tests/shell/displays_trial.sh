@@ -15,11 +15,14 @@ cd "$root"
 unset QT_QPA_PLATFORMTHEME
 fail=0
 tmp=$(mktemp -d "$root/.dev/displays-trial.XXXXXX" 2>/dev/null || { mkdir -p "$root/.dev" && mktemp -d "$root/.dev/displays-trial.XXXXXX"; })
+# The runtime folder (the fake Hyprland's sockets) under a short base: a Unix socket path holds at most 107 bytes, and
+# "$root/.dev/..." of a deep checkout went past it, so nothing could connect (integrator, 2026-11-02).
+rt=$(mktemp -d "${TMPDIR:-/tmp}/gf-rt.XXXXXX")
 fake=""
-trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp"' EXIT
+trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp" "$rt"' EXIT
 sig=gf-displays-trial
-mkdir -p "$tmp/runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg"
-chmod 700 "$tmp/runtime" "$tmp/cache"
+mkdir -p "$rt/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg"
+chmod 700 "$rt" "$tmp/cache"
 # The test shell.qml next to links to every module of the real shell (qs.platform's qmldir names singletons of its siblings).
 for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
@@ -65,15 +68,15 @@ def serve_events():
 threading.Thread(target=serve_events, daemon=True).start()
 serve_requests()
 PY
-python3 -I "$tmp/fake.py" "$tmp/runtime/hypr/$sig" "$tmp/requests.log" &
+python3 -I "$tmp/fake.py" "$rt/hypr/$sig" "$tmp/requests.log" &
 fake=$!
-for _ in $(seq 50); do [[ -S $tmp/runtime/hypr/$sig/.socket.sock && -S $tmp/runtime/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
+for _ in $(seq 50); do [[ -S $rt/hypr/$sig/.socket.sock && -S $rt/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
 
 # A trial a shell left behind when it stopped: the new shell must take it back at start.
 printf 'trial old until %s\nv1\tdesc:GF Reference\t1920x1080@60\t0x0\t1\t0\n' "$(($(date +%s) + 60))" >"$tmp/state/display-trial.conf"
 
 out=$(env -u WAYLAND_DISPLAY -u GRASSFIELD_SESSION -u DBUS_SESSION_BUS_ADDRESS GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$tmp/state" \
-  GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig" XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache" \
+  GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig" XDG_RUNTIME_DIR="$rt" XDG_CACHE_HOME="$tmp/cache" \
   QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" timeout 60 qs -p "$tmp/cfg" --no-color 2>&1) || true
 res=$(grep -o 'displays-trial: .*' <<<"$out" || true)
 echo "${res:-FAIL: displays-trial: no result}"
