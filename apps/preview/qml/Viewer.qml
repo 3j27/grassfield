@@ -283,7 +283,9 @@ Window {
             id: titleBlock
             anchors {
                 left: sidebarGroup.visible ? sidebarGroup.right : parent.left
-                leftMargin: Tokens.spacingMd
+                // Without the sidebar toggle the title is the first item after the lights: it starts at the toolbar's
+                // contentStart, as every app's leading items do, not at the window's edge under them.
+                leftMargin: sidebarGroup.visible ? Tokens.spacingMd : toolbar.contentStart
                 right: tools.left
                 rightMargin: Tokens.spacingMd
                 verticalCenter: parent.verticalCenter
