@@ -15,6 +15,7 @@
 #include "settingsinstance.h"
 #include "keywindow.h"
 #include "windowchrome.h"
+#include "textrender.h"
 
 #ifndef GRASSFIELD_SETTINGS_QML_DIR
 #define GRASSFIELD_SETTINGS_QML_DIR "/usr/share/grassfield/settings/qml"
@@ -28,7 +29,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     // The app's static text is rasterised natively (ADR-0039 Q5, step 19): distance-field glyphs carry 8 to 20 % less ink than
     // macOS's, so text read greyer and softer; no app text is scaled or animated (an item that is sets its own renderType).
-    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
+    grassfield::apps::applyTextRenderType(); // native unless GRASSFIELD_TEXT_RENDER says otherwise (textrender.h)
     // Before any QML: no global menu item may hold Qt's first shortcut id (globalmenu.h).
     grassfield::apps::reserveFirstShortcutId(app);
     // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
