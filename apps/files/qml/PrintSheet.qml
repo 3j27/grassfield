@@ -816,7 +816,7 @@ Window {
                             FormLabel {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: form.labelWidth
-                                text: sheet.optionLabel(String(optionRow.modelData.name))
+                                text: sheet.optionLabel(String(optionRow.modelData.name)) // raw-name-ok: a print option keyword, never a file name
                             }
                             ComboBox {
                                 width: Tokens.filesPrintFieldWidth
@@ -827,7 +827,7 @@ Window {
                                 }
                                 model: optionRow.modelData.values.map(v => ({
                                             id: String(v.value),
-                                            text: sheet.valueLabel(String(optionRow.modelData.name), String(v.value), String(v.label),
+                                            text: sheet.valueLabel(String(optionRow.modelData.name), String(v.value), String(v.label), // raw-name-ok: same
                                                                    String(v.keyword || ""))
                                         }))
                                 onPicked: id => sheet.setOption(String(optionRow.modelData.name), id)
