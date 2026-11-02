@@ -2678,7 +2678,7 @@ QString FilesApp::saveSearch(const QString &name, const QUrl &search, bool sideb
 {
     const auto query = SearchLogic::fromUrl(search);
     if (!query)
-        return tr("This search can't be read.");
+        return tr("This search can’t be read.");
     return m_savedSearches->save({name, *query, sidebar});
 }
 

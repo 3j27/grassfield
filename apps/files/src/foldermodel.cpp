@@ -1715,7 +1715,7 @@ void FolderModel::startFileSearch()
     m_searchContentsUnavailable = false;
     const auto query = SearchLogic::fromUrl(m_url);
     if (!query) {
-        setError(tr("This search can't be read."));
+        setError(tr("This search can’t be read."));
         m_loading = false;
         emit loadingChanged();
         return;
@@ -1728,7 +1728,7 @@ void FolderModel::startFileSearch()
     }
     const QUrl base = searchBase();
     if (!QFileInfo(base.toLocalFile()).isDir()) {
-        setError(tr("The folder of this search can't be found."));
+        setError(tr("The folder of this search can’t be found."));
         m_loading = false;
         emit loadingChanged();
         return;

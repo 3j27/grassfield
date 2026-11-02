@@ -5339,7 +5339,7 @@
         <translation>Autre</translation>
     </message>
     <message>
-        <source>This search can&apos;t be read.</source>
+        <source>This search can’t be read.</source>
         <translation>Cette recherche ne peut pas être lue.</translation>
     </message>
     <message>
@@ -5473,11 +5473,11 @@
         <translation>Les tags ne sont recherchés que dans les dossiers locaux.</translation>
     </message>
     <message>
-        <source>This search can&apos;t be read.</source>
+        <source>This search can’t be read.</source>
         <translation>Cette recherche ne peut pas être lue.</translation>
     </message>
     <message>
-        <source>The folder of this search can&apos;t be found.</source>
+        <source>The folder of this search can’t be found.</source>
         <translation>Le dossier de cette recherche est introuvable.</translation>
     </message>
 </context>
