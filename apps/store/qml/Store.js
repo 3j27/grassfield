@@ -46,8 +46,9 @@ function symbolIcon(symbol) {
     return SYMBOLS[symbol] || "apps";
 }
 
-// The button of an app (SR13): its operation's ring while one runs or waits ("progress"), else Get, Open (installed with a
-// launcher) or Installed (installed without one). `actions`: the backend's (installed, launcher), when there is one.
+// The button of an app (SR13): its operation's ring while one runs or waits ("progress"), else Get, Update (a Flatpak with
+// an update, step 4), Open (installed with a launcher) or Installed (installed without one). `actions`: the backend's
+// (installed, launcher, update), when there is one.
 function buttonState(app, actions, operation) {
     if (operation)
         return "progress";
@@ -55,6 +56,8 @@ function buttonState(app, actions, operation) {
     const launcher = actions ? actions.launcher : app && app.launcher;
     if (!installed)
         return "get";
+    if (actions && actions.update !== undefined && actions.update !== "none")
+        return "update";
     return launcher ? "open" : "installed";
 }
 
@@ -85,6 +88,8 @@ function getBlockText(reason, kind) {
         return qsTr("A repository has this package: the Store installs it from there, from its own page.");
     case "flathubOff":
         return qsTr("Turn on Flathub in the Store's settings to install from it.");
+    case "checking":
+        return qsTr("Checking what this update changes…");
     case "noFlatpak":
         return qsTr("Flathub needs the flatpak package.");
     case "source":
@@ -98,7 +103,7 @@ function omarchyChangedText(kind) {
     if (kind === "aur")
         return qsTr("Installing from the AUR hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
     if (kind === "getFlatpak")
-        return qsTr("Getting Flatpak hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
+        return qsTr("Flathub needs Flatpak, and getting it hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
     return qsTr("This setup hasn't been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.");
 }
 
@@ -143,6 +148,21 @@ function resultText(result) {
     if (!result)
         return "";
     const removing = result.kind === "remove";
+    // A Flatpak's update (step 4): judged by a new check, never by flatpak's exit code alone (offline it says "Nothing to
+    // update" and exits 0, S31d).
+    if (result.kind === "update") {
+        switch (result.outcome) {
+        case "interrupted":
+            return qsTr("The update was interrupted: %1 of %2 were updated.").arg(result.present).arg(result.total);
+        case "notFinished":
+            return qsTr("The update did not finish. Check your connection to the internet, then try again.");
+        case "lostTrack":
+            return qsTr("The Store stopped following this operation after a long time. Check what is installed in Installed.");
+        case "failed":
+            return qsTr("The update failed.");
+        }
+        return "";
+    }
     switch (result.outcome) {
     case "interrupted":
         return removing ? qsTr("The uninstallation was interrupted: %1 of %2 packages were removed.").arg(result.present).arg(result.total)
@@ -280,7 +300,7 @@ function accessText(keys) {
 }
 
 function buttonText(state) {
-    return state === "open" ? qsTr("Open") : state === "installed" ? qsTr("Installed") : qsTr("Get");
+    return state === "open" ? qsTr("Open") : state === "installed" ? qsTr("Installed") : state === "update" ? qsTr("Update") : qsTr("Get");
 }
 
 // The content rating (SR11): "Not rated" without OARS data, "None" when it lists nothing, else each group at its level.
@@ -354,10 +374,21 @@ function groupTitle(group) {
     return "";
 }
 
-// The state line of Updates (SR24, read only until step 4).
+// The state line of Updates (SR24): an update running, a check asked, the last system update unfinished (S12), else what
+// Software Update's last check says. `u`: StoreBackend::updates.
 function updatesStatus(u) {
-    switch (u ? u.state : "unknown") {
+    if (!u)
+        return qsTr("Software Update has not checked for updates yet.");
+    if (u.running)
+        return qsTr("Update in progress");
+    if (u.checking)
+        return qsTr("Checking for updates…");
+    if (u.unfinished > 0)
+        return qsTr("The last system update did not finish.");
+    switch (u.state) {
     case "up-to-date":
+        if ((u.count || 0) > 0)
+            return u.checkedAt !== "" ? qsTr("Last checked %1.").arg(u.checkedAt) : "";
         return u.checkedAt !== "" ? qsTr("Your apps are up to date. Last checked %1.").arg(u.checkedAt) : qsTr("Your apps are up to date.");
     case "available":
         return u.checkedAt !== "" ? qsTr("Last checked %1.").arg(u.checkedAt) : "";
@@ -372,7 +403,38 @@ function updatesStatus(u) {
     case "repair":
         return qsTr("Software Update is not set up. Settings can set it up.");
     }
-    return qsTr("Software Update has not checked for updates yet.");
+    return u.askFailed ? qsTr("Software Update couldn't check for updates. Open it to check.") : qsTr("Software Update has not checked for updates yet.");
+}
+
+// What the system part of Updates offers (SR24, SD32): "update" (Update All… opens Software Update, which updates the whole
+// system), "software" (Software Update… for what only it can do: blocked, not set up), or "" (nothing to update, or it runs).
+function systemAction(u) {
+    if (!u || u.running || u.checking)
+        return "";
+    if (u.unfinished > 0)
+        return "update";
+    if (u.state === "blocking" || u.state === "not-set-up" || u.state === "repair")
+        return "software";
+    const releases = (u.grassfield && u.grassfield.available) || (u.omarchy && u.omarchy.available);
+    return (u.others || 0) > 0 || releases ? "update" : "";
+}
+
+// The Flatpak group's line (SR24): an update's plan while it reads each app's commit and access (SD33), Flathub's check while
+// it runs, or why it could not answer.
+function flatpakUpdatesLine(f) {
+    if (!f || !f.on)
+        return "";
+    if (f.planning && f.planning.total > 0)
+        return qsTr("Checking what the updates change: %1 of %2 apps…").arg(f.planning.done).arg(f.planning.total);
+    if (f.state === "checking")
+        return qsTr("Checking Flathub for updates…");
+    if (f.state === "failed")
+        return qsTr("Flathub's updates couldn't be checked. Check your connection to the internet, then try again.");
+    if ((f.apps || []).length === 0 && (f.runtimes || 0) === 0)
+        return qsTr("Your Flatpak apps are up to date.");
+    if ((f.apps || []).length === 0)
+        return f.runtimes === 1 ? qsTr("1 runtime has an update.") : qsTr("%1 runtimes have an update.").arg(f.runtimes);
+    return "";
 }
 
 // The address a link shows: its host.

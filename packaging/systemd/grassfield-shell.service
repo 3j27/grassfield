@@ -29,6 +29,9 @@ Type=simple
 Slice=session.slice
 # Quickshell's own reload is off: package upgrades must not hot-reload a half-written tree.
 Environment=QS_DISABLE_FILE_WATCHER=1 QS_NO_RELOAD_POPUP=1
+# Qt's "@2x" image lookup off (review of cbd6ef05): a file:// picture is decoded from the very path the shell asked for (the
+# lock checks its wallpaper still by that path), never from a "<name>@2x.<ext>" beside it. The shell ships no such file.
+Environment=QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING=1
 # Leaked developer search paths and accidental overrides must not replace or disable the shell's QML (review of 360d6fa,
 # the GF-115 class): a `qs/security/lock` directory on QML_IMPORT_PATH replaced the whole lock screen, and a stray
 # QS_MANIFEST (or QS_CONFIG_NAME) made `qs -n -p` refuse to start at all (no lock, no polkit agent). So the unit clears

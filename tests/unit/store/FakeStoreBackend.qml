@@ -92,9 +92,10 @@ QtObject {
     function actions(id) {
         const a = find(id);
         const b = blocks[id] || {};
-        const installed = a ? a.installed : id.startsWith("webapp:");
+        const installed = a ? a.installed : id.startsWith("webapp:") || flatpakUpdates[id] !== undefined;
         return {installed: installed, launcher: a ? a.launcher : installed,
-                get: installed ? "installed" : (b.get !== undefined ? b.get : ""), uninstall: b.uninstall !== undefined ? b.uninstall : (installed ? "" : "notInstalled")};
+                get: installed ? "installed" : (b.get !== undefined ? b.get : ""), uninstall: b.uninstall !== undefined ? b.uninstall : (installed ? "" : "notInstalled"),
+                update: flatpakUpdates[id] !== undefined ? flatpakUpdates[id] : "none"};
     }
 
     function plan(id, kind) {
@@ -227,10 +228,37 @@ QtObject {
                     installed: true, launcher: true, page: false}]}];
     }
 
-    function updates() {
-        return {state: "available", checkedAt: "10/27/26 9:12 AM", grassfield: {installed: "1.0.0-1", available: "1.0.1-1"},
+    // StoreBackend::updates (step 4): Software Update's answer, the shell's check, the Flatpaks' updates, the sidebar's count.
+    property var updates: ({state: "available", checkedAt: "10/27/26 9:12 AM", grassfield: {installed: "1.0.0-1", available: "1.0.1-1"},
             omarchy: {installed: "", available: ""}, others: 3, listed: true, truncated: false,
-            apps: [Object.assign({from: "1.0-1", to: "1.1-1"}, find("org.example.Photo"))], otherCount: 2};
+            apps: [Object.assign({from: "1.0-1", to: "1.1-1"}, find("org.example.Photo"))], otherCount: 2,
+            checking: false, askFailed: false, running: false, unfinished: 0,
+            flatpak: {on: true, state: "", runtimes: 1, block: "",
+                      apps: [{id: "flatpak:org.example.Draw", name: "Draw", summary: "", icon: "", kind: "flatpak", installed: true,
+                              launcher: true, page: false, ref: "app/org.example.Draw/x86_64/stable"}]},
+            count: 2})
+    // The Flatpak ids actions() says have an update ("" when it runs now, else why not).
+    property var flatpakUpdates: ({})
+
+    function checkUpdates() {
+        calls.push("checkUpdates");
+    }
+
+    function updatesShown(shown) {
+        calls.push("updatesShown:" + shown);
+    }
+
+    function update(id) {
+        calls.push("update:" + id);
+        operations = operations.concat([{id: "op" + operations.length, app: id, name: (find(id) || {}).name || id, kind: "update",
+                                         path: "flatpak", state: "running", blocked: false, done: 0, total: 1}]);
+        return true;
+    }
+
+    function typeSearch(type) {
+        calls.push("typeSearch:" + type);
+        return type === "image/png" ? {type: type, description: "PNG image", apps: [find("org.example.Photo")]}
+                                    : {type: type, description: type, apps: []};
     }
 
     function refresh() {

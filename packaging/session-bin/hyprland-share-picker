@@ -1,0 +1,354 @@
+#!/usr/bin/python3 -I
+# Grassfield session stand-in for xdg-desktop-portal-hyprland's screen-sharing picker (ADR-0035 D-6, step 7a; spec
+# system-dialogs.md section 3). Installed to /usr/lib/grassfield/session-bin/, which comes first in PATH for the systemd user
+# manager (packaging/uwsm/env-grassfield) and the compositor (config/hypr/grassfield/omarchy.lua) in a Grassfield session
+# only. xdph 1.4.1 runs its picker by name through PATH, `hyprland-share-picker` or the `custom_picker_binary` of xdph.conf
+# (Omarchy's: hyprland-preview-share-picker, whose stand-in runs this program with --stock-name), with `--allow-token` when
+# allow_token_by_default is set and the window list in XDPH_WINDOW_SHARING_LIST; it reads one line from stdout:
+# `[SELECTION]<flags>/screen:<output>`, `…/window:<handleLo>` or `…/region:<output>@x,y,w,h`, flag `r` for "Remember this
+# choice"; anything else is "cancelled" (src/shared/ScreencopyShared.cpp:42-128). xdph blocks its main loop meanwhile.
+#
+# The way (ADR-0035 D-6): the session locked, or its lock unknown, cancels at once (owner decision Q15). Otherwise a one-time
+# Unix socket ($XDG_RUNTIME_DIR/grassfield/picker/<random>.sock, 0600 in a 0700 directory, removed on every exit) and a random
+# request id; the shell is asked with `picker request <id> <socket>` under 1 s. "accepted": the shell connects within 2 s
+# (else cancelled), gets the window list on the socket (never in a command line other users can read), shows its panel,
+# writes `<id> wait` every 5 s and then `<id> <flags>/<selection>` or `<id> cancel`; end of file, 15 s without a line, or
+# xdph gone (stdout hung up) cancels. The answer is checked before it is printed: the id, the grammar, a window xdph listed,
+# a display Hyprland lists (a region inside it). "busy" or "locked" cancels. No answer at all (no shell): the socket file is
+# removed first, then the stock picker runs with the same arguments and environment. Never two pickers; never a guess.
+# Nothing is written to stderr; no window title or class is ever logged.
+import json
+import os
+import re
+import secrets
+import select
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import time
+
+STOCK_DIR = "/usr/bin"
+SUSPEND_STATS = "/sys/power/suspend_stats/success"
+STOCK_NAMES = ("hyprland-share-picker", "hyprland-preview-share-picker")
+SHELL_DIR = "/usr/share/grassfield/shell"
+ACK_SECONDS = 1.0
+CONNECT_SECONDS = 2.0
+SILENCE_SECONDS = 15.0
+MAX_WINDOWS = 256
+MAX_TEXT = 256
+MAX_LINE = 4096
+NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
+# The shell's lock marker line (shell/security/LockMachine.js MARKER_LINE).
+MARKER = re.compile(r"(locked|unlocked)(?: sleeps=([0-9]{1,12}))?")
+SELECTION = re.compile(r"(r?)/(?:screen:(?P<screen>[A-Za-z0-9._-]{1,64})|window:(?P<window>[0-9]{1,10})|"
+                       r"region:(?P<region>[A-Za-z0-9._-]{1,64})@(?P<x>[0-9]{1,5}),(?P<y>[0-9]{1,5}),(?P<w>[0-9]{1,5}),"
+                       r"(?P<h>[0-9]{1,5}))")
+
+socket_path = None
+
+
+def remove_socket():
+    global socket_path
+    if socket_path:
+        try:
+            os.unlink(socket_path)
+        except OSError:
+            pass
+        socket_path = None
+
+
+def cancel(*_):
+    # Cancelled: nothing on stdout. The socket file goes on every way out (a signal too).
+    remove_socket()
+    os._exit(0)
+
+
+def run(argv, timeout):
+    # A helper's stdout, or None when it fails, is silent too long or cannot start. Never our stdout or stderr.
+    try:
+        done = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              timeout=timeout, env=child_env())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else None
+
+
+def child_env():
+    # Quickshell's option variables would make `qs ipc -p` refuse (security.md, tests/security/lock_request_env.sh). The
+    # window list (titles) goes to no helper.
+    env = dict(os.environ)
+    for key in ("QS_CONFIG_PATH", "QS_CONFIG_NAME", "QS_MANIFEST", "XDPH_WINDOW_SHARING_LIST"):
+        env.pop(key, None)
+    return env
+
+
+def monitors():
+    # Hyprland's displays, or None: hyprctl failing or silent for 1 s, output that is not a list of objects, no display.
+    out = run(["hyprctl", "-j", "monitors"], ACK_SECONDS)
+    try:
+        listed = json.loads(out) if out is not None else None
+    except ValueError:
+        return None
+    if type(listed) is not list or not listed or any(type(m) is not dict for m in listed):
+        return None
+    return listed
+
+
+def marker_path():
+    # The shell's lock marker (LockMachine.markerName, the test of packaging/shims/omarchy-shell).
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    key = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") or os.environ.get("WAYLAND_DISPLAY") or "default"
+    return os.path.join(runtime, "grassfield-lock-" + re.sub(r"[^A-Za-z0-9_.-]", "_", key))
+
+
+def sleeps_now():
+    # The count of completed suspends, or None when it cannot be read (the shell's sleepCount()).
+    try:
+        with open(SUSPEND_STATS) as f:
+            return int(f.read(32).strip())
+    except (OSError, ValueError):
+        return None
+
+
+def locked():
+    # Owner decision Q15: while the session is locked nothing shows. Every doubt counts as locked (ADR-0035 D-6): hyprctl
+    # failing, silent or unreadable, no display, a display blocked by the lock (the lock is the session's: the shell settles
+    # on any display, LockMachine.compositorLockStateLazy); a marker that cannot be read, or that is
+    # not "unlocked" in the shell's own grammar (LockMachine.markerSaysLocked: "unlocked" or "unlocked sleeps=<n>"), or one
+    # whose sleep count is not the machine's now (LockMachine.sleptSince: a sleep that no shell locked for, the shell locks).
+    shown = monitors()
+    if shown is None:
+        return True
+    blocked = [m.get("solitaryBlockedBy", []) for m in shown]
+    if any(type(b) is list and "LOCK" in b for b in blocked):
+        return True
+    try:
+        with open(marker_path(), "rb") as f:
+            text = f.read(256).decode("ascii").strip()
+    except FileNotFoundError:
+        return False
+    except (OSError, UnicodeDecodeError):
+        return True
+    m = MARKER.fullmatch(text)
+    if not m or m.group(1) != "unlocked":
+        return True
+    now = sleeps_now()
+    return m.group(2) is not None and now is not None and int(m.group(2)) != now
+
+
+def window_list():
+    # XDPH_WINDOW_SHARING_LIST: `<handleLo>[HC>]<class>[HT>]<title>[HE>]<address>[HA>]`…, names sanitized by xdph (no `>]`
+    # inside). An entry that does not read is left out (and cannot be chosen).
+    found = []
+    for entry in os.environ.get("XDPH_WINDOW_SHARING_LIST", "").split("[HA>]"):
+        m = re.fullmatch(r"([0-9]{1,10})\[HC>\](.*?)\[HT>\](.*?)\[HE>\]([0-9]{1,20})", entry, re.S)
+        if not m or int(m.group(1)) > 0xFFFFFFFF or len(found) >= MAX_WINDOWS:
+            continue
+        address = int(m.group(4))
+        found.append({"handle": m.group(1), "class": m.group(2)[:MAX_TEXT], "title": m.group(3)[:MAX_TEXT],
+                      "address": "0x%x" % address if 0 < address < 2 ** 64 else ""})
+    return found
+
+
+def private_dir():
+    # $XDG_RUNTIME_DIR/grassfield/picker, 0700, ours, no link: or None.
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime or not os.path.isabs(runtime):
+        return None
+    path = runtime
+    for part in ("grassfield", "picker"):
+        path = os.path.join(path, part)
+        try:
+            os.mkdir(path, 0o700)
+        except FileExistsError:
+            pass
+        except OSError:
+            return None
+        try:
+            st = os.lstat(path)
+        except OSError:
+            return None
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+            return None
+    return path
+
+
+def listen():
+    # The one-time channel: a random name, 0600, listening for one connection.
+    global socket_path
+    folder = private_dir()
+    if folder is None:
+        return None
+    path = os.path.join(folder, secrets.token_hex(16) + ".sock")
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    old = os.umask(0o177)
+    try:
+        server.bind(path)
+        socket_path = path
+        os.chmod(path, 0o600)
+        server.listen(1)
+    except OSError:
+        server.close()
+        remove_socket()
+        return None
+    finally:
+        os.umask(old)
+    return server
+
+
+def shell_dir():
+    # Dev plumbing (ADR-0019): the nested dev session runs the shell from the repository. GRASSFIELD_SHELL_DIR is honoured
+    # only in a dev session (GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1"), as in hyprland-dialog.
+    env = os.environ
+    if env.get("GRASSFIELD_DEV") == "1" and env.get("GRASSFIELD_SESSION") != "1" and env.get("GRASSFIELD_SHELL_DIR"):
+        return env["GRASSFIELD_SHELL_DIR"]
+    return SHELL_DIR
+
+
+def ask_shell(request_id, path):
+    # "accepted", "busy", "locked", or None (no shell, or no answer in 1 s).
+    command = "qs ipc -p SHELL_DIR call picker request".split()
+    argv = [shell_dir() if a == "SHELL_DIR" else a for a in command] + [request_id, path]
+    out = run(argv, ACK_SECONDS)
+    answer = out.strip() if out is not None else None
+    return answer if answer in ("accepted", "busy", "locked") else None
+
+
+def stdout_gone():
+    # xdph ended (or stopped reading): the write end of its pipe reports an error or a hang-up.
+    poller = select.poll()
+    poller.register(sys.stdout.fileno(), 0)
+    return any(ev & (select.POLLERR | select.POLLHUP) for _, ev in poller.poll(0))
+
+
+def valid(selection, windows):
+    # The answer xdph will read, or None: the grammar, a window xdph listed, a display Hyprland lists now, a region inside
+    # that display's logical size.
+    m = SELECTION.fullmatch(selection)
+    if not m:
+        return None
+    if m.group("window") is not None:
+        return selection if m.group("window") in {w["handle"] for w in windows} else None
+    shown = monitors()
+    if shown is None:
+        return None
+    output = m.group("screen") or m.group("region")
+    display = next((d for d in shown if d.get("name") == output and not d.get("disabled", False)), None)
+    if display is None:
+        return None
+    if m.group("screen") is not None:
+        return selection
+    try:
+        scale = float(display["scale"])
+        width, height = int(display["width"]), int(display["height"])
+        if int(display.get("transform", 0)) % 2:
+            width, height = height, width
+    except (KeyError, TypeError, ValueError):
+        return None
+    if scale <= 0:
+        return None
+    x, y, w, h = (int(m.group(k)) for k in ("x", "y", "w", "h"))
+    if w <= 0 or h <= 0 or x + w > round(width / scale) or y + h > round(height / scale):
+        return None
+    return selection
+
+
+def converse(conn, request_id, windows):
+    # The shell's lines until its answer: the selection to print, or None (cancelled).
+    # The list whole, however long, within the connection's 2 s; then the shell's lines without blocking.
+    conn.settimeout(CONNECT_SECONDS)
+    try:
+        conn.sendall((request_id + " list " + json.dumps(windows, ensure_ascii=True) + "\n").encode("ascii"))
+    except OSError:
+        return None
+    conn.setblocking(False)
+    buffered = b""
+    last = time.monotonic()
+    while True:
+        if stdout_gone():
+            return None
+        left = SILENCE_SECONDS - (time.monotonic() - last)
+        if left <= 0:
+            return None
+        ready, _, _ = select.select([conn], [], [], min(left, 0.5))
+        if not ready:
+            continue
+        try:
+            chunk = conn.recv(MAX_LINE)
+        except BlockingIOError:
+            continue
+        except OSError:
+            return None
+        if not chunk:
+            return None
+        buffered += chunk
+        while b"\n" in buffered:
+            line, buffered = buffered.split(b"\n", 1)
+            try:
+                said, _, rest = line.decode("ascii").partition(" ")
+            except UnicodeDecodeError:
+                return None
+            if said != request_id:
+                continue
+            last = time.monotonic()
+            if rest == "wait":
+                continue
+            if rest == "cancel":
+                return None
+            return valid(rest, windows)
+        if len(buffered) > MAX_LINE:
+            return None
+
+
+def main():
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, cancel)
+    args = sys.argv[1:]
+    stock_name = STOCK_NAMES[0]
+    if len(args) >= 2 and args[0] == "--stock-name":
+        if args[1] not in STOCK_NAMES:
+            cancel()
+        stock_name, args = args[1], args[2:]
+    if locked():
+        cancel()
+    windows = window_list()
+    request_id = secrets.token_hex(16)
+    server = listen()
+    answer = ask_shell(request_id, socket_path) if server is not None else None
+    if answer is None:
+        # No shell: the stock picker, once the socket file is gone (a late "accepted" finds nothing to connect to), and
+        # only if the session did not lock meanwhile (a restarting shell restores its lock). SIGPIPE back to its default:
+        # Python ignores it, and an exec keeps an ignored signal.
+        remove_socket()
+        if server is not None:
+            server.close()
+        if locked():
+            cancel()
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+        stock = os.path.join(STOCK_DIR, stock_name)
+        try:
+            os.execv(stock, [stock] + args)
+        except OSError:
+            cancel()
+    if answer != "accepted":
+        cancel()
+    server.settimeout(CONNECT_SECONDS)
+    try:
+        conn, _ = server.accept()
+    except OSError:
+        cancel()
+    server.close()
+    remove_socket()
+    selection = converse(conn, request_id, windows)
+    if selection is None:
+        cancel()
+    sys.stdout.write("[SELECTION]" + selection + "\n")
+    sys.stdout.flush()
+    conn.close()
+    os._exit(0)
+
+
+if __name__ == "__main__":
+    main()

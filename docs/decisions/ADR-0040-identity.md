@@ -1,8 +1,9 @@
 # ADR-0040: Grassfield identity: wallpapers, brand, lock screen and session transitions
 Status: Accepted (the owner answered the twelve questions and B-5 on 2026-10-29: "Owner decisions (2026-10-29)", with the
 integrator's conditions for the four non-recommended choices, W1 C, W2 C, W3 A and L1 C). Step 0 merged (pull request
-#46, e16fa8c), steps 1a, 1b and 1c merged (pull requests #52 a5488a6, #55 12bcda9, #69 837dd2b); the owner's brand green
-and warm neutrals of 2026-10-30 under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to
+#46, e16fa8c), steps 1a, 1b, 1c and 1d merged (pull requests #52 a5488a6, #55 12bcda9, #69 837dd2b, #76 244f16a); the
+owner's brand green and warm neutrals of 2026-10-30 merged (#71 56befa2, #73 5229fd3), their GTK follow-up in #79; step 7
+(the exit) under way. Every other choice follows the owner's rule of 2026-10-28 ("the closest to
 macOS 27, no technical step for the end user") and is listed in "Decisions taken under the owner's rule" (ID-1 to ID-21), which the
 owner can revisit. Revised after the integrator's opus review of
 b44d17e (FAIL: two MAJORs, five MINORs) and again after the re-review of ed21d46 (FAIL: one MAJOR, one MINOR, two
@@ -122,6 +123,26 @@ and IQ-B3 here changes the palette only, not which controls read it.
     ships.
   - The pull request states the total package weight. They install under `/usr/share/grassfield/wallpapers/` and go
     through the helper like any picture (ADR-0016: the shell decodes only the helper's output).
+  - **Step 2c as built** (after the owner's call of 2026-10-31, "Owner decisions", and the owner's « Au build » for where
+    the files live): `packaging/arch/wallpaper-photos.json` is the one list (names in English and French, author, credit,
+    licence, Commons page, original, SHA-1); the PKGBUILD downloads the originals from `upload.wikimedia.org` (the ids
+    and addresses in `wallpaper-pins.sh`), checks each by the SHA-1 Commons publishes, shrinks them with the build-only
+    `grassfield-wallpaper-shrink` (at most 5120 px wide, JPEG quality 90, the EXIF orientation applied, no metadata kept;
+    the installed helper still writes only into its cache) and installs them with `photos.json` under
+    `/usr/share/grassfield/wallpapers/photos/` in a split package, `grassfield-wallpapers`, which `grassfield-desktop`
+    depends on, as it does on the icon theme (so it is downloaded again with each release, like the icons). Settings >
+    Wallpaper lists them in a Photographs section after the Grassfield artwork (`WallpaperConfig.parsePhotos`; an entry of
+    the wrong shape is left out, an id is a plain file name); one is chosen as a picture (source `file`, through the
+    helper like any other) and About This Wallpaper credits it as its licence asks (its own title, the author's credit line
+    with its copyright notice, the source, the licence, Grassfield's changes: the integrator's review of e067f26f). The
+    desktop's own About This
+    Wallpaper card shows them too (2026-11-01, the owner's « Maintenant dans la #79 »: `WallpaperState` reads the list
+    as Settings does, `WallpaperConfig.aboutEntryOf` picks the online picture's or the shown photograph's attribution,
+    `tst_wallpaper.qml` +2). Legal: E40 and `THIRD_PARTY.md` "5c";
+    `tests/ci/wallpaper_photos.py` holds the list, the pins, the PKGBUILD and the legal texts together. The package weight:
+    estimated at about 70 MB from the 960 px thumbnails at the same quality (the originals could not be downloaded in the
+    container that built it); the build gives the real figure. `scripts/dev/photos.sh` prepares them under `.dev/photos`
+    for a dev session.
 - **Default (IQ-W1, owner: C, the time of day).** The Grassfield hills through the day: **Dawn**, **Day**, **Evening**
   and **Night**, like macOS's dynamic desktop. Light and dark still choose the variant set: four light palettes in the
   light appearance, four dark ones in the dark appearance (the same scenes, darker; the dark Evening is today's
@@ -171,6 +192,40 @@ and IQ-B3 here changes the palette only, not which controls read it.
   (`LockView.qml:80`): `WallpaperArt` without a parameter keeps today's drawing, so step 2 edits nothing in
   `shell/security` and the lock's output stays as it is until step 4a changes it under the security review (reviews of
   b44d17e and ed21d46).
+- **Step 2 as built** (in the one pull request of 2026-10-31):
+  - **Palettes as tokens (ID-1).** 44 `artwork.*` tokens: the Grassfield hills at Dawn, Day, Evening and Night in a light and a
+    dark set (sky, sun, its place, four hills), Meadow, Field Rows and Ridgeline light and dark. The light Dawn, Day and Night
+    are the mockups'; the light Evening is new (a warm dusk); the dark Dawn, Day and Night are the light ones darkened in
+    OKLCH (lightness x0.52 to x0.80, chroma x0.85 for the sky and x0.72 for the hills), so every dark phase keeps light menu
+    bar text; the dark Evening is the artwork as it was. The written exception of `GrassfieldArtwork.qml` is gone
+    (`tests/ci/qml_literals.py` no longer allows it a colour).
+  - **One component.** `GrassfieldArtwork.qml` draws the four artworks from those palettes (`artwork`, `variant`; the seeded
+    geometry of Meadow and Field Rows and the night's stars in the private `Artwork.js`), clipped to its own rectangle.
+    Without parameters it draws the dark Evening. The sun is now a real radial glow (a `Shape`: the `RadialGradient` of a
+    `Rectangle` drew a hard disc), which the lock and the screen saver show too; the lock's own picture changes under step 4a.
+  - **The time of day.** `TimeOfDay.js` (public in `Grassfield.Ui`) is the probe's rule in JavaScript: the zone's point from
+    `zone1970.tab`, `zone.tab` and the links of `tzdata.zi`, the NOAA sunrise and sunset, the phases, the short-day and
+    short-night rules, the fixed hours (`wallpaper.phase*` tokens). Its tests (`tst_timeofday.qml`) are the probe's twelve
+    checks on fixtures cut from tzdata 2026e. The shell's `DayPhase` service reads the zone (TZ, else the target of
+    `/etc/localtime`) and the three tables once, then keeps one timer to the next change, recomputed when the clock jumps
+    (a wake, a clock change), at local midnight and with the zone read again when the UTC offset moves.
+  - **Settings.** `wallpaper.artwork` and `wallpaper.artworkVariant` (schema, defaults, contract, `WallpaperConfig`;
+    additive). Settings > Wallpaper's Grassfield section shows the four artworks, each tile in the current appearance; the
+    current wallpaper's group gets the choice of variant (Time of Day, for the Grassfield artwork only, Automatic, Light,
+    Dark; `WallpaperConfig.artworkVariantFor`); the preview draws the variant the desktop shows (the shell publishes the
+    phase in its wallpaper status). Settings > Appearance draws the dark variant instead of darkening the light one (W-3).
+  - **The desktop.** Each output resolves the variant from the choice, the appearance and the phase. A new phase crossfades
+    over `wallpaper.phaseFadeMs` (20 s) and waits while a full-screen window is on that output; a new appearance crossfades
+    over `wallpaper.crossfadeMs` with the bar's tone switching at the midpoint (ID-14); Reduce Motion cuts; an output's
+    first wallpaper and the first phase known at start cut in (no fade from the default artwork). The bar's tone, the glass
+    backdrop and the window's colour read the palette on screen (they read slot A's before).
+  - **Gate A2.** `test_contrast_tokens.py` checks every palette's tone over the strip under the bar, without the band, on
+    displays 720 to 2160 pixels tall (6.9:1 or more). During a crossfade between two artworks the tone in effect is checked
+    at every twentieth of the fade (`BarToneLogic.artFadeNeedsBand`); where it would fall under 4.5:1 the band is on for the
+    fade and only then: Dawn to Day in the light set and an appearance switch at Day (`tst_bartone.qml`).
+  - **Not done here.** A pointer drag does not hold a phase change back: the shell has no signal for a drag in progress
+    (Hyprland 0.56 gives none); only a full-screen window does. NOT VERIFIED: the artworks and the fades on screen (nested:
+    `qs ipc call wallpaper phase dawn`, and the Settings tiles), and the zone files on the owner's machine.
 - **Videos (IQ-W3, owner: A, the drawn animation in 1.0).** No video file ships; the user's own videos stay as built
   (ADR-0016 W7). The default artwork gets a **moving** variant drawn live (clouds drift, the light changes slowly), also
   a screen saver kind (in `shell/saver`; nothing in `shell/security`, review of 6c310a8). The integrator's conditions
@@ -178,11 +233,172 @@ and IQ-B3 here changes the palette only, not which controls read it.
   in Low Power Mode or on battery, under a full-screen app, while locked (and when idle, with Reduce Motion and in the
   Reduced profile, as the video policy already does); P1 and P3 are measured with it on before its pull request asks
   for a merge, and a cost over budget blocks it.
+- **Step 9 as built** (2026-10-31, in the one pull request; nothing in `shell/security`): `wallpaper.moving` (schema,
+  defaults, contract, `WallpaperConfig`; off by default) and the screen saver kind `moving` ("Clouds"). The Grassfield
+  artwork (`GrassfieldArtwork.qml`) draws four seeded clouds (`Artwork.clouds`: between 0.1 and 0.5 of the height, so
+  nothing enters the strip under the menu bar and the bar's tone and gate A2 stay those of the still picture; under the
+  hills) that drift across the sky (`wallpaper.movingCloudMs` 240 s for a cloud of speed 1) and a glow that softens by
+  `wallpaper.movingLightDepth` over `wallpaper.movingLightMs` (90 s); colours `artwork.cloudLight` and `cloudDark` at
+  `wallpaper.movingCloudOpacityLight` 0.5 and `Dark` 0.14. It advances by `wallpaper.movingFrameMs` (100 ms) steps of a
+  Timer, never every frame, only while `playing`; paused, it holds where it is. The desktop gives each slot the video's
+  pause policy (`WallpaperConfig.playbackState`: locked, full screen, Reduce Motion, the Reduced profile, on battery unless
+  "Play on battery power", idle), only while the slot is on screen; the idle monitor runs for it too. The screen saver's
+  kind plays while the saver is shown, still with Reduce Motion. Settings > Wallpaper shows "Moving clouds" under the
+  Grassfield artwork; Settings > Screen Saver adds "Clouds". Tests: `tst_artwork.qml` (the clouds' bounds and seeding,
+  the light, it moves only while playing), `tst_wallpaper.qml`, `tst_settingswallpaper.qml`, `tst_savermodel.qml`,
+  `tst_settingsscreensaver.qml`; an offscreen render of the four phases with clouds. **The integrator's condition is not
+  met in this container:** P1 and P3 with the moving variant on are NOT MEASURED (no nested session, no reference
+  machine), so the merge waits for that measurement, and a cost over budget blocks the variant (it stays off by default
+  meanwhile).
+- **Step 9 as revised** (2026-11-01, the integrator's review of e067f26f): P1 measured over budget with the clouds moving
+  on the desktop (nested proxy, session unlocked, 300 s each: 3.70 % of one core with them, 0.64 % without, budget
+  0.77 %). The integrator's decision, closest to macOS's moving wallpapers: **the motion plays on the lock screen and
+  slows to a still as the desktop appears; the desktop picture is still.** As built:
+  - Desktop: no `WallpaperSlot` plays the artwork any more and the idle monitor is a video's only; each slot draws the
+    clouds where the last lock left them (`WallpaperState.motionOf`, per output, kept for the session, 0 at start).
+  - Lock screen (`shell/security`, display only; opus security review): `LockView` takes `wallpaper.moving` and that
+    position once at creation (through `LockStills` and `Lock.qml`); the artwork's own Timer moves them while the backdrop
+    is the artwork, not while releasing, not under Reduce Motion, not while Idle has the displays off (`Lock.displaysOff`,
+    set from Idle's `displayOff`) and not once unlocked (`LockView.motionHeld`; the start position is taken until they
+    first move). Opus security review of bdc11b2d: **PASS**; its two MINORs (the tests' patterns, three mutants) and three
+    NITs are fixed in 7db57a7d, each mutant now killed. Counter-review of 7db57a7d and de14f4c1: **PASS**; its MINOR (no
+    handler could be added unnoticed: the view's and its instance's handlers are pinned, three mutants) and its NIT (the
+    start taken a turn after the clouds first play) are fixed after it. When the release fade starts they slow down
+    linearly to a stop within it
+    (`Easing.OutQuad` over the controller's `releaseMs`; `WallpaperConfig.lockMotionRest`), and `Lock.qml` gives that frame
+    to the desktop at once (`restMotion`, in a `try`), so the desktop under the lock is the frame the lock rests on. The
+    release never waits for it, and the lock path (`lock`, `engage`, `release`, `restore`) reads none of it.
+  - Settings > Wallpaper's footnote says so. Tests: `tst_wallpaper.qml` (`motionIn`, `withMotion`, `lockMotionRest`, the
+    desktop draws them still), `tst_lockbackdrop.qml` (`test_theCloudsMoveOnTheLockOnly`), each guard checked by a mutant.
+  - **NOT MEASURED here** (no nested session): P1 with `wallpaper.moving` on (the desktop now renders nothing for it) and
+    P3, for the integrator's re-measure. On the lock screen the clouds cost what they cost on the desktop before, while the
+    lock shows with the displays on.
 - **First frame (ID-3).** The wallpaper window shows the **last applied wallpaper's prepared still** from the cache as
   its first frame, with the bar tone from its stored statistics, and maps only then (bounded by
   `wallpaper.firstShowTimeoutMs`, after which the artwork). When the feed's result is the same file, nothing fades.
   This removes the artwork-then-picture sequence (W-7) and the late tone switch (W-8), and keeps ADR-0016's rule that
   the shell decodes only the helper's own output.
+- **Step 3 as built** (in the one pull request of 2026-10-31; nothing in `shell/security`):
+  - **First frame (ID-3).** Each output's wallpaper window maps only with its first frame (`visible: win.firstReady`).
+    What each output shows is recorded in `wallpaper.json` once it is on screen (`shown`, per output: a picture with its
+    prepared file, strip and whole-picture statistics and mean colour, or a video's poster marked as one; the artwork and
+    variant; a colour; each with the artwork and variant the output would draw instead, the lock's fallback; ADR-0020 row),
+    and at the next start `WallpaperConfig.stillOf` reads a picture back only when it is one of the helper's own (a 32-hex
+    cache name directly in the prepared folder: the shell still decodes nothing else). The first frame is chosen by
+    `WallpaperConfig.firstFrameChoice`: nothing before `wallpaper.json` was read; then the stored still until the feed's
+    first result, which decides (it carries the phase and the appearance: a phase or an appearance known before it changes
+    nothing, review of 4457edc1). The still goes into slot A with the bar tone of its stored strip, and the window maps once
+    it is decoded; the artwork and a colour map at once; when the feed's result is the still's file nothing changes but its
+    statistics (the helper's, fresh). A still that cannot be decoded, or nothing within `wallpaper.firstShowTimeoutMs`
+    (1500 ms), gives the artwork. A video has no still for the desktop (its poster lives in the video cache): it waits for
+    the feed within the same bound. The bar's tone is never reported from the default artwork before the first frame.
+  - **Ground (ID-2).** `Artwork.ground` (the sRGB mean of the sky's middle and the middle of the land, in whole channel
+    values) gives each palette a ground; the default artwork's, `#2F6D5F`, is now `session.ground` and `looknfeel.lua`'s
+    `background_color` (`tst_artwork.qml` and `tst_sessionexit.qml` hold the three equal). `WallpaperConfig.groundOf` gives
+    the ground of what an output shows (a picture's mean colour from the helper, a colour, the artwork's), reported to the
+    `Ground` service when it is on screen. The wallpaper window's own colour is its output's ground, and `Compositor.qml`
+    sets Hyprland's `misc.background_color` to the first screen's (`Ground.current`) through the request socket like the
+    blur (`Minimized.groundCall`): once the first screen has reported (`Ground.known`: at a shell restart the compositor
+    keeps the previous run's ground until then, no flash to the default), on each change (debounced), after a config
+    reload; an error answer stops the pushes until the next change and the static default stays. The exit cover fades to
+    the colour Hyprland last answered "ok" to (`Ground.accepted`, the static default before), which is what shows once the
+    shell has stopped. VERIFY on 0.56.2 (section "Not verified"): that the call is accepted at run time and repaints the
+    background.
+  - **No compositor fade (ID-4).** `gf-wallpaper-no-anim` in `windows.lua`.
+  - **Hotplug (ID-15, the wallpaper's part).** A new output's window takes the same path: unmapped (the compositor's
+    ground shows) until its still or its feed's first result, then mapped once; `Ground.of` gives an output without a
+    report the compositor's ground.
+  - **Measurement (ID-16).** `Journal` starts its clock with the desktop (`grassfield-shell: journal starts`) and logs
+    `grassfield-shell: shown wallpaper <output> <ms>` when a window maps and `hidden` when a mapped one goes, plus `grassfield-shell: wallpaper first <kind> [<artwork> <variant>] source=<source>
+    output=<output>`; `tests/visual/appear-once.sh` comes with step 6, which adds the bars' lines.
+  - Tests: `tst_wallpaper.qml` (`stillOf` refuses any file but a cache name in the prepared folder, `withShown`,
+    `firstFrameChoice`, `groundOf`, `groundFor`, `withCarousel` and `stateText` keep every part of `wallpaper.json`, the
+    window's wiring from its source), `tst_artwork.qml` (every palette's ground, the default's equal to `session.ground`),
+    `tst_minimized.qml` (`groundCall` interpolates only `#rrggbb`), `tst_sessionexit.qml` (the cover on `Ground.accepted`,
+    the compositor's push only once known). Review of 4457edc1 (FAIL: M1 the phase or appearance before the feed; m1 the
+    flash at a restart; m2 the cover's colour; m3 the journal's clock; m4 the write path untested; two NITs): all fixed;
+    the counter-review of c5d43be4 found M1's second half (a still already mapped was cut to the placeholder artwork by a
+    phase or appearance event before the feed's first result): the phase, appearance and full-screen handlers act only once
+    the feed has given its first result.
+    NOT VERIFIED (nested): the first frame at start and at a shell restart, the hotplug, the background colour after a
+    change and a reload.
+- **Step 4a as built** (2026-10-31, in the one pull request; `shell/security`, so under the opus security review):
+  - **The data.** The desktop's record of what each output shows (`wallpaper.json` `shown`, step 3) is what the lock draws:
+    `WallpaperState.lockBackdrop` (`WallpaperConfig.lockBackdropOf`) gives a picture only as a plain cache name in the
+    prepared or the video folder (the video's poster), else the colour, else the artwork and variant (also every picture's
+    fallback). Read from that record rather than from the desktop's live objects; at ADR-0041 S2 the security process needs
+    its own watched reader of `shown` (WallpaperState reads the file once and is a desktop store with side effects), with
+    the pure `lockBackdropOf` (noted in ADR-0041 S2).
+  - **Ready before it is needed (ID-7).** `shell/security/lock/LockStill.qml`, one per output in `LockStills.qml` (which
+    `Lock.qml` creates at run time, last in its `Component.onCompleted`, never as a declared child: a display file that fails
+    to load costs the surfaces their backdrop and picture, never the lock), decides the backdrop while the session is
+    unlocked, when the wallpaper changes: a picture is checked again (`/usr/bin/realpath -m` with the two cache folders: the
+    file's real path a plain cache name directly in one of their real paths, `WallpaperConfig.lockStillReal`;
+    `/usr/bin/stat --printf %f|%s`: the raw mode, which no locale translates, a regular file of at most
+    `wallpaper.lockStillMaxBytes`, `lockStillStatOk`; absolute paths, argument vectors, one process per step and request, a
+    superseded answer dropped) and decoded by a hidden `Image` into Qt's pixmap cache (no `sourceSize`: the helper wrote it at the output's
+    physical size, and a `sourceSize` would key the cache on each window's scale). The account picture is decoded the same
+    way (`avatarPreload`, the shell's PNG copy of at most 256 x 256). A lock surface takes its backdrop when created, or
+    when first decided (a hotplugged output, a wallpaper changed just before), at most `wallpaper.firstShowTimeoutMs` later,
+    then the artwork; the name and the picture at creation (the picture only if already decoded, else the initials); then
+    nothing changes but the clock, which `SleepInhibitor.afterResume` refreshes (`Lock.resumed`). Engaging, releasing and
+    restoring the lock read none of it (`tst_lockbackdrop.qml`).
+  - **Ground (ID-2, ID-15).** The lock surface's own colour is its output's ground (`Ground.of`): what shows before the
+    content and while the backdrop is undecided, under the scrim and the text, which are there at once.
+  - **Sharp, banded scrim (IQ-W4 A).** No blur any more (`lock.blurMax` removed); the scrim is `lock.dimOpacity` from the
+    top to the bottom of the date and clock and from the top of the account column to the bottom, `lock.scrimClearOpacity`
+    0.25 between them, `lock.scrimFeather` 48 px ramps on the clear side, bound to the two columns' geometry so every text
+    line lies on 0.6 at every text scale; without room for a clear band the whole surface stays at 0.6. A2: the text roles
+    are unchanged (`contrast-roles.json`, `test_contrast_tokens.py` reads the scrim's lines and the columns).
+  - **Opus security review of cbd6ef05: FAIL, no BLOCKER** (fail closed intact; the reviewer confirmed on Qt 6.10 that the
+    committed `LockView.qml` loads, that its still is Ready synchronously from the windowless preload, and that the field
+    has focus). MAJOR 1 `tst_lockbackdrop.qml` failed under `scripts/dev/test.sh` (no `QML_XHR_ALLOW_FILE_READ` for
+    `tests/security`) → set there. MAJOR 2 `stat %F` is translated by the locale (the artwork always on a French session) →
+    `%f`, the raw mode. MAJOR 3 no evidence that `Lock.qml` with a `Variants` and an `Image` still loads in Quickshell → the
+    display data moved to `LockStills.qml`, created at run time and caught; what is left in `Lock.qml` is one function. Still
+    required before the merge (NOT VERIFIED here, no Quickshell): `tests/security/lock_monitor_model.sh`, `dev_gate.sh`,
+    `reload_locked.sh`, nested L1 to L5. MINOR 1 (the decoded file can differ from the checked one, for a process of the
+    same user writing the 0700 cache): Qt's `@2x` lookup is off for the shell (`QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING=1` in
+    `grassfield-shell.service`); the rename race and the format sniffing (every installed image plugin reachable) are
+    bounded (64 MiB, Qt's 256 MiB allocation limit, `wallpaper.toolTimeoutMs`) and go to S2 (only the JPEG plugin, a file
+    the process opened itself). MINOR 2 S2's reader (above, ADR-0041). MINOR 3 tests shallow → the pure checks are tested
+    (`tst_wallpaper.qml` `test_lockStillChecks`), and an offscreen probe with stand-in Quickshell types (simulated
+    processes, a real PNG) showed: nothing shown, undecided; a picture checked and decoded; a colour at once; a directory,
+    a path outside the cache and a missing file, the artwork. NITs: focus first in `LockView`, the surface colour taken
+    once, a failed check clears the image, the folders canonicalized.
+  - Tests: `tests/security/tst_lockbackdrop.qml` (the checks, the same pixmap options on both sides, taken once, the
+    clock on resume, the ground, nothing on the lock path, the display data created at run time; four planted mutants each
+    fail it), `tst_wallpaper.qml`
+    (`lockBackdropOf`), `test_contrast_tokens.py`, `lock_surfaces.sh` (the clock's one refresh, and a mutant). An offscreen
+    render of the real `LockView.qml` with stand-in modules (white and the light Day artwork, 1280 x 800; text layers off,
+    since offscreen Qt draws no `MultiEffect`) shows every text line on the dark bands; it also caught `top` and `bottom`,
+    FINAL properties of `Item` in Qt 6, which would have kept `LockView` from loading. NOT VERIFIED (nested): the still in
+    the lock's first frame (the pixmap cache hit with `asynchronous: true`), a hotplugged output while locked, the clock
+    after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`), L1 to L5.
+- **Step 4b as built** (2026-10-31; `shell/security`, under the opus security review): the machine gains `releasing`
+  (`LockMachine.js`): a PAM success (`success` while authenticating, `fingerprint` while locked or authenticating) enters
+  it, `released` leaves it for `unlocked` and is the only way there; `request`, `error`, `timeout`, `abort` bring it back
+  to `locked`, `lost` to `locking`; it counts as holding. `LockController` arms a Timer of `releaseMs`
+  (`Appearance.duration(lock.fadeOutMs)`, 200) at the PAM success and emits `unlockRequested` only when it ends;
+  `interruptRelease()` (called first by every `Lock.lock`, so an idle, sleep, lid or IPC request during the fade keeps the
+  lock) stops it and the success is spent. `LockView` fades the scrim, the date and clock and the account column in over
+  `lock.fadeInMs` (200) once the surface shows and out while releasing; the wallpaper does not fade; the field takes input
+  from the first frame and none while releasing. Tests: `tst_lockmachine.qml` (+1, the exhaustive check now covers
+  `releasing` and every two-event path), `tst_lockcontroller.qml` (+4: the release after the fade, a lock request during
+  it, a lost lock during it, the fingerprint), `tst_lockbackdrop.qml` (+1: the wiring); planted mutants (success straight
+  to unlocked, an always synchronous release, an error during the fade not relocking) each fail them. The fade-in from
+  the idle dim's level (ID-8) is step 5. NOT VERIFIED (nested, required before the merge): L1 to L5 with the fades,
+  `reload_locked.sh` (a soft reload during `releasing` must keep the lock: `persist.intent` stays true until `release()`).
+- **Step 5 as built** (2026-10-31; `shell/security`, under the opus security review): ID-8 (the dim stays until the lock it
+  led to holds, bounded; the lock's content starts at the dim's level; the saver on screen stays until the lock holds,
+  bounded), IQ-T4 A (`lock.requirePasswordAfterDisplayOff`, schema, contract, Settings > Lock Screen with its footnotes and
+  French strings; a display that turns off for inactivity locks at once, the displays on until the lock holds, or after
+  the delay, or never; `lock.idleMinutes` the ceiling), IQ-T5 A (`misc.lockdead_screen_delay = 5000`). With it, the opus
+  review of step 4b (PASS): its MINOR (a lock request now also abandons a password check in flight) and its NITs (the fade
+  starts right after the focus; the dev hook docs name `releasing`). Tests: `tst_idlemodel.qml` (+1),
+  `tst_lockcontroller.qml` (+1), `tst_lockbackdrop.qml` (+1: the order's wiring and the delay's bounds),
+  `tst_settingslock.qml` (+1, the footnotes), `test_contrast_tokens.py` (the carried dim declared). NOT VERIFIED (nested,
+  before the merge): the order on screen, the display-off lock on a real display, only black during the lockdead delay.
 - **Lock still.** ADR-0016 §6 (W8) as already specified, plus the preloaded still of ID-7 (section 4).
 - **Legibility (A2).** Every variant goes through `tests/visual/contrast.sh` (menu bar strip, desktop labels, lock);
   the artworks' tones come from their palettes.
@@ -253,6 +469,17 @@ and IQ-B3 here changes the palette only, not which controls read it.
   a light tile and the Apps tile three fanned cards, drawn away from macOS's own Activity Monitor (a dark screen with a
   green graph) and Apps (a grid of coloured squares) icons; whether they are far enough is the owner's legal call
   (E39), asked again with the drawings before step 8 ships them. Mockup: `mockups/b4-app-icons.svg`.
+- **Step 8 as built** (2026-10-31, in the one pull request; nothing in `shell/security`): the owner's legal call on the
+  two drawings, shown at 104 and 16 px in light and dark: « Livrer les deux » (legal E39). `branding/icons/apps/`
+  `org.grassfield.Store.svg` (the bag set on the grammar: 104 tile, radius 23.4, the rim), `org.grassfield.Activity.svg`
+  (the gauge) and `org.grassfield.Apps.svg` (the fanned cards, new; `grassfield-desktop` installs it in hicolor, so every
+  icon theme finds it); the `org.grassfield.Apps` alias to the pack's app grid is gone from
+  `packaging/arch/icons-aliases.txt` (the Store and Activity Monitor never had one); Files, Settings and Preview keep the
+  pack. `branding/LICENSES.md` rows; `docs/specs/dock.md` item 19; ADR-0017's note; `scripts/dev/devenv.sh` puts the Apps
+  tile's icon in the dev hicolor (review of ee7fe429: PASS, its MINOR and NITs taken but the versioned dependency on
+  `grassfield-icons`, which would make every desktop update download the 60 MiB pack for a cosmetic case). NOT VERIFIED:
+  the icons in the Dock, the Apps panel and the Store in a session, in the Dark, Clear and Tinted modes (nested);
+  `makepkg`.
 - **Boot and login (IQ-L1, owner: C, an SDDM theme and a Plymouth theme).** Grassfield's look from power-on: a
   login theme in the lock screen's layout for SDDM's own greeter, and a boot theme with the mark for the disk password.
   The integrator's conditions (2026-10-29):
@@ -266,6 +493,18 @@ and IQ-B3 here changes the palette only, not which controls read it.
   - a broken theme must never hide the disk-password prompt: a tested fallback to the text prompt;
   - the last identity step, after the lock steps.
   Until then Omarchy's path stays, and Grassfield's identity starts at the ground colour.
+- **Step 10 as built** (2026-10-31, in the one pull request; ADR-0042, under the opus security review; nothing in
+  `shell/security`): the package `grassfield-login-themes` installs `/usr/share/sddm/themes/grassfield` (`Main.qml`,
+  `Strings.js`, `metadata.desktop`, `theme.conf`: the lock's layout on the default artwork, tokens only, SDDM's own
+  `sddm.login`, the field emptied before the call and after a failure; "Grassfield (uwsm)" selected first) and
+  `/usr/share/plymouth/themes/grassfield` (Plymouth's `two-step` module, the ground `#2F6D5F`, the mark white, an entry box,
+  bullets, a padlock and a throbber drawn in `packaging/plymouth/build.sh`), and activates nothing: the owner's commands, the
+  first-boot Esc test and the reverts are in `docs/owner-setup/login-boot-themes.md`. `grassfield-login-check` knows the
+  theme. Tests: `tests/ci/login_themes.py` (logic layer, 58 mutants after the opus reviews), `tests/unit/tst_loginstrings.qml`
+  (the picture only from root-written folders), `tests/shell/login_session.sh` (+1),
+  `tests/ci/qml_literals.py` (scans the theme). Legal: E41 (the login layout; the mark's boot place and its white build-time
+  render, confirmed by the owner on 2026-10-31: « Oui, marque blanche »). NOT VERIFIED (owner, real machine): the theme in `sddm-greeter-qt6`, SDDM's fallback, the
+  boot screen with the disk password, Esc to the text prompt, the reverts.
 
 ### 4. Lock screen (security module: display only, opus security review, R12)
 - **Backdrop (IQ-W4, owner: A, sharp, banded scrim).** The prepared still of the output's current wallpaper, sharp (the artwork, drawn
@@ -312,6 +551,55 @@ and IQ-B3 here changes the palette only, not which controls read it.
 | Time of day | (none) | a 20 s crossfade at each phase boundary, deferred during a drag or a full-screen window (IQ-W1 C) | step 2 |
 | Wallpaper change | crossfade (ADR-0016) | unchanged | — |
 
+Step 6 as built (ID-20, ID-5, ID-6; 2026-10-31, in the one pull request). The entrance is a latch,
+`shell/services/Entrance.qml` (its rule pure in `EntranceLogic.js`): every surface says it is expected when it is created
+(`wallpaper:<output>`, `menubar:<output>`, `dock`, `icons:<output>`) and ready when its content is final (the wallpaper's
+first frame, step 3; the menu bar once the settings are read; the Dock's first settled layout; the desktop icons' first
+layout); `revealed` latches once all are, or after `session.revealTimeoutMs` (1500), and never goes back (a surface created
+later is simply shown). Then the menu bar (band and content), the Dock and the desktop icons fade in together over
+`session.revealMs` (250; Reduce Motion caps it); the wallpaper is not part of the fade, it is there first. The Dock's
+latched `reveal` now also waits for the entrance (its mask, blur and exclusive zone switch with it). Settings first (ID-5):
+`Entrance.settingsFinal` once `Settings.loaded`, or `session.settingsWaitMs` (500) after the start, logged, with the
+defaults. The menu bar's auto-hide starts at rest (ID-6): when its settings are final its machine is
+`AutoHide.initial(autoHides)`, as the Dock's, so an auto-hidden bar is never shown and slid away. P5 counts the entrance:
+the bar's `UsableProbe` is armed only once it is shown, and the Dock's probe follows its reveal. Journal: `grassfield-shell:
+entrance (ready|timeout[; waited for <keys>])`, and `shown`/`hidden` lines for `menubar` and `dock`. Tests:
+`tests/unit/tst_entrance.qml` (the latch, the tokens, the wiring of the four surfaces), `tests/shell/startup_settle_wiring.sh`
+(unchanged, passes), and the nested `tests/visual/appear-once.sh` (section 7: first wallpaper kind equals the final one, no
+surface shown twice, the menu bar and the Dock after their output's wallpaper, the entrance logged (a timeout reported,
+not failed), one bar tone in the first 3 s; at a start and at a restart). Review of 3a5e1b80 (FAIL: MAJOR the bar's blur
+before the entrance; MINOR the auto-hide state set before the settings or the full-screen state were final, the bound equal
+to the wallpaper's, the Dock ready before it was placed, input on the invisible bar and icons, the script ending on a
+missing line under `set -e`; NITs) → fixed: the blur and the bar's input wait for the entrance; the auto-hide machine is
+set again until and at the entrance; on its bound the latch still waits for every wallpaper's first frame (which has its
+own); the Dock's own window says it is ready once placed; the icons take no pointer input before it and are ready when
+hidden; a surface that goes first is forgotten (`Entrance.forget`); the script's reads tolerate a missing line and the Dock
+is compared with its own output's wallpaper. `shown menubar` and `shown dock` mean their entrance, auto-hidden or not. NOT VERIFIED: `appear-once.sh` was not run (no nested session in this container), nor P5 on
+the owner's logins.
+
+Step 7 as built (ID-21, ID-10). Log Out, Restart and Shut Down, from the System menu and from Search, confirm with the
+countdown as their message ("If you do nothing, the computer will restart automatically in 60 seconds.", one second at a
+time from `session.exitCountdownSeconds`; one and many as separate strings); left alone, the dialog confirms itself
+(`PopupKinds.countsDown`, `countdownMessage`; Force Quit and Empty Trash never act without a click). Closing the dialog stops
+the count: Cancel, Esc, another popup in its place, and the lock (`Lock.qml` closes every popup as it locks, so a countdown
+never ends the session from behind the lock screen; whether macOS's count goes on under its lock is NOT VERIFIED, and the
+stop is the safe side; nothing in `shell/security` changes). Settings > Software Update's own Log Out… and Restart… sheets
+keep their message until that panel's lane has merged. Once `grassfield-session-end` has seen every window go (or the user
+chose "… Anyway", or `--force`), it asks the shell for the exit cover (`qs ipc -p /usr/share/grassfield/shell call session
+cover`, Quickshell's option variables cleared) and waits for the fade it answers (`session.exitFadeMs`; Reduce Motion
+`motion.reducedMax`), the ask included at most `session.exitWaitMs`; a shell that does not answer costs nothing but the fade.
+The cover (`shell/overlay/ExitCover.qml`) is one opaque `grassfield-exit-cover` surface per output on the overlay layer, in
+the ground's colour, faded by the shell alone (`gf-exit-cover-no-anim` in `windows.lua`, ID-4); the black after it is the
+greeter's or the firmware's (`mockups/t1-transitions.svg`). When the session then cannot be ended (`uwsm stop` and the
+compositor's exit both fail, or `systemctl` refuses), the helper lifts the cover and exits 4; a cover nobody lifts (the
+helper was killed) lifts itself after `session.exitCoverHoldMs`; `session cover` and `lift` are actions of the shell's IPC
+surface (`docs/specs/security.md`: another process of the user can hide the desktop for that long at most), `session
+state` a dev hook. Since step 3 the ground is the shown wallpaper's (`Ground.current`, which the shell also sets as
+Hyprland's background colour), `session.ground` the static default (`tests/unit/tst_sessionexit.qml`). Tests: `tst_popupkinds.qml`,
+`tst_sessionexit.qml`, `tests/shell/session_end.sh` (the helper against a stand-in `qs`: the real one would reach the
+session's shell), `tests/fuzz/fuzz_helpers.py` session-end (the wait stays within `EXIT_WAIT` whatever the shell answers).
+Legal (ID-17): E2 of `docs/legal/visual-review.md` adds the countdown, its macOS-like sentences and the exit fade.
+
 ### 6. Tokens and contract (proposed; every value an estimate until F1 and P3)
 | Token or key | Value | Note |
 |---|---|---|
@@ -320,6 +608,9 @@ and IQ-B3 here changes the palette only, not which controls read it.
 | `session.revealTimeoutMs` | 1500 | the latch's bound (P-6) |
 | `session.revealMs` | 250 | ID-20 (ASSUMPTION for macOS); an ADR-0039 `motion.*` role where one fits |
 | `session.exitFadeMs`, `session.exitWaitMs` | 400, 1000 | ID-10 |
+| `session.exitCountdownSeconds` | 60 | ID-21 (step 7) |
+| `session.exitCoverHoldMs` | 20000 | ID-10, P-6: a cover nobody lifted lifts itself (step 7) |
+| `session.ground` | `#2F6D5F` since step 3 (the default artwork's ground; `#1E1C18` in step 7), the session's static Hyprland background colour | ID-2: the shown wallpaper's ground replaces it at run time (step 3) |
 | `wallpaper.firstShowTimeoutMs` | 1500 | ID-3 |
 | `lock.fadeInMs`, `lock.fadeOutMs` | 200, 200 | IQ-T2 A |
 | `lock.scrimClearOpacity`, `lock.scrimFeather` | 0.25, 48 | IQ-W4 A; A2 per band |
@@ -490,8 +781,56 @@ preview tint); `window.inactiveLight*`; `folderIcon.plateBackdrop*`; `menu.swatc
 `store.accountCircleFill`. Kept: the black and white inks drawn at an alpha (hover, separators, shadows, fills, borders),
 the opaque white knob, the Graphite accent and its selection, Files' Gray tag and the drawing of the computer
 (`settings.device*`).
+Follow-up (the integrator's decision on #73, the owner's « Faire le suivi GTK » of 2026-10-31): the GTK themes but `-hc`
+lay the warm grounds (window `groupFill`, views, lists, menus and popovers `windowBackground`, header bars the plugin's
+title bar colour, text `text`; ADR-0035 D-8), and the session's Hyprland ground is `#1E1C18` (`#1C1C1E` warmed) until step
+3 makes it the default artwork's ground (ID-2).
 Re-pinned: the light glass's worst-case alpha 0.78 to 0.79 (`test_contrast_tokens.py`, `tst_glasstint.qml`), the GTK
 themes' thin marks under high contrast (yellow 1.97:1, green 2.46:1), and the tests that named the old greys.
+
+**The photographs (step 2c, 2026-10-31).** Shown the list (a review page: each photograph's thumbnail cropped to 16:10
+under the menu bar and the Dock, its Commons page, licence, author, size, the closest well-known OS wallpaper and what to
+know), the owner kept all sixteen and answered the three licence questions: « domaine public (04, 16) : acceptées »
+(a deliberate exception to the integrator's "CC0 or CC BY": 04 was released into the public domain by its author, 16 is
+a work of the U.S. federal government whose status does not cover the agency's name or logo, neither shown);
+« Unsplash (01, 15) : CC0 de Commons accepté » (published on Unsplash before 2017-06-05, when it was CC0, and uploaded to
+Commons in 2017 from archived pages; Commons marks them CC0); « FIND/47 (08, 12) : acceptées » (the source library
+states CC BY 4.0 for all its photos, checked on its page; Commons has no licence review on these two files). The
+resemblance notes shown with them: 08 is the closest of the list to Windows XP's "Bliss" and 12 recalls macOS Big Sur's
+coast at dusk; the side-by-side check of E32 before release covers them. Found on Wikimedia Commons (the licence read
+from each file page); 55 other files were rejected (CC BY-SA, a look-alike of an OS wallpaper, a person, a vehicle, a
+watermark, flat light). The originals weigh 235.4 MB together; the files, their `docs/legal` entries (source, author,
+licence, date, changes made), the install path and the package weight come with step 2c's pull request.
+
+| No. | Commons file | Author | Licence | Original |
+|---|---|---|---|---|
+| 01 | `Matt Palmer 2016 (Unsplash).jpg` | Matt Palmer (Unsplash) | CC0 | 5760 × 3840, 14.3 MB |
+| 02 | `Łąki nad Wisłą pod Brzeźnicą po wschodzie słońca, 20241116 0725 2676.jpg` | Jakub Hałun | CC BY 4.0 | 4807 × 3198, 9.1 MB |
+| 03 | `Zamglona dolina w Witowie w powiecie proszowickim, 20241020 0808 6322.jpg` | Jakub Hałun | CC BY 4.0 | 5340 × 3566, 12.5 MB |
+| 04 | `Desna river Vinn meadow 2016 G2.jpg` | George Chernilevsky | public domain (PD-self) | 6000 × 4000, 8.9 MB |
+| 05 | `Чуйский хребет и Курайская степь.jpg` | Aleksandr Rudny | CC BY 4.0 | 4857 × 2732, 8.1 MB |
+| 06 | `Tatry - panorama z Polskiego Spiszu.jpg` | Qvidemus | CC BY 3.0 | 8364 × 4850, 28.8 MB |
+| 07 | `Ingushetia, Закатный золотой свет на склонах долины Армхи, горы Ингушетии, Кавказ.jpg` | Vyacheslav Argenberg | CC BY 4.0 | 6000 × 4000, 19.4 MB |
+| 08 | `Hyogo-Rice terraces in Ueyama.(early autumn.)-xl.jpg` | rikky_photography (FIND/47) | CC BY 4.0 | 6000 × 4000, 30.2 MB |
+| 09 | `Dew on grass (21677746153).jpg` | Andrey Nagaycev | CC BY 2.0 | 5616 × 3744, 10.3 MB |
+| 10 | `Grass (14448015527).jpg` | Yuri Samoilov | CC BY 2.0 | 5760 × 3840, 4.0 MB |
+| 11 | `Grass at Sunrise (36993588030).jpg` | Mikhail Lazarev | CC BY 2.0 | 6000 × 4000, 6.1 MB |
+| 12 | `Kyoto-Evening view of Sodeshi rice terraces.-xl.jpg` | rikky_photography (FIND/47) | CC BY 4.0 | 6000 × 4000, 25.0 MB |
+| 13 | `Wschód słońca nad łąkami pod Tyńcem w Krakowie, 20260301 0636 4894.jpg` | Jakub Hałun | CC BY 4.0 | 4686 × 3118, 13.6 MB |
+| 14 | `Dew on grass (22309335571).jpg` | Andrey Nagaycev | CC BY 2.0 | 5616 × 3744, 10.9 MB |
+| 15 | `Waving grass under mountains (Unsplash).jpg` | Thomas Rohlfs (Unsplash) | CC0 | 4608 × 2592, 9.2 MB |
+| 16 | `Milky Way over Cronan Ranch (52321033535).jpg` | Bureau of Land Management California | public domain (PD-USGov-BLM) | 6965 × 4752, 25.0 MB |
+
+**The rest in one pull request (2026-10-31).** With the integrator away, the owner asked for every remaining step in one
+pull request (« Fait tout jusqu'à la fin dans une même PR ... sauf s'il te demande d'arrêter de travailler »): pull request
+#79 carries #73's GTK follow-up, step 7, step 2c and then steps 2, 3, 4a, 4b, 5, 6, 8, 9 and 10, one commit series per step
+in the delivery plan's order, each pushed when its checks pass, so the integrator can stop the work at any commit. The
+owner lifted, for this chantier, the rule that kept `shell/desktop`, `shell/menubar`, `shell/dock`, `Appearance.qml`,
+`apps/store` and `apps/activity` to their own lanes (« Oui, touche-les »; no open pull request worked there that day). IQ-L1
+C: the owner's explicit go-ahead for Plymouth as well as SDDM (« SDDM et Plymouth »), given with the conditions as asked:
+plymouthd runs as root in the boot image and draws the disk-password prompt; a broken theme must never hide it (a fallback
+to the text prompt, which this container cannot test); every root step is the owner's command. The security steps (4a,
+4b, 5, 10) keep their opus security review before any merge; the review of each is recorded in "Review history".
 
 **The integrator's conditions for the non-recommended choices** (2026-10-29, under the owner's rule: closest to macOS
 27, no technical step for the end user), written into the sections they shape:
@@ -593,7 +932,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
 | 7 | Exit: the countdown (ID-21), the exit cover (ID-10) | — | reviewer |
 | 2c | Photographs (IQ-W2 C): first the list (thumbnail, source, licence) to the owner for the legal call; then the files, their `docs/legal` entries, the helper path, the package weight in the pull request | the owner's legal call on the list | reviewer; legal rows |
 | 8 | App icons (IQ-B5 C): own icons for Store, Activity Monitor and the Apps tile on one grammar; the two new drawings to the owner's legal call first | `apps/store`, `apps/activity` merged | reviewer; legal row |
-| 9 | The moving variant (IQ-W3 A, in 1.0): off by default, the video pause rules, also a screen saver kind in `shell/saver`; nothing in `shell/security` (review of 6c310a8); P1 and P3 measured with it on before the merge request, over budget blocks it | step 2 | reviewer; P1, P3 |
+| 9 | The moving variant (IQ-W3 A, in 1.0): off by default, also a screen saver kind in `shell/saver`; P1 and P3 measured with it on before the merge request, over budget blocks it. Revised by the integrator (review of e067f26f, P1 over budget): it moves on the lock screen only and comes to rest as the desktop appears, still on the desktop; this puts display code in `shell/security/lock` (the review of 6c310a8 had kept it out) | step 2 | reviewer; **opus security review** (the lock); P1, P3 |
 | 10 | Login and boot themes (IQ-L1 C): their own ADR first; SDDM theme in the lock's layout; Plymouth theme with the mark only with the owner's explicit go-ahead inside that ADR (outside master-prompt §4's allowance; plymouthd runs as root in the boot image); a tested fallback to the text disk-password prompt; every root step an owner command | steps 4a, 4b and 5 (the last identity step) | **opus security review**; owner runs |
 
 ## Not verified, assumptions, unknowns
@@ -642,7 +981,8 @@ this ADR follows it, and any later pull request of either lane that meets one of
 - The proposed artworks inherit E32's flag (`distinct`, side-by-side check before release); names included (ID-18).
 - The lock and About layouts stay `close` (E2, E12). The proposed Activity Monitor and Apps tile drawings are flagged
   for the owner's legal call: they were redrawn away from macOS's icons for those apps, and no claim is made that they
-  are far enough; the owner chose IQ-B5 C, and the drawings go to the owner's legal call before step 8 ships them. No
+  are far enough; the owner chose IQ-B5 C, and the drawings go to the owner's legal call before step 8 ships them
+  (decided 2026-10-31: both shipped, « Livrer les deux »). No
   lockup (IQ-B2 A). B-5: the owner checked the name "Grassfield" on 2026-10-18, not the logo; the dossier says so (E33,
   Q7, section 7). Photographs (IQ-W2 C): a licence and provenance entry each, and the owner's legal call on the list
   before any ships.

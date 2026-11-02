@@ -107,6 +107,9 @@ protected:
     virtual void ended(int id) { Q_UNUSED(id) }
     // Request `id` has just been sent to x-d-p-gtk (after its call): what the subclass must send after it can go now.
     virtual void forwarded(int id) { Q_UNUSED(id) }
+    // Whether request `id` can still go to x-d-p-gtk as it came (Print: not once part of a document on a pipe was read, which
+    // x-d-p-gtk would get truncated; security review of step 6b, MINOR 6). When it cannot, forward() ends it without an answer.
+    virtual bool forwardable(int id) { Q_UNUSED(id) return true; }
     // The idle time starts again now, when no request is open (a subclass's own reason to stay has just gone).
     void armIdle();
 

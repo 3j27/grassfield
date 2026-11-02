@@ -7,6 +7,7 @@
 #include "chooserlogic.h"
 #include "filechooser.h"
 #include "panelstate.h"
+#include "printpreview.h"
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -730,6 +731,9 @@ TEST(FileChooserIds, APanelCountsAsTheApplicationsWindow)
 
 int main(int argc, char **argv)
 {
+    // The print preview's child, as grassfield-portal runs it (tst_print.cpp draws pages through this binary).
+    if (grassfield::portal::isPreviewChildInvocation(argc, argv))
+        return grassfield::portal::previewChildMain(argc, argv);
     qputenv("QT_QPA_PLATFORM", "offscreen");
     // No input method: a desktop's (QT_IM_MODULE=fcitx) loads a plugin that leaks at exit, which the sanitized run reports
     // as a failure (re-review of 65311e0, MINOR 4); the tests type nothing.

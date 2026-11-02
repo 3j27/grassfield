@@ -1,0 +1,4 @@
+# A few lines of tzdata 2026e's zone1970.tab (/usr/share/zoneinfo), the ones tests/unit/tst_timeofday.qml reads (ADR-0040 IQ-W1 C).
+FR,MC	+4852+00220	Europe/Paris
+US	+404251-0740023	America/New_York	Eastern (most areas)
+CA,BS	+4339-07923	America/Toronto	Eastern - ON & QC (most areas)

@@ -1,4 +1,4 @@
-// grassfield-portal (ADR-0035 D-4, D-5, D-7; steps 4b, 5a, 5b and 6a): the Open and Save panels, the Choose Application panel,
+// grassfield-portal (ADR-0035 D-4, D-5, D-7; steps 4b, 5a, 5b, 6a and 6b): the Open and Save panels, the Choose Application panel,
 // the permission alerts and the print sheet of the Grassfield session, served to xdg-desktop-portal as
 // org.freedesktop.impl.portal.FileChooser, org.freedesktop.impl.portal.AppChooser, org.freedesktop.impl.portal.Access and
 // org.freedesktop.impl.portal.Print under
@@ -16,6 +16,7 @@
 #include "imageproviders.h"
 #include "panelstate.h"
 #include "print.h"
+#include "printpreview.h"
 #include "printsystem.h"
 #include "runmode.h"
 #include "testbus.h"
@@ -26,6 +27,7 @@
 #include <QDBusConnection>
 #include <QDir>
 #include <QQmlApplicationEngine>
+#include <QStandardPaths>
 #include <QUrl>
 
 #include <wayland-client-core.h>
@@ -68,6 +70,9 @@ int main(int argc, char *argv[])
     // nothing else, never a second backend.
     if (AppIcons::isDecodeChildInvocation(argc, argv))
         return AppIcons::decodeChildMain(argc, argv);
+    // The print preview's child (printpreview.h): one page of a document drawn, confined, and nothing else.
+    if (grassfield::portal::isPreviewChildInvocation(argc, argv))
+        return grassfield::portal::previewChildMain(argc, argv);
     // D-4's start-up loop: a platform theme that reads the portal (gtk3 with GTK_USE_PORTAL=1) could wait on the frontend that
     // waits on this process. The panels draw with Grassfield.Ui and need none (the unit clears it too).
     qunsetenv("QT_QPA_PLATFORMTHEME");
@@ -120,6 +125,16 @@ int main(int argc, char *argv[])
     // Dev plumbing: how Add Printer… opens Settings (the shell's own GRASSFIELD_SETTINGS_CMD).
     if (const QString settings = runmode::devValue("SETTINGS_CMD"); !settings.isEmpty())
         printOptions.addPrinterCommand = settings.split(QLatin1Char(' '), Qt::SkipEmptyParts) << QStringLiteral("--section=printers");
+    // Last Used Settings next to the panels' memory. A document sent first is kept, and Open in Preview's copies are written, on
+    // disk in the user's cache folder (never the runtime folder, a tmpfs whose pages count against this unit's MemoryMax:
+    // security review of step 6b, MAJOR 3); dev plumbing: how Preview opens (the same GRASSFIELD_PREVIEW_CMD as Files' Glance).
+    printOptions.stateFile = runmode::stateDir() + QStringLiteral("/portal-print.json");
+    if (const QString cache = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation); cache.startsWith(QLatin1Char('/'))) {
+        printOptions.spoolFolder = cache + QStringLiteral("/grassfield/print");
+        printOptions.previewFolder = cache + QStringLiteral("/grassfield/preview");
+    }
+    if (const QString preview = runmode::devValue("PREVIEW_CMD"); !preview.isEmpty())
+        printOptions.previewCommand = preview.split(QLatin1Char(' '), Qt::SkipEmptyParts);
     const QString serviceName = QStringLiteral("org.freedesktop.impl.portal.desktop.grassfield");
     // Access, AppChooser and Print first: they outlive FileChooser and the adaptors FileChooser's object owns; the printers'
     // system before Print, which asks it.
@@ -188,6 +203,8 @@ int main(int argc, char *argv[])
             ApplicationsLogic::waitForListings(3500);
         });
         engine->addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
+        // The print sheet's preview: pages its confined child drew (printpreview.h).
+        engine->addImageProvider(QStringLiteral("printpreview"), new grassfield::portal::PrintPreviewProvider);
         qmlDir = runmode::devValue("FILES_QML");
         if (qmlDir.isEmpty())
             qmlDir = QStringLiteral(GRASSFIELD_FILES_QML_DIR);

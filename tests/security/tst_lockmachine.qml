@@ -15,6 +15,10 @@ TestCase {
         s = Machine.next(s, "submit");
         compare(s, "authenticating");
         s = Machine.next(s, "success");
+        // ADR-0040 step 4b: the lock's content fades out first, the session still locked.
+        compare(s, "releasing");
+        verify(Machine.isLocked(s));
+        s = Machine.next(s, "released");
         compare(s, "unlocked");
     }
 
@@ -24,17 +28,41 @@ TestCase {
             compare(Machine.next("authenticating", events[i]), "locked", events[i]);
     }
 
-    // Exhaustive: from any locked state, no event except a PAM success unlocks.
+    // Exhaustive: from any locked state, only "released" from "releasing" unlocks, and only a PAM success
+    // ("success" while authenticating, "fingerprint" while locked or authenticating) enters "releasing" (ADR-0040 step 4b).
     function test_onlyPamSuccessUnlocks() {
-        const lockedStates = ["locking", "locked", "authenticating"];
+        const lockedStates = ["locking", "locked", "authenticating", "releasing"];
         for (let i = 0; i < lockedStates.length; i++) {
             for (let j = 0; j < Machine.EVENTS.length; j++) {
                 const event = Machine.EVENTS[j];
                 const after = Machine.next(lockedStates[i], event);
                 if (after === "unlocked")
-                    verify(event === "success" && lockedStates[i] === "authenticating" || event === "fingerprint" && lockedStates[i] !== "locking", lockedStates[i] + " + " + event);
+                    verify(event === "released" && lockedStates[i] === "releasing", lockedStates[i] + " + " + event);
+                if (after === "releasing" && lockedStates[i] !== "releasing")
+                    verify(event === "success" && lockedStates[i] === "authenticating" || event === "fingerprint" && (lockedStates[i] === "locked" || lockedStates[i] === "authenticating"), lockedStates[i] + " + " + event);
             }
         }
+        // Two steps from any locked state: never unlocked without a PAM success first.
+        for (const st of ["locking", "locked"])
+            for (const a of Machine.EVENTS)
+                for (const b of Machine.EVENTS)
+                    if (Machine.next(Machine.next(st, a), b) === "unlocked")
+                        verify(a === "fingerprint" && b === "released" && st === "locked", st + " + " + a + " + " + b);
+    }
+
+    // ADR-0040 step 4b: anything during the fade brings the lock back, and the PAM success is spent.
+    function test_releasingIsInterrupted() {
+        compare(Machine.next("releasing", "request"), "locked");
+        compare(Machine.next("releasing", "lost"), "locking");
+        for (const e of ["error", "timeout", "abort"])
+            compare(Machine.next("releasing", e), "locked", e);
+        // A new password is needed: nothing but "released" leaves releasing towards unlocked, and from locked a new submit.
+        compare(Machine.next("releasing", "submit"), "releasing");
+        compare(Machine.next("releasing", "success"), "releasing");
+        compare(Machine.next("locked", "released"), "locked");
+        compare(Machine.next("authenticating", "released"), "authenticating");
+        compare(Machine.next("unlocked", "released"), "unlocked");
+        compare(Machine.next("locking", "released"), "locking");
     }
 
     function test_successOutsideAuthenticationIsIgnored() {
@@ -53,6 +81,7 @@ TestCase {
     function test_lostLockIsReacquired() {
         compare(Machine.next("locked", "lost"), "locking");
         compare(Machine.next("authenticating", "lost"), "locking");
+        compare(Machine.next("releasing", "lost"), "locking");
         compare(Machine.next("unlocked", "lost"), "unlocked");
     }
 
@@ -315,6 +344,7 @@ TestCase {
     function test_isHolding() {
         verify(Machine.isHolding("locked"));
         verify(Machine.isHolding("authenticating"));
+        verify(Machine.isHolding("releasing"));
         const others = ["unlocked", "locking", "", "LOCKED", undefined, null, "garbage"];
         for (let i = 0; i < others.length; i++)
             verify(!Machine.isHolding(others[i]), String(others[i]));

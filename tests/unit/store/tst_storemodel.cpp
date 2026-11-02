@@ -179,6 +179,31 @@ TEST(StoreModel, Search)
     EXPECT_EQ(searchApps(m.apps, QStringLiteral("a"), QStringLiteral("en"), 2).size(), 2);
 }
 
+// The search by document type (ADR-0035 5c-3): the type asked first, then its parents in order; by name within each.
+TEST(StoreModel, AppsForAType)
+{
+    QList<StoreApp> apps(4);
+    apps[0].id = QStringLiteral("a.Editor");
+    apps[0].mediaTypes = {QStringLiteral("text/plain")};
+    apps[1].id = QStringLiteral("b.Code");
+    apps[1].mediaTypes = {QStringLiteral("text/x-csrc"), QStringLiteral("text/plain")};
+    apps[2].id = QStringLiteral("c.Image");
+    apps[2].mediaTypes = {QStringLiteral("image/png")};
+    apps[3].id = QStringLiteral("d.Compiler");
+    apps[3].mediaTypes = {QStringLiteral("text/x-csrc")};
+    auto ids = [&](const QStringList &types, int limit = 200) {
+        QStringList out;
+        for (int i : appsForType(apps, types, limit))
+            out.append(apps.at(i).id);
+        return out;
+    };
+    EXPECT_EQ(ids({QStringLiteral("text/x-csrc"), QStringLiteral("text/plain")}),
+              (QStringList{QStringLiteral("b.Code"), QStringLiteral("d.Compiler"), QStringLiteral("a.Editor")}));
+    EXPECT_EQ(ids({QStringLiteral("image/png")}), QStringList{QStringLiteral("c.Image")});
+    EXPECT_TRUE(ids({QStringLiteral("application/x-unknown")}).isEmpty());
+    EXPECT_EQ(ids({QStringLiteral("text/x-csrc"), QStringLiteral("text/plain")}, 1), QStringList{QStringLiteral("b.Code")});
+}
+
 TEST(StoreModel, Categories)
 {
     const Model m(true, true);

@@ -4,7 +4,9 @@ Status: step 0 (this spec, ADR-0037 and the parity matrix), revised after the fi
 list, the settings window without its switches; ADR-0037 SD6 to SD10) is built and measured
 (`docs/audits/store-2026-10-27/step2.md`); install, open and uninstall are step 3 (3a repository packages and web apps,
 3b1 Omarchy's setups, and 3b2 the AUR, merged; 3c Flathub: part 1 merged, part 2, the Flathub source, built
-(`docs/audits/store-2026-10-27/step3c.md`), part 3 "Get Flatpak…" built). The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
+(`docs/audits/store-2026-10-27/step3c.md`), part 3 "Get Flatpak…" merged); step 4 (the Updates page with Flatpak updates, the
+sidebar's count, the search by document type for Files, one Store per user; ADR-0037 SD32 to SD35) is built
+(`docs/audits/store-2026-10-27/step4.md`). The owner answered ADR-0037 ST1 to ST10 on 2026-10-27 (in the owner's own words in the ADR): §4 amended; AUR and Flathub both
 off until turned on; the sheet alone for per-user installs; repository packages through the Store's root helper behind
 polkit, the AUR and Omarchy's recipes in Omarchy's terminal; Arch's AppStream from its package, else fetched; screenshots
 when a product page opens; the AUR's web service; the only update badge on Settings; the proposed step order; publishers'
@@ -69,6 +71,12 @@ Search (step 2)
 - SR6. Typing in the sidebar field (Ctrl+F focuses it) shows results while typing from the local merged catalog (our catalog,
   AppStream, the `[omarchy]` list): name, keywords, summary and package name, ranked name-prefix first; Esc clears, then
   leaves the field. Empty result: "No Results for “…”" (« Aucun résultat pour « … » »).
+- SR6b. The search by document type (step 4, ADR-0035 5c-3, ADR-0037 SD34): `--page=type:<type>` (what Files' "Search the
+  Store" opens when no application opens a document) lists the apps whose AppStream says they open the type (`<provides>
+  <mediatype>`, the older `<mimetypes>`), those of the type itself first, then those of its parents in the MIME
+  database's order (a C file: text editors), by name in each; titled "Apps for “PNG image” Documents" (« Apps pour les
+  documents « … » »), else "No apps in the Store open “…” documents." A malformed type opens nothing. A second launch
+  hands its page to the running Store (one Store per user, SD35).
 - SR7. AUR results (only when the AUR source is turned on, ADR-0037 ST2/ST7) appear after Return in their own section "From
   the AUR (not reviewed)" (« Depuis l'AUR (non vérifié) »), with votes and the out-of-date flag: the AUR's search by name,
   the most voted first (at most 50), the names a repository has left out (their own pages install them). Until Return,
@@ -224,15 +232,28 @@ Installed (step 2 read-only, step 3 actions)
   protected (SR22), Uninstall…. Grouped by source, sorted by name.
 
 Updates (step 4; ADR-0037 d, owner ST8)
-- SR24. From ADR-0033's result (`software-update.json`): the installed apps with an update, each marked "Updates with the
-  system" (« Mise à jour avec le système »), then "N other system packages", the Grassfield and Omarchy releases as Software
-  Update names them, and "Update All…" (« Tout mettre à jour… ») which starts ADR-0033's "Update Now". "Check Now" asks the shell
-  to check (ADR-0033). States: checking, up to date (with the last check time), update running, failed (offline or
-  unavailable, with the last success), blocking (ADR-0033 a2: a link to Software Update's "Turn Off…"), and "The last
-  system update did not finish" (« La dernière mise à jour du système n'est pas terminée ») when `pacman -Qu` lists packages
-  while no update runs (S12).
-  Flatpaks (Flathub on) form their own group: "Update" per app and "Update All" for the group (`flatpak update --user`),
-  checked by the Store when it opens and on "Check Now" (`flatpak remote-ls --user --updates`).
+- SR24. From ADR-0033's result (`software-update.json`, watched): the installed apps with an update, each marked "Updates
+  with the system" (« Mise à jour avec le système »), then "N other system packages", the Grassfield and Omarchy releases as
+  Software Update names them, and "Update All…" (« Tout mettre à jour… »), which opens Software Update (Settings > General),
+  where Update Now updates the whole system with its password and its progress (SD32); "Software Update…" (« Mise à jour de
+  logiciels… ») instead when only it can act (updates blocked, not set up). "Check Now" (« Vérifier maintenant ») asks the
+  shell to check (`qs ipc … update check user`, ADR-0033 d.7), reads `pacman -Qu` and checks Flathub; the page checks
+  likewise when it opens, unless a check finished less than a minute ago, and follows Omarchy's update lock every 2 s while
+  shown. States, first that applies: "Update in progress" (the lock held by another program, or the checker says so),
+  "Checking for updates…", "The last system update did not finish." when `pacman -Qu` lists packages not "[ignored]" while no
+  update runs (S12; with what it means and Update All…), then the checker's own (up to date with the last check time,
+  available, failed, blocking, not set up), or "Software Update couldn't check for updates. Open it to check." when the shell
+  did not answer.
+  Flatpaks (Flathub on) form their own group, "Flatpak Apps" (« Apps Flatpak »): Flathub's updates of the user's
+  installation (`flatpak remote-ls --user --updates`, S31; another remote's are the user's own), checked when the Store
+  opens, on "Check Now", when the page opens (unless checked less than a minute ago) and after each Flatpak operation; each
+  app with "Update" (« Mettre à jour »), the runtimes counted, and "Update All" (« Tout mettre à jour ») for the group. An
+  update starts at once, unless it lets an app reach more than the installed version can, or that could not be read: then
+  a sheet says what it adds first (SD33, SD25 for an update); while its plan reads each app's commit and access, the
+  group's line says "Checking what the updates change: N of M apps…" and the app's Update waits. Each app is updated to the
+  commit its plan checked (a newer one published meanwhile is listed again and asked about again, S32); it is done when that
+  commit is installed (an unpinned ref: when a new check no longer lists it), never on flatpak's exit code alone (offline it
+  exits 0 with "Nothing to update.", S31d). Update All takes every listed update; its sheet says "Update the Flatpak apps?".
 - SR25. The sidebar's Updates row shows the number of apps with an update, Flatpaks included. The Store's Dock tile has no
   badge: the only update badge is Software Update's, on Settings (owner, ST8).
 

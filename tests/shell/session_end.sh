@@ -32,6 +32,8 @@ if args == ["-j", "clients"]:
     print(json.dumps(clients()))
 elif args and args[0] == "dispatch":
     open(d + "/hyprctl.log", "a").write(args[1] + "\n")
+    if args[1] == "hl.dsp.exit()" and os.environ.get("FAKE_EXIT_FAIL"):
+        sys.exit(1)
     m = re.search(r'address:(0x[0-9a-f]+)', args[1])
     if m:
         a = m.group(1)
@@ -45,9 +47,20 @@ elif args and args[0] == "dispatch":
             cl = [c for c in cl if c["address"] != a]
         json.dump(cl, open(d + "/clients.json", "w"))
 PY
-for name in uwsm systemctl gdbus; do
-  printf '#!/bin/sh\necho "%s $*" >>"$FAKE_DIR/calls.log"\n' "$name" >"$bin/$name"
+for name in uwsm systemctl gdbus; do   # FAKE_FAIL_<name>: that helper fails
+  printf '#!/bin/sh\necho "%s $*" >>"$FAKE_DIR/calls.log"\n[ -z "$FAKE_FAIL_%s" ] || exit 1\n' "$name" "$name" >"$bin/$name"
 done
+# The shell's IPC (ADR-0040 ID-10, the exit cover). Always this stand-in: the real `qs` would reach the session's own shell.
+cat >"$bin/qs" <<'SH'
+#!/bin/sh
+echo "qs $* manifest=${QS_MANIFEST:-}" >>"$FAKE_DIR/calls.log"
+[ -z "$FAKE_QS_FAIL" ] || exit 1
+[ -z "$FAKE_QS_HANG" ] || exec sleep 30
+case "$*" in
+  *" session cover") printf '%s\n' "${FAKE_QS_ANSWER:-400}" ;;
+  *" session lift") echo ok ;;
+esac
+SH
 cat >"$bin/notify-send" <<'SH'
 #!/bin/sh
 echo "notify-send $*" >>"$FAKE_DIR/calls.log"
@@ -203,6 +216,50 @@ done
 desc="an unknown action is refused (exit 2) and ends nothing"
 run '[]' hibernate
 check bash -c '[[ $2 == 2 ]] && [[ ! -s "$1/calls.log" ]]' _ "$tmp" "$status"
+
+# ADR-0040 ID-10: the exit cover. The shell's instance is called by its path with Quickshell's option variables cleared.
+cover='qs ipc -p /usr/share/grassfield/shell call session cover manifest='
+lift='qs ipc -p /usr/share/grassfield/shell call session lift manifest='
+desc="ID-10: once the windows are gone the shell's exit cover is asked for (a stray QS_MANIFEST cleared), then the session ends; nothing is lifted"
+QS_MANIFEST=stray run "$two" logout
+check bash -c 'c=$(grep -nx "$2" "$1/calls.log" | cut -d: -f1) && u=$(grep -nx "uwsm stop" "$1/calls.log" | cut -d: -f1) && [[ -n $c && -n $u && $c -lt $u ]] && ! grep -q "session lift" "$1/calls.log" && [[ $3 == 0 ]]' _ "$tmp" "$cover" "$status"
+desc="...for Restart, Shut Down and --force too, and after the user's own 'Anyway'"
+for args in restart shutdown "logout --force"; do
+  # shellcheck disable=SC2086  # the action and its option
+  run '[]' $args
+  check bash -c 'grep -qx "$2" "$1/calls.log" && [[ $3 == 0 ]]' _ "$tmp" "$cover" "$status"
+done
+FAKE_REFUSE="0x2" FAKE_NOTIFY_ANSWER=force run "$two" logout
+check bash -c 'grep -qx "$2" "$1/calls.log" && grep -qx "uwsm stop" "$1/calls.log" && [[ $3 == 0 ]]' _ "$tmp" "$cover" "$status"
+desc="ID-10: no cover while the session is not ended (an application kept its window): nothing asked of the shell"
+FAKE_REFUSE="0x2" run "$two" logout
+check bash -c '! grep -q "^qs " "$1/calls.log" && [[ $2 == 3 ]]' _ "$tmp" "$status"
+desc="ID-10: a shell that does not answer costs nothing: the session still ends, nothing to lift"
+FAKE_QS_FAIL=1 run "$two" logout
+check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && ! grep -q "session lift" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
+desc="ID-10: uwsm stop fails, the compositor's own exit works: the session ends, the cover stays"
+FAKE_FAIL_uwsm=1 run "$two" logout
+check bash -c 'grep -qx "hl.dsp.exit()" "$1/hyprctl.log" && ! grep -q "session lift" "$1/calls.log" && [[ $2 == 0 ]]' _ "$tmp" "$status"
+desc="ID-10: the session cannot be ended (uwsm stop and the compositor's exit both fail): the cover is lifted after it came up, exit 4"
+FAKE_FAIL_uwsm=1 FAKE_EXIT_FAIL=1 run "$two" logout
+check bash -c 'c=$(grep -nx "$2" "$1/calls.log" | cut -d: -f1) && l=$(grep -nx "$3" "$1/calls.log" | cut -d: -f1) && [[ -n $c && -n $l && $c -lt $l ]] && [[ $4 == 4 ]]' _ "$tmp" "$cover" "$lift" "$status"
+desc="ID-10: systemctl refuses the restart: the cover is lifted, exit 4"
+FAKE_FAIL_systemctl=1 run '[]' restart
+check bash -c 'grep -qx "$2" "$1/calls.log" && [[ $3 == 4 ]]' _ "$tmp" "$lift" "$status"
+desc="ID-10: the helper's bound on the cover, EXIT_WAIT, is session.exitWaitMs"
+check python3 -I -c 'import json, re, sys
+t = json.load(open(sys.argv[1]))["session"]["exitWaitMs"]["value"]
+m = re.search(r"^EXIT_WAIT = ([0-9.]+)", open(sys.argv[2]).read(), re.M)
+sys.exit(0 if m and round(float(m.group(1)) * 1000) == t else 1)' "$root/ui/tokens/tokens.json" "$root/packaging/bin/grassfield-session-end"
+desc="ID-10: whatever the shell answers or however long it takes, the cover costs at most EXIT_WAIT (1 s) each: an answer of 999999 ms, a hung shell"
+for env in FAKE_QS_ANSWER=999999 FAKE_QS_HANG=1; do
+  start=$(date +%s%N)
+  export "${env?}"
+  run '[]' logout
+  unset "${env%%=*}"
+  took=$((($(date +%s%N) - start) / 1000000))
+  check bash -c 'grep -qx "uwsm stop" "$1/calls.log" && [[ $2 == 0 ]] && (( $3 < 4000 ))' _ "$tmp" "$status" "$took"
+done
 
 desc="the shell routes Log Out, Restart and Shut Down through the helper (not systemctl or exit directly)"
 check bash -c 'grep -q "endSession(\"logout\")" "$1" && grep -q "endSession(\"restart\")" "$1" && grep -q "endSession(\"shutdown\")" "$1" && ! grep -q "systemctl(\"reboot\")\|systemctl(\"poweroff\")" "$1"' _ "$root/shell/services/Power.qml"

@@ -249,8 +249,10 @@ Built in step 5c (Files' own Open With; ADR-0035 5c-1 to 5c-7):
   chosen opens the documents; Cancel and Esc open nothing. No "Always Open With" box (5c-4).
 - OW3 A document whose type has no application (KIO's question in Files): Finder's alert, "There is no application set to open
   the document “X”.", with Choose Application… (the default, Return) and Cancel (Esc); Choose Application… opens the panel,
-  and the application chosen opens the document. A job that ends takes its alert or panel away. No store button until
-  Grassfield Store can search by document type (5c-3).
+  and the application chosen opens the document. A job that ends takes its alert or panel away. With Grassfield Store
+  installed (Store step 4, 5c-3's follow-up): "Search the Store" too, Finder's App Store button, and the message "Search
+  Grassfield Store for an app that opens it, or choose an application on this computer."; it opens the Store on the apps
+  that open the document's type (`grassfield-store --page=type:<type>`, ADR-0037 SD34) and the document stays closed.
 - The panel's line cuts a long name in its middle (its extension and the closing quote stay) and shows an address decoded,
   without its password.
 - Every selected document goes to the application chosen, each as one argument (KIO starts it; no shell reads a name).
@@ -282,8 +284,10 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   `screen:`/`region:` output listed by `hyprctl -j monitors`, a region inside that output's logical size. Anything else prints
   nothing.
 - SP4 one picker at a time: a request while a picker is open gets `busy` (cancelled).
-- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on every monitor, or
-  the shell's crash-recovery marker, the test of `packaging/shims/omarchy-shell:64-74`) and the shell answers `locked`; either
+- SP5 locked (owner decision Q15): the stand-in checks the lock itself (Hyprland's `solitaryBlockedBy` LOCK on any monitor, or
+  the shell's crash-recovery marker read as the shell reads it, `shell/security/LockMachine.js`: only `unlocked` or
+  `unlocked sleeps=<n>` is unlocked, and only while `<n>` is the machine's count of suspends or that count cannot be read) and
+  the shell answers `locked`; either
   way the request is cancelled and no picker shows, Grassfield's or stock. Every error counts as locked: `hyprctl` failing or
   silent for 1 s, output that is not the expected JSON, no monitor, a marker file that exists but cannot be read.
 - SP6 the panel: tabs "Entire Screen" (one live thumbnail per display, the display's name), "Window" (live thumbnails of the
@@ -292,8 +296,9 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   picker cannot know which app); "Remember this choice" unticked at every opening, whatever `--allow-token` says (owner
   decision Q14); Cancel / Share (default once something is selected); double-click shares at once.
 - SP7 keyboard: arrows move in the grid, Return shares, Esc cancels, Cmd-1/2/3 switch tabs.
-- SP8 the recording indicator in the menu bar while Hyprland reports an active screencast; its menu says what is shared (a
-  display or a window), not which app shares it (Hyprland's events carry only the source).
+- SP8 the recording indicator in the menu bar while an app shares through the portal (xdph's PipeWire streams, ADR-0035 7-9:
+  Hyprland's screencast event comes from every capture, the shell's thumbnails too); its menu says what is shared (the
+  picker's choice for that stream when it made one), not which app shares it.
 - SP9 no acknowledgement within 1 s and the session not locked: the stand-in removes the socket file, then execs the stock
   picker (a late `accepted` finds no socket and shows nothing).
 
@@ -313,10 +318,67 @@ it), Esc cancels; while sharing, the menu bar shows the screen-recording indicat
   that display).
 - A-SP6 (L1) shell stopped, session unlocked: the stock picker opens.
 
+### Built in step 7a (ADR-0035 7-1 to 7-8)
+- **Stand-ins:**
+  - `packaging/session-bin/hyprland-share-picker` (`python3 -I`) and `hyprland-preview-share-picker`, Omarchy's name, which runs it with `--stock-name`.
+  - `env-grassfield` puts that directory first in the systemd user manager's PATH, where xdph runs.
+- **Shell:**
+  - `shell/services/SharePicker.{qml,js}`: IPC target `picker` (`request`, plus the dev hooks `status` and `choose`).
+  - `shell/overlay/SharePickerPanel.qml`: popup kind `sharePicker`.
+- **The channel as built (SP2, SP2b):**
+  - The stand-in's first line on the socket is `<id> list <json>`: xdph's windows as `{handle, class, title, address}`. The address is Hyprland's, in hex, or `""`. The titles never go into a command line (7-2).
+  - The shell opens the panel when that line arrives, at most 2 s after `accepted`; otherwise it closes the connection and shows nothing.
+  - The shell's answer is `<id> <flags>/screen:<output>` or `<id> <flags>/window:<handle>`.
+  - Lines with another id are ignored. A line longer than 4096 bytes, or one that is not ASCII, cancels.
+  - `request` answers `refused` to an id that is not 128-bit lowercase hex, or a socket that is not `<128-bit hex>.sock` directly in `$XDG_RUNTIME_DIR/grassfield/picker/`. The stand-in, which always uses that form, then treats it like a missing shell.
+- **The panel (SP6, SP7):**
+  - "Share Your Screen", "An app wants to share your screen. Choose what it can see.", and Entire Screen / Window as a segmented control.
+  - A grid of live thumbnails, three to a row, two rows before it scrolls.
+  - Windows are grouped by app name, then sorted by title. A window without an address, or one the shell does not know, shows its app's icon.
+  - Remember this choice is unticked at every opening.
+  - Cancel and Share. Share is dimmed until a tile is chosen; nothing is selected at first (7-3).
+  - Arrows move in the grid, Return shares, Esc cancels, Cmd-1 and Cmd-2 switch the tabs, and a double-click shares.
+  - Nothing answers keys or clicks for `panel.alertArmMs` after the panel shows, or after the last key pressed meanwhile (7-8);
+    Esc and Cancel always cancel.
+- **Cancelled:**
+  - when another popup takes the panel's place or a click lands outside it (7-5);
+  - when the session locks;
+  - when the stand-in's end closes (it gave up, or xdph ended: the stand-in notices xdph's end of stdout closing).
+- **Not in 7a:** Selection, the recording indicator and the greying of protected windows came in step 7b, below.
+- **Tests:**
+  - `tests/shell/share_picker.sh`: A-SP1, A-SP2, A-SP2b and A-SP3 against fakes, with a copy of xdph 1.4.1's parser.
+  - `tests/shell/share_picker_ipc.sh`: the stand-in and the real service under Quickshell, offscreen, for busy, the wait lines, the stand-in's end, another popup, the lock and refused forms; case 13: a failed connection (no socket file, a refused one, a stand-in that gave up because the shell's answer took over 1 s) does not stop the next request from showing its panel, and no request's socket is left once it ended; cases 1 and 2: the panel (loaded as the Overlay loads it) opens with Remember this choice unticked and unarmed, and is armed after `panel.alertArmMs` with Remember still unticked, though xdph passed `--allow-token` (review of PR #83, MINOR 1).
+  - `tests/unit/tst_sharepicker.qml`.
+  - A-SP4 to A-SP6 (nested, Chromium) are the integrator's.
+
+### Built in step 7b (ADR-0035 7-9 to 7-14)
+- **Selection (SP6):** a third tab (Cmd-3).
+  - The chosen display's live preview, with a display chooser when there are several; a drag on it marks the area.
+  - The area must be at least `panel.sharePickerMinArea` either way, and its size shows under the preview ("640 × 360 on DP-1").
+  - The answer is `<flags>/region:<display>@x,y,w,h` in that display's logical pixels. An area past the display is never answered, by the shell or by the stand-in.
+- **Windows that hide from capture (SP6):** Hyprland's effective `no_screen_share`, asked with `hyprctl -j getprop` for every listed window when the panel opens (16 at a time, 1 s each at most). Such a window is greyed with "This window can't be shared" and never answered; no window is answered before Hyprland's answers have come. A query that cannot run greys none (Hyprland still blacks such a window out: 7-13).
+- **The recording indicator (SP8):** a status item, `screen-share`, while xdph has a stream (a PipeWire video node named `xdg-desktop-portal-hyprland`); it never gives way when the status area is crowded.
+  - Its menu has one row per share, named by what the picker chose for it ("Entire screen: DP-1", "Window: …", "Part of DP-1"), best effort: one new stream and one choice answered in the last 3 s. Otherwise "Screen or window" (a share an app restored with its token, or two at once).
+  - Then "To stop sharing, use the app that shares."
+  - While the bar is away (over a full-screen window, or on the desktop with a bar that hides there) the indicator stays in view: its glyph on its own capsule of the band's glass at the bar's right inset, coming as the bar leaves and going as it comes back (7-14). It takes no click; the top edge brings the bar back.
+- **Tests:**
+  - `tst_sharepicker.qml`.
+  - `share_picker_ipc.sh`, cases 9-12 (11 with a private PipeWire and a stream made as xdph makes it, `share_picker_ipc.d/fake-xdph-stream.c`; 12 with the getprop answers held by gate files).
+  - `share_picker_nested.sh`, check 5.
+  - `tst_barhide.qml`: the indicator while the bar is away (7-14).
+  - The indicator in a real share (Chromium) is the integrator's.
+
 ### Known limitations
 A user `xdph.conf` naming another picker is respected; xdph blocks its main loop while any picker runs (upstream), for up to
-3 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
-requesting app.
+4 s when the shell dies before connecting and 15 s when it hangs after; the picker and the indicator cannot name the
+requesting app. A shell that hangs with its panel open leaves the panel drawn: the stand-in gives up after 15 s, and if the
+app asks again the stock picker opens beside the frozen panel (only the stock picker can answer). The indicator shows shares
+made through the portal only: a recorder that captures without it (wf-recorder, OBS's own Wayland capture) is not shown
+(7-9), and any PipeWire client can light it by naming a video node after xdph (nothing is shared then). An area is drawn on a
+preview: about 3 logical pixels of a 1920-pixel display per preview pixel (7-10). A row of the indicator's menu can name another
+app's choice when an app restores a share with its token within 3 s of the picker answering a different app that has not
+started its stream yet (7-12). While the bar is away the indicator's capsule is drawn on the display, so a share of that
+display shows it (7-14).
 
 ## 4. Not responding (H1; ADR-0035 D-3; built in step 3)
 
@@ -818,6 +880,9 @@ apply to every app.
   colour roles (decision 2b-5): the GTK 4 focus ring opaque (`control.focusOutlineOpacity`, decision 2b-15), hover, pressed
   and border shades as the shell's overlays, the selected tab's indicator at GTK's own width (`gtk.tabIndicatorWidth`); no
   CSS colour function; the radii stay GTK's (decision 2b-7). MIT, no copy of Adwaita. `gtk-theme` names the matching one.
+  Every theme but `-hc` also lays the warm grounds of ADR-0040 (window `groupFill`, views, lists, menus and popovers
+  `windowBackground`, header bars `titlebar.background*`, text `text`; `tests/ci/gtk_themes.py` checks them and 7:1 for the
+  text); libadwaita apps keep their own.
 - AP5 a change of appearance, accent, contrast or motion in Settings or Quick Settings reaches running GTK 3 (with the
   variable), GTK 4 (with `GDK_DEBUG=portals`), libadwaita, Qt (`gtk3` theme), Chromium, Electron and Firefox within 1 s.
 
@@ -874,7 +939,8 @@ backend left only Qt's idiom.
 The print sheet attaches to the document's window: a preview of the pages on the left (page arrows under it), on the right
 Printer, Presets, Copies, Pages (All, From–to, Selection), then Paper Size, Orientation, Scale, Two-Sided and the printer's
 options in collapsible sections; at the bottom "PDF" (a menu: Save as PDF…, Open in Preview) and Cancel / Print (default).
-The last-used printer and settings are remembered per app.
+The last printer used is shown first; Last Used Settings, a preset of the Presets menu shared by every application, brings the
+last print's settings back (ADR-0035 6-18).
 
 ### Functional requirements
 - PR1 `PreparePrint`: the sheet without preview (the document is not sent yet), every option the destination reports through
@@ -882,7 +948,7 @@ The last-used printer and settings are remembered per app.
   for the matching `Print` call.
 - PR2 `Print` with a valid token: submits the document fd to the chosen CUPS destination with the chosen options, no UI; without
   a token: the full sheet with the preview of the document (Qt PDF for PDF, the first page of PostScript as an image when it can
-  be rendered, else "No preview").
+  be rendered, else "No preview"; step 6b sends a document that is not a PDF to x-d-p-gtk instead, ADR-0035 6-12).
 - PR3 "Save as PDF…" opens the D-4 save panel and writes the document there (PDF input) instead of printing.
 - PR4 no printer: the sheet says "No printers available" with "Add Printer…" (opens Settings > Printers).
 - PR5 never blocks: CUPS calls run off the UI thread with deadlines (a dead network printer never freezes the sheet); the UI
@@ -925,11 +991,52 @@ The last-used printer and settings are remembered per app.
   job in the scratch scheduler with its copies); evince in a nested session is the integrator's. A-PR3: the integrator's.
 - `tests/unit/tst_printsheet.qml`: the sheet's states, keys, Save as PDF and the late-keyboard hold.
 
+### Built in step 6b (ADR-0035 6-10 to 6-30)
+- PR2 without a token done: Print with no sheet before it (libportal's callers) opens the sheet with the document's preview on
+  the left, one page at a time with "‹ 1 of N ›" and Page Up / Page Down (6-14); Orientation and Scale are not offered (the
+  document is laid out), Pages is All Pages or a range, which the printer applies (`page-ranges`), and the paper of the
+  document's first page is chosen where the printer has it (6-13). The document is kept in an unlinked private file on disk
+  (the user's cache folder), within one 2 GiB budget for every document waiting (6-11, 6-21), and its pages are drawn by a
+  confined child of grassfield-portal (Qt PDF; Landlock: reading under /usr only; a measured seccomp allow-list: no socket,
+  program, process, lock, ioctl, nor any act on another process; setsid, the locale's variables only, 512 MiB, one child at a
+  time, one thread when it confines itself; an unlisted call answers ENOSYS; raw pixels read back; no preview when the
+  confinement cannot be installed) (6-10, 6-20, 6-25 to 6-27). The sheet may print as soon as the document is kept, its preview
+  coming apart, and the document's own paper chosen with the first printer's options, or suggested when its size comes after
+  them (6-13, 6-28). Print sends the job at once from that file and the sheet goes (6-15); a document that is not a PDF goes to
+  x-d-p-gtk as it came, or fails when it came on a pipe, as does one whose sheet does not show in time once part of a pipe was
+  read (6-12, 6-24); one the full budget refuses goes to x-d-p-gtk as it came when it is a file (6-28).
+- PR3 done with macOS's "PDF" pull-down (6-16): Save as PDF… (6-3's Save panel and writer) and Open in Preview: a private copy
+  in `$XDG_CACHE_HOME/grassfield/preview` (a name within 255 bytes; the copies older than a day, or beyond 16, removed), written
+  as Save as PDF writes, opened in Preview started as the Dock starts an application (`systemd-run --expand-environment=no`)
+  (6-17, 6-22). In both flows.
+- PR1 done with the Presets (6-18): Default Settings and Last Used Settings (one for every printer, kept in grassfield-portal's
+  state when Print sends a job: two sides, colour, collation and the printer's own options, never the copies, pages, paper,
+  orientation or scale), the sheet opening on Last Used Settings when there are some; and with a printer's own options (6-19):
+  Feed From, Media Type and Quality in "Media & Quality", Output Bin and Finishing in "Printer Options", disclosure sections
+  closed at first, only what the printer reports with two values or more, its defaults first (the user's lpoptions, else the
+  queue's), each value sent as CUPS takes it, only one the printer listed and only when the queue would not apply it by itself
+  (the user's lpoptions value goes; 6-23); the standard finishings named in the UI language.
+- A-PR1 extended: `tst_printlogic.cpp` (options, page ranges, Open in Preview, presets and their JSON, file names within 255
+  bytes), `tst_print.cpp` (the confinement against the security review's probes, the child's environment and session, the
+  private file and its budget, the pages drawn by the child, a document sent first through the D-Bus interface, one that is not
+  a PDF, one on a pipe never sent on truncated, Open in Preview and its copies' bounds, Last Used Settings, a printer's
+  options), `print_cups.sh` (the scratch scheduler reports the queue's
+  own options with their names and defaults, and keeps them on the job), `tst_printsheet.qml` (the Presets, the sections, the
+  PDF pull-down, the preview and its pages). A-PR2 without the nested session: `portal_filechooser.sh` scenario 9b (Print with
+  no token through the real frontend: the sheet, the backend's child counting the pages, the job in the scratch scheduler with
+  the document as sent). Evince or a libportal application in a nested session, and A-PR3, are the integrator's.
+
 ### Known limitations
 Only portal clients get it (Chromium's and Firefox's own previews, LibreOffice, Electron and Qt apps keep their dialogs); no
 preview when the app asks for settings before it renders (the portal sends the document later); printer setup stays in
-Settings. Step 6a: a Print with no sheet before it gets x-d-p-gtk's dialog; no Presets; a printer's options beyond paper, two
-sides and colour (trays, quality, finishing) are its defaults. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
+Settings. Step 6b: no named presets (Save Current Settings as Preset…), no Layout (pages per sheet) or Paper Handling (page
+order, odd or even pages) sections, and a PPD's vendor options with no IPP name are not shown (the printer's defaults apply);
+a document sent first that is not a PDF gets x-d-p-gtk's dialog; the preview needs Landlock (a kernel from 5.13 with Landlock
+enabled, as Arch's is) and x86_64 or aarch64 (the allow-list is measured on x86_64 only), else it says "No Preview" and the
+document still prints; the child can still learn a path's metadata (whether a file exists, its size, times and mode; never its
+contents: Landlock does not cover stat); Open in Preview's copies stay in the user's cache folder for up to a day (16 at most), where an
+application allowed to read that folder can read them; a finishing that is neither standard nor named by CUPS is shown as its
+keyword in English words. When the sheet cannot show and PreparePrint goes to x-d-p-gtk,
 a GTK 3 application asking for n copies gets n × n (GTK renders the n copies its answer names and x-d-p-gtk's job asks for n
 again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes to the folder the Save panel's answer named as
 it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that

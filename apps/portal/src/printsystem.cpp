@@ -91,36 +91,69 @@ Media mediaOf(http_t *http, cups_dest_t *dest, cups_dinfo_t *info, cups_size_t &
     return m;
 }
 
-// Reads what `fd` has next into `into` (at most `size` bytes): the count, 0 at its end, -1 (and `error` set) when it is silent
-// for idleMs, fails, or `stopped` says so (asked every 200 ms at most while it waits, so a shutdown never waits on a silent
-// source).
-ssize_t readSome(int fd, char *into, size_t size, int idleMs, const std::function<bool()> &stopped, QString *error)
+// A value of an IPP attribute as CUPS takes it back in an option: a keyword as it is, an enum as its number.
+QString optionValue(ipp_attribute_t *attribute, int index)
 {
-    QDeadlineTimer silence(idleMs);
-    for (;;) {
-        if (stopped && stopped()) {
-            *error = QStringLiteral("cancelled");
-            return -1;
-        }
-        pollfd p{fd, POLLIN, 0};
-        const int ready = ::poll(&p, 1, int(std::min<qint64>(200, std::max<qint64>(0, silence.remainingTime()))));
-        if (ready < 0 && errno == EINTR)
+    const ipp_tag_t tag = ippGetValueTag(attribute);
+    if (tag == IPP_TAG_ENUM || tag == IPP_TAG_INTEGER)
+        return QString::number(ippGetInteger(attribute, index));
+    if (tag == IPP_TAG_KEYWORD)
+        return fromUtf8(ippGetString(attribute, index, nullptr));
+    return {};
+}
+
+// The printer's own options the sheet shows (print::printerOptionNames), each with two values or more (step 6b): the values it
+// lists, as CUPS names them (CUPS localizes a queue's own names; an enum CUPS does not name gets its keyword in words), the one
+// shown first (the user's own, lpoptions, else the queue's, else the first), and the queue's own default apart (<name>-default,
+// or for the paper's source and type media-col-default's): only a value that differs from it goes with a job (the
+// counter-review of step 6b, MINOR 1: the user's lpoptions value must go, libcups does not add it).
+QList<print::PrinterOption> printerOptions(http_t *http, cups_dest_t *dest, cups_dinfo_t *info, const int &cancel)
+{
+    QList<print::PrinterOption> out;
+    for (const QString &name : print::printerOptionNames()) {
+        if (cancel)
+            break;
+        const QByteArray n = name.toLatin1();
+        ipp_attribute_t *supported = cupsFindDestSupported(http, dest, info, n.constData());
+        if (!supported)
             continue;
-        if (ready == 0 && !silence.hasExpired())
-            continue;
-        if (ready <= 0) {
-            *error = QStringLiteral("the document stopped coming");
-            return -1;
+        const ipp_tag_t tag = ippGetValueTag(supported);
+        print::PrinterOption option;
+        option.name = name;
+        for (int i = 0; i < ippGetCount(supported) && i < 64; ++i) {
+            const QString value = optionValue(supported, i);
+            if (!print::validOptionValue(value) || option.lists(value))
+                continue;
+            const QByteArray v = value.toUtf8();
+            const QString keyword = tag == IPP_TAG_ENUM ? fromUtf8(ippEnumString(n.constData(), ippGetInteger(supported, i))) : value;
+            QString label = fromUtf8(cupsLocalizeDestValue(http, dest, info, n.constData(), v.constData())).simplified();
+            if (label.isEmpty() || label == value)
+                label = print::keywordLabel(keyword);
+            option.values.append({value, label.left(100), print::validOptionValue(keyword) ? keyword : QString()});
         }
-        const ssize_t n = ::read(fd, into, size);
-        if (n < 0 && errno == EINTR)
+        if (option.values.size() < 2)
             continue;
-        if (n < 0) {
-            *error = QStringLiteral("cannot read the document");
-            return -1;
+        QString own = fromUtf8(cupsGetOption(n.constData(), dest->num_options, dest->options));
+        if (!option.lists(own))
+            own.clear();
+        QString queue;
+        if (ipp_attribute_t *given = cupsFindDestDefault(http, dest, info, n.constData()))
+            queue = optionValue(given, 0);
+        else if (name == QLatin1String("media-source") || name == QLatin1String("media-type")) {
+            ipp_attribute_t *media = cupsFindDestDefault(http, dest, info, "media-col");
+            ipp_t *collection = media && ippGetValueTag(media) == IPP_TAG_BEGIN_COLLECTION ? ippGetCollection(media, 0) : nullptr;
+            if (ipp_attribute_t *member = collection ? ippFindAttribute(collection, n.constData(), IPP_TAG_ZERO) : nullptr)
+                queue = optionValue(member, 0);
         }
-        return n;
+        if (!option.lists(queue))
+            queue.clear();
+        option.defaultValue = !own.isEmpty() ? own : !queue.isEmpty() ? queue : option.values.first().value;
+        // What the queue does with no value: its own default; with none reported, the first value when the user named none (the
+        // sheet shows it and it goes unsent), else nothing (the user's value goes).
+        option.queueDefault = !queue.isEmpty() ? queue : own.isEmpty() ? option.values.first().value : QString();
+        out.append(option);
     }
+    return out;
 }
 
 // The document's first bytes, until there are enough to tell its type (five) or it ends.
@@ -129,7 +162,7 @@ QByteArray readHead(int fd, int idleMs, const std::function<bool()> &stopped, QS
     QByteArray head;
     char buffer[65536];
     while (head.size() < 5) {
-        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, stopped, error);
+        const ssize_t n = readChunk(fd, buffer, sizeof buffer, idleMs, stopped, error);
         if (n <= 0)
             break;
         head.append(buffer, qsizetype(n));
@@ -200,6 +233,35 @@ int openFolder(const QString &path, QString *error)
 }
 
 } // namespace
+
+ssize_t readChunk(int fd, char *into, size_t size, int idleMs, const std::function<bool()> &stopped, QString *error)
+{
+    QDeadlineTimer silence(idleMs);
+    for (;;) {
+        if (stopped && stopped()) {
+            *error = QStringLiteral("cancelled");
+            return -1;
+        }
+        pollfd p{fd, POLLIN, 0};
+        const int ready = ::poll(&p, 1, int(std::min<qint64>(200, std::max<qint64>(0, silence.remainingTime()))));
+        if (ready < 0 && errno == EINTR)
+            continue;
+        if (ready == 0 && !silence.hasExpired())
+            continue;
+        if (ready <= 0) {
+            *error = QStringLiteral("the document stopped coming");
+            return -1;
+        }
+        const ssize_t n = ::read(fd, into, size);
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n < 0) {
+            *error = QStringLiteral("cannot read the document");
+            return -1;
+        }
+        return n;
+    }
+}
 
 CupsPrintSystem::CupsPrintSystem(QObject *parent)
     : CupsPrintSystem(Limits{}, parent)
@@ -354,6 +416,7 @@ void CupsPrintSystem::capabilities(const QString &printer, QObject *context, Cap
                 } else {
                     caps.maxCopies = 1;
                 }
+                caps.options = printerOptions(http, dest, info, call.cancel);
                 caps.known = !call.cancel;
                 call.capabilities = caps;
                 cupsFreeDestInfo(info);
@@ -431,7 +494,7 @@ void CupsPrintSystem::submit(const QString &printer, const QString &title, const
                 if (cupsWriteRequestData(http, head.constData(), size_t(head.size())) != HTTP_STATUS_CONTINUE)
                     call.error = QStringLiteral("the printer stopped taking the document");
                 while (call.error.isEmpty()) {
-                    const ssize_t n = readSome(fd, buffer, sizeof buffer, limits.idleMs, stopped, &call.error);
+                    const ssize_t n = readChunk(fd, buffer, sizeof buffer, limits.idleMs, stopped, &call.error);
                     if (n < 0)
                         break;
                     if (n == 0) {
@@ -519,7 +582,7 @@ QString writePdf(int fd, const QString &folder, const QString &name, int idleMs,
         error = QStringLiteral("cannot write “%1”: %2").arg(target, errnoText(errno));
     char buffer[65536];
     while (error.isEmpty()) {
-        const ssize_t n = readSome(fd, buffer, sizeof buffer, idleMs, stopped, &error);
+        const ssize_t n = readChunk(fd, buffer, sizeof buffer, idleMs, stopped, &error);
         if (n <= 0)
             break;
         total += n;

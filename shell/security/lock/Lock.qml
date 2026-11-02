@@ -57,12 +57,13 @@ import "../../lib/RunMode.js" as RunMode
 Singleton {
     id: root
 
-    // "unlocked" | "locking" | "locked" | "authenticating"
+    // "unlocked" | "locking" | "locked" | "authenticating" | "releasing" (ADR-0040 step 4b: the fade after a PAM success, still
+    // locked)
     readonly property string lockState: controller.lockState
     readonly property bool locked: controller.locked
     // This shell holds a lock the compositor confirmed (its `locked` event: every output shows a
     // lock surface). On Hyprland the lock may since have been taken over: see `secure`.
-    readonly property bool holding: (controller.lockState === Machine.LOCKED || controller.lockState === Machine.AUTHENTICATING) && sessionLock.secure
+    readonly property bool holding: Machine.isHolding(controller.lockState) && sessionLock.secure
     // Holding, and Hyprland reported the session locked since the last verify() (or the lock was
     // just acquired). SleepInhibitor releases the sleep delay only on this.
     readonly property bool secure: holding && verified
@@ -87,6 +88,78 @@ Singleton {
     // the initials show; nothing here can unlock or keep the lock from engaging.
     readonly property string facePath: Quickshell.env("HOME") ? Quickshell.env("HOME") + "/.face" : ""
     readonly property string avatarSource: Machine.avatarSource(facePath, Machine.accountsIconPath(loginName), path => ThemeIcons.fileSource(path), path => ThemeIcons.fileState(path))
+
+    // ---- ready before it is needed (ADR-0040 step 4a, ID-7; display only) ----
+    // LockStills.qml, created at run time at the end of Component.onCompleted (never a declared child: if it cannot be
+    // loaded, the lock is unaffected and the surfaces show the artwork and the initials): one backdrop per output and the
+    // account picture, decoded while the session is unlocked (Qt's pixmap cache; LockView asks for the same urls with the
+    // same options and gets them at once). A surface takes them once. Nothing here can unlock or keep the lock from engaging.
+    property var stills: null
+    // The lock follows the idle dim (ADR-0040 ID-8, set by Idle around its lock request): the surfaces' content starts at the
+    // dim's level. Display only; nothing on the lock path reads it.
+    property bool fromDim: false
+    readonly property string avatarReady: root.stills ? root.stills.avatarReady : ""
+    readonly property int backdrops: root.stills ? root.stills.revision : 0
+    function backdropOf(output: string): var {
+        return root.stills ? root.stills.backdropOf(output) : null;
+    }
+    // The moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f): its clouds move on
+    // the lock only, from where the desktop's still picture left them, and the desktop takes where they came to rest. Display
+    // data through the stills like the backdrops (without them: off, from 0, nothing given back); a surface takes the first
+    // two once (LockView).
+    readonly property bool moving: root.stills ? root.stills.moving : false
+    // Set by Idle (its displayOff): the displays are off, the clouds hold where they are (LockView.motionHeld, which also holds
+    // them once the session is unlocked, should a surface outlive the unlock). Display only; nothing on the lock path reads it.
+    property bool displaysOff: false
+    function motionOf(output: string): real {
+        return root.stills ? root.stills.motionOf(output) : 0;
+    }
+    function restMotion(output: string, at: real): void {
+        try {
+            if (root.stills && output !== "" && at >= 0)
+                root.stills.restMotion(output, at);
+        } catch (e) {
+            console.warn("grassfield-lock: the desktop's clouds were not updated (" + e + ")");
+        }
+    }
+    function prepareStills(): void {
+        try {
+            const c = Qt.createComponent(Qt.resolvedUrl("LockStills.qml"));
+            // Still loading (a URL served asynchronously): finish when it is ready (counter-review of 830ed088, NIT 2).
+            if (c.status === Component.Loading) {
+                c.statusChanged.connect(() => {
+                    if (c.status !== Component.Loading)
+                        root.finishStills(c);
+                });
+                return;
+            }
+            root.finishStills(c);
+        } catch (e) {
+            console.warn("grassfield-lock: the lock's display data failed (" + e + "); the lock shows the artwork and the initials");
+        }
+    }
+    function finishStills(c: var): void {
+        try {
+            if (c.status !== Component.Ready) {
+                console.warn("grassfield-lock: the lock's display data cannot be prepared (" + c.errorString() + "); the lock shows the artwork and the initials");
+                return;
+            }
+            const o = c.createObject(root);
+            if (o === null) {
+                console.warn("grassfield-lock: the lock's display data cannot be created; the lock shows the artwork and the initials");
+                return;
+            }
+            o.avatarSource = Qt.binding(() => root.avatarSource);
+            root.stills = o;
+        } catch (e) {
+            console.warn("grassfield-lock: the lock's display data failed (" + e + "); the lock shows the artwork and the initials");
+        }
+    }
+    // Counts the resumes from sleep (SleepInhibitor.afterResume): each lock surface refreshes its clock (ID-7, T-14).
+    property int resumes: 0
+    function resumed(): void {
+        root.resumes += 1;
+    }
 
     readonly property string markerPath: {
         const dir = Quickshell.env("XDG_RUNTIME_DIR");
@@ -143,13 +216,22 @@ Singleton {
         return Machine.isHolding(controller.currentState()) && sessionLock.secure && verified;
     }
 
-    // Engage the lock. reason: "ipc" | "menu" | "idle" | "sleep" | "lid" | "restore". Returns "ok",
+    // Engage the lock. reason: "ipc" | "menu" | "idle" | "display-off" | "sleep" | "lid" | "restore". Returns "ok",
     // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
     // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock once
     // a fresh answer confirms it (checkOwnership), never here on an earlier answer alone: relock()
     // releases the lock object first, and releasing the lock the compositor still uses unlocks the
     // session until the new lock arrives (R12 review #3: keys reached a window in forced runs).
     function lock(reason: string): string {
+        // A lock request during the release fade (ADR-0040 step 4b) brings the lock back: the PAM success is spent. A check
+        // still in flight is spent too (opus review of f66cf08e, MINOR 1: a password submitted just before the lid closes
+        // must not unlock after the sleep request): PAM is aborted, back to locked, no shake.
+        if (controller.interruptRelease())
+            console.info("grassfield-lock: lock requested (" + reason + ") during the release fade: the lock stays; a new password is needed");
+        if (controller.authenticating) {
+            console.info("grassfield-lock: lock requested (" + reason + ") during a password check: the check is abandoned; a new password is needed");
+            controller.abort();
+        }
         if (currentlyLocked()) {
             console.info("grassfield-lock: lock requested (" + reason + ") while " + controller.lockState + "; verifying the session lock");
             engage();
@@ -419,6 +501,8 @@ Singleton {
     LockController {
         id: controller
         pam: passwordPam
+        // ADR-0040 step 4b (IQ-T2 A): the content fades out before the release; Reduce Motion caps it.
+        releaseMs: Appearance.duration(Tokens.lockFadeOutMs)
         onUnlockRequested: root.release()
         onLockStateChanged: {
             // Carried over a soft reload; cleared only by release() (PAM success).
@@ -482,7 +566,19 @@ Singleton {
         WlSessionLockSurface {
             id: surface
 
+            // The ground under the scrim (ADR-0040 ID-2, ID-15): what shows before the content and until the backdrop is
+            // decided, on a hotplugged output too. Taken once, from the surface's own screen as soon as it is known (it may be
+            // set after the surface is created: counter-review of 830ed088, NIT 1); the shadow colour until then.
             color: Tokens.colorDark.shadow
+            property bool groundTaken: false
+            function takeGround(): void {
+                if (surface.groundTaken || !surface.screen)
+                    return;
+                surface.groundTaken = true;
+                surface.color = Ground.of(surface.screen.name);
+            }
+            onScreenChanged: surface.takeGround()
+            Component.onCompleted: surface.takeGround()
 
             // Keyboard focus left this lock surface: on Hyprland that also happens when another
             // client takes the session lock over or the session is unlocked under it. Ask now
@@ -514,11 +610,19 @@ Singleton {
                 id: view
                 anchors.fill: parent
                 userName: root.userName
-                avatarSource: root.avatarSource
+                avatarSource: root.avatarReady
+                offeredBackdrop: root.backdrops >= 0 ? root.backdropOf(surface.screen ? surface.screen.name : "") : null
+                moving: root.moving
+                motionHeld: root.displaysOff || !controller.locked
+                motionStart: root.motionOf(surface.screen ? surface.screen.name : "")
+                onMotionRestChanged: root.restMotion(surface.screen ? surface.screen.name : "", view.motionRest)
+                resumes: root.resumes
                 showUser: Settings.lockShowUser
                 lockMessage: Settings.lockShowMessage ? Settings.lockMessage : ""
                 authenticating: controller.authenticating
-                inputEnabled: controller.pamAvailable
+                releasing: controller.releasing
+                startDim: root.fromDim ? Tokens.idleDimOpacity : 0
+                inputEnabled: controller.pamAvailable && !controller.releasing
                 message: controller.pamAvailable ? controller.message : qsTr("Authentication service unavailable. The session stays locked.")
                 // In dev, a visible hint that password checks are off (PAM suppressed), so a GRASSFIELD_DEV value that
                 // leaked into a real session is obvious; the lock still fails closed.
@@ -742,6 +846,8 @@ Singleton {
             strandedUndecided = true;
             strandedProbe.start();
         }
+        // Last, after everything the lock itself needs (ADR-0040 step 4a): the display data.
+        prepareStills();
     }
 
     // Dev hooks (dev session only, "refused" otherwise; tests/security/dev_gate checks both ways). Functions of

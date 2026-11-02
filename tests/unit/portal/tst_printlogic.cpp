@@ -1,9 +1,11 @@
-// ADR-0035 D-7, step 6a; docs/specs/system-dialogs.md section 7 (A-PR1): GTK's print settings and page setup in, the sheet's
-// first state, GTK's keys out (both directions, with the names and D-Bus types GTK reads), and the CUPS options of the job.
+// ADR-0035 D-7, steps 6a and 6b; docs/specs/system-dialogs.md section 7 (A-PR1): GTK's print settings and page setup in, the
+// sheet's first state, GTK's keys out (both directions, with the names and D-Bus types GTK reads), and the CUPS options of the job;
+// step 6b: a printer's own options, a document's page ranges, Open in Preview and the Presets.
 #include <gtest/gtest.h>
 
 #include "printlogic.h"
 
+#include <QJsonDocument>
 #include <QUrl>
 
 using namespace grassfield::portal::print;
@@ -43,6 +45,20 @@ Capabilities monoSimplex()
     c.known = true;
     c.media = {kA4};
     c.defaultMedia = kA4.name;
+    return c;
+}
+
+// A printer with options of its own: two in Media & Quality, one in Printer Options.
+Capabilities withOptions()
+{
+    Capabilities c = office();
+    c.options = {{QStringLiteral("media-source"), {{QStringLiteral("auto"), QStringLiteral("Automatic"), QStringLiteral("auto")}, {QStringLiteral("tray-1"), QStringLiteral("Tray 1"), QStringLiteral("tray-1")}},
+                  QStringLiteral("auto"), QStringLiteral("auto")},
+                 {QStringLiteral("print-quality"),
+                  {{QStringLiteral("3"), QStringLiteral("Draft"), QStringLiteral("3")}, {QStringLiteral("4"), QStringLiteral("Normal"), QStringLiteral("4")}, {QStringLiteral("5"), QStringLiteral("High"), QStringLiteral("5")}},
+                  QStringLiteral("4"), QStringLiteral("4")},
+                 {QStringLiteral("finishings"), {{QStringLiteral("3"), QStringLiteral("None"), QStringLiteral("3")}, {QStringLiteral("20"), QStringLiteral("Staple Top Left"), QStringLiteral("20")}},
+                  QStringLiteral("3"), QStringLiteral("3")}};
     return c;
 }
 
@@ -376,4 +392,198 @@ TEST(PrintLogic, TheFrontendsOptions)
     for (const QVariant &notBool : {QVariant(QStringLiteral("false")), QVariant(0), QVariant(0u)})
         EXPECT_TRUE(prepareOptions({{QStringLiteral("modal"), notBool}}).value(QStringLiteral("modal")).toBool())
             << "a modal that is not a boolean is the default: " << notBool.typeName();
+}
+
+// Step 6b: a printer's own options start at its defaults, go to CUPS as it listed them and only with a value it listed (an
+// option of another printer, a value it does not list or one CUPS would read as several values never goes); none for a file.
+TEST(PrintLogic, APrintersOwnOptionsGoOnlyAsItListsThem)
+{
+    const Capabilities caps = withOptions();
+    Choices c = initialChoices(QStringLiteral("Office"), caps, {}, {}, false, false);
+    EXPECT_EQ(c.options, (QMap<QString, QString>{{QStringLiteral("media-source"), QStringLiteral("auto")},
+                                                 {QStringLiteral("print-quality"), QStringLiteral("4")},
+                                                 {QStringLiteral("finishings"), QStringLiteral("3")}}));
+    EXPECT_TRUE(initialChoices(QStringLiteral("Office"), office(), {}, {}, false, false).options.isEmpty()) << "none reported, none chosen";
+    c.options.insert(QStringLiteral("print-quality"), QStringLiteral("5"));
+    c.options.insert(QStringLiteral("media-source"), QStringLiteral("tray-9"));
+    c.options.insert(QStringLiteral("output-bin"), QStringLiteral("lower"));
+    const auto options = cupsOptions(c, caps);
+    EXPECT_TRUE(options.contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    for (const auto &o : options) {
+        EXPECT_NE(o.first, QStringLiteral("media-source")) << "a value the printer does not list";
+        EXPECT_NE(o.first, QStringLiteral("output-bin")) << "an option the printer does not report";
+        EXPECT_NE(o.first, QStringLiteral("finishings")) << "the printer's default is not sent (the review's MINOR 5)";
+    }
+    // At its defaults, nothing of the printer's own goes (a tray of media-col-default would otherwise be forced).
+    const Choices defaults = initialChoices(QStringLiteral("Office"), caps, {}, {}, false, false);
+    for (const auto &o : cupsOptions(defaults, caps))
+        EXPECT_TRUE(optionSection(o.first).isEmpty()) << o.first.toStdString();
+    // The user's own default (lpoptions) differs from the queue's: shown first, and sent, since libcups does not add lpoptions
+    // to a job (the counter-review of step 6b, MINOR 1); also when the queue reports no default of its own.
+    Capabilities mine = caps;
+    mine.options[1].defaultValue = QStringLiteral("5");
+    const Choices lpoptions = initialChoices(QStringLiteral("Office"), mine, {}, {}, false, false);
+    EXPECT_EQ(lpoptions.options.value(QStringLiteral("print-quality")), QStringLiteral("5"));
+    EXPECT_TRUE(cupsOptions(lpoptions, mine).contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    mine.options[1].queueDefault.clear();
+    EXPECT_TRUE(cupsOptions(lpoptions, mine).contains({QStringLiteral("print-quality"), QStringLiteral("5")}));
+    // The user choosing the queue's own default over the lpoptions one: nothing to send, the queue applies it by itself.
+    Choices queueOwn = lpoptions;
+    queueOwn.options.insert(QStringLiteral("print-quality"), QStringLiteral("4"));
+    mine.options[1].queueDefault = QStringLiteral("4");
+    for (const auto &o : cupsOptions(queueOwn, mine))
+        EXPECT_NE(o.first, QStringLiteral("print-quality")) << "what the queue does by itself";
+    // A value listed that CUPS would read as more than one, or as a collection: never sent.
+    Capabilities odd = caps;
+    odd.options[1].values.append({QStringLiteral("5,6"), QStringLiteral("x"), QString()});
+    c.options.insert(QStringLiteral("print-quality"), QStringLiteral("5,6"));
+    for (const auto &o : cupsOptions(c, odd))
+        EXPECT_NE(o.first, QStringLiteral("print-quality"));
+    for (const char *good : {"auto", "tray-1", "5", "na_letter.x"})
+        EXPECT_TRUE(validOptionValue(QString::fromLatin1(good))) << good;
+    for (const char *bad : {"", "Tray1", "a,b", "a b", "{x}", "\"a\"", "-x", "a=b", "tray\n"})
+        EXPECT_FALSE(validOptionValue(QString::fromLatin1(bad))) << bad;
+    EXPECT_FALSE(validOptionValue(QString(64, QLatin1Char('a'))));
+    // Wanted where listed, else the default; an option the printer does not report is not kept.
+    EXPECT_EQ(optionChoices(caps, {{QStringLiteral("print-quality"), QStringLiteral("3")}, {QStringLiteral("media-source"), QStringLiteral("nope")},
+                                   {QStringLiteral("output-bin"), QStringLiteral("lower")}}),
+              (QMap<QString, QString>{{QStringLiteral("media-source"), QStringLiteral("auto")}, {QStringLiteral("print-quality"), QStringLiteral("3")},
+                                      {QStringLiteral("finishings"), QStringLiteral("3")}}));
+    EXPECT_EQ(optionSection(QStringLiteral("media-type")), QStringLiteral("quality"));
+    EXPECT_EQ(optionSection(QStringLiteral("output-bin")), QStringLiteral("printer"));
+    EXPECT_EQ(optionSection(QStringLiteral("job-hold-until")), QString()) << "not one the sheet shows";
+    EXPECT_EQ(keywordLabel(QStringLiteral("staple-top-left")), QStringLiteral("Staple Top Left"));
+    EXPECT_EQ(keywordLabel(QStringLiteral("face_down")), QStringLiteral("Face Down"));
+    // Save as PDF and Open in Preview: nothing for a printer.
+    Choices file = c;
+    file.preview = true;
+    EXPECT_TRUE(cupsOptions(file, caps).isEmpty());
+    // The sheet's map: unknown options and values that do not read are dropped on the way back.
+    const Choices back = fromQml({{QStringLiteral("options"), QVariantMap{{QStringLiteral("print-quality"), QStringLiteral("5")},
+                                                                         {QStringLiteral("job-hold-until"), QStringLiteral("indefinite")},
+                                                                         {QStringLiteral("media-type"), QStringLiteral("a,b")},
+                                                                         {QStringLiteral("finishings"), 4}}}},
+                                 Choices{});
+    EXPECT_EQ(back.options, (QMap<QString, QString>{{QStringLiteral("print-quality"), QStringLiteral("5")}}));
+    const QVariantList shown = toQml(caps).value(QStringLiteral("options")).toList();
+    ASSERT_EQ(shown.size(), 3);
+    EXPECT_EQ(shown.at(1).toMap().value(QStringLiteral("section")).toString(), QStringLiteral("quality"));
+    EXPECT_EQ(shown.at(2).toMap().value(QStringLiteral("section")).toString(), QStringLiteral("printer"));
+    EXPECT_EQ(shown.at(1).toMap().value(QStringLiteral("values")).toList().at(2).toMap().value(QStringLiteral("value")).toString(), QStringLiteral("5"));
+}
+
+// Step 6b: a document the application sent first is made already: the printer applies its page ranges (1-based, each a range),
+// never for a file; the rest as for GTK's.
+TEST(PrintLogic, ADocumentSentFirstHasItsPagesPrintedByThePrinter)
+{
+    Choices c = initialChoices(QStringLiteral("Office"), office(), {}, {}, false, false);
+    c.pages = QStringLiteral("ranges");
+    c.ranges = QStringLiteral("5, 1-3");
+    const auto options = documentOptions(c, office());
+    EXPECT_TRUE(options.contains({QStringLiteral("page-ranges"), QStringLiteral("1-3,5-5")}));
+    EXPECT_FALSE(cupsOptions(c, office()).contains({QStringLiteral("page-ranges"), QStringLiteral("1-3,5-5")})) << "GTK applies them itself";
+    c.pages = QStringLiteral("all");
+    for (const auto &o : documentOptions(c, office()))
+        EXPECT_NE(o.first, QStringLiteral("page-ranges"));
+    c.pages = QStringLiteral("ranges");
+    c.ranges = QStringLiteral("3-1");
+    for (const auto &o : documentOptions(c, office()))
+        EXPECT_NE(o.first, QStringLiteral("page-ranges")) << "ranges that do not read";
+    c.ranges = QStringLiteral("2");
+    c.outputUri = QStringLiteral("file:///tmp/a.pdf");
+    EXPECT_TRUE(documentOptions(c, office()).isEmpty());
+}
+
+// Open in Preview asks GTK for a PDF file as Save as PDF does (never a path of the user's), and sends nothing to a printer.
+TEST(PrintLogic, OpenInPreviewAsksForAPdf)
+{
+    Choices c = initialChoices(QStringLiteral("Office"), office(), {}, {}, false, false);
+    c.printer.clear();
+    c.preview = true;
+    QVariantMap settings, pageSetup;
+    ASSERT_TRUE(toGtk(c, &settings, &pageSetup));
+    EXPECT_EQ(settings.value(QStringLiteral("output-uri")).toString(), QString::fromLatin1(kPdfOutputUri));
+    EXPECT_EQ(settings.value(QStringLiteral("output-file-format")).toString(), QStringLiteral("pdf"));
+    EXPECT_FALSE(settings.contains(QStringLiteral("printer")));
+    EXPECT_TRUE(fromQml({{QStringLiteral("preview"), true}}, Choices{}).preview);
+    EXPECT_EQ(toQml(c).value(QStringLiteral("preview")).toBool(), true);
+}
+
+// Last Used Settings keep how a print was printed (two sides, colour, collation, the printer's options), never the document's
+// (copies, pages, paper, orientation, scale); applied where the printer takes them; kept as JSON and read back, anything malformed
+// refused.
+TEST(PrintLogic, LastUsedSettingsKeepHowNotWhat)
+{
+    Choices printed = initialChoices(QStringLiteral("Office"), withOptions(), {}, {}, false, false);
+    printed.copies = 7;
+    printed.duplex = QStringLiteral("vertical");
+    printed.color = false;
+    printed.collate = false;
+    printed.scale = 50;
+    printed.options.insert(QStringLiteral("print-quality"), QStringLiteral("5"));
+    const Preset last = presetOf(printed);
+    EXPECT_EQ(last.duplex, QStringLiteral("vertical"));
+    EXPECT_FALSE(last.color);
+    EXPECT_FALSE(last.collate);
+    EXPECT_EQ(last.options.value(QStringLiteral("print-quality")), QStringLiteral("5"));
+
+    const Choices fresh = initialChoices(QStringLiteral("Office"), withOptions(), {}, {}, false, false);
+    const Choices applied = withPreset(fresh, last, withOptions());
+    EXPECT_EQ(applied.duplex, QStringLiteral("vertical"));
+    EXPECT_FALSE(applied.color);
+    EXPECT_FALSE(applied.collate);
+    EXPECT_EQ(applied.options.value(QStringLiteral("print-quality")), QStringLiteral("5"));
+    EXPECT_EQ(applied.copies, 1) << "the copies are the document's";
+    EXPECT_EQ(applied.scale, 100);
+    EXPECT_EQ(applied.media, fresh.media);
+    // A printer with neither two sides, colour nor options takes none of them.
+    const Choices mono = withPreset(initialChoices(QStringLiteral("Mono"), monoSimplex(), {}, {}, false, false), last, monoSimplex());
+    EXPECT_EQ(mono.duplex, QStringLiteral("simplex"));
+    EXPECT_FALSE(mono.color);
+    EXPECT_TRUE(mono.options.isEmpty());
+    // An option value this printer does not list stays at its default.
+    Preset other = last;
+    other.options.insert(QStringLiteral("media-source"), QStringLiteral("tray-9"));
+    EXPECT_EQ(withPreset(fresh, other, withOptions()).options.value(QStringLiteral("media-source")), QStringLiteral("auto"));
+
+    const QJsonObject json = toJson(last);
+    const auto read = presetFromJson(QJsonDocument::fromJson(QJsonDocument(json).toJson()).object());
+    ASSERT_TRUE(read.has_value());
+    EXPECT_EQ(*read, last);
+    EXPECT_FALSE(json.contains(QStringLiteral("copies")));
+    EXPECT_FALSE(presetFromJson({}).has_value());
+    EXPECT_FALSE(presetFromJson({{QStringLiteral("collate"), true}, {QStringLiteral("color"), true}, {QStringLiteral("duplex"), QStringLiteral("sideways")}})
+                     .has_value());
+    EXPECT_FALSE(presetFromJson({{QStringLiteral("collate"), QStringLiteral("yes")}, {QStringLiteral("color"), true},
+                                 {QStringLiteral("duplex"), QStringLiteral("simplex")}})
+                     .has_value());
+    const auto cleaned = presetFromJson({{QStringLiteral("collate"), true}, {QStringLiteral("color"), true}, {QStringLiteral("duplex"), QStringLiteral("simplex")},
+                                         {QStringLiteral("options"), QJsonObject{{QStringLiteral("print-quality"), QStringLiteral("a,b")},
+                                                                                {QStringLiteral("job-hold-until"), QStringLiteral("x")},
+                                                                                {QStringLiteral("media-type"), QStringLiteral("photo")}}}});
+    ASSERT_TRUE(cleaned.has_value());
+    EXPECT_EQ(cleaned->options, (QMap<QString, QString>{{QStringLiteral("media-type"), QStringLiteral("photo")}}));
+    // The preset named goes to the sheet and back.
+    Choices named = fresh;
+    named.preset = QStringLiteral("last");
+    EXPECT_EQ(fromQml(toQml(named), Choices{}).preset, QStringLiteral("last"));
+    EXPECT_EQ(fromQml({{QStringLiteral("preset"), QStringLiteral("mine")}}, named).preset, QStringLiteral("last"));
+}
+
+// The name a document is saved or opened under (the review's MINOR 4): a plain name, ".pdf" once, within a file name's 255 bytes
+// in UTF-8, cut on a character's boundary.
+TEST(PrintLogic, ADocumentsFileNameFitsAFileSystem)
+{
+    EXPECT_EQ(pdfFileName({QStringLiteral("Quarterly Report")}), QStringLiteral("Quarterly Report.pdf"));
+    EXPECT_EQ(pdfFileName({QStringLiteral("Report.PDF")}), QStringLiteral("Report.pdf"));
+    EXPECT_EQ(pdfFileName({QStringLiteral("a/b"), QStringLiteral(".."), QStringLiteral("Second")}), QStringLiteral("Second.pdf"));
+    EXPECT_EQ(pdfFileName({QString(), QStringLiteral("  ")}), QStringLiteral("Document.pdf"));
+    EXPECT_EQ(pdfFileName({QStringLiteral("line\nbreak")}), QStringLiteral("line break.pdf"));
+    const QString japanese = pdfFileName({QString(150, QChar(0x65E5))}); // 日: 3 bytes each
+    EXPECT_LE(japanese.toUtf8().size(), 255);
+    EXPECT_TRUE(japanese.endsWith(QStringLiteral(".pdf")));
+    EXPECT_EQ(japanese, QString(83, QChar(0x65E5)) + QStringLiteral(".pdf")) << "249 bytes of whole characters, then .pdf";
+    const QString emoji = pdfFileName({QString::fromUtf8("\xf0\x9f\x93\x84").repeated(100)});
+    EXPECT_LE(emoji.toUtf8().size(), 255);
+    EXPECT_EQ(QString::fromUtf8(emoji.toUtf8()), emoji) << "no half character";
 }

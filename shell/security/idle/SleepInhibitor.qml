@@ -85,6 +85,8 @@ Scope {
         } else {
             console.info("grassfield-idle: system resumed");
         }
+        // The lock's clock (ADR-0040 ID-7, T-14: the time shown on waking is the time now).
+        Lock.resumed();
         sleeping = false;
         releaseTimer.stop();
         take();

@@ -1644,8 +1644,20 @@
         <translation>Auteur</translation>
     </message>
     <message>
+        <source>Credit</source>
+        <translation>Crédit</translation>
+    </message>
+    <message>
         <source>Source</source>
         <translation>Source</translation>
+    </message>
+    <message>
+        <source>Changes</source>
+        <translation>Modifications</translation>
+    </message>
+    <message>
+        <source>Resized and re-encoded by Grassfield, metadata removed</source>
+        <translation>Redimensionnée et réencodée par Grassfield, métadonnées supprimées</translation>
     </message>
     <message>
         <source>Wikimedia Commons</source>
@@ -6310,12 +6322,20 @@
         <translation>Aucune application n’est définie pour ouvrir le document «&#xa0;%1&#xa0;».</translation>
     </message>
     <message>
+        <source>Search Grassfield Store for an app that opens it, or choose an application on this computer.</source>
+        <translation>Recherchez dans Grassfield Store une app qui l’ouvre, ou choisissez une application de cet ordinateur.</translation>
+    </message>
+    <message>
         <source>Choose an application on this computer to open it.</source>
         <translation>Choisissez une application de cet ordinateur pour l’ouvrir.</translation>
     </message>
     <message>
         <source>Choose Application…</source>
         <translation>Choisir une application…</translation>
+    </message>
+    <message>
+        <source>Search the Store</source>
+        <translation>Rechercher dans le Store</translation>
     </message>
     <message>
         <source>Unnamed certificate</source>
@@ -6528,6 +6548,18 @@
         <translation>Après %1 minutes</translation>
     </message>
     <message>
+        <source>The session locks when a display turns off for inactivity, as set below; otherwise it does not lock by itself.</source>
+        <translation>La session se verrouille quand un écran s’éteint faute d’activité, selon le réglage ci-dessous ; sinon, elle ne se verrouille pas d’elle-même.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, or as soon as a display turns off.</source>
+        <translation>La session se verrouille après cette durée sans saisie au clavier ni au pointeur, ou dès qu’un écran s’éteint.</translation>
+    </message>
+    <message>
+        <source>The session locks after this much time without keyboard or pointer input, or once a display has been off for the time set below. Until then, any input turns it back on without the password.</source>
+        <translation>La session se verrouille après cette durée sans saisie au clavier ni au pointeur, ou quand un écran est éteint depuis la durée réglée ci-dessous. D’ici là, toute saisie le rallume sans le mot de passe.</translation>
+    </message>
+    <message>
         <source>The session does not lock by itself: a display that turned off comes back on with any input, without the password.</source>
         <translation>La session ne se verrouille pas d’elle-même&#xa0;: un écran éteint se rallume à la moindre saisie, sans le mot de passe.</translation>
     </message>
@@ -6540,6 +6572,22 @@
         <translation>La session se verrouille après ce délai sans saisie au clavier ni au pointeur, que les écrans soient allumés ou éteints.</translation>
     </message>
     <message>
+        <source>Immediately</source>
+        <translation>Immédiatement</translation>
+    </message>
+    <message>
+        <source>After 5 seconds</source>
+        <translation>Après 5 secondes</translation>
+    </message>
+    <message>
+        <source>After 5 minutes</source>
+        <translation>Après 5 minutes</translation>
+    </message>
+    <message>
+        <source>After 15 minutes</source>
+        <translation>Après 15 minutes</translation>
+    </message>
+    <message>
         <source>Turn display off on battery when inactive</source>
         <translation>Éteindre l’écran sur batterie en cas d’inactivité</translation>
     </message>
@@ -6550,6 +6598,10 @@
     <message>
         <source>Turn display off when inactive</source>
         <translation>Éteindre l’écran en cas d’inactivité</translation>
+    </message>
+    <message>
+        <source>Require password after the display turns off</source>
+        <translation>Exiger le mot de passe après l’extinction de l’écran</translation>
     </message>
     <message>
         <source>Require password after inactivity</source>
@@ -7069,6 +7121,10 @@
         <translation>Mises à jour</translation>
     </message>
     <message>
+        <source>Flatpak apps</source>
+        <translation>Apps Flatpak</translation>
+    </message>
+    <message>
         <source>“%1” could not be opened.</source>
         <translation>«&#xa0;%1&#xa0;» n’a pas pu être ouverte.</translation>
     </message>
@@ -7309,6 +7365,10 @@
     <message>
         <source>Window</source>
         <translation>Fenêtre</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
     </message>
     <message>
         <source>Now Playing: %1</source>
@@ -8068,6 +8128,22 @@
         <translation>AUR</translation>
     </message>
     <message>
+        <source>Update the Flatpak apps?</source>
+        <translation>Mettre à jour les apps Flatpak&#xa0;?</translation>
+    </message>
+    <message>
+        <source>The Flatpak apps can&apos;t be updated now</source>
+        <translation>Impossible de mettre à jour les apps Flatpak maintenant</translation>
+    </message>
+    <message>
+        <source>Update “%1”?</source>
+        <translation>Mettre à jour «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>“%1” can&apos;t be updated now</source>
+        <translation>Impossible de mettre à jour «&#xa0;%1&#xa0;» maintenant</translation>
+    </message>
+    <message>
         <source>Get Flatpak?</source>
         <translation>Obtenir Flatpak&#xa0;?</translation>
     </message>
@@ -8078,6 +8154,30 @@
     <message>
         <source>“%1” is in a repository</source>
         <translation>« %1 » est dans un dépôt</translation>
+    </message>
+    <message>
+        <source>There&apos;s nothing to update now.</source>
+        <translation>Il n’y a rien à mettre à jour maintenant.</translation>
+    </message>
+    <message>
+        <source>It&apos;s already waiting to be updated.</source>
+        <translation>Sa mise à jour est déjà en attente.</translation>
+    </message>
+    <message>
+        <source>After this update, “%1” can also reach: %2.</source>
+        <translation>Après cette mise à jour, «&#xa0;%1&#xa0;» peut aussi accéder à&#xa0;: %2.</translation>
+    </message>
+    <message>
+        <source>What this update lets %1 reach could not be read.</source>
+        <translation>Ce à quoi cette mise à jour permet à %1 d’accéder n’a pas pu être lu.</translation>
+    </message>
+    <message>
+        <source>They&apos;re updated in your own folder, for you alone, without administrator rights.</source>
+        <translation>Elles sont mises à jour dans votre propre dossier, pour vous seul, sans droits d’administrateur.</translation>
+    </message>
+    <message>
+        <source>It&apos;s updated in your own folder, for you alone, without administrator rights.</source>
+        <translation>Elle est mise à jour dans votre propre dossier, pour vous seul, sans droits d’administrateur.</translation>
     </message>
     <message>
         <source>Flatpak installs the apps of Flathub in your own folder, for you alone.</source>
@@ -8174,6 +8274,10 @@
     <message>
         <source>The Store could not read what this would change.</source>
         <translation>Le Store n’a pas pu lire ce que cela changerait.</translation>
+    </message>
+    <message>
+        <source>Update</source>
+        <translation>Mettre à jour</translation>
     </message>
     <message>
         <source>Uninstall</source>
@@ -8437,6 +8541,33 @@
     </message>
 </context>
 <context>
+    <name>PopupKinds</name>
+    <message>
+        <source>If you do nothing, you will be logged out automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, votre session sera fermée automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, you will be logged out automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, votre session sera fermée automatiquement dans %1 secondes.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will restart automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, l’ordinateur redémarrera automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will restart automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, l’ordinateur redémarrera automatiquement dans %1 secondes.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will shut down automatically in 1 second.</source>
+        <translation>Si vous ne faites rien, l’ordinateur s’éteindra automatiquement dans 1 seconde.</translation>
+    </message>
+    <message>
+        <source>If you do nothing, the computer will shut down automatically in %1 seconds.</source>
+        <translation>Si vous ne faites rien, l’ordinateur s’éteindra automatiquement dans %1 secondes.</translation>
+    </message>
+</context>
+<context>
     <name>Power</name>
     <message>
         <source>Sleep</source>
@@ -8600,8 +8731,124 @@
 <context>
     <name>PrintSheet</name>
     <message>
+        <source>Media &amp; Quality</source>
+        <translation>Support et qualité</translation>
+    </message>
+    <message>
+        <source>Printer Options</source>
+        <translation>Options de l’imprimante</translation>
+    </message>
+    <message>
         <source>Print</source>
         <translation>Imprimer</translation>
+    </message>
+    <message>
+        <source>Feed From:</source>
+        <translation>Alimentation&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Media Type:</source>
+        <translation>Type de support&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Quality:</source>
+        <translation>Qualité&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Output Bin:</source>
+        <translation>Bac de sortie&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Finishing:</source>
+        <translation>Finition&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Feed From</source>
+        <translation>Alimentation</translation>
+    </message>
+    <message>
+        <source>Media Type</source>
+        <translation>Type de support</translation>
+    </message>
+    <message>
+        <source>Quality</source>
+        <translation>Qualité</translation>
+    </message>
+    <message>
+        <source>Output Bin</source>
+        <translation>Bac de sortie</translation>
+    </message>
+    <message>
+        <source>Finishing</source>
+        <translation>Finition</translation>
+    </message>
+    <message>
+        <source>Draft</source>
+        <translation>Brouillon</translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation>Normale</translation>
+    </message>
+    <message>
+        <source>Best</source>
+        <translation>Optimale</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucune</translation>
+    </message>
+    <message>
+        <source>Staple</source>
+        <translation>Agrafe</translation>
+    </message>
+    <message>
+        <source>Punch</source>
+        <translation>Perforation</translation>
+    </message>
+    <message>
+        <source>Fold</source>
+        <translation>Pliage</translation>
+    </message>
+    <message>
+        <source>Bind</source>
+        <translation>Reliure</translation>
+    </message>
+    <message>
+        <source>Saddle Stitch</source>
+        <translation>Piqûre à cheval</translation>
+    </message>
+    <message>
+        <source>Staple Top Left</source>
+        <translation>Agrafe en haut à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Left</source>
+        <translation>Agrafe en bas à gauche</translation>
+    </message>
+    <message>
+        <source>Staple Top Right</source>
+        <translation>Agrafe en haut à droite</translation>
+    </message>
+    <message>
+        <source>Staple Bottom Right</source>
+        <translation>Agrafe en bas à droite</translation>
+    </message>
+    <message>
+        <source>Two Staples Left</source>
+        <translation>Deux agrafes à gauche</translation>
+    </message>
+    <message>
+        <source>Two Staples Top</source>
+        <translation>Deux agrafes en haut</translation>
+    </message>
+    <message>
+        <source>Two Holes Left</source>
+        <translation>Deux trous à gauche</translation>
+    </message>
+    <message>
+        <source>Two Holes Top</source>
+        <translation>Deux trous en haut</translation>
     </message>
     <message>
         <source>Untitled</source>
@@ -8610,6 +8857,30 @@
     <message>
         <source>Save as PDF</source>
         <translation>Enregistrer au format PDF</translation>
+    </message>
+    <message>
+        <source>Page %1 of %2</source>
+        <translation>Page %1 sur %2</translation>
+    </message>
+    <message>
+        <source>Preparing Preview…</source>
+        <translation>Préparation de l’aperçu…</translation>
+    </message>
+    <message>
+        <source>No Preview</source>
+        <translation>Aucun aperçu</translation>
+    </message>
+    <message>
+        <source>Previous Page</source>
+        <translation>Page précédente</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Next Page</source>
+        <translation>Page suivante</translation>
     </message>
     <message>
         <source>Printer:</source>
@@ -8634,6 +8905,22 @@
     <message>
         <source>Add Printer…</source>
         <translation>Ajouter une imprimante…</translation>
+    </message>
+    <message>
+        <source>Presets:</source>
+        <translation>Préréglages&#xa0;:</translation>
+    </message>
+    <message>
+        <source>Presets</source>
+        <translation>Préréglages</translation>
+    </message>
+    <message>
+        <source>Default Settings</source>
+        <translation>Réglages par défaut</translation>
+    </message>
+    <message>
+        <source>Last Used Settings</source>
+        <translation>Derniers réglages utilisés</translation>
     </message>
     <message>
         <source>Copies:</source>
@@ -8744,8 +9031,16 @@
         <translation>Noir et blanc</translation>
     </message>
     <message>
+        <source>PDF</source>
+        <translation>PDF</translation>
+    </message>
+    <message>
         <source>Save as PDF…</source>
         <translation>Enregistrer au format PDF…</translation>
+    </message>
+    <message>
+        <source>Open in Preview</source>
+        <translation>Ouvrir dans la Visionneuse</translation>
     </message>
     <message>
         <source>Click the panel to use the keyboard in it.</source>
@@ -9493,6 +9788,10 @@
         <translation>Horloge</translation>
     </message>
     <message>
+        <source>Clouds</source>
+        <translation>Nuages</translation>
+    </message>
+    <message>
         <source>Start screen saver when inactive</source>
         <translation>Démarrer l’économiseur d’écran en cas d’inactivité</translation>
     </message>
@@ -9519,6 +9818,37 @@
     <message>
         <source>Choose a folder of pictures</source>
         <translation>Choisir un dossier d’images</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenShareMenu</name>
+    <message>
+        <source>Screen or window</source>
+        <translation>Écran ou fenêtre</translation>
+    </message>
+    <message>
+        <source>Window: %1</source>
+        <translation>Fenêtre&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>A window</source>
+        <translation>Une fenêtre</translation>
+    </message>
+    <message>
+        <source>Part of %1</source>
+        <translation>Une partie de %1</translation>
+    </message>
+    <message>
+        <source>Entire screen: %1</source>
+        <translation>Écran entier&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Screen Sharing</source>
+        <translation>Partage d’écran</translation>
+    </message>
+    <message>
+        <source>To stop sharing, use the app that shares.</source>
+        <translation>Pour arrêter le partage, utilisez l’app qui partage.</translation>
     </message>
 </context>
 <context>
@@ -9986,10 +10316,6 @@
     <message>
         <source>Are you sure you want to restart your computer now?</source>
         <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
-    </message>
-    <message>
-        <source>Open applications will be closed.</source>
-        <translation>Les applications ouvertes seront fermées.</translation>
     </message>
     <message>
         <source>Are you sure you want to shut down your computer now?</source>
@@ -10766,6 +11092,89 @@
     </message>
 </context>
 <context>
+    <name>SharePickerPanel</name>
+    <message>
+        <source>Share Your Screen</source>
+        <translation>Partager votre écran</translation>
+    </message>
+    <message>
+        <source>An app wants to share your screen. Choose what it can see.</source>
+        <translation>Une app souhaite partager votre écran. Choisissez ce qu’elle peut voir.</translation>
+    </message>
+    <message>
+        <source>What to share</source>
+        <translation>Élément à partager</translation>
+    </message>
+    <message>
+        <source>Entire Screen</source>
+        <translation>Écran entier</translation>
+    </message>
+    <message>
+        <source>Window</source>
+        <translation>Fenêtre</translation>
+    </message>
+    <message>
+        <source>Selection</source>
+        <translation>Sélection</translation>
+    </message>
+    <message>
+        <source>Displays</source>
+        <translation>Écrans</translation>
+    </message>
+    <message>
+        <source>Windows</source>
+        <translation>Fenêtres</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
+    <message>
+        <source>%1, %2, can&apos;t be shared</source>
+        <translation>%1, %2, ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>This window can&apos;t be shared</source>
+        <translation>Cette fenêtre ne peut pas être partagée</translation>
+    </message>
+    <message>
+        <source>Area to share</source>
+        <translation>Zone à partager</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Écran</translation>
+    </message>
+    <message>
+        <source>%1 × %2 on %3</source>
+        <translation>%1 × %2 sur %3</translation>
+    </message>
+    <message>
+        <source>Drag over the display to choose the area to share.</source>
+        <translation>Faites glisser sur l’écran pour choisir la zone à partager.</translation>
+    </message>
+    <message>
+        <source>No display can be shared.</source>
+        <translation>Aucun écran ne peut être partagé.</translation>
+    </message>
+    <message>
+        <source>No window can be shared.</source>
+        <translation>Aucune fenêtre ne peut être partagée.</translation>
+    </message>
+    <message>
+        <source>Remember this choice</source>
+        <translation>Mémoriser ce choix</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Share</source>
+        <translation>Partager</translation>
+    </message>
+</context>
+<context>
     <name>Sheet</name>
     <message>
         <source>OK</source>
@@ -10821,6 +11230,10 @@
     <message>
         <source>Search</source>
         <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
     </message>
     <message>
         <source>%1: Installed apps</source>
@@ -11716,10 +12129,6 @@
         <translation>L&apos;installation depuis l&apos;AUR n&apos;a pas encore été vérifiée avec votre version d&apos;Omarchy. Le Store la propose de nouveau dès que son catalogue l&apos;a été.</translation>
     </message>
     <message>
-        <source>Getting Flatpak hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
-        <translation>L’obtention de Flatpak n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’aura été.</translation>
-    </message>
-    <message>
         <source>This setup hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
         <translation>Cette configuration n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose de nouveau dès que son catalogue l’a été.</translation>
     </message>
@@ -11806,6 +12215,26 @@
     <message>
         <source>The Store stopped following this operation after a long time. Check what is installed in Installed.</source>
         <translation>Le Store a cessé de suivre cette opération au bout d’un long moment. Vérifiez ce qui est installé dans Installées.</translation>
+    </message>
+    <message>
+        <source>Checking what this update changes…</source>
+        <translation>Vérification de ce que change cette mise à jour…</translation>
+    </message>
+    <message>
+        <source>Flathub needs Flatpak, and getting it hasn&apos;t been checked with your version of Omarchy yet. The Store offers it again once its catalog has been.</source>
+        <translation>Flathub a besoin de Flatpak, et son obtention n’a pas encore été vérifiée avec votre version d’Omarchy. Le Store la propose à nouveau dès que son catalogue l’aura été.</translation>
+    </message>
+    <message>
+        <source>The update was interrupted: %1 of %2 were updated.</source>
+        <translation>La mise à jour a été interrompue&#xa0;: %1 sur %2 ont été mis à jour.</translation>
+    </message>
+    <message>
+        <source>The update did not finish. Check your connection to the internet, then try again.</source>
+        <translation>La mise à jour ne s’est pas terminée. Vérifiez votre connexion à Internet, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>The update failed.</source>
+        <translation>La mise à jour a échoué.</translation>
     </message>
     <message>
         <source>The request for permission timed out.</source>
@@ -12020,6 +12449,10 @@
         <translation>Obtenir</translation>
     </message>
     <message>
+        <source>Update</source>
+        <translation>Mettre à jour</translation>
+    </message>
+    <message>
         <source>Not rated</source>
         <translation>Non classé</translation>
     </message>
@@ -12128,6 +12561,42 @@
         <translation>Mise à jour de logiciels n’a pas encore recherché de mises à jour.</translation>
     </message>
     <message>
+        <source>Checking for updates…</source>
+        <translation>Recherche de mises à jour…</translation>
+    </message>
+    <message>
+        <source>The last system update did not finish.</source>
+        <translation>La dernière mise à jour du système n’est pas terminée.</translation>
+    </message>
+    <message>
+        <source>Software Update couldn&apos;t check for updates. Open it to check.</source>
+        <translation>Mise à jour de logiciels n’a pas pu rechercher de mises à jour. Ouvrez-la pour lancer la recherche.</translation>
+    </message>
+    <message>
+        <source>Checking what the updates change: %1 of %2 apps…</source>
+        <translation>Vérification de ce que changent les mises à jour&#xa0;: %1 apps sur %2…</translation>
+    </message>
+    <message>
+        <source>Checking Flathub for updates…</source>
+        <translation>Recherche de mises à jour sur Flathub…</translation>
+    </message>
+    <message>
+        <source>Flathub&apos;s updates couldn&apos;t be checked. Check your connection to the internet, then try again.</source>
+        <translation>Les mises à jour de Flathub n’ont pas pu être vérifiées. Vérifiez votre connexion à Internet, puis réessayez.</translation>
+    </message>
+    <message>
+        <source>Your Flatpak apps are up to date.</source>
+        <translation>Vos apps Flatpak sont à jour.</translation>
+    </message>
+    <message>
+        <source>1 runtime has an update.</source>
+        <translation>1 environnement d’exécution a une mise à jour.</translation>
+    </message>
+    <message>
+        <source>%1 runtimes have an update.</source>
+        <translation>%1 environnements d’exécution ont une mise à jour.</translation>
+    </message>
+    <message>
         <source>You&apos;re offline, and this computer has no saved catalog or app data yet.</source>
         <translation>Vous êtes hors ligne et cet ordinateur n’a encore ni catalogue ni données d’apps enregistrés.</translation>
     </message>
@@ -12161,6 +12630,13 @@
     </message>
 </context>
 <context>
+    <name>StoreBackend</name>
+    <message>
+        <source>Flatpak apps</source>
+        <translation>Apps Flatpak</translation>
+    </message>
+</context>
+<context>
     <name>StoreButton</name>
     <message>
         <source>Installing and opening apps work in the Store&apos;s window.</source>
@@ -12181,6 +12657,10 @@
     <message>
         <source>Get %1</source>
         <translation>Obtenir %1</translation>
+    </message>
+    <message>
+        <source>Update %1</source>
+        <translation>Mettre à jour %1</translation>
     </message>
     <message>
         <source>Remove %1 from the queue</source>
@@ -12412,10 +12892,6 @@
     <message>
         <source>Are you sure you want to restart your computer now?</source>
         <translation>Voulez-vous vraiment redémarrer votre ordinateur maintenant&#xa0;?</translation>
-    </message>
-    <message>
-        <source>Open applications will be closed.</source>
-        <translation>Les applications ouvertes seront fermées.</translation>
     </message>
     <message>
         <source>Restart</source>
@@ -12668,6 +13144,17 @@
     </message>
 </context>
 <context>
+    <name>TypePage</name>
+    <message>
+        <source>Apps for “%1” Documents</source>
+        <translation>Apps pour les documents «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>No apps in the Store open “%1” documents.</source>
+        <translation>Aucune app du Store n’ouvre les documents «&#xa0;%1&#xa0;».</translation>
+    </message>
+</context>
+<context>
     <name>UnifiedToolbar</name>
     <message>
         <source>Toolbar</source>
@@ -12679,6 +13166,14 @@
     <message>
         <source>Updates</source>
         <translation>Mises à jour</translation>
+    </message>
+    <message>
+        <source>Check Now</source>
+        <translation>Vérifier maintenant</translation>
+    </message>
+    <message>
+        <source>System</source>
+        <translation>Système</translation>
     </message>
     <message>
         <source>Grassfield</source>
@@ -12709,8 +13204,32 @@
         <translation>Paquets du système&#xa0;: %1</translation>
     </message>
     <message>
+        <source>Some packages are newer in the repositories than on this computer. Nothing installs from the repositories until the system update is finished.</source>
+        <translation>Certains paquets sont plus récents dans les dépôts que sur cet ordinateur. Rien ne s’installe depuis les dépôts tant que la mise à jour du système n’est pas terminée.</translation>
+    </message>
+    <message>
+        <source>Update All…</source>
+        <translation>Tout mettre à jour…</translation>
+    </message>
+    <message>
+        <source>Software Update…</source>
+        <translation>Mise à jour de logiciels…</translation>
+    </message>
+    <message>
+        <source>Opens Software Update in Settings, which updates the whole system.</source>
+        <translation>Ouvre Mise à jour de logiciels dans Réglages, qui met à jour tout le système.</translation>
+    </message>
+    <message>
         <source>Apps from the repositories update with the whole system, in Software Update (Settings &gt; General).</source>
         <translation>Les apps des dépôts se mettent à jour avec tout le système, dans Mise à jour de logiciels (Réglages &gt; Général).</translation>
+    </message>
+    <message>
+        <source>Flatpak Apps</source>
+        <translation>Apps Flatpak</translation>
+    </message>
+    <message>
+        <source>Update All</source>
+        <translation>Tout mettre à jour</translation>
     </message>
 </context>
 <context>
@@ -12931,6 +13450,34 @@
     <message>
         <source>Wallpaper</source>
         <translation>Fond d’écran</translation>
+    </message>
+    <message>
+        <source>Meadow</source>
+        <translation>Prairie</translation>
+    </message>
+    <message>
+        <source>Field Rows</source>
+        <translation>Sillons</translation>
+    </message>
+    <message>
+        <source>Ridgeline</source>
+        <translation>Ligne de crête</translation>
+    </message>
+    <message>
+        <source>Time of Day</source>
+        <translation>Selon l’heure</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>Clair</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>Sombre</translation>
     </message>
     <message>
         <source>When logging in</source>
@@ -13221,6 +13768,18 @@
         <translation>Tous les écrans</translation>
     </message>
     <message>
+        <source>Appearance of the wallpaper</source>
+        <translation>Aspect du fond d’écran</translation>
+    </message>
+    <message>
+        <source>Moving clouds</source>
+        <translation>Nuages en mouvement</translation>
+    </message>
+    <message>
+        <source>On the lock screen, clouds drift and the light changes slowly, coming to rest as you unlock; the desktop shows them still. Still with Reduce Motion.</source>
+        <translation>Sur l’écran verrouillé, les nuages dérivent et la lumière change lentement, puis s’arrêtent quand vous déverrouillez ; le bureau les montre immobiles. Immobiles avec Réduire les animations.</translation>
+    </message>
+    <message>
         <source>Use the All Displays Wallpaper</source>
         <translation>Utiliser le fond d’écran de Tous les écrans</translation>
     </message>
@@ -13235,6 +13794,10 @@
     <message>
         <source>Preparing the video</source>
         <translation>Préparation de la vidéo</translation>
+    </message>
+    <message>
+        <source>Photographs</source>
+        <translation>Photographies</translation>
     </message>
     <message>
         <source>Once a day Grassfield contacts the source you choose: commons.wikimedia.org, thumb.wikimedia.org and upload.wikimedia.org, or api.nasa.gov and apod.nasa.gov. These services see your IP address.</source>
@@ -13259,6 +13822,10 @@
     <message>
         <source>Author</source>
         <translation>Auteur</translation>
+    </message>
+    <message>
+        <source>Credit</source>
+        <translation>Crédit</translation>
     </message>
     <message>
         <source>Source</source>
@@ -13315,6 +13882,14 @@
     <message>
         <source>Add Video…</source>
         <translation>Ajouter une vidéo…</translation>
+    </message>
+    <message>
+        <source>Changes</source>
+        <translation>Modifications</translation>
+    </message>
+    <message>
+        <source>Resized and re-encoded by Grassfield, metadata removed</source>
+        <translation>Redimensionnée et réencodée par Grassfield, métadonnées supprimées</translation>
     </message>
     <message>
         <source>Choose a folder of pictures</source>
