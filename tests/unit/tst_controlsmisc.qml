@@ -400,6 +400,21 @@ TestCase {
         flick.contentY = 0;
     }
 
+    // macOS 27 overlay scroll bars (owner report 2026-11-02): nothing over a still view; the thumb shows while the view moves,
+    // stays a moment after it stops, then fades out.
+    function test_scrollBarHidesWhileTheViewIsStill() {
+        verify(scroll.visible);
+        flick.contentY = 0;
+        const settle = Tokens.controlScrollbarHideDelayMs + Tokens.motionNormal + 2000;
+        tryCompare(scroll.contentItem, "opacity", 0, settle, "hidden over a still view");
+        flick.flick(0, -1500);
+        tryVerify(() => flick.moving && scroll.contentItem.opacity > 0.9, 2000, "shown while the view moves");
+        tryCompare(flick, "moving", false, 5000);
+        verify(scroll.contentItem.opacity > 0.9, "still shown just after the view stops");
+        tryCompare(scroll.contentItem, "opacity", 0, settle, "hidden again once the view is still");
+        flick.contentY = 0;
+    }
+
     function test_sheetConfirmErrorKeepsItOpenAndEscapeCancels() {
         sheet.open();
         verify(sheet.visible);
