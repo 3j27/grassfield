@@ -20,7 +20,9 @@ while [[ $# -gt 0 ]]; do
     --menu-bridge) export GRASSFIELD_MENU_BRIDGE=${2:?--menu-bridge needs a path}; shift ;;
     --desktop-screen) export GRASSFIELD_DESKTOP_SCREEN=${2:?--desktop-screen needs an output name}; shift ;;
     --cursor-theme) export GRASSFIELD_CURSOR_THEME=${2:?--cursor-theme needs a theme name}; shift ;;
-    -h|--help) echo "usage: nested-up.sh [--cursor-theme grassfield-cursors-custom] [--session-bus] [--no-plugin] [--render-timing] [--unit-env] [--visual-fixtures] [--lang LL] [--desktop-dir PATH] [--desktop-screen NAME] [--menu-bridge PATH]"; exit 0 ;;
+    # GF-REF at a fractional scale, like the owner's 1.25 panel (config/hypr/dev.lua accepts 1, 1.25, 1.5, 1.75, 2 only).
+    --ref-scale) export GRASSFIELD_REF_SCALE=${2:?--ref-scale needs a scale}; shift ;;
+    -h|--help) echo "usage: nested-up.sh [--cursor-theme grassfield-cursors-custom] [--session-bus] [--no-plugin] [--render-timing] [--unit-env] [--visual-fixtures] [--lang LL] [--desktop-dir PATH] [--desktop-screen NAME] [--menu-bridge PATH] [--ref-scale 1|1.25|1.5|1.75|2]"; exit 0 ;;
     *) echo "nested-up: unknown option $1" >&2; exit 2 ;;
   esac
   shift
