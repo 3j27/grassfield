@@ -356,6 +356,7 @@ pour l'utilisateur ». The integrator checks them in review.
 | D74 amended (step 6e, integrator review of #99, MAJOR) | The hand-over broke across the 8 px gap between the halves: walked along the band in small steps, the left bar went in the gap and the right one never came (the menu bar left too). What owns the gap? | (a) the bar that is revealed: a member's bar stays until the pointer is over the other half (the gap counts as its own), then the other half's comes in the same motion; a member covered by its other member (zoomed or in full screen) shows none; (b) the nearest half; (c) both bars while in the gap | (a) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: macOS keeps the title bar shown until the pointer is over the other window. No user step. |
 | D75 amended (step 6e, the same review, MINOR and NIT) | While dragged by its revealed bar the member hung 24 px above the bar's bottom (its content above its own bar); an unload mid-drag left the member where it was dragged. | (a) once it moves, the window hangs below the bar, which stays under the pointer where it was pressed (as any window dragged by its titlebar), never above that place; the unload puts a dragged member back in its half before it ends the Split View; (b) the bar drawn at the window's top edge, under the menu bar at the start | (a) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: macOS lifts the window with its title bar on top. No user step. |
 | D73 amended (step 6e, the same review, MINOR) | A member that left the Split View another way (moved to another Desktop by a key, the plugin reloaded) kept its surface at the output's top edge: its titlebar came back above the output, out of reach. | (a) every window that leaves a Split View gets its frame, with its titlebar band, below the menu bar of its output (the top clamp's rule); a hidden one when it shows again; nothing while the session is locked (at the unlock); the unload ends every Split View that way; unsplit's own places are below the menu bar already; (b) only for unsplit, as before | (a) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: a window's title bar stays reachable below the menu bar wherever it goes. No user step. |
+| D77 (step 6e merged, the plan of this ADR done) | Steps 1 to 6 are merged (PRs #18, #28, #31, #35, #38, #42, #43, #48, #56, #70, #78, #99): what does the window-tiling lane do next? | (a) close the plan: tiling.md and the parity matrix say what is built, this ADR lists the Hyprland internals steps 3 to 6e added (gate C3 re-reads them on each Hyprland update); the matrix's Later rows (M04, M05, M16, M30, M55, W17) stay recorded for their modules (Overview, Desktops, Stages, monitor hotplug) and its Refuse rows stay refused; a new chantier starts only from the owner's choice (CLAUDE.md: scope growth is asked); (b) start a Later row in this lane (M16, the Alt-drag that resizes around the centre, is the nearest: the shared edge's spike held) | (a) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: every macOS and Windows behaviour the plan took is built; the Later rows belong to other modules and the project's rules keep scope growth for the owner. No user step. |
 
 ## Evidence
 - Hyprland facts above: read in the v0.56.2 sources (commit efb50993, matching the owner's installed 0.56.2), file and line
@@ -380,7 +381,28 @@ pour l'utilisateur ». The integrator checks them in review.
   `CDragStateController::{exclusiveDeviceGrab, draggingTiled}` (the grab an app's move asks for, carried into the restarted
   drag); `CLayoutManager::performSnap` and Hyprland's `general:snap:enabled` (read through `CConfigValue`); a resize begun
   at a left press as the mark of a resize border (Hyprland's `resize_on_border` path or an app's `xdg_toplevel.resize`);
-  `CWindow::getWindowMainSurfaceBox`; `CEventLoopTimer` for the preview delay.
+  `CWindow::getWindowMainSurfaceBox`; `CEventLoopTimer` for the preview delay. Steps 3 to 6e add (D77, read from the
+  merged code):
+  - step 3, the zoom light's hover: `CViewHitTester::{layerSurfaceAt, layerPopupSurfaceAt}` and the Exclusive layers of
+    `CMonitor::m_layerSurfaceLayers` (a layer over the light), `CSessionLockManager::{isSessionLocked, m_events.lock,
+    m_events.unlock}`, `CInputManager::getModsFromAllKBs` (Alt) and the observed `input.keyboard.key` event;
+  - step 4b: `Config::Actions::alterZOrder` (Show Tile Group raises the group's windows);
+  - step 4c, the shared edge: a pointer button cancelled on the event bus (`SCallbackInfo::cancelled`: Hyprland returns
+    before its held-button state, so a cancelled press and its cancelled release leave it as it was),
+    `CViewHitTester::windowAt` (what is in front of the handle, D35 amended), `Pointer::Cursor::overrideController`'s
+    `setOverride` and `unsetOverride` with `CURSOR_OVERRIDE_SPECIAL_ACTION` (the handle's cursor), the X11 override-redirect surfaces (`CWindow::isX11OverrideRedirect`), `CEventLoopTimer` for the frames that
+    wait for the next refresh;
+  - step 6a, the Split View Desktop: `State::workspaceState()->{create, query().id().run(), workspacesCopy}`,
+    `Config::Actions::{moveToWorkspace(workspace, silent, window), changeWorkspace}`, `Fullscreen::controller()->
+    {getFullscreenModes, setFullscreenMode}`, `CMonitor::{m_activeWorkspace, m_activeSpecialWorkspace}`, the
+    `window.moveToWorkspace`, `window.fullscreen` and `window.close` events;
+  - step 6c: the `monitor.removed` event with `ITarget::space()` and `CFocusState::monitor()` (the windows gathered after an
+    unplug, D67);
+  - step 6e: `CDecorationPositioner::{repositionDeco, getWindowDecorationBox}` and `CWindow::updateWindowDecos` (a member's
+    titlebar going away and coming back, its extents read again from `getPositioningInfo`), `CInputManager::{m_pointers,
+    hasHeldButtons, isConstrained}` and `CDataDeviceProtocol::dndActive` (the revealed bar's guards and its drag), the
+    revealed bar drawn at `RENDER_POST_WINDOWS` (ADR-0015 P6's path), `CMonitor::m_reservedArea` (a window leaving a Split
+    View placed below the menu bar, D73 amended).
 - gfc/1 grows additively (verbs, a notice event, a reply); the contract table of ADR-0007 is updated in the same commit as
   the code of each step, `tests/ci/gfc_parity.py` enforces it. Every new shell IPC function is listed in
   `docs/specs/security.md` in the step that adds it (`ipc_inventory.sh`), and every new surface or entry point joins the

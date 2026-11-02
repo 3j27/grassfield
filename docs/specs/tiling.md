@@ -6,8 +6,9 @@ Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (P
 merged (PR #42: the shared edge, TL30); step 5 merged (PR #43: Settings > Desktop & Dock > Windows, TL32); step 6 is split
 in two, then five (ADR-0036 D40, D40 amended, D63, D70): 6a merged (PR #48: the Split View Desktop, TL33), 6b merged (PR
 #56: the separator's reset and the swap), 6c merged (PR #70: full screen's reveal, Dock and green button; windows gathered
-after an unplug), 6d merged (PR #78: the Split View rows, the Overview's drop rule), 6e on its branch (the titles hidden
-and revealed at the top, the revealed bar's drag). Below, "Today" is the state before step 1. A requirement
+after an unplug), 6d merged (PR #78: the Split View rows, the Overview's drop rule), 6e merged (PR #99: the titles hidden
+and revealed at the top, the revealed bar's drag). ADR-0036's plan is done (D77): the parity matrix's Later rows stay
+recorded for their modules. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
