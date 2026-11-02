@@ -61,7 +61,7 @@ Item {
             textFormat: Text.PlainText
             anchors.centerIn: parent
             text: pill.label
-            color: pill.selected ? Appearance.colors.text : Appearance.colors.textSecondary
+            color: pill.selected ? Appearance.colors.text : Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
             font.weight: Font.Bold
@@ -89,7 +89,7 @@ Item {
 
         height: Tokens.filesScopePillHeight
         radius: Tokens.filesScopePillRadius
-        color: buttonArea.pressed ? Appearance.withAlpha(Appearance.colors.text, Tokens.filesScopePillOpacity) : Appearance.buttonFill
+        color: buttonArea.pressed ? Appearance.withAlpha(Appearance.colors.text, Tokens.filesScopePillOpacity) : Appearance.withAlpha(Appearance.colors.text, Tokens.toolbarCapsuleFillOpacity)
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: button.accessibleName
@@ -145,7 +145,7 @@ Item {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Search:")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 font.weight: Font.Bold

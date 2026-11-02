@@ -51,7 +51,7 @@ Window {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "document"
                     size: Tokens.filesProgressIconSize
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                 }
 
                 Text {
@@ -91,7 +91,7 @@ Window {
                     width: track.width
                     elide: Text.ElideRight
                     text: row.modelData.detail
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
                 }
@@ -104,7 +104,7 @@ Window {
                     anchors.right: parent.right
                     anchors.rightMargin: Tokens.filesProgressStopInset
                     y: Tokens.filesProgressBarCenter - height / 2
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     Accessible.role: Accessible.Button
                     Accessible.name: qsTr("Stop")
                     Accessible.onPressAction: root.app.cancelJob(row.modelData.id)

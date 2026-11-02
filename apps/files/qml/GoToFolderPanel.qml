@@ -199,7 +199,7 @@ Item {
                     x: field.cursorRectangle.x + field.cursorRectangle.width
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.suffix
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font: field.font
                 }
 
@@ -208,7 +208,7 @@ Item {
                     visible: field.text === ""
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Folder path, ~/Documents or trash:/")
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font: field.font
                 }
             }
@@ -223,7 +223,7 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: Tokens.filesGoFieldInset
                 anchors.verticalCenter: parent.verticalCenter
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 Accessible.role: Accessible.Button
                 Accessible.name: qsTr("Clear")
 
@@ -264,7 +264,7 @@ Item {
                 y: Tokens.filesGoHeaderCenter - height / 2
                 visible: root.rows.length > 0 || root.errorText !== ""
                 text: root.errorText !== "" ? root.errorText : root.showingRecents ? qsTr("Recents") : qsTr("Go to:")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 font.weight: root.errorText !== "" ? Font.Normal : Font.Bold
@@ -334,7 +334,7 @@ Item {
                                         textFormat: Text.PlainText
                                         visible: part.index > 0
                                         text: "›"
-                                        color: row.chosen ? Appearance.highlightText : Appearance.colors.textSecondary
+                                        color: row.chosen ? Appearance.highlightText : Appearance.windowSecondary
                                         font.family: Appearance.fontFamily
                                         font.pixelSize: Tokens.typographyBodySize
                                     }

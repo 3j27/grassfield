@@ -181,8 +181,8 @@ TestCase {
 
     function test_theWindowsSecondaryText_data() {
         // ColumnView, FileList and PrintSheet followed once #67 merged.
-        return ["AccessAlert", "BrowserWindow", "ColumnView", "CustomizeFolderWindow", "FileList", "FilePanel", "GalleryView", "IconView",
-                "InfoWindow", "KioSheets", "PathBar", "PreviewPane", "PrintSheet", "SearchCapsule", "Sidebar", "TabBar"].map(n => ({tag: n, path: "apps/files/qml/" + n + ".qml"}));
+        return ["AccessAlert", "BrowserWindow", "ColumnView", "CustomizeFolderWindow", "FileList", "FilePanel", "GalleryView", "GoToFolderPanel", "IconView",
+                "InfoWindow", "KioSheets", "PathBar", "PreviewPane", "PrintSheet", "ProgressWindow", "ScopeBar", "SearchCapsule", "Sidebar", "TabBar"].map(n => ({tag: n, path: "apps/files/qml/" + n + ".qml"}));
     }
 
     function test_theWindowsSecondaryText(data) {
