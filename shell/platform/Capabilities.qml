@@ -75,6 +75,8 @@ Singleton {
 
     // Test hook (tests/visual waits on it before capturing): `qs ipc call capabilities status` is "pending" until the
     // hello reply arrived or timed out, then "ready present <features>" or "ready degraded". Dev session only (SEC-04).
+    // The shell's liveness probe (packaging/bin/grassfield-shell-watchdog, ADR-0041 step 6a) asks it too and reads no
+    // answer: any answer, the `refused` of a real session included, is the GUI thread answering.
     IpcHandler {
         target: "capabilities"
 
@@ -84,6 +86,19 @@ Singleton {
             if (!root.settled)
                 return "pending";
             return root.pluginPresent ? "ready present " + root.features.join(",") : "ready degraded";
+        }
+
+        // Test hook (the liveness probe's proof, ADR-0041 step 6a): holds the GUI thread for `seconds` (1 to 300), as a
+        // frozen shell would: no IPC answer, no input, no frame meanwhile. Dev session only (SEC-04).
+        function devBlock(seconds: int): string {
+            if (!Mode.dev)
+                return Mode.refused;
+            const held = Math.max(1, Math.min(300, seconds));
+            const end = Date.now() + held * 1000;
+            let spins = 0;
+            while (Date.now() < end)
+                spins++;
+            return "blocked " + held;
         }
     }
 

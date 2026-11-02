@@ -144,6 +144,21 @@ check bash -c ': >"$2/db.lck"; : >"$2/ipc.log"
   env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/db.lck" GRASSFIELD_PACMAN_WATCH_LOCK_WAIT=2 GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" timeout 30 "$1" >/dev/null
   [[ $(cat "$2/ipc.log") == "asked call update check system" ]] || { echo "not asked after the bound"; exit 1; }' _ "$h" "$watch_dir"
 rm -rf "$watch_dir"
+# ADR-0041 step 6a (SQ-5 A): the shell's liveness probe, a timer every 30 s and its oneshot service; both start with the
+# session and skip themselves outside it; the probe's logic is tests/shell/shell_watchdog.sh.
+t=$pk/systemd/grassfield-shell-watchdog.timer
+u=$pk/systemd/grassfield-shell-watchdog.service
+desc="grassfield-shell-watchdog.timer: every 30 s from its start, accurate to a second, starts its service, session-only, part of the session target, started by autostart and installed by the PKGBUILD"
+check bash -c 'grep -qx "OnActiveSec=30s" "$1" && grep -qx "OnUnitActiveSec=30s" "$1" && grep -qx "AccuracySec=1s" "$1" && grep -qx "Unit=grassfield-shell-watchdog.service" "$1" &&
+  grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "Requisite=graphical-session.target" "$1" &&
+  grep -qE "^  local services = \".* grassfield-shell-watchdog.timer\"$" "$2/config/hypr/grassfield/autostart.lua" &&
+  grep -qF "packaging/systemd/grassfield-shell-watchdog.timer\" \"\$pkgdir/usr/lib/systemd/user/grassfield-shell-watchdog.timer\"" "$2/packaging/arch/PKGBUILD"' _ "$t" "$root"
+desc="grassfield-shell-watchdog.service: oneshot, runs the probe, session-only, hardened, Quickshell's option variables and the probe's test variable cleared, its runtime directory kept, a start timeout past the loaded bound, no restart of its own, installed by the PKGBUILD"
+check bash -c 'grep -qx "Type=oneshot" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-shell-watchdog" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" &&
+  grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "ProtectSystem=strict" "$1" && grep -qx "ProtectHome=read-only" "$1" && grep -qx "ReadWritePaths=%t" "$1" &&
+  grep -qx "PrivateNetwork=yes" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "CapabilityBoundingSet=" "$1" &&
+  grep -qx "UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_SHELL_WATCHDOG_PRESSURE" "$1" && grep -qx "RuntimeDirectoryPreserve=yes" "$1" && grep -qx "TimeoutStartSec=45" "$1" &&
+  ! grep -q "^Restart=" "$1" && grep -qE "^  for unit in .* shell-watchdog; do$" "$2/packaging/arch/PKGBUILD"' _ "$u" "$root"
 # The password-prompt bridge (ADR-0035 D-9): it identifies its callers through /proc/<pid>/exe, so no option may put it in a
 # user namespace of its own (decision 9-8, as 2c-6); passwords pass through it.
 u=$pk/systemd/grassfield-prompter.service
