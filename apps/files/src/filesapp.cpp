@@ -742,8 +742,8 @@ QVariantList FilesApp::pathSegments(const QUrl &url) const
     // A search: one segment, its title (the path bar shows the selected result's path instead: BrowserWindow).
     if (SearchLogic::isSearchUrl(url)) {
         const auto query = SearchLogic::fromUrl(url);
-        const QString scope = query && !query->inComputer() ? FileLogic::displayName(QFileInfo(query->folder.toLocalFile()).fileName()) : tr("This Computer");
-        out.append(QVariantMap{{QStringLiteral("label"), tr("Searching “%1”").arg(scope)}, {QStringLiteral("url"), url}});
+        const QString scope = query && !query->inComputer() ? QFileInfo(query->folder.toLocalFile()).fileName() : tr("This Computer");
+        out.append(QVariantMap{{QStringLiteral("label"), tr("Searching “%1”").arg(FileLogic::displayName(scope))}, {QStringLiteral("url"), url}});
         return out;
     }
     // A tag search: the segments of its folder, then the tag.
@@ -1302,8 +1302,10 @@ void FilesApp::makeAlias(const QList<QUrl> &urls, QObject *folder)
         }
         const QFileInfo info(url.toLocalFile());
         const QString dir = info.absolutePath();
-        // The Finder's "report.txt alias", "report.txt alias 2"…
-        const QString name = FileLogic::uniqueName(tr("%1 alias").arg(info.fileName()), [&dir](const QString &n) {
+        // The Finder's "report.txt alias", "report.txt alias 2"… The new file's own name (not a message: kept exactly as the
+        // original's, never cleaned for display).
+        const QString original = info.fileName();
+        const QString name = FileLogic::uniqueName(tr("%1 alias").arg(original), [&dir](const QString &n) {
             return QFileInfo::exists(dir + QLatin1Char('/') + n) || QFileInfo(dir + QLatin1Char('/') + n).isSymLink();
         });
         const QString link = dir + QLatin1Char('/') + name;

@@ -369,7 +369,7 @@ Window {
                         width: content.width
                         height: privilege.implicitHeight
                         Accessible.role: Accessible.Row
-                        Accessible.name: permissionRow.modelData.name
+                        Accessible.name: DisplayName.text(permissionRow.modelData.name)
 
                         // The group's own pop-up: the user's groups (the item can be given to any of them).
                         ComboBox {
@@ -389,7 +389,7 @@ Window {
                             width: Tokens.filesInfoLabelWidth + Tokens.spacingLg
                             anchors.verticalCenter: parent.verticalCenter
                             elide: Text.ElideRight
-                            text: permissionRow.modelData.name
+                            text: DisplayName.text(permissionRow.modelData.name)
                             color: Appearance.colors.text
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyCaptionSize
@@ -400,7 +400,7 @@ Window {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             enabled: root.permissions.editable
-                            accessibleName: qsTr("Privilege of %1").arg(permissionRow.modelData.name)
+                            accessibleName: qsTr("Privilege of %1").arg(DisplayName.text(permissionRow.modelData.name))
                             model: root.accessChoices
                             value: String(root.permissions.access[permissionRow.modelData.who])
                             onPicked: id => root.app.setAccess(root.info.url, permissionRow.modelData.who, parseInt(id))
