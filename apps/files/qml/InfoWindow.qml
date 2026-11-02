@@ -441,7 +441,7 @@ Window {
                 }
 
                 Button {
-                    visible: root.permissions.editable && root.permissions.isDir
+                    visible: root.permissionsShown && root.permissions.editable === true && root.permissions.isDir === true
                     text: qsTr("Apply to enclosed items…")
                     onClicked: applySheet.open()
                 }
