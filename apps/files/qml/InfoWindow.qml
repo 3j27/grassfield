@@ -336,7 +336,7 @@ Window {
                     width: content.width
                     wrapMode: Text.Wrap
                     text: qsTr("Use this application to open all documents like this one.")
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                 }
@@ -417,7 +417,7 @@ Window {
                     Icon {
                         name: "lock"
                         size: Tokens.menuIconSize
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                     }
 
                     Text {
@@ -425,7 +425,7 @@ Window {
                         width: parent.width - Tokens.menuIconSize - Tokens.spacingSm
                         text: root.permissions.reason || ""
                         wrapMode: Text.Wrap
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
                     }
@@ -434,7 +434,7 @@ Window {
                 Text {
                     textFormat: Text.PlainText
                     text: root.permissions.modeText || ""
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                     Accessible.name: qsTr("Mode %1").arg(text)

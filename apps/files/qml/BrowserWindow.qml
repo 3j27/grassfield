@@ -1139,7 +1139,7 @@ Window {
                         width: chipRow.implicitWidth + 2 * Tokens.spacingSm
                         height: Tokens.controlButtonHeight
                         radius: height / 2
-                        color: Appearance.buttonFill
+                        color: Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
                         Accessible.role: Accessible.Button
                         Accessible.name: qsTr("Remove the tag %1").arg(chip.modelData)
                         Accessible.onPressAction: win.app.removeTag(win.tagUrls, chip.modelData)
@@ -1171,7 +1171,7 @@ Window {
                                 anchors.verticalCenter: parent.verticalCenter
                                 name: "close-glyph"
                                 size: Tokens.menuIconSize - Tokens.spacingXs
-                                color: Appearance.colors.textSecondary
+                                color: Appearance.windowSecondary
 
                                 MouseArea {
                                     anchors.fill: parent
@@ -1310,7 +1310,7 @@ Window {
                 elide: Text.ElideMiddle
                 readonly property var preview: renameSheet.shown ? win.app.renamePreview(win.renameUrls.slice(0, 1), win.renameOptions) : []
                 text: qsTr("Example: %1").arg(preview.length > 0 ? DisplayName.text(preview[0]) : "")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
             }
