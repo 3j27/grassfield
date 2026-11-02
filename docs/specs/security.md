@@ -209,7 +209,7 @@ does not check its gate.
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
-| overview | holdNextRelease, status | dev | `status` lists window titles and app ids |
+| overview | holdNextRelease, status, dropProbe | dev | `status` lists window titles and app ids; `dropProbe` (tiling step 6e, the follow-up of #78) runs the Overview's own drop of a window on a Desktop (ADR-0036 D72) and answers moved, refused or absent |
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
@@ -486,6 +486,14 @@ shell no longer relies on that alone:
   `SessionState.refuses` first, from the tiling popover and the Window menu (refused surfaces while locked). Replace Tiled
   Window's picker is the Split View picker of step 6a (its suggestion lists window addresses only). The Overview's drop rule
   only refuses drops.
+  Tiling step 6e (ADR-0036 D73-D76) adds no verb, event field or popup kind: the feature `tiling-split-titles` only tells the
+  shell's Overview to lay a Split View member out without a strip. A member's hidden titlebar is revealed and takes presses
+  by the full-screen path (P6): never while the session is locked (`revealable()`), never under a layer popup or an Overlay
+  layer, never a press of a button another device holds; its press and release are cancelled together. A member's drag by
+  its revealed bar ends the moment the lock engages (the member back in its half; its release, still owed, stays
+  cancelled and swaps nothing), and on another press or a pointer device gone. A window that leaves a Split View is placed
+  below the menu bar only once the session is unlocked (D73 amended, review of #99). The development hook `overview dropProbe`
+  (D76, the table above) answers "refused" outside development and only ever refuses or performs the Overview's own drop.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.

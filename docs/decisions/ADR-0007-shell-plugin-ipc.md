@@ -228,6 +228,12 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   `reason:"invalid"`; refused while locked (`reason:"locked"`) as every `unsplit`. A plugin before 6d takes one argument and
   ignores a second, so a 6d plugin advertises feature `tiling-split-rows`, always right after `tiling-split`, and the shell
   offers the rows (and sends the argument) only with it.
+- Window tiling, step 6e (2026-11-01, additive, ADR-0036 D73-D76, docs/specs/tiling.md TL33): a Split View member's
+  titlebar is away and no band is kept above it (its half is filled from the output's top edge); the pointer at the top
+  edge over its half reveals it as a full-screen window's is (the `titlebar-reveal` event carries it, unchanged), and its
+  revealed bar takes the member's drag as well as its lights (the plugin's own input). A plugin before 6e still draws the
+  strip above a member, so a 6e plugin advertises feature `tiling-split-titles`, always right after `tiling-split-rows`,
+  and the shell's Overview lays a member out without a strip only with it. No new verb, event field or reply field.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -272,6 +278,7 @@ enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
 feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge tiling-split tiling-split-rows
+feature tiling-split-titles
 verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front split unsplit window_size
 ```
 

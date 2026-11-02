@@ -132,6 +132,12 @@ namespace gf::topClamp {
         return toCBox(topclamp::heldMove(toRect(surface), gf::chrome::bandOf(w), topclamp::Point{pointer.x, pointer.y}, outputs()));
     }
 
+    CBox belowMenuBar(const PHLWINDOW& w, const CBox& surface, double band) {
+        if (!holdable(w))
+            return surface;
+        return toCBox(topclamp::heldMove(toRect(surface), band, topclamp::Point{surface.x + (surface.w / 2.0), surface.y}, outputs()));
+    }
+
     void beforePointerMotion() {
         auto& s = st();
         if (!s.ready || !g_layoutManager)

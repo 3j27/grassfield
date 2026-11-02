@@ -28,6 +28,9 @@ namespace gf::chrome {
     // The band the plugin reserves above a window's surface: its titlebar, none for a window that draws its own chrome
     // (P3: Stages thumbnails; also the tiling and restore frames, so that no empty strip is left above such a window).
     double band(bool clientChrome);
+    // TL33 (step 6e, ADR-0036 D73): none either above a Split View member, whose titlebar is away as a full-screen window's
+    // is (the pointer at the top edge of its half reveals it, P6): its half is filled from the output's top edge.
+    double band(bool clientChrome, bool splitMember);
 
     // ---- P8: the minimize capability (GF-056 part 2) ----
     // xdg_toplevel.wm_capabilities (xdg-shell v5) tells a client which window controls work; GTK4 greys the ones that are
@@ -106,22 +109,42 @@ namespace gf::chrome {
     // In full screen the titlebar is away. The pointer at the top edge of the window's monitor brings it back, below the
     // menu bar and over the window's content; it goes when the pointer leaves it, or with the full screen. Its zoom light
     // leaves full screen (the pointer's way out); its minimize light is unavailable (greyed and inert, as on macOS).
+    // A Split View member's titlebar is away too (TL33, step 6e, ADR-0036 D73, D74): the pointer at the top edge over its half
+    // brings that half's bar alone, and while one half's bar is there the pointer brings the other's by moving across
+    // within the bar's band (macOS, one menu bar over both).
     inline constexpr double kRevealEdge  = 2.0; // the pointer this close to the monitor's top edge (layout px) reveals it
     inline constexpr double kRevealSlack = 8.0; // it stays until the pointer is this far below it (layout px)
 
     struct RevealInput {
-        bool   fullscreen = false; // the window is in full screen on a visible workspace and has a plugin titlebar
+        bool   revealable = false; // the window is in full screen or a Split View member, on a visible workspace, and has a plugin titlebar
         bool   onMonitor  = false; // the pointer is on the window's monitor
         double pointerY   = 0.0;   // the pointer below the monitor's top edge (layout px)
         double barTop     = 0.0;   // where the bar starts below the top edge (the menu bar's height, or 0)
-        bool   pressing   = false; // a press on the revealed bar is not released yet
+        bool   pressing   = false; // a press on a revealed bar is not released yet (a light decided at its release, a member's drag)
+        bool   inSpan     = true;  // the pointer is within the window's width (a Split View member: its half; full screen: the monitor)
+        bool   handOver   = false; // another bar is revealed on this monitor (the other half's): within the band this one comes
+        bool   overOther  = false; // the pointer is over the other half of its Split View (that member's width; never in full screen)
     };
 
-    // Whether the titlebar is revealed after a pointer motion (or a change of the window), from whether it was.
+    // Whether the titlebar is revealed after a pointer motion (or a change of the window), from whether it was. While a
+    // press on a revealed bar lasts, that bar stays and no other comes. A revealed member's bar stays until the pointer is
+    // over the other half: the gap between the halves is its own (the review of #99: walked in small steps, the bar was
+    // lost in the gap and the other never came).
     bool nextRevealed(bool revealed, const RevealInput& in);
 
     // Whether a light of a full-screen window's titlebar can be used (minimize cannot).
     bool lightAvailableInFullscreen(titlebar::Button button);
+
+    // What a left press on a revealed titlebar does (TL33, step 6e, ADR-0036 D75). A light that can be used is armed (it acts
+    // at its release over it); minimize is inert. Away from the lights, a Split View member in its half (`memberInPlace`:
+    // neither in full screen nor zoomed) starts its drag (D59: over the other half the two swap); any other press focuses
+    // and raises the window only.
+    enum class RevealedPress : uint8_t {
+        Nothing,
+        ArmLight,
+        MemberDrag,
+    };
+    RevealedPress revealedPress(titlebar::HitTarget hit, bool memberInPlace);
 
     // Whether a light of the plugin's titlebar can be used: drawn in colour with its glyph, its click acting. `fullscreen`: the
     // bar of a window in full screen (lightAvailableInFullscreen); `fixedSize`: the window's minimum is its maximum on both

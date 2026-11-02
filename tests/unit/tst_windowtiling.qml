@@ -457,6 +457,20 @@ TestCase {
         verify(WindowTiling.dropAllowed(null, "a1", 4));
     }
 
+    // Step 6e (ADR-0036 D73): with the plugin's tiling-split-titles a Split View window has no strip, so the Overview keeps no band.
+    function test_splitTitleAwayOnlyForAMemberWithTheFeature() {
+        const splits = [{workspace: 4, output: "DP-1", home: 1, windows: ["a1", "b2"], waiting: false}];
+        verify(WindowTiling.splitTitleAway(splits, "a1", true), "a member, the plugin keeps its titlebar away");
+        verify(WindowTiling.splitTitleAway(splits, "0xB2", true), "the address in any case");
+        verify(!WindowTiling.splitTitleAway(splits, "c3", true), "no member: its strip stays");
+        verify(!WindowTiling.splitTitleAway(splits, "a1", false), "a plugin before 6e still draws the strip above a member");
+        verify(!WindowTiling.splitTitleAway(splits, "a1", undefined));
+        verify(!WindowTiling.splitTitleAway(splits, "a1", 1), "only true counts");
+        verify(!WindowTiling.splitTitleAway([], "a1", true));
+        verify(!WindowTiling.splitTitleAway(null, "a1", true));
+        verify(!WindowTiling.splitTitleAway(splits, "", true));
+    }
+
     // Step 6d (ADR-0036 D71): Replace Tiled Window keeps the other window; the rows' unsplit needs tiling-split-rows.
     function test_splitPairAndUnsplitAllowed() {
         const split = (windows) => ({workspace: 4, output: "DP-1", home: 1, windows: windows, waiting: false});
