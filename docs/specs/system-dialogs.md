@@ -465,7 +465,8 @@ this step's brief; ADR-0035 "Delivered in step 9c", decisions 9-25 to 9-35); ste
 "Delivered in step 9e", decisions 9-36 to 9-50).
 From 9b the shell connects in the session: gcr's prompts (gnome-keyring, pinentry-gnome3, gcr-ssh-agent) are drawn by the
 shell; from 9c also an encrypted removable disk's password (udiskie) and NetworkManager's Wi-Fi secrets; from 9e the
-passwords of network locations that KIO asks for (Files, the D-4 panel, any KF6 app).
+passwords of network locations that KIO asks for (Files, the D-4 panel, any KF6 app); from step 10 BlueZ's pairing steps (section 8),
+in the same queue and sheet.
 
 ### macOS reference behavior
 System-modal alert centred on the active display, above every window, never on the lock screen: the requesting app's icon,
@@ -611,7 +612,7 @@ server “X”." with "Remember this password in my keychain", Cancel / Connect.
   narrowed to int, a const local that blocked a move), and what remains is Qt's own idiom (static `QStringLiteral`
   constants, `S_IW*` bit masks, a `QDBusArgument` operator returning its argument, an enum's base type).
 
-### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13; kind nm and role disk in step 9c, 9-26 and 9-33; kind kio and role kio in step 9e, 9-38 to 9-47)
+### prompter/1 protocol (bridge and shell; built in step 9a, ADR-0035 decisions 9-1 to 9-13; kind nm and role disk in step 9c, 9-26 and 9-33; kind kio and role kio in step 9e, 9-38 to 9-47; kind bluetooth and message progress in step 10, 10-5)
 Transport: the Unix stream socket `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600), served by
 `grassfield-prompter`; UTF-8 JSON, one object per line, ended by a line feed. The bridge accepts one peer at a time, only
 one that runs as the user and whose cgroup is the unit named by the bridge's `--peer-unit` (`grassfield-shell.service`;
@@ -621,8 +622,8 @@ shell; the shell sends a password once, in its answer, and the bridge decodes it
 
 Bridge to shell:
 - `{"v":"prompter/1","type":"hello","bridge":"<version>","kinds":["password","confirm"],"max":8}`: first line, at once; `kinds`
-  goes on with `"nm"` when the bridge's NetworkManager agent runs (it has a system bus, step 9c) and `"kio"` when its KIO
-  password server runs (step 9e).
+  goes on with `"nm"` when the bridge's NetworkManager agent runs (it has a system bus, step 9c), `"kio"` when its KIO
+  password server runs (step 9e) and `"bluetooth"` when its BlueZ pairing agent runs (it has a system bus, step 10).
 - `{"type":"name","state":"released"|"queued"|"owned"}`: after the shell's hello and at every change of
   `org.gnome.keyring.SystemPrompter`'s ownership (queued: another process holds it, usually the stock gcr-prompter for 10 s
   after its last prompt; the bridge gets it when that process lets it go).
@@ -660,9 +661,28 @@ Bridge to shell:
   the server's own words, plain, at most 256 units, shown framed as unverified; `retry` the worker says the last name and
   password failed (its message itself is never sent); `remember` "Remember this password" not offered, off or on at first;
   `keyring` the protection of the keyring that would keep a remembered password ("unknown" when `remember` is "none").
+- `{"type":"prompt","id":"p<N>","kind":"bluetooth","device":{"name":"...","address":"XX:XX:XX:XX:XX:XX","icon":"..."},
+  "pairing":{"mode":"pin"|"passkey"|"display-pin"|"display-passkey"|"confirm"|"authorize"|"authorize-service","code":"...",
+  "entered":0-6,"service":"...","uuid":"..."}}` (step 10): a BlueZ pairing step, sent only for a call whose sender is the
+  current owner of `org.bluez` on the system bus, so it carries no requester object (the shell draws its own row, role
+  `bluetooth`); `name` the device's Alias (else its Name, else its address), plain, at most 64 UTF-16 code units, never
+  empty, shown only as a quoted field of the sheet's sentence; `address` the device's, upper-case hexadecimal, from the
+  object path bluetoothd gave; `icon` one of "", `keyboard`, `mouse`, `gamecontroller`, `headphones`, `speaker`, `phone`,
+  `laptop`, `display`, `printer`, `camera` (each a Grassfield glyph); `mode` the Agent1 method: `pin` (RequestPinCode) and
+  `passkey` (RequestPasskey) ask for a code, `display-pin` (DisplayPinCode) and `display-passkey` (DisplayPasskey) show one to
+  type on the device, `confirm` (RequestConfirmation) shows one to compare, `authorize` (RequestAuthorization) and
+  `authorize-service` (AuthorizeService) ask to allow an incoming pairing or service; `code` the passkey as 6 digits for
+  `display-passkey` and `confirm`, the PIN (1 to 16 ASCII letters and digits) for `display-pin`, "" otherwise; `entered` the
+  digits typed on the device for `display-passkey` (0 to 6), 0 otherwise; `service` (`audio`, `remote-control`, `headset`,
+  `hands-free`, `file-transfer`, `object-push`, `network`, `input`, `phonebook`, `messages`, `serial`, `dial-up` or `other`)
+  and `uuid` (canonical, lower case) for `authorize-service`, "" otherwise.
+- `{"type":"progress","id":"p<N>","entered":0-6}` (step 10): the digits typed on the device changed for a `display-passkey`
+  request the shell holds; the shell updates that request and nothing else. One for an id the shell does not hold is ignored
+  (it crossed the shell's answer); one for an id it holds that shows no passkey closes the connection.
 - `{"type":"cancel","id":"p<N>"}`: the request is withdrawn (its caller stopped prompting or left the bus, NetworkManager
-  cancelled it or left the bus, its answer's time ran out, or the bridge cancelled it after a wrong answer): the shell removes
-  its sheet, shown or still queued, and does not answer it.
+  cancelled it or left the bus, bluetoothd cancelled it, left the bus or reported the device paired, its answer's time ran
+  out, or the bridge cancelled it after a wrong answer): the shell removes its sheet, shown or still queued, and does not
+  answer it.
 - `{"type":"error","code":"<code>","message":"<text>"}`: `refused`, `busy`, `version`, `bad-line`, `too-long`,
   `unknown-type`, `bad-answer`.
 
@@ -677,9 +697,13 @@ Shell to bridge (at most 16 KiB per line):
   (not empty, at most 1024 bytes), never for `nm` (NetworkManager keeps only secrets: an `nm` answer with a name cancels its
   request). `refused` is the shell's own refusal (beyond its bound of 8, or without a queue) and carries nothing: gcr gets
   "cancelled", NetworkManager `NoSecrets`, never the user's `UserCanceled` (opus review of step 9c), KIO's client its
-  AuthInfo unmodified with no cancelled entry kept (only the user's Cancel leaves one; ADR-0035 9-37). A `kio` cancellation
-  carries nothing. An `nm` or `kio` answer that breaks these rules cancels its request (NetworkManager gets
-  `NoSecrets`; KIO's client its AuthInfo unmodified).
+  AuthInfo unmodified with no cancelled entry kept (only the user's Cancel leaves one; ADR-0035 9-37), bluetoothd `Rejected`.
+  A `kio` cancellation carries nothing. An `nm` or `kio` answer that breaks these rules cancels its request (NetworkManager
+  gets `NoSecrets`; KIO's client its AuthInfo unmodified). A `bluetooth` answer (step 10): `ok` with `password` the PIN (1 to
+  16 ASCII letters and digits) for `pin` or the passkey (exactly 6 ASCII digits) for `passkey`, with nothing for `confirm`,
+  `authorize` and `authorize-service`; never `ok` for `display-pin` or `display-passkey` (only `cancel`); `cancel` carries
+  nothing (bluetoothd gets `Canceled` for a code or a comparison, `Rejected` for an authorization: Decline; for a code shown
+  the bridge asks bluetoothd to `CancelPairing`); one that breaks these rules cancels its request (`Rejected`).
 
 The shell's reading (step 9b, decision 9-20; `shell/security/secret/Prompter.js`): exactly these messages with exactly
 these keys and types, texts within the caps above, a requester consistent with its role, only the kinds of its hello;
@@ -711,12 +735,12 @@ Rules (fail closed: no answer is ever invented):
   message of a connection closes it too.
 - When the shell disconnects, every outstanding request is answered "cancelled" and the name is released; the stock
   gcr-prompter is then activated for the next prompt, as before step 9.
-- Kind `nm` (Wi-Fi and 802.1X secrets) is built in step 9c and `kio` (a server's name and password) in step 9e; `bluetooth`
-  (pairing, step 10) is reserved; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of
+- Kind `nm` (Wi-Fi and 802.1X secrets) is built in step 9c, `kio` (a server's name and password) in step 9e and `bluetooth`
+  (pairing, with its `progress` message) in step 10; each adds its own prompt and answer fields within `prompter/1`. A change to the fields of
   an existing kind is `prompter/2`; a new value of a field (the role `disk`, step 9c) is not: bridge and shell ship together,
   and a shell that does not know it closes the connection (9-26).
-- NetworkManager's and KIO's requests share the ids and the bound of 8 with gcr's; the 9th, from any side, is refused (gcr:
-  cancelled; NetworkManager: `NoSecrets`; KIO: its AuthInfo unmodified).
+- NetworkManager's, KIO's and bluetoothd's requests share the ids and the bound of 8 with gcr's; the 9th, from any side, is
+  refused (gcr: cancelled; NetworkManager: `NoSecrets`; KIO: its AuthInfo unmodified; bluetoothd: `Rejected`).
 
 ### Acceptance criteria
 - A-SC1 (L0) a fake gcr client on a private bus gets the password through the exchange; a fake process queued on the name never
@@ -1142,33 +1166,109 @@ again): upstream's behaviour, relayed unchanged (ADR-0035 6-4). Save as PDF goes
 it resolves a moment later: an application that can write in the folder above can swap the chosen folder for a link in that
 moment (6-3). A raw print queue passes a document's bytes to the device as they are (6-4).
 
-## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9)
+## 8. Bluetooth pairing (BlueZ Agent1; inventory O7; ADR-0035 D-11, owner decision Q9; built in step 10, decisions 10-1 to 10-16)
+A security module (the secret sheets fed by grassfield-prompter, "BlueZ pairing" in the amended rule, owner decision Q12): R12
+applies (opus PASS, fail closed, nothing logged). From step 10 a pairing step that needs the user (a code to type, show or
+compare, an incoming pairing or service) is drawn by the shell's secret sheet, in the one queue (section 5, SC2).
 
 ### macOS reference behavior
 Pairing a keyboard shows "Connection Request from “Name”" with the code to type on the device or to compare, Cancel / Connect;
 a device that asks for a PIN gets a PIN field; an incoming request from an unknown device asks before anything connects;
 nothing is accepted silently.
 
-### Functional requirements
-- BT1 the bridge registers a `KeyboardDisplay` agent and becomes the default agent while the shell is connected; Omarchy's
-  `bt-agent` does not run in the Grassfield session (packaged drop-in), unless the step's BlueZ check shows that pairing without
-  any agent is refused, in which case `bt-agent` stays as the fallback and the bridge only requests to be the default.
-- BT2 each `Agent1` method maps to one form of the secret sheet: PIN or passkey field (`RequestPinCode`, `RequestPasskey`),
-  code to type (`DisplayPinCode`, `DisplayPasskey`, updated on each `entered` count), code to confirm (`RequestConfirmation`),
-  yes/no (`RequestAuthorization`, `AuthorizeService`, naming the device and, for a service, its profile); `Cancel` closes the
-  sheet; a timeout of BlueZ answers "rejected".
-- BT3 the device is named by its alias from `org.bluez.Device1` (plain text, capped), with its icon class.
-- BT4 the agent accepts calls only from the current owner of `org.bluez` on the system bus; other callers get
-  `org.bluez.Error.Rejected` and no sheet. Its sheets go through the same queue as the other secret sheets (section 5, SC2).
+### Functional requirements (as built in step 10)
+- BT1 (decisions 10-1, 10-2) the bridge (`bridges/prompter/src/BtAgent.{h,cpp}`, `BtPairing.{h,cpp}`) registers
+  `org.bluez.Agent1` at `/org/grassfield/prompter/BluetoothAgent` as a `KeyboardDisplay` agent and asks to be the default
+  (`RegisterAgent`, `RequestDefaultAgent`) while a shell whose hello lists `bluetooth` is connected, unregisters when it goes,
+  registers again when `org.bluez` gets a new owner; the system bus as in SC8 (the fixed socket in the session). Omarchy's
+  `bt-agent` does not run in the Grassfield session: `packaging/systemd/bt-agent.service.d/10-grassfield.conf`
+  (`ConditionEnvironment=!GRASSFIELD_SESSION=1`, and `PartOf=graphical-session.target` so that one an Omarchy session started
+  stops with it even when the user manager stays), installed to `/usr/lib/systemd/user/bt-agent.service.d/`, and
+  `grassfield-prompter.service` stops one still running before it starts (opus review of step 10, MAJOR). BlueZ's check
+  (10-1): with no agent at all (the shell not connected) bluetoothd makes the adapter non-bondable and refuses every step that
+  needs an agent; nothing is accepted silently, so `bt-agent` is not kept as a fallback (it would accept incoming pairings
+  without asking exactly then).
+- BT2 (10-4 to 10-7, 10-10, 10-11) each Agent1 method is one form of the secret sheet, macOS's connection request: the device's
+  glyph, "Connection Request from “Name”", "Bluetooth device <address>", then Grassfield's sentence:
+  - `RequestPinCode`: "Enter the device's PIN code.", a PIN field (1 to 16 letters and digits), Cancel / Connect;
+  - `RequestPasskey`: "Enter the code shown on the device.", a code field (6 digits), Cancel / Connect;
+  - `DisplayPinCode`, `DisplayPasskey`: "Type this code on the device, then press Return on it.", the code large, for a
+    passkey "Digits typed on the device: N of 6" updated on each `DisplayPasskey` of the same code without touching the
+    keyboard (10-8); Cancel alone, which asks bluetoothd to `CancelPairing` the device; bluetoothd gets its reply at once
+    (it hands a PIN to the controller only then) and the sheet goes when bluetoothd leaves, when the device is reported
+    paired, disconnects or is removed, when another code is shown (one at a time), or after 55 s (10-6, 10-16);
+  - `RequestConfirmation`: "Connect only if the device shows the same code.", the passkey as 6 digits, Cancel / Connect;
+  - `RequestAuthorization`: "The device wants to pair with this computer.", Decline / Connect;
+  - `AuthorizeService`: "The device wants to use <profile> on this computer." (audio streaming, media remote control, headset
+    audio, hands-free calling, file transfer, sending files, network sharing, keyboard or mouse input, phonebook access,
+    message access, a serial port, dial-up networking; otherwise "a Bluetooth service" with its UUID), Decline / Connect.
+  Every pairing step is held until a click past the guard (10-7): no key answers an authorization or a comparison, nothing
+  typed elsewhere reaches a code field. bluetoothd gets the code or an empty reply on Connect, `org.bluez.Error.Canceled` on
+  the user's Cancel of a code or a comparison, `org.bluez.Error.Rejected` on Decline and on every other end (the shell gone or
+  refusing, a wrong answer, the bound of 8, bluetoothd's departure, no answer within 55 s, under bluetoothd's own 60 s);
+  `Cancel` from bluetoothd withdraws its call still waiting for a reply (shown or queued), never a code shown (10-4);
+  `Release` (bluetoothd stopping) is answered. A code sent lingers as "Code
+  sent" (10-13).
+- BT3 (10-9) the device is named by its `Alias` from `org.bluez.Device1` (else its `Name`, else its address), read
+  asynchronously from the same owner of `org.bluez` (2 s at most), plain text flattened and capped at 64 UTF-16 code units,
+  shown only as a quoted field of Grassfield's sentence; its address (the object path's) is shown under the title so
+  look-alike names can be told apart; its `Icon` only as one of a fixed list of glyphs, else the Bluetooth glyph.
+- BT4 (10-3) the agent accepts calls only from the current owner of `org.bluez` on the system bus, asked when each call
+  arrives; other callers get `org.bluez.Error.Rejected` and no sheet; a stranger's `Cancel` cancels nothing. Every argument is
+  checked before anything is shown (a device path of bluetoothd's form, a passkey of at most 999999, a PIN to show of 1 to 16
+  letters and digits, a canonical UUID): anything else is Rejected without a sheet. Its sheets go through the same queue and
+  bound of 8 as the other secret sheets (section 5, SC2).
+- BT5 (10-12) Settings' Bluetooth pane (PR #8) owns discovery and the adapter's state and is unchanged: its `Pair()`, made
+  without an agent of its own, asks the default agent, the bridge, so a pairing that needs a code or a comparison shows the
+  sheet; a device that needs neither pairs without one.
 
 ### Acceptance criteria
 - A-BT1 (L0) a fake BlueZ on a private system-style bus drives every method; mutants removing the "no automatic yes" rule or
-  the caller check fail.
+  the caller check fail. Step 10: `tests/security/bluez_agent.sh` (a fake bluetoothd, `tests/fixtures/fake-bluez.py`, serving
+  AgentManager1 and Device1 objects as BlueZ 5.87 does; a fake shell; an attacker; Settings' Pair() through `dbus-send`; the
+  shared bound with libgcr's client; a bridge with a short answer time; `--mutants`), `tests/unit/prompter/tst_prompter.cpp`
+  (the argument checks, the device's name, the passkey's form, the prompt and progress lines; plain and ASan/UBSan),
+  `tests/security/tst_prompter.qml` and `tst_secretsheetmodel.qml` (the kind read strictly, the answers, the sheet's words and
+  rules), `tests/security/secret_sheets.sh` (the real agent and sheet: held, no key answers, Decline, the code rules, a code
+  shown with Cancel alone following its progress without touching the keyboard; mutants), `tests/security/secret_bridge.sh`
+  (the shell's real client against a fake bridge and, end to end, the real bridge with the fake bluetoothd).
 - A-BT2 (L2, owner) pairing a keyboard that needs a passkey and a phone that compares a code; opus PASS before merge.
+- A-BT3 (L1) nested scenario for step 10 (owner approval: `just nested-up`, `just shot`): as for step 9c (section 5, A-SC7), a
+  second private dbus-daemon as the "system" bus (the session bus's test configuration with `<type>system</type>` and its own
+  socket under `/tmp`, as `tests/security/bluez_agent.sh` writes it) and the fake bluetoothd on it (`env
+  DBUS_SYSTEM_BUS_ADDRESS=<that bus> GF_TEST_BUS_DIR=/tmp python3 -I tests/fixtures/fake-bluez.py --log /tmp/bz.log --commands
+  /tmp/bz.cmd`), the bridge started with the same `DBUS_SYSTEM_BUS_ADDRESS`, the dev shell restarted on its socket; once
+  `/tmp/bz.log` says `#default`, `echo 'device AA_BB_CC_DD_EE_01 alias=Desk-Keyboard icon=input-keyboard' >/tmp/bz.cmd`, then
+  `echo 'confirm c1 AA_BB_CC_DD_EE_01 42' >/tmp/bz.cmd`: `just shot pairing-confirm` (the keyboard glyph, "Connection Request
+  from “Desk-Keyboard”", the address, 000042, held), click past the guard, Connect (`/tmp/bz.log` gets `c1 ok`); `echo
+  'passkey c2 AA_BB_CC_DD_EE_01' >/tmp/bz.cmd`: `just shot pairing-passkey`, type six digits, Return (`c2 ok <number>`); `echo
+  'display-passkey AA_BB_CC_DD_EE_01 123456 0' >/tmp/bz.cmd` then the same line with 1, 2 and 3 typed: `just shot
+  pairing-display` (Cancel alone, "Digits typed on the device: 3 of 6"; the keyboard stays where it was), `echo 'paired
+  AA_BB_CC_DD_EE_01' >/tmp/bz.cmd` (the sheet goes); `echo 'service c3 AA_BB_CC_DD_EE_01
+  0000110b-0000-1000-8000-00805f9b34fb' >/tmp/bz.cmd`: `just shot pairing-service` (Decline / Connect, "audio streaming").
+  Visual NOT verified in step 10; a real bluetoothd with a real keyboard and a real phone are the owner's L2 checks (A-BT2).
 
 ### Known limitations
-Agent precedence with another agent that also asks to be the default is BlueZ's (the last one to ask wins); legacy devices
-with fixed PINs need the user to know the PIN.
+Agent precedence with another agent that also asks to be the default is BlueZ's (the last one to ask wins,
+`src/agent.c:139-154`): a program of the user that registers its own agent and asks to be the default (`bluetoothctl`'s
+`default-agent`) takes the pairings until the bridge registers again (the shell's next connection, or bluetoothd's restart);
+an application with an agent of its own gets its own pairings (BlueZ's design). Legacy devices with fixed PINs need the user
+to know the PIN. While the shell is not connected bluetoothd has no agent in the Grassfield session: a pairing started then
+from Settings works only for a device without keys or a screen and is not kept as a bond, and an incoming one is refused
+(10-1); with `AlwaysPairable = true` in `/etc/bluetooth/main.conf` (not BlueZ's default; Omarchy 4.0.4 does not set it; on
+the owner's machine UNVERIFIED) the adapter stays bondable without an agent, with the NoInputNoOutput capability, and the
+kernel itself would then accept an incoming Just Works pairing while the shell is not connected (`hci_event.c:5393-5394`):
+`grassfield-login-check` (after every install and upgrade) warns then, and Grassfield never changes the file (10-15).
+Omarchy's `bt-agent.service` does not stop with its session by itself (no `PartOf=`): Grassfield's drop-in adds it, and the
+bridge's unit stops a bt-agent still running before it starts (10-1 amended; checked under a systemd 262 user manager in a
+container, not on the owner's machine). bluetoothd hands the PIN of `DisplayPinCode` to the controller whatever the
+agent answers (`src/device.c:7609-7618`): the sheet cannot refuse such a pairing, only not show the code (the device then
+times out). The user's Cancel of a code shown stops a pairing Settings started (`CancelPairing`); one the device started ends
+at its own time limit. One code is shown at a time: a newer one (another device) withdraws it (10-16). A device in range
+names itself (look-alike names: the address under the title tells them apart); a
+service bluetoothd does not name is shown by its UUID. A code sheet left open is withdrawn after 55 s (bluetoothd stops
+waiting at 60 s). GDBus marshals a copy of a PIN into the reply it writes and frees it unwiped (10-14). Real devices, the
+nested scenario and the sheets' look are not verified (A-BT2, A-BT3).
 
 ## 9. KIO's dialogs in Files and the panel (inventory K3–K7, K9; ADR-0035 D-12 a, owner decision Q11; built in step 4a for Files)
 

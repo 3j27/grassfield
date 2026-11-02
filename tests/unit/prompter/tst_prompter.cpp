@@ -2,9 +2,11 @@
 // parser and messages, the bound of outstanding requests, the shell's cgroup, the socket peer check, who is trusted as a
 // requester (temporary trees stand for the system's root-owned ones), the bus filter that tells a prompt its caller, and
 // the GcrPrompt object itself (answers, withdrawals, the password wiped); step 9e: KIO's AuthInfo on the bus, the
-// kpasswdserver session cache and its quirks, the server's name, the keyring's protection, the kio prompt. The process on a
-// private bus: tests/security/prompter_bridge.sh (KIO's: tests/security/kio_passwd.sh).
+// kpasswdserver session cache and its quirks, the server's name, the keyring's protection, the kio prompt; step 10: the BlueZ
+// agent's argument checks, the device's name, the passkey's form, the bluetooth prompt and progress lines. The process on a
+// private bus: tests/security/prompter_bridge.sh (KIO's: tests/security/kio_passwd.sh; BlueZ's: tests/security/bluez_agent.sh).
 #include "Askpass.h"
+#include "BtPairing.h"
 #include "Filter.h"
 #include "Identity.h"
 #include "KioAuth.h"
@@ -2387,4 +2389,193 @@ TEST(PrompterProtocol, AKioPromptCarriesTheServerTheLoginAndTheRequester) {
     EXPECT_TRUE(l.value(QStringLiteral("retry")).toBool());
     EXPECT_EQ(l.value(QStringLiteral("remember")).toString(), QStringLiteral("on"));
     EXPECT_EQ(l.value(QStringLiteral("keyring")).toString(), QStringLiteral("unprotected"));
+}
+
+// --- step 10: the BlueZ pairing agent (BtPairing.h) -------------------------------------------------------------------------
+
+TEST(PrompterBluetooth, OnlyADevicePathOfBluetoothdIsAccepted) {
+    QString address;
+    EXPECT_TRUE(bt::validDevicePath("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_01", &address));
+    EXPECT_EQ(address, QStringLiteral("AA:BB:CC:DD:EE:01"));
+    EXPECT_TRUE(bt::validDevicePath("/org/bluez/hci12/dev_00_1A_7D_DA_71_13", &address));
+    EXPECT_EQ(address, QStringLiteral("00:1A:7D:DA:71:13"));
+    for (const char* bad : {"", "/", "/org/bluez", "/org/bluez/hci0", "/org/bluez/hci0/dev_AA_BB_CC_DD_EE", "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_01/sep1",
+                            "/org/bluez/hci0/dev_aa_bb_cc_dd_ee_01", "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_0G", "/org/bluez/hci0/dev_AA-BB-CC-DD-EE-01",
+                            "/org/bluez/hciX/dev_AA_BB_CC_DD_EE_01", "/org/bluez/hci01/dev_AA_BB_CC_DD_EE_01", "/org/bluez/hci1000/dev_AA_BB_CC_DD_EE_01",
+                            "/org/bluez/hci/dev_AA_BB_CC_DD_EE_01", "/org/freedesktop/NetworkManager/Devices/1", "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_01_02",
+                            "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_01\n"}) {
+        EXPECT_FALSE(bt::validDevicePath(bad, &address)) << bad;
+    }
+    EXPECT_FALSE(bt::validDevicePath(nullptr, &address));
+}
+
+TEST(PrompterBluetooth, APasskeyIsShownAsSixDigits) {
+    EXPECT_EQ(bt::formatPasskey(0), QStringLiteral("000000"));
+    EXPECT_EQ(bt::formatPasskey(7), QStringLiteral("000007"));
+    EXPECT_EQ(bt::formatPasskey(123456), QStringLiteral("123456"));
+    EXPECT_EQ(bt::formatPasskey(999999), QStringLiteral("999999"));
+    EXPECT_TRUE(bt::formatPasskey(1000000).isEmpty());
+    EXPECT_TRUE(bt::formatPasskey(0xFFFFFFFFu).isEmpty());
+}
+
+TEST(PrompterBluetooth, TheCodesTypedAreChecked) {
+    EXPECT_TRUE(bt::validPin("0", 1));
+    EXPECT_TRUE(bt::validPin("0000", 4));
+    EXPECT_TRUE(bt::validPin("Ab12Cd34Ef56Gh78", 16));
+    EXPECT_FALSE(bt::validPin("", 0));
+    EXPECT_FALSE(bt::validPin("Ab12Cd34Ef56Gh789", 17)) << "BlueZ refuses more than 16 bytes";
+    for (const char* bad : {"12-34", "12 34", "1234\n", "caf\xc3\xa9", "12;34"})
+        EXPECT_FALSE(bt::validPin(bad, std::strlen(bad))) << bad;
+    EXPECT_FALSE(bt::validPin("12\0" "34", 5)) << "a NUL";
+    guint32 passkey = 1;
+    EXPECT_TRUE(bt::parsePasskey("000000", 6, &passkey));
+    EXPECT_EQ(passkey, 0u);
+    EXPECT_TRUE(bt::parsePasskey("012345", 6, &passkey));
+    EXPECT_EQ(passkey, 12345u);
+    EXPECT_TRUE(bt::parsePasskey("999999", 6, &passkey));
+    EXPECT_EQ(passkey, 999999u);
+    for (const char* bad : {"", "12345", "1234567", "12345a", "-12345", "+12345", " 12345", "1e5000"})
+        EXPECT_FALSE(bt::parsePasskey(bad, std::strlen(bad), &passkey)) << bad;
+}
+
+TEST(PrompterBluetooth, AServiceIsNamedByItsProfileOrOther) {
+    QString uuid;
+    EXPECT_EQ(bt::serviceKey("0000110B-0000-1000-8000-00805F9B34FB", &uuid), QStringLiteral("audio"));
+    EXPECT_EQ(uuid, QStringLiteral("0000110b-0000-1000-8000-00805f9b34fb"));
+    EXPECT_EQ(bt::serviceKey("0000110e-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("remote-control"));
+    EXPECT_EQ(bt::serviceKey("0000111e-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("hands-free"));
+    EXPECT_EQ(bt::serviceKey("00001108-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("headset"));
+    EXPECT_EQ(bt::serviceKey("00001105-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("object-push"));
+    EXPECT_EQ(bt::serviceKey("00001106-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("file-transfer"));
+    EXPECT_EQ(bt::serviceKey("00001116-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("network"));
+    EXPECT_EQ(bt::serviceKey("00001124-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("input"));
+    EXPECT_EQ(bt::serviceKey("00001812-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("input"));
+    EXPECT_EQ(bt::serviceKey("0000112f-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("phonebook"));
+    EXPECT_EQ(bt::serviceKey("00001132-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("messages"));
+    EXPECT_EQ(bt::serviceKey("00001101-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("serial"));
+    EXPECT_EQ(bt::serviceKey("00001103-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("dial-up"));
+    EXPECT_EQ(bt::serviceKey("0000ffff-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("other"));
+    EXPECT_EQ(bt::serviceKey("03b80e5a-ede8-4b33-a751-6ce34ec4c700", &uuid), QStringLiteral("other")) << "outside the base UUID";
+    EXPECT_EQ(uuid, QStringLiteral("03b80e5a-ede8-4b33-a751-6ce34ec4c700"));
+    EXPECT_EQ(bt::serviceKey("1000110b-0000-1000-8000-00805f9b34fb", &uuid), QStringLiteral("other")) << "not 0000xxxx";
+    for (const char* bad : {"", "0000110b", "0000110b-0000-1000-8000-00805f9b34f", "0000110b-0000-1000-8000-00805f9b34fbb", "0000110b00000-1000-8000-00805f9b34fb",
+                            "0000110g-0000-1000-8000-00805f9b34fb", "{0000110b-0000-1000-8000-00805f9b34}", "0000110b-0000-1000-8000-00805f9b34f\n"})
+        EXPECT_TRUE(bt::serviceKey(bad, &uuid).isEmpty()) << bad;
+    EXPECT_TRUE(bt::serviceKey(nullptr, &uuid).isEmpty());
+}
+
+TEST(PrompterBluetooth, TheModes) {
+    EXPECT_EQ(bt::modeName(bt::Mode::Pin), QStringLiteral("pin"));
+    EXPECT_EQ(bt::modeName(bt::Mode::Passkey), QStringLiteral("passkey"));
+    EXPECT_EQ(bt::modeName(bt::Mode::DisplayPin), QStringLiteral("display-pin"));
+    EXPECT_EQ(bt::modeName(bt::Mode::DisplayPasskey), QStringLiteral("display-passkey"));
+    EXPECT_EQ(bt::modeName(bt::Mode::Confirm), QStringLiteral("confirm"));
+    EXPECT_EQ(bt::modeName(bt::Mode::Authorize), QStringLiteral("authorize"));
+    EXPECT_EQ(bt::modeName(bt::Mode::AuthorizeService), QStringLiteral("authorize-service"));
+    EXPECT_TRUE(bt::isDisplay(bt::Mode::DisplayPin));
+    EXPECT_TRUE(bt::isDisplay(bt::Mode::DisplayPasskey));
+    EXPECT_FALSE(bt::isDisplay(bt::Mode::Confirm));
+    EXPECT_TRUE(bt::asksCode(bt::Mode::Pin));
+    EXPECT_TRUE(bt::asksCode(bt::Mode::Passkey));
+    EXPECT_FALSE(bt::asksCode(bt::Mode::DisplayPasskey));
+    EXPECT_FALSE(bt::asksCode(bt::Mode::Authorize));
+}
+
+TEST(PrompterBluetooth, TheDeviceIsNamedByItsAliasFlattenedElseItsNameElseItsAddress) {
+    const QString address = QStringLiteral("AA:BB:CC:DD:EE:01");
+    auto props            = [](std::initializer_list<std::pair<const char*, GVariant*>> entries) {
+        GVariantBuilder b;
+        g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
+        for (const auto& [k, v] : entries)
+            g_variant_builder_add(&b, "{sv}", k, v);
+        return g_variant_ref_sink(g_variant_builder_end(&b));
+    };
+    GVariant* full = props({{"Alias", g_variant_new_string("Desk Keyboard")}, {"Name", g_variant_new_string("MK-7")},
+                            {"Address", g_variant_new_string("11:22:33:44:55:66")}, {"Icon", g_variant_new_string("input-keyboard")}});
+    bt::DeviceView v = bt::deviceView(full, address);
+    EXPECT_EQ(v.name, QStringLiteral("Desk Keyboard"));
+    EXPECT_EQ(v.address, address) << "the path's address, never the property's";
+    EXPECT_EQ(v.icon, QStringLiteral("keyboard"));
+    g_variant_unref(full);
+    GVariant* hostile = props({{"Alias", g_variant_new_string("Key\n\xe2\x80\xae" "eno\t" "board")}, {"Icon", g_variant_new_string("../../evil")}});
+    v                 = bt::deviceView(hostile, address);
+    EXPECT_EQ(v.name, QStringLiteral("Key eno board")) << "a line feed and a direction override flattened";
+    EXPECT_EQ(v.icon, QString()) << "an icon that is not one of the list";
+    g_variant_unref(hostile);
+    GVariant* longName = props({{"Alias", g_variant_new_string(std::string(300, 'x').c_str())}});
+    v                  = bt::deviceView(longName, address);
+    EXPECT_EQ(v.name.size(), bt::kNameCap);
+    EXPECT_TRUE(v.name.endsWith(QChar(0x2026)));
+    g_variant_unref(longName);
+    GVariant* nameOnly = props({{"Alias", g_variant_new_string(" ​ ")}, {"Name", g_variant_new_string("Speaker")}, {"Icon", g_variant_new_string("audio-card")}});
+    v                  = bt::deviceView(nameOnly, address);
+    EXPECT_EQ(v.name, QStringLiteral("Speaker")) << "an alias that shows nothing";
+    EXPECT_EQ(v.icon, QStringLiteral("speaker"));
+    g_variant_unref(nameOnly);
+    GVariant* wrongType = props({{"Alias", g_variant_new_uint32(7)}, {"Icon", g_variant_new_uint32(1)}});
+    v                   = bt::deviceView(wrongType, address);
+    EXPECT_EQ(v.name, address);
+    EXPECT_EQ(v.icon, QString());
+    g_variant_unref(wrongType);
+    v = bt::deviceView(nullptr, address);
+    EXPECT_EQ(v.name, address) << "no properties: the address";
+    GVariant* notADict = g_variant_ref_sink(g_variant_new_string("Alias"));
+    EXPECT_EQ(bt::deviceView(notADict, address).name, address);
+    g_variant_unref(notADict);
+    const std::pair<const char*, const char*> icons[] = {{"input-keyboard", "keyboard"}, {"input-mouse", "mouse"},        {"input-tablet", "mouse"},
+                                                         {"input-gaming", "gamecontroller"}, {"audio-headset", "headphones"}, {"audio-headphones", "headphones"},
+                                                         {"audio-card", "speaker"},       {"phone", "phone"},             {"computer", "laptop"},
+                                                         {"video-display", "display"},    {"printer", "printer"},         {"camera-photo", "camera"},
+                                                         {"camera-video", "camera"},      {"modem", ""},                  {"network-wireless", ""},
+                                                         {"Phone", ""}};
+    for (const auto& [in, out] : icons)
+        EXPECT_EQ(bt::iconKey(QString::fromLatin1(in)), QString::fromLatin1(out)) << in;
+}
+
+TEST(PrompterProtocol, ABluetoothPromptAndItsProgress) {
+    BtPromptView v;
+    v.id                  = QStringLiteral("p4");
+    v.mode                = QStringLiteral("display-passkey");
+    v.name                = QStringLiteral("Desk Keyboard");
+    v.address             = QStringLiteral("AA:BB:CC:DD:EE:01");
+    v.icon                = QStringLiteral("keyboard");
+    v.code                = QStringLiteral("000042");
+    v.entered             = 2;
+    const QByteArray line = btPromptMessage(v);
+    ASSERT_TRUE(line.endsWith('\n'));
+    EXPECT_EQ(line.count('\n'), 1);
+    const QJsonObject o = QJsonDocument::fromJson(line).object();
+    EXPECT_EQ(o.keys(), (QStringList{QStringLiteral("device"), QStringLiteral("id"), QStringLiteral("kind"), QStringLiteral("pairing"), QStringLiteral("type")}));
+    EXPECT_EQ(o.value(QStringLiteral("kind")).toString(), QStringLiteral("bluetooth"));
+    const QJsonObject dev = o.value(QStringLiteral("device")).toObject();
+    EXPECT_EQ(dev.keys(), (QStringList{QStringLiteral("address"), QStringLiteral("icon"), QStringLiteral("name")}));
+    EXPECT_EQ(dev.value(QStringLiteral("name")).toString(), QStringLiteral("Desk Keyboard"));
+    const QJsonObject pairing = o.value(QStringLiteral("pairing")).toObject();
+    EXPECT_EQ(pairing.keys(), (QStringList{QStringLiteral("code"), QStringLiteral("entered"), QStringLiteral("mode"), QStringLiteral("service"), QStringLiteral("uuid")}));
+    EXPECT_EQ(pairing.value(QStringLiteral("mode")).toString(), QStringLiteral("display-passkey"));
+    EXPECT_EQ(pairing.value(QStringLiteral("code")).toString(), QStringLiteral("000042")) << "a string: the leading zeros stay";
+    EXPECT_TRUE(pairing.value(QStringLiteral("entered")).isDouble());
+    EXPECT_EQ(pairing.value(QStringLiteral("entered")).toInt(), 2);
+    EXPECT_EQ(progressMessage(QStringLiteral("p4"), 5), QByteArray("{\"entered\":5,\"id\":\"p4\",\"type\":\"progress\"}\n"));
+}
+
+TEST(PrompterProtocol, ABluetoothAnswerCarriesTheCodeAsAPassword) {
+    ShellLine m;
+    QString   error;
+    const std::string pin = R"({"type":"answer","id":"p3","result":"ok","password":"12ab34"})";
+    ASSERT_EQ(parseShellLine(pin, &m, &error), ParseStatus::Ok) << qPrintable(error);
+    EXPECT_TRUE(m.ok);
+    EXPECT_TRUE(m.hasPassword);
+    char buffer[32]{};
+    const long n = decodeJsonString(pin.data() + m.password.begin, m.password.end - m.password.begin, buffer, sizeof(buffer));
+    ASSERT_EQ(n, 6);
+    EXPECT_TRUE(bt::validPin(buffer, static_cast<std::size_t>(n)));
+    guint32 passkey = 0;
+    EXPECT_FALSE(bt::parsePasskey(buffer, static_cast<std::size_t>(n), &passkey)) << "letters are not a passkey";
+    const std::string escaped = R"({"type":"answer","id":"p3","result":"ok","password":"123456"})";
+    ASSERT_EQ(parseShellLine(escaped, &m, &error), ParseStatus::Ok);
+    const long e = decodeJsonString(escaped.data() + m.password.begin, m.password.end - m.password.begin, buffer, sizeof(buffer));
+    ASSERT_EQ(e, 6);
+    EXPECT_TRUE(bt::parsePasskey(buffer, static_cast<std::size_t>(e), &passkey));
+    EXPECT_EQ(passkey, 123456u);
 }

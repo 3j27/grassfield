@@ -174,7 +174,7 @@ scenario_body() {
   desc="a shell that draws \"nm\" says hello: Register(\"org.grassfield.prompter\") from the bridge's own system bus connection"
   check wait_until 5 grep -qx "#register $agent_name org.grassfield.prompter" "$d/nm.nm"
   desc="...and the bridge's hello lists nm"
-  check has s shell '"kinds":\["password","confirm","nm","kio"\]'
+  check has s shell '"kinds":\["password","confirm","nm","kio","bluetooth"\]'
 
   # --- 3 the four forms ------------------------------------------------------------------------------------------------
   local n
@@ -460,7 +460,7 @@ cancel-by-path-only (m27, the integrator's review of PR 96)#NmAgent.cpp#        
 cancel-by-setting-only#NmAgent.cpp#            if (!request->ended && request->path == path && request->setting == setting) {#            if (!request->ended && request->setting == setting) {
 registered-for-any-shell#Bridge.cpp#                m_nm->setWanted(m_kinds.contains(QStringLiteral("nm")));#                m_nm->setWanted(true);
 user-cancel-as-nosecrets#Bridge.cpp#                m_nm->refuse(request, nm::kErrorUserCanceled, QStringLiteral("the user cancelled"));#                m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("the user cancelled"));
-name-accepted#Bridge.cpp#        else if (answer.hasIdentity)\n            wrong = QStringLiteral("a name where none is asked");#        else if (false)\n            wrong = QStringLiteral("a name where none is asked");
+name-accepted#Bridge.cpp#        else if (answer.hasIdentity)\n            wrong = QStringLiteral("a name where none is asked");\n        else if (!answer.ok && answer.hasPassword)#        else if (false)\n            wrong = QStringLiteral("a name where none is asked");\n        else if (!answer.ok && answer.hasPassword)
 identity-in-the-reply (NetworkManager drops it)#NmSecrets.cpp#        g_variant_builder_init(&inner, G_VARIANT_TYPE("a{sv}"));#        g_variant_builder_init(&inner, G_VARIANT_TYPE("a{sv}"));\n        if (ask.security == Security::Enterprise)\n            g_variant_builder_add(&inner, "{sv}", "identity", g_variant_new_string(ask.identity.toUtf8().constData()));
 asked-without-a-username#NmSecrets.cpp#            if (a.identity.isEmpty())#            if (false)
 refusal-as-usercanceled#Bridge.cpp#                m_nm->refuse(request, nm::kErrorNoSecrets, QStringLiteral("the shell could not take it"));#                m_nm->refuse(request, nm::kErrorUserCanceled, QStringLiteral("the shell could not take it"));

@@ -28,11 +28,13 @@ Scope {
     // The bridge's last word on org.gnome.keyring.SystemPrompter: "released", "queued", "owned", or "" before it said.
     readonly property string nameState: priv.nameState
     // Requests sent by the bridge and not answered or withdrawn yet, by id: {kind, passwordNew, choice, security, nameMode,
-    // remember} (what an answer needs). Read by SecretAgent's dev state only through `openCount`.
+    // remember, mode} (what an answer needs). Read by SecretAgent's dev state only through `openCount`.
     readonly property int openCount: priv.openCount
 
     signal prompted(var request)
     signal withdrawn(string id)
+    // The digits typed on a device changed for a code the shell shows (a bluetooth display-passkey request, step 10).
+    signal progressed(string id, int entered)
     // The connection ended: every request it carried is gone (the bridge answered them "cancelled").
     signal lost
 
@@ -163,10 +165,20 @@ Scope {
                 return;
             }
             const open = priv.open;
-            open[m.id] = {id: m.id, kind: m.kind, passwordNew: m.passwordNew, choice: m.choice, security: m.kind === "nm" ? m.network.security : "", nameMode: m.kind === "kio" ? m.login.nameMode : "", remember: m.kind === "kio" ? m.login.remember : ""};
+            open[m.id] = {id: m.id, kind: m.kind, passwordNew: m.passwordNew, choice: m.choice, security: m.kind === "nm" ? m.network.security : "", nameMode: m.kind === "kio" ? m.login.nameMode : "", remember: m.kind === "kio" ? m.login.remember : "", mode: m.kind === "bluetooth" ? m.pairing.mode : ""};
             priv.open = open;
             priv.openCount = Object.keys(open).length;
             root.prompted(m);
+        } else if (m.type === "progress") {
+            // Crossed the shell's own answer: nothing to do. For an id it holds, only a code shown on the screen has digits
+            // typed on the device; anything else is a bridge this side does not understand.
+            if (!Object.prototype.hasOwnProperty.call(priv.open, m.id))
+                return;
+            if (priv.open[m.id].mode !== "display-passkey") {
+                root.fail("progress for request " + m.id + ", which shows no passkey");
+                return;
+            }
+            root.progressed(m.id, m.entered);
         } else if (m.type === "cancel") {
             // A withdrawal that crossed this side's answer names an id no longer open: nothing to do.
             if (!Object.prototype.hasOwnProperty.call(priv.open, m.id))

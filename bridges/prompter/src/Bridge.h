@@ -25,8 +25,11 @@
 //   NetworkManager only while a shell that draws kind "nm" is connected; its requests share the bound of 8 and the ids.
 // - KIO's network passwords (step 9e): org.kde.kpasswdserver6 on the bridge's session bus connection (KioServer.h), its name
 //   held only while a shell that draws kind "kio" is connected; its queries share the bound of 8 and the ids.
+// - Bluetooth pairing (step 10): a BlueZ agent on the bridge's system bus connection (BtAgent.h), registered with bluetoothd
+//   only while a shell that draws kind "bluetooth" is connected; its requests share the bound of 8 and the ids.
 // - Nothing the callers or the shell send is logged; the journal gets ids, kinds, requesters' roles and paths, and refusals.
 
+#include "BtAgent.h"
 #include "Filter.h"
 #include "KioServer.h"
 #include "NmAgent.h"
@@ -52,7 +55,7 @@ class QSocketNotifier;
 
 namespace gf::prompter {
 
-    class Bridge : public PromptSink, public NmAgent::Sink, public KioServer::Sink {
+    class Bridge : public PromptSink, public NmAgent::Sink, public KioServer::Sink, public BtAgent::Sink {
       public:
         struct Options {
             QString socketPath;
@@ -62,6 +65,8 @@ namespace gf::prompter {
             // The system bus for the NetworkManager agent (step 9c); nullptr: no agent (NetworkManager gets NoSecrets).
             GDBusConnection* systemBus   = nullptr;
             int              nmTimeoutMs = nm::kAnswerTimeoutMs;
+            // How long a Bluetooth pairing step waits for its answer (step 10), on the same system bus.
+            int              btTimeoutMs = bt::kAnswerTimeoutMs;
             // gnome-keyring's keyrings directory, where the KIO server reads whether a keyring has a password (step 9e).
             QString keyringDirectory;
             int     kioStoreTimeoutMs = 0; // how long a keychain store holds its place (0: KioServer::kStoreTimeoutMs)
@@ -91,6 +96,11 @@ namespace gf::prompter {
         QString submitKio(KioRequest* request) override;
         void    withdrawKio(const QString& id) override;
 
+        // BtAgent::Sink
+        QString submitBt(BtRequest* request) override;
+        void    withdrawBt(const QString& id) override;
+        void    progressBt(const QString& id, int entered) override;
+
       private:
         struct Pending {
             GfPrompt*  prompt = nullptr; // a reference, held while outstanding
@@ -99,6 +109,7 @@ namespace gf::prompter {
             bool       choice = false;   // it was shown with a check box
             NmRequest* nm     = nullptr; // a NetworkManager request (kind "nm"; prompt is then nullptr), owned by m_nm
             KioRequest* kio   = nullptr; // a KIO query (kind "kio"; prompt is then nullptr), owned by m_kio
+            BtRequest*  bt    = nullptr; // a BlueZ pairing step (kind "bluetooth"; prompt is then nullptr), owned by m_bt
         };
 
         static GcrPrompt* onNewPrompt(GcrSystemPrompter* prompter, gpointer self);
@@ -120,6 +131,7 @@ namespace gf::prompter {
         void onAnswer(const ShellLine& answer, std::string_view line);
         void onNmAnswer(const ShellLine& answer, std::string_view line, NmRequest* request);
         void onKioAnswer(const ShellLine& answer, std::string_view line, KioRequest* request);
+        void onBtAnswer(const ShellLine& answer, std::string_view line, BtRequest* request);
 
         void identified(const QString& id, GfPrompt* prompt, const RequesterView& requester);
         void cancelRequest(const QString& id, bool tellShell);
@@ -172,6 +184,7 @@ namespace gf::prompter {
 
         std::unique_ptr<NmAgent> m_nm; // the NetworkManager agent, when a system bus was given
         std::unique_ptr<KioServer> m_kio; // KIO's password server (step 9e)
+        std::unique_ptr<BtAgent>   m_bt;  // the BlueZ pairing agent (step 10), when a system bus was given
     };
 
 } // namespace gf::prompter

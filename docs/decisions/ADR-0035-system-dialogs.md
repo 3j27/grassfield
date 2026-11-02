@@ -2610,11 +2610,261 @@ none widens a rule of Q12's text).
   `omarchy-sleep-lock.service.d`; the Omarchy session keeps it.
 - Fallback: shell not connected → the agent unregisters; BlueZ then has no agent and refuses pairings that need one (UNVERIFIED:
   BlueZ's behaviour for Just Works without any agent, checked in the step; if it refuses, the step keeps bt-agent as the
-  fallback agent instead of the drop-in).
+  fallback agent instead of the drop-in). **Checked in step 10 (decision 10-1):** without any agent BlueZ makes the adapter
+  non-bondable and refuses every step that needs an agent, and nothing is accepted silently; the drop-in is kept and bt-agent
+  is not a fallback, because as one it would accept incoming pairings silently exactly while nobody can see them.
 - Requires the same CLAUDE.md amendment and an opus PASS (a PIN is a secret; an incoming authorization is a security
   decision). Tests on a private system-bus fake of BlueZ.
-- Cost: medium. Risk: agent precedence between two agents (UNVERIFIED, inventory O7), adapter pairable/discoverable state
-  (Settings' Bluetooth pane, PR #8, owns discovery).
+- Cost: medium. Risk: agent precedence between two agents (UNVERIFIED, inventory O7; step 10: BlueZ's rule is that the last
+  agent to ask is the default, `src/agent.c:139-154`, and the session has no second agent, decision 10-1), adapter
+  pairable/discoverable state (Settings' Bluetooth pane, PR #8, owns discovery).
+
+**Delivered in step 10 (the BlueZ pairing agent in the bridge and the shell's pairing sheets; owner decision Q9).** Built under
+the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31": "BlueZ pairing" is named in Q12's
+text); no new dependency (GDBus, Qt Core and libgcr-4's secure memory as in 9c). BlueZ 5.87, Arch's `bluez 5.87-2`, read as
+data from the kernel.org tarball (`doc/org.bluez.Agent.rst`, `doc/org.bluez.AgentManager.rst`, `src/agent.c`, `src/device.c`,
+`src/adapter.c`, `src/main.c`, `src/main.conf`, `src/bluetooth.conf`, `src/dbus-common.c`, `gdbus/object.c`,
+`plugins/autopair.c`), and Linux 6.18's `net/bluetooth/hci_event.c` and `smp.c` for what the kernel does with them.
+- **The agent** (`bridges/prompter/src/BtAgent.{h,cpp}`, the pure rules in `BtPairing.{h,cpp}`): `org.bluez.Agent1` at
+  `/org/grassfield/prompter/BluetoothAgent` on the bridge's system bus connection (the one of 9-27: the fixed socket in the
+  session, only a private test bus in a development run), registered with `RegisterAgent(path, "KeyboardDisplay")` and
+  `RequestDefaultAgent` only while a shell whose hello lists `bluetooth` is connected, `UnregisterAgent` when it goes, again
+  when `org.bluez` comes back on the bus (10-2); every call handled only when its sender is the current owner of `org.bluez`,
+  asked when the call arrives, else `org.bluez.Error.Rejected` and nothing shown (10-3); every argument checked before
+  anything is shown (a device path of bluetoothd's form, a passkey of at most 999999, a PIN to show of 1 to 16 letters and
+  digits, a canonical UUID, 10-10, 10-11); the device named from its `Device1` properties read from that same owner (10-9);
+  `Release` answered, `Cancel` withdrawing the call still waiting for its reply; each request answered once (10-4); a code
+  shown on the screen followed until the pairing ends, one at a time (10-6, 10-16). Its requests share the bridge's ids and its bound of 8 with gcr's, NetworkManager's
+  and KIO's.
+- **prompter/1** (spec section 5, "prompter/1 protocol"): the kind `bluetooth` (`device` and `pairing` objects) and the message
+  `progress` (the digits typed on the device for a code shown), the answer's `password` carrying a PIN or a passkey (10-5).
+  The bridge's hello lists `bluetooth` when its agent runs (a system bus).
+- **The shell** (`shell/security/secret/`): `Prompter.js` reads the kind and `progress` strictly; `PrompterClient` emits
+  `progressed` only for a display-passkey request it holds (any other id it holds closes the connection); `SecretSheet` draws
+  macOS's connection request (the device's glyph, "Connection Request from “Name”", "Bluetooth device <address>", Grassfield's
+  sentence for the step, the code large, the digits typed, a PIN or passkey field, Cancel / Connect, Decline / Connect, Cancel
+  alone); `SecretAgent` holds every pairing step until a click past the guard (10-7) and updates a code shown without
+  touching the keyboard (10-8); a code sent lingers as "Code sent" (10-13). French catalog: 31 strings.
+- **Packaging** (10-1, 10-15): `packaging/systemd/bt-agent.service.d/10-grassfield.conf` (`ConditionEnvironment=!GRASSFIELD_SESSION=1`,
+  `PartOf=graphical-session.target`), installed by the PKGBUILD's drop-in loop to `/usr/lib/systemd/user/bt-agent.service.d/`;
+  `grassfield-prompter.service` stops a leftover bt-agent before it starts; `scripts/dev/omarchy-compat.sh` fails when
+  Omarchy runs `bt-agent` under another unit name; `grassfield-login-check` warns when `/etc/bluetooth/main.conf` sets
+  `AlwaysPairable`. config/hypr: no change (9b's `no_screen_share` rule covers the
+  secret layer). Settings (PR #8) unchanged: its Pair() reaches the sheet (10-12).
+- **Tests.** `tests/unit/prompter/tst_prompter.cpp` (79 cases, plain and under ASan and UBSan: device paths, the passkey's six
+  digits, the codes typed, the services, the modes, the device's name, the bluetooth prompt and progress lines, a code carried
+  as an answer's password); `tests/security/bluez_agent.sh` (59 checks after the opus review on two private buses with a fake bluetoothd,
+  `tests/fixtures/fake-bluez.py`, serving AgentManager1 and Device1 objects as BlueZ 5.87 does, a fake shell, an attacker,
+  Settings' Pair() through `dbus-send` and libgcr's client for the shared bound; `--mutants`: 23, all caught: an
+  authorization answered without the shell, the sender check, the unregistering, the error mapping (the user's Cancel,
+  Decline, the shell's refusal), the kinds gate, the passkey's zeros, the device path, the PIN and passkey checks,
+  bluetoothd's Cancel, the withdrawal once paired, the progress, the answer's time, the re-registration, the default agent,
+  CancelPairing, ok for a code shown, and after the opus review Cancel ending codes shown, a code kept after its device
+  disconnected or was removed, codes not capped; also with the bridge built with ASan and UBSan, no sanitizer report);
+  `tests/security/tst_prompter.qml` (121), `tst_secretsheetmodel.qml` (47), the security qmltestrunner tests 277;
+  `tests/security/secret_sheets.sh` (the pairing sheets in the real agent and queue, real keys and clicks: 88 results with
+  the model's test, 19 static checks; `--mutants`: 53, all caught, 10 of them step 10's: the hold, the progress not shown,
+  taking the keyboard, arriving again, a waiting request's count lost, OK on a code shown, a code shown answered ok, the
+  code's form, Connect's length rule, the name as rich text); `tests/security/secret_bridge.sh` (72 checks: the bluetooth kind
+  and progress through the shell's real client against the fake bridge, progress for a request that shows no passkey closing
+  the connection, and the real bridge with the fake bluetoothd end to end: the hello registering the default agent, a passkey
+  and a confirmation answered in the shell reaching bluetoothd, the agent unregistering when the shell goes; `--mutants`: 17,
+  all caught); the suites of steps 9a to 9e unchanged and passing: `prompter_bridge.sh` 58, `nm_agent.sh` 42 (its hello
+  check now lists bluetooth), `askpass.sh` 12, `kio_passwd.sh` 50 (`prompter_bridge.sh`, `nm_agent.sh` and `kio_passwd.sh`
+  also with the ASan/UBSan bridge); `tests/shell/session_services.sh` 39 (the drop-in installed by the PKGBUILD, its
+  `PartOf=`, the bridge's unit stopping a leftover bt-agent without `Conflicts=`); `tests/shell/login_session.sh` 28 (the
+  `AlwaysPairable` warning, 10-15); the unit interaction under a systemd 262 user manager (10-1 amended);
+  `ipc_inventory.sh` 104. Nested and visual: NOT VERIFIED (spec section 8, A-BT3); a real bluetoothd with a real keyboard and
+  a real phone, Omarchy's unit name on the owner's machine and `AlwaysPairable` there: NOT VERIFIED (owner L2, A-BT2).
+- **The opus security review of step 10: FAIL** (one MAJOR, three MINORs, one NIT), fixed on top of the step: MAJOR (a
+  bt-agent left running by an Omarchy session, in a user manager that outlived its logout, answered pairings in the next
+  Grassfield session before the shell's hello and whenever the shell went) by 10-1 amended; MINOR (bluetoothd's Cancel for
+  one device's confirmation withdrew another device's code shown) by 10-4 amended and 10-16; MINOR (an abandoned code shown
+  held a place of the shared bound for 55 s, eight of them could fill it) by 10-16; MINOR (nothing looked at
+  `AlwaysPairable`, on which 10-1 depends) by 10-15; NIT (bluetoothd sends no Release after `UnregisterAgent`) by 10-2
+  amended and the fake bluetoothd, which now behaves so.
+- **What step 10 changes for the user**: pairing a keyboard that shows a code, a phone that compares one, an older keyboard
+  that needs a PIN, from Settings' Bluetooth pane, shows Grassfield's connection request instead of failing; a device that
+  asks to pair, or to use a service, asks first (Decline / Connect) instead of being accepted silently; headphones and mice
+  that pair without a code pair as before, without a sheet.
+
+**Decisions of step 10** (each delegated by the owner on 2026-10-27: macOS first, no technical intervention for the user;
+none widens a rule of Q12's text, which names "BlueZ pairing").
+- **10-1. Omarchy's `bt-agent` in the Grassfield session: the drop-in, or kept as the fallback agent?** D-11 asked first what
+  BlueZ does with no agent at all (UNVERIFIED there). BlueZ 5.87, read as data: when the last default agent goes,
+  `remove_default_agent` hands the adapters an invalid IO capability (`src/agent.c:126-137, 156-172`), and
+  `adapter_set_io_capability` then makes the adapter non-bondable unless `AlwaysPairable` is set (`src/adapter.c:9157-9162`;
+  `AlwaysPairable` defaults to false: `src/main.c:1082-1083, 1393`, `src/main.conf:19`), so the kernel refuses an incoming
+  pairing that asks for a bond (Linux 6.18 `net/bluetooth/hci_event.c:4544-4547, 5252-5296`, `smp.c:1765-1767, 2338-2340`);
+  every step that needs an agent fails, `new_auth` finding none ("No agent available", `src/device.c:7620-7656`) and the
+  adapter answering the kernel negatively (`src/adapter.c:8175-8179, 8248-8252, 8398-8402`), Just Works included, since
+  `new_auth` runs before the auto-accept of a pairing the user started (`src/device.c:7717-7731`); a service of an untrusted
+  device is refused ("Authentication attempt without agent", `src/adapter.c:7792-7797`). A pairing an application starts
+  without an agent (Settings' Pair) uses NoInputNoOutput (`src/device.c:3389-3395`), which the kernel completes itself for a
+  device that needs no code (`hci_event.c:5393-5394`), as a pairing without bonding while the adapter is not bondable
+  (`hci_event.c:5281-5282`). So BlueZ refuses; nothing is accepted silently. Options: (a) the drop-in (no bt-agent in the
+  session; with the shell, the bridge is the only agent; without it, the refusals above); (b) bt-agent kept as the fallback,
+  the bridge only asking to be the default. **Choice: (a).** Rule applied: macOS ("nothing is accepted silently", spec section
+  8), D-11's "never automatic", fail closed. (b) would accept incoming pairings and untrusted services silently exactly when
+  the shell is not there to ask (bt-agent answers `NoInputNoOutput` requests without asking), and a bt-agent that restarts
+  after the bridge registered becomes the default again (the last agent to ask is: `src/agent.c:139-154`) with no signal to
+  the bridge, which would then never see a pairing while the shell runs. Cost: while the shell is not connected (a crash
+  until systemd restarts it), a pairing started from Settings works only for a device without keys or a screen, and is not
+  kept as a bond. How Omarchy starts it: `bt-agent.service` of omarchy-settings, `ExecStart=/usr/bin/bt-agent -c
+  NoInputNoOutput`, enabled for `graphical-session.target` (inventory probe P13, `docs/audits/final-1.0/02-omarchy-compatibility.md`
+  section 3.6), the pattern of the `omarchy-crash-watch` drop-in (GRASSFIELD_SESSION is imported by `uwsm finalize` before that
+  target's units start). **Amended after the opus review of step 10 (MAJOR).** The drop-in's condition is read only when the
+  unit starts, and Omarchy's unit has no `PartOf=` (Omarchy 4.0.4 `default/systemd/user/bt-agent.service`: only
+  `WantedBy=graphical-session.target`, line 23): a bt-agent started by an Omarchy session kept running when that session
+  ended and the user manager stayed (a session switch, a quick log-in again, lingering: the ksecretd case of D-12), so in
+  the next Grassfield session it was bluetoothd's default until the bridge registered, and again whenever the shell went
+  (`remove_default_agent` hands the default to the next agent, `src/agent.c:156-172`), NoInputNoOutput accepting Just Works
+  pairings (`hci_event.c:5393-5394`). Options: (a) `Conflicts=bt-agent.service` in `grassfield-prompter.service`; (b) the
+  drop-in adds `PartOf=graphical-session.target` (bt-agent stops with the session that started it), and
+  `grassfield-prompter.service` stops a leftover bt-agent before it starts (`ExecStartPre=-/usr/bin/systemctl --user stop
+  bt-agent.service`). **Choice: (b).** Checked under a systemd 262 user manager (a privileged container with systemd as PID 1;
+  Omarchy's unit with a stand-in process and without its hardware conditions; a target binding `graphical-session.target`
+  for each session; the bridge's unit with a stand-in process and without `CapabilityBoundingSet=`, which a user manager in
+  that container cannot apply to any unit, while `grassfield-menu-bridge.service` runs with it on the owner's machine,
+  `docs/audits/final-1.0/02-omarchy-compatibility.md` section 4.3): with the first drop-in, bt-agent stayed active after the
+  Omarchy session and into the Grassfield one; with `PartOf=` it stopped with the session; an older bt-agent still running
+  was stopped by the bridge's unit, which then started; `systemctl --user start bt-agent.service` in the Grassfield session
+  left bt-agent inactive (its condition) and the bridge running, whereas a unit with `Conflicts=bt-agent.service` was stopped
+  by that command although bt-agent then did not start. (a) would therefore let any start of bt-agent in this session (an
+  Omarchy tool, the user) stop the whole bridge, and gcr's, NetworkManager's, KIO's and Bluetooth's prompts with it, until
+  the next log-in. In the Omarchy session the bridge never starts (`ConditionEnvironment=GRASSFIELD_SESSION=1`, started only
+  by Grassfield's `autostart.lua`), and bt-agent starts with the session and now stops with it. `systemd-analyze --user
+  verify` of both units (systemd 262): rc 0. Rule applied: fail closed, never another agent beside the sheet.
+- **10-2. When is the agent registered, with which capability, and is it the default?** **Choice:** registered (`KeyboardDisplay`:
+  every method can be drawn, D-11) only while a shell whose hello lists `bluetooth` is connected, then `RequestDefaultAgent`
+  (an `AlreadyExists` answer means this connection's agent is still registered, and the default is asked all the same);
+  `UnregisterAgent` when the shell goes; registered again when `org.bluez` gets a new owner (a restarted bluetoothd knows no
+  agent). The object stays exported for the bridge's life, and a call while no shell draws the sheet is Rejected. `Release`
+  is answered and changes nothing: bluetoothd sends it only as it stops (`btd_agent_cleanup` → `agent_destroy` →
+  `agent_release`, `src/agent.c:1054-1061, 930-945`), a pending request cancelled first (`:75-92`), and the stopping
+  bluetoothd leaves the bus, which ends everything. **Amended after the opus review of step 10 (NIT):** the first text said
+  bluetoothd also sends it after the bridge's own `UnregisterAgent` or when the bridge's connection ends; it does not, since
+  `agent_disconnect` clears the watch that `agent_destroy` releases on (`:174-188`); the fake bluetoothd of
+  `bluez_agent.sh` now behaves so. Rule applied: D-9's fallback (never blocking, nothing without a shell), 9-27's pattern.
+- **10-3. Who may call the agent?** **Choice:** a call is handled only when its sender is the unique name that owns `org.bluez`
+  now, asked with `GetNameOwner` when the call arrives; any other caller (and every call while the name has no owner) gets
+  `org.bluez.Error.Rejected`, nothing reaches the shell, and the refusal is logged once per 10 s; a stranger's `Cancel` cancels
+  nothing. The system bus's policy already lets only root send `org.bluez.Agent1` (`src/bluetooth.conf:10-28`); the check also
+  stops other root processes and a misconfigured policy. The device's properties and `CancelPairing` go to that same unique
+  name. Rule applied: D-11 (review of PR #13, minor), as 9-29.
+- **10-4. What does bluetoothd get on each end?** **Choice:** the PIN typed (a string), the passkey typed (a number), an empty
+  reply for Connect; `org.bluez.Error.Canceled` for the user's Cancel of a PIN, a passkey or a code to compare;
+  `org.bluez.Error.Rejected` for Decline of an incoming pairing or service, and on every other end: the shell gone or never
+  there, its refusal (result `refused`), a wrong answer from it, the bound of 8, bluetoothd leaving the bus, an argument that
+  does not pass, and no answer after 55 s. bluetoothd waits 60 s (`src/agent.c:40`) and, for a PIN or a passkey, never says
+  it stopped (`pincode_reply` and `passkey_reply` have no time-out branch, `:455-512, 570-610`; a confirmation's time-out does
+  send Cancel, `:344-351`), so a sheet left open would take a code nobody waits for. bluetoothd's `Cancel` withdraws its call
+  still waiting for a reply from the shell (shown or queued) and answers it Canceled (bluetoothd has dropped it already,
+  `:307-321`). **Amended after the opus review of step 10 (MINOR):** the first version ended every request, a code shown for
+  another device included; bluetoothd sends Cancel only for its one request awaiting a reply (`agent_cancel` needs
+  `agent->request->call`, `:307-321`; one request per agent, `:407-428, 551-552`), so a code shown, which has had its reply or
+  wants none, stays (10-16). Rule applied: fail closed (no answer invented), the brief's mapping (user cancel Canceled, refusal Rejected).
+  (bluetoothd itself treats both errors alike: a negative reply to the kernel, `src/device.c:7572-7607`.)
+- **10-5. The bluetooth kind in prompter/1.** **Choice:** bridge to shell `{"type":"prompt","id":…,"kind":"bluetooth",
+  "device":{"name","address","icon"},"pairing":{"mode","code","entered","service","uuid"}}` with no requester object (the bridge
+  sends this kind only for the owner of `org.bluez`; the shell draws its own row, role `bluetooth`), and `{"type":"progress",
+  "id":…,"entered":0-6}` for the digits typed on the device; shell to bridge, the answer's `password` carries the PIN or the
+  passkey, only for those modes answered ok; a code shown is answered "cancel" only; nothing else. Both sides check each
+  mode's fields (a passkey's 6 digits for display-passkey and confirm, the PIN shown for display-pin, `entered` only for
+  display-passkey, a service and its UUID only for authorize-service); the shell closes the connection on anything else, and on
+  a `progress` for an id it holds that shows no passkey (one for an id it does not hold crossed its answer: ignored). A new
+  message type within `prompter/1`, as 9-26 added a field value: bridge and shell ship in one package, and a shell that did
+  not know it would close the connection (fail closed). Rule applied: 9-9 (kinds added within `prompter/1`), R12 (the
+  requester is never the caller's text), 9-20 (read strictly).
+- **10-6. A code shown on the screen (DisplayPinCode, DisplayPasskey).** bluetoothd expects no reply to `DisplayPasskey`
+  (`src/agent.c:788-813`, `gdbus/object.c:1616-1617` sets NO_REPLY_EXPECTED) and hands the PIN of `DisplayPinCode` to the
+  controller only when the agent answers (`src/device.c:7609-7618`, whatever the answer: `pincode_cb` ignores the error,
+  `:7555-7570`); once answered, neither has a pending call, so bluetoothd never sends Cancel for them (`agent_cancel` needs
+  one, `src/agent.c:307-321`; `display_pincode_reply` clears it first, `:825`), contrary to the doc's "the Cancel method of
+  the agent will be called". Options: (a) answer at once and keep the sheet until the pairing visibly ends; (b) answer
+  `DisplayPinCode` only when the user closes the sheet. **Choice: (a)**: answered at once; the sheet goes on bluetoothd's
+  departure, the device's `Paired` or `Bonded` turning true (a `PropertiesChanged` of that device from that owner,
+  subscribed for the sheet's life), its `Connected` turning false or the device removed (10-16), another code shown (one at
+  a time, 10-16), or 55 s; it has only Cancel (no OK: nothing to
+  agree to), and the user's Cancel asks bluetoothd to `CancelPairing` the device (a pairing Settings started stops; one the
+  device started ends at the device's own time limit, nobody typing the code). Each `DisplayPasskey` of the same code for the
+  same device updates `entered` (at most 6), sent as `progress`. Rule applied: macOS (the code stays while the device is being
+  typed on, and goes when it connects), never blocking ((b) would hold the pairing on a sheet the user must close first).
+- **10-7. Which pairing sheets are held until a click?** **Choice:** all of them. An incoming pairing or service
+  (`RequestAuthorization`, `AuthorizeService`) is a security decision that a device in range chooses the moment of: no key
+  may answer it (Return, Space or Enter, whatever has the focus), notice "Click the alert to answer it: no key answers it
+  before that."; a code to compare likewise (9-23's rule for a confirmation); a PIN or passkey field because bluetoothd asks
+  when a device decides and what reaches the field goes to that device (9-28's rule), notice "Click the alert to type the
+  code: nothing typed elsewhere goes into it."; a code shown because it needs no keyboard at all (no notice: nothing to click
+  for; a click past the guard gives it the keyboard so Esc can cancel, and Cancel works with or without that click). Rule
+  applied: R12 (no answer from a key typed for something else), the reviewed hold reused (its guard, its click, its notice).
+  Cost: one click before Connect, also right after the user's own click on Settings' Connect (macOS asks one click too).
+- **10-8. The digits typed on the device.** **Choice:** a `progress` updates the waiting request's count and, when it is on
+  screen, the sheet's `entered` property only: no arrival, no change of the hold, no focus moved, no keyboard taken, nothing
+  emptied. Rule applied: R12 (no sheet takes the keyboard), the brief ("without stealing focus").
+- **10-9. How is the device named?** **Choice:** `GetAll(org.bluez.Device1)` of the device's path, from the unique name whose
+  call this is, asynchronously, given up after 2 s: its `Alias`, else its `Name`, else its address; plain text flattened by
+  9-13's rule and capped at 64 UTF-16 code units, flattened again by the shell, shown only as a quoted field of Grassfield's
+  sentence ("Connection Request from “%1”"), never as an instruction; the address is the path's (bluetoothd builds the path
+  from it), never the `Address` property, and is shown under the title ("Bluetooth device AA:BB:…"), so two devices with
+  look-alike names can be told apart; the icon only as one of a fixed list of keys (bluetoothd's names, `src/dbus-common.c`),
+  each a Grassfield glyph, else the Bluetooth glyph. Rule applied: BT3, SC3b (remote text never in the title's place; a remote
+  device chooses its own name), macOS (it names the device).
+- **10-10. The codes.** **Choice:** a passkey is shown as 6 digits with leading zeros (the doc's rule) and typed as exactly 6
+  ASCII digits (a remote display shows all six); a PIN is 1 to 16 ASCII letters and digits (BlueZ refuses a reply outside 1
+  to 16 bytes, `src/agent.c:491-500`; the doc: "can be alphanumeric"), the same for a PIN shown (`plugins/autopair.c:110-114`
+  makes six random digits). Connect is enabled by the field's length only (6, or 1 to 16); the characters are checked when the
+  code is sent, by the model, the client's answer line and the bridge, which answers Rejected for a wrong one. The field is a
+  hidden secret field like every other (no Show password: 9-34's is a network's). Rule applied: bounded, validated input on the
+  secret path (9-11), SC5 (the text read once, when it is sent).
+- **10-11. An incoming service.** **Choice:** the UUID must be canonical (8-4-4-4-12 hexadecimal, any case, sent in lower case);
+  a profile of the Bluetooth base UUID that the sheet can name gets a fixed key (audio, remote-control, headset, hands-free,
+  file-transfer, object-push, network, input, phonebook, messages, serial, dial-up) shown in Grassfield's words ("The device
+  wants to use audio streaming on this computer."); anything else is "other" ("a Bluetooth service"), with the UUID under it.
+  Rule applied: BT2 ("naming the device and, for a service, its profile"), never free text from the bus.
+- **10-12. Pairing started from Settings.** Settings' Bluetooth pane (PR #8) calls `Device1.Pair` with no agent of its own
+  (`apps/settings/src/systembus.cpp:1471-1475`, waiting up to 120 s, `:29`); bluetoothd then asks the default agent
+  (`src/device.c:3389-3397`, `src/agent.c:247-261`) and pairs with that agent's IO capability, `KeyboardDisplay`. **Choice:**
+  nothing changes in Settings: with the shell connected, its pairings reach the bridge's sheet (`bluez_agent.sh` 10: a stand-in
+  calls Pair on the fake bluetoothd, the sheet shows the code, Connect completes Pair). A device that needs no code is paired
+  by the kernel without any sheet (`hci_event.c:5358-5396`; Just Works with a link key already there is accepted for a
+  pairing the user started, `src/device.c:7723-7731`), as macOS pairs headphones. Settings' own comment and spec line ("Settings
+  registers no Agent1 … a device that needs a PIN is refused") now describe what Settings does, not what the session does
+  (`docs/specs/settings.md` notes the sheet). Rule applied: the brief (Settings owns discovery; no change to its pane).
+- **10-13. After a code is sent.** **Choice:** the key sink lingers as after a password (9-19: a legacy PIN that fails may be
+  asked again at once, `src/adapter.c:8368-8369` and the bonding retry), its notice "Code sent". Rule applied: 9-19 reused, the
+  notice telling the truth.
+- **10-14. The secret on the bridge's side.** **Choice:** the PIN is decoded from the shell's line straight into gcr's secure
+  memory and the reply's string is that buffer (zeroed and freed with the reply); a passkey is parsed from it and the buffer
+  wiped at once; GDBus marshals a copy into the message it writes and frees it unwiped (known limitation, as 9-35); nothing of
+  a code, and nothing of a device's name, reaches the journal (ids, modes, addresses). Rule applied: SC5, D-9.
+- **10-15. Is `AlwaysPairable` checked?** (opus review of step 10, MINOR.) 10-1 relies on BlueZ's default, `AlwaysPairable =
+  false`: with it true, the adapter stays bondable with no agent, at the NoInputNoOutput capability (`src/adapter.c:9167-9168`),
+  and the kernel accepts an incoming Just Works pairing by itself while the shell is not connected (`hci_event.c:5393-5394`).
+  BlueZ 5.87 reads one file, `main.conf` in its configuration directory (`src/main.c:253-291`; `ConfigurationDirectory=bluetooth`,
+  `src/bluetooth.service.in:24`: `/etc/bluetooth/main.conf`), as a GLib key file (the last value of a key in `[General]`
+  counts; "true" or "1" is true, anything else leaves the default, `:894-914`); no drop-in directory. Omarchy 4.0.4 sets no
+  `AlwaysPairable` (its only change to that file is `AutoEnable`, `migrations/1786380259.sh:32-34`). Options: (a) document
+  the risk only; (b) `grassfield-login-check` (run by the package after every install and upgrade, and on demand) reads
+  the file as BlueZ does and warns when it is true; (c) a notice in the session, or the bridge refusing to start; (d) change
+  the file. **Choice: (b)**, with the residual risk documented. Rule applied: Grassfield never edits `/etc` or the owner's
+  files ((d)); no technical step is asked in the default case, and the warning says what a true value means; (c) would add a
+  surface for a window (the shell not connected) in which the shell cannot show anything anyway: with the shell connected,
+  `AlwaysPairable` changes nothing (the bridge is the default agent, `KeyboardDisplay`, and every incoming pairing asks).
+  What remains: a value set after the last check, a configuration file given to bluetoothd another way (a drop-in of its
+  unit with `-f`), and the window while the shell is not connected. Tests: `tests/shell/login_session.sh` (no file,
+  BlueZ's commented file, true, 1, another group, the last value, "yes").
+- **10-16. When does a code shown end, and how many can be open?** (opus review of step 10, MINOR.) bluetoothd sends no Cancel
+  for a code shown (10-6) nor for an incoming pairing that fails, so an abandoned code sheet held a place of the shared bound
+  of 8 for 55 s, and a device changing its address for each attempt could hold eight, refusing gcr's, NetworkManager's and
+  KIO's requests meanwhile. Options for the number: (a) one code shown at a time, a new one (any device) withdrawing the one
+  before; (b) one, a new one refused while it is shown; (c) two. **Choice: (a)**, and a code shown also ends when its device's
+  `Connected` turns false (the pairing's link went down) or bluetoothd removes the device (`InterfacesRemoved` from the same
+  owner, on its object manager `/`). Rule applied: fail closed and bounded (with one request awaiting a reply per agent in
+  bluetoothd, Bluetooth now holds at most two of the eight places); macOS shows one pairing at a time; the newest code is the
+  pairing bluetoothd is doing now, and (b) would let a device that keeps the place block the user's own pairing.
+  `bluez_agent.sh` 5 (mutants `cancel-ends-codes-shown`, `code-kept-when-disconnected`, `code-kept-when-removed`,
+  `codes-not-capped`).
 
 ### D-12. KIO's and KWallet's dialogs in Grassfield's own apps (category A + S; inventory K1–K8; owner decision Q11)
 Upstream facts (inventory § K, KIO and KWallet v6.31.0): `grassfield-desktop` depends on kio (`packaging/arch/PKGBUILD:136`),
