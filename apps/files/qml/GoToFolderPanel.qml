@@ -25,6 +25,8 @@ Item {
     property int chosen: 0
     // An arrow key moved the choice: Return then goes to that row even when the typed path exists.
     property bool picked: false
+    // A Return waits for the completions of the text it was pressed on.
+    property bool returnWaiting: false
     property string errorText: ""
     readonly property bool shown: root.visible
     readonly property bool showingRecents: field.text === ""
@@ -44,6 +46,7 @@ Item {
 
     function open(): void {
         root.errorText = "";
+        root.stopWaiting();
         root.matches = [];
         root.matchesFor = "";
         root.chosen = 0;
@@ -54,6 +57,7 @@ Item {
     }
 
     function close(): void {
+        root.stopWaiting();
         if (root.focusBack)
             root.focusBack.forceActiveFocus();
         root.visible = false;
@@ -89,8 +93,36 @@ Item {
             root.go(root.rows[root.chosen].url);
             return;
         }
+        // The completions of what was just typed are still on their way: the Return waits for them (a moment at most), then
+        // acts on them; without them it resolves the typed text as it stands.
+        if (text !== "" && !root.showingRecents && root.matchesFor !== field.text && !root.returnWaiting) {
+            root.returnWaiting = true;
+            returnWait.restart();
+            return;
+        }
+        if (root.returnWaiting)
+            return;
+        root.notFound(text);
+    }
+
+    function notFound(text: string): void {
         if (text !== "")
             root.errorText = qsTr("The folder “%1” can’t be found.").arg(text);
+    }
+
+    function stopWaiting(): void {
+        root.returnWaiting = false;
+        returnWait.stop();
+    }
+
+    Timer {
+        id: returnWait
+        interval: Tokens.filesGoReturnWait
+        onTriggered: {
+            // No completions came: the typed text as it stands (it was already looked up and does not exist).
+            root.returnWaiting = false;
+            root.notFound(field.text.trim());
+        }
     }
 
     function go(url: url): void {
@@ -113,10 +145,16 @@ Item {
         function onFolderCompletions(text: string, matches: var): void {
             if (text !== field.text)
                 return;
+            // A new list clears an error that was shown for the text before it.
+            root.errorText = "";
             root.matches = matches;
             root.matchesFor = text;
             root.chosen = 0;
             root.picked = false;
+            if (root.returnWaiting) {
+                root.stopWaiting();
+                root.accept();
+            }
         }
     }
 
@@ -170,6 +208,7 @@ Item {
                 Accessible.name: qsTr("Folder path")
                 onTextEdited: {
                     root.errorText = "";
+                    root.stopWaiting();
                     root.picked = false;
                     if (field.text === "")
                         root.matches = [];

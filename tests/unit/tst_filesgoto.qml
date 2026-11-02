@@ -212,11 +212,40 @@ TestCase {
         compare(panel.current.length, 0, "the matches of ~/Do are not ~/Dow's");
         compare(panel.rows.length, 0);
         keyClick(Qt.Key_Return);
-        compare(tc.visited, [], "nothing opens from the stale rows");
-        verify(panel.errorText !== "", "the typed text was resolved as it is: not found");
+        keyClick(Qt.Key_Return);
+        compare(tc.visited, [], "nothing opens from the stale rows, whatever the number of Returns");
+        verify(panel.returnWaiting, "the Return waits for the completions of ~/Dow");
+        compare(panel.errorText, "", "no error yet");
         // Once the right completions arrive, Return goes to the match of the text typed.
         fakeApp.flush();
         compare(panel.current.length, 1);
         compare(panel.current[0].name, "Downloads");
+    }
+
+    // The Return is remembered and acts when the current text's completions arrive.
+    function test_aReturnBeforeTheCompletionsActsWhenTheyArrive() {
+        const panel = openPanel();
+        fakeApp.deferred = true;
+        tc.typeText("~/Dow");
+        keyClick(Qt.Key_Return);
+        compare(tc.visited, []);
+        fakeApp.flush();
+        compare(tc.visited, ["file:///home/u/Downloads"], "the match of the text typed, not of an earlier one");
+        verify(!panel.visible);
+    }
+
+    // No completions within the wait: the typed text as it stands (not found), and a list that comes later clears the error.
+    function test_withoutCompletionsTheTypedTextIsResolvedAndALaterListClearsTheError() {
+        const panel = openPanel();
+        fakeApp.deferred = true;
+        tc.typeText("~/Nope");
+        keyClick(Qt.Key_Return);
+        compare(panel.errorText, "");
+        tryVerify(() => panel.errorText !== "", 2000, "after the wait the typed text is reported as not found");
+        verify(!panel.returnWaiting);
+        compare(tc.visited, []);
+        fakeApp.flush();
+        compare(panel.errorText, "", "a new completion list clears the error");
+        verify(panel.visible);
     }
 }

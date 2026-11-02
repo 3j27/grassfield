@@ -2649,6 +2649,8 @@ QtObject {
     readonly property int filesProgressStopSize: 11
     // macOS 27 Finder-Copy: the stop button 27 px inside the window edge at 2x [ref: docs/specs/files.md § File operations]
     readonly property real filesProgressStopInset: 13.5
+    // estimate: ms Go to Folder waits for the typed text's completions after a Return before it resolves the text as it stands [ref: docs/specs/files.md § File operations]
+    readonly property int filesGoReturnWait: 300
     // estimate: ms a copy runs before its window shows (a quick copy shows none) [ref: docs/specs/files.md § File operations]
     readonly property int filesProgressShowDelay: 700
 
