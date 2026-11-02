@@ -318,7 +318,9 @@ TestCase {
         const load = parseFloat(read("/proc/loadavg"));
         if (load > cores)
             skip("timing budget not judged at load " + load + " (above " + cores + " cores)");
-        verify(each <= 2, "one read took " + each.toFixed(2) + " ms (budget 2 ms)");
+        // Measured 1.1 to 1.8 ms on a quiet machine and 2.2 ms beside check-quick at load 5 (below the core count, so not
+        // skipped): the budget keeps twice that headroom; the old 4n x 4n read cost 6.9 ms.
+        verify(each <= 4, "one read took " + each.toFixed(2) + " ms (budget 4 ms)");
     }
 
     Component {
