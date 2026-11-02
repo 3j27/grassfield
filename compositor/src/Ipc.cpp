@@ -691,7 +691,7 @@ namespace gf::ipc {
             guarded("hl.plugin.grassfield.unsplit", [&] {
                 if (!address.ok || (hasHow && !how.ok)) {
                     logRequest(Log::WARN, "unsplit: rejected: invalid arguments");
-                    tiler::unsplitRequest("", "invalid"); // posts the refusal (reason invalid, or locked)
+                    tiler::unsplitRequest(""); // no window: posts the refusal (reason invalid, or locked)
                     return;
                 }
                 tiler::unsplitRequest(address.view(), hasHow ? how.view() : std::string_view{});

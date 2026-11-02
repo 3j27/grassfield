@@ -120,6 +120,14 @@ TEST(ClientChromeBand, NoTitlebarBandAboveSuchAWindow) {
     EXPECT_EQ(band(false), gf::theme::kTitlebarHeight);
 }
 
+// TL33, step 6e (ADR-0036 D73): a Split View member's titlebar is away, so its half is filled from the output's top edge.
+TEST(ClientChromeBand, NoBandAboveASplitViewMember) {
+    EXPECT_EQ(band(false, true), 0.0) << "a member: its bar is away";
+    EXPECT_EQ(band(true, true), 0.0);
+    EXPECT_EQ(band(false, false), gf::theme::kTitlebarHeight) << "an ordinary window keeps its band";
+    EXPECT_EQ(band(true, false), 0.0) << "client chrome, as before";
+}
+
 TEST(ClientChromeBand, StagesThumbnailOfSuchAWindowHasNoBand) {
     using namespace gf::stages;
     const Box                 tile{16, 120, 180, 130};
@@ -210,7 +218,7 @@ TEST(ClientChromeZoomLight, TheGlyphShowsTheArrowsWhileOptionIsHeld) {
 // Reviewer, 2026-10-23: a window in full screen had no titlebar, so the pointer had no way out of it (LeaveFullscreen was
 // unreachable). macOS: the pointer at the top edge reveals the titlebar below the menu bar.
 TEST(ClientChromeFullscreenTitlebar, ThePointerAtTheTopEdgeRevealsIt) {
-    RevealInput in{.fullscreen = true, .onMonitor = true, .pointerY = 0.0, .barTop = 30.0, .pressing = false};
+    RevealInput in{.revealable = true, .onMonitor = true, .pointerY = 0.0, .barTop = 30.0, .pressing = false};
     EXPECT_TRUE(nextRevealed(false, in)) << "at the top edge";
     in.pointerY = kRevealEdge;
     EXPECT_TRUE(nextRevealed(false, in));
@@ -221,7 +229,7 @@ TEST(ClientChromeFullscreenTitlebar, ThePointerAtTheTopEdgeRevealsIt) {
 }
 
 TEST(ClientChromeFullscreenTitlebar, ItStaysWhileThePointerIsOnItAndGoesBelowIt) {
-    RevealInput in{.fullscreen = true, .onMonitor = true, .pointerY = 30.0 + 16.0, .barTop = 30.0, .pressing = false};
+    RevealInput in{.revealable = true, .onMonitor = true, .pointerY = 30.0 + 16.0, .barTop = 30.0, .pressing = false};
     EXPECT_TRUE(nextRevealed(true, in)) << "on the bar, below the menu bar";
     in.pointerY = 5.0;
     EXPECT_TRUE(nextRevealed(true, in)) << "over the menu bar";
@@ -236,16 +244,139 @@ TEST(ClientChromeFullscreenTitlebar, ItStaysWhileThePointerIsOnItAndGoesBelowIt)
     in.onMonitor  = false;
     EXPECT_FALSE(nextRevealed(true, in)) << "the pointer went to another monitor";
     in.onMonitor  = true;
-    in.fullscreen = false;
+    in.revealable = false;
     EXPECT_FALSE(nextRevealed(true, in)) << "the window left full screen";
     in.pressing = true;
     EXPECT_FALSE(nextRevealed(true, in)) << "even during a press";
+}
+
+// TL33, step 6e (ADR-0036 D74): each half of a Split View reveals its own bar; the pointer moving across within the band
+// hands the bar over to the other half (one menu bar over both, macOS).
+TEST(ClientChromeSplitTitlebar, EachHalfRevealsItsOwnBar) {
+    RevealInput in{.revealable = true, .onMonitor = true, .pointerY = 0.0, .barTop = 30.0, .pressing = false, .inSpan = true, .handOver = false};
+    EXPECT_TRUE(nextRevealed(false, in)) << "at the top edge over its half";
+    in.inSpan = false;
+    EXPECT_FALSE(nextRevealed(false, in)) << "at the top edge over the other half: that half's bar, not this one";
+    in.pointerY = 20.0;
+    in.inSpan   = true;
+    EXPECT_TRUE(nextRevealed(true, in)) << "revealed, the pointer on it";
+    in.inSpan = false;
+    EXPECT_TRUE(nextRevealed(true, in)) << "in the gap between the halves: still its bar";
+    in.overOther = true;
+    EXPECT_FALSE(nextRevealed(true, in)) << "the pointer went across to the other half: it goes";
+    in.pointerY = 0.0;
+    EXPECT_FALSE(nextRevealed(false, in)) << "over the other half at the top edge: that half's bar, not this one";
+}
+
+namespace {
+    // Two members side by side (the review of #99: an 8 px gap between the halves), the pointer walked along the band from
+    // `from` to `to` in `step` px: at every step exactly one bar is revealed, the left one until the pointer is over the
+    // right half, the right one from there. Both bars' states come from nextRevealed, each motion seeing the other's state
+    // before it (updateReveal's handOver).
+    void walkTheGap(double from, double to, double step) {
+        constexpr double kLeftEnd = 956.0, kRightStart = 964.0, kWidth = 1920.0, kBarTop = 24.0;
+        bool             left = false, right = false;
+        const auto       input = [&]([[maybe_unused]] double x, bool inOwn, bool overOther, bool otherRevealed) {
+            return RevealInput{.revealable = true, .onMonitor = true, .pointerY = 20.0, .barTop = kBarTop, .pressing = false, .inSpan = inOwn,
+                               .handOver = otherRevealed, .overOther = overOther};
+        };
+        // Revealed first over the left half, at the top edge.
+        left = nextRevealed(left, RevealInput{.revealable = true, .onMonitor = true, .pointerY = 0.0, .barTop = kBarTop, .pressing = false, .inSpan = true});
+        ASSERT_TRUE(left);
+        const int steps = static_cast<int>((to - from) / step);
+        for (int i = 0; i <= steps; ++i) {
+            const double x = from + (i * step);
+            const bool inLeft  = x >= 0 && x < kLeftEnd;
+            const bool inRight = x >= kRightStart && x < kWidth;
+            const bool l = nextRevealed(left, input(x, inLeft, inRight, right));
+            const bool r = nextRevealed(right, input(x, inRight, inLeft, left));
+            left  = l;
+            right = r;
+            EXPECT_EQ(left, x < kRightStart) << "the left bar at x " << x;
+            EXPECT_EQ(right, x >= kRightStart) << "the right bar at x " << x;
+        }
+    }
+} // namespace
+
+TEST(ClientChromeSplitTitlebar, TheBarIsHandedOverAcrossTheGapInSmallSteps) {
+    walkTheGap(900.0, 1020.0, 4.0);
+    walkTheGap(900.0, 1020.0, 12.0);
+    walkTheGap(950.0, 970.0, 1.0);
+    walkTheGap(940.0, 980.0, 40.0); // one jump over the gap, as before
+}
+
+TEST(ClientChromeSplitTitlebar, AndBackTheOtherWay) {
+    // Revealed over the right half, walked left in small steps: the right bar until the pointer is over the left half.
+    constexpr double kLeftEnd = 956.0, kRightStart = 964.0, kBarTop = 24.0;
+    bool             left = false;
+    bool             right = nextRevealed(false, RevealInput{.revealable = true, .onMonitor = true, .pointerY = 0.0, .barTop = kBarTop, .pressing = false});
+    for (int i = 0; i <= 25; ++i) {
+        const double x       = 1000.0 - (i * 4.0); // 1000 down to 900
+        const bool   inLeft  = x < kLeftEnd;
+        const bool inRight = x >= kRightStart;
+        const auto in      = [&](bool own, bool other, bool otherRevealed) {
+            return RevealInput{.revealable = true, .onMonitor = true, .pointerY = 20.0, .barTop = kBarTop, .pressing = false, .inSpan = own,
+                               .handOver = otherRevealed, .overOther = other};
+        };
+        const bool l = nextRevealed(left, in(inLeft, inRight, right));
+        const bool r = nextRevealed(right, in(inRight, inLeft, left));
+        left  = l;
+        right = r;
+        EXPECT_EQ(right, x >= kLeftEnd) << "the right bar at x " << x;
+        EXPECT_EQ(left, x < kLeftEnd) << "the left bar at x " << x;
+    }
+}
+
+TEST(ClientChromeSplitTitlebar, TheOtherHalfsBarComesAcrossTheBand) {
+    RevealInput in{.revealable = true, .onMonitor = true, .pointerY = 20.0, .barTop = 30.0, .pressing = false, .inSpan = true, .handOver = true};
+    EXPECT_TRUE(nextRevealed(false, in)) << "the other half's bar is revealed: within the band this one comes";
+    in.pointerY = 30.0 + gf::theme::kTitlebarHeight + kRevealSlack - 0.5;
+    EXPECT_TRUE(nextRevealed(false, in)) << "within the slack too";
+    in.pointerY = 30.0 + gf::theme::kTitlebarHeight + kRevealSlack;
+    EXPECT_FALSE(nextRevealed(false, in)) << "below the band: the content's own";
+    in.pointerY = 20.0;
+    in.handOver = false;
+    EXPECT_FALSE(nextRevealed(false, in)) << "no bar revealed on this monitor: only the top edge reveals";
+    in.handOver = true;
+    in.inSpan   = false;
+    EXPECT_FALSE(nextRevealed(false, in)) << "not over its half";
+    in.inSpan    = true;
+    in.onMonitor = false;
+    EXPECT_FALSE(nextRevealed(false, in)) << "not on its monitor";
+    in.onMonitor = true;
+    in.pointerY  = -1.0;
+    EXPECT_FALSE(nextRevealed(false, in)) << "above its monitor";
+    in.pointerY   = 20.0;
+    in.revealable = false;
+    EXPECT_FALSE(nextRevealed(false, in)) << "a window that cannot show it";
+}
+
+TEST(ClientChromeSplitTitlebar, APressOnARevealedBarHoldsItAndNoOtherComes) {
+    RevealInput in{.revealable = true, .onMonitor = true, .pointerY = 600.0, .barTop = 30.0, .pressing = true, .inSpan = false, .handOver = true};
+    EXPECT_TRUE(nextRevealed(true, in)) << "a member dragged by its revealed bar keeps it, wherever the pointer goes";
+    in.pointerY = 0.0;
+    in.inSpan   = true;
+    EXPECT_FALSE(nextRevealed(false, in)) << "the other half's bar does not come during that press, even at the top edge";
 }
 
 TEST(ClientChromeFullscreenTitlebar, MinimizeIsUnavailable) {
     EXPECT_TRUE(lightAvailableInFullscreen(gf::titlebar::Button::Close));
     EXPECT_FALSE(lightAvailableInFullscreen(gf::titlebar::Button::Minimize));
     EXPECT_TRUE(lightAvailableInFullscreen(gf::titlebar::Button::Zoom));
+}
+
+// TL33, step 6e (ADR-0036 D75): the revealed bar of a Split View member takes its drag as well as its lights.
+TEST(ClientChromeSplitTitlebar, ARevealedMembersBarStartsItsDragAwayFromTheLights) {
+    using gf::titlebar::HitTarget;
+    EXPECT_EQ(revealedPress(HitTarget::DragArea, true), RevealedPress::MemberDrag) << "a member in its half: its drag (D59)";
+    EXPECT_EQ(revealedPress(HitTarget::DragArea, false), RevealedPress::Nothing) << "full screen, or a member zoomed: focus only";
+    EXPECT_EQ(revealedPress(HitTarget::Zoom, true), RevealedPress::ArmLight) << "the green light leaves the Split View at its release";
+    EXPECT_EQ(revealedPress(HitTarget::Close, true), RevealedPress::ArmLight);
+    EXPECT_EQ(revealedPress(HitTarget::Close, false), RevealedPress::ArmLight) << "full screen's lights, as before";
+    EXPECT_EQ(revealedPress(HitTarget::Zoom, false), RevealedPress::ArmLight);
+    EXPECT_EQ(revealedPress(HitTarget::Minimize, true), RevealedPress::Nothing) << "minimize is inert (D56), never a drag";
+    EXPECT_EQ(revealedPress(HitTarget::Minimize, false), RevealedPress::Nothing);
+    EXPECT_EQ(revealedPress(HitTarget::None, true), RevealedPress::Nothing) << "off the bar";
 }
 
 // ADR-0040 step 1b's review: a window of fixed size drawn with the plugin's titlebar showed a live zoom light and a click

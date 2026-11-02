@@ -126,6 +126,15 @@
 #                  left, the Dock back on the top layer); off full screen the same click under tile_popover's popover zooms
 #   split-green    (integrator review of 7096305, MAJOR 1) a Split View member's light lies under the menu bar's strip: clicked
 #                  under its open popover it leaves the Split View, no app menu opens, no overlay stays
+# Step 6e (TL33, ADR-0036 D73-D75; with tiling-split-titles; the step 6a-6d Split View cases read a member's box without a
+# band, drag it by its revealed bar and click its revealed green light):
+#   split-titles   the pointer at the top edge over the left half reveals the left member's bar alone (the plugin's numbered
+#                  log line names it, read in Hyprland's in-memory log) and titlebar-reveal comes; moving across within the band
+#                  brings the right member's bar and the left one goes; below the band it goes too (titlebar-reveal false);
+#                  coming from below reveals nothing; the band walked across the gap between the halves in 4 px steps: the left
+#                  bar stays in the gap and goes only when the right one comes (review of #99); the session locked during the
+#                  revealed bar's drag: back in its half at the lock, no swap at the release; a member moved off by a key, or
+#                  back from special:minimized, has its titlebar in reach (below the work area's top)
 # Step 6d (TL33, ADR-0036 D71; with tiling-split-rows):
 #   split-rows     unsplit with an unknown `how` refused; Replace Tiled Window: the member home, the Split View Desktop shown,
 #                  the other kept in its half and waiting, the suggestion never offering the window replaced, a pick filling the
@@ -133,6 +142,9 @@
 #                  refused while locked
 #   replace-shell  (with the shell) Replace Tiled Window from a member's popover by the keys: the picker shows on the Split
 #                  View Desktop and a Return picks the first window offered
+#   overview-drop  (with the shell; step 6e, the follow-up of #78) the Overview's own drop path (dev hook overview dropProbe)
+#                  refuses a window dropped on a Split View Desktop (one the picker left on its Desktop) and a member dropped
+#                  on another Desktop; nothing moves
 #   gather         (without the shell too) a headless output made, the window placed on its area with GF-REF's Desktop kept,
 #                  the output removed: the plugin logs it and centres it across GF-REF's work area; again while the foreign
 #                  locker holds the lock: it stays off every output until the unlock, then comes back (review of 7096305)
@@ -1959,8 +1971,38 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       say "  members: $got (want $want)"
       [[ $got == "$want" ]]
     }
-    green_click() { # address: a click on its zoom light (found through tile_popover, the popover closed first)
-      local ev lx ly
+    # Step 6e (TL33, ADR-0036 D73): with tiling-split-titles a member's titlebar is away, no band above it (its half fills
+    # from the output's top edge); its bar is revealed by the pointer at the top edge over its half, below the menu bar.
+    split_titles=0 stb=$tb
+    if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-split-titles")' >/dev/null 2>&1; then
+      split_titles=1 stb=0
+    fi
+    split_inset=$(nestctl layers -j 2>/dev/null | jq -r --arg o "$out" '[.[$o].levels[][]? | select(.namespace == "grassfield-menubar") | .h] | max // 0')
+    [[ $split_inset =~ ^[0-9]+$ ]] || split_inset=0
+    say "  split titles: $([[ $split_titles == 1 ]] && echo "away (revealed below a menu bar strip of $split_inset px)" || echo shown)"
+    reveal_over() { # x (relative to $out): the pointer at the top edge over x, which reveals that half's bar (6e; nothing before)
+      ((split_titles)) && pointer abs "$1" $((mh / 2)) sleep 100 abs "$1" 0 sleep 300
+      return 0
+    }
+    member_grip() { # address: where a press drags a member, "px py": the middle of its revealed bar (6e), else of its titlebar
+      if ((split_titles)); then
+        nestctl clients -j | jq -r --arg a "$1" --argjson mx "$mx" --argjson y "$((split_inset + GF_TB_MID))" \
+          '.[] | select(.address == $a) | "\((.at[0] + .size[0] / 2 - $mx) | floor) \($y)"' | grep .
+      else
+        grip_of "$1"
+      fi
+    }
+    green_click() { # address: a click on its zoom light (found through tile_popover, the popover closed first; 6e: on its
+      # revealed bar, the pointer at the top edge over its half first)
+      local ev lx ly wx
+      if ((split_titles)) && split_members_of "$1"; then
+        wx=$(nestctl clients -j | jq -r --arg a "$1" --argjson mx "$mx" '.[] | select(.address == $a) | (.at[0] - $mx) | floor')
+        reveal_over $((wx + GF_TB_ZOOM_X + 40))
+        pointer abs $((wx + GF_TB_ZOOM_X)) $((split_inset + GF_TB_MID)) sleep 150 down sleep 80 up sleep 300
+        pointer abs 20 $((mh / 2)) sleep 200
+        sleep 0.8
+        return 0
+      fi
       mark_events
       nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$1\")" >>"$log" 2>&1
       event_came ".type == \"tile-hover\" and .address == \"${1#0x}\" and .state == \"open\"" || return 1
@@ -1971,23 +2013,33 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       pointer abs 20 $((mh / 2)) sleep 200
       sleep 0.8
     }
+    bar_in_reach() { # title: its frame (the titlebar band above the surface) starts at or below the work area's top
+      local _x y _w _h _a
+      area_now
+      read -r _x y _w _h _a < <(geometry_of "$1")
+      say "  $1 surface top ${y:-?}, band $tb, work area top $ay"
+      [[ -n ${y:-} ]] && (( y - tb >= ay - 1 ))
+    }
+    split_members_of() { # address: a member of a Split View Desktop now
+      tiling_state | jq -e --arg a "${1#0x}" 'any(.splits[]; .windows | index($a) != null)' >/dev/null 2>&1
+    }
     half_of() { # title left|right: that half of the whole output (D42: no menu bar or Dock reservation, one separator of
-      # tiling.margin in the middle, on the grid: up to 8 px of rounding)
+      # tiling.margin in the middle, on the grid: up to 8 px of rounding; 6e: no band above a member)
       local x y w h _a
       read -r x y w h _a < <(geometry_of "$1")
-      say "  $1 at $x,$y ${w}x$h (output $mx,$my ${mw}x$mh, band $tb)"
-      near $((y - tb)) "$my" 1 && near $((h + tb)) "$mh" 1 || return 1
+      say "  $1 at $x,$y ${w}x$h (output $mx,$my ${mw}x$mh, band $stb)"
+      near $((y - stb)) "$my" 1 && near $((h + stb)) "$mh" 1 || return 1
       if [[ $2 == left ]]; then
         near "$x" "$mx" 1 && (( x + w <= mx + mw / 2 - m / 2 + 1 && x + w >= mx + mw / 2 - m / 2 - 8 ))
       else
         near $((x + w)) $((mx + mw)) 1 && (( x >= mx + mw / 2 + m / 2 - 1 && x <= mx + mw / 2 + m / 2 + 8 ))
       fi
     }
-    fills_output() { # title: the whole output (D43)
+    fills_output() { # title: the whole output (D43; 6e: no band above a member)
       local x y w h _a
       read -r x y w h _a < <(geometry_of "$1")
-      say "  $1 at $x,$y ${w}x$h (output $mx,$my ${mw}x$mh, band $tb)"
-      near "$x" "$mx" 1 && near $((y - tb)) "$my" 1 && near "$w" "$mw" 1 && near $((h + tb)) "$mh" 1
+      say "  $1 at $x,$y ${w}x$h (output $mx,$my ${mw}x$mh, band $stb)"
+      near "$x" "$mx" 1 && near $((y - stb)) "$my" 1 && near "$w" "$mw" 1 && near $((h + stb)) "$mh" 1
     }
     home=$(shown_desktop)
     next=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
@@ -2043,7 +2095,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tiling-shared-edge")' >/dev/null 2>&1; then
       read -r slx sly slw slh _ < <(geometry_of tiling-foot)
       read -r srx _ _ _ _ < <(geometry_of tiling-foot2)
-      shx=$((slx + slw + (srx - slx - slw) / 2 - mx)) shy=$((sly - tb + (slh + tb) / 2 - my))
+      shx=$((slx + slw + (srx - slx - slw) / 2 - mx)) shy=$((sly - stb + (slh + stb) / 2 - my))
       say "  separator at $shx,$shy (left member right side $((slx + slw)), right member at $srx)"
       separator_moved() {
         local _x _y w _h _a
@@ -2101,33 +2153,39 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "split keys: tiling a member is refused (reason invalid)" event_came '.type == "tiling" and .reason == "invalid"'
     check "split keys: it keeps its half" half_of tiling-foot left
     # Step 6b (D59): a member's titlebar drag released in its own half puts it back there; released over the other half, the
-    # two swap halves (macOS), still members of one group; dragged back over the other half, they swap again.
-    if read -r gx gy < <(grip_of "$addr"); then
+    # two swap halves (macOS), still members of one group; dragged back over the other half, they swap again. Step 6e (D75):
+    # by its revealed bar (member_grip, reveal_over: the pointer at the top edge over its half first).
+    if read -r gx gy < <(member_grip "$addr"); then
+      reveal_over "$gx"
       pointer abs "$gx" "$gy" sleep 200 down drag $((gx + 120)) $((gy + 80)) sleep 300 up sleep 600
       check "split titlebar: released in its own half, back in it" half_of tiling-foot left
       check "split titlebar: the other member did not move" half_of tiling-foot2 right
       mark_events
+      reveal_over "$gx"
       pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 300 up sleep 800
       check "split swap: the plugin posts placed" event_came '.type == "tiling" and .reason == "placed"'
       check "split swap: the dragged window takes the right half" half_of tiling-foot right
       check "split swap: the other window takes the left half" half_of tiling-foot2 left
       check "split swap: both still members" split_members "$next" "$addr" "$addr2"
       check "split swap: still one tile group" split_pair_swapped
-      if read -r gx gy < <(grip_of "$addr"); then
+      if read -r gx gy < <(member_grip "$addr"); then
+        reveal_over "$gx"
         pointer abs "$gx" "$gy" sleep 200 down drag $((mw / 4)) $((mh / 2)) sleep 300 up sleep 800
       fi
       check "split swap back: the first window in the left half again" half_of tiling-foot left
       check "split swap back: the second in the right half again" half_of tiling-foot2 right
       check "split swap back: zones as at the pick" split_pair
       # A drag over the other half cancelled by a second button (the right one): no swap, back in its half (D59).
-      if read -r gx gy < <(grip_of "$addr"); then
+      if read -r gx gy < <(member_grip "$addr"); then
+        reveal_over "$gx"
         pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 300 rdown sleep 100 rup sleep 200 up sleep 800
       fi
       check "split cancelled: a second button ends the drag, back in its half" half_of tiling-foot left
       check "split cancelled: no swap" half_of tiling-foot2 right
       # The drag exemption (integrator PASS on 12e3dd3, MINOR A): the plugin's state read during a member's drag (the shell's
       # fetch does so at any notice) keeps the dragged member's record, and the drop still swaps; then back.
-      if read -r gx gy < <(grip_of "$addr"); then
+      if read -r gx gy < <(member_grip "$addr"); then
+        reveal_over "$gx"
         pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 3000 up sleep 200 &
         held_pid=$!
         # The read waits for the drag itself (the window follows the pointer over the other half), not a fixed time (merge
@@ -2154,13 +2212,106 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         sleep 0.8
         check "split drag read: the drop after it still swaps" half_of tiling-foot right
         check "split drag read: the other window in the left half" half_of tiling-foot2 left
-        if read -r gx gy < <(grip_of "$addr"); then
+        if read -r gx gy < <(member_grip "$addr"); then
+          reveal_over "$gx"
           pointer abs "$gx" "$gy" sleep 200 down drag $((mw / 4)) $((mh / 2)) sleep 300 up sleep 800
         fi
         check "split drag read: swapped back" half_of tiling-foot left
       fi
     else
       check "split titlebar: the first window's grip found" false
+    fi
+    # Step 6e (TL33, ADR-0036 D74, D75; with tiling-split-titles): the halves fill from the output's top edge (half_of above, no
+    # band); the pointer at the top edge over a half reveals that half's bar alone (the plugin's log names the window) and the
+    # titlebar-reveal event comes (the menu bar follows); moving across within the bar's band brings the other half's bar and
+    # the first goes; below the band both go. A member's drag by its revealed bar with the session locked meanwhile: back in
+    # its half at the lock, no swap at the release.
+    if ((split_titles)); then
+      # Hyprland's in-memory log (the log file is buffered: the review of #99); each Split View bar's change is numbered.
+      reveal_mark() { local n; n=$(nestctl rollinglog 2>/dev/null | grep -ao "(reveal [0-9]*)" | tail -n 1 | tr -dc '0-9'); echo "${n:-0}"; }
+      reveal_seen() { # pattern mark: a line "PATTERN (reveal N)" with N past mark in the in-memory log now
+        local n
+        for n in $(nestctl rollinglog 2>/dev/null | grep -ao -- "$1 (reveal [0-9]*)" | sed 's/.*(reveal \([0-9]*\))/\1/'); do
+          (( n > $2 )) && return 0
+        done
+        return 1
+      }
+      reveal_came() { local _; for _ in $(seq 1 30); do reveal_seen "$1" "$2" && return 0; sleep 0.1; done; return 1; }
+      reveal_absent() { ! reveal_seen "$1" "$2"; } # checked once the line it races with came (the log is in order)
+      read -r tlx _ tlw _ _ < <(geometry_of tiling-foot)
+      read -r trx _ trw _ _ < <(geometry_of tiling-foot2)
+      lmid=$((tlx + tlw / 2 - mx)) rmid=$((trx + trw / 2 - mx))
+      gapl=$((tlx + tlw - mx)) gapr=$((trx - mx)) bandy=$((split_inset + GF_TB_MID))
+      say "  halves: left ends at $gapl, right starts at $gapr (relative to $out); the band at y $bandy"
+      lrev="titlebar of Split View window ${addr#0x} revealed" laway="titlebar of Split View window ${addr#0x} away"
+      rrev="titlebar of Split View window ${addr2#0x} revealed" raway="titlebar of Split View window ${addr2#0x} away"
+      pointer abs "$lmid" $((mh / 2)) sleep 400
+      r0=$(reveal_mark)
+      mark_events
+      pointer abs "$lmid" 0 sleep 500
+      check "split titles: the pointer at the top edge over the left half reveals the left member's bar" reveal_came "$lrev" "$r0"
+      check "split titles: not the right member's" reveal_absent "$rrev" "$r0"
+      check "split titles: the plugin posts titlebar-reveal for $out (the menu bar follows it, D65)" \
+        event_came ".type == \"titlebar-reveal\" and .output == \"$out\" and .revealed == true"
+      r0=$(reveal_mark)
+      pointer abs "$rmid" "$bandy" sleep 500
+      check "split titles: moving across within the band brings the right member's bar" reveal_came "$rrev" "$r0"
+      check "split titles: and the left member's bar goes" reveal_came "$laway" "$r0"
+      r0=$(reveal_mark)
+      mark_events
+      pointer abs "$rmid" $((mh / 2)) sleep 500
+      check "split titles: below the band the right member's bar goes too" reveal_came "$raway" "$r0"
+      check "split titles: the plugin posts titlebar-reveal false for $out" \
+        event_came ".type == \"titlebar-reveal\" and .output == \"$out\" and .revealed == false"
+      r0=$(reveal_mark)
+      pointer abs "$rmid" "$bandy" sleep 500
+      check "split titles: coming from below to where the bar would be reveals nothing" reveal_absent "$rrev" "$r0"
+      # The review of #99 (MAJOR): the band walked across the gap between the halves in 4 px steps, as a hand moves: the left
+      # bar stays while the pointer is in the gap, and goes only when the right half's bar comes.
+      if (( gapr > gapl )); then
+        pointer abs "$lmid" $((mh / 2)) sleep 200 abs $((gapl - 16)) 0 sleep 400
+        walk() { local x seq=() ; for ((x = $1; x <= $2; x += 4)); do seq+=(abs "$x" "$bandy" sleep 40); done; pointer "${seq[@]}" sleep 300; }
+        r0=$(reveal_mark)
+        walk $((gapl - 12)) $(((gapl + gapr) / 2))
+        check "split gap walk: in the gap the left member's bar stays" reveal_absent "$laway" "$r0"
+        check "split gap walk: and the right one has not come yet" reveal_absent "$rrev" "$r0"
+        walk $(((gapl + gapr) / 2 + 4)) $((gapr + 16))
+        check "split gap walk: over the right half the right member's bar comes" reveal_came "$rrev" "$r0"
+        check "split gap walk: and the left one goes" reveal_came "$laway" "$r0"
+      else
+        say "  split gap walk: no gap between the halves on $out (margins off): skipped"
+      fi
+      pointer abs 20 $((mh / 2)) sleep 200
+      # D75: the session locked during the revealed bar's drag over the other half: the member back in its half at the lock,
+      # the release under the lock swaps nothing.
+      if read -r gx gy < <(member_grip "$addr"); then
+        reveal_over "$gx"
+        pointer abs "$gx" "$gy" sleep 200 down drag $((mw * 3 / 4)) $((mh / 2)) sleep 9000 up sleep 200 &
+        held_pid=$!
+        drag_on() { local x _y _w _h _a; read -r x _y _w _h _a < <(geometry_of tiling-foot); (( ${x:-0} > mx + mw / 8 )); }
+        for _ in $(seq 50); do drag_on && break; sleep 0.05; done
+        check "split titles drag: the member follows the pointer by its revealed bar" drag_on
+        if lock_session; then
+          sleep 0.5
+          check "split titles drag: at the lock the member is back in its half" half_of tiling-foot left
+          wait "$held_pid"
+          sleep 0.8
+          check "split titles drag: the release under the lock swapped nothing" half_of tiling-foot2 right
+          check "split titles drag: still members" split_members "$next" "$addr" "$addr2"
+          unlock_session || check "split titles drag: the session unlocked" false
+        else
+          wait "$held_pid"
+          check "split titles drag: the foreign locker locked the session" false
+          unlock_session >/dev/null 2>&1
+        fi
+        sleep 0.5
+        check "split titles drag: after the unlock both in their halves" half_of tiling-foot left
+      else
+        check "split titles: the first window's revealed grip found" false
+      fi
+      pointer abs 20 $((mh / 2)) sleep 200
+    else
+      say "SKIP: step 6e split titles (the plugin does not advertise tiling-split-titles)"
     fi
 
     if lock_session; then
@@ -2200,6 +2351,10 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     check "split empty: shown again" test "$(shown_desktop)" = "$next"
     move_off "$addr2" "$home"
     check "split empty: its last window moved off, $out goes back to the Desktop it came from" test "$(shown_desktop)" = "$home"
+    if ((split_titles)); then
+      # The review of #99: a member moved off by a key gets its titlebar back below the menu bar (its surface was at the top).
+      check "split empty: the window moved off has its titlebar in reach" bar_in_reach tiling-foot2
+    fi
     check "split empty: the reply no longer lists it" split_gone "$next" "$home"
     tile_ipc "$addr2" previous
 
@@ -2213,6 +2368,9 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
     move_off "$addr" special:minimized
     check "split leave: the other window fills the Split View Desktop" fills_output tiling-foot3
     move_off "$addr" "$home"
+    if ((split_titles)); then
+      check "split leave: back from special:minimized, its titlebar in reach" bar_in_reach tiling-foot
+    fi
     # D49: the green button of a member leaves the Split View (macOS exits full screen), here its last one, zoomed by a key
     # first (re-review of e5bd9d2: it went home still zoomed).
     nestctl dispatch "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:$addr3\" })" >>"$log" 2>&1
@@ -2493,6 +2651,49 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
           unsplit_ipc "0x$m8"
         done
         check "split replace shell: ended" split_gone "$next8" "$home"
+        tile_ipc "$addr3" previous
+        # The follow-up of #78 (D72): the Overview's own drop path (dev hook overview dropProbe, OverviewWindow.dropWindow)
+        # refuses a window dropped on a Split View Desktop and a member dropped on another Desktop; nothing moves.
+        ov() { timeout 5 "$root/tests/visual/ipc.sh" overview "$@" 2>>"$log"; }
+        next9=$(($(nestctl workspaces -j | jq '[.[].id, 0] | max') + 1))
+        split_ipc "$addr3" left
+        keys -k Return
+        sleep 1.5
+        close_shell_popup "overview drop picker"
+        # The window dropped is one the picker did not take (the review of #99: its Return picked $addr, whose drop was then
+        # refused as a member's and never as a window dropped onto the Split View Desktop).
+        outsider=""
+        for cand in "$addr" "$addr2"; do
+          if [[ $(desktop_of "$cand") == "$home" ]] && ! tiling_state | jq -e --arg a "${cand#0x}" 'any(.splits[]; .windows | index($a) != null)' >/dev/null 2>&1; then
+            outsider=$cand
+            break
+          fi
+        done
+        if [[ $(desktop_of "$addr3") == "$next9" && -n $outsider ]]; then
+          nestctl dispatch "hl.dsp.focus({ window = 'address:$outsider' })" >>"$log" 2>&1
+          sleep 1
+          ov open >/dev/null
+          sleep 1.5
+          check "overview drop: a window dropped on the Split View Desktop is refused" test "$(ov dropProbe "$outsider" "$next9")" = refused
+          check "overview drop: it stays on its Desktop" test "$(desktop_of "$outsider")" = "$home"
+          ov close >/dev/null
+          sleep 1
+          nestctl dispatch "hl.dsp.focus({ window = 'address:$addr3' })" >>"$log" 2>&1
+          sleep 1
+          ov open >/dev/null
+          sleep 1.5
+          check "overview drop: a member dropped on another Desktop is refused" test "$(ov dropProbe "$addr3" "$home")" = refused
+          check "overview drop: it stays in its half" test "$(desktop_of "$addr3")" = "$next9"
+          ov close >/dev/null
+          sleep 1
+        else
+          check "overview drop: the Split View Desktop $next9 was made for $addr3, a window left on Desktop $home (${outsider:-none})" false
+        fi
+        close_shell_popup "overview drop end"
+        for m9 in $(tiling_state | jq -r --argjson w "$next9" '[.splits[] | select(.workspace == $w) | .windows[]][]? // empty'); do
+          unsplit_ipc "0x$m9"
+        done
+        check "overview drop: the Split View ended" split_gone "$next9" "$home"
         tile_ipc "$addr3" previous
       fi
       surfaces_state

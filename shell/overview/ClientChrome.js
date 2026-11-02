@@ -20,7 +20,11 @@ function hasClientChrome(tags) {
 
 // The band the layout reserves above `win` (an entry of Compositor.windowsAcross, with its Hyprland `tags`): 0 for a window
 // that draws its own chrome while the plugin says it steps aside (`advertised`: Capabilities.has(FEATURE)), else the plugin's
-// strip height. Without the feature the plugin still draws its strip on every window, so the band stays.
-function band(win, advertised, stripHeight) {
+// strip height. Without the feature the plugin still draws its strip on every window, so the band stays. `titleAway`: the
+// window's titlebar is away (a Split View member with the plugin's tiling-split-titles, WindowTiling.splitTitleAway; tiling
+// step 6e, ADR-0036 D73): no band either.
+function band(win, advertised, stripHeight, titleAway) {
+    if (titleAway === true)
+        return 0;
     return advertised && win && hasClientChrome(win.tags) ? 0 : stripHeight;
 }
