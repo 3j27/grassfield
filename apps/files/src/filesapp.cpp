@@ -1382,8 +1382,17 @@ void FilesApp::newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory
         const QStringList pending = beginStyleMoves(urls);
         BatchOps::Failure failure;
         if (!BatchOps::apply(steps, &failure)) {
+            // A revert that failed leaves part of it done: the folders that did move keep their look, and that part is a command
+            // of its own, so Undo can put it back.
+            QList<QPair<QUrl, QUrl>> kept;
+            for (const auto &pair : std::as_const(pairs)) {
+                for (const BatchOps::Step &step : std::as_const(failure.applied)) {
+                    if (step.from == pair.first.toLocalFile())
+                        kept.append(pair);
+                }
+            }
+            styleMovedAll(kept);
             endStyleMoves(pending);
-            // A revert that failed leaves part of it done: that part is a command of its own, so Undo can put it back.
             recordCustom(tr("New Folder with Selection"), failure.applied);
             emit operationFailed(tr("“%1” couldn’t be moved into a new folder.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())) + QLatin1Char(' ') + rollbackNote(failure.applied));
             return;
@@ -1531,13 +1540,22 @@ QString FilesApp::renameItems(const QList<QUrl> &urls, const QVariantMap &option
     const QStringList pending = beginStyleMoves(sources);
     BatchOps::Failure failure;
     if (!BatchOps::apply(steps, &failure)) {
+        // The folders that did move keep their look (as in a complete rename), and what stayed renamed is one undo step.
+        QList<QPair<QUrl, QUrl>> kept;
+        for (const auto &pair : std::as_const(pairs)) {
+            for (const BatchOps::Step &step : std::as_const(failure.applied)) {
+                if (step.from == pair.first.toLocalFile())
+                    kept.append(pair);
+            }
+        }
+        styleMovedAll(kept);
         endStyleMoves(pending);
-        recordCustom(tr("Rename %1 Items").arg(failure.applied.size()), failure.applied);
+        recordCustom(countText(tr("Rename 1 Item"), tr("Rename %1 Items"), failure.applied.size()), failure.applied);
         return tr("“%1” couldn’t be renamed: %2.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName()), QString::fromLocal8Bit(strerror(failure.error))) + QLatin1Char(' ') + rollbackNote(failure.applied);
     }
     styleMovedAll(pairs);
     endStyleMoves(pending);
-    recordCustom(tr("Rename %1 Items").arg(changed.size()), steps);
+    recordCustom(countText(tr("Rename 1 Item"), tr("Rename %1 Items"), changed.size()), steps);
     QPointer<QObject> target = folder;
     for (const auto &pair : std::as_const(pairs)) {
         if (auto *f = asFolder(target))

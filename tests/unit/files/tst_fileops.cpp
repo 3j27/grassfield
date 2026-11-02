@@ -441,14 +441,18 @@ TEST_F(FileOps, AFailedNewFolderWithSelectionRecordsNothing)
     write(d("a.txt"), "a");
     write(d("b.txt"), "b");
     ASSERT_TRUE(QFile::remove(d("b.txt"))); // gone since the window listed it
+    // Other tests of this binary may have left steps in the history: what counts is that this command adds none.
     const quint64 serial = KIO::FileUndoManager::self()->currentCommandSerialNumber();
+    const QString undoBefore = app.undoText();
     app.newFolderWithItems({url(d("a.txt")), url(d("b.txt"))}, url(m_dir.path()), nullptr);
     ASSERT_EQ(told.messages.size(), 1);
     EXPECT_TRUE(told.messages.first().contains(QStringLiteral("Nothing was changed")));
     EXPECT_FALSE(present(d("New Folder With Items"))) << "the folder was made and taken away again";
     EXPECT_EQ(read(d("a.txt")), QByteArray("a"));
-    EXPECT_EQ(app.canUndo(), m_kioUndoBefore) << "no undo step for a command that did nothing";
+    EXPECT_EQ(app.undoText(), undoBefore) << "no undo step for a command that did nothing";
     EXPECT_EQ(KIO::FileUndoManager::self()->currentCommandSerialNumber(), serial);
+    app.undo(); // nothing of this command to undo: no folder comes back from nowhere, a.txt stays where it is
+    EXPECT_EQ(read(d("a.txt")), QByteArray("a"));
 }
 
 TEST_F(FileOps, ARollbackThatFailedToSaysWhatStayedChangedAndKeepsItUndoable)
@@ -474,7 +478,45 @@ TEST_F(FileOps, ARollbackThatFailedToSaysWhatStayedChangedAndKeepsItUndoable)
     EXPECT_EQ(read(d("a-x.txt")), QByteArray("a"));
     // What stayed done is one undo step.
     ASSERT_TRUE(app.canUndo());
+    EXPECT_EQ(app.undoText(), QStringLiteral("Undo Rename 1 Item")) << "the singular";
     app.undo();
     EXPECT_EQ(read(d("a.txt")), QByteArray("a"));
     EXPECT_FALSE(present(d("a-x.txt")));
+}
+
+// A command whose undo stops half way keeps only the steps that were not undone (review of PR #98, A3): what was undone is not
+// undone twice, and Undo again finishes it.
+TEST_F(FileOps, APartlyUndoneCommandKeepsOnlyTheStepsNotUndone)
+{
+    FilesApp app(QList<QUrl>{});
+    Told told(app);
+    write(d("a.txt"), "a");
+    write(d("b.txt"), "b");
+    QVariantMap add;
+    add.insert(QStringLiteral("mode"), 1);
+    add.insert(QStringLiteral("addText"), QStringLiteral("-x"));
+    ASSERT_EQ(app.renameItems({url(d("a.txt")), url(d("b.txt"))}, add, nullptr), QString());
+    ASSERT_EQ(app.undoText(), QStringLiteral("Undo Rename 2 Items"));
+    // The undo puts b-x.txt back (its newest step first), then the folder turns read-only and a-x.txt cannot move.
+    BatchOps::setStepHook([&](int step) {
+        if (step == 0)
+            ::chmod(QFile::encodeName(m_dir.path()).constData(), 0500);
+    });
+    app.undo();
+    BatchOps::setStepHook({});
+    ::chmod(QFile::encodeName(m_dir.path()).constData(), 0700);
+    // The failing step reverted the one done before it (the folder is read-only: it could not), so one step stays undone.
+    ASSERT_EQ(told.messages.size(), 1);
+    EXPECT_TRUE(told.messages.first().contains(QStringLiteral("Part of it was undone")));
+    const bool bBack = present(d("b.txt"));
+    EXPECT_TRUE(bBack);
+    EXPECT_TRUE(present(d("a-x.txt")));
+    EXPECT_EQ(app.undoText(), QStringLiteral("Undo Rename 2 Items")) << "the command stays on the stack";
+    // Undo again: only the step not undone runs (a second b-x.txt -> b.txt would fail), and the command is finished.
+    app.undo();
+    EXPECT_EQ(told.messages.size(), 1) << told.messages.last().toStdString();
+    EXPECT_EQ(read(d("a.txt")), QByteArray("a"));
+    EXPECT_EQ(read(d("b.txt")), QByteArray("b"));
+    EXPECT_FALSE(present(d("a-x.txt")));
+    EXPECT_TRUE(app.canRedo());
 }

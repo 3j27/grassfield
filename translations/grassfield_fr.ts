@@ -5143,6 +5143,10 @@
         <translation>Renommer %1 éléments</translation>
     </message>
     <message>
+        <source>Rename 1 Item</source>
+        <translation>Renommer 1 élément</translation>
+    </message>
+    <message>
         <source>copy</source>
         <translation>copie</translation>
     </message>
