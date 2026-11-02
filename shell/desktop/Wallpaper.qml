@@ -324,6 +324,10 @@ Scope {
                 id: feed
                 screenInfo: win.modelData
                 onDisplayChanged: {
+                    // Not the feed's initial `display` (the placeholder artwork): the change signal fires once when the feed is
+                    // created, before any request (seen in the journal at rc1-16: the default artwork was the first frame).
+                    if (!feed.appliedOnce)
+                        return;
                     win.feedSeen = true;
                     win.show(win.withArt(feed.display), "normal");
                 }
@@ -426,9 +430,10 @@ Scope {
                 onTriggered: {
                     if (win.firstReady)
                         return;
-                    // A configured picture or video still being prepared is waited for (a few more bounds): the default artwork
-                    // is never the first frame of an owner who chose another wallpaper.
-                    if (win.holds < 3 && feed.status === "preparing" && Settings.loaded) {
+                    // A configured picture or video still being prepared, or a feed that has not started yet (a slow start: the
+                    // settings, the helper's check), is waited for (a few more bounds): the default artwork is never the first
+                    // frame of an owner who chose another wallpaper.
+                    if (win.holds + 1 < Entrance.firstShowBounds && (!feed.appliedOnce || feed.status === "preparing")) {
                         win.holds++;
                         restart();
                         return;

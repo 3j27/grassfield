@@ -20,6 +20,9 @@ Singleton {
     property bool revealed: false
     // The bound ran out while a wallpaper still drew its first frame: the entrance follows that frame (review of 3a5e1b80).
     property bool timedOut: false
+    // How many wallpaper bounds (wallpaper.firstShowTimeoutMs) a configured wallpaper may take for its first frame before the
+    // artwork shows: the first, and the extra ones a feed that has not started or is still preparing is given (Wallpaper.qml).
+    readonly property int firstShowBounds: 4
     property bool settingsWaited: false
     readonly property bool settingsFinal: Settings.loaded || root.settingsWaited
 
@@ -86,7 +89,7 @@ Singleton {
     // the entrance's.
     Timer {
         id: hardTimer
-        interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs
+        interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs * root.firstShowBounds
         onTriggered: root.reveal("timeout")
     }
 

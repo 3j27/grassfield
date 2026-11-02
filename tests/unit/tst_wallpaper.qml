@@ -1255,7 +1255,9 @@ TestCase {
         xhr.send();
         const w = xhr.responseText;
         compare((w.match(/win\.feedSeen = true;/g) || []).length, 1);
-        verify(/onDisplayChanged: \{\s*win\.feedSeen = true;\s*win\.show\(/.test(w));
+        // ... and not the signal the feed emits when it is created (its placeholder artwork, rc1-16: the default artwork was
+        // the first frame): only after the first request.
+        verify(/onDisplayChanged: \{(\s*\/\/[^\n]*)*\s*if \(!feed\.appliedOnce\)\s*return;\s*win\.feedSeen = true;\s*win\.show\(/.test(w));
         verify(/if \(!win\.firstReady\) \{\s*win\.begin\(\);\s*return;\s*\}/.test(w), "show() before the first frame only asks the choice");
         // After the first frame too: a phase or an appearance acts on the artwork only once the feed has given its first result
         // (counter-review of c5d43be4: a mapped still was cut to the placeholder artwork).
@@ -1323,7 +1325,10 @@ TestCase {
         verify(/Entrance\.settingsFinal \? WallpaperState\.stillOf\(/.test(w) && /WallpaperConfig\.stillMatches\(st, WallpaperConfig\.sourceKey\(feed\.cfg\)\)/.test(w), "only the matching still, once the settings are read");
         verify(/src: WallpaperConfig\.sourceKey\(feed\.cfg\)/.test(w), "the record keeps its setting");
         // The bound does not paint the default artwork while the chosen picture or video is being prepared.
-        verify(/win\.holds < 3 && feed\.status === "preparing" && Settings\.loaded/.test(w));
+        verify(/win\.holds \+ 1 < Entrance\.firstShowBounds && \(!feed\.appliedOnce \|\| feed\.status === "preparing"\)/.test(w));
+        // A file wallpaper prepares: an omitted typed argument arrives as "undefined" (invalid-path, the artwork for good).
+        verify(/function startPrepare\(path: string, fit: var, color: var\)/.test(f), "startPrepare takes untyped fit and color");
+        verify(/typeof fit === "string" && fit !== "" \? fit : cfg\.fit/.test(f) && /typeof color === "string" && color !== "" \? color : cfg\.color/.test(f));
         // The compositor's ground at the session's start is the last picture's mean, the default's green only without one.
         const lua = text("../../config/hypr/grassfield/looknfeel.lua");
         verify(/wallpaper\.json/.test(lua) && /misc = \{ background_color = "rgba\(" \.\. mean:lower\(\)/.test(lua));
