@@ -38,3 +38,4 @@ singleton NotResponding 1.0 NotResponding.qml
 singleton SharePicker 1.0 SharePicker.qml
 singleton SoftwareUpdate 1.0 SoftwareUpdate.qml
 singleton ActivityLink 1.0 ActivityLink.qml
+singleton KeyWindow 1.0 KeyWindow.qml

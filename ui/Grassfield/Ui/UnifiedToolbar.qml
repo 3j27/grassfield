@@ -122,7 +122,7 @@ Item {
         text: root.title
         elide: Text.ElideRight
         // Dimmed while the window is not key (macOS 27; ADR-0039 step 17).
-        color: root.Window.active ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+        color: Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
         font.family: Appearance.fontFamily
         font.pixelSize: root.titlebarStyle ? Tokens.typographyBodySize : Tokens.windowTitleSize
         font.weight: Tokens.typographyMenuBoldWeight

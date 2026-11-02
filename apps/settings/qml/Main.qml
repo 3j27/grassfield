@@ -16,6 +16,8 @@ Window {
     required property bool globalMenu
     // Section to open first (--section=<id> on the command line); "" opens Appearance.
     property string startSection: ""
+    // Drawn as key (ADR-0039 step 17): active, or held while a shell menu or the Control Center is open (Appearance.looksKey).
+    readonly property bool keyLook: Appearance.looksKey(root, root.active)
     readonly property alias searchField: search
     // ADR-0015: this window draws its own chrome (lights and toolbar below); the apps' tagger (apps/windowchrome.h)
     // names its role for the compositor, whose plugin then draws no titlebar on it.
@@ -447,7 +449,7 @@ Window {
                         anchors.fill: parent
                         radius: Tokens.settingsSidebarItemRadius
                         // The accent while the window is key; neutral, the hover ink, while it is not (macOS 27; ADR-0039 step 17).
-                        color: entry.selected ? (root.active ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)) : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
+                        color: entry.selected ? (root.keyLook ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)) : (hover.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent")
                     }
 
                     // Keyboard focus ring: outside the selected row, accent and translucent (as macOS).
@@ -490,7 +492,7 @@ Window {
                         }
                         text: entry.modelData.title
                         elide: Text.ElideRight
-                        color: entry.selected && root.active ? Appearance.colors.selectionText : Appearance.colors.text
+                        color: entry.selected && root.keyLook ? Appearance.colors.selectionText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                         font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight

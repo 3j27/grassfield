@@ -166,6 +166,12 @@ TestCase {
         other.requestActivate();
         tryVerify(() => !t.win.active, 2000);
         verify(Qt.colorEqual(fill.color, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)), "not key: neutral");
+        // A shell menu or the Control Center holds the keyboard for this window (the app holds it key, apps/keywindow.h): the
+        // accent stays (the integrator's macOS decision on #88).
+        Appearance.heldKeyWindow = t.win;
+        verify(Qt.colorEqual(fill.color, Appearance.colors.selection), "held key: the accent");
+        Appearance.heldKeyWindow = null;
+        verify(Qt.colorEqual(fill.color, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)), "released: neutral");
         other.close();
         t.win.requestActivate();
         tryVerify(() => t.win.active, 2000);

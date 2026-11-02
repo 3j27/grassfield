@@ -31,7 +31,7 @@ T.ToolButton {
 
     // Dimmed while the window is not key, as macOS 27 draws a toolbar's glyphs then (ADR-0039 step 17).
     readonly property color foreground: !enabled ? Appearance.withAlpha(root.tint, Tokens.materialDisabledOpacity)
-        : root.Window.window !== null && !root.Window.active ? Appearance.withAlpha(root.tint, Appearance.inactiveTextOpacity) : root.tint
+        : root.Window.window !== null && !Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.withAlpha(root.tint, Appearance.inactiveTextOpacity) : root.tint
 
     implicitWidth: root.text !== "" ? Math.max(root.buttonSize, caption.implicitWidth + 2 * Tokens.spacingSm) : root.buttonSize
     implicitHeight: root.buttonSize

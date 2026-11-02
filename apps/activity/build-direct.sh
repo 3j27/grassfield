@@ -59,6 +59,7 @@ case ${1:-} in
         -I"/usr/include/qt6/QtGui/$qtver" -I"/usr/include/qt6/QtGui/$qtver/QtGui" -I"/usr/include/qt6/QtCore/$qtver" \
         -I"/usr/include/qt6/QtCore/$qtver/QtCore" \
         "${sampler[@]}" "${window[@]}" "${generated[@]}" "$root"/tests/unit/activity/qml/tst_window.cpp \
+        "$root"/tests/unit/activity/qml/tst_keywindow.cpp \
         $(pkg-config --libs Qt6Gui Qt6Qml Qt6Quick Qt6DBus Qt6Test) -lgtest -pthread -o "$out/activity-window-qml-tests"
       echo "built $out/activity-window-qml-tests"
     fi

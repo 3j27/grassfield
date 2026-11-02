@@ -9,6 +9,7 @@
 #include "applicationslogic.h"
 #include "filesapp.h"
 #include "globalmenu.h"
+#include "keywindow.h"
 #include "windowchrome.h"
 #include "appicons.h"
 #include "imageproviders.h"
@@ -70,6 +71,8 @@ int main(int argc, char *argv[])
     FilesApp files(urls);
 
     QQmlApplicationEngine engine;
+    // ADR-0039 step 17: the window keeps its key look while a shell menu or the Control Center holds the keyboard (keywindow.h).
+    new grassfield::apps::KeyWindow(&engine);
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
     // addImportPath puts a path before the ones searched so far, so the system directory above would shadow the tree's own

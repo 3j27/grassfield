@@ -90,6 +90,9 @@ TestCase {
         other.requestActivate();
         tryVerify(() => !t.win.active, 2000);
         verify(near(sidebar.selectionFill, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)), "not key: the inactive selection");
+        Appearance.heldKeyWindow = t.win;
+        verify(near(sidebar.selectionFill, Appearance.withAlpha(Appearance.colors.text, Tokens.storeSidebarSelectionOpacity)), "held key by a shell menu: the key one");
+        Appearance.heldKeyWindow = null;
         other.close();
     }
 

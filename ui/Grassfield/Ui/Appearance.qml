@@ -72,9 +72,18 @@ QtObject {
 
     // A window that is not key (ADR-0039 step 17, measured on macOS 27): its selection turns neutral (the hover ink at
     // inactiveSelectionOpacity over its background, the label in the text colour), its toolbar title and glyphs dim (the text
-    // colour at inactiveTextOpacity). Read with the item's Window.active.
+    // colour at inactiveTextOpacity). Read with looksKey(item.Window.window, item.Window.active).
     readonly property real inactiveSelectionOpacity: dark ? Tokens.windowInactiveSelectionOpacityDark : Tokens.windowInactiveSelectionOpacityLight
     readonly property real inactiveTextOpacity: dark ? Tokens.windowInactiveTextOpacityDark : Tokens.windowInactiveTextOpacityLight
+    // The window that keeps its key look while a shell menu or the Control Center holds the keyboard (the integrator's macOS
+    // decision on #88, ADR-0039 step 17): the compositor then withdraws the window's activation, but only another window
+    // taking the focus makes it inactive. Set by the app from the shell's key-window file (apps/keywindow.h); null otherwise.
+    property var heldKeyWindow: null
+
+    // Whether a window draws as key: `active` (its Window.active), or it is the window held above.
+    function looksKey(window: var, active: bool): bool {
+        return active || (!!window && window === heldKeyWindow);
+    }
 
     // Secondary text drawn directly on the opaque window surface or on its group fill (Settings): the lighter app-only grey, as
     // macOS. Text on a field, tab or chip fill keeps `colors.textSecondary`, which holds 4.5:1 on those fills (A2); outside an

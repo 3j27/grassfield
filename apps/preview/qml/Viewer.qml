@@ -13,6 +13,8 @@ Window {
     // The registrar is there (kept up to date by src/main.cpp): the window exports its menus to the global menu bar.
     required property bool globalMenu
 
+    // Drawn as key (ADR-0039 step 17): active, or held while a shell menu or the Control Center is open (Appearance.looksKey).
+    readonly property bool keyLook: Appearance.looksKey(win, win.active)
     property int current: win.backend.startIndex
     // Several files named on the command line show their list at once; the folder of a single image starts without it.
     property bool sidebarOpen: !win.backend.browsing
@@ -294,7 +296,7 @@ Window {
                 textFormat: Text.PlainText
                 text: win.title
                 // Dimmed while the window is not key (macOS 27; ADR-0039 step 17).
-                color: win.active ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+                color: win.keyLook ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 font.weight: Tokens.typographyMenuBoldWeight
@@ -690,7 +692,7 @@ Window {
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
                         color: rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                         border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
-                        border.color: win.active ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+                        border.color: win.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                     }
 
                     Item {
@@ -752,7 +754,7 @@ Window {
                             color: "transparent"
                             radius: Tokens.radiusControl
                             border.width: Tokens.controlFocusOutline
-                            border.color: win.active ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+                            border.color: win.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                         }
                     }
 

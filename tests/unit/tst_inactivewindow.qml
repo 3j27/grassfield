@@ -3,8 +3,10 @@ import QtTest
 import Grassfield.Ui
 
 // A window that is not key (ADR-0039 step 17; audit §3.13, measured on macOS 27): the toolbar's title and a ToolButton's glyph
-// dim to the text colour at Appearance.inactiveTextOpacity, and come back when the window is key again. Settings' sidebar
-// selection is tst_settingsmain (it needs its window).
+// dim to the text colour at Appearance.inactiveTextOpacity, and come back when the window is key again. While a shell menu or
+// the Control Center holds the keyboard the window keeps its key look (Appearance.heldKeyWindow, set by the app from the
+// shell's key-window file: apps/keywindow.h, tests/unit/activity/qml/tst_keywindow.cpp); only another window taking the focus
+// makes it inactive. Settings' sidebar selection is tst_settingsmain (it needs its window), the Store's tst_storefinish.
 TestCase {
     id: tc
 
@@ -26,6 +28,13 @@ TestCase {
         y: 70
         iconName: "chevron-right"
         accessibleName: "Forward"
+    }
+
+    WindowControls {
+        id: lights
+        x: 100
+        y: 70
+        window: tool.Window.window
     }
 
     Component {
@@ -82,5 +91,35 @@ TestCase {
         tool.Window.window.requestActivate();
         tryVerify(() => tool.Window.active, 2000);
         verify(Qt.colorEqual(title.color, Appearance.colors.text), "key again");
+    }
+
+    function cleanup() {
+        Appearance.heldKeyWindow = null;
+    }
+
+    function test_aShellMenuLeavesTheWindowKey() {
+        const title = titleOf(toolbar);
+        const win = tool.Window.window;
+        tryVerify(() => tool.Window.active, 2000, "the test window starts key");
+        verify(lights.active, "the lights in colour");
+        const other = createTemporaryObject(otherWindow, null);
+        other.requestActivate();
+        tryVerify(() => !tool.Window.active, 2000, "the window lost its activation");
+        verify(!lights.active && !Appearance.looksKey(win, false));
+        // The shell names this window's client while its menu holds the keyboard: the app holds the window key.
+        Appearance.heldKeyWindow = win;
+        verify(Appearance.looksKey(win, false), "held: key");
+        verify(!Appearance.looksKey(other, false), "only the held window");
+        verify(!Appearance.looksKey(null, false));
+        verify(Qt.colorEqual(title.color, Appearance.colors.text), "the title stays in the text colour");
+        verify(Qt.colorEqual(tool.foreground, Appearance.colors.text), "the glyph too");
+        verify(lights.active, "and the lights");
+        // Another window took the focus: the app no longer holds it.
+        Appearance.heldKeyWindow = null;
+        const dim = Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity);
+        verify(near(title.color, dim) && near(tool.foreground, dim) && !lights.active, "inactive");
+        other.close();
+        win.requestActivate();
+        tryVerify(() => tool.Window.active, 2000);
     }
 }

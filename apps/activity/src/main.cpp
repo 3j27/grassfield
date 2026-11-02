@@ -14,6 +14,7 @@
 #include "runmode.h"
 #include "shownwatch.h"
 #include "translationloader.h"
+#include "keywindow.h"
 #include "windowchrome.h"
 
 #ifndef GRASSFIELD_ACTIVITY_QML_DIR
@@ -78,6 +79,8 @@ int main(int argc, char *argv[])
     activity::ActivityApp backend(options, grassfield::apps::runmode::stateDir() + QStringLiteral("/activity.json"));
 
     QQmlApplicationEngine engine;
+    // ADR-0039 step 17: the window keeps its key look while a shell menu or the Control Center holds the keyboard (keywindow.h).
+    new grassfield::apps::KeyWindow(&engine);
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH (the tree's ui/ in a dev session) is added
     // after it in reverse, so that its first entry is searched first (as the Store).
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));

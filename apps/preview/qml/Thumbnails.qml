@@ -72,7 +72,7 @@ ListView {
             radius: Tokens.radiusControl
             border.width: Tokens.controlFocusOutline
             // The accent while the window is key, neutral while it is not (macOS 27; ADR-0039 step 17).
-            border.color: root.Window.active ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+            border.color: Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
         }
 
         Text {

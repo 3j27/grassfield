@@ -12,7 +12,7 @@ FocusScope {
     required property var win
     // The selected row's fill: the measured neutral while the window is key, the inactive selection while it is not (ADR-0039
     // step 24, as Settings' sidebar in step 17).
-    readonly property color selectionFill: root.Window.active ? Appearance.withAlpha(Appearance.colors.text, Tokens.storeSidebarSelectionOpacity)
+    readonly property color selectionFill: Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.withAlpha(Appearance.colors.text, Tokens.storeSidebarSelectionOpacity)
                                                               : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)
     // [{key, title, icon}]
     property var items: []

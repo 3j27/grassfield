@@ -101,6 +101,21 @@ seams ADR-0024's lots left between surfaces, and the places where an accessibili
   next to the shared ramp; the shared ramp is named after macOS's text styles in the tokens' sources.
 - **D7 Timers stay literals** (debounces, polls, retries); a timing the user perceives (the OSD's hide delay, a notice's
   lifetime) becomes a token.
+- **D8 A shell menu leaves the front window key** (the integrator's macOS decision in the second review of #88, 2026-11-02):
+  while a menu, a status menu, a popover or the Control Center holds the keyboard, the window that was key keeps its key look
+  (step 17's selection, toolbar title and glyphs, and the lights); only another window taking the focus makes it inactive.
+  Hyprland withdraws the window's activation as soon as a shell layer takes the keyboard, and Qt follows it, so an app cannot
+  tell a menu from another window. The shell says which client looks key in a runtime file, as it already says what the
+  plugin offers (ADR-0015 Q4b): `$XDG_RUNTIME_DIR/grassfield-keywindow.json` (`$GRASSFIELD_STATE_HOME/keywindow.json` in a dev
+  session), `{"v":1,"pid":…,"appId":…}`, written by `shell/services/KeyWindow.qml` (the rule in `KeyWindowFile.js`: the
+  focused window's client, the menu's opener while the Overlay's popup holds the keyboard with a kind that is not a dialog
+  and until a window is focused again after it, at most `focusReturn.menuActionWaitMs`; nobody under the lock, over the
+  desktop, or while another shell surface or a dialog holds it). `apps/keywindow.h`, made by each of the five apps with its
+  engine, holds the app's last focused window key (`Appearance.heldKeyWindow`) while the app has no focused window and the
+  file names it; `Appearance.looksKey(window, active)` is what step 17's looks read. No file, an old shell or a malformed file:
+  `Window.active` alone, as before. Not covered: third-party apps and the compositor's own window edge and titlebars, which
+  follow Hyprland's activation (only the plugin could keep it, for every client: a later step if the owner wants it).
+  Rejected: the global menu's opened and closed events (they cover the app menus, not the Control Center or the Dock's menus).
 
 ### Steps, in priority order
 One pull request each, with `just check`, the tests and captures (`docs/audits/design-polish-2026-10-29/tools/run.sh` for
@@ -126,7 +141,7 @@ few files), M (a surface family).
 | 14 | **Shared toolbar and search field:** `toolbar.*` tokens (capsule 36, button 34, divider) replacing the borrowed `files.*` and `settings.*`; `RimmedCapsule` on them; `SearchField` as the rimmed 28-pt capsule with a clear button, used by Settings; icon-only `ToolButton`s show their name as a tooltip | `ui/Grassfield/Ui/RimmedCapsule.qml`, `SearchField.qml`, `ToolButton.qml`, `tokens.json`, `apps/settings/qml/Main.qml` | free, now (Files and Store with steps 23 and 24) | renders, unit tests | M | G16 (part) |
 | 15 | **Settings finish** (Software Update excluded): `InfoButton` and `MoreButton` on `ToolButton`'s states, the colour well's field and popover on `TextField` and `Material`, one empty-list style, `ErrorNote` in `windowSecondary`, the 34 literal hairlines on the token, content that scrolls under the toolbar with its rule (D3), the glass preview on the class tints and Reduce Transparency, unused tokens removed | `apps/settings/qml/*` | free, now | renders (`settings.py`), unit tests | M | G22 (Settings), G12 (preview) |
 | 16 | **Preview's structure:** the edge-to-edge sidebar, toolbar capsules on the shared tokens with 34-pt buttons, scroll bars, the toolbar rule | `apps/preview/qml/Viewer.qml`, `ToolbarGroup.qml`, `ImageView.qml`, `TextView.qml` | free, after step 14 | nested capture | M | G11 |
-| 17 | **Inactive windows:** the selection of a window that is not key turns neutral; the toolbar title and glyphs dim | `ui/Grassfield/Ui/UnifiedToolbar.qml`, `apps/settings/qml/Main.qml`, `apps/preview` | free, now; Files and Store after their merges | renders with `Window.active` false; a macOS 27 capture of an inactive window (NOT VERIFIED until then) | S–M | G18 |
+| 17 | **Inactive windows:** the selection of a window that is not key turns neutral; the toolbar title and glyphs dim; a shell menu or the Control Center leaves the window key (D8) | `ui/Grassfield/Ui/UnifiedToolbar.qml`, `apps/settings/qml/Main.qml`, `apps/preview` | free, now; Files and Store after their merges | renders with `Window.active` false; a macOS 27 capture of an inactive window (NOT VERIFIED until then) | S–M | G18 |
 | 18 | **Text size everywhere** (Q7): Preview (done in step 3: its title, search field and PDF file names on the body size) and Files (with step 23); the apps' text tokens follow `textScale` | `tokens.json`, `apps/preview`, `apps/files` | decided (Q7: every app) | unit tests at 130 % | S | G12 |
 | 19 | **Native text in the apps** (Q5) | the apps' `main.cpp` (Settings, Preview now; Files, Store, Activity Monitor after their merges) | decided (Q5: the apps' static text) | `shots/metrics.txt` method, the owner's side-by-side | S | G21 |
 | 20 | **Motion tokens** (Q6): a panel-and-sheet curve, one easing per role (enter, exit, move), Hyprland's curves aligned with them | `tokens.json`, the free surfaces, `config/hypr/grassfield/looknfeel.lua`, `shell/platform/Minimized.js` | decided (Q6: the 650-ms stand-in) | nested recordings, P3 | M | G20 |
@@ -316,6 +331,10 @@ palette, not which controls read it.
   - Also in scope: gate A2's role table, red on main: audit §3.7.5 lists the 15 entries (13 on 11c9e69, two more from the
     startup-settle fix), each a table out of date; step 0b repairs it and wires the check into `just check-quick`.
   - Coordination with #46: the section above.
+- **Integrator review of #88, round 2 (2026-11-02): two blocking items.** Main (1b33ef24) merged in, the request socket
+  resolved as #90's integration did (one socket, `what` "blur" | "edge" | "ground"); D8 above for the key look while a shell
+  menu or the Control Center is open (nested: Settings' selection and lights went inactive, 195E3F to E4E2DD and E5534B to
+  D4D1CC).
 
 ## macOS reference
 - macOS 27: one window radius, edge-to-edge sidebars, bars with a rule once content scrolls, white text on the accent, its
