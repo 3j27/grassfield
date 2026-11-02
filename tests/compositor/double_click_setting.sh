@@ -9,9 +9,13 @@
 # absence) is restored at exit. Pointer input through scripts/dev/pointer.sh, hyprctl read-only.
 #   minimize -> a double-click on the bar hides the window on special:minimized (minimize-request path);
 #   none     -> a double-click changes nothing (no zoom, no minimize);
-#   zoom     -> a double-click maximizes, a second one restores the geometry;
+#   zoom     -> a double-click zooms, a second one restores the geometry. Zoom is Fill (ADR-0036 D78): with the plugin's
+#               zoom-fill the window fills the usable area (larger on both axes, fullscreen 0); without it Hyprland's
+#               maximized mode (fullscreen 1);
 #   fill     -> (plugin with "tiling-arrange", docs/specs/tiling.md TL32) a double-click tiles the window over the usable
-#               area: larger on both axes, not full screen, on the same Desktop.
+#               area: larger on both axes, not full screen, on the same Desktop; a second one restores the geometry (D78);
+#   default  -> the key removed from the settings file: the default is fill (D78), the double-click fills, a second
+#               one restores the geometry.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Log: .dev/double-click/run-<timestamp>.log.
 set -uo pipefail
 
@@ -61,11 +65,15 @@ cleanup() {
   if ((had_settings)); then cp "$backup" "$settings"; else rm -f "$settings"; fi
 }
 trap cleanup EXIT
-set_setting() { # <zoom|minimize|none|fill>: rewrite the dev settings file, give the shell time to push it
+set_setting() { # <zoom|minimize|none|fill|default>: rewrite the dev settings file, give the shell time to push it
   mkdir -p "$dev/config"
   local base=$root/config/defaults/grassfield.json
   ((had_settings)) && base=$backup
-  jq --arg v "$1" '.windows.titlebarDoubleClick = $v' "$base" >"$settings.tmp" && mv "$settings.tmp" "$settings"
+  if [[ $1 == default ]]; then
+    jq 'del(.windows.titlebarDoubleClick)' "$base" >"$settings.tmp" && mv "$settings.tmp" "$settings"
+  else
+    jq --arg v "$1" '.windows.titlebarDoubleClick = $v' "$base" >"$settings.tmp" && mv "$settings.tmp" "$settings"
+  fi
   sleep 1
 }
 
@@ -120,20 +128,31 @@ say "zoom"
 set_setting zoom
 double_click "$bar_x" "$bar_y"
 read -r mx my mw mh fs ws < <(geom)
-[[ $fs == 1 ]]
-check "double-click maximizes" $? "${mw}x${mh} fullscreen $fs"
+if query grassfield | jq -e '.features | index("zoom-fill")' >/dev/null 2>&1; then
+  [[ $fs == 0 && $ws == "$ws0" ]] && ((mw > w0 && mh > h0))
+  check "double-click zooms: Zoom is Fill (ADR-0036 D78)" $? "${mw}x${mh} at ($mx,$my) fullscreen $fs on $ws (was ${w0}x${h0})"
+else
+  [[ $fs == 1 ]]
+  check "double-click maximizes (no zoom-fill: Hyprland's maximized mode)" $? "${mw}x${mh} fullscreen $fs"
+fi
 double_click $((mx + mw / 2)) $((my - GF_TB_MID))
 read -r x y w h fs ws < <(geom)
 [[ $fs == 0 && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
 check "double-click restores" $? "${w}x${h} at ($x,$y) fullscreen $fs"
 
 if query grassfield | jq -e '.features | index("tiling-arrange")' >/dev/null 2>&1; then
-  say "fill"
-  set_setting fill
-  double_click "$bar_x" "$bar_y"
-  read -r x y w h fs ws < <(geom)
-  [[ $fs == 0 && $ws == "$ws0" ]] && ((w > w0 && h > h0))
-  check "double-click fills" $? "${w}x${h} at ($x,$y) fullscreen $fs on $ws (was ${w0}x${h0})"
+  for setting in fill default; do
+    say "$setting"
+    set_setting "$setting"
+    double_click "$bar_x" "$bar_y"
+    read -r mx my mw mh fs ws < <(geom)
+    [[ $fs == 0 && $ws == "$ws0" ]] && ((mw > w0 && mh > h0))
+    check "double-click fills ($setting)" $? "${mw}x${mh} at ($mx,$my) fullscreen $fs on $ws (was ${w0}x${h0})"
+    double_click $((mx + mw / 2)) $((my - GF_TB_MID))
+    read -r x y w h fs ws < <(geom)
+    [[ $fs == 0 && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
+    check "a second double-click restores ($setting, ADR-0036 D78)" $? "${w}x${h} at ($x,$y) fullscreen $fs"
+  done
 else
   say "fill: SKIP (the plugin does not advertise tiling-arrange; the shell sends zoom instead)"
 fi
