@@ -18,6 +18,7 @@ TestCase {
     when: windowShown
 
     property var visited: []
+    property var expected: []
 
     QtObject {
         id: fakeApp
@@ -34,11 +35,30 @@ TestCase {
                 t = t.replace(/\/+$/, "");
             return t;
         }
+        // A file of the tree: its path opens its folder with the file selected (the Finder).
+        readonly property var files: ["/home/u/notes.txt"]
+        // Completions arrive off the GUI thread: with `deferred` they wait for flush().
+        property bool deferred: false
+        property var pending: []
+        function flush(): void {
+            const todo = fakeApp.pending;
+            fakeApp.pending = [];
+            for (const text of todo)
+                fakeApp.deliver(text);
+        }
         function goToTarget(text: string, base: url): var {
             const t = fakeApp.resolve(text);
+            if (fakeApp.files.indexOf(t) >= 0)
+                return {folder: "file://" + t.substring(0, t.lastIndexOf("/")), select: "file://" + t};
             return {folder: fakeApp.folders.indexOf(t) >= 0 ? "file://" + t : "", select: ""};
         }
         function completeFolder(text: string, base: url): void {
+            if (fakeApp.deferred)
+                fakeApp.pending = fakeApp.pending.concat([text]);
+            else
+                fakeApp.deliver(text);
+        }
+        function deliver(text: string): void {
             const slash = text.lastIndexOf("/");
             const dir = fakeApp.resolve(text.substring(0, slash + 1));
             const prefix = text.substring(slash + 1).toLowerCase();
@@ -62,6 +82,7 @@ TestCase {
         property url url: "file:///home/u"
         property var folder: QtObject {
             function expect(target: url, select: bool): void {
+                tc.expected.push(String(target));
             }
         }
         function navigate(target: url, record: bool): void {
@@ -87,6 +108,9 @@ TestCase {
 
     function openPanel(): var {
         tc.visited = [];
+        tc.expected = [];
+        fakeApp.deferred = false;
+        fakeApp.pending = [];
         const panel = createTemporaryObject(panelComponent, host);
         verify(panel !== null);
         panel.open();
@@ -166,5 +190,33 @@ TestCase {
         compare(tc.visited, []);
         verify(panel.visible);
         verify(panel.errorText !== "");
+    }
+
+    // A typed path to a file opens its folder with the file selected (the Finder).
+    function test_aTypedFileOpensItsFolderWithTheFileSelected() {
+        const panel = openPanel();
+        tc.typeText("~/notes.txt");
+        keyClick(Qt.Key_Return);
+        compare(tc.visited, ["file:///home/u"]);
+        compare(tc.expected, ["file:///home/u/notes.txt"]);
+    }
+
+    // Completions come later than the keys: Return never acts on the previous text's matches.
+    function test_returnNeverActsOnTheMatchesOfAnEarlierText() {
+        const panel = openPanel();
+        fakeApp.deferred = true;
+        tc.typeText("~/Do");
+        fakeApp.flush();
+        compare(panel.current.length, 2, "Documents and Downloads, for ~/Do");
+        tc.typeText("w");
+        compare(panel.current.length, 0, "the matches of ~/Do are not ~/Dow's");
+        compare(panel.rows.length, 0);
+        keyClick(Qt.Key_Return);
+        compare(tc.visited, [], "nothing opens from the stale rows");
+        verify(panel.errorText !== "", "the typed text was resolved as it is: not found");
+        // Once the right completions arrive, Return goes to the match of the text typed.
+        fakeApp.flush();
+        compare(panel.current.length, 1);
+        compare(panel.current[0].name, "Downloads");
     }
 }

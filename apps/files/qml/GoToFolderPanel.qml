@@ -18,19 +18,23 @@ Item {
     property Item focusBack: null
 
     property var matches: []
+    // The text the matches were listed for: completions arrive off the GUI thread, so after another keystroke the matches are
+    // the previous text's until the new ones come. Only the current text's matches are ever used (Return, Tab, the list).
+    property string matchesFor: ""
+    readonly property var current: root.matchesFor === field.text ? root.matches : []
     property int chosen: 0
     // An arrow key moved the choice: Return then goes to that row even when the typed path exists.
     property bool picked: false
     property string errorText: ""
     readonly property bool shown: root.visible
     readonly property bool showingRecents: field.text === ""
-    readonly property var rows: root.showingRecents ? root.app.recentFolders.map(r => ({url: r.url, parts: root.partsOf(r.url), name: ""})) : root.matches
+    readonly property var rows: root.showingRecents ? root.app.recentFolders.map(r => ({url: r.url, parts: root.partsOf(r.url), name: ""})) : root.current
     // The rest of the chosen match's name after what is typed of it ("~/D" + "ownloads").
     readonly property string suffix: {
-        if (root.showingRecents || root.matches.length === 0 || field.cursorPosition !== field.text.length)
+        if (root.showingRecents || root.current.length === 0 || field.cursorPosition !== field.text.length)
             return "";
         const typed = field.text.substring(field.text.lastIndexOf("/") + 1);
-        const name = root.matches[Math.min(root.chosen, root.matches.length - 1)].name;
+        const name = root.current[Math.min(root.chosen, root.current.length - 1)].name;
         return name.toLowerCase().startsWith(typed.toLowerCase()) ? name.substring(typed.length) : "";
     }
 
@@ -41,6 +45,7 @@ Item {
     function open(): void {
         root.errorText = "";
         root.matches = [];
+        root.matchesFor = "";
         root.chosen = 0;
         root.picked = false;
         field.text = "";
@@ -95,9 +100,9 @@ Item {
 
     // Tab or → at the end: the chosen match's name completes the text.
     function complete(): bool {
-        if (root.showingRecents || root.matches.length === 0)
+        if (root.showingRecents || root.current.length === 0)
             return false;
-        const name = root.matches[Math.min(root.chosen, root.matches.length - 1)].name;
+        const name = root.current[Math.min(root.chosen, root.current.length - 1)].name;
         field.text = root.app.completedText(field.text, root.tab.url, name);
         field.cursorPosition = field.text.length;
         return true;
@@ -109,6 +114,7 @@ Item {
             if (text !== field.text)
                 return;
             root.matches = matches;
+            root.matchesFor = text;
             root.chosen = 0;
             root.picked = false;
         }
