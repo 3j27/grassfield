@@ -238,7 +238,7 @@
             "fill",
             "none"
           ],
-          "default": "zoom"
+          "default": "fill"
         },
         "tilingEdges": {
           "type": "boolean",
