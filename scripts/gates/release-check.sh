@@ -15,10 +15,14 @@
 #   5 coverage   scripts/gates/coverage.sh: line coverage of the compositor core and the menu bridge logic (Q3, >= 70 %)
 #   6 secrets    gitleaks over the WHOLE history of this repository (gate S1)
 #   7 plugin-rc  the same against rc-channel headers, only when --rc-headers is given (gate C3)
+#   8 rc-toolkit scripts/gates/rc-toolkit.sh: the snapshot on the rc channel's whole toolkit in a throwaway container (the
+#                QML lint against the rc Quickshell's qmltypes, the offscreen suites, the plugin build and its unit tests
+#                against the rc Hyprland headers; ADR-0041 step 2c, T-5, T-10, C3), only when --rc is given (docker)
 #
-#   scripts/gates/release-check.sh [--rc-headers ROOT] [--keep] [--only step[,step...]]
+#   scripts/gates/release-check.sh [--rc-headers ROOT] [--rc] [--keep] [--only step[,step...]]
 #     --rc-headers ROOT   an extracted rc-channel hyprland package: ROOT/usr/include/hyprland and
 #                         ROOT/usr/share/pkgconfig/hyprland.pc (e.g. `bsdtar -xf hyprland-*.pkg.tar.zst -C ROOT`)
+#     --rc                run the rc-channel gate too (needs the docker daemon; its report lands in the log directory)
 #     --keep              keep the temporary directory (default: removed; the logs are always kept)
 #     --only STEPS        run only these steps (debugging; the verdict then says "partial")
 #
@@ -29,10 +33,11 @@
 # 2 usage or environment error.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
-rc_headers="" keep=0 only=""
+rc_headers="" rc_gate=0 keep=0 only=""
 while (($#)); do
   case $1 in
     --rc-headers) shift; rc_headers=$1 ;;
+    --rc) rc_gate=1 ;;
     --keep) keep=1 ;;
     --only) shift; only=$1 ;;
     -h | --help) sed -n '2,/^set -uo/p' "$0" | sed '$d;s/^# \{0,1\}//'; exit 0 ;;
@@ -46,6 +51,9 @@ done
 if [[ -n $rc_headers ]]; then
   [[ -f $rc_headers/usr/share/pkgconfig/hyprland.pc && -d $rc_headers/usr/include/hyprland ]] \
     || { echo "release-check: $rc_headers has no usr/share/pkgconfig/hyprland.pc and usr/include/hyprland" >&2; exit 2; }
+fi
+if ((rc_gate)); then
+  command -v docker >/dev/null && docker info >/dev/null 2>&1 || { echo "release-check: --rc needs the docker daemon" >&2; exit 2; }
 fi
 
 commit=$(git -C "$root" rev-parse HEAD)
@@ -106,6 +114,13 @@ if [[ -n $rc_headers ]]; then
   step plugin-rc env PKG_CONFIG_PATH="$rc_headers/usr/share/pkgconfig" PKG_CONFIG_SYSROOT_DIR="$rc_headers" \
     sh -c 'cmake -S compositor -B compositor/build-rc -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build compositor/build-rc'
 fi
+if ((rc_gate)); then
+  # The gate snapshots HEAD of the repository it runs in: the snapshot's own HEAD here. Its report goes beside this run's logs.
+  step rc-toolkit scripts/gates/rc-toolkit.sh --logs "$logs/rc-toolkit"
+  if want rc-toolkit && [[ ${names[${#names[@]} - 1]:-} == rc-toolkit ]]; then
+    notes[${#notes[@]} - 1]=$(grep -a -E '^rc-toolkit: (PASS|FAIL|INCONCLUSIVE)' "$logs/rc-toolkit.log" | tail -n 1)
+  fi
+fi
 
 echo
 printf '%-10s %-9s %6s  %s\n' step result sec notes
@@ -116,6 +131,7 @@ for i in "${!names[@]}"; do
 done
 echo "commit $commit; snapshot built in $src; logs in $logs"
 if [[ -z $rc_headers ]] && want plugin; then echo "plugin-rc: NOT RUN (no --rc-headers): gate C3 is not covered by this run"; fi
+if ((!rc_gate)) && want rc-toolkit; then echo "rc-toolkit: NOT RUN (no --rc): the rc-channel gate (T-5, T-10) is not covered by this run"; fi
 if ((fail)); then
   echo "release-check: FAIL (see the logs above; first lines of each failing step follow)"
   for i in "${!names[@]}"; do

@@ -20,6 +20,7 @@ python3 -I "$root/scripts/gates/session_start.py" --selftest || fails=$((fails +
 "$root/scripts/dev/check-version.sh" --selftest || fails=$((fails + 1))
 "$root/scripts/dev/check-licenses.sh" --selftest || fails=$((fails + 1))
 "$root/scripts/gates/version-agreement.sh" --selftest || fails=$((fails + 1))
+"$root/scripts/gates/rc-toolkit.sh" --selftest || fails=$((fails + 1))
 
 # The user's compositor rebuild (/usr/src/grassfield-compositor as the package lays it out: no ../cmake, the pacman source id in
 # VERSION, the product version in cmake/VERSION) must configure and carry the product version.

@@ -29,3 +29,7 @@ bcb8a5b65f5c48797b47f709444104e14fef314e:docs/audits/store-2026-10-27/probes-4-o
 # Omarchy's public package-signing key fingerprint again, held as GU_OMARCHY_KEY in the first commit of the Software
 # Update step 3 helper (PR #44); a060504 renamed it out of the rule's reach. Not a secret.
 422cacc480f5d5ca26facdcf518f0e334866f361:packaging/pacman/grassfield-update-helper:generic-api-key:62
+#
+# Omarchy's public package-signing fingerprint a third time, held as OMARCHY_KEY in the second commit of the rc-channel gate
+# (ADR-0041 step 2c, PR #104); the next commit renamed it FPR, as tests/integration/update_helper.sh names it. Not a secret.
+f4ecdbc680b2069f9dd88b935ddd10cfff2aa1e0:scripts/gates/rc-toolkit.sh:generic-api-key:40
