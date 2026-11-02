@@ -690,6 +690,29 @@ namespace gf::tiler {
             return box;
         }
 
+        // Return to Previous Size (tile(address, "previous"), a second Zoom of a filled window): `before` put back, the window
+        // Free. False when it has no record, cannot be placed now (TL9) or is a Split View member (its Desktop places it).
+        bool returnToPrevious(const PHLWINDOW& w) {
+            auto&          s  = st();
+            const uint64_t id = idOf(w);
+            const auto*    r  = placeable(w) && g_layoutManager && !tiling::splitOfWindow(s.splits, id) ? s.book.find(id) : nullptr;
+            const auto     before = r ? s.book.takeBefore(id) : std::nullopt;
+            if (!before)
+                return false;
+            g_layoutManager->setTargetGeom(beforeBox(w, *before), w->layoutTarget());
+            notify(tiling::Reason::Forgotten);
+            return true;
+        }
+
+        // Hyprland's own maximized mode toggled, as the zoom was before ADR-0036 D78 (and still is without window-tiling).
+        void toggleMaximized(const PHLWINDOW& w) {
+            const auto& fs = Fullscreen::controller();
+            if (!fs)
+                return;
+            const auto target = fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_MAXIMIZED ? Fullscreen::FSMODE_NONE : Fullscreen::FSMODE_MAXIMIZED;
+            fs->setFullscreenMode(w, target, target, false);
+        }
+
         bool hyprlandDrag(eMouseBindMode mode) {
             return mode == MBIND_MOVE || mode == MBIND_RESIZE || mode == MBIND_RESIZE_BLOCK_RATIO || mode == MBIND_RESIZE_FORCE_RATIO;
         }
@@ -1861,6 +1884,56 @@ namespace gf::tiler {
         return true;
     }
 
+    tiling::ZoomStep zoom(const PHLWINDOW& w, bool toggleHyprland) {
+        const auto& fs = Fullscreen::controller();
+        if (!w || !fs)
+            return tiling::ZoomStep::Refused;
+        const auto mode = fs->getFullscreenModes(w).internal;
+        reconcile(); // a record whose window something else moved is Free (TL10): such a window fills again
+        const auto*             r = st().book.find(idOf(w));
+        const tiling::ZoomFacts facts{
+            .tiling       = gf::ipc::tilingAvailable() && !gf::deferredFocus::sessionLocked(),
+            .maximized    = mode == Fullscreen::FSMODE_MAXIMIZED,
+            .fullscreen   = mode == Fullscreen::FSMODE_FULLSCREEN,
+            .clientChrome = gf::chrome::isClientChrome(w),
+            .splitMember  = inSplit(w),
+            .fixedSize    = fixedSize(w),
+            .filled       = r && r->state == tiling::TileState::Tiled && r->where.place == tiling::Place::Fill && r->where.layout.empty() && r->where.sides == 0,
+        };
+        auto step = tiling::zoomStep(facts);
+        switch (step) {
+            case tiling::ZoomStep::Fill:
+                if (!tile(w, tiling::Place::Fill)) {
+                    logRequest(Log::DEBUG, "zoom {:x}: Fill refused (TL9), Hyprland's maximized mode instead", idOf(w));
+                    step = tiling::ZoomStep::Hyprland;
+                }
+                break;
+            case tiling::ZoomStep::Previous:
+                if (!returnToPrevious(w)) {
+                    logRequest(Log::INFO, "zoom {:x}: its box from before cannot be put back now", idOf(w));
+                    step = tiling::ZoomStep::Refused;
+                }
+                break;
+            case tiling::ZoomStep::UnzoomToFill:
+                fs->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE, false); // Hyprland restores its box at once
+                if (!tile(w, tiling::Place::Fill))
+                    logRequest(Log::DEBUG, "zoom {:x}: out of the maximized mode; Fill refused (TL9), its box kept", idOf(w));
+                break;
+            case tiling::ZoomStep::Hyprland:
+            case tiling::ZoomStep::Refused: break;
+        }
+        logRequest(Log::DEBUG, "zoom {:x}: {}", idOf(w), tiling::nameOf(step));
+        if (step == tiling::ZoomStep::Hyprland && toggleHyprland)
+            toggleMaximized(w);
+        return step;
+    }
+
+    tiling::ZoomStep zoomFocused() {
+        const auto focus = Desktop::focusState();
+        const auto w     = focus ? focus->window() : nullptr;
+        return w ? zoom(w, false) : tiling::ZoomStep::Hyprland; // no window: Hyprland's dispatcher does nothing itself
+    }
+
     bool movable(const PHLWINDOW& w) {
         return tiling::movable(factsOf(w));
     }
@@ -2044,15 +2117,14 @@ namespace gf::tiler {
             return;
         }
         if (placeName == "previous") {
-            auto&      s      = st();
-            const auto r      = placeable(window) && g_layoutManager && !tiling::splitOfWindow(s.splits, address) ? s.book.find(address) : nullptr;
-            const auto before = r ? s.book.takeBefore(address) : std::nullopt;
-            if (!before) {
+            if (!returnToPrevious(window))
                 logRequest(Log::INFO, "tile {:x}: not tiled, nothing to return to", address);
-                return;
-            }
-            g_layoutManager->setTargetGeom(beforeBox(window, *before), window->layoutTarget());
-            notify(tiling::Reason::Forgotten);
+            return;
+        }
+        if (placeName == "zoom") {
+            // ADR-0036 D78 (feature zoom-fill): Window > Zoom and the zoom light clicked under its open popover (D64).
+            if (zoom(window, true) == tiling::ZoomStep::Refused)
+                logRequest(Log::INFO, "tile {:x}: zoom refused (a window of fixed size)", address);
             return;
         }
         const auto place = tiling::parsePlace(placeName);

@@ -142,8 +142,10 @@ namespace gf::gfc {
             out.push_back(kFeatureOverviewFocus);
         if (minimizeEffect)
             out.push_back(kFeatureMinimizeEffect);
-        if (windowTiling)
+        if (windowTiling) {
             out.push_back(kFeatureWindowTiling);
+            out.push_back(kFeatureZoomFill);
+        }
         if (layerPointer)
             out.push_back(kFeatureLayerPointer);
         if (appearance)

@@ -646,6 +646,37 @@ namespace gf::tiling {
     // the mode it is in (`inMode`: Exit Full Screen, Unzoom); any other window toggles as Hyprland's dispatcher does.
     bool sizeKeyActs(bool fixed, bool inMode);
 
+    // ---- Zoom is Fill (ADR-0036 D78; tiling.md TL35) ----
+    // Grassfield's Zoom (the zoom light without Alt, a titlebar double-click set to Zoom or Fill, Super+Alt+F, Window > Zoom)
+    // fills the window as a tile, with the tiling margins when "Tiled windows have margins" is on, as macOS 15+ fills a window
+    // from its title bar; Hyprland's maximized mode (fullscreen 1) glued it under the menu bar and against the screen's edges.
+    enum class ZoomStep : uint8_t {
+        Fill,         // tiled as Fill (a plain window, or one tiled in another place)
+        Previous,     // back to its box from before tiling (Return to Previous Size): it is filled now
+        UnzoomToFill, // out of Hyprland's maximized mode, then Fill
+        Hyprland,     // Hyprland's own maximized mode, toggled as before
+        Refused,      // nothing: a window of fixed size that is not zoomed (its zoom light is disabled)
+    };
+
+    // What the step reads from the window and the plugin.
+    struct ZoomFacts {
+        bool tiling       = false; // feature window-tiling advertised (the tile verb registered) and the session not locked
+        bool maximized    = false; // in Hyprland's maximized mode (fullscreen 1)
+        bool fullscreen   = false; // in Hyprland's full screen (fullscreen 2)
+        bool clientChrome = false; // draws its own chrome (ADR-0015): its own zoom control enters Hyprland's maximized mode
+        bool splitMember  = false; // a member of a Split View Desktop (TL33): its Desktop places it (D50)
+        bool fixedSize    = false; // minimum = maximum on both axes
+        bool filled       = false; // its tile record is Tiled as Fill (a place, not a layout zone or extended sides)
+    };
+
+    // A window of fixed size that is not zoomed is refused (ADR-0040 step 1b). Without window-tiling (no plugin, a degraded
+    // one: gate C2), in full screen or for a Split View member: Hyprland's maximized mode, as before. A window in Hyprland's
+    // maximized mode leaves it into Fill, unless it is client chrome (ADR-0015 Q4: its own zoom control is Hyprland's
+    // maximized mode, honoured; the key only takes it out again) or of fixed size. A filled window goes back to its box from
+    // before; any other window fills.
+    ZoomStep zoomStep(const ZoomFacts& f);
+    std::string_view nameOf(ZoomStep step);
+
     // ---- what a window fits (ADR-0036 D69: D57's model for every place and arrangement) ----
 
     // A window with limits `c` fits zone `zone` of `area`: fitsFrame on the zone's frame as its glyph shows it (zoneFrame). The

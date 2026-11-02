@@ -34,7 +34,8 @@ Code: `compositor/`. Build and run: `compositor/README.md`.
   hover; inactive windows show grey buttons.
 - The window title is centered on the full titlebar width in semibold system text, never overlapping the
   buttons, truncated with an ellipsis when too long.
-- Dragging the titlebar moves the window; double-clicking it performs the user's chosen action (default: zoom).
+- Dragging the titlebar moves the window; double-clicking it performs the user's chosen action (default: Fill, which
+  is also what Zoom does since ADR-0036 D78).
 - Buttons act on mouse-up over the same button (press, move away, release = cancel).
 - Minimize: the window goes into its own tile in the Dock, right of the separator. System Settings > Desktop & Dock
   > "Minimize windows using": "Genie Effect" (the default: the window's bottom is pulled into the tile through a
@@ -105,7 +106,9 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
 - **FR5** The title is centered on the bar and kept at least 8 px clear of the buttons (symmetric margins);
   it is limited to the remaining width.
 - **FR6** A left press on a button arms it; releasing over the same button activates it: close → close the
-  window (Hyprland's close action); zoom → toggle full-screen mode *maximized*; minimize → post
+  window (Hyprland's close action); zoom → Grassfield's Zoom, which is Fill (ADR-0036 D78, tiling.md TL35: the window
+  fills the work area as a tile with the tiling margins, and back to its box from before; Hyprland's full-screen mode
+  *maximized* toggled without the `window-tiling` feature); minimize → post
   `minimize-request`; the shell, which owns the Dock tile rectangle, answers with
   `hl.plugin.grassfield.minimize(address, rect)` (FR14), or parks the window on `special:minimized` itself
   when the plugin lacks the `minimize` feature.
@@ -115,9 +118,10 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   reports no held button or a pointer device present at the press has disappeared: a lost release never
   leaves the window following the pointer.
 - **FR8** Two presses on the drag area within 400 ms and 4 px do what Settings say
-  (`windows.titlebarDoubleClick`, pushed by the shell, FR16): `zoom` (default) → the zoom button's toggle
-  (no move); `minimize` → the minimize button's path (FR6); `none` → nothing (the second press is a single
-  press). A press moves the window only after the pointer travelled more than 4 px
+  (`windows.titlebarDoubleClick`, pushed by the shell, FR16): `fill` (default since ADR-0036 D78; the shell sends
+  `zoom` without `tiling-arrange`, D36) and `zoom` → the zoom button's toggle (no move; Zoom is Fill, TL35);
+  `minimize` → the minimize button's path (FR6); `none` → nothing (the second press is a single press). Before the
+  shell's first push the plugin's own default is `zoom`, the same toggle. A press moves the window only after the pointer travelled more than 4 px
   (`kDragThreshold`); a click never writes the window geometry. A drag that starts on a maximized window
   first leaves the maximized mode and places the restored floating size under the pointer (same horizontal
   fraction of the window, same offset on the titlebar), then follows the pointer (macOS).
@@ -800,7 +804,7 @@ not bound for the virtual keyboard in nested: foot received `ESC TAB`). Fixed bu
 | plugin → shell | socket2 event `grassfield` (end of a minimize / restore) | `{"v":"gfc/1","type":"minimized","address":"<hex>"}`, `{"v":"gfc/1","type":"restored","address":"<hex>"}` |
 | shell → plugin | Lua function `hl.plugin.grassfield.hello()` via `Hyprland.dispatch("hl.plugin.grassfield.hello()")` | re-posts capabilities |
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` (Dock tile, layout px, integers) | FR14 / FR15 |
-| shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | FR16 |
+| shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"fill"\|"none")` | FR16 |
 | shell → plugin | `hl.plugin.grassfield.config("minimizeEffect", "funnel"\|"shrink"\|"fade")` (only with feature `minimize-effect`) | FR45 |
 | plugin → shell | socket2 event `grassfield` (appmenu registration of a mapped window changed, window mapped with one, window focused, re-emit) | `{"v":"gfc/1","type":"appmenu","address":"<hex>","service":"<bus name>","path":"<object path>","pid":N}`; `"service":"","path":""` = no `set_address` menu, with the window's Wayland client pid (0: X11/XWayland or a clear) (FR20–FR22) |
 | plugin → shell | socket2 event `grassfield` (the seat's keyboard focus entered a mapped window; feature `keyboard-focus`) | `{"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}` (FR20) |
@@ -1187,7 +1191,9 @@ plugin observes `input.mouse.button` and never cancels it, for presses and relea
 - Minimize without a Dock (no shell, or no target rectangle): the shell sends an empty rectangle and the
   plugin minimizes/restores without animation; with no shell at all, the minimize button only posts
   `minimize-request` and nothing happens (there would be no way to restore the window).
-- Without the `config` feature the double-click always zooms (the default).
+- Without the `config` feature the double-click always zooms (the plugin's own default; Zoom is Fill with
+  `window-tiling`). Without `window-tiling` (or `zoom-fill` for the shell's Window > Zoom) Zoom is Hyprland's
+  maximized mode, as before ADR-0036 D78 (gate C2).
 - Without the `appmenu` feature (plugin absent, mismatched, or the global failed): no
   `org_kde_kwin_appmenu_manager` global, no `appmenu` events; the shell keeps T0 menus. Whoever owns
   `com.canonical.AppMenu.Registrar` (the bridge, step B) must not own it then: Qt would hide its in-window menu

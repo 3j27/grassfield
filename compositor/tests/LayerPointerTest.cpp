@@ -148,7 +148,7 @@ TEST(LayerPointer, FeatureIsAdvertisedOnlyWhenRegisteredAndLast) {
     EXPECT_EQ(capabilitiesJson(features(false, false, false, false, false, false, false, false, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","layer-pointer"]})");
     EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, false, true, true, true, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","layer-pointer"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","minimize","config","appmenu","overview","desktop-focus","desktop-focus-v2","stages-available","cursor-refresh","overview-focus","minimize-effect","window-tiling","zoom-fill","layer-pointer"]})");
     EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, true, true, true, true, true, false)).find("layer-pointer"), std::string::npos);
 }
 

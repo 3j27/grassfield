@@ -234,6 +234,13 @@ Option 1 adapted to the Lua config, versioned `gfc/1`:
   revealed bar takes the member's drag as well as its lights (the plugin's own input). A plugin before 6e still draws the
   strip above a member, so a 6e plugin advertises feature `tiling-split-titles`, always right after `tiling-split-rows`,
   and the shell's Overview lays a member out without a strip only with it. No new verb, event field or reply field.
+- Zoom is Fill (2026-11-02, additive, ADR-0036 D78, docs/specs/tiling.md TL35): `tile(address, place)` also takes `place`
+  = `zoom`, Grassfield's zoom toggle (the window fills its work area as a tile with the margins; a filled window goes back
+  to its box from before; a window in Hyprland's maximized mode leaves it into Fill, unless it is client chrome, whose own
+  maximize is only taken out). The plugin's zoom light, its titlebar double-click and `window_size("maximized")` do the
+  same, with no new argument. A plugin before D78 rejects the place, so a D78 plugin advertises feature `zoom-fill`,
+  always right after `window-tiling`, and the shell's Window > Zoom (and the green light clicked under its popover, D64)
+  sends `zoom` only with it, Hyprland's maximized dispatcher otherwise. No new verb, event field or reply field.
 - The shell only calls verbs listed in `shell/platform/Minimized.js` `isPluginVerb`.
 - All arguments are validated by the plugin (untrusted). Payloads never carry window contents.
 - Unknown `v` major → the shell treats the plugin as absent.
@@ -278,7 +285,7 @@ enum tile-hover.state: enter leave open
 feature decorations minimize config appmenu overview desktop-focus desktop-focus-v2 stages-available stages
 feature cursor-refresh overview-focus minimize-effect window-tiling layer-pointer appearance client-chrome frame-times
 feature keyboard-focus tiling-arrange tiling-layouts tile-hover tiling-groups tiling-shared-edge tiling-split tiling-split-rows
-feature tiling-split-titles
+feature tiling-split-titles zoom-fill
 verb hello minimize restore config appmenu overview stages cursor_refresh overview_focus tile arrange tile_popover move_to group_front split unsplit window_size
 ```
 
