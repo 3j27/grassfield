@@ -166,6 +166,18 @@ TEST(ArchiveJobs, CompressThenExpandRoundTrip)
     ASSERT_TRUE(r.ok);
     EXPECT_EQ(QFileInfo(r.path).fileName(), QStringLiteral("Archive 2"));
 
+    // Compress again with "Archive.zip" taken: the new archive is "Archive 2.zip" and the existing one is left exactly as it
+    // was (Compress never replaces an archive).
+    const QByteArray before = read(src + QStringLiteral("/Archive.zip"));
+    ASSERT_FALSE(before.isEmpty());
+    write(src + QStringLiteral("/@notes"), "changed since");
+    r = runJob(ArchiveJob::compress(bsdtar, src, {QStringLiteral("@notes"), QStringLiteral("Folder"), QStringLiteral("link")}));
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    EXPECT_EQ(QFileInfo(r.path).fileName(), QStringLiteral("Archive 2.zip"));
+    EXPECT_EQ(read(src + QStringLiteral("/Archive.zip")), before) << "the existing archive is untouched";
+    EXPECT_NE(read(src + QStringLiteral("/Archive 2.zip")), before);
+    EXPECT_TRUE(hiddenLeftovers(src).isEmpty());
+
     // One item: it keeps its name.
     r = runJob(ArchiveJob::compress(bsdtar, src, {QStringLiteral("Folder")}));
     ASSERT_TRUE(r.ok);
