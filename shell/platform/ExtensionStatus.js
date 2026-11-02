@@ -65,6 +65,13 @@ function resultNotice(status, stale) {
     return out;
 }
 
+// The degraded notices a click acts on (ADR-0041 step 2d): without the opt-in setting the notice no longer names a command
+// to type; its click runs what the setting runs (`--session`, as the user, in the background), then the result notice
+// says what is next. The `-rebuilding` notices need no click (the rebuild runs already); the plain notice has nothing to run.
+function manualAction(key) {
+    return key === "stale-manual" || key === "mismatch-manual";
+}
+
 // The notice keys whose text names the Hyprland version (the cause of a mismatch); a stale build's never do.
 function namesHyprland(key) {
     return ["mismatch-rebuilding", "mismatch-manual", "rebuilt-loaded", "rebuilt-built"].indexOf(key) >= 0;

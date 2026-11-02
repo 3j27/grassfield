@@ -14941,8 +14941,8 @@
         <translation>Elle n’est pas encore compilée pour %1. Les barres de titre et la réduction des fenêtres sont indisponibles pendant sa compilation en arrière-plan.</translation>
     </message>
     <message>
-        <source>It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.</source>
-        <translation>Elle n’est pas encore compilée pour %1 : les barres de titre et la réduction des fenêtres sont indisponibles. Lancez grassfield-compositor-rebuild dans un terminal, puis fermez la session et rouvrez-la.</translation>
+        <source>It is not built for %1 yet, so window titlebars and minimize are unavailable. Click to build it, then log out and back in.</source>
+        <translation>Elle n’est pas encore compilée pour %1 : les barres de titre et la réduction des fenêtres sont indisponibles. Cliquez pour la compiler, puis fermez la session et rouvrez-la.</translation>
     </message>
     <message>
         <source>Compositor extension needs a rebuild</source>
@@ -14993,8 +14993,8 @@
         <translation>Mise à jour de l’extension du compositeur</translation>
     </message>
     <message>
-        <source>Grassfield was updated. Run grassfield-compositor-rebuild in a terminal to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then.</source>
-        <translation>Grassfield a été mis à jour. Lancez grassfield-compositor-rebuild dans un terminal pour mettre à jour son extension du compositeur, puis fermez la session et rouvrez-la. Les barres de titre et la réduction des fenêtres sont indisponibles d’ici là.</translation>
+        <source>Grassfield was updated. Click to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then.</source>
+        <translation>Grassfield a été mis à jour. Cliquez pour mettre à jour son extension du compositeur, puis fermez la session et rouvrez-la. Les barres de titre et la réduction des fenêtres sont indisponibles d’ici là.</translation>
     </message>
     <message>
         <source>Grassfield was updated. Log out and back in to use the new version.</source>
