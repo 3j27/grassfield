@@ -581,6 +581,10 @@ of the session, never in a terminal.
   turns earlier, and the lock file is written (synchronously) at step 20 before the reload is asked. Nit: the probe's step
   k sent `user` then `system` back to back, and a request made during a run joins it (U4): the probe logs every run that
   ends once it is ready (`ipc-run-done <n>`) and the script sends `system` only after the user run's line.
+- Follow-up (2026-11-02, the integrator's note on #93): once the fake Hyprland was reachable (ad044d4d, the sockets under a
+  short base), `displays_trial.sh` steps 21 and 24 failed: the probe recorded every `answered()` of `SessionConfig`, so the
+  answers to the nine earlier reloads were in the lock step's list (inside the sandbox the fake was never reached and
+  nothing was answered, which hid it). The probe records the lock step's own ticket only.
 
 ### Step 2d as built (2026-11-01, the branch of the stability lane; the extension notice without a command)
 - The two degraded notices shown without the opt-in setting (`stale-manual`: "Grassfield was updated. Click to update
@@ -660,6 +664,12 @@ of the session, never in a terminal.
   the selftest counts its own cases (16 now: five for the network rule, one of which caught `127.example.org` taken for
   loopback); `--only`, `--channel` and `--logs` without a value are usage errors (exit 2); the INCONCLUSIVE text says
   rootless podman is not supported.
+- Follow-up (2026-11-02, the integrator's note on #104): `hypr_socket_errors.sh` steps 9 and 12 failed and the fake saw no
+  connection: the fake waited for the probe's `go` file in the Hyprland instance directory, while the probe writes it to
+  `Mode.stateDir` (`GRASSFIELD_STATE_HOME`, the test's `state` folder), so the request socket never came and every reload
+  met a connect error. The fake is given that path, and it counts only `reload` requests (a JSON query of Quickshell's
+  Hyprland module gets `[]` and is not counted, so it cannot shift the order). The fake alone, driven by a client that
+  replays the probe's sequence (no socket before `go`, a JSON query, three reloads), logs "1 hangup;2 answered;3 late".
 
 ### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
 Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.
