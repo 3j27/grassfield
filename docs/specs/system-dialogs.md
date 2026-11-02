@@ -1238,9 +1238,9 @@ nothing is accepted silently.
   socket under `/tmp`, as `tests/security/bluez_agent.sh` writes it) and the fake bluetoothd on it (`env
   DBUS_SYSTEM_BUS_ADDRESS=<that bus> GF_TEST_BUS_DIR=/tmp python3 -I tests/fixtures/fake-bluez.py --log /tmp/bz.log --commands
   /tmp/bz.cmd`), the bridge started with the same `DBUS_SYSTEM_BUS_ADDRESS`, the dev shell restarted on its socket; once
-  `/tmp/bz.log` says `#default`, `echo 'device AA_BB_CC_DD_EE_01 alias=Magic-Keyboard icon=input-keyboard' >/tmp/bz.cmd`, then
+  `/tmp/bz.log` says `#default`, `echo 'device AA_BB_CC_DD_EE_01 alias=Desk-Keyboard icon=input-keyboard' >/tmp/bz.cmd`, then
   `echo 'confirm c1 AA_BB_CC_DD_EE_01 42' >/tmp/bz.cmd`: `just shot pairing-confirm` (the keyboard glyph, "Connection Request
-  from “Magic-Keyboard”", the address, 000042, held), click past the guard, Connect (`/tmp/bz.log` gets `c1 ok`); `echo
+  from “Desk-Keyboard”", the address, 000042, held), click past the guard, Connect (`/tmp/bz.log` gets `c1 ok`); `echo
   'passkey c2 AA_BB_CC_DD_EE_01' >/tmp/bz.cmd`: `just shot pairing-passkey`, type six digits, Return (`c2 ok <number>`); `echo
   'display-passkey AA_BB_CC_DD_EE_01 123456 0' >/tmp/bz.cmd` then the same line with 1, 2 and 3 typed: `just shot
   pairing-display` (Cancel alone, "Digits typed on the device: 3 of 6"; the keyboard stays where it was), `echo 'paired

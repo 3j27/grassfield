@@ -891,7 +891,7 @@ Item {
             compare(rig.secret.heldWhy, "pairing-answer");
             compare(rig.secret.sheet.takesKeys, false);
             verify(named("secretHeldNotice").text.indexOf("no key answers it before that") >= 0);
-            compare(named("secretTitle").text, "Connection Request from “Magic Keyboard”");
+            compare(named("secretTitle").text, "Connection Request from “Desk Keyboard”");
             compare(named("secretRequester").text, "Bluetooth device AA:BB:CC:DD:EE:01");
             compare(named("secretGlyph").name, "keyboard");
             compare(named("secretPairingMessage").text, "Connect only if the device shows the same code.");

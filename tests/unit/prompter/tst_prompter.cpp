@@ -2490,10 +2490,10 @@ TEST(PrompterBluetooth, TheDeviceIsNamedByItsAliasFlattenedElseItsNameElseItsAdd
             g_variant_builder_add(&b, "{sv}", k, v);
         return g_variant_ref_sink(g_variant_builder_end(&b));
     };
-    GVariant* full = props({{"Alias", g_variant_new_string("Magic Keyboard")}, {"Name", g_variant_new_string("MK-7")},
+    GVariant* full = props({{"Alias", g_variant_new_string("Desk Keyboard")}, {"Name", g_variant_new_string("MK-7")},
                             {"Address", g_variant_new_string("11:22:33:44:55:66")}, {"Icon", g_variant_new_string("input-keyboard")}});
     bt::DeviceView v = bt::deviceView(full, address);
-    EXPECT_EQ(v.name, QStringLiteral("Magic Keyboard"));
+    EXPECT_EQ(v.name, QStringLiteral("Desk Keyboard"));
     EXPECT_EQ(v.address, address) << "the path's address, never the property's";
     EXPECT_EQ(v.icon, QStringLiteral("keyboard"));
     g_variant_unref(full);
@@ -2536,7 +2536,7 @@ TEST(PrompterProtocol, ABluetoothPromptAndItsProgress) {
     BtPromptView v;
     v.id                  = QStringLiteral("p4");
     v.mode                = QStringLiteral("display-passkey");
-    v.name                = QStringLiteral("Magic Keyboard");
+    v.name                = QStringLiteral("Desk Keyboard");
     v.address             = QStringLiteral("AA:BB:CC:DD:EE:01");
     v.icon                = QStringLiteral("keyboard");
     v.code                = QStringLiteral("000042");
@@ -2549,7 +2549,7 @@ TEST(PrompterProtocol, ABluetoothPromptAndItsProgress) {
     EXPECT_EQ(o.value(QStringLiteral("kind")).toString(), QStringLiteral("bluetooth"));
     const QJsonObject dev = o.value(QStringLiteral("device")).toObject();
     EXPECT_EQ(dev.keys(), (QStringList{QStringLiteral("address"), QStringLiteral("icon"), QStringLiteral("name")}));
-    EXPECT_EQ(dev.value(QStringLiteral("name")).toString(), QStringLiteral("Magic Keyboard"));
+    EXPECT_EQ(dev.value(QStringLiteral("name")).toString(), QStringLiteral("Desk Keyboard"));
     const QJsonObject pairing = o.value(QStringLiteral("pairing")).toObject();
     EXPECT_EQ(pairing.keys(), (QStringList{QStringLiteral("code"), QStringLiteral("entered"), QStringLiteral("mode"), QStringLiteral("service"), QStringLiteral("uuid")}));
     EXPECT_EQ(pairing.value(QStringLiteral("mode")).toString(), QStringLiteral("display-passkey"));

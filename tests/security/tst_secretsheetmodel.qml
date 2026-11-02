@@ -399,7 +399,7 @@ TestCase {
             kind: "bluetooth",
             requester: {role: "bluetooth", name: "", desktopId: "", icon: "", path: "", identified: true, onBehalf: false},
             texts: {title: "", message: "", description: "", warning: "", continueLabel: "", cancelLabel: ""},
-            device: Object.assign({name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
+            device: Object.assign({name: "Desk Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
             pairing: Object.assign({mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""}, p || {})
         });
     }
@@ -418,7 +418,7 @@ TestCase {
     function test_pairingSheet(d) {
         const m = createTemporaryObject(modelC, test, {request: pairing(d.p)});
         compare(m.pairing, true);
-        compare(m.title, "Connection Request from “Magic Keyboard”", "the device's name is a field of Grassfield's sentence");
+        compare(m.title, "Connection Request from “Desk Keyboard”", "the device's name is a field of Grassfield's sentence");
         compare(m.requesterDetail, "Bluetooth device AA:BB:CC:DD:EE:01");
         compare(m.requesterName, "Bluetooth");
         compare(m.glyph, "keyboard");

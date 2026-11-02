@@ -87,7 +87,7 @@ QtObject {
             type: "prompt",
             id: id,
             kind: "bluetooth",
-            device: Object.assign({name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
+            device: Object.assign({name: "Desk Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
             pairing: Object.assign({mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""}, pairing || {})
         };
         const parsed = Prompter.parseBridgeLine(JSON.stringify(m), true);

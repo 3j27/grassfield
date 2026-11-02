@@ -330,7 +330,7 @@ TestCase {
             type: "prompt",
             id: "p5",
             kind: "bluetooth",
-            device: Object.assign({name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
+            device: Object.assign({name: "Desk Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
             pairing: Object.assign({mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""}, pairing || {})
         };
     }
@@ -340,7 +340,7 @@ TestCase {
         verify(r.ok, r.reason);
         compare(r.message.kind, "bluetooth");
         compare(r.message.requester.role, "bluetooth", "the shell's own row, never the request's");
-        compare(r.message.device, {name: "Magic Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"});
+        compare(r.message.device, {name: "Desk Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"});
         compare(r.message.pairing, {mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""});
         compare(r.message.texts.title, "", "no caller text");
         compare(r.message.choice, null);

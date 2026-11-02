@@ -152,7 +152,7 @@ scenario_body() {
 
   # --- 2 registration follows the shell --------------------------------------------------------------------------------
   bz_up bz
-  say bz "device AA_BB_CC_DD_EE_01 alias=Magic-Keys icon=input-keyboard"
+  say bz "device AA_BB_CC_DD_EE_01 alias=Desk-Keys icon=input-keyboard"
   say bz "device AA_BB_CC_DD_EE_02 alias=Phone icon=phone"
   start_bridge main --socket "$sock" --peer-unit "$leaf"
   local main_pid=$bridge_pid
@@ -184,7 +184,7 @@ scenario_body() {
   next_prompt s "$n"
   desc="RequestPinCode: kind bluetooth, mode pin, the device's alias, address and icon, no requester object"
   check test "$(last_prompt s '"|".join((m["kind"], m["pairing"]["mode"], m["device"]["name"], m["device"]["address"], m["device"]["icon"], ",".join(sorted(m))))')" \
-    = "bluetooth|pin|Magic-Keys|AA:BB:CC:DD:EE:01|keyboard|device,id,kind,pairing,type"
+    = "bluetooth|pin|Desk-Keys|AA:BB:CC:DD:EE:01|keyboard|device,id,kind,pairing,type"
   say s "answer last ok 12ab34"
   desc="...the PIN typed reaches bluetoothd"
   check wait_until 10 grep -qx 'b1 ok 12ab34' "$d/bz.bz"
