@@ -2,7 +2,7 @@
 # The rc-channel gate (ADR-0041 step 2c; audit T-5 and T-10; master-prompt section 10 C3): this tree built and run on the
 # toolkit of Omarchy's rc channel in a throwaway Arch container, so an incompatibility (Qt, Quickshell, KDE Frameworks,
 # Hyprland) is known one Omarchy cycle before it reaches stable. Never on a real machine: inside, it refuses to run unless it
-# is root in a container with the repository mounted at /src and the report directory at /out.
+# is root in a docker container with this script mounted at /gate and the report directory, holding the snapshot, at /out.
 #
 #   scripts/gates/rc-toolkit.sh [--only lint,test,plugin] [--channel rc|stable] [--logs DIR]
 #   scripts/gates/rc-toolkit.sh --selftest
@@ -12,9 +12,13 @@
 #     --selftest        the pure parts (the pacman configuration, the dependency reader, the moved-package table, the
 #                       verdict, the record) on fixed samples; no container
 #
-# Runs `docker run --rm --network host` on archlinux:base (digest pinned below, the one of tests/integration) with the
-# repository mounted read-only and the report directory mounted; HTTPS_PROXY/HTTP_PROXY/NO_PROXY are passed through and
-# GRASSFIELD_TEST_CA, when set, is mounted as the container's CA bundle. Inside, pacman is set up as an Omarchy machine of
+# Runs `docker run --rm` on archlinux:base (digest pinned below, the one of tests/integration) with only this script mounted
+# read-only and the report directory mounted (the snapshot arrives there: package scripts run as root in the container and
+# must not read the working tree's untracked files or its .dev logs). The container gets docker's default network, not the
+# host's; only a proxy that listens on this machine's loopback (HTTPS_PROXY or HTTP_PROXY naming localhost, 127.x or ::1)
+# needs `--network host`, and the run says so. HTTPS_PROXY/HTTP_PROXY/NO_PROXY are passed through and GRASSFIELD_TEST_CA,
+# when set, is mounted as the container's CA bundle. Rootless podman is not supported (no /.dockerenv inside: the inside
+# refuses). Inside, pacman is set up as an Omarchy machine of
 # that channel (Omarchy 4.0.6's pacman-<channel>.conf: `[omarchy]` first, so Omarchy's own builds win, Quickshell among
 # them, then `[core]` and `[extra]` from the channel's dated Arch mirror, which is where Hyprland, Qt and KDE Frameworks come
 # from; Omarchy's key from keys.openpgp.org, signed locally, then omarchy-keyring, as Omarchy's own bootstrap does) and
@@ -36,8 +40,9 @@ set -uo pipefail
 
 IMAGE=archlinux:base@sha256:52dfbd5afb23a220d5ee92dafcb4c788d96c026ed04179890c23adef4c897fa0
 CHANNEL_DEFAULT=rc
-# Omarchy's signing key (bin/omarchy-update-keyring at v4.0.6; tests/integration/update_helper.sh fetches the same).
-OMARCHY_KEY=40DFB630FF42BCFFB047046CF0134EE680CAC571
+# Omarchy's package-signing fingerprint (bin/omarchy-update-keyring at v4.0.6; tests/integration/update_helper.sh uses the
+# same, under the same name: a name with KEY in it is gitleaks' generic-api-key, gate S1).
+FPR=40DFB630FF42BCFFB047046CF0134EE680CAC571
 # The packages the record names: BUILD-DEPS's five (ADR-0033 s3.4: what the compatibility check tracks) and the ones the
 # shell's QML and the plugin's ABI depend on besides.
 TOOLKIT=(qt6-base qt6-declarative quickshell hyprland aquamarine hyprutils hyprlang kcoreaddons kio)
@@ -65,6 +70,25 @@ Include = /etc/pacman.d/mirrorlist
 [extra]
 Include = /etc/pacman.d/mirrorlist
 EOF
+}
+
+# The container's network: "host" only when a proxy URL names this machine's loopback (the container could not reach it
+# through docker's default network), "default" otherwise. Host-network for a root container shares every localhost service.
+rc_network() { # <proxy URL>...
+  local url host
+  for url in "$@"; do
+    [[ -n $url ]] || continue
+    host=${url#*://}
+    host=${host#*@}
+    host=${host%%/*}
+    if [[ $host == \[* ]]; then host=${host#\[}; host=${host%%]*}; else host=${host%%:*}; fi
+    host=${host,,}
+    if [[ $host == localhost || $host == ::1 || $host =~ ^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+      echo host
+      return 0
+    fi
+  done
+  echo default
 }
 
 # The channel's Arch mirror (default/pacman/mirrorlist-<channel> at v4.0.4 and v4.0.6: one line).
@@ -179,12 +203,21 @@ PY
 }
 
 selftest() {
-  local work fails=0
+  local work fails=0 cases=0
   work=$(mktemp -d)
   trap 'rm -rf "$work"' RETURN
   expect() { # <name> <got> <want>
+    cases=$((cases + 1))
     if [[ $2 == "$3" ]]; then echo "  ok   $1"; else echo "  FAIL $1: got '$2', want '$3'"; fails=$((fails + 1)); fi
   }
+  expect "network: no proxy -> docker's default network" "$(rc_network "" "")" default
+  expect "network: a proxy on another host -> the default network" "$(rc_network "http://proxy.example:3128" "")" default
+  expect "network: a proxy on 127.0.0.1 -> the host's network (the only case)" "$(rc_network "" "http://127.0.0.1:3128")" host
+  expect "network: localhost with credentials, ::1 in brackets, no scheme" \
+    "$(rc_network "http://u:p@LocalHost:8080/"; rc_network "http://[::1]:3128"; rc_network "127.0.0.2:3128")" "host
+host
+host"
+  expect "network: a host that only starts like loopback is not" "$(rc_network "http://127.example.org:3128" "http://localhost.example:1")" default
   expect "pacman.conf of the rc channel: [omarchy] first (pkgs.omarchy.org/rc), then core and extra from the mirrorlist, packages signed" \
     "$(rc_pacman_conf rc | grep -E '^\[|^Server|^SigLevel' | paste -sd';' -)" \
     '[options];SigLevel = Required DatabaseOptional;[omarchy];Server = https://pkgs.omarchy.org/rc/$arch;[core];[extra]'
@@ -229,7 +262,7 @@ EOF
   expect "the record: valid JSON with the channel, the moved packages, the sources and the verdict" \
     "$(python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r["verdict"], r["channel"], sorted(r["moved"]), r["steps"]["test"]["seconds"], r["uncommitted_paths"], r["toolkit"]["kio"], len(r["snapshot"]), r["sources"][0].rsplit("/", 1)[1][:10])' "$work/summary.json")" \
     "PASS rc ['hyprland', 'qt6-base'] 600 2 6.31.0-1 2 quickshell"
-  if ((fails == 0)); then echo "rc-toolkit selftest: PASS (12 cases)"; else echo "rc-toolkit selftest: FAIL ($fails)"; fi
+  if ((fails == 0)); then echo "rc-toolkit selftest: PASS ($cases cases)"; else echo "rc-toolkit selftest: FAIL ($fails of $cases)"; fi
   return $((fails > 0))
 }
 
@@ -237,8 +270,8 @@ EOF
 
 inside() { # <channel> <wanted steps>
   local channel=$1 wanted=$2
-  [[ -f /.dockerenv && $(id -u) == 0 && -f /src/packaging/arch/PKGBUILD && -d /out && -f /out/snapshot.tar ]] ||
-    { echo "refused: runs only as root inside a throwaway container (/src, /out with the snapshot)"; exit 2; }
+  [[ -f /.dockerenv && $(id -u) == 0 && -f /gate/rc-toolkit.sh && -d /out && -f /out/snapshot.tar ]] ||
+    { echo "refused: runs only as root inside a throwaway docker container (/gate, /out with the snapshot)"; exit 2; }
   local log=/out/setup.log t0 rc step name
   : >$log
   quiet() { "$@" >>"$log" 2>&1; }
@@ -251,8 +284,8 @@ inside() { # <channel> <wanted steps>
   rc_pacman_conf "$channel" >/etc/pacman.conf
   rc_mirrorlist "$channel" >/etc/pacman.d/mirrorlist
   quiet pacman-key --init && quiet pacman-key --populate archlinux || setup_fail "pacman-key"
-  curl -fsS "https://keys.openpgp.org/vks/v1/by-fingerprint/$OMARCHY_KEY" -o /tmp/omarchy.asc && quiet pacman-key --add /tmp/omarchy.asc &&
-    quiet pacman-key --lsign-key "$OMARCHY_KEY" || setup_fail "Omarchy's public key from keys.openpgp.org"
+  curl -fsS "https://keys.openpgp.org/vks/v1/by-fingerprint/$FPR" -o /tmp/omarchy.asc && quiet pacman-key --add /tmp/omarchy.asc &&
+    quiet pacman-key --lsign-key "$FPR" || setup_fail "Omarchy's public key from keys.openpgp.org"
   # The whole base to the channel's snapshot, Omarchy's keyring with it: the package set of a machine on that channel.
   quiet pacman -Syuu --noconfirm omarchy-keyring || setup_fail "pacman -Syuu on the $channel channel"
   {
@@ -317,11 +350,12 @@ inside() { # <channel> <wanted steps>
 # --- outside ---------------------------------------------------------------------------------------------------------------
 
 channel=$CHANNEL_DEFAULT only="" logs="" mode=run
+value_of() { [[ -n ${2:-} ]] || { echo "rc-toolkit: $1 needs a value (--help)" >&2; exit 2; }; }
 while (($#)); do
   case $1 in
-    --only) shift; only=$1 ;;
-    --channel) shift; channel=$1 ;;
-    --logs) shift; logs=$1 ;;
+    --only) value_of "$@"; shift; only=$1 ;;
+    --channel) value_of "$@"; shift; channel=$1 ;;
+    --logs) value_of "$@"; shift; logs=$1 ;;
     --selftest) mode=selftest ;;
     --inside) mode=inside ;;
     -h | --help) sed -n '2,/^set -uo/p' "$0" | sed '$d;s/^# \{0,1\}//'; exit 0 ;;
@@ -341,7 +375,7 @@ esac
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
 command -v docker >/dev/null && docker info >/dev/null 2>&1 ||
-  { echo "rc-toolkit: INCONCLUSIVE: no docker daemon (this gate runs only in a throwaway container)"; exit 2; }
+  { echo "rc-toolkit: INCONCLUSIVE: no docker daemon (this gate runs only in a throwaway docker container; rootless podman is not supported: the inside refuses without /.dockerenv)"; exit 2; }
 commit=$(git -C "$root" rev-parse HEAD)
 dirty=$(git -C "$root" status --porcelain | wc -l)
 [[ -n $logs ]] || logs=$root/.dev/rc-toolkit/$(date +%Y%m%d-%H%M%S)
@@ -353,10 +387,15 @@ git -C "$root" archive --format=tar HEAD >"$logs/snapshot.tar" || { echo "rc-too
 # This machine's toolkit, when pacman knows these packages (an Omarchy machine): what the channel's run is compared with.
 pacman -Q "${TOOLKIT[@]}" 2>/dev/null >"$logs/stable.txt" || true
 echo "rc-toolkit: commit $commit ($dirty uncommitted path(s) are NOT in the snapshot); channel $channel; steps $wanted; report in $logs"
-args=(--rm --network host -v "$root:/src:ro" -v "$logs:/out")
+# Only this script goes in (the snapshot is already in the report directory): package scripts run as root in there.
+args=(--rm -v "$(realpath "$0"):/gate/rc-toolkit.sh:ro" -v "$logs:/out")
+if [[ $(rc_network "${HTTPS_PROXY:-${https_proxy:-}}" "${HTTP_PROXY:-${http_proxy:-}}") == host ]]; then
+  echo "rc-toolkit: the proxy listens on this machine's loopback: the container shares the host's network to reach it"
+  args+=(--network host)
+fi
 [[ -n ${GRASSFIELD_TEST_CA:-} ]] && args+=(-v "$(realpath "$GRASSFIELD_TEST_CA"):/etc/ssl/certs/ca-certificates.crt:ro")
 for v in HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy; do [[ -n ${!v:-} ]] && args+=(-e "$v"); done
-docker run "${args[@]}" "$IMAGE" bash /src/scripts/gates/rc-toolkit.sh --inside --channel "$channel" --only "$wanted"
+docker run "${args[@]}" "$IMAGE" bash /gate/rc-toolkit.sh --inside --channel "$channel" --only "$wanted"
 container_rc=$?
 rm -f "$logs/snapshot.tar"
 
