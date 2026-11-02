@@ -12,6 +12,9 @@ namespace BatchOps
 {
 namespace
 {
+bool g_forceFallback = false;
+std::function<void(int)> g_stepHook;
+
 // 0 or errno.
 int run(const Step &step)
 {
@@ -19,11 +22,15 @@ int run(const Step &step)
     const QByteArray to = QFile::encodeName(step.to);
     switch (step.kind) {
     case Step::Kind::Rename: {
-        if (::renameat2(AT_FDCWD, from.constData(), AT_FDCWD, to.constData(), RENAME_NOREPLACE) == 0)
-            return 0;
-        if (errno != EINVAL && errno != ENOSYS)
-            return errno;
-        // A filesystem without RENAME_NOREPLACE: look first (the window is a few microseconds, and the user's own folder).
+        if (!g_forceFallback) {
+            if (::renameat2(AT_FDCWD, from.constData(), AT_FDCWD, to.constData(), RENAME_NOREPLACE) == 0)
+                return 0;
+            if (errno != EINVAL && errno != ENOSYS)
+                return errno;
+        }
+        // A filesystem without RENAME_NOREPLACE: look first, then rename. The window between the two is a few
+        // microseconds in the user's own folder, and it is what gnulib's renameatu does too; the look is what keeps a name
+        // that exists from being replaced in every other case.
         struct stat st;
         if (::lstat(to.constData(), &st) == 0)
             return EEXIST;
@@ -81,19 +88,33 @@ Steps inverse(const Steps &steps)
     return out;
 }
 
+void forceNoReplaceFallback(bool on)
+{
+    g_forceFallback = on;
+}
+
+void setStepHook(const std::function<void(int)> &hook)
+{
+    g_stepHook = hook;
+}
+
 bool apply(const Steps &steps, Failure *failure)
 {
     for (int i = 0; i < steps.size(); ++i) {
         const int error = run(steps.at(i));
-        if (error == 0)
+        if (error == 0) {
+            if (g_stepHook)
+                g_stepHook(i);
             continue;
-        // Revert what was done, newest first; a revert that fails stops there (nothing is forced).
-        for (int done = i - 1; done >= 0; --done) {
-            if (run(inverted(steps.at(done))) != 0)
-                break;
         }
-        if (failure)
-            *failure = {i, itemOf(steps.at(i)), error};
+        // Revert what was done, newest first; a revert that fails stops there (nothing is forced) and what is still in
+        // effect is reported.
+        int stillDone = i; // steps [0, stillDone) are in effect
+        while (stillDone > 0 && run(inverted(steps.at(stillDone - 1))) == 0)
+            --stillDone;
+        if (failure) {
+            *failure = {i, itemOf(steps.at(i)), error, steps.mid(0, stillDone)};
+        }
         return false;
     }
     return true;

@@ -400,3 +400,81 @@ TEST_F(FileOps, GoToFolderTargetsAreTheTypedFolderWhenItExists)
     ASSERT_TRUE(waitFor([&] { return answeredFor == QStringLiteral("~/Nowhere"); }));
     EXPECT_TRUE(names.isEmpty());
 }
+
+// A failed undo keeps the command on the stack (review of PR #98, mutant U3), a command of KIO's ends Files' redo history (U4), a
+// New Folder with Selection that fails records nothing (U5), and a rollback that failed too says which items stayed changed and
+// keeps them undoable.
+TEST_F(FileOps, AFailedUndoKeepsTheCommandAndAKioCommandEndsTheRedoHistory)
+{
+    FilesApp app(QList<QUrl>{});
+    Told told(app);
+    write(d("report.txt"), "r");
+    app.makeAlias({url(d("report.txt"))}, nullptr);
+    ASSERT_TRUE(QFileInfo(d("report.txt alias")).isSymLink());
+    // The user replaced the alias by a file of their own: the undo is refused, nothing is removed, the command stays.
+    ASSERT_TRUE(QFile::remove(d("report.txt alias")));
+    write(d("report.txt alias"), "mine");
+    app.undo();
+    ASSERT_EQ(told.messages.size(), 1);
+    EXPECT_TRUE(told.messages.first().contains(QStringLiteral("can’t be undone")));
+    EXPECT_EQ(read(d("report.txt alias")), QByteArray("mine"));
+    EXPECT_TRUE(app.canUndo());
+    EXPECT_FALSE(app.canRedo()) << "nothing was undone";
+    // Put the alias back: the same command undoes now.
+    ASSERT_TRUE(QFile::remove(d("report.txt alias")));
+    ASSERT_TRUE(QFile::link(d("report.txt"), d("report.txt alias")));
+    app.undo();
+    EXPECT_FALSE(present(d("report.txt alias")));
+    ASSERT_TRUE(app.canRedo());
+    // A command of KIO's (a single rename) ends the redo history at once.
+    app.rename(url(d("report.txt")), QStringLiteral("rapport.txt"), nullptr);
+    EXPECT_FALSE(app.canRedo());
+    ASSERT_TRUE(waitFor([&] { return present(d("rapport.txt")); }));
+    app.redo();
+    EXPECT_FALSE(present(d("report.txt alias"))) << "the old redo is gone";
+}
+
+TEST_F(FileOps, AFailedNewFolderWithSelectionRecordsNothing)
+{
+    FilesApp app(QList<QUrl>{});
+    Told told(app);
+    write(d("a.txt"), "a");
+    write(d("b.txt"), "b");
+    ASSERT_TRUE(QFile::remove(d("b.txt"))); // gone since the window listed it
+    const quint64 serial = KIO::FileUndoManager::self()->currentCommandSerialNumber();
+    app.newFolderWithItems({url(d("a.txt")), url(d("b.txt"))}, url(m_dir.path()), nullptr);
+    ASSERT_EQ(told.messages.size(), 1);
+    EXPECT_TRUE(told.messages.first().contains(QStringLiteral("Nothing was changed")));
+    EXPECT_FALSE(present(d("New Folder With Items"))) << "the folder was made and taken away again";
+    EXPECT_EQ(read(d("a.txt")), QByteArray("a"));
+    EXPECT_EQ(app.canUndo(), m_kioUndoBefore) << "no undo step for a command that did nothing";
+    EXPECT_EQ(KIO::FileUndoManager::self()->currentCommandSerialNumber(), serial);
+}
+
+TEST_F(FileOps, ARollbackThatFailedToSaysWhatStayedChangedAndKeepsItUndoable)
+{
+    FilesApp app(QList<QUrl>{});
+    write(d("a.txt"), "a");
+    write(d("b.txt"), "b");
+    write(d("c.txt"), "c");
+    ASSERT_TRUE(QFile::remove(d("b.txt"))); // the second rename fails; the first cannot be put back (the folder is read-only by then)
+    BatchOps::setStepHook([&](int step) {
+        if (step == 0)
+            ::chmod(QFile::encodeName(m_dir.path()).constData(), 0500);
+    });
+    QVariantMap add;
+    add.insert(QStringLiteral("mode"), 1);
+    add.insert(QStringLiteral("addText"), QStringLiteral("-x"));
+    const QString why = app.renameItems({url(d("a.txt")), url(d("b.txt")), url(d("c.txt"))}, add, nullptr);
+    BatchOps::setStepHook({});
+    ::chmod(QFile::encodeName(m_dir.path()).constData(), 0700);
+    EXPECT_TRUE(why.contains(QStringLiteral("These stayed changed"))) << why.toStdString();
+    EXPECT_TRUE(why.contains(QStringLiteral("a-x.txt"))) << "it names the item";
+    EXPECT_FALSE(why.contains(QStringLiteral("Nothing was changed")));
+    EXPECT_EQ(read(d("a-x.txt")), QByteArray("a"));
+    // What stayed done is one undo step.
+    ASSERT_TRUE(app.canUndo());
+    app.undo();
+    EXPECT_EQ(read(d("a.txt")), QByteArray("a"));
+    EXPECT_FALSE(present(d("a-x.txt")));
+}

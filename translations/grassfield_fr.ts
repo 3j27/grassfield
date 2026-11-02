@@ -5007,6 +5007,10 @@
         <translation>Nouveau dossier avec éléments</translation>
     </message>
     <message>
+        <source>“%1” couldn’t be moved into a new folder.</source>
+        <translation>« %1 » n’a pas pu être placé dans un nouveau dossier.</translation>
+    </message>
+    <message>
         <source>Moving…</source>
         <translation>Déplacement…</translation>
     </message>
@@ -5037,6 +5041,10 @@
     <message>
         <source>No name would change.</source>
         <translation>Aucun nom ne changerait.</translation>
+    </message>
+    <message>
+        <source>“%1” couldn’t be renamed: %2.</source>
+        <translation>« %1 » n’a pas pu être renommé : %2.</translation>
     </message>
     <message>
         <source>Only items on this computer can be compressed.</source>
@@ -5127,16 +5135,8 @@
         <translation>Créer des alias</translation>
     </message>
     <message>
-        <source>“%1” couldn’t be moved into a new folder. Nothing was changed.</source>
-        <translation>« %1 » n’a pas pu être placé dans un nouveau dossier. Rien n’a été modifié.</translation>
-    </message>
-    <message>
         <source>New Folder with Selection</source>
         <translation>Nouveau dossier avec la sélection</translation>
-    </message>
-    <message>
-        <source>“%1” couldn’t be renamed: %2. Nothing was renamed.</source>
-        <translation>« %1 » n’a pas pu être renommé : %2. Rien n’a été renommé.</translation>
     </message>
     <message>
         <source>Rename %1 Items</source>
@@ -5153,14 +5153,6 @@
     <message>
         <source>“%1” can’t be moved or copied into itself.</source>
         <translation>«&#xa0;%1&#xa0;» ne peut pas être déplacé ou copié dans lui-même.</translation>
-    </message>
-    <message>
-        <source>“%1” can’t be undone: something has changed since. Nothing was changed.</source>
-        <translation>« %1 » ne peut pas être annulé : quelque chose a changé depuis. Rien n’a été modifié.</translation>
-    </message>
-    <message>
-        <source>“%1” can’t be redone: something has changed since. Nothing was changed.</source>
-        <translation>« %1 » ne peut pas être rétabli : quelque chose a changé depuis. Rien n’a été modifié.</translation>
     </message>
     <message>
         <source>Only files and folders can be tagged.</source>
@@ -5407,6 +5399,18 @@
         <translation>Impossible de faire pivoter «&#xa0;%1&#xa0;»&#xa0;: %2.</translation>
     </message>
     <message>
+        <source>Nothing was changed.</source>
+        <translation>Rien n’a été modifié.</translation>
+    </message>
+    <message>
+        <source> and %1 more</source>
+        <translation> et %1 de plus</translation>
+    </message>
+    <message>
+        <source>These stayed changed: %1. Undo puts them back.</source>
+        <translation>Ces éléments sont restés modifiés : %1. Annuler les remet en place.</translation>
+    </message>
+    <message>
         <source>Recents</source>
         <translation>Récents</translation>
     </message>
@@ -5433,6 +5437,18 @@
     <message>
         <source>About %1 minutes</source>
         <translation>Environ %1 minutes</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be undone: something has changed since.</source>
+        <translation>« %1 » ne peut pas être annulé : quelque chose a changé depuis.</translation>
+    </message>
+    <message>
+        <source>Part of it was undone; Undo again after fixing the items.</source>
+        <translation>Une partie a été annulée ; annulez de nouveau après avoir réglé les éléments.</translation>
+    </message>
+    <message>
+        <source>“%1” can’t be redone: something has changed since.</source>
+        <translation>« %1 » ne peut pas être rétabli : quelque chose a changé depuis.</translation>
     </message>
     <message>
         <source>Links can’t carry tags.</source>

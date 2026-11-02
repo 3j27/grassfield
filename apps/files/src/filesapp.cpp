@@ -369,6 +369,26 @@ bool FilesApp::customUndoIsNext() const
     return !m_undoCustom.isEmpty() && (!kio->isUndoAvailable() || m_undoCustom.last().serial > kio->currentCommandSerialNumber());
 }
 
+namespace
+{
+// What the user is told after a command stopped part-way: all was put back, or these items stayed changed (and Undo, which
+// the caller keeps for them, puts them back).
+QString rollbackNote(const BatchOps::Steps &stayed)
+{
+    if (stayed.isEmpty())
+        return FilesApp::tr("Nothing was changed.");
+    QStringList names;
+    for (const BatchOps::Step &step : stayed) {
+        if (names.size() < 3)
+            names << QStringLiteral("“%1”").arg(FileLogic::displayName(QFileInfo(step.to).fileName()));
+    }
+    QString list = names.join(QStringLiteral(", "));
+    if (stayed.size() > names.size())
+        list += FilesApp::tr(" and %1 more").arg(stayed.size() - names.size());
+    return FilesApp::tr("These stayed changed: %1. Undo puts them back.").arg(list);
+}
+} // namespace
+
 bool FilesApp::canUndo() const
 {
     return !m_undoCustom.isEmpty() || KIO::FileUndoManager::self()->isUndoAvailable();
@@ -1363,7 +1383,9 @@ void FilesApp::newFolderWithItems(const QList<QUrl> &urls, const QUrl &directory
         BatchOps::Failure failure;
         if (!BatchOps::apply(steps, &failure)) {
             endStyleMoves(pending);
-            emit operationFailed(tr("“%1” couldn’t be moved into a new folder. Nothing was changed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())));
+            // A revert that failed leaves part of it done: that part is a command of its own, so Undo can put it back.
+            recordCustom(tr("New Folder with Selection"), failure.applied);
+            emit operationFailed(tr("“%1” couldn’t be moved into a new folder.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())) + QLatin1Char(' ') + rollbackNote(failure.applied));
             return;
         }
         styleMovedAll(pairs);
@@ -1510,7 +1532,8 @@ QString FilesApp::renameItems(const QList<QUrl> &urls, const QVariantMap &option
     BatchOps::Failure failure;
     if (!BatchOps::apply(steps, &failure)) {
         endStyleMoves(pending);
-        return tr("“%1” couldn’t be renamed: %2. Nothing was renamed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName()), QString::fromLocal8Bit(strerror(failure.error)));
+        recordCustom(tr("Rename %1 Items").arg(failure.applied.size()), failure.applied);
+        return tr("“%1” couldn’t be renamed: %2.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName()), QString::fromLocal8Bit(strerror(failure.error))) + QLatin1Char(' ') + rollbackNote(failure.applied);
     }
     styleMovedAll(pairs);
     endStyleMoves(pending);
@@ -2091,7 +2114,13 @@ void FilesApp::undo()
     const CustomCommand command = m_undoCustom.last();
     BatchOps::Failure failure;
     if (!BatchOps::apply(BatchOps::inverse(command.steps), &failure)) {
-        emit operationFailed(tr("“%1” can’t be undone: something has changed since. Nothing was changed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())));
+        // The command stays on the stack. When a revert failed too, part of it is undone: what is still done stays its steps.
+        const int undone = int(failure.applied.size());
+        if (undone > 0)
+            m_undoCustom.last().steps = command.steps.mid(0, command.steps.size() - undone);
+        emit operationFailed(tr("“%1” can’t be undone: something has changed since.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())) + QLatin1Char(' ')
+                             + (undone > 0 ? tr("Part of it was undone; Undo again after fixing the items.") : tr("Nothing was changed.")));
+        emit undoChanged();
         return;
     }
     m_undoCustom.removeLast();
@@ -2120,7 +2149,16 @@ void FilesApp::redo()
     const CustomCommand command = m_redoCustom.last();
     BatchOps::Failure failure;
     if (!BatchOps::apply(command.steps, &failure)) {
-        emit operationFailed(tr("“%1” can’t be redone: something has changed since. Nothing was changed.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())));
+        QString note = tr("Nothing was changed.");
+        if (!failure.applied.isEmpty()) {
+            // Part of it is done and stays: it is a command of its own now (Undo puts it back) and the rest of the redo is gone.
+            m_redoCustom.removeLast();
+            m_redoKinds.removeLast();
+            m_undoCustom.append({KIO::FileUndoManager::self()->newCommandSerialNumber(), command.text, failure.applied});
+            note = rollbackNote(failure.applied);
+        }
+        emit operationFailed(tr("“%1” can’t be redone: something has changed since.").arg(FileLogic::displayName(QFileInfo(failure.path).fileName())) + QLatin1Char(' ') + note);
+        emit undoChanged();
         return;
     }
     m_redoCustom.removeLast();

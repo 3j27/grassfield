@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 using namespace BatchOps;
@@ -182,4 +183,80 @@ TEST(BatchOps, ANewFolderWithItemsIsOneCommand)
     EXPECT_EQ(f.step, 0);
     EXPECT_EQ(read(d + QStringLiteral("/a.txt")), QByteArray("a"));
     EXPECT_EQ(read(folder), QByteArray("a file in the way"));
+}
+
+namespace
+{
+// Puts the step hook and the fallback switch back whatever the test did.
+struct Reset {
+    ~Reset()
+    {
+        setStepHook({});
+        forceNoReplaceFallback(false);
+    }
+};
+} // namespace
+
+TEST(BatchOps, ARevertThatFailsToo_ReportsWhatStayedDone)
+{
+    QString why;
+    auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << why.toStdString();
+    Reset reset;
+    const QString d = dir->path();
+    ASSERT_TRUE(QDir().mkpath(d + QStringLiteral("/one")));
+    ASSERT_TRUE(QDir().mkpath(d + QStringLiteral("/two")));
+    write(d + QStringLiteral("/one/a"), "a");
+    write(d + QStringLiteral("/two/b"), "b");
+    write(d + QStringLiteral("/two/taken"), "mine");
+    const Steps steps{{Step::Kind::Rename, d + QStringLiteral("/one/a"), d + QStringLiteral("/one/a2")},
+                      {Step::Kind::Rename, d + QStringLiteral("/two/b"), d + QStringLiteral("/two/taken")}};
+    // The second step fails (the name exists); the revert of the first cannot write in its folder.
+    setStepHook([&](int step) {
+        if (step == 0)
+            ::chmod(QFile::encodeName(d + QStringLiteral("/one")).constData(), 0500);
+    });
+    Failure f;
+    EXPECT_FALSE(apply(steps, &f));
+    ::chmod(QFile::encodeName(d + QStringLiteral("/one")).constData(), 0700);
+    EXPECT_EQ(f.step, 1);
+    ASSERT_EQ(f.applied.size(), 1) << "the first rename stayed done";
+    EXPECT_EQ(f.applied.first().to, d + QStringLiteral("/one/a2"));
+    EXPECT_EQ(read(d + QStringLiteral("/one/a2")), QByteArray("a"));
+    EXPECT_EQ(read(d + QStringLiteral("/two/taken")), QByteArray("mine"));
+    // The caller can put it back with the steps it was given.
+    setStepHook({});
+    Failure g;
+    ASSERT_TRUE(apply(inverse(f.applied), &g));
+    EXPECT_EQ(read(d + QStringLiteral("/one/a")), QByteArray("a"));
+    // A complete revert reports nothing stayed.
+    EXPECT_FALSE(apply(steps, &f));
+    EXPECT_TRUE(f.applied.isEmpty());
+}
+
+TEST(BatchOps, WithoutRenameNoreplaceTheNameIsLookedAtFirst)
+{
+    QString why;
+    auto dir = sandbox(&why);
+    if (!dir)
+        GTEST_SKIP() << why.toStdString();
+    Reset reset;
+    forceNoReplaceFallback(true);
+    const QString d = dir->path();
+    write(d + QStringLiteral("/a"), "a");
+    write(d + QStringLiteral("/b"), "b");
+    write(d + QStringLiteral("/taken"), "mine");
+    Failure f;
+    // A name that exists is never replaced on this path either.
+    EXPECT_FALSE(apply({{Step::Kind::Rename, d + QStringLiteral("/a"), d + QStringLiteral("/taken")}}, &f));
+    EXPECT_EQ(f.error, EEXIST);
+    EXPECT_EQ(read(d + QStringLiteral("/taken")), QByteArray("mine"));
+    EXPECT_EQ(read(d + QStringLiteral("/a")), QByteArray("a"));
+    // A free name works, and a dangling link in the way counts as taken.
+    ASSERT_TRUE(QFile::link(d + QStringLiteral("/nowhere"), d + QStringLiteral("/dangling")));
+    EXPECT_FALSE(apply({{Step::Kind::Rename, d + QStringLiteral("/b"), d + QStringLiteral("/dangling")}}, &f));
+    EXPECT_EQ(read(d + QStringLiteral("/b")), QByteArray("b"));
+    ASSERT_TRUE(apply({{Step::Kind::Rename, d + QStringLiteral("/b"), d + QStringLiteral("/b2")}}, &f));
+    EXPECT_EQ(read(d + QStringLiteral("/b2")), QByteArray("b"));
 }
