@@ -196,6 +196,131 @@ TestCase {
         compare(IconShape.busy, 0);
     }
 
+    // The icons of the Dock's apps in the installed grassfield-icons (only where the package is installed): the tile ones are read as
+    // tiles and drawn as ONE tile (scale > the glyph scale), the Files app icon (a folder) is not. tests/shell/icontile_hidpi.sh runs
+    // this file again at window pixel ratios of 1.05, 1.25, 1.5 and 2, where drawImage of an icon once left every icon "empty": a pale plate around a
+    // coloured tile on every Dock icon.
+    function test_installedTileIconsAreTiles() {
+        const dir = "file:///usr/share/icons/grassfield-icons/";
+        const tiles = ["base/apps/scalable/chromium.svg", "base/apps/scalable/foot.svg", "scalable/apps/org.grassfield.Settings.svg", "scalable/apps/org.grassfield.Preview.svg"];
+        let seen = 0;
+        for (const rel of tiles) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", dir + rel, false);
+            try {
+                xhr.send();
+            } catch (e) {
+                continue;
+            }
+            if (xhr.status !== 200 && xhr.status !== 0 || xhr.responseText === "")
+                continue;
+            seen++;
+            Appearance.iconMode = "tinted";
+            const icon = createTemporaryObject(iconComponent, testCase, {source: dir + rel});
+            tryVerify(() => icon.shapeKnown, 5000, rel + " was not read");
+            verify(icon.ownTile, rel + " is a tile (side " + icon.tileSide + ")");
+            verify(icon.artScale > Tokens.iconModeSysGlyphScale, rel + ": one tile on the plate, not inside it (scale " + icon.artScale + ")");
+        }
+        if (seen === 0)
+            skip("grassfield-icons is not installed");
+        const files = new XMLHttpRequest();
+        files.open("GET", dir + "scalable/apps/org.grassfield.Files.svg", false);
+        try {
+            files.send();
+        } catch (e) {
+            return;
+        }
+        if (files.responseText === "")
+            return;
+        Appearance.iconMode = "tinted";
+        const folder = createTemporaryObject(iconComponent, testCase, {source: dir + "scalable/apps/org.grassfield.Files.svg"});
+        tryVerify(() => folder.shapeKnown, 5000, "the Files icon was not read");
+        verify(!folder.ownTile, "the Files app icon is a folder, not a tile");
+    }
+
+
+    // The shape is read from the image's own pixels (createImageData), so an SVG and a PNG of another size measure alike at every ratio.
+    function test_svgAndPngMeasureAlike() {
+        const svg = testCase.read("own-tile-squircle.svg", "dark");
+        const png = testCase.read("own-tile-squircle-200.png", "dark");
+        verify(svg.ownTile && png.ownTile, "both are tiles (svg " + svg.tileSide + ", png " + png.tileSide + ")");
+        fuzzyCompare(png.tileSide, svg.tileSide, 0.03);
+    }
+
+    Component {
+        id: folderComponent
+
+        FolderIcon {
+            size: 48
+            folderGlyph: "★"
+        }
+    }
+
+    // FolderIcon reads the pixels under the symbol from the image's own pixels: the box [0.33, 0.67] x [0.45, 0.79] of the fixture holds the white
+    // disc (about a third of it); a read of the wrong part of the picture (the top-left of a scaled backing: tests/shell/icontile_hidpi.sh runs
+    // this file at 1.05, 1.25, 1.5 and 2) holds none.
+    function test_folderPlateReadsTheSymbolBox() {
+        FolderPlate.reset();
+        const icon = createTemporaryObject(folderComponent, testCase, {source: testCase.fixtureDir + "blue-plate-white-glyph.svg"});
+        tryVerify(() => FolderPlate.samples[icon.rawKey] !== undefined, 5000, "the plate was read");
+        const s = FolderPlate.samples[icon.rawKey];
+        verify(s !== null, "samples");
+        let white = 0, total = 0;
+        for (let i = 0; i < s.length; i += 4) {
+            total++;
+            if (s[i] > 0.9 && s[i + 1] > 0.9 && s[i + 2] > 0.9 && s[i + 3] > 0.9)
+                white++;
+        }
+        verify(white / total > 0.15, "white share of the symbol box " + (white / total));
+    }
+
+
+    Component {
+        id: costCanvasComponent
+
+        Canvas {
+            width: 1
+            height: 1
+            renderTarget: Canvas.Image
+            renderStrategy: Canvas.Immediate
+        }
+    }
+
+    // Cost of the shape read of a 200 px picture (what an image://icon pixmap is): `IconTile.sideOfImageData` alone, averaged over 40 reads, with its
+    // number in the log. A budget of a quiet machine: skipped, not passed, while the 1-minute load is above the cores (scripts/dev/test.sh's rule).
+    function test_aShapeReadIsCheap() {
+        const canvas = createTemporaryObject(costCanvasComponent, testCase);
+        const url = testCase.fixtureDir + "own-tile-squircle-200.png";
+        canvas.loadImage(url);
+        tryVerify(() => canvas.isImageLoaded(url), 5000, "fixture loaded");
+        tryVerify(() => canvas.available, 5000, "canvas available");
+        const ctx = canvas.getContext("2d");
+        const img = ctx.createImageData(url);
+        compare(img.width, 200);
+        verify(IconTile.sideOfImageData(img, Tokens.iconModeOwnTileProbeSize, Tokens) > 0.8, "a tile");
+        const reads = 40;
+        const t0 = Date.now();
+        for (let i = 0; i < reads; i++)
+            IconTile.sideOfImageData(img, Tokens.iconModeOwnTileProbeSize, Tokens);
+        const each = (Date.now() - t0) / reads;
+        console.log("COST sideOfImageData of a 200 px picture: " + each.toFixed(2) + " ms per read");
+        const read = path => {
+            const x = new XMLHttpRequest();
+            x.open("GET", "file://" + path, false);
+            try {
+                x.send();
+            } catch (e) {
+                return "";
+            }
+            return x.responseText;
+        };
+        const cores = Math.max(1, read("/proc/cpuinfo").split("\n").filter(l => l.startsWith("processor")).length);
+        const load = parseFloat(read("/proc/loadavg"));
+        if (load > cores)
+            skip("timing budget not judged at load " + load + " (above " + cores + " cores)");
+        verify(each <= 2, "one read took " + each.toFixed(2) + " ms (budget 2 ms)");
+    }
+
     Component {
         id: prewarmComponent
 
