@@ -693,6 +693,7 @@
  {"path": "tests/visual/preview-browse.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/preview-title.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-tinted.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/menubar-corner.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/recent-items.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/menu-stable.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/widgets-blur.sh", "layer": "visual", "runner": "bare"},
