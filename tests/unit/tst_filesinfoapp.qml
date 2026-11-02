@@ -41,8 +41,13 @@ TestCase {
         }
         // Get Info's Sharing & Permissions (ADR-0028): nothing to edit here.
         signal permissionsChanged(url url)
+        property var permissionsResult: ({valid: false})
         function permissionsOf(target: url): var {
-            return {valid: false};
+            return fakeApp.permissionsResult;
+        }
+        function setGroup(target: url, group: string): void {
+        }
+        function setAccess(target: url, who: int, access: int): void {
         }
         property var jobs: []
         function applicationsFor(urls: var): var {
@@ -108,6 +113,52 @@ TestCase {
             app: fakeApp
             info: test.locationInfo
         }
+    }
+
+    Component {
+        id: fileComponent
+
+        InfoWindow {
+            app: fakeApp
+            info: ({name: "report.txt", url: "file:///tmp/report.txt", iconName: "text-plain", kind: "Plain Text", isDir: false,
+                    readable: true, writable: true, size: 10, sizeText: "10 bytes", bytes: 10, where: "/tmp", created: "", modified: "",
+                    accessed: "", linkDest: "", owner: "", group: "", permissions: "", thumbnail: ""})
+        }
+    }
+
+    function items(item: var, name: string, out: var): var {
+        if (item.objectName === name)
+            out.push(item);
+        for (let i = 0; i < item.children.length; i++)
+            test.items(item.children[i], name, out);
+        return out;
+    }
+
+    // Sharing & Permissions is a table (Finder): the Name column and the Privilege column never overlap, whatever the user and
+    // group names, and a long name elides (review of PR #98: the group pop-up ran under the privilege pop-up, 34 px).
+    function test_permissionsNameColumnNeverRunsUnderThePrivilegeColumn() {
+        const longName = "a-user-with-a-really-quite-long-account-name";
+        fakeApp.permissionsResult = {valid: true, mode: 420, modeText: "-rw-r--r--", owner: longName, group: "a-group-with-a-long-name-too",
+                               ownedByMe: true, isDir: true, editable: true, reason: "",
+                               groups: ["a-group-with-a-long-name-too", "another-quite-long-group-name", "wheel"], access: [3, 1, 1]};
+        const win = createTemporaryObject(fileComponent, test);
+        verify(win);
+        win.show();
+        tryVerify(() => win.visible && win.contentItem.width > 0, 3000);
+        verify(win.permissionsShown);
+        const privileges = test.items(win.contentItem, "privilege", []);
+        compare(privileges.length, 3, "one privilege pop-up per row");
+        const names = test.items(win.contentItem, "nameText", []).concat(test.items(win.contentItem, "groupChoice", [])).filter(i => i.visible);
+        compare(names.length, 3, "one name control per row (a text, or the group's pop-up)");
+        for (const n of names) {
+            const row = n.parent;
+            const privilege = privileges.find(p => p.parent === row);
+            verify(privilege !== undefined);
+            verify(n.x >= 0, "the name starts inside the row");
+            verify(n.x + n.width <= privilege.x, "the name ends before the privilege begins (" + n.objectName + ": " + (n.x + n.width) + " > " + privilege.x + ")");
+            verify(privilege.x + privilege.width <= row.width + 0.5, "the privilege stays inside the row");
+        }
+        fakeApp.permissionsResult = {valid: false};
     }
 
     function test_applicationInfoHasNoUndefinedThumbnail() {

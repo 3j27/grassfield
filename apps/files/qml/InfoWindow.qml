@@ -368,14 +368,18 @@ Window {
                         required property var modelData
                         width: content.width
                         height: privilege.implicitHeight
+                        // The Name column takes what the Privilege column leaves (Finder's table): it never runs under it, and a
+                        // long name elides.
+                        readonly property real nameWidth: Math.max(0, permissionRow.width - privilege.width - Tokens.spacingSm)
                         Accessible.role: Accessible.Row
                         Accessible.name: DisplayName.text(permissionRow.modelData.name)
 
                         // The group's own pop-up: the user's groups (the item can be given to any of them).
                         ComboBox {
                             id: groupChoice
+                            objectName: "groupChoice"
                             visible: permissionRow.modelData.who === 1 && root.permissions.editable && root.permissions.groups.length > 1
-                            width: Tokens.filesInfoLabelWidth + Tokens.spacingLg
+                            width: permissionRow.nameWidth
                             anchors.verticalCenter: parent.verticalCenter
                             accessibleName: qsTr("Group")
                             model: visible ? root.permissions.groups.map(g => ({id: g, text: g})) : []
@@ -385,8 +389,9 @@ Window {
 
                         Text {
                             textFormat: Text.PlainText
+                            objectName: "nameText"
                             visible: !groupChoice.visible
-                            width: Tokens.filesInfoLabelWidth + Tokens.spacingLg
+                            width: permissionRow.nameWidth
                             anchors.verticalCenter: parent.verticalCenter
                             elide: Text.ElideRight
                             text: DisplayName.text(permissionRow.modelData.name)
@@ -397,6 +402,7 @@ Window {
 
                         ComboBox {
                             id: privilege
+                            objectName: "privilege"
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             enabled: root.permissions.editable
