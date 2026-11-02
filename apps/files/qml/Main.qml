@@ -360,7 +360,7 @@ QtObject {
             if (!root.jobsRunning)
                 return;
             if (!root.progressWindow)
-                root.progressWindow = progressComponent.createObject(root, {app: root.app});
+                root.progressWindow = root.progressComponent.createObject(root, {app: root.app});
             if (root.progressWindow)
                 root.progressWindow.show();
         }
