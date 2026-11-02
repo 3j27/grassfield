@@ -262,13 +262,13 @@ giving 12 to every class that is not org.grassfield.* (12 is under the cap). A r
 | Window corner radius | 26 ± 1.5 | 12 | −14 | large |
 | Sidebar | floating: inset 8, radius 18 ± 1, translucent; the traffic lights sit inside it | flush, below a plugin titlebar | — | missing |
 | Sidebar width | 215 ± 0.5 | `settings.sidebarWidth` 215 | 0 | match |
-| Sidebar search | 195 x 28 capsule, top at 61 | `settings.searchHeight` 28 | 0 | match |
+| Sidebar search | 195 x 28 capsule, top at 61 | `toolbar.searchHeight` 28 (`settings.searchHeight` until ADR-0039 step 14) | 0 | match |
 | Account row | 37 ± 1 avatar, 13 semibold name, 11-pt subtitle | none | — | missing (optional) |
 | Sidebar row pitch | 32 ± 0.5 | `settings.sidebarItemHeight` 30 | −2 | small |
 | Sidebar groups | +13 space, no divider | not tokenised | — | small |
 | Selection | 195 x 32, radius 8 ± 1, inset 10, accent fill, white text | `radius.control` 6 | −2 | small |
 | Sidebar icon | 20 ± 0.5 coloured rounded tile (radius ~5), white glyph | `settings.sidebarIconSize` 14, monochrome | −6 | large |
-| Toolbar | back/forward capsule 72.5 x 36 + pane title 15 bold in a 52-pt toolbar | page title 20 inside the content (`settings.pageTitleSize`), no back/forward | — | missing |
+| Toolbar | back/forward capsule 72.5 x 36 + pane title 15 bold in a 52-pt toolbar | page title 20 inside the content (the former `settings.pageTitleSize`, removed by ADR-0039 step 15 once the title moved into the toolbar), no back/forward | — | missing |
 | Content column | pane 500, margins 20, groups 460 ± 0.5 | `settings.contentMaxWidth` 520 | +60 | large |
 | Group radius / fill | 12 ± 1, no stroke | `radius.menu` 10 with a separator-colour border | −2 | small |
 | Group gap | 10 ± 0.5 | `settings.groupGap` 20 | +10 | large |

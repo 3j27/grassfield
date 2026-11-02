@@ -1,0 +1,2 @@
+# A few lines of tzdata 2026e's tzdata.zi (/usr/share/zoneinfo), the ones tests/unit/tst_timeofday.qml reads (ADR-0040 IQ-W1 C).
+L America/Toronto America/Montreal

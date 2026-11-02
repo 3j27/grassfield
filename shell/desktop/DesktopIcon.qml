@@ -28,6 +28,34 @@ Item {
     // Names carried with the internal-rearrange marker format (the selection).
     property var dragNames: []
 
+    // The label follows the wallpaper's tone under it, as the menu bar does (ADR-0039 step 25; macOS: dark labels without a
+    // halo on a bright wallpaper): black text where the wallpaper under the label is at least menubar.toneLightBelow (the
+    // menu bar's dark foreground holds 4.5:1 from there, gate A2's role "desktop label, dark foreground"), else white text
+    // with the soft dark halo. The range is the luminance grid's cells under the label (Backdrop, reported with the
+    // wallpaper whatever the windows); an unknown wallpaper (a video, no statistics) keeps the white label.
+    readonly property string screenName: Screen.name
+    property rect labelRect: Qt.rect(0, 0, 0, 0)
+    readonly property var labelRange: {
+        const whole = Backdrop.wallpapers[root.screenName] ?? null;
+        if (!whole)
+            return null;
+        const grid = Backdrop.grids[root.screenName] ?? null;
+        return (grid ? GlassTint.gridRange(grid, root.labelRect, 0) : null) ?? whole;
+    }
+    readonly property bool darkLabel: !root.selected && !root.renaming && Logic.darkLabelOver(root.labelRange, Tokens.menubarToneLightBelow)
+
+    function measureLabel(): void {
+        if (!root.visible || labelBox.width <= 0)
+            return;
+        const p = labelBox.mapToItem(null, 0, 0);
+        root.labelRect = Qt.rect(p.x, p.y, labelBox.width, labelBox.height);
+    }
+
+    onXChanged: Qt.callLater(root.measureLabel)
+    onYChanged: Qt.callLater(root.measureLabel)
+    onVisibleChanged: Qt.callLater(root.measureLabel)
+    Component.onCompleted: Qt.callLater(root.measureLabel)
+
     // Pointer events for the grid.
     signal pressedIcon(int modifiers, bool right)
     // Left click released without a drag.
@@ -175,9 +203,11 @@ Item {
         color: root.renaming ? Appearance.withAlpha(Appearance.colors.fieldFill, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.selection : "transparent")
         border.width: root.renaming ? Tokens.controlFocusOutline : 0
         border.color: root.renameError !== "" ? Appearance.darkColors.danger : Appearance.colors.accent
+        onWidthChanged: Qt.callLater(root.measureLabel)
+        onHeightChanged: Qt.callLater(root.measureLabel)
         // Second pass of the drop shadow: the shadow of the text and its own shadow, a denser soft halo (gate A2: white text
-        // must stay legible on a white wallpaper). Off on the accent highlight and while renaming.
-        layer.enabled: !root.selected && !root.renaming
+        // must stay legible on a white wallpaper). Off on the accent highlight, while renaming, and for a dark label.
+        layer.enabled: !root.selected && !root.renaming && !root.darkLabel
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Appearance.darkColors.shadow
@@ -192,7 +222,7 @@ Item {
             id: labelFx
             anchors.fill: parent
             visible: !root.renaming
-            layer.enabled: !root.selected
+            layer.enabled: !root.selected && !root.darkLabel
             layer.effect: MultiEffect {
                 shadowEnabled: true
                 shadowColor: Appearance.darkColors.shadow
@@ -216,14 +246,14 @@ Item {
                 textFormat: Text.PlainText
                 // White text with a soft dark drop shadow whatever the appearance (a desktop label sits on the wallpaper, not
                 // on material); the selected label is drawn on the selection fill with its text colour (gate A2).
-                color: root.selected ? Appearance.colors.selectionText : Appearance.darkColors.text
+                color: root.selected ? Appearance.colors.selectionText : (root.darkLabel ? Appearance.lightColors.barText : Appearance.darkColors.text)
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.desktopIconLabelSize
                 font.weight: Tokens.typographyMenuWeight
                 // The core of the shadow is a one pixel outline at labelShadowOpacity, softened by the blurred copy below.
-                style: root.selected ? Text.Normal : Text.Outline
+                style: root.selected || root.darkLabel ? Text.Normal : Text.Outline
                 styleColor: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconLabelShadowOpacity)
-                layer.enabled: !root.selected
+                layer.enabled: !root.selected && !root.darkLabel
                 layer.effect: MultiEffect {
                     shadowEnabled: true
                     shadowColor: Appearance.darkColors.shadow

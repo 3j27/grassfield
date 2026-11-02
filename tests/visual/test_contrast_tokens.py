@@ -12,7 +12,7 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   window         an opaque app window: color.windowBackground and color.sidebarFill, bare and under a rimmed capsule's fill (the text
-                 colour at settings.fieldFillOpacity or settings.toolbarFillOpacity); the same at every transparency and wallpaper
+                 colour at toolbar.fieldFillOpacity or toolbar.capsuleFillOpacity); the same at every transparency and wallpaper
   accent         the solid accent colour
   selection      the solid selection colour: the light appearance's accent in the light appearance, color.selectionDark in the dark one (Appearance.accentedDark/Light,
                  Accent.withSelection), the fill of a selected row, a default button or a checked box
@@ -231,7 +231,7 @@ def backdrops(tok, role, appearance, t, wallpaper):
         for base_name in ("windowBackground", "sidebarFill"):
             base = tok.color(pal, appearance, base_name)
             out.append(base)
-            for opacity in ("settings.fieldFillOpacity", "settings.toolbarFillOpacity"):
+            for opacity in ("toolbar.fieldFillOpacity", "toolbar.capsuleFillOpacity"):
                 out.append(over(text, tok.path(opacity), base))
         return out
     if kind == "accent":
@@ -515,7 +515,19 @@ class ContrastTokens(unittest.TestCase):
         with open(os.path.join(ROOT, "shell", "security", "PasswordField.qml")) as f:
             field = f.read()
         for line in ("readonly property var colors: Appearance.darkColors",
-                     "color: root.colors.shadow\n        opacity: Tokens.lockDimOpacity",
+                     # The banded scrim (ADR-0040 step 4a, IQ-W4 A): lock.dimOpacity from the top to the bottom of the date and
+                     # clock and from the top of the account column down; the clear band only between them, on the far side
+                     # of each feather; all at lock.dimOpacity without room for it.
+                     "readonly property color dim: Appearance.withAlpha(root.colors.shadow, Tokens.lockDimOpacity)",
+                     "readonly property color clear: Appearance.withAlpha(root.colors.shadow, Tokens.lockScrimClearOpacity)",
+                     "readonly property real upperEdge: (dateClock.y + dateClock.height) / Math.max(1, height)",
+                     "readonly property real lowerEdge: account.y / Math.max(1, height)",
+                     "readonly property real feather: Tokens.lockScrimFeather / Math.max(1, height)",
+                     "readonly property bool banded: lowerEdge - upperEdge > 2 * feather",
+                     "position: scrim.banded ? scrim.upperEdge : 0\n                color: scrim.dim",
+                     "position: scrim.banded ? scrim.upperEdge + scrim.feather : 0\n                color: scrim.banded ? scrim.clear : scrim.dim",
+                     "position: scrim.banded ? scrim.lowerEdge - scrim.feather : 1\n                color: scrim.banded ? scrim.clear : scrim.dim",
+                     "position: scrim.banded ? scrim.lowerEdge : 1\n                color: scrim.dim",
                      "color: Appearance.withAlpha(root.colors.fill, Tokens.lockAvatarFillOpacity)",
                      "textColor: root.colors.text",
                      "placeholderColor: root.colors.textSecondary",
@@ -536,6 +548,14 @@ class ContrastTokens(unittest.TestCase):
         # Every text item on the scrim and the disc uses the primary text colour: date, clock, the user's message, initials,
         # name, error, notice.
         self.assertEqual(view.count("color: root.colors.text\n"), 7)
+        # The clear part of the scrim is lighter than the text bands, and only the two middle stops use it.
+        self.assertLess(self.tok.path("lock.scrimClearOpacity"), self.tok.path("lock.dimOpacity"))
+        self.assertEqual(view.count("scrim.clear"), 2)
+        self.assertEqual(view.count("GradientStop {"), 6)
+        # The date and clock are in the top column, every other text in the account column: the bands' geometry follows
+        # the two columns, so no text lies in the clear band.
+        top = view[view.index("id: dateClock"):view.index("id: account")]
+        self.assertEqual(top.count("Text {"), 2)
         # The error and notice lines (the two AlertMessage items) carry no layer or effect: a failed effect would hide
         # "Authentication service unavailable" / "Crash recovery unavailable" (R12 review of 0513f6e).
         alerts = [i for i in range(len(view)) if view.startswith("Accessible.role: Accessible.AlertMessage", i)]
@@ -584,6 +604,47 @@ class ContrastTokens(unittest.TestCase):
         for wp in ((255, 255, 255), (0, 0, 0)):
             for ap in APPEARANCES:
                 self.assertGreaterEqual(role_ratio(self.tok, label, ap, 0.25, wp), 4.5)
+
+    def test_artworks_hold_their_menu_bar_tone(self):
+        # ADR-0040 step 2 (gate A2 for the artworks): every palette of the four artworks, light and dark sets, the Grassfield hills at
+        # every phase, gives the menu bar a tone that reaches menubar.toneNeededContrast over the whole strip under the bar, with no
+        # band, on a display from 720 to 2160 pixels tall. The tone is chosen as BarTone does (the strip's mean luminance against
+        # menubar.toneLightBelow and toneDarkAbove; either inside the hysteresis band); the text is the bar's own (the dark
+        # palette's text over a dark strip, the light palette's over a light one). The strip: the top of the artwork's gradient,
+        # from its first colour towards its second (at `at` of the height, Artwork.js palette().tone); Field Rows: the first four
+        # bands, which cross the top edge. The crossfades between two palettes are covered by the band rule
+        # (BarToneLogic.artFadeNeedsBand, tests/unit/tst_bartone.qml).
+        need = self.tok.path("menubar.toneNeededContrast")
+        light_below, dark_above = self.tok.path("menubar.toneLightBelow"), self.tok.path("menubar.toneDarkAbove")
+        white_text = self.tok.color("darkColors", "dark", "text")
+        black_text = self.tok.color("lightColors", "light", "text")
+        bar = self.tok.path("menubar.height")
+
+        def mix(a, b, t):
+            return tuple(x + (y - x) * t for x, y in zip(a, b))
+
+        cases = []
+        for phase in ("Dawn", "Day", "Evening", "Night"):
+            for st in ("Light", "Dark"):
+                sky = [hex_rgb(c) for c in self.tok.path("artwork.grassfield%s%sSky" % (phase, st))]
+                cases.append(("grassfield %s %s" % (phase, st), sky[0], sky[1], 0.55, None))
+        for st in ("Light", "Dark"):
+            m = [hex_rgb(c) for c in self.tok.path("artwork.meadow%sSky" % st)]
+            cases.append(("meadow %s" % st, m[0], m[1], 1.0, None))
+            r = [hex_rgb(c) for c in self.tok.path("artwork.ridgeline%sSky" % st)]
+            cases.append(("ridgeline %s" % st, r[0], r[1], 0.6, None))
+            bands = [hex_rgb(c) for c in self.tok.path("artwork.rows%s" % st)]
+            cases.append(("rows %s" % st, bands[1], bands[2], 1.0, bands[:4]))
+        for name, top, nxt, at, extra in cases:
+            for height in (720, 1080, 1440, 2160):
+                reach = min(1.0, bar / (at * height))
+                strip = [mix(top, nxt, reach * k / 4) for k in range(5)] + (extra or [])
+                mean = lum(mix(top, nxt, reach / 2))
+                tones = ["light"] if mean < light_below else ["dark"] if mean > dark_above else ["light", "dark"]
+                for tone in tones:
+                    text = white_text if tone == "light" else black_text
+                    worst = min(wcag(text, c) for c in strip)
+                    self.assertGreaterEqual(worst, need, "%s at %d px: %s text %.2f:1" % (name, height, tone, worst))
 
     def test_menu_bar_tone_roles_are_asserted(self):
         # The adaptive bar is inside gate A2: white text over every wallpaper colour that picks it, black text over every one that picks
@@ -708,7 +769,7 @@ class ContrastTokens(unittest.TestCase):
             self.assertGreaterEqual(wcag(text, fill), 4.85 if light_text == (255, 255, 255) else 4.5, accent)
             self.assertEqual(text == (255, 255, 255), light_text == (255, 255, 255), accent)
 
-    GLASS_CLASSES = ("menu", "notification", "controls", "apps")
+    GLASS_CLASSES = ("menu", "notification", "controls", "apps", "gallery", "widgets")
 
     def test_glass_classes_hold_a2_over_any_backdrop(self):
         # ADR-0024 G-1 to G-3: a glass class whose backdrop the shell does not know takes the worst case; its text and secondary
@@ -807,6 +868,19 @@ class WindowSurfacePairs(unittest.TestCase):
             for bg, what in ((win, "the window"), (on_group, "a Settings group")):
                 self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, %s: %.2f:1" % (what, ap, wcag(fg, bg)))
                 self.assertGreaterEqual(wcag(self.tok.color("colors", ap, "text"), bg), 7.0, "text on %s, %s" % (what, ap))
+
+    def test_dark_window_secondary_text_on_the_window_its_groups_and_its_sidebar(self):
+        # ADR-0039 Q3 (the owner, 2026-10-29: #A1A1A6, warm since ADR-0040's warm neutrals): the dark window's secondary text
+        # holds A2 where it is drawn, on the window, a group and the sidebar, and reads as secondary: the primary text keeps at
+        # least twice its contrast there (it had 10.7:1 against the text's 13.4:1, so subtitles read like titles).
+        ap = "dark"
+        fg = self.tok.color("colors", ap, "windowTextSecondary")
+        text = self.tok.color("colors", ap, "text")
+        for name, what in (("windowBackground", "the window"), ("groupFill", "a group"), ("sidebarFill", "the sidebar")):
+            bg = self.tok.color("colors", ap, name)
+            self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, dark: %.2f:1" % (what, wcag(fg, bg)))
+            self.assertGreaterEqual(wcag(text, bg) / wcag(fg, bg), 2.0,
+                                    "text %.2f:1 against secondary %.2f:1 on %s, dark" % (wcag(text, bg), wcag(fg, bg), what))
 
     def test_permission_alert_symbol_on_the_window(self):
         # grassfield-portal's permission alert (apps/files/qml/AccessAlert.qml): the frontend's symbolic icon, for an application

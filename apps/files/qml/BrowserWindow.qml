@@ -787,18 +787,17 @@ Window {
                 }
 
                 // Group By (Finder): a capsule with the groups glyph and a chevron; its menu groups and sorts the folder.
-                Rectangle {
+                RimmedCapsule {
                     width: Tokens.filesGroupButtonWidth
-                    height: Tokens.filesToolbarCapsule
-                    radius: height / 2
-                    color: Appearance.buttonFill
+                    height: Tokens.toolbarCapsule
+                    fillOpacity: Tokens.toolbarCapsuleFillOpacity
                     anchors.verticalCenter: parent.verticalCenter
 
                     ToolButton {
                         id: groupButton
                         anchors.fill: parent
                         capsule: true
-                        buttonSize: Tokens.filesToolbarCapsule
+                        buttonSize: Tokens.toolbarCapsule
                         enabled: win.tab !== null && win.tab.groupsShown
                         accessibleName: qsTr("Group By")
                         onClicked: {
@@ -830,43 +829,58 @@ Window {
                     }
                 }
 
-                // Tags (Finder-Home): the colour tags of the selection, and Tags… for named ones (FP-21, FP-63).
-                ToolButton {
-                    id: tagsButton
-                    accessibleName: qsTr("Tags")
+                // Tags and Action in the toolbar's rimmed capsule, as macOS 27 Finder groups Share, Tags and Action (Finder-Home;
+                // Files has no Share; ADR-0039 step 23). Tags: the colour tags of the selection, and Tags… for named ones
+                // (FP-21, FP-63).
+                RimmedCapsule {
+                    width: 2 * Tokens.toolbarCapsule
+                    height: Tokens.toolbarCapsule
+                    fillOpacity: Tokens.toolbarCapsuleFillOpacity
                     anchors.verticalCenter: parent.verticalCenter
-                    enabled: win.tab !== null && win.folder !== null && win.folder.selectedCount > 0 && !win.folder.isTrash && !win.folder.isApplications
-                    onClicked: {
-                        const p = tagsButton.mapToItem(null, 0, tagsButton.height + Tokens.spacingXs);
-                        const items = [win.tab.tagRow(win.folder), {separator: true}, {id: "tagsEditor", text: qsTr("Tags…")}];
-                        win.menuLayer.open(items, p.x, p.y, id => {
-                            if (id === "tagsEditor")
-                                win.editTags(win.tab.selection());
-                            else
-                                win.tab.runAction(id, win.folder);
-                        }, win.tab.view, false);
-                    }
 
-                    ViewGlyph {
-                        anchors.centerIn: parent
-                        kind: "tag"
-                        size: Tokens.filesTagGlyphSize
-                        color: tagsButton.foreground
-                    }
-                }
+                    Row {
+                        anchors.fill: parent
 
-                ToolButton {
-                    id: actionButton
-                    accessibleName: qsTr("Action")
-                    anchors.verticalCenter: parent.verticalCenter
-                    onClicked: {
-                        const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
-                        win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
-                    }
+                        ToolButton {
+                            id: tagsButton
+                            capsule: true
+                            buttonSize: Tokens.toolbarCapsule
+                            accessibleName: qsTr("Tags")
+                            enabled: win.tab !== null && win.folder !== null && win.folder.selectedCount > 0 && !win.folder.isTrash && !win.folder.isApplications
+                            onClicked: {
+                                const p = tagsButton.mapToItem(null, 0, tagsButton.height + Tokens.spacingXs);
+                                const items = [win.tab.tagRow(win.folder), {separator: true}, {id: "tagsEditor", text: qsTr("Tags…")}];
+                                win.menuLayer.open(items, p.x, p.y, id => {
+                                    if (id === "tagsEditor")
+                                        win.editTags(win.tab.selection());
+                                    else
+                                        win.tab.runAction(id, win.folder);
+                                }, win.tab.view, false);
+                            }
 
-                    ViewGlyph {
-                        anchors.centerIn: parent
-                        kind: "more"
+                            ViewGlyph {
+                                anchors.centerIn: parent
+                                kind: "tag"
+                                size: Tokens.filesTagGlyphSize
+                                color: tagsButton.foreground
+                            }
+                        }
+
+                        ToolButton {
+                            id: actionButton
+                            capsule: true
+                            buttonSize: Tokens.toolbarCapsule
+                            accessibleName: qsTr("Action")
+                            onClicked: {
+                                const p = actionButton.mapToItem(null, 0, actionButton.height + Tokens.spacingXs);
+                                win.menuLayer.open(win.tab.actionMenu(), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                            }
+
+                            ViewGlyph {
+                                anchors.centerIn: parent
+                                kind: "more"
+                            }
+                        }
                     }
                 }
 
@@ -1017,7 +1031,7 @@ Window {
                 width: parent.width - 2 * Tokens.spacingMd
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 text: {

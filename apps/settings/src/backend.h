@@ -38,6 +38,8 @@ class Backend : public QObject
     Q_PROPERTY(QString wallpaperTool READ wallpaperTool CONSTANT)
     Q_PROPERTY(QString wallpaperCache READ wallpaperCache CONSTANT)
     Q_PROPERTY(QString picturesDir READ picturesDir CONSTANT)
+    // The shipped photographs (ADR-0040 step 2c): the folder of <id>.jpg and their photos.json.
+    Q_PROPERTY(QString wallpaperPhotosDir READ wallpaperPhotosDir CONSTANT)
     Q_PROPERTY(QString devRoot READ devRoot CONSTANT)
     Q_PROPERTY(QString wallpaperStatusFile READ wallpaperStatusFile CONSTANT)
     Q_PROPERTY(QString wallpaperRecentFile READ wallpaperRecentFile CONSTANT)
@@ -84,6 +86,7 @@ public:
     QString wallpaperTool() const { return m_wallpaperTool; }
     QString wallpaperCache() const { return m_wallpaperCache; }
     QString picturesDir() const { return m_picturesDir; }
+    QString wallpaperPhotosDir() const { return m_wallpaperPhotosDir; }
     QString devRoot() const { return m_devRoot; }
     QString wallpaperStatusFile() const;
     QString wallpaperRecentFile() const;
@@ -224,6 +227,7 @@ private:
     QString m_wallpaperTool;
     QString m_wallpaperCache;
     QString m_picturesDir;
+    QString m_wallpaperPhotosDir;
     QString m_devRoot;
     QFileSystemWatcher m_watcher;
     QStringList m_watched;

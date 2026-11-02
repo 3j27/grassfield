@@ -1,0 +1,471 @@
+import QtQuick
+import QtTest
+import "../../shell/security/secret/Prompter.js" as Prompter
+
+// prompter/1, the shell's side (shell/security/secret/Prompter.js; ADR-0035 D-9, step 9b): the bridge's lines read strictly
+// (anything else closes the connection), the flattening rule of the bridge (decision 9-13), the answer lines, the socket
+// path's run-mode rule and the back-off; step 9c: NetworkManager's kind (nm), its length rule and answers, the disk role;
+// step 9e: KIO's kind (kio), its server rule, its answers, the kio role; step 10: BlueZ's kind (bluetooth), its modes and
+// fields, the progress of a code shown, its answers.
+TestCase {
+    name: "Prompter"
+
+    function prompt(over) {
+        const m = {
+            type: "prompt",
+            id: "p1",
+            kind: "password",
+            requester: {role: "keyring", name: "", desktopId: "", icon: "", path: "/usr/bin/gnome-keyring-daemon", identified: true, onBehalf: true},
+            texts: {title: "Unlock Keyring", message: "Authentication required", description: "An app wants access", warning: "", "continue": "Unlock", cancel: ""},
+            choice: {label: "Unlock automatically", chosen: false},
+            passwordNew: false,
+            strength: false
+        };
+        return Object.assign(m, over || {});
+    }
+
+    function line(o) {
+        return JSON.stringify(o);
+    }
+
+    function parse(o, helloSeen) {
+        return Prompter.parseBridgeLine(typeof o === "string" ? o : line(o), helloSeen === undefined ? true : helloSeen);
+    }
+
+    function test_hello() {
+        const ok = parse({v: "prompter/1", type: "hello", bridge: "0.9", kinds: ["password", "confirm"], max: 8}, false);
+        verify(ok.ok, ok.reason);
+        compare(ok.message.type, "hello");
+        verify(!parse({v: "prompter/2", type: "hello", bridge: "1", kinds: [], max: 8}, false).ok, "another version closes");
+        verify(!parse({v: "prompter/1", type: "hello", bridge: "1", kinds: [], max: 8, extra: 1}, false).ok, "an unknown key");
+        verify(!parse({v: "prompter/1", type: "hello", bridge: "1", kinds: [], max: "8"}, false).ok, "max is a number");
+        verify(!parse({v: "prompter/1", type: "hello", bridge: "0.9", kinds: ["password"], max: 8}, true).ok, "a second hello");
+    }
+
+    function test_beforeHello() {
+        verify(!parse({type: "name", state: "owned"}, false).ok, "nothing before hello");
+        verify(!parse(prompt(), false).ok, "no prompt before hello");
+        const refusal = parse({type: "error", code: "refused", message: "not the shell"}, false);
+        verify(refusal.ok, "the bridge's refusal comes instead of its hello");
+        compare(refusal.message.code, "refused");
+    }
+
+    function test_malformed_data() {
+        return [
+            {tag: "not JSON", l: "{\"type\":"},
+            {tag: "an array", l: "[1,2]"},
+            {tag: "a string", l: "\"prompt\""},
+            {tag: "no type", l: "{\"id\":\"p1\"}"},
+            {tag: "unknown type", l: "{\"type\":\"pwn\"}"},
+            {tag: "too long", l: "{\"type\":\"name\",\"state\":\"owned\",\"x\":\"" + "a".repeat(Prompter.MAX_BRIDGE_LINE) + "\"}"},
+            {tag: "name: unknown state", l: line({type: "name", state: "mine"})},
+            {tag: "cancel: bad id", l: line({type: "cancel", id: "p01"})},
+            {tag: "cancel: extra key", l: line({type: "cancel", id: "p1", password: "x"})}
+        ];
+    }
+    function test_malformed(d) {
+        verify(!Prompter.parseBridgeLine(d.l, true).ok, d.tag);
+    }
+
+    function test_prompt() {
+        const r = parse(prompt());
+        verify(r.ok, r.reason);
+        const m = r.message;
+        compare(m.id, "p1");
+        compare(m.kind, "password");
+        compare(m.requester.role, "keyring");
+        compare(m.requester.onBehalf, true);
+        compare(m.texts.title, "Unlock Keyring");
+        compare(m.texts.continueLabel, "Unlock");
+        compare(m.choice.label, "Unlock automatically");
+        compare(m.choice.chosen, false);
+        verify(parse(prompt({choice: null})).ok, "no check box");
+        verify(parse(prompt({kind: "confirm"})).ok, "a confirmation");
+        verify(parse(prompt({passwordNew: true, strength: true})).ok, "a new password");
+    }
+
+    // Every way a prompt can be wrong closes the connection: the shell never draws what the bridge would not send.
+    function test_promptRefused_data() {
+        const base = prompt();
+        const req = o => Object.assign({}, base.requester, o);
+        const txt = o => Object.assign({}, base.texts, o);
+        return [
+            {tag: "unknown kind", p: prompt({kind: "kio"})},
+            {tag: "nm with a gcr prompt's keys", p: prompt({kind: "nm"})},
+            {tag: "disk not on behalf", p: prompt({requester: req({role: "disk", onBehalf: false})})},
+            {tag: "bad id", p: prompt({id: "x1"})},
+            {tag: "id with a leading zero", p: prompt({id: "p0"})},
+            {tag: "extra key", p: Object.assign(prompt(), {password: "x"})},
+            {tag: "missing key", p: (() => { const p = prompt(); delete p.strength; return p; })()},
+            {tag: "requester extra key", p: prompt({requester: req({pid: 1})})},
+            {tag: "unknown role", p: prompt({requester: req({role: "root"})})},
+            {tag: "keyring not on behalf", p: prompt({requester: req({onBehalf: false})})},
+            {tag: "unidentified but identified", p: prompt({requester: req({role: "unidentified", identified: true, onBehalf: false})})},
+            {tag: "app without a name", p: prompt({requester: req({role: "app", name: "", onBehalf: false})})},
+            {tag: "keyring with a name", p: prompt({requester: req({name: "Authentication required"})})},
+            {tag: "identified is a string", p: prompt({requester: req({identified: "true"})})},
+            {tag: "title over its cap", p: prompt({texts: txt({title: "t".repeat(129)})})},
+            {tag: "description over its cap", p: prompt({texts: txt({description: "d".repeat(1025)})})},
+            {tag: "texts extra key", p: prompt({texts: txt({html: "<b>x</b>"})})},
+            {tag: "texts number", p: prompt({texts: txt({message: 3})})},
+            {tag: "choice without a label", p: prompt({choice: {label: "", chosen: true}})},
+            {tag: "choice extra key", p: prompt({choice: {label: "x", chosen: true, y: 1}})},
+            {tag: "strength without passwordNew", p: prompt({strength: true})},
+            {tag: "passwordNew on a confirmation", p: prompt({kind: "confirm", passwordNew: true, strength: true})},
+            {tag: "requester is null", p: prompt({requester: null})}
+        ];
+    }
+    function test_promptRefused(d) {
+        verify(!parse(d.p).ok, d.tag);
+    }
+
+    // The bridge's rule (decision 9-13, bridges/prompter/src/Text.cpp).
+    function test_flatten_data() {
+        return [
+            {tag: "plain", t: "Unlock", cap: 128, want: "Unlock"},
+            {tag: "controls and newlines", t: "a\nb\tc\r\u0085d", cap: 128, want: "a b c d"},
+            {tag: "line separators", t: "a\u2028b\u2029c", cap: 128, want: "a b c"},
+            {tag: "runs of space trimmed", t: "  a   \u00a0 b  ", cap: 128, want: "a b"},
+            {tag: "bidi and zero width removed", t: "a\u202eb\u200bc\u2066d\u2069\u061c\ufeffe", cap: 128, want: "abcde"},
+            {tag: "tags and noncharacters removed", t: "a\udb40\udc41b\ufdd0c\uffffd", cap: 128, want: "abcd"},
+            {tag: "unpaired surrogate", t: "a\ud800b", cap: 128, want: "a\ufffdb"},
+            {tag: "cut with an ellipsis", t: "abcdef", cap: 4, want: "abc\u2026"},
+            {tag: "cut never splits a pair", t: "ab\ud83d\ude00cd", cap: 4, want: "ab\u2026"},
+            {tag: "no space before the ellipsis", t: "ab cdef", cap: 4, want: "ab\u2026"},
+            {tag: "not a string", t: 42, cap: 8, want: ""}
+        ];
+    }
+    function test_flatten(d) {
+        compare(Prompter.flatten(d.t, d.cap), d.want);
+        compare(Prompter.flatten(Prompter.flatten(d.t, d.cap), d.cap), Prompter.flatten(d.t, d.cap), "idempotent");
+    }
+
+    function test_promptTextsFlattenedAgain() {
+        const r = parse(prompt({texts: {title: "a\u202eb\nc", message: "", description: "", warning: "", "continue": "", cancel: ""}}));
+        verify(r.ok, r.reason);
+        compare(r.message.texts.title, "ab c", "a broken bridge's text is flattened by the shell too");
+    }
+
+    function test_answerLines() {
+        const pw = parse(prompt()).message;
+        compare(JSON.parse(Prompter.answerLine(pw, true, "s3cret", true)), {type: "answer", id: "p1", result: "ok", password: "s3cret", choice: true});
+        compare(JSON.parse(Prompter.answerLine(pw, false, "ignored", false)), {type: "answer", id: "p1", result: "cancel", choice: false}, "a cancellation carries no password");
+        compare(Prompter.answerLine(pw, true, "", false), "", "no empty password for an unlock");
+        compare(Prompter.answerLine(pw, true, null, false), "", "ok without a password");
+        compare(Prompter.answerLine(pw, true, "x".repeat(4097), false), "", "over 4096 bytes");
+        compare(Prompter.answerLine(pw, true, "\u00e9".repeat(2049), false), "", "over 4096 bytes of UTF-8");
+        verify(Prompter.answerLine(pw, true, "\u00e9".repeat(2048), false) !== "", "4096 bytes of UTF-8");
+        const fresh = parse(prompt({passwordNew: true, strength: true, choice: null})).message;
+        compare(JSON.parse(Prompter.answerLine(fresh, true, "", false)), {type: "answer", id: "p1", result: "ok", password: ""}, "an empty new password; no choice key without a check box");
+        const confirm = parse(prompt({kind: "confirm", choice: null})).message;
+        compare(JSON.parse(Prompter.answerLine(confirm, true, "x", false)), {type: "answer", id: "p1", result: "ok"}, "a confirmation carries no password");
+        compare(Prompter.answerLine({id: "p1", kind: "bluetooth"}, true, "x", false), "", "an unknown kind");
+    }
+
+    function test_hello_line() {
+        compare(JSON.parse(Prompter.helloLine("1.0\n")), {v: "prompter/1", type: "hello", shell: "1.0", kinds: ["password", "confirm", "nm", "kio", "bluetooth"]});
+    }
+
+    // --- step 9c: NetworkManager's kind and the disk role --------------------------------------------------------------
+
+    function nm(over, network) {
+        return Object.assign({type: "prompt", id: "p7", kind: "nm", network: Object.assign({ssid: "Home", security: "wpa", identity: ""}, network || {})}, over || {});
+    }
+
+    function test_networkPrompt() {
+        const r = parse(nm());
+        verify(r.ok, r.reason);
+        const m = r.message;
+        compare([m.id, m.kind, m.network.ssid, m.network.security, m.network.identity], ["p7", "nm", "Home", "wpa", ""]);
+        compare(m.requester.role, "network", "the shell's own requester row, never from the request");
+        compare(m.requester.onBehalf, false);
+        compare([m.texts.title, m.texts.message, m.choice, m.passwordNew, m.strength], ["", "", null, false, false], "no caller text, no check box");
+        const e = parse(nm({}, {security: "enterprise", identity: "alice\u202e"}));
+        verify(e.ok, e.reason);
+        compare(e.message.network.identity, "alice", "the identity flattened");
+        compare(parse(nm({}, {ssid: "Caf\u00e9\n\u202eevil"})).message.network.ssid, "Caf\u00e9 evil", "the SSID flattened");
+        for (const security of ["wpa3", "wep"])
+            verify(parse(nm({}, {security: security})).ok, security);
+    }
+
+    function test_networkPromptRefused_data() {
+        return [
+            {tag: "a requester object", p: nm({requester: {role: "network"}})},
+            {tag: "texts", p: nm({texts: {title: "Authentication required"}})},
+            {tag: "missing network", p: (() => { const p = nm(); delete p.network; return p; })()},
+            {tag: "network extra key", p: nm({}, {password: "x"})},
+            {tag: "unknown security", p: nm({}, {security: "owe"})},
+            {tag: "SSID over its cap", p: nm({}, {ssid: "s".repeat(65)})},
+            {tag: "an SSID that shows nothing", p: nm({}, {ssid: "\u202e \n"})},
+            {tag: "a name for a WPA2 network", p: nm({}, {identity: "eve"})},
+            {tag: "an enterprise network without its username", p: nm({}, {security: "enterprise", identity: "\u200b "})},
+            {tag: "SSID a number", p: nm({}, {ssid: 3})},
+            {tag: "bad id", p: nm({id: "p0"})}
+        ];
+    }
+    function test_networkPromptRefused(d) {
+        verify(!parse(d.p).ok, d.tag);
+    }
+
+    function test_networkLength() {
+        verify(!Prompter.networkLengthOk("wpa", 7), "WPA2: under 8");
+        verify(Prompter.networkLengthOk("wpa", 8));
+        verify(Prompter.networkLengthOk("wpa", 64), "64 hexadecimal digits");
+        verify(!Prompter.networkLengthOk("wpa", 65));
+        verify(Prompter.networkLengthOk("wpa3", 1));
+        verify(Prompter.networkLengthOk("wep", 5));
+        verify(Prompter.networkLengthOk("enterprise", 1));
+        verify(!Prompter.networkLengthOk("wep", 0), "never empty");
+        verify(!Prompter.networkLengthOk("owe", 8), "an unknown security");
+    }
+
+    function test_networkAnswerLines() {
+        const w = parse(nm()).message;
+        const kept = {id: "p7", kind: "nm", passwordNew: false, choice: null, security: "wpa"};
+        compare(JSON.parse(Prompter.answerLine(kept, true, "correct horse", false, null)), {type: "answer", id: "p7", result: "ok", password: "correct horse"});
+        compare(JSON.parse(Prompter.answerLine(kept, false, "ignored", true, "ignored")), {type: "answer", id: "p7", result: "cancel"}, "a cancellation carries nothing");
+        compare(Prompter.answerLine(kept, true, "", false, null), "", "never an empty Wi-Fi password");
+        compare(Prompter.answerLine(kept, true, "x".repeat(4097), false, null), "", "over 4096 bytes");
+        compare(JSON.parse(Prompter.answerLine(kept, true, "pw", false, "eve")), {type: "answer", id: "p7", result: "ok", password: "pw"}, "no name for a WPA2 network");
+        // Enterprise: the password only; NetworkManager would drop a name (opus review of step 9c, MAJOR).
+        const ent = Object.assign({}, kept, {security: "enterprise"});
+        compare(JSON.parse(Prompter.answerLine(ent, true, "pw", false, "bob")), {type: "answer", id: "p7", result: "ok", password: "pw"});
+        compare(JSON.parse(Prompter.answerLine(parse(nm({}, {security: "enterprise", identity: "alice"})).message, true, "pw", false, null)),
+                {type: "answer", id: "p7", result: "ok", password: "pw"});
+        verify(w.kind === "nm");
+    }
+
+    // The shell's refusal (its bound): "refused", never "cancel" (opus review of step 9c, NIT).
+    function test_refusalLine() {
+        compare(JSON.parse(Prompter.refusalLine("p9")), {type: "answer", id: "p9", result: "refused"});
+        compare(Prompter.refusalLine("p09"), "", "an id the bridge never sends");
+        compare(Prompter.refusalLine(""), "");
+    }
+
+    function test_diskRole() {
+        const r = parse(prompt({requester: {role: "disk", name: "", desktopId: "", icon: "", path: "/usr/lib/grassfield/grassfield-askpass", identified: true, onBehalf: true}}));
+        verify(r.ok, r.reason);
+        compare(r.message.requester.role, "disk");
+    }
+
+    // --- step 9e: KIO's kind and the kio role -----------------------------------------------------------------------------
+
+    function kio(over, login, requester) {
+        return Object.assign({
+            type: "prompt",
+            id: "p9",
+            kind: "kio",
+            requester: Object.assign({role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: true}, requester || {}),
+            server: "example.org:2222",
+            login: Object.assign({name: "alice", nameMode: "edit", realm: "", retry: false, remember: "off", keyring: "protected"}, login || {})
+        }, over || {});
+    }
+
+    function test_serverPrompt() {
+        const r = parse(kio());
+        verify(r.ok, r.reason);
+        const m = r.message;
+        compare([m.id, m.kind, m.server, m.requester.role, m.requester.onBehalf], ["p9", "kio", "example.org:2222", "kio", true]);
+        compare([m.login.name, m.login.nameMode, m.login.realm, m.login.retry, m.login.remember, m.login.keyring], ["alice", "edit", "", false, "off", "protected"]);
+        compare([m.texts.title, m.texts.message, m.choice, m.passwordNew, m.strength], ["", "", null, false, false], "no caller text, no caller check box");
+        compare(parse(kio({}, {realm: "Staff
+‮Area", name: "bob​"})).message.login.realm, "Staff Area", "the realm flattened");
+        compare(parse(kio({}, {name: "bob​"})).message.login.name, "bob", "the name flattened");
+        for (const server of ["127.0.0.1", "[::1]:22", "my_nas", "host.example.", "xn--bcher-kva.example:21"])
+            verify(parse(kio({server: server})).ok, server);
+        const app = parse(kio({}, {}, {role: "app", name: "Files", desktopId: "grassfield-files.desktop", icon: "system-file-manager", path: "/usr/bin/grassfield-files", onBehalf: false}));
+        verify(app.ok, app.reason);
+        compare(app.message.requester.name, "Files");
+        const stranger = parse(kio({}, {remember: "none", keyring: "unknown"}, {role: "unidentified", path: "/home/u/evil", identified: false, onBehalf: false}));
+        verify(stranger.ok, stranger.reason);
+        verify(parse(kio({}, {nameMode: "none", name: ""})).ok, "no name field");
+        verify(parse(kio({}, {nameMode: "fixed"})).ok, "a name shown only");
+    }
+
+    function test_serverPromptRefused_data() {
+        return [
+            {tag: "free text as the server", p: kio({server: "Your Bank"})},
+            {tag: "a server with a path", p: kio({server: "example.org/login"})},
+            {tag: "an upper-case server", p: kio({server: "Example.org"})},
+            {tag: "an empty server", p: kio({server: ""})},
+            {tag: "a server over its cap", p: kio({server: "a".repeat(63) + ("." + "a".repeat(63)).repeat(4)})},
+            {tag: "a look-alike character", p: kio({server: "аpple.com"})},
+            {tag: "texts", p: kio({texts: {title: "Authentication required"}})},
+            {tag: "a choice of the caller's", p: kio({choice: {label: "Allow", chosen: true}})},
+            {tag: "missing login", p: (() => { const p = kio(); delete p.login; return p; })()},
+            {tag: "login extra key", p: kio({}, {password: "x"})},
+            {tag: "unknown name mode", p: kio({}, {nameMode: "guest"})},
+            {tag: "a name with no name field", p: kio({}, {nameMode: "none", name: "eve"})},
+            {tag: "retry a string", p: kio({}, {retry: "yes"})},
+            {tag: "unknown remember", p: kio({}, {remember: "always"})},
+            {tag: "a keyring state without Remember", p: kio({}, {remember: "none", keyring: "unprotected"})},
+            {tag: "unknown keyring", p: kio({}, {keyring: "encrypted"})},
+            {tag: "realm over its cap", p: kio({}, {realm: "r".repeat(257)})},
+            {tag: "an inconsistent requester", p: kio({}, {}, {onBehalf: false})},
+            {tag: "an unknown role", p: kio({}, {}, {role: "kiod"})},
+            {tag: "bad id", p: kio({id: "p0"})}
+        ];
+    }
+    function test_serverPromptRefused(d) {
+        verify(!parse(d.p).ok, d.tag);
+    }
+
+    function test_serverAnswerLines() {
+        const m = parse(kio()).message;
+        compare(JSON.parse(Prompter.answerLine(m, true, "pw", true, "bob")), {type: "answer", id: "p9", result: "ok", identity: "bob", password: "pw", choice: true});
+        compare(JSON.parse(Prompter.answerLine(m, false, "ignored", true, "ignored")), {type: "answer", id: "p9", result: "cancel"}, "a cancellation carries nothing");
+        compare(Prompter.answerLine(m, true, "", false, "bob"), "", "never an empty password");
+        compare(Prompter.answerLine(m, true, "pw", false, ""), "", "a name when the sheet asks for one");
+        compare(Prompter.answerLine(m, true, "x".repeat(4097), false, "bob"), "", "over 4096 bytes");
+        compare(Prompter.answerLine(m, true, "pw", false, "n".repeat(1025)), "", "a name over 1024 bytes");
+        const fixed = parse(kio({}, {nameMode: "fixed", remember: "none", keyring: "unknown"})).message;
+        compare(JSON.parse(Prompter.answerLine(fixed, true, "pw", true, "eve")), {type: "answer", id: "p9", result: "ok", password: "pw"}, "no name, no choice where none is asked");
+        const kept = {id: "p9", kind: "kio", passwordNew: false, choice: null, security: "", nameMode: "edit", remember: "on"};
+        compare(JSON.parse(Prompter.answerLine(kept, true, "pw", false, "bob")), {type: "answer", id: "p9", result: "ok", identity: "bob", password: "pw", choice: false}, "what the client keeps of it");
+    }
+
+    // Step 10: a BlueZ pairing step as the bridge sends it (a confirmation by default).
+    function pairingPrompt(device, pairing) {
+        return {
+            type: "prompt",
+            id: "p5",
+            kind: "bluetooth",
+            device: Object.assign({name: "Desk Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"}, device || {}),
+            pairing: Object.assign({mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""}, pairing || {})
+        };
+    }
+
+    function test_pairingPrompt() {
+        const r = parse(pairingPrompt());
+        verify(r.ok, r.reason);
+        compare(r.message.kind, "bluetooth");
+        compare(r.message.requester.role, "bluetooth", "the shell's own row, never the request's");
+        compare(r.message.device, {name: "Desk Keyboard", address: "AA:BB:CC:DD:EE:01", icon: "keyboard"});
+        compare(r.message.pairing, {mode: "confirm", code: "000042", entered: 0, service: "", uuid: ""});
+        compare(r.message.texts.title, "", "no caller text");
+        compare(r.message.choice, null);
+        const flat = parse(pairingPrompt({name: "Key
+board‮"}));
+        verify(flat.ok, flat.reason);
+        compare(flat.message.device.name, "Key board", "the name flattened again");
+        for (const ok of [{mode: "pin", code: ""}, {mode: "passkey", code: ""}, {mode: "display-pin", code: "482913"}, {mode: "display-pin", code: "0000"},
+                          {mode: "display-passkey", code: "000001", entered: 6}, {mode: "authorize", code: ""},
+                          {mode: "authorize-service", code: "", service: "audio", uuid: "0000110b-0000-1000-8000-00805f9b34fb"},
+                          {mode: "authorize-service", code: "", service: "other", uuid: "03b80e5a-ede8-4b33-a751-6ce34ec4c700"}]) {
+            const m = parse(pairingPrompt({}, ok));
+            verify(m.ok, JSON.stringify(ok) + ": " + m.reason);
+        }
+        for (const icon of Prompter.DEVICE_ICONS)
+            verify(parse(pairingPrompt({icon: icon})).ok, icon);
+    }
+
+    function test_pairingPromptRefused_data() {
+        return [
+            {tag: "an extra key", p: Object.assign(pairingPrompt(), {requester: {}})},
+            {tag: "an extra device key", p: pairingPrompt({path: "/org/bluez/hci0"})},
+            {tag: "an extra pairing key", p: pairingPrompt({}, {pin: "1"})},
+            {tag: "an unknown mode", p: pairingPrompt({}, {mode: "yes"})},
+            {tag: "a lower-case address", p: pairingPrompt({address: "aa:bb:cc:dd:ee:01"})},
+            {tag: "an address with text", p: pairingPrompt({address: "AA:BB:CC:DD:EE:01 evil"})},
+            {tag: "an icon outside the list", p: pairingPrompt({icon: "../../lock"})},
+            {tag: "a name that shows nothing", p: pairingPrompt({name: "​ ‮"})},
+            {tag: "a name over its cap", p: pairingPrompt({name: "x".repeat(65)})},
+            {tag: "a name that is not text", p: pairingPrompt({name: 7})},
+            {tag: "a passkey of 5 digits", p: pairingPrompt({}, {code: "00042"})},
+            {tag: "a passkey with a letter", p: pairingPrompt({}, {code: "00004a"})},
+            {tag: "a passkey as a number", p: pairingPrompt({}, {code: 42})},
+            {tag: "a code where none is shown", p: pairingPrompt({}, {mode: "pin", code: "1234"})},
+            {tag: "a PIN shown with punctuation", p: pairingPrompt({}, {mode: "display-pin", code: "12-34"})},
+            {tag: "a PIN shown over 16", p: pairingPrompt({}, {mode: "display-pin", code: "1".repeat(17)})},
+            {tag: "digits typed for a confirmation", p: pairingPrompt({}, {entered: 1})},
+            {tag: "digits typed over 6", p: pairingPrompt({}, {mode: "display-passkey", entered: 7})},
+            {tag: "digits typed not a whole number", p: pairingPrompt({}, {mode: "display-passkey", entered: 1.5})},
+            {tag: "digits typed as text", p: pairingPrompt({}, {mode: "display-passkey", entered: "1"})},
+            {tag: "a service for a confirmation", p: pairingPrompt({}, {service: "audio", uuid: "0000110b-0000-1000-8000-00805f9b34fb"})},
+            {tag: "an unknown service", p: pairingPrompt({}, {mode: "authorize-service", code: "", service: "root", uuid: "0000110b-0000-1000-8000-00805f9b34fb"})},
+            {tag: "a service without its UUID", p: pairingPrompt({}, {mode: "authorize-service", code: "", service: "audio", uuid: ""})},
+            {tag: "an upper-case UUID", p: pairingPrompt({}, {mode: "authorize-service", code: "", service: "audio", uuid: "0000110B-0000-1000-8000-00805F9B34FB"})}
+        ];
+    }
+    function test_pairingPromptRefused(d) {
+        verify(!parse(d.p).ok, d.tag);
+    }
+
+    function test_progress() {
+        const r = parse({type: "progress", id: "p5", entered: 3});
+        verify(r.ok, r.reason);
+        compare(r.message, {type: "progress", id: "p5", entered: 3});
+        verify(!parse({type: "progress", id: "p5", entered: 3}, false).ok, "nothing before hello");
+        verify(!parse({type: "progress", id: "p5", entered: 7}).ok, "at most 6 digits");
+        verify(!parse({type: "progress", id: "p5", entered: -1}).ok);
+        verify(!parse({type: "progress", id: "p5", entered: "3"}).ok);
+        verify(!parse({type: "progress", id: "x5", entered: 3}).ok, "an id the bridge would never give");
+        verify(!parse({type: "progress", id: "p5", entered: 3, code: "000042"}).ok, "nothing else");
+    }
+
+    function test_pairingAnswerLines() {
+        const pin = parse(pairingPrompt({}, {mode: "pin", code: ""})).message;
+        compare(JSON.parse(Prompter.answerLine(pin, true, "12ab", false, null)), {type: "answer", id: "p5", result: "ok", password: "12ab"});
+        compare(Prompter.answerLine(pin, true, "12-ab", false, null), "", "a PIN of letters and digits only");
+        compare(Prompter.answerLine(pin, true, "", false, null), "", "never an empty PIN");
+        compare(Prompter.answerLine(pin, true, "1".repeat(17), false, null), "", "at most 16");
+        compare(JSON.parse(Prompter.answerLine(pin, false, "12ab", true, "eve")), {type: "answer", id: "p5", result: "cancel"}, "a cancellation carries nothing");
+        const passkey = parse(pairingPrompt({}, {mode: "passkey", code: ""})).message;
+        compare(JSON.parse(Prompter.answerLine(passkey, true, "012345", false, null)), {type: "answer", id: "p5", result: "ok", password: "012345"});
+        compare(Prompter.answerLine(passkey, true, "12345", false, null), "", "exactly 6 digits");
+        compare(Prompter.answerLine(passkey, true, "12345a", false, null), "");
+        const confirm = parse(pairingPrompt()).message;
+        compare(JSON.parse(Prompter.answerLine(confirm, true, "000042", true, "eve")), {type: "answer", id: "p5", result: "ok"}, "a confirmation carries nothing");
+        const display = parse(pairingPrompt({}, {mode: "display-passkey", code: "000042"})).message;
+        compare(Prompter.answerLine(display, true, null, false, null), "", "a code shown is never answered ok");
+        compare(JSON.parse(Prompter.answerLine(display, false, null, false, null)), {type: "answer", id: "p5", result: "cancel"});
+        const kept = {id: "p5", kind: "bluetooth", passwordNew: false, choice: null, security: "", nameMode: "", remember: "", mode: "passkey"};
+        compare(JSON.parse(Prompter.answerLine(kept, true, "999999", false, null)), {type: "answer", id: "p5", result: "ok", password: "999999"}, "what the client keeps of it");
+        compare(Prompter.answerLine({id: "p5", kind: "bluetooth", mode: "maybe"}, true, null, false, null), "", "an unknown mode");
+    }
+
+    function test_pairingCodeRules() {
+        verify(Prompter.pairingLengthOk("pin", 1));
+        verify(Prompter.pairingLengthOk("pin", 16));
+        verify(!Prompter.pairingLengthOk("pin", 17));
+        verify(!Prompter.pairingLengthOk("pin", 0));
+        verify(Prompter.pairingLengthOk("passkey", 6));
+        verify(!Prompter.pairingLengthOk("passkey", 5));
+        verify(!Prompter.pairingLengthOk("confirm", 6));
+        verify(Prompter.pairingCodeOk("pin", "0000"));
+        verify(!Prompter.pairingCodeOk("pin", "00 00"));
+        verify(Prompter.pairingCodeOk("passkey", "000000"));
+        verify(!Prompter.pairingCodeOk("passkey", "00000١"), "ASCII digits only");
+        verify(!Prompter.pairingCodeOk("display-passkey", "000000"));
+    }
+
+    function test_kioRole() {
+        const r = parse(prompt({requester: {role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: true}}));
+        verify(r.ok, r.reason);
+        verify(!parse(prompt({requester: {role: "kio", name: "", desktopId: "", icon: "", path: "/usr/lib/kf6/kioworker", identified: true, onBehalf: false}})).ok, "KIO's worker asks for others");
+    }
+
+    function test_utf8Length() {
+        compare(Prompter.utf8Length("a\u00e9\u20ac\ud83d\ude00"), 1 + 2 + 3 + 4);
+        compare(Prompter.utf8Length("\ud800"), 6, "an unpaired surrogate is written as a \\u escape");
+    }
+
+    // ADR-0019: a dev session reaches only its test socket; anything else the session's socket, never an override.
+    function test_socketPath() {
+        compare(Prompter.socketPath(false, "/run/user/1000", "/tmp/evil.sock"), "/run/user/1000/grassfield/prompter.sock");
+        compare(Prompter.socketPath(false, "/run/user/1000/", ""), "/run/user/1000/grassfield/prompter.sock");
+        compare(Prompter.socketPath(false, "relative", ""), "", "a relative runtime directory");
+        compare(Prompter.socketPath(false, undefined, ""), "", "no runtime directory");
+        compare(Prompter.socketPath(true, "/run/user/1000", "/tmp/t/p.sock"), "/tmp/t/p.sock");
+        compare(Prompter.socketPath(true, "/run/user/1000", ""), "", "a dev session without a test socket connects nowhere");
+        compare(Prompter.socketPath("true", "/run/user/1000", "/tmp/t/p.sock"), "/run/user/1000/grassfield/prompter.sock", "only true is dev");
+    }
+
+    function test_retryDelay() {
+        compare(Prompter.retryDelay(0), 1000);
+        compare(Prompter.retryDelay(1), 2000);
+        compare(Prompter.retryDelay(4), 16000);
+        compare(Prompter.retryDelay(5), 30000);
+        compare(Prompter.retryDelay(1000), 30000);
+    }
+}

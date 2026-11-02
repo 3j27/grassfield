@@ -10,6 +10,8 @@ Item {
     id: root
 
     required property var actions
+    // AM68: the backend's Efficiency Mode and its "Don't ask again".
+    property var backend: null
     property Item focusBack: null
     // prepare()'s answer for the open sheet.
     property var info: ({})
@@ -17,12 +19,16 @@ Item {
     property bool forceOnly: false
     // The signal chosen in the pop-up (Terminate by default).
     property string signalChoice: "15"
+    // AM52: Quit waits for the shell to close the process's windows (at most a second): the sheet takes no click or key.
+    property bool waiting: false
     // The tests read them.
     readonly property alias quitSheet: quitSheet
     readonly property alias sessionSheet: sessionSheet
     readonly property alias signalSheet: signalSheet
     readonly property alias signalPicker: signalPicker
-    readonly property bool shown: quitSheet.shown || sessionSheet.shown || signalSheet.shown
+    readonly property alias efficiencySheet: efficiencySheet
+    readonly property alias efficiencyError: efficiencyError
+    readonly property bool shown: quitSheet.shown || sessionSheet.shown || signalSheet.shown || efficiencySheet.shown || efficiencyError.shown
 
     anchors.fill: parent
 
@@ -34,6 +40,14 @@ Item {
     // View > Send Signal to Process… and the action menu (AM55).
     function openSignal(): void {
         root.open("signal");
+    }
+
+    // AM68: the first time Efficiency Mode is turned on.
+    function openEfficiency(): void {
+        if (root.shown || !root.backend)
+            return;
+        dontAsk.checked = false;
+        efficiencySheet.open();
     }
 
     function open(action: string): void {
@@ -68,6 +82,15 @@ Item {
         root.actions.release();
         root.info = ({});
         root.forceOnly = false;
+    }
+
+    // Quit's answer: false while the shell closes windows (quitFinished follows), else as outcome().
+    function answerQuit(result: var): var {
+        if (result.pending) {
+            root.waiting = true;
+            return false;
+        }
+        return root.outcome(result);
     }
 
     // An answer of the backend: "" when it was done (the sheet closes), else the sheet's message.
@@ -110,7 +133,9 @@ Item {
         destructive: root.forceOnly
         returnCancels: root.forceOnly
         focusBack: root.focusBack
-        confirmHandler: () => root.outcome(root.forceOnly ? root.actions.forceQuit() : root.actions.quit())
+        holdInput: root.waiting
+        confirmEnabled: !root.waiting
+        confirmHandler: () => root.answerQuit(root.forceOnly ? root.actions.forceQuit() : root.actions.quit())
         onExtra: id => {
             const error = root.outcome(root.actions.forceQuit());
             if (error === "")
@@ -119,6 +144,65 @@ Item {
                 quitSheet.errorText = error;
         }
         onCanceled: root.release()
+    }
+
+    Connections {
+        target: root.actions
+
+        function onQuitFinished(result: var): void {
+            root.waiting = false;
+            const error = root.outcome(result);
+            if (error === "")
+                quitSheet.close();
+            else
+                quitSheet.errorText = error;
+        }
+    }
+
+    // AM68: what Efficiency Mode does, before the first time; "Don't ask again" is remembered (AM74).
+    Sheet {
+        id: efficiencySheet
+        objectName: "efficiencySheet"
+        title: qsTr("Turn on Efficiency Mode for “%1”?").arg(root.backend ? root.backend.efficiency.appName : "")
+        message: qsTr("The whole app runs at the lowest priority whenever the computer is busy, so other apps stay responsive. It may run more slowly until you turn Efficiency Mode off or quit it.")
+        confirmText: qsTr("Turn On")
+        focusBack: root.focusBack
+        confirmHandler: () => {
+            if (dontAsk.checked)
+                root.backend.askEfficiency = false;
+            root.backend.efficiency.set(true);
+            return "";
+        }
+
+        CheckBox {
+            id: dontAsk
+            objectName: "dontAskEfficiency"
+            text: qsTr("Don't ask again")
+        }
+    }
+
+    // AM68: the user manager refused the weight (or the process ended, or is not an app's any more).
+    Sheet {
+        id: efficiencyError
+        objectName: "efficiencyError"
+        showCancel: false
+        focusBack: root.focusBack
+    }
+
+    Connections {
+        target: root.backend ? root.backend.efficiency : null
+
+        // An answer can come from inside Turn On's handler, before its sheet has closed: shown once the sheets settle.
+        function onFinished(error: string): void {
+            if (error === "")
+                return;
+            Qt.callLater(() => {
+                if (root.shown)
+                    return;
+                efficiencyError.title = error;
+                efficiencyError.open();
+            });
+        }
     }
 
     // AM55: one process, a signal from the pop-up.

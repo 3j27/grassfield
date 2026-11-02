@@ -146,7 +146,7 @@ Singleton {
     }
 
     // The windows Hyprland reported, as {pid and cls (from its list: 0 and "" until it was read for that window), title (live,
-    // from its events)} (NotResponding).
+    // from its events), idleInhibit (its list's inhibitingIdle)} (NotResponding, Activity Monitor's projection).
     function knownWindows(): var {
         const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         return all.map(t => {
@@ -154,9 +154,16 @@ Singleton {
             return {
                 pid: d && d.pid ? d.pid : 0,
                 cls: d && d.class ? d.class : "",
-                title: t.title ?? ""
+                title: t.title ?? "",
+                idleInhibit: !!(d && d.inhibitingIdle === true)
             };
         });
+    }
+
+    // The toplevel handles Hyprland reported, in knownWindows()' order (AM61: the windows `activity quit` closes).
+    function knownToplevels(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        return all.map(t => t.wayland);
     }
 
     // Activate (focus, un-minimize) a toplevel through the protocol. A window parked by hide()
@@ -421,6 +428,29 @@ Singleton {
     property bool blurRejected: false
     property int blurPushes: 0
 
+    // The window edge follows the appearance (ADR-0039 step 6, C-4): macOS 27's contact edge is dark in the light appearance and
+    // the light rim in the dark one. Hyprland holds one border colour pair for every window, so the shell sends the pair of
+    // the current appearance as it sends the blur: at start, on a change of appearance and after a config reload, which
+    // restores the config's own (the dark appearance's, config/hypr/grassfield/looknfeel.lua).
+    readonly property string edgeCall: Appearance.dark
+        ? Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark)
+        : Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight)
+    onEdgeCallChanged: {
+        root.edgeRejected = false;
+        edgeDebounce.restart();
+    }
+    property bool edgeRejected: false
+    property int edgePushes: 0
+
+    function pushEdge(): void {
+        const path = Hyprland.requestSocketPath || "";
+        if (root.edgeRejected || root.edgeCall === "" || path === "")
+            return;
+        root.edgePushes++;
+        console.info("grassfield-shell: push window edge (" + (Appearance.dark ? "dark" : "light") + ")");
+        requestSocket.createObject(root, {"path": path, "line": "dispatch " + root.edgeCall, "what": "edge"});
+    }
+
     function pushBlur(): void {
         const call = Minimized.blurCall(root.blurSize, root.blurPasses);
         const path = Hyprland.requestSocketPath || "";
@@ -428,18 +458,54 @@ Singleton {
             return;
         root.blurPushes++;
         console.info("grassfield-shell: push blur size " + root.blurSize + " passes " + root.blurPasses);
-        blurSocket.createObject(root, {"path": path, "line": "dispatch " + call});
+        requestSocket.createObject(root, {"path": path, "line": "dispatch " + call, "what": "blur"});
+    }
+
+    // The session's ground (ADR-0040 ID-2, P-1): the compositor's background colour is the shown wallpaper's ground (the first
+    // screen's; Hyprland holds one), sent the same way as the blur: at start, on each change (debounced) and after a config
+    // reload (which restores looknfeel.lua's static default, session.ground). An error answer (a Hyprland that cannot set it at
+    // run time) stops the pushes until the next change: the static default stays, as ID-2's fallback says.
+    // Nothing is pushed before the first screen reported its ground (Ground.known): at a shell restart the compositor keeps
+    // the previous run's ground until then, instead of flashing the static default. The colour Hyprland answers "ok" to is
+    // recorded (Ground.accepted): the exit cover fades to it.
+    readonly property string ground: Ground.current
+    readonly property bool groundKnown: Ground.known
+    property bool groundRejected: false
+    onGroundChanged: {
+        root.groundRejected = false;
+        if (root.groundKnown)
+            groundDebounce.restart();
+    }
+    onGroundKnownChanged: {
+        if (root.groundKnown)
+            groundDebounce.restart();
+    }
+    function pushGround(): void {
+        const call = Minimized.groundCall(root.ground);
+        const path = Hyprland.requestSocketPath || "";
+        if (!root.groundKnown || root.groundRejected || call === "" || path === "")
+            return;
+        console.info("grassfield-shell: push ground " + root.ground);
+        requestSocket.createObject(root, {"path": path, "line": "dispatch " + call, "what": "ground", "value": root.ground});
+    }
+    Timer {
+        id: groundDebounce
+        interval: Tokens.motionFast
+        onTriggered: root.pushGround()
     }
 
     // One connection per push: it sends the dispatch and collects the whole answer (it may arrive in pieces) until Hyprland
     // closes the connection; then it is judged once and the socket is destroyed (later: a Socket cannot be destroyed from its
     // own error signal, that signal can fire inside createObject).
     Component {
-        id: blurSocket
+        id: requestSocket
 
         Socket {
             id: sock
             property string line: ""
+            // What the request sets ("blur", "edge", "ground"), and the ground it sent: a refusal stops the pushes of that one only.
+            property string what: "blur"
+            property string value: ""
             property string reply: ""
             property bool judged: false
 
@@ -448,9 +514,20 @@ Singleton {
                     return;
                 sock.judged = true;
                 sock.answerTimeout.stop();
-                if (Minimized.blurAnswer(sock.reply) === "rejected" && !root.blurRejected) {
-                    root.blurRejected = true;
-                    console.info("grassfield-shell: Hyprland rejected the blur request (" + sock.reply.trim() + "); the blur stays as configured until the next change");
+                const answer = Minimized.blurAnswer(sock.reply);
+                if (sock.what === "ground" && answer === "ok")
+                    Ground.accepted = sock.value;
+                if (answer === "rejected") {
+                    if (sock.what === "edge" && !root.edgeRejected) {
+                        root.edgeRejected = true;
+                        console.info("grassfield-shell: Hyprland rejected the window edge request (" + sock.reply.trim() + "); the edge stays as configured until the next change");
+                    } else if (sock.what === "ground" && !root.groundRejected) {
+                        root.groundRejected = true;
+                        console.info("grassfield-shell: Hyprland rejected the ground request (" + sock.reply.trim() + "); the background stays as configured until the next change");
+                    } else if (sock.what === "blur" && !root.blurRejected) {
+                        root.blurRejected = true;
+                        console.info("grassfield-shell: Hyprland rejected the blur request (" + sock.reply.trim() + "); the blur stays as configured until the next change");
+                    }
                 }
                 sock.connected = false;
                 Qt.callLater(() => sock.destroy());
@@ -493,6 +570,12 @@ Singleton {
         onTriggered: root.pushBlur()
     }
 
+    Timer {
+        id: edgeDebounce
+        interval: Tokens.motionFast
+        onTriggered: root.pushEdge()
+    }
+
     Connections {
         target: Hyprland
 
@@ -501,9 +584,13 @@ Singleton {
                 return;
             if (root.reduceMotion)
                 root.pushMotion();
-            // A reload restores the config's blur. Neither push emits an event (captured on Hyprland 0.56.2), so a reload is
-            // always a real one: no echo, no loop (tests/compositor/blur_events.sh).
+            // A reload restores the config's blur and window edge. Neither push emits an event (captured on Hyprland 0.56.2 for
+            // the blur), so a reload is always a real one: no echo, no loop (tests/compositor/blur_events.sh).
             root.pushBlur();
+            // And the ground (ADR-0040 ID-2): the reload put back the config's static default.
+            Ground.accepted = Tokens.sessionGround;
+            root.pushGround();
+            root.pushEdge();
         }
     }
 
@@ -624,6 +711,8 @@ Singleton {
     readonly property bool canSplit: Capabilities.has("tiling-split")
     // Step 6d (ADR-0036 D71): unsplit's Make Window Full Screen and Replace Tiled Window (a plugin before 6d would ignore them).
     readonly property bool canSplitRows: Capabilities.has("tiling-split-rows")
+    // Step 6e (ADR-0036 D73): a Split View window's titlebar is away and no strip is kept above it (the Overview's band).
+    readonly property bool splitTitlesAway: Capabilities.has("tiling-split-titles")
     // ADR-0036 D47: while Stages shows its strip the plugin refuses Left and Right of Screen; the rows are greyed.
     readonly property bool splitBlocked: root.stagesAvailable && Settings.windowsStages
 
@@ -649,6 +738,12 @@ Singleton {
     // opens nothing from its zoom light).
     function fixedSize(toplevel: var): bool {
         return WindowTiling.isFixed(TilingLink.fixed, addressOf(toplevel));
+    }
+
+    // The zones and the places the window does not fit, {zones, places} (ADR-0036 D69; from the plugin's last reply: not known
+    // yet, nothing is greyed and the plugin still refuses what does not fit).
+    function fitOf(toplevel: var): var {
+        return WindowTiling.fitOf(TilingLink.unfitZones, addressOf(toplevel));
     }
 
     // The output shows a Split View Desktop: its menu bar and its Dock hide there and show at their edge, as in full screen.
@@ -890,8 +985,11 @@ Singleton {
         // Always, whatever the value: Hyprland outlives the shell, so a restarted shell (or one that finds the setting off
         // after a config reset) must not leave the compositor on the reduced animations of the previous run.
         pushMotion();
-        // The same for the blur: the compositor keeps the values of the previous run.
+        // The same for the blur and the window edge: the compositor keeps the values of the previous run.
         pushBlur();
+        // And the ground, once known (ADR-0040 ID-2; onGroundKnownChanged otherwise).
+        pushGround();
+        pushEdge();
     }
 
     function isMinimized(toplevel: var): bool {

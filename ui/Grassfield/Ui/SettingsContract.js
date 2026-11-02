@@ -28,6 +28,7 @@ const DEFAULTS = {
     "dock.animateOpening": true,
     "dock.showIndicators": true,
     "dock.minimizeEffect": "funnel",
+    "dock.endTask": false,
     "windows.titlebarDoubleClick": "zoom",
     "windows.tilingEdges": true,
     "windows.tilingMenuBar": true,
@@ -46,6 +47,7 @@ const DEFAULTS = {
     "lock.idleMinutes": 5,
     "lock.displayOffBattery": 2,
     "lock.displayOffPower": 10,
+    "lock.requirePasswordAfterDisplayOff": "immediately",
     "lock.showUser": true,
     "lock.showMessage": false,
     "lock.message": "",
@@ -110,6 +112,9 @@ const DEFAULTS = {
     "wallpaper.shuffle": true,
     "wallpaper.videoOnBattery": false,
     "wallpaper.online.provider": "commons",
+    "wallpaper.artwork": "grassfield",
+    "wallpaper.artworkVariant": "timeOfDay",
+    "wallpaper.moving": false,
     "wallpaper.outputs": []
 };
 
@@ -139,6 +144,7 @@ const ALL_DEFAULTS = {
     "dock.animateOpening": true,
     "dock.showIndicators": true,
     "dock.minimizeEffect": "funnel",
+    "dock.endTask": false,
     "windows.titlebarDoubleClick": "zoom",
     "windows.tilingEdges": true,
     "windows.tilingMenuBar": true,
@@ -157,6 +163,7 @@ const ALL_DEFAULTS = {
     "lock.idleMinutes": 5,
     "lock.displayOffBattery": 2,
     "lock.displayOffPower": 10,
+    "lock.requirePasswordAfterDisplayOff": "immediately",
     "lock.showUser": true,
     "lock.showMessage": false,
     "lock.message": "",
@@ -221,6 +228,9 @@ const ALL_DEFAULTS = {
     "wallpaper.shuffle": true,
     "wallpaper.videoOnBattery": false,
     "wallpaper.online.provider": "commons",
+    "wallpaper.artwork": "grassfield",
+    "wallpaper.artworkVariant": "timeOfDay",
+    "wallpaper.moving": false,
     "wallpaper.outputs": []
 };
 
@@ -246,6 +256,7 @@ const RULES = {
     "dock.animateOpening": {"type": "boolean"},
     "dock.showIndicators": {"type": "boolean"},
     "dock.minimizeEffect": {"type": "enum", "values": ["funnel", "shrink"]},
+    "dock.endTask": {"type": "boolean"},
     "windows.titlebarDoubleClick": {"type": "enum", "values": ["zoom", "minimize", "fill", "none"]},
     "windows.tilingEdges": {"type": "boolean"},
     "windows.tilingMenuBar": {"type": "boolean"},
@@ -264,6 +275,7 @@ const RULES = {
     "lock.idleMinutes": {"type": "integer", "zeroIsExact": true, "min": 0, "max": 240},
     "lock.displayOffBattery": {"type": "integer", "min": 0, "max": 240},
     "lock.displayOffPower": {"type": "integer", "min": 0, "max": 240},
+    "lock.requirePasswordAfterDisplayOff": {"type": "enum", "values": ["immediately", "5s", "1m", "5m", "15m", "1h", "never"]},
     "lock.showUser": {"type": "boolean"},
     "lock.showMessage": {"type": "boolean"},
     "lock.message": {"type": "plainText", "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]{0,200}$"},
@@ -314,7 +326,7 @@ const RULES = {
     "search.clipboard.clearedAt": {"type": "integer", "min": 0, "max": 9999999999999},
     "search.clipboard.pinnedClearedAt": {"type": "integer", "min": 0, "max": 9999999999999},
     "screensaver.idleMinutes": {"type": "integer", "min": 0, "max": 240},
-    "screensaver.kind": {"type": "enum", "values": ["artwork", "wallpaperClock", "slideshow", "clock"]},
+    "screensaver.kind": {"type": "enum", "values": ["artwork", "wallpaperClock", "slideshow", "clock", "moving"]},
     "screensaver.folder": {"type": "wallpaperPath"},
     "store.sources.aur": {"type": "boolean"},
     "store.sources.flathub": {"type": "boolean"},
@@ -328,6 +340,9 @@ const RULES = {
     "wallpaper.shuffle": {"type": "boolean"},
     "wallpaper.videoOnBattery": {"type": "boolean"},
     "wallpaper.online.provider": {"type": "enum", "values": ["commons", "apod"]},
+    "wallpaper.artwork": {"type": "enum", "values": ["grassfield", "meadow", "rows", "ridgeline"]},
+    "wallpaper.artworkVariant": {"type": "enum", "values": ["timeOfDay", "automatic", "light", "dark"]},
+    "wallpaper.moving": {"type": "boolean"},
     "wallpaper.outputs": {"type": "wallpaperOutputs"}
 };
 

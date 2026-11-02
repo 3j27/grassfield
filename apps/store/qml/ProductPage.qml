@@ -174,9 +174,14 @@ ScrollPage {
                         color: Appearance.windowSecondary
                     }
 
+                    // The keyboard's ring only: the menu gives the focus back after a click too (ADR-0039 step 24, G7).
                     FocusRing {
                         shapeRadius: more.width / 2
-                        visible: more.activeFocus
+                        visible: moreFocus.active
+                    }
+
+                    KeyFocus {
+                        id: moreFocus
                     }
 
                     TapHandler {

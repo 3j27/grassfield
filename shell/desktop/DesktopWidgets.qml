@@ -257,7 +257,9 @@ Variants {
                         active: !win.isCovered
                         x: win.dragging ? win.origin.x + scope.dragOffset.x : win.pad
                         y: win.dragging ? win.origin.y + scope.dragOffset.y : win.pad
-                        scale: win.dragging ? Tokens.widgetLiftScale : 1
+                        // A lifted widget grows a little; under Reduce Motion it does not (ADR-0039 D2, step 25: a scale is
+                        // motion; the drag itself follows the pointer).
+                        scale: win.dragging && !Appearance.reduceMotion ? Tokens.widgetLiftScale : 1
                         onPressed: scope.keepActive()
                         onMenuRequested: (px, py) => {
                             if (SessionState.refuses("widget menu"))
@@ -273,6 +275,8 @@ Variants {
                         Behavior on scale {
                             NumberAnimation {
                                 duration: Appearance.duration(Tokens.motionFast)
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.curve
                             }
                         }
 

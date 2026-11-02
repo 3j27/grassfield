@@ -3,7 +3,8 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// Gate P5 marker: the session is "usable" once the menu bar and the Dock of every output have drawn a first frame. The
+// Gate P5 marker: the session is "usable" once the menu bar and the Dock of every output have drawn a first frame (after the
+// session's entrance, ADR-0040 step 6: both wait for it, so P5 counts the wallpaper and the entrance). The
 // shell logs one line, "grassfield-shell: usable (...)", when that holds; scripts/gates/session-start.sh measures the
 // time from the session start to this line in the journal. UsableProbe.qml, placed in the menu bar and Dock windows,
 // reports the first frame of each. A Dock window that is not shown (`active` false) is not waited for.

@@ -60,6 +60,7 @@ Singleton {
     readonly property bool dockMinimizeIntoApp: store.dockMinimizeIntoApp
     readonly property bool dockAnimateOpening: store.dockAnimateOpening
     readonly property bool dockShowIndicators: store.dockShowIndicators
+    readonly property bool dockEndTask: store.dockEndTask
     readonly property string dockMinimizeEffect: store.dockMinimizeEffect
 
     readonly property string accentColor: store.accentColor
@@ -103,6 +104,7 @@ Singleton {
     readonly property bool windowsRebuildExtension: store.windowsRebuildExtension
     readonly property int lockIdleMinutes: store.lockIdleMinutes
     readonly property int lockDisplayOffBattery: store.lockDisplayOffBattery
+    readonly property string lockRequirePasswordAfterDisplayOff: store.lockRequirePasswordAfterDisplayOff
     readonly property int lockDisplayOffPower: store.lockDisplayOffPower
     readonly property bool lockShowUser: store.lockShowUser
     readonly property bool lockShowMessage: store.lockShowMessage

@@ -38,7 +38,8 @@ WidgetBase {
         y: root.padding
         width: edge
         height: edge
-        radius: Tokens.radiusControl
+        // A cover art's corner, concentric with the tile (ADR-0039 step 13, G5).
+        radius: Tokens.radiusArtwork
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
         clip: true
 
@@ -153,8 +154,16 @@ WidgetBase {
                     anchors.fill: parent
                     radius: width / 2
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                    border.width: button.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+                }
+
+                // The shared ring outside the button, after a key only (ADR-0039 step 7).
+                KeyFocus {
+                    id: buttonFocus
+                }
+
+                FocusRing {
+                    shapeRadius: width / 2
+                    visible: buttonFocus.active
                 }
 
                 Icon {

@@ -3,7 +3,9 @@ import QtQuick
 import Grassfield.Ui
 import qs.services
 
-// Sound menu: output volume slider with mute, and the list of output devices (PipeWire).
+// Sound menu: output volume slider with mute, and the list of output devices (PipeWire). On PopupMenu's metrics (ADR-0039
+// step 8, G17): rows a row tall with no gap between them, the Output section titled by the menus' MenuHeader after the check
+// column, and one highlight, the pointer's and the keyboard's.
 FocusScope {
     id: root
 
@@ -34,15 +36,18 @@ FocusScope {
         x: Tokens.menuPadding
         y: Tokens.menuPadding
         width: root.width - 2 * Tokens.menuPadding
-        spacing: Tokens.spacingXs
 
+        // The menu's own title (macOS: the status menu's name, bold, in the label colour), a row tall.
         Text {
             textFormat: Text.PlainText
             x: Tokens.menuItemPadding
+            height: Tokens.menuItemHeight
+            verticalAlignment: Text.AlignVCenter
             text: qsTr("Sound")
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyMenuSize
+            font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)
             font.weight: Tokens.typographyMenuBoldWeight
         }
 
@@ -68,12 +73,15 @@ FocusScope {
                     }
                 }
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Tokens.radiusControl
-                    color: "transparent"
-                    border.width: muteButton.activeFocus ? Tokens.controlFocusOutline : 0
-                    border.color: Appearance.focusRingColor
+                // The shared ring outside the button, after a key only (ADR-0039 step 7); the focus it has on open is the
+                // pointer's when a click opened the menu (step 8).
+                KeyFocus {
+                    id: muteFocus
+                    pointer: Popups.openedByPointer
+                }
+
+                FocusRing {
+                    visible: muteFocus.active
                 }
 
                 Icon {
@@ -105,15 +113,12 @@ FocusScope {
             visible: root.devices.length > 0
         }
 
-        Text {
-            textFormat: Text.PlainText
-            x: Tokens.menuItemPadding
+        // Every device row is checkable: the title starts after the check column, with their labels.
+        MenuHeader {
+            width: parent.width
             visible: root.devices.length > 0
             text: qsTr("Output")
-            color: Appearance.colors.textSecondary
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyCaptionSize
-            font.weight: Tokens.typographyMenuBoldWeight
+            checkColumn: true
         }
 
         Repeater {
@@ -138,17 +143,29 @@ FocusScope {
                     }
                 }
 
+                // Whether the pointer gave the row its focus: such a row goes dark when the pointer leaves it, as a menu's row
+                // does (the review of #88); a row the keyboard chose stays lit.
+                property bool pointerFocus: false
+                onActiveFocusChanged: if (!deviceRow.activeFocus)
+                    deviceRow.pointerFocus = false
+
+                HoverHandler {
+                    id: rowHover
+                }
+
                 MenuItem {
                     anchors.fill: parent
                     text: Audio.describe(deviceRow.modelData)
                     checked: Audio.sink === deviceRow.modelData
                     // Every device row is checkable: all labels start after the check column (macOS).
                     checkColumn: true
-                    highlighted: deviceRow.activeFocus || hover.hovered
+                    // One highlight: the pointer moving onto a row gives it the focus (a menu's hover and keys share one
+                    // current row), so a focused row and a hovered one are never both lit.
+                    highlighted: deviceRow.activeFocus && (!deviceRow.pointerFocus || rowHover.hovered)
                     onClicked: Audio.select(deviceRow.modelData)
-
-                    HoverHandler {
-                        id: hover
+                    onHovered: if (!deviceRow.activeFocus) {
+                        deviceRow.pointerFocus = true;
+                        deviceRow.forceActiveFocus(Qt.MouseFocusReason);
                     }
                 }
             }

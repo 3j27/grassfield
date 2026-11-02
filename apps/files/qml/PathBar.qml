@@ -3,7 +3,8 @@ import QtQuick
 import Grassfield.Ui
 
 // Path bar: the location as clickable segments (home or the root first). Segments accept drops. In a search location the
-// bar shows the path of the selected result instead (Finder-Search); its last segment shows the item in its folder.
+// bar shows the path of the selected result instead (Finder-Search); its last segment shows the item in its folder. Each
+// segment is a Tab stop that Space or Return opens, with the shared ring on keyboard focus (ADR-0039 step 23).
 Item {
     id: root
 
@@ -72,15 +73,36 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         name: "chevron-right"
                         size: Tokens.filesChevronSize
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                     }
 
                     Item {
+                        id: segmentButton
                         width: label.implicitWidth + 2 * Tokens.spacingXs
                         height: parent.height
+                        activeFocusOnTab: true
                         Accessible.role: Accessible.Button
                         Accessible.name: DisplayName.text(segment.modelData.label)
+                        Accessible.focusable: true
                         Accessible.onPressAction: segment.activate()
+                        // A segment off the bar's visible part scrolls in with the focus.
+                        onActiveFocusChanged: {
+                            if (!segmentButton.activeFocus)
+                                return;
+                            const left = segmentButton.mapToItem(row, 0, 0).x;
+                            let x = flick.contentX;
+                            if (left < x)
+                                x = left;
+                            else if (left + segmentButton.width > x + flick.width)
+                                x = left + segmentButton.width - flick.width;
+                            flick.contentX = Math.max(0, Math.min(Math.max(0, flick.contentWidth - flick.width), x));
+                        }
+                        Keys.onPressed: event => {
+                            if (ActivationKeys.activation(event.key)) {
+                                segment.activate();
+                                event.accepted = true;
+                            }
+                        }
 
                         Rectangle {
                             anchors.fill: parent
@@ -90,6 +112,14 @@ Item {
                             color: mouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                             border.width: drop.containsDrag ? Tokens.filesDropBorder : 0
                             border.color: Appearance.colors.accent
+
+                            FocusRing {
+                                visible: segmentFocus.active
+                            }
+                        }
+
+                        KeyFocus {
+                            id: segmentFocus
                         }
 
                         Text {
@@ -97,7 +127,7 @@ Item {
                             textFormat: Text.PlainText
                             anchors.centerIn: parent
                             text: DisplayName.text(segment.modelData.label)
-                            color: segment.last ? Appearance.colors.text : Appearance.colors.textSecondary
+                            color: segment.last ? Appearance.colors.text : Appearance.windowSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyCaptionSize
                             font.weight: segment.last ? Tokens.typographyMenuWeight : Tokens.typographySmallWeight

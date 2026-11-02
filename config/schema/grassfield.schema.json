@@ -219,6 +219,10 @@
             "shrink"
           ],
           "default": "funnel"
+        },
+        "endTask": {
+          "type": "boolean",
+          "default": false
         }
       }
     },
@@ -392,6 +396,20 @@
           "maximum": 240,
           "default": 10,
           "description": "Minutes without input on the power adapter before the displays turn off while the session is unlocked (Turn display off on power adapter when inactive); 0 = never."
+        },
+        "requirePasswordAfterDisplayOff": {
+          "type": "string",
+          "enum": [
+            "immediately",
+            "5s",
+            "1m",
+            "5m",
+            "15m",
+            "1h",
+            "never"
+          ],
+          "default": "immediately",
+          "description": "When a display that turned off for inactivity locks the session (ADR-0040 IQ-T4 A, macOS's Require password after the display is turned off): at once (the lock is drawn just before the displays go off), after this delay with no input, or never. lock.idleMinutes stays the ceiling either way."
         },
         "showUser": {
           "type": "boolean",
@@ -848,10 +866,11 @@
             "artwork",
             "wallpaperClock",
             "slideshow",
-            "clock"
+            "clock",
+            "moving"
           ],
           "default": "artwork",
-          "description": "Which screen saver: the Grassfield artwork drifting, the wallpaper with a clock, a folder's pictures as a slideshow, or a clock alone."
+          "description": "Which screen saver: the Grassfield artwork drifting, the wallpaper with a clock, a folder's pictures as a slideshow, a clock alone, or the moving Grassfield artwork (ADR-0040 step 9)."
         },
         "folder": {
           "type": "string",
@@ -991,6 +1010,33 @@
               "default": "commons"
             }
           }
+        },
+        "artwork": {
+          "type": "string",
+          "enum": [
+            "grassfield",
+            "meadow",
+            "rows",
+            "ridgeline"
+          ],
+          "description": "The Grassfield artwork the builtin source draws (ADR-0040 step 2): the Grassfield hills, Meadow, Field Rows or Ridgeline.",
+          "default": "grassfield"
+        },
+        "artworkVariant": {
+          "type": "string",
+          "enum": [
+            "timeOfDay",
+            "automatic",
+            "light",
+            "dark"
+          ],
+          "description": "Which variant of the artwork shows: the time of day (the Grassfield artwork only; the others read it as automatic), the appearance's (automatic), or always the light or the dark one.",
+          "default": "timeOfDay"
+        },
+        "moving": {
+          "type": "boolean",
+          "description": "The Grassfield artwork moves (ADR-0040 IQ-W3 A, step 9): clouds drift and the light changes slowly; it pauses like a video wallpaper (locked, full screen, idle, on battery unless videoOnBattery, Reduce Motion, the Reduced profile). Off by default.",
+          "default": false
         },
         "outputs": {
           "type": "array",

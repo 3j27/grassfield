@@ -83,6 +83,17 @@ Singleton {
             statusTimer.start();
     }
 
+    // The shipped photographs (ADR-0040 step 2c): their list beside them (photos.json in the package's folder; a dev session's
+    // .dev/photos, scripts/dev/photos.sh), read once at start as Settings reads it; [] without them.
+    readonly property string photosDir: dev ? repoRoot + "/.dev/photos" : "/usr/share/grassfield/wallpapers/photos"
+    property var photos: []
+
+    // What the desktop's "About This Wallpaper" shows for an output: the online picture's attribution or the shown photograph's
+    // ({title, author, sourceUrl, licenseShort, licenseUrl}; WallpaperConfig.aboutEntryOf); null when neither is on screen.
+    function aboutEntry(output: string): var {
+        return WallpaperConfig.aboutEntryOf(outputs[output], online, photos, Qt.locale().name);
+    }
+
     // True while the picture of an output is the online daily one (the desktop menu's "About This Wallpaper").
     function onlineShown(output: string): bool {
         const o = outputs[output];
@@ -146,18 +157,10 @@ Singleton {
         writeNow();
     }
 
+    // The carousel, the last wallpaper shown on each output (ADR-0040 ID-3, ID-7: the first frame of the next start, the
+    // lock's backdrop), the video markers (WallpaperConfig.stateText).
     function stateJson(): string {
-        const o = {displays: saved.displays};
-        const starting = [];
-        for (const owner of Object.keys(videoStartingBy)) {
-            if (!starting.some(m => m.path === videoStartingBy[owner]))
-                starting.push({path: videoStartingBy[owner], at: Date.now()});
-        }
-        if (starting.length > 0)
-            o.videoStarting = starting;
-        if (videoBlockedPaths.length > 0)
-            o.videoBlocked = videoBlockedPaths;
-        return JSON.stringify(o, null, 2) + "\n";
+        return WallpaperConfig.stateText(saved, videoStartingBy, videoBlockedPaths, Date.now());
     }
 
     // Written at once (the marker must be on disk before the video starts), atomically.
@@ -172,13 +175,19 @@ Singleton {
     // login session; "" when neither is known (every start counts as a login).
     readonly property string loginKey: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || Quickshell.env("XDG_SESSION_ID") || ""
 
-    // The prepared pictures on screen, for every output: the helper never prunes them from its cache.
+    // The prepared pictures on screen, for every output, and the stills of the next start (ADR-0040 ID-3: a still decoding
+    // while the first prepare runs, or the lock's): the helper never prunes them from its cache.
     function currentFiles(): var {
         const out = [];
         for (const name of Object.keys(outputs)) {
             const f = outputs[name].file;
             if (typeof f === "string" && f !== "")
                 out.push(f);
+        }
+        for (const name of Object.keys(saved.shown || {})) {
+            const st = WallpaperConfig.stillOf(saved, name, preparedDir);
+            if (st !== null && out.indexOf(st.file) < 0)
+                out.push(st.file);
         }
         return out;
     }
@@ -202,10 +211,45 @@ Singleton {
     }
 
     function setCarousel(key: string, state: var): void {
-        const all = Object.assign({}, saved.displays);
-        all[key] = state;
-        saved = {displays: all};
+        saved = WallpaperConfig.withCarousel(saved, key, state);
         writeTimer.restart();
+    }
+
+    // ---- the first frame (ADR-0040 step 3, ID-3) and the lock's backdrop (step 4a, ID-7) ----
+    // The last picture an output showed, for its first frame at the next start: {file, strip, image, mean} or null (validated:
+    // one of the helper's own prepared pictures; WallpaperConfig.stillOf).
+    function stillOf(output: string): var {
+        return WallpaperConfig.stillOf(saved, output, preparedDir);
+    }
+
+    // What the lock draws on `output` (WallpaperConfig.lockBackdropOf): {kind, file, color, artwork, variant}, or null when
+    // the output never showed a wallpaper. Read by shell/security/lock (which checks the file again).
+    function lockBackdrop(output: string): var {
+        return WallpaperConfig.lockBackdropOf(saved, output, preparedDir, videoDir);
+    }
+
+    // The output now shows `desc`; `art` ({artwork, variant}) is what it would draw instead. Written a short while after.
+    function setShown(output: string, desc: var, art: var): void {
+        const next = WallpaperConfig.withShown(saved, output, desc, art);
+        // Unchanged record: nothing to write (the order of the outputs only decides which go past 16).
+        if (JSON.stringify(next.shown[output]) === JSON.stringify((saved.shown || {})[output]))
+            return;
+        saved = next;
+        writeTimer.restart();
+    }
+
+    // ---- the moving Grassfield artwork (ADR-0040 step 9, as the integrator decided in the review of e067f26f) ----
+    // wallpaper.moving, and where its clouds rest on each output (ms of motion; WallpaperConfig.motionIn). The desktop draws
+    // them still there; only the lock screen moves them, from there, and gives back where they came to rest
+    // (shell/security/lock, through LockStills: display data only). Kept for the session, not stored: a new one starts at 0.
+    readonly property bool moving: WallpaperConfig.normalize(Settings.wallpaper).moving
+    property var motion: ({})
+    function motionOf(output: string): real {
+        return WallpaperConfig.motionIn(root.motion, output);
+    }
+    function setMotion(output: string, at: real): void {
+        if (WallpaperConfig.motionIn(root.motion, output) !== at)
+            root.motion = WallpaperConfig.withMotion(root.motion, output, at);
     }
 
     Timer {
@@ -251,7 +295,7 @@ Singleton {
         onLoaded: {
             try {
                 const o = JSON.parse(text());
-                root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}};
+                root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}, shown: o && typeof o.shown === "object" && o.shown !== null && !Array.isArray(o.shown) ? o.shown : {}};
                 // A marker left by the previous run: that video crashed the shell while it started. It becomes `videoBlocked`
                 // (no retry) and the marker is gone, so the next start does not read it again.
                 const markers = WallpaperConfig.videoMarkersOf(o && o.videoStarting !== undefined ? o.videoStarting : []);
@@ -272,6 +316,14 @@ Singleton {
             root.stateReady = true;
         }
         onLoadFailed: root.stateReady = true
+    }
+
+    FileView {
+        id: photosReader
+        path: root.photosDir + "/photos.json"
+        printErrors: false
+        onLoaded: root.photos = WallpaperConfig.parsePhotos(text(), root.photosDir)
+        onLoadFailed: root.photos = []
     }
 
     FileView {

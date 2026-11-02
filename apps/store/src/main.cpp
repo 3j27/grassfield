@@ -1,4 +1,5 @@
 #include <QCommandLineParser>
+#include <QDBusConnection>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -13,7 +14,9 @@
 #include "globalmenu.h"
 #include "screenshotprovider.h"
 #include "storebackend.h"
+#include "storeinstance.h"
 #include "translationloader.h"
+#include "keywindow.h"
 #include "windowchrome.h"
 
 #ifndef GRASSFIELD_STORE_QML_DIR
@@ -41,6 +44,9 @@ int main(int argc, char *argv[])
     QImageReader::setAllocationLimit(128);
 
     QGuiApplication app(argc, argv);
+    // The app's static text is rasterised natively (ADR-0039 Q5, step 19): distance-field glyphs carry 8 to 20 % less ink than
+    // macOS's, so text read greyer and softer; no app text is scaled or animated (an item that is sets its own renderType).
+    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
     // Before any QML: no global menu item may hold Qt's first shortcut id (globalmenu.h).
     grassfield::apps::reserveFirstShortcutId(app);
     // ADR-0015: the window draws its own chrome (QML property gfChromeRole), tagged for the compositor plugin.
@@ -62,11 +68,23 @@ int main(int argc, char *argv[])
     parser.addOption(pageOption);
     parser.process(app);
 
+    // One Store per user (storeinstance.h): a second launch hands its page and its activation token to the running one and
+    // leaves (Files' "Search the Store", a second click on its entry).
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    grassfield::store::StoreInstance instance;
+    if (bus.isConnected()
+        && grassfield::store::claimOrHandOver(bus, &instance, grassfield::store::StoreInstance::cleanPage(parser.value(pageOption)),
+                                              grassfield::store::StoreInstance::cleanToken(qEnvironmentVariable("XDG_ACTIVATION_TOKEN")))
+            == grassfield::store::Launch::Leave)
+        return 0;
+
     // The backend outlives the engine (declared first, destroyed last): bindings that run while the engine tears the
     // window down still see it.
     grassfield::store::StoreBackend backend;
 
     QQmlApplicationEngine engine;
+    // ADR-0039 step 17: the window keeps its key look while a shell menu or the Control Center holds the keyboard (keywindow.h).
+    new grassfield::apps::KeyWindow(&engine);
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH (the tree's ui/ in a dev session) is
     // added after it in reverse, so that its first entry is searched first (as Preview).
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
@@ -87,6 +105,17 @@ int main(int argc, char *argv[])
     if (engine.rootObjects().isEmpty())
         return 1;
     grassfield::apps::followGlobalMenu(engine.rootObjects().constFirst(), "globalMenu");
+    // A page another launch asked for: the window goes there (Main.qml openPage checks it) and comes forward.
+    QObject::connect(&instance, &grassfield::store::StoreInstance::openRequested, &app, [&engine, &backend](const QString &page, const QString &token) {
+        // Asked for again while a quit waits for the running operation (Ctrl+Q, the window closed): the Store stays.
+        backend.reopened();
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
+        if (!window)
+            return;
+        if (!page.isEmpty())
+            QMetaObject::invokeMethod(window, "openPage", Q_ARG(QString, page));
+        grassfield::store::activateWindow(window, token);
+    });
     // The last window closed while an operation runs: the Store stays until it ends (ADR-0037 f; it holds Omarchy's update
     // lock and keeps the result), then quits.
     app.setQuitOnLastWindowClosed(false);

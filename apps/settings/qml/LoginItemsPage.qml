@@ -157,15 +157,21 @@ SettingsPage {
                     }
                 }
 
-                SettingsRow {
+                EmptyListRow {
                     visible: root.items.length === 0
-                    title: qsTr("No login items")
+                    text: qsTr("No login items")
                 }
             }
 
+            // After a key only (ADR-0039 step 7).
+            KeyFocus {
+                id: listFocus
+                target: list
+            }
+
             FocusRing {
-                shapeRadius: Tokens.radiusMenu
-                visible: list.activeFocus
+                shapeRadius: Tokens.radiusGroup
+                visible: listFocus.active
             }
         }
 
@@ -200,9 +206,9 @@ SettingsPage {
                 }
             }
         }
-        SettingsRow {
+        EmptyListRow {
             visible: root.units.length === 0
-            title: qsTr("No background items")
+            text: qsTr("No background items")
         }
     }
 

@@ -274,6 +274,24 @@ function blurCall(size, passes) {
     return "function() hl.config({ decoration = { blur = { size = " + size + ", passes = " + passes + " } } }) end";
 }
 
+// The session's ground (ADR-0040 ID-2): the compositor's background colour, sent as one Lua call like the blur. "" for anything
+// but "#rrggbb" (the value is interpolated into the Lua expression).
+function groundCall(hex) {
+    if (typeof hex !== "string" || !/^#[0-9a-fA-F]{6}$/.test(hex))
+        return "";
+    return "function() hl.config({ misc = { background_color = \"rgba(" + hex.substring(1).toLowerCase() + "ff)\" } }) end";
+}
+
+// The window edge of an appearance (ADR-0039 step 6, C-4): Hyprland's border colours, the active and an inactive window's,
+// as one Lua call for the request socket. colour "#rrggbb", alphas from 0 to 1; "" when one is not.
+function edgeCall(colour, active, inactive) {
+    const alpha = a => typeof a === "number" && isFinite(a) && a >= 0 && a <= 1;
+    if (typeof colour !== "string" || !/^#[0-9A-Fa-f]{6}$/.test(colour) || !alpha(active) || !alpha(inactive))
+        return "";
+    const rgba = a => "rgba(" + colour.slice(1).toLowerCase() + ("0" + Math.round(a * 255).toString(16)).slice(-2) + ")";
+    return "function() hl.config({ general = { col = { active_border = \"" + rgba(active) + "\", inactive_border = \"" + rgba(inactive) + "\" } } }) end";
+}
+
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
 // minimizeEffect: Settings dock.minimizeEffect (funnel | shrink), or "fade" while Reduce Motion is on (feature
 // "minimize-effect"; older plugins reject the key, so the shell sends it only when the feature is advertised).

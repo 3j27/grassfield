@@ -73,4 +73,10 @@ add RimmedCapsule
 add TileGlyph
 add SoftwareUpdateLogic
 add DevicePicture
+add KeyFocus
+add MenuHeader
+add Spinner
+add ProgressRing
+add MenuPopup
+add TimeOfDay
 ```

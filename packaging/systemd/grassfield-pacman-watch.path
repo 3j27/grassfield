@@ -1,0 +1,25 @@
+[Unit]
+Description=Grassfield: a Software Update check when pacman's local database changes
+Documentation=file:///usr/share/doc/grassfield/README.md
+# ADR-0041 step 2b (U31), second slice: a package installed from a terminal (pacman -Syu, an AUR helper) replaces a library
+# under the running session, and no check of ours would see it before the next scheduled one (U7). pacman's local database
+# directory changes at every transaction (one entry per package, created and removed; readable by every user): this unit
+# then starts grassfield-pacman-watch.service, which waits while pacman holds its database lock (the transaction still
+# runs), lets the burst settle and asks the shell for a check (`update check system`). Nothing runs as root (ADR-0009's
+# amendment).
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+
+[Path]
+PathChanged=/var/lib/pacman/local
+Unit=grassfield-pacman-watch.service
+# A transaction changes the directory hundreds of times in seconds. The service's settle keeps the activations to one per
+# few seconds (events during a run are kept and start it once more after it); this limit leaves room for a long one, since a
+# path unit that hits it (systemd's default: 200 in 2 s) goes to failed and watches no more until the next login.
+TriggerLimitIntervalSec=60
+TriggerLimitBurst=100
+
+[Install]
+WantedBy=graphical-session.target

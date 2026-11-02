@@ -6,6 +6,7 @@ import Grassfield.I18n
 import Grassfield.Ui
 import qs.desktop
 import qs.dock
+import qs.lib
 import qs.launchpad
 import qs.menubar
 import qs.notifications
@@ -15,9 +16,11 @@ import qs.overlay
 import qs.platform
 import qs.saver
 import qs.search
+import qs.security
 import qs.security.idle
 import qs.security.lock
 import qs.security.polkit
+import qs.security.secret
 import qs.services
 import qs.stages
 import qs.switcher
@@ -74,11 +77,12 @@ ShellRoot {
         value: dock.keyboardMode
     }
 
-    // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11).
+    // The authorization state for the modules that must not import shell/security (the clipboard history, ADR-0034 Q11): the
+    // polkit sheet or a secret sheet is open (ADR-0035 D-9).
     Binding {
         target: SessionState
         property: "authorizing"
-        value: authAgent.requestActive
+        value: authAgent.requestActive || secretAgent.requestActive
     }
 
     Connections {
@@ -267,23 +271,32 @@ ShellRoot {
             degradedNoticeKey = Notifications.postInternal(qsTr("Updating the compositor extension"), qsTr("Grassfield was updated, and its compositor extension is being updated in the background. Window titlebars and minimize come back once it is done, or after the next login."));
             break;
         case "stale-manual":
-            degradedNoticeKey = Notifications.postInternal(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Run grassfield-compositor-rebuild in a terminal to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then."));
+            // ADR-0041 step 2d (SP-6): no command to type; a click runs the rebuild the opt-in setting would have run.
+            degradedNoticeKey = Notifications.postInternalAction(qsTr("Log out to finish updating"), qsTr("Grassfield was updated. Click to update its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then."), () => root.startExtensionRebuild("the notice"));
             break;
         case "mismatch-rebuilding":
             degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet. Window titlebars and minimize are unavailable while it is built in the background.").arg(hyprlandName()));
             break;
         case "mismatch-manual":
-            degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet, so window titlebars and minimize are unavailable. Run grassfield-compositor-rebuild in a terminal, then log out and back in.").arg(hyprlandName()));
+            degradedNoticeKey = Notifications.postInternalAction(qsTr("Compositor extension needs a rebuild"), qsTr("It is not built for %1 yet, so window titlebars and minimize are unavailable. Click to build it, then log out and back in.").arg(hyprlandName()), () => root.startExtensionRebuild("the notice"));
             break;
         default:
             degradedNoticeKey = Notifications.postInternal(qsTr("Compositor extension not loaded"), qsTr("Window titlebars and minimize are unavailable (compositor extension not loaded)."));
             return;
         }
-        if (rebuild) {
-            extensionRebuildTried = true;
-            console.info("grassfield: compositor extension rebuild started");
-            extensionSession.running = true;
-        }
+        if (rebuild)
+            startExtensionRebuild("the setting");
+    }
+
+    // The background rebuild (`--session`, as the user): started once per shell run by the opt-in setting, or by a click on
+    // a manual degraded notice (ADR-0041 step 2d). A second click while it runs, or after it ran, starts nothing: the
+    // result notice already said what is next.
+    function startExtensionRebuild(why: string): void {
+        if (extensionSession.running || extensionRebuildTried)
+            return;
+        extensionRebuildTried = true;
+        console.info("grassfield: compositor extension rebuild started (" + why + ")");
+        extensionSession.running = true;
     }
 
     // The notice for the --session answer.
@@ -478,11 +491,28 @@ ShellRoot {
     Banners {}
     NotificationCenter {}
     OsdWindow {}
+    // Log Out, Restart and Shut Down end under one fade to the ground (ADR-0040 ID-10; grassfield-session-end asks for it).
+    ExitCover {}
     Search {
         id: searchSurface
     }
+    // The one queue of the polkit sheet and the secret sheets (ADR-0035 D-9, master-prompt R12): one sheet on screen at a
+    // time, in arrival order; no sheet takes the keyboard from another.
+    SheetQueue {
+        id: sheetQueue
+        polkitPresent: authAgent.queuePresent
+    }
     AuthAgent {
         id: authAgent
+        queue: sheetQueue
+    }
+    // Password prompts of gcr's callers (gnome-keyring, GnuPG's pinentry, gcr-ssh-agent) through grassfield-prompter
+    // (ADR-0035 D-9, step 9b). In a dev session it connects only to the test socket GRASSFIELD_PROMPTER_SOCKET names.
+    SecretAgent {
+        id: secretAgent
+        queue: sheetQueue
+        devSocket: Mode.devValue("PROMPTER_SOCKET")
+        shellVersion: SystemInfo.grassfieldVersion
     }
     Idle {
         id: idle
@@ -525,9 +555,12 @@ ShellRoot {
     // Referencing Capabilities instantiates it, which sends the plugin hello; referencing Lock
     // instantiates the session lock (IPC target "lock", crash-recovery restore); referencing RecentItems makes it listen to
     // every launch from the start (it would otherwise exist only once the Grassfield menu opened); referencing NotResponding
-    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3); referencing TilingHover makes it listen
+    // registers its IPC target "anr" for the hyprland-dialog stand-in (ADR-0035 D-3), SharePicker its target "picker" for the
+    // screen-sharing picker's stand-in (D-6); referencing TilingHover makes it listen
     // to the plugin's tile-hover events (the tiling popover, docs/specs/tiling.md TL22); referencing TilingSuggest makes it
     // listen to the suggestions that follow a layout or an arrangement (TL28); referencing SoftwareUpdate starts its automatic
-    // checks and registers its IPC target "update" (ADR-0033 d.7).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count)
+    // checks and registers its IPC target "update" (ADR-0033 d.7); referencing ActivityLink registers its IPC target "activity"
+    // and writes Activity Monitor's projection while the app's window is open (ADR-0038 AM60, AM61); referencing KeyWindow
+    // writes the key window's file for the apps from the start (ADR-0039 step 17).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "share picker", SharePicker.current === null ? "idle" : "open", "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder", "key window", KeyWindow.path !== "" ? "written" : "no runtime folder")
 }

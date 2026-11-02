@@ -1,0 +1,138 @@
+#!/bin/sh
+# grassfield-shell-watchdog: the shell's liveness probe (ADR-0041 step 6a, owner decision SQ-5 A, 2026-10-29). Installed to
+# /usr/lib/grassfield/grassfield-shell-watchdog, run every 30 s by grassfield-shell-watchdog.service from its timer.
+#
+# Why: a frozen shell (its GUI thread blocked: a loop in QML, a plugin that never returns) draws nothing and answers
+# nothing, yet its process lives, so systemd sees no failure and nothing restarts it. Hyprland's "not responding" ping
+# reaches xdg toplevels only, and the shell's surfaces are layer surfaces. This probe asks the shell one question over its
+# IPC socket, `capabilities status`, whose handler runs on the GUI thread: ANY answer, the `refused` of a real session
+# included, is that thread answering; nothing in the answer is read. No answer within 5 s is a miss. Three misses in a row
+# of the same shell process (the state file $XDG_RUNTIME_DIR/grassfield/shell-watchdog, 0600) make it send that process
+# SIGKILL through the user manager. The main process then dies by a signal, so the unit fails: Restart=always brings the
+# shell back within a second, OnFailure= arms the sleep lock and step 1a's counter counts the failure (a hang that repeats
+# ends in the loop detector's stop, as a crash loop does). A plain restart is a stop, which never fails the unit and would
+# never reach the loop detector (review of 2c0bd74, finding 3). Only the hung main process gets SIGKILL; the unit's other
+# processes get the restart's usual SIGTERM.
+#
+# A miss is a question that ran into the 5 s bound (timeout's exit 124, or 137 once its KILL followed) and took that long.
+# A question that fails at once (no instance registered yet, a refused connection, a qs that could not start) is no
+# evidence of a hang and counts nothing. Nothing is asked while the unit is not active/running, nor once the compositor is
+# gone (the session ends: session-gone, next to this script). A shell that restarted between two misses, or during the
+# question, starts again from zero: the misses belong to one MainPID. A hang shorter than about 65 s is never killed (the
+# third miss comes 60 s after the first at the earliest); one longer than about 95 s always is.
+#
+# The bound includes starting the qs client itself. Under a loaded machine (the kernel's pressure stall information,
+# /proc/pressure: cpu `some avg10` at 40 % or more, or memory `some avg10` at 10 % or more) a healthy shell could miss 5 s
+# three times in a row, and that kill would count toward the loop detector; so the bound is 20 s while the machine is that
+# loaded (integrator's review of f01a0b9f). It is extended, never skipped: a shell that spins in a loop raises the pressure
+# itself on a small machine, and it must still be found. Unreadable pressure files leave the 5 s bound.
+#
+# Nothing here unlocks, starts or stops a unit: the one state change is that kill, and the compositor keeps the session
+# locked while the shell restarts (ext-session-lock; the restarted shell takes the lock back, docs/specs/security.md
+# "Lock survival"). No environment variable changes the bounds: the unit clears Quickshell's option variables, and the tests
+# run a scratch copy against fake qs and systemctl commands first on a private PATH.
+set -u
+unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST
+me=grassfield-shell-watchdog
+unit=grassfield-shell.service
+answer=5
+answer_loaded=20
+misses_max=3
+# For tests only, which run a scratch copy of this script: a directory holding `cpu` and `memory` in /proc/pressure's format.
+# The unit clears it (UnsetEnvironment=), so in the session the kernel's own files are read.
+pressure=${GRASSFIELD_SHELL_WATCHDOG_PRESSURE:-/proc/pressure}
+say() { echo "$me: $*" >&2; }
+digits() { case ${1:-} in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+# The shell's main process while the unit runs it, else 0.
+main_pid() {
+  systemctl --user show -p ActiveState -p SubState -p MainPID "$unit" 2>/dev/null |
+    awk -F= '$1 == "ActiveState" { a = $2 } $1 == "SubState" { s = $2 } $1 == "MainPID" { p = $2 }
+      END { if (a == "active" && s == "running" && p ~ /^[1-9][0-9]*$/) print p; else print 0 }'
+}
+# The integer part of `some avg10` of a /proc/pressure file (the share of the last 10 s in which a task waited), else nothing.
+avg10() { awk '$1 == "some" { for (i = 2; i <= NF; i++) if ($i ~ /^avg10=/) { v = substr($i, 7); print int(v); exit } }' "$1" 2>/dev/null; }
+# Monotonic hundredths of a second (/proc/uptime), which a wall-clock change never moves.
+uptime_cs() { awk '{ n = split($1, t, "."); printf "%d\n", t[1] * 100 + (n > 1 ? substr(t[2] "00", 1, 2) : 0) }' /proc/uptime 2>/dev/null; }
+
+# 1. A session that is ending: nothing to watch.
+if "$(dirname "$0")/session-gone"; then
+  exit 0
+fi
+# 2. Where the misses are kept.
+if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+  say "no XDG_RUNTIME_DIR: nothing watched"
+  exit 0
+fi
+dir=$XDG_RUNTIME_DIR/grassfield
+state=$dir/shell-watchdog
+umask 077
+if ! mkdir -p "$dir" 2>/dev/null || [ ! -d "$dir" ] || [ -L "$dir" ]; then
+  say "cannot use $dir: nothing watched"
+  exit 0
+fi
+# 3. The shell, only while the unit runs it.
+pid=$(main_pid)
+if [ "$pid" = 0 ]; then
+  rm -f "$state"
+  exit 0
+fi
+# 4. The question. From outside the session's display (no WAYLAND_DISPLAY in the user manager) qs filters the instance
+# out; --any-display lifts that, and the path still names one instance (grassfield-security-status does the same).
+display=""
+[ -n "${WAYLAND_DISPLAY:-}" ] || display="--any-display"
+cpu=$(avg10 "$pressure/cpu")
+memory=$(avg10 "$pressure/memory")
+if { digits "$cpu" && [ "$cpu" -ge 40 ]; } || { digits "$memory" && [ "$memory" -ge 10 ]; }; then
+  answer=$answer_loaded
+fi
+t0=$(uptime_cs)
+# shellcheck disable=SC2086  # $display is empty or one option
+timeout -k 1 "$answer" qs ipc $display -p /usr/share/grassfield/shell call capabilities status >/dev/null 2>&1
+rc=$?
+t1=$(uptime_cs)
+if [ "$rc" = 0 ]; then
+  rm -f "$state"
+  exit 0
+fi
+if [ "$rc" != 124 ] && [ "$rc" != 137 ]; then
+  say "the question failed at once (exit $rc): no evidence of a hang, not counted"
+  exit 0
+fi
+if ! digits "$t0" || ! digits "$t1" || [ $((t1 - t0)) -lt $((answer * 100 - 50)) ]; then
+  say "the question ended before its bound (exit $rc): not counted"
+  exit 0
+fi
+# 5. The same process still? A shell that restarted meanwhile starts from zero.
+if [ "$(main_pid)" != "$pid" ]; then
+  rm -f "$state"
+  exit 0
+fi
+misses=1
+was_pid=""
+was_misses=""
+if [ -f "$state" ] && [ ! -L "$state" ]; then
+  read -r was_pid was_misses <"$state" 2>/dev/null || true
+fi
+if [ "${was_pid:-}" = "$pid" ] && digits "${was_misses:-}" && [ "$was_misses" -lt "$misses_max" ]; then
+  misses=$((was_misses + 1))
+fi
+if [ "$misses" -ge "$misses_max" ]; then
+  rm -f "$state"
+  # Read once more right before the kill: a shell that restarted since is a new process, never killed for the old one's
+  # misses (integrator's review of f01a0b9f).
+  if [ "$(main_pid)" != "$pid" ]; then
+    exit 0
+  fi
+  say "the shell (pid $pid) did not answer within $answer s $misses times in a row: SIGKILL, so that its unit fails and restarts it"
+  systemctl --user kill --kill-whom=main --signal=SIGKILL "$unit" || say "the kill failed"
+  exit 0
+fi
+# A new file renamed over the old one: a link planted at the state's path is replaced, never written through.
+tmp=$state.$$
+if printf '%s %s\n' "$pid" "$misses" >"$tmp" 2>/dev/null && mv -f "$tmp" "$state" 2>/dev/null; then
+  say "the shell (pid $pid) did not answer within $answer s: $misses of $misses_max"
+else
+  rm -f "$tmp"
+  say "cannot write $state: this miss is not remembered"
+fi
+exit 0

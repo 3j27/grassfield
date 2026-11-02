@@ -424,7 +424,8 @@ TestCase {
     function test_emptyCategory() {
         const t = make(categoryComp, {key: "remoteDesktop"});
         answer(t);
-        verify(find(t.page, i => i.title === "No saved choices" && i.visible));
+        // Said as every empty list of Settings says it (EmptyListRow, ADR-0039 step 15).
+        verify(find(t.page, i => i.text === "No saved choices" && i.visible && i.Accessible.role === Accessible.StaticText));
         // Its portal is not there: the footnote says so.
         verify(find(t.page, i => i.footnote !== undefined && i.visible && i.footnote.indexOf("do not provide this permission") >= 0));
         const b = make(categoryComp, {key: "background"});

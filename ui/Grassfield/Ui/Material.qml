@@ -24,7 +24,7 @@ Item {
     // Surfaces without text (the Dock shelf) may be more translucent than the A2 clamp allows: an explicit tint alpha
     // (0..1, -1 = from `transparency`) that applies only while the surface is not opaque (Reduce Transparency wins).
     property real tintAlphaOverride: -1
-    // Glass class (ADR-0024 section 2): "menu", "notification", "controls" or "apps" take the class tint, raised to keep
+    // Glass class (ADR-0024 section 2): "menu", "notification", "controls", "apps", "gallery" or "widgets" take the class tint, raised to keep
     // the text legible over the backdrop the shell knows for this output (Appearance.glassAlpha); "" keeps the one material
     // tint (Appearance.tintAlpha).
     property string glassClass: ""
@@ -59,12 +59,15 @@ Item {
     // Rims (default: the material tokens): the inner specular rim (highlight) and the outer edge (border), each one device
     // pixel wide at every scale. The outer edge is dark in both appearances, the inner rim light.
     property real highlightOpacity: Appearance.dark ? Tokens.materialHighlightOpacity : Tokens.materialHighlightOpacityLight
+    // Increase Contrast raises both edges (material.edgeOpacityDark and material.borderOpacity; the dark one by ADR-0039 step 22).
     property real borderOpacity: Appearance.dark ? Math.max(Tokens.materialEdgeOpacityDark, Tokens.materialBorderOpacity) : Tokens.materialBorderOpacity
     property color borderColor: Appearance.dark ? Appearance.colors.shadow : Appearance.colors.materialBorder
     readonly property real hairline: 1 / Math.max(1, Screen.devicePixelRatio)
     readonly property real baseTintAlpha: tintAlphaOverride >= 0 && blurActive ? tintAlphaOverride : (glassClass !== "" ? Appearance.glassAlpha(glassClass, transparency, screenName, glassRect) : Appearance.tintAlpha(transparency))
     // Increase Contrast frosts every glass surface (ADR-0024 G-8); Reduce Transparency has already made it opaque.
-    readonly property real tintAlpha: Appearance.increaseContrast ? Math.max(Tokens.glassContrastFrost, baseTintAlpha) : baseTintAlpha
+    readonly property real tintAlpha: Appearance.frosted(baseTintAlpha)
+    // The tint as drawn: what a piece of the same glass outside the shape (a menu's or a tooltip's tail) fills with.
+    readonly property color fillColor: Appearance.withAlpha(root.tintColor, root.tintAlpha)
     // The host window needs this much room around the shape for the shadow.
     readonly property int shadowMargin: Tokens.shadowBlur + Tokens.shadowOffsetY
 
@@ -128,12 +131,14 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        color: Appearance.withAlpha(root.tintColor, root.tintAlpha)
+        color: root.fillColor
     }
 
-    // Inner specular rim: one device pixel inside the edge, half strength all round and full strength along the straight
-    // part of the top edge (the light comes from above).
+    // Inner specular rim: one device pixel inside the edge, half strength all round and stronger toward the light, the top
+    // left (ADR-0024 section 2.5, ADR-0039 step 22): full strength round the top-left corner, fading back to half along the
+    // straight parts of the top and left edges.
     Rectangle {
+        id: rim
         visible: root.highlightEnabled
         anchors.fill: parent
         anchors.margins: root.hairline
@@ -143,13 +148,62 @@ Item {
         border.color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity / 2)
     }
 
-    Rectangle {
+    Item {
+        id: lightCorner
         visible: root.highlightEnabled
-        x: root.radius
+        width: Math.min(root.radius, root.width / 2)
+        height: Math.min(root.radius, root.height / 2)
+        clip: true
+
+        Rectangle {
+            x: rim.x
+            y: rim.y
+            width: rim.width
+            height: rim.height
+            radius: rim.radius
+            color: "transparent"
+            border.width: root.hairline
+            border.color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity)
+        }
+    }
+
+    Rectangle {
+        id: topLight
+        visible: root.highlightEnabled
+        x: lightCorner.width
         y: root.hairline
-        width: Math.max(0, root.width - 2 * root.radius)
+        width: Math.max(0, root.width - 2 * lightCorner.width)
         height: root.hairline
-        color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity)
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0
+                color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity)
+            }
+            GradientStop {
+                position: 1
+                color: Appearance.withAlpha(Appearance.colors.materialHighlight, 0)
+            }
+        }
+    }
+
+    Rectangle {
+        id: leftLight
+        visible: root.highlightEnabled
+        x: root.hairline
+        y: lightCorner.height
+        width: root.hairline
+        height: Math.max(0, root.height - 2 * lightCorner.height)
+        gradient: Gradient {
+            GradientStop {
+                position: 0
+                color: Appearance.withAlpha(Appearance.colors.materialHighlight, root.highlightOpacity)
+            }
+            GradientStop {
+                position: 1
+                color: Appearance.withAlpha(Appearance.colors.materialHighlight, 0)
+            }
+        }
     }
 
     // Outer edge: one device pixel.

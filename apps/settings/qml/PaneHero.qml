@@ -14,7 +14,7 @@ Rectangle {
     width: parent ? parent.width : implicitWidth
     implicitWidth: Tokens.settingsContentMaxWidth
     implicitHeight: Math.round(body.y + body.baselineOffset + (body.lineCount - 1) * Tokens.settingsHeroTextLineHeight + Tokens.settingsHeroBottom)
-    radius: Tokens.radiusMenu
+    radius: Tokens.radiusGroup
     color: Appearance.colors.groupFill
     // Increase Contrast outlines the card, as it does the groups (SettingsGroup).
     border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
@@ -62,7 +62,9 @@ Rectangle {
         id: body
         textFormat: Text.PlainText
         x: Tokens.settingsHeroTextInset
-        y: Tokens.settingsHeroTextBaseline - baselineOffset
+        // The text's first baseline its measured gap under the title's, the gap growing with Text size as the text does
+        // (ADR-0039 step 18); the tile and the title's baseline stay.
+        y: Tokens.settingsHeroTitleBaseline + (Tokens.settingsHeroTextBaseline - Tokens.settingsHeroTitleBaseline) * Appearance.textScale - baselineOffset
         width: root.width - 2 * Tokens.settingsHeroTextInset
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap

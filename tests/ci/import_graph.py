@@ -8,7 +8,9 @@
 Layers, low to high: lib < platform < store < services < features < shell.qml. A module may import only a lower layer; two
 feature modules may import each other only while no cycle forms (a feature edge inside a strongly connected component of the
 feature graph is a violation). Security modules (shell/security/**) may import only lib, services and other security
-modules. `Quickshell.Hyprland` and `rawEvent` belong to platform.
+modules. `Quickshell.Hyprland` and `rawEvent` belong to platform. `qs.security.secret` (the secret sheets, ADR-0035 D-9) is imported
+by shell/shell.qml alone, which wires it to the one queue it shares with the polkit sheet: no marker excuses another importer
+(the integrator's review of PR #95).
 
 Rule choices: a feature-to-feature edge is a violation only when it lies on a cycle of the feature graph once every layer
 violation is removed from that graph. A raw-event violation is reported once per file, on its `import Quickshell.Hyprland`
@@ -65,6 +67,8 @@ JS_IMPORT = re.compile(r"""\.\s*import\s+(?:"([^"]*)"|'([^']*)'|([A-Za-z_][\w.]*
 TAGS = ("GF-087", "GF-050", "ADR-0021 security")
 MARKER = re.compile(r"//\s*layering-exception:\s*(.*?)\s*$")
 SECURITY_ALLOWED = {"lib", "services"}
+SECRET_MODULE = "security.secret"
+SECRET_REASON = "qs.security.secret is imported by shell/shell.qml only"
 PERMANENT_DIRS = ("security/lock/", "security/idle/")  # the only places the permanent tag is accepted (not polkit)
 GF050_FILE = "security/idle/SleepInhibitor.qml"
 GF050_TARGET = "notifications"
@@ -441,7 +445,10 @@ def analyze(shell):
         if kind == "unknown":
             found.append((path, f"{tgt} is not a module of shell/ (no qmldir)", key, None))
         elif kind == "module" and tgt != src:
-            if upward(src, tgt):
+            if tgt == SECRET_MODULE and not (path.name == "shell.qml" and path.parent.resolve() == shell.resolve()):
+                found.append((path, f"{SECRET_REASON} (it wires the secret sheets to the one queue they share with the polkit sheet); "
+                                    f"{src} imports it", key, None))
+            elif upward(src, tgt):
                 why = (f"a security module may import only lib, services and security (imports {tgt})" if is_security(src) and not is_security(tgt)
                        else f"{src} (layer {layer_of(src)}) imports {tgt} (layer {layer_of(tgt)}): imports go to a lower layer only")
                 found.append((path, why, key, None))
@@ -498,7 +505,9 @@ def problems(shell, root=None):
         where = f"{path.relative_to(root)}:{n}"
         rel = path.relative_to(shell).as_posix()
         stale = reason.startswith("stale marker")
-        if tag is None:
+        if reason.startswith(SECRET_REASON):
+            out.append(f"{where}: {reason}; no layering-exception marker covers it")
+        elif tag is None:
             out.append(f"{where}: {reason}; fix the import or mark the line `// layering-exception: GF-087`")
         elif tag == MULTI:
             out.append(f"{where}: {reason}; put each import on its own line")
@@ -760,6 +769,19 @@ def selftest():
     run("the permanent marker in security itself fails",
         {**clean, "security/Mod.qml": "import Quickshell.Hyprland // layering-exception: ADR-0021 security\nItem {}\n"}, "shell/security/lock and shell/security/idle only")
     run("a feature importing security is a feature edge", {**clean, "dock/Dock.qml": "import qs.services\nimport qs.security.lock\nItem {}\n"}, None)
+    secret = {**clean, **modules("security.secret"), "security/secret/SecretAgent.qml": "import qs.security\nItem {}\n",
+              "shell.qml": "import qs.dock\nimport qs.services\nimport qs.security.secret\nShellRoot {}\n"}
+    run("shell.qml imports qs.security.secret", secret, None)
+    run("a feature importing qs.security.secret fails", {**secret, "dock/Dock.qml": "import qs.services\nimport qs.security.secret\nItem {}\n"},
+        "qs.security.secret is imported by shell/shell.qml only")
+    run("another security module importing qs.security.secret fails",
+        {**secret, "security/lock/Lock.qml": "import qs.security.secret\nItem {}\n"}, "qs.security.secret is imported by shell/shell.qml only")
+    run("another root file importing qs.security.secret fails", {**secret, "Other.qml": "import qs.security.secret\nItem {}\n"},
+        "qs.security.secret is imported by shell/shell.qml only")
+    run("a relative import of the secret sheets' directory fails", {**secret, "dock/Dock.qml": 'import "../security/secret"\nItem {}\n'},
+        "qs.security.secret is imported by shell/shell.qml only")
+    run("a marker does not excuse it",
+        {**secret, "dock/Dock.qml": "import qs.security.secret // layering-exception: GF-087\nItem {}\n"}, "no layering-exception marker covers it")
     run("a file of the module itself is no edge", {**clean, "dock/Dock.qml": 'import "."\nimport "DockModel.js" as M\nItem {}\n'}, None)
 
     # Test trees: a tree that links a shell module directory links lib too.

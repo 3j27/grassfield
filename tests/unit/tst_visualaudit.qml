@@ -105,8 +105,8 @@ TestCase {
 
     // Priority 11: toolbar capsules are 36 pt; two 34-pt buttons make the 72-pt back/forward capsule.
     function test_toolbarCapsules() {
-        compare(Tokens.filesToolbarCapsule, 36);
-        compare(2 * Tokens.filesToolbarGroupButton + Tokens.spacingXs, 72);
+        compare(Tokens.toolbarCapsule, 36);
+        compare(2 * Tokens.toolbarGroupButton + Tokens.spacingXs, 72);
         verify(Tokens.filesSearchWidth >= 180);
     }
 
@@ -213,10 +213,12 @@ TestCase {
         verify(lum(Tokens.colorLight.windowTextSecondary) > lum(Tokens.colorLight.textSecondary));
     }
 
-    // Dark appearance (no dark macOS secondary reference): the window secondary text is the old textSecondary; the window itself is
-    // the neutral grey of ADR-0024 lot 1.
+    // Dark appearance: the window secondary text is the owner's answer to ADR-0039 Q3 (#A1A1A6, warm as every neutral since
+    // ADR-0040: #A4A19C), a step below the material's textSecondary, which read like the titles on the window; the window
+    // itself is the neutral grey of ADR-0024 lot 1.
     function test_darkWindowValues() {
-        compare(Tokens.colorDark.windowTextSecondary, Tokens.colorDark.textSecondary);
+        compare(Tokens.colorDark.windowTextSecondary, "#A4A19C");
+        verify(lum(Tokens.colorDark.windowTextSecondary) < lum(Tokens.colorDark.textSecondary), "a step below the material's");
         // #292929 warmed (the owner's warm neutrals of 2026-10-30, ADR-0040; the same lightness).
         compare(Tokens.colorDark.windowBackground, "#2B2925");
     }

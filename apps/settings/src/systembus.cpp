@@ -1465,8 +1465,9 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
             continue;
         const QString path = it.key().path();
         // Pair a nearby device, trust it (it may connect again on its own) and connect it. Settings registers no pairing agent:
-        // BlueZ pairs as a device without input or output (Just Works), which most mice, keyboards and headphones accept; one
-        // that needs a PIN is refused by the device and its reason shown. The pairing can wait for the device (kPrivilegedMs).
+        // BlueZ asks the session's default agent (in the Grassfield session the shell's pairing sheet, ADR-0035 step 10), and
+        // without one pairs as a device without input or output (Just Works), which most mice, keyboards and headphones accept;
+        // one that needs a code is then refused and its reason shown. The pairing can wait for the device (kPrivilegedMs).
         if (name == QLatin1String("bt.pair")) {
             if (!d.value(QStringLiteral("Paired")).toBool()) {
                 const BusReply r = bus.call(kBluez, path, kDevice1, QStringLiteral("Pair"), {}, kPrivilegedMs);

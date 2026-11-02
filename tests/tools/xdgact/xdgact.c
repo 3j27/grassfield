@@ -4,7 +4,7 @@
 // (tests/compositor/tiling.sh, the shared edge's handle behind a popup).
 // Never run it against the owner's session: use tests/tools/xdgact/xdgact.sh, which targets only the verified nested socket.
 //
-// Usage: xdgact APP_ID [MIN_WIDTH]
+// Usage: xdgact APP_ID [MIN_WIDTH | WxH]
 // Opens a small toplevel with the app id, prints "mapped" once it is shown, and waits. On SIGUSR1 it asks the compositor for an
 // activation token and activates its own surface with it: what an app does to bring its window forward (a real client request,
 // handled by Hyprland's CWindow::activate with misc.focus_on_activate), as opposed to the focus dispatcher. Prints "activated" when
@@ -14,6 +14,9 @@
 // toplevel draws a buffer of the size the compositor configures. Ends on SIGTERM/SIGINT or when the window is closed.
 // With MIN_WIDTH the toplevel also asks for that minimum width (xdg_toplevel.set_min_size) and never draws
 // narrower, as an app with a wide minimum does (tests/compositor/tiling.sh: a window too wide for half of the output, TL33).
+// With WxH the toplevel is of fixed size: its minimum and maximum are both WxH (xdg_toplevel.set_min_size, set_max_size) and it
+// always draws that size, whatever the compositor configures, as a window that cannot be resized does (tests/compositor/tiling.sh:
+// the plugin's titlebar disables its zoom light and the Zoom and Full Screen keys leave it alone, ADR-0040 step 1b's review).
 #define _GNU_SOURCE
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
@@ -52,6 +55,7 @@ static int                         unmapped;
 static int                         popup_mapped;
 static int                         cfg_w = WIDTH, cfg_h = HEIGHT; // the size the compositor configured (its default before any)
 static int                         min_w = 0;                     // the minimum width asked (0: none)
+static int                         fixed_w = 0, fixed_h = 0;      // a window of fixed size: minimum = maximum (0: none)
 static int                         buf_w, buf_h;
 
 static void on_signal(int sig) {
@@ -149,6 +153,8 @@ static void toplevel_configure(void* data, struct xdg_toplevel* t, int32_t w, in
     (void)data;
     (void)t;
     (void)states;
+    if (fixed_w > 0)
+        return; // a window of fixed size draws its size, whatever is configured
     if (w > 0 && h > 0) {
         cfg_w = w < min_w ? min_w : w;
         cfg_h = h;
@@ -295,10 +301,22 @@ static void request_activation(const char* app_id) {
 
 int main(int argc, char** argv) {
     if (argc != 2 && argc != 3) {
-        fprintf(stderr, "usage: xdgact APP_ID [MIN_WIDTH]\n");
+        fprintf(stderr, "usage: xdgact APP_ID [MIN_WIDTH | WxH]\n");
         return 2;
     }
-    if (argc == 3) {
+    if (argc == 3 && strchr(argv[2], 'x')) {
+        char* end = NULL;
+        long  w   = strtol(argv[2], &end, 10);
+        long  h   = end && *end == 'x' ? strtol(end + 1, &end, 10) : 0;
+        if (!end || *end != '\0' || w < 1 || w > 16384 || h < 1 || h > 16384) {
+            fprintf(stderr, "xdgact: WxH must be two sizes of 1-16384\n");
+            return 2;
+        }
+        fixed_w = (int)w;
+        fixed_h = (int)h;
+        cfg_w   = fixed_w;
+        cfg_h   = fixed_h;
+    } else if (argc == 3) {
         char* end = NULL;
         long  v   = strtol(argv[2], &end, 10);
         if (!end || *end != '\0' || v < 1 || v > 16384) {
@@ -340,6 +358,10 @@ int main(int argc, char** argv) {
     xdg_toplevel_set_title(top, argv[1]);
     if (min_w > 0)
         xdg_toplevel_set_min_size(top, min_w, 0);
+    if (fixed_w > 0) {
+        xdg_toplevel_set_min_size(top, fixed_w, fixed_h);
+        xdg_toplevel_set_max_size(top, fixed_w, fixed_h);
+    }
     wl_surface_commit(surface);
 
     while (!want_exit && !closed) {

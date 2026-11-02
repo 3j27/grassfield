@@ -28,6 +28,7 @@ Row {
 
             width: Tokens.widgetSizeButtonWidth
             height: Tokens.menuItemHeight
+            z: segmentFocus.active ? 1 : 0
             activeFocusOnTab: true
             Accessible.role: Accessible.RadioButton
             Accessible.name: Registry.sizeLabel(modelData)
@@ -46,8 +47,15 @@ Row {
                 anchors.fill: parent
                 radius: Tokens.radiusControl
                 color: segment.selected ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                border.width: segment.activeFocus ? Tokens.controlFocusOutline : 0
-                border.color: segment.selected ? Appearance.colors.text : Appearance.colors.accent
+            }
+
+            // The shared ring outside the segment, after a key only, above its neighbours (ADR-0039 step 7).
+            KeyFocus {
+                id: segmentFocus
+            }
+
+            FocusRing {
+                visible: segmentFocus.active
             }
 
             WidgetLabel {

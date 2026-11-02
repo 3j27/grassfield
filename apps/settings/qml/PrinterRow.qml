@@ -37,7 +37,7 @@ T.AbstractButton {
             visible: root.contentTop > 0
             x: Tokens.settingsRowInset
             width: parent.width - 2 * Tokens.settingsRowInset
-            height: 1
+            height: Tokens.appsBorderWidth
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 
@@ -52,7 +52,7 @@ T.AbstractButton {
 
         // Keyboard focus only (never after a click).
         FocusRing {
-            shapeRadius: Tokens.radiusMenu
+            shapeRadius: Tokens.radiusGroup
             visible: root.visualFocus
         }
     }

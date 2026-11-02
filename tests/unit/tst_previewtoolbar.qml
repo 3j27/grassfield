@@ -48,9 +48,13 @@ TestCase {
         }
     }
 
+    // A group is the toolbar's rimmed capsule around 34-pt group buttons, as every app's toolbar (ADR-0039 step 16; it was a
+    // floating Material capsule around 28-pt buttons).
     function test_groupSize() {
-        compare(group.width, 2 * Tokens.previewToolbarButtonSize + 2 * Tokens.spacingXs);
-        compare(group.height, Tokens.previewToolbarCapsuleHeight);
+        compare(group.width, 2 * Tokens.toolbarGroupButton + 2 * Tokens.spacingXs);
+        compare(group.height, Tokens.toolbarCapsule);
+        compare(group.fillOpacity, Tokens.toolbarCapsuleFillOpacity, "the rimmed glass capsule");
+        verify(group.hairline > 0, "its rims");
         verify(row.width > group.width);
     }
 

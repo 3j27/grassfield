@@ -17,6 +17,10 @@ namespace gf::chrome {
         return clientChrome ? 0.0 : theme::kTitlebarHeight;
     }
 
+    double band(bool clientChrome, bool splitMember) {
+        return splitMember ? 0.0 : band(clientChrome);
+    }
+
     std::vector<uint32_t> wmCapabilities(bool clientChrome, bool minimizeBridged) {
         std::vector<uint32_t> caps{kCapFullscreen, kCapMaximize};
         if (clientChrome && minimizeBridged)
@@ -55,19 +59,32 @@ namespace gf::chrome {
     }
 
     bool nextRevealed(bool revealed, const RevealInput& in) {
-        if (!in.fullscreen)
+        if (!in.revealable)
             return false;
-        if (revealed && in.pressing)
-            return true; // a press on a light is decided at its release, over the bar
+        if (in.pressing)
+            return revealed; // a press on a light is decided at its release, over the bar; a member's drag holds its bar
         if (!in.onMonitor || in.pointerY < 0.0)
             return false;
-        if (!revealed)
-            return in.pointerY <= kRevealEdge;
-        return in.pointerY < in.barTop + theme::kTitlebarHeight + kRevealSlack;
+        const bool onBand = in.pointerY < in.barTop + theme::kTitlebarHeight + kRevealSlack;
+        if (revealed)
+            return onBand && !in.overOther; // across the gap between the halves too, until the other half
+        return in.inSpan && (in.pointerY <= kRevealEdge || (in.handOver && onBand));
     }
 
     bool lightAvailableInFullscreen(titlebar::Button button) {
         return button != titlebar::Button::Minimize;
+    }
+
+    RevealedPress revealedPress(titlebar::HitTarget hit, bool memberInPlace) {
+        if (const auto light = titlebar::buttonForHit(hit))
+            return lightAvailableInFullscreen(*light) ? RevealedPress::ArmLight : RevealedPress::Nothing;
+        return hit == titlebar::HitTarget::DragArea && memberInPlace ? RevealedPress::MemberDrag : RevealedPress::Nothing;
+    }
+
+    bool lightAvailable(titlebar::Button button, bool fullscreen, bool fixedSize, bool sized) {
+        if (fullscreen && !lightAvailableInFullscreen(button))
+            return false;
+        return button != titlebar::Button::Zoom || !fixedSize || sized;
     }
 
     void CRevealPresses::onPress(uint32_t button, bool onBar) {

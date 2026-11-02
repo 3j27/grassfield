@@ -32,7 +32,7 @@ QtObject {
         statusWarn: "#E0B000",  // own yellow of a status dot, dark appearance: 6.4:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusOff: "#FF6B63",  // own red of a status dot, dark appearance: 4.7:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#25231F",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #232323 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
-        windowTextSecondary: "#DFDDD7",  // Secondary text on the opaque app window surface, dark appearance: the same as textSecondary (no dark macOS reference, the dark values stay as they were); visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #DCDCE4 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        windowTextSecondary: "#A4A19C",  // Secondary text drawn directly on the opaque app window, on its group fill or on its sidebar, dark appearance (Appearance.windowSecondary): the owner's answer to ADR-0039 Q3 (2026-10-29), #A1A1A6, close to macOS's secondary label, warm as the owner's warm neutrals of 2026-10-30 make every neutral (ADR-0040: OKLCH hue 85, chroma 0.0075, its lightness kept); 5.6:1 on the window, 5.0:1 on a group, 6.1:1 on the sidebar, tested (tests/visual/test_contrast_tokens.py WindowSurfacePairs); was #DFDDD7, the material's textSecondary, which read like the titles (10.7:1 against the text's 13.4:1); fields, tabs and chips keep textSecondary on their own fills [ref: docs/decisions/ADR-0039-design-polish.md § Questions for the owner]
         chipFill: "#FFFFFF",  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#FF6B63",  // own value: the CPU Load graph's System share (AM29), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
         activityGraphUser: "#5AA2FF",  // own value: the CPU Load graph's User share and the Energy Impact graph (AM29, AM39), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -208,6 +208,10 @@ QtObject {
     readonly property int radiusMenuBar: 0
     // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusMenu: 12
+    // a Settings group, its rows' rings and the boxes that sit with the groups (banners, the hero, a sheet's list well): macOS 27 measures 11.9 at the 45-degree point (Desktop & Dock's groups, 512 Pixels release capture); its own role, no longer the menus' radius (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int radiusGroup: 12
+    // a cover art's corner in Now Playing (Control Center's module and the widget): macOS 27's Control Center measures 10.2 at the 45-degree point on its 40-pt artwork; the widget's is concentric with its tile (widget.radius 26 less its 16 padding); was radius.control 6 (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int radiusArtwork: 10
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
     readonly property int radiusPanel: 18
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers)
@@ -216,10 +220,10 @@ QtObject {
     readonly property int radiusBanner: 18
     // docs/specs/search.md: rounded about 26 pt
     readonly property int radiusSearch: 26
-    // F1 gap 13: alert radius ~24 +-3 (Dialog frame: confirm, notice, About, Force Quit) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
-    readonly property int radiusAlert: 24
-    // F1 gap 13: sheet radius 26 +-1.5 [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
-    readonly property int radiusSheet: 26
+    // macOS 27 alerts: 25.6-27.3 at the 45-degree point (Mail's Save this message as a draft?, Finder's Empty Trash; 512 Pixels release captures), rounder than the window; the owner's choice of 2026-10-31 over ADR-0039 Q2 (a), which gave alerts the window's 16 when no macOS 27 alert was measured; was 24, the macOS 26 value (Dialog frame: confirm, notice) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int radiusAlert: 26
+    // the window's corner (its 45-degree point, Hyprland rounding 20 at power 2.6: ADR-0024), the owner's answer to ADR-0039 Q2 (a) of 2026-10-29; macOS 27 sheets measure 15.4-17.1 (Print, TextEdit's Open); was 26, the macOS 26 value (the shared Sheet, the shell's Force Quit and About) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int radiusSheet: 16
 
     // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 measurement of a shadow exists]
     readonly property int shadowBlur: 18
@@ -238,6 +242,14 @@ QtObject {
     readonly property int motionReducedMax: 100
     // estimate; Easing.BezierSpline control points [ref: docs/specs/ui.md § Functional requirements; no F1 capture of motion exists]
     readonly property var motionCurveStandard: [0.2, 0.0, 0.0, 1.0, 1.0, 1.0]
+    // a panel or a sheet arriving or leaving (the Notification Center, a banner sliding in): Apple's documented default spring (response 0.55, no bounce) as a fixed-duration stand-in, the owner's answer to ADR-0039 Q6 (a) of 2026-10-29; menus stay instant; Reduce Motion caps it (Appearance.duration) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property int motionPanel: 650
+    // Easing.BezierSpline control points of the panel motion: the default spring's stand-in, cubic-bezier (0.24, 0.24, 0.15, 1.04) (ADR-0039 Q6 (a)) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property var motionCurvePanel: [0.24, 0.24, 0.15, 1.04, 1.0, 1.0]
+    // estimate: an element arriving (decelerating), one curve for the role: the compositor's own windows and layers open on it (looknfeel.lua gfDecelerate) (ADR-0039 step 20) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property var motionCurveEnter: [0.32, 0.72, 0.0, 1.0, 1.0, 1.0]
+    // estimate: an element leaving (accelerating), one curve for the role: the compositor's windows and layers close on it (looknfeel.lua gfAccelerate) (ADR-0039 step 20) [ref: docs/audits/design-polish-2026-10-29.md § 3.16 Motion roles]
+    readonly property var motionCurveExit: [0.4, 0.0, 1.0, 1.0, 1.0, 1.0]
 
     // master-prompt § 5.5 default, owner validates on screenshots
     readonly property real materialDefaultTransparency: 0.25
@@ -265,6 +277,8 @@ QtObject {
     readonly property real materialBorderOpacity: Appearance.increaseContrast ? 0.5 : 0.14
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialHoverOpacity: 0.12
+    // the neutral selection of an item on glass (one role, ADR-0039 step 12, G6): the current tile of the switcher and of a stack's grid, an Overview's minimized window under the pointer or the keyboard, the tiling suggestions' window; the hover ink (black in light, white in dark) at this alpha. macOS 27's App Switcher draws its selection #ACACAC on its #E5E5E5 glass, black at 0.25 (1.8:1; the 512 Pixels release capture Finder-App-Switcher) [ref: docs/audits/design-polish-2026-10-29.md § 3.10 Hover and selection roles]
+    readonly property real materialSelectionOpacity: 0.25
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
     readonly property real materialSeparatorOpacity: Appearance.increaseContrast ? 0.45 : 0.16
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours)
@@ -275,8 +289,8 @@ QtObject {
     readonly property real materialHoverActiveFactor: 1.5
     // estimate: the inner specular rim of the material in the light appearance (one device pixel, stronger along the top edge); the dark appearance keeps material.highlightOpacity (macOS 27 dark menu: the inner rim about 0.2 white over the panel) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
     readonly property real materialHighlightOpacityLight: 0.45
-    // the material's outer edge in the dark appearance: one device pixel of near black outside the light inner rim (macOS 27 dark menu: outer pixel 4 against a 62 panel) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
-    readonly property real materialEdgeOpacityDark: 0.6
+    // the material's outer edge in the dark appearance: one device pixel of near black outside the light inner rim (macOS 27 dark menu: outer pixel 4 against a 62 panel); Increase Contrast raises it as much as it raises the light appearance's edge (material.borderOpacity 0.14 to 0.5, 0.36 more: 0.96), ADR-0039 step 22 [ref: docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024; docs/audits/design-polish-2026-10-29.md § 3.7.2 Increase Contrast]
+    readonly property real materialEdgeOpacityDark: Appearance.increaseContrast ? 0.96 : 0.6
     // control fill (push button, field, segmented track, unchecked box) in the light appearance: macOS 26/27 light controls about 6 percent black, not a dark well (docs/audits/visual-tahoe-2026-10-25.md section 2; macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024); the A2 worst case keeps material.fillOpacity
     readonly property real materialFillOpacityLight: 0.06
     // F1 gap 18: light separators about 8 percent black (reference 234 grey); non-text, outside the A2 text-contrast scope [ref: docs/testing/f1-reference-gaps.md § Window chrome and Neutral colours; docs/specs/ui.md]
@@ -409,8 +423,6 @@ QtObject {
     readonly property real dockDotHaloOpacity: 0.5
     // Dock fidelity pass: top rim gradient strength (reference: lighter rim along the top edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockHighlightOpacity: 0.34
-    // Dock fidelity pass: 1 px rim, white in both appearances (glass edge) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
-    readonly property real dockRimOpacity: 0.34
     // macOS convention: at most three recent applications [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property int dockRecentMax: 3
     // estimate: recent documents listed in an app's Dock menu (macOS lists up to ten; five keep the menu short) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
@@ -527,6 +539,16 @@ QtObject {
     readonly property int dockSeparatorSpace: 17
     // Separator line: the separator colour at 0.3 (was the generic 0.16), macOS about -34 % luminance; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, Dock) [ref: docs/testing/f1-reference-gaps.md § Dock; docs/specs/dock.md]
     readonly property real dockSeparatorOpacity: 0.3
+    // own value: the room between an app tile's edge and the live graph Activity Monitor gives it (View > Dock Icon, ADR-0038 AM62) [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property int dockTileGraphInset: 3
+    // own value: the graph's dark plate over the tile, opaque enough for its bars to read over any icon (AM62) [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property real dockTileGraphFillOpacity: 0.88
+    // AM62: CPU Usage is a gauge of ten segments [ref: docs/specs/activity.md]
+    readonly property int dockTileGraphSegments: 10
+    // own value: the gap between two bars or two segments of the tile's graph [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property int dockTileGraphGap: 1
+    // own value: a CPU Usage gauge segment that is not lit, white on the graph's dark plate [ref: docs/specs/activity.md; docs/specs/dock.md]
+    readonly property real dockTileGraphUnlitOpacity: 0.18
 
     // task spec: pointer dwell before a hot corner fires [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int hotCornerDwellMs: 150
@@ -620,6 +642,16 @@ QtObject {
     readonly property int controlButtonHeight: 24
     // macOS 27 push button (24 tall capsule): the label 12 from each end, no minimum width (Wi-Fi's Details… 76 x 24; macOS 15 Date & Time's Set… 49 x 22) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi; docs/audits/settings-parity-2026-10-26.md § Controls]
     readonly property int controlPushPadding: 12
+    // macOS 27 sheet button (Button.sheet): a 24-tall rounded rectangle, not a capsule, its corner's 45-degree point that of a 6.8-pt circle (+-0.9; Print, TextEdit's Open, Finder's Connect to Server), its label pushPadding from each end [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int controlSheetButtonRadius: 7
+    // the switch knob's drop shadow, the shadow colour at this opacity (macOS 27 Settings, an off switch at 2 px/pt: the shadow darkens the track by 0.077 of its value under the knob, 0.050 at its side, 0.027 above it; this token, the blur and the offset give 0.077, 0.051 and 0.034 in a 2x render) [ref: docs/audits/design-polish-2026-10-29.md § 3.24 The switch knob's shadow]
+    readonly property real controlKnobShadowOpacity: 0.22
+    // its blur (the measured shadow fades into the track over about 5 pt; 3 matches its first three device pixels) [ref: docs/audits/design-polish-2026-10-29.md § 3.24 The switch knob's shadow]
+    readonly property int controlKnobShadowBlur: 3
+    // its offset down (darker under the knob than above it) [ref: docs/audits/design-polish-2026-10-29.md § 3.24 The switch knob's shadow]
+    readonly property real controlKnobShadowOffsetY: 0.5
+    // WCAG 1.4.11 (non-text contrast) for the white knob of a switch or a slider on its on fill (the selection colour, ADR-0039 D-Q4): under it the knob is outlined in the fill's mark colour (Accent.knobOutlined; the yellow and green fills, 2.02:1 and 2.52:1) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property real controlKnobMinContrast: 3.0
     // F1 gap 13: alert capsule buttons 110x28 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlAlertButtonHeight: 28
     // F1 gap 13: gap between alert buttons [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
@@ -674,6 +706,30 @@ QtObject {
     readonly property int controlPageStepFactor: 10
     // GF-085: inset of the stepper arrow highlight [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlStepperInset: 1
+    // moved from settings.spinnerSize, the spinner shared by every app (ADR-0039 D4, step 23): the progress spinner beside a section title: 8 spokes 2 wide, from 2.25 to 7.75 off its centre [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real controlSpinnerSize: 15.5
+    // moved from settings.spinnerSpokes, the spinner shared by every app (ADR-0039 D4, step 23): the spinner's spokes [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlSpinnerSpokes: 8
+    // moved from settings.spinnerSpokeWidth, the spinner shared by every app (ADR-0039 D4, step 23): a spoke's width (round ends) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlSpinnerSpokeWidth: 2
+    // moved from settings.spinnerSpokeLength, the spinner shared by every app (ADR-0039 D4, step 23): a spoke's length [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real controlSpinnerSpokeLength: 5.5
+    // moved from settings.spinnerTailOpacity, the spinner shared by every app (ADR-0039 D4, step 23): the lightest spoke, behind the darkest (the secondary colour) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property real controlSpinnerTailOpacity: 0.2
+    // moved from settings.spinnerStepMs, the spinner shared by every app (ADR-0039 D4, step 23): the spinner's step: one spoke, 8 a second [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
+    readonly property int controlSpinnerStepMs: 125
+    // moved from store.ringSize, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingSize: 26
+    // moved from store.ringStroke, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property real controlProgressRingStroke: 2.5
+    // moved from store.ringSweep, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: the arc that turns while an operation waits or has no count yet (degrees) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingSweep: 100
+    // moved from store.ringTurnMs, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: one turn of that arc (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingTurnMs: 1100
+    // moved from store.ringStopSize, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]: the square inside it, removing a waiting operation from the queue
+    readonly property int controlProgressRingStopSize: 8
+    // moved from store.ringStopRadius, the determinate ring shared by every app (ADR-0039 D4, step 24): estimate: that square's corner [ref: docs/audits/store-2026-10-27/parity.md]
+    readonly property int controlProgressRingStopRadius: 2
 
     // F1 gap 6: Quick Settings column 291 +-1 (4 x 63 cells + 3 x 13 gaps) [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
     readonly property int panelControlCenterWidth: 291
@@ -685,6 +741,20 @@ QtObject {
     readonly property int panelForceQuitWidth: 380
     // an app's icon in a Force Quit row: the menu row height less 6, unchanged value, was a literal offset in ForceQuitPanel.qml (ADR-0039 step 3, the literals guard)
     readonly property int panelForceQuitIconSize: 18
+    // estimate: three tiles of panel.sharePickerTileWidth with their gaps inside a sheet's padding (the system screen-sharing picker shows its displays and windows as a grid of thumbnails); no measured value yet, F1 sign-off pending (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerWidth: 620
+    // estimate: a thumbnail wide enough to tell windows apart, three to a row of panel.sharePickerWidth; no measured value yet (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerTileWidth: 176
+    // estimate: panel.sharePickerTileWidth at 16:10, the box a display or a window is fitted into with its own aspect (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerThumbHeight: 110
+    // the 16:10 box of panel.sharePickerThumbHeight, the aspect a thumbnail takes until its capture has a size (ADR-0035 D-6, step 7a)
+    readonly property real panelSharePickerThumbAspect: 1.6
+    // an app's icon in a thumbnail's place when the window has no capture source: the size of an alert's symbol (panel.alertIconGlyph), unchanged (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerIconSize: 48
+    // the smallest area Selection shares, in the display's logical pixels either way: a click or a slip of the pointer is no area (ADR-0035 D-6, step 7b)
+    readonly property int panelSharePickerMinArea: 16
+    // rows of tiles shown before the grid scrolls, so that the sheet stays smaller than a laptop's display (ADR-0035 D-6, step 7a)
+    readonly property int panelSharePickerRows: 2
     // the glyphs of a Control Center appearance choice: the menu icon size plus 4, unchanged value, was a literal offset in AppearanceSection.qml (ADR-0039 step 3, the literals guard)
     readonly property int panelAppearanceGlyphSize: 18
     // F1 gap 6: 2x1 module height 63 [ref: docs/testing/f1-reference-gaps.md § Quick Settings and Dialogs, alerts and sheets; docs/specs/controlcenter.md]
@@ -729,6 +799,29 @@ QtObject {
     readonly property int panelAlertWidth: 260
     // estimate: a permission alert takes no click, key or close this long after it became the active window, so one meant for what was there before never answers it (ADR-0035 5a-5) [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
     readonly property int panelAlertArmMs: 500
+
+    // the sidebar search field: #E9E9E9 in its middle on the #ECECEC sidebar, the text colour at 0.012 (moved from settings.fieldFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarFieldFillOpacity: 0.012
+    // the dark rim of the search field and the toolbar capsule, one device pixel: #BDBDBD on the sides, black at 0.2 (moved from settings.rimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarRimOpacity: 0.2
+    // estimate: the dark rim in the dark appearance (no macOS 27 dark capture) (moved from settings.rimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarRimOpacityDark: 0.5
+    // the light rim inside the dark one, one device pixel: #FFFFFF / #F8F8F8 against the #F1F1F1 fill, white at 0.7 (moved from settings.innerRimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarInnerRimOpacity: 0.7
+    // estimate: the light inner rim in the dark appearance (no macOS 27 dark capture) (moved from settings.innerRimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarInnerRimOpacityDark: 0.08
+    // the toolbar's back / forward capsule: #FAFAFA on the white pane, the text colour at 0.02 (moved from settings.toolbarFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarCapsuleFillOpacity: 0.02
+    // the hairline between back and forward: #C7C7C7 on #FAFAFA, black at 0.2 (moved from settings.toolbarDividerOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property real toolbarDividerOpacity: 0.2
+    // the hairline between back and forward is 19.5 tall, centred (moved from settings.toolbarDividerHeight: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
+    readonly property int toolbarDividerHeight: 20
+    // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) (moved from files.toolbarCapsule: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int toolbarCapsule: 36
+    // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) (moved from files.toolbarGroupButton: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
+    readonly property int toolbarGroupButton: 34
+    // a search field (SearchField: the rimmed capsule of an app window's sidebar and toolbar), Settings' 28 (moved from settings.searchHeight, an estimate of the Settings app; ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings]
+    readonly property int toolbarSearchHeight: 28
 
     // F1 gap 6: grid cell 63 (1x1 circle, 2x1 capsule 139 x 63) [ref: docs/testing/f1-reference-gaps.md § Quick Settings; docs/specs/controlcenter.md]
     readonly property int quicksettingsCell: 63
@@ -798,6 +891,8 @@ QtObject {
     readonly property int notificationBannerGap: 6
     // design/reference/macos (gap 7): app icon 32 pt in banners and cards [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationBannerIconSize: 32
+    // the app icon tile of a notification while its image loads: an app icon's corner at notification.bannerIconSize 32 (0.225 of its side, as an app icon); it borrowed the Dock's radius.dockIcon 11 (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int notificationIconRadius: 7
     // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationIconInset: 2
     // F1 gap 7 (meas-A): text column 57-58 from the card edge = 14 + 32 icon + 11 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
@@ -882,6 +977,10 @@ QtObject {
     readonly property real glassControls: 0.15
     // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value (macOS 26 measured the Apps panel 0.35-0.70); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py)
     readonly property real glassApps: 0.55
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value, the Overview's Desktops band and the widget gallery (macOS 26 measured 0-0.15: thumbnails, labels on a plate); raised by GlassTint.js to what keeps its text at 4.5:1 over the backdrop (A2: tests/visual/test_contrast_tokens.py); ADR-0039 step 22 [ref: docs/audits/design-polish-2026-10-29.md § 3.1 Materials]
+    readonly property real glassGallery: 0.15
+    // ADR-0024 section 2 point 1: the Grassfield default of the class at the default slider value, the desktop's and the Notification Center's widgets (macOS 26 measured near-opaque, light 244-255); ADR-0039 step 22 [ref: docs/audits/design-polish-2026-10-29.md § 3.1 Materials]
+    readonly property real glassWidgets: 0.92
     // added to 4.5:1 over a measured backdrop (a picture's 5th to 95th percentile, the blur's own lift and the grey approximation of a coloured backdrop); the unknown backdrop is the exact black-to-white worst case [ref: ADR-0024; tests/visual/test_contrast_tokens.py]
     readonly property real glassContrastMargin: 0.2
     // ADR-0024 G-3 per surface: the output's luminance grid is this many cells across (a QS module or a notification card covers 2 to 4) [ref: ADR-0024]
@@ -1022,10 +1121,16 @@ QtObject {
     readonly property int lockSubmitSize: 22
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockBottomMargin: 112
-    // A2: was 0.28 (clock 1.8:1 over a white wallpaper); shadow-colour scrim over the blurred wallpaper, white text 5.3:1 or more over any wallpaper (white is the worst case), tested in tests/visual/test_contrast_tokens.py
+    // ADR-0040 section 4 (IQ-T2 A): the lock's scrim and text fade in over this long once its surface shows (the wallpaper does not fade; the lock is engaged at once and the field takes input from the first frame); Reduce Motion caps it (Appearance.duration)
+    readonly property int lockFadeInMs: 200
+    // ADR-0040 section 4 (IQ-T2 A): after a PAM success the lock's scrim and text fade out over this long while the session is still locked (state releasing), then the lock is released; Reduce Motion caps it
+    readonly property int lockFadeOutMs: 200
+    // A2: was 0.28 (clock 1.8:1 over a white wallpaper); shadow-colour scrim under the two text bands over the wallpaper (sharp since ADR-0040 step 4a; blurred before), white text 5.3:1 or more over any wallpaper (white is the worst case), tested in tests/visual/test_contrast_tokens.py
     readonly property real lockDimOpacity: 0.6
-    // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
-    readonly property int lockBlurMax: 64
+    // ADR-0040 section 4 (IQ-W4 A, sharp backdrop, banded scrim): the shadow-colour scrim between the date and clock band and the account band, where no text lies; the text bands stay at lock.dimOpacity (gate A2 per band, tests/visual/test_contrast_tokens.py)
+    readonly property real lockScrimClearOpacity: 0.25
+    // ADR-0040 section 4 (IQ-W4 A): px of the ramp from lock.dimOpacity to lock.scrimClearOpacity, on the clear side of each text band (outside every text line at every text scale)
+    readonly property int lockScrimFeather: 48
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockShakeDistance: 12
     // estimate: duration of one shake leg in ms [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/security.md]
@@ -1170,8 +1275,6 @@ QtObject {
     readonly property int settingsSidebarItemHeight: 32
     // macOS 27 System Settings sidebar icon tiles 20 x 20 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsSidebarIconSize: 20
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsSearchHeight: 28
     // macOS 27 System Settings groups 468 wide with 20 margins in a 508 detail pane (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsContentMaxWidth: 468
     // macOS 27 System Settings plain rows 38 pt apart (Desktop & Dock pane) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
@@ -1195,13 +1298,9 @@ QtObject {
     // macOS 26/27 System Settings groups about 10 apart (visual-tahoe-2026-10-25.md Settings) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsGroupGap: 10
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsPageTitleSize: Math.round(20 * Appearance.textScale)
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsGroupLabelWidth: 150
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsPickerWidth: 150
-    // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
-    readonly property int settingsShortcutKeyMinWidth: 28
     // estimate: Settings system sections re-read the tools' state while a pane is open [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property int settingsSystemRefreshMs: 4000
     // estimate: Displays pane, height of the arrangement preview [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
@@ -1328,8 +1427,8 @@ QtObject {
     readonly property real settingsBannerTitleBaseline: 22.5
     // macOS 27 Notifications: the header card's text, its first baseline under the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
     readonly property real settingsBannerTextBaseline: 38.5
-    // macOS 27 Notifications: the header card's text lines 14 apart [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
-    readonly property int settingsBannerTextLineHeight: 14
+    // macOS 27 Notifications: the header card's text lines 14 apart (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsBannerTextLineHeight: Math.round(14 * Appearance.textScale)
     // macOS 27 Notifications: the card ends 13 under the text's last baseline [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
     readonly property int settingsBannerBottom: 13
     // macOS 27 Notifications and Focus: a row with a 28-pt picture, 52 tall (+1 separator) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
@@ -1382,8 +1481,6 @@ QtObject {
     readonly property string settingsColorSquareBlack: "#000000"
     // same: transparent black end of the square [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
     readonly property string settingsColorSquareBlackClear: "#00000000"
-    // estimate: Sound pane, width of the percentage next to a slider [ref: docs/testing/f1-reference-gaps.md § Settings; docs/specs/settings.md]
-    readonly property int settingsVolumeValueWidth: 44
     // gap between the sidebar's groups: the row pitch is 45 across a group boundary instead of 32 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
     readonly property int settingsSidebarGroupGap: 13
     // General's header card: a 48-pt tile, centred [ref: docs/audits/settings-parity-2026-10-26.md § General]
@@ -1392,14 +1489,14 @@ QtObject {
     readonly property int settingsHeroIconTop: 26
     // estimate: the header tile's corner, the sidebar tiles' proportion (5 on 20) on 48 [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsHeroIconRadius: 11
-    // header title, bold: cap height 16.5 (SF about 23 pt); Inter's cap height 0.727 gives 22 [ref: docs/audits/settings-parity-2026-10-26.md § General]
-    readonly property int settingsHeroTitleSize: 22
+    // header title, bold: cap height 16.5 (SF about 23 pt); Inter's cap height 0.727 gives 22 (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTitleSize: Math.round(22 * Appearance.textScale)
     // the header title's baseline below the card top [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property real settingsHeroTitleBaseline: 107.5
-    // header text 12 pt (cap 8.5) in the window's secondary grey [ref: docs/audits/settings-parity-2026-10-26.md § General]
-    readonly property int settingsHeroTextSize: 12
-    // header text line pitch [ref: docs/audits/settings-parity-2026-10-26.md § General]
-    readonly property int settingsHeroTextLineHeight: 17
+    // header text 12 pt (cap 8.5) in the window's secondary grey (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextSize: Math.round(12 * Appearance.textScale)
+    // header text line pitch (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § General]
+    readonly property int settingsHeroTextLineHeight: Math.round(17 * Appearance.textScale)
     // the header text's first baseline below the card top [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsHeroTextBaseline: 124
     // the header text's last baseline to the card bottom [ref: docs/audits/settings-parity-2026-10-26.md § General]
@@ -1446,22 +1543,6 @@ QtObject {
     readonly property real settingsPopupInset: 3.5
     // the header tile's glyph nearly fills it (the gear's ink about 36 on 48: our gear is 18.4 of its 24 units) [ref: docs/audits/settings-parity-2026-10-26.md § General]
     readonly property int settingsHeroGlyphSize: 46
-    // the sidebar search field: #E9E9E9 in its middle on the #ECECEC sidebar, the text colour at 0.012 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsFieldFillOpacity: 0.012
-    // the toolbar's back / forward capsule: #FAFAFA on the white pane, the text colour at 0.02 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsToolbarFillOpacity: 0.02
-    // the dark rim of the search field and the toolbar capsule, one device pixel: #BDBDBD on the sides, black at 0.2 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsRimOpacity: 0.2
-    // estimate: the dark rim in the dark appearance (no macOS 27 dark capture) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsRimOpacityDark: 0.5
-    // the light rim inside the dark one, one device pixel: #FFFFFF / #F8F8F8 against the #F1F1F1 fill, white at 0.7 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsInnerRimOpacity: 0.7
-    // estimate: the light inner rim in the dark appearance (no macOS 27 dark capture) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsInnerRimOpacityDark: 0.08
-    // the hairline between back and forward: #C7C7C7 on #FAFAFA, black at 0.2 [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real settingsToolbarDividerOpacity: 0.2
-    // the hairline between back and forward is 19.5 tall, centred [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property int settingsToolbarDividerHeight: 20
     // About's header (the device picture and its name) above the first group: the macOS 15 capture's 52 to 233 below the toolbar, less the group gap [ref: docs/audits/settings-parity-2026-10-26.md § About]
     readonly property int settingsAboutHeaderHeight: 169
     // the device picture 40 below the header's top (macOS 15 capture: 104 in the window) [ref: docs/audits/settings-parity-2026-10-26.md § About]
@@ -1512,10 +1593,10 @@ QtObject {
     readonly property int settingsPreviewFirstBaseline: 21
     // the preview's second line: its baseline 16 below the first [ref: docs/audits/settings-parity-2026-10-26.md § Language & Region]
     readonly property int settingsPreviewLineGap: 16
-    // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
-    readonly property int settingsCaptionDetailSize: 12
-    // macOS 27: a section title's explanation, its lines 14 apart (Notification Center) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
-    readonly property int settingsCaptionDetailLineHeight: 14
+    // a section title's explanation under it: 12-pt text in the secondary colour (caps 8.5 tall) (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
+    readonly property int settingsCaptionDetailSize: Math.round(12 * Appearance.textScale)
+    // macOS 27: a section title's explanation, its lines 14 apart (Notification Center) (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Notifications]
+    readonly property int settingsCaptionDetailLineHeight: Math.round(14 * Appearance.textScale)
     // the explanation's baseline 16.5 below the section title's [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
     readonly property real settingsCaptionDetailGap: 16.5
     // a list's + / − footer: 23.5 tall with its top line [ref: docs/audits/settings-parity-2026-10-26.md § Login Items]
@@ -1548,8 +1629,8 @@ QtObject {
     readonly property real settingsStorageFreeOpacity: 0.14
     // the legend: its baseline 78 below the card's top [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
     readonly property int settingsStorageLegendBaseline: 78
-    // the legend: 10-pt text (caps 7 tall) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
-    readonly property int settingsStorageLegendSize: 10
+    // the legend: 10-pt text (caps 7 tall) (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
+    readonly property int settingsStorageLegendSize: Math.round(10 * Appearance.textScale)
     // the legend: an 8-pt dot in the category's colour [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
     readonly property int settingsStorageLegendDot: 8
     // the legend: 5 from the dot to its name [ref: docs/audits/settings-parity-2026-10-26.md § Storage]
@@ -1616,20 +1697,8 @@ QtObject {
     readonly property int settingsWifiGlyphSize: 15
     // the signal glyph: ink 14.5 x 10.5 (14 x 10.7 at 14) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property int settingsWifiSignalSize: 14
-    // the progress spinner beside a section title: 8 spokes 2 wide, from 2.25 to 7.75 off its centre [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property real settingsSpinnerSize: 15.5
-    // the spinner's spokes [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property int settingsSpinnerSpokes: 8
-    // a spoke's width (round ends) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property int settingsSpinnerSpokeWidth: 2
-    // a spoke's length [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property real settingsSpinnerSpokeLength: 5.5
-    // the lightest spoke, behind the darkest (the secondary colour) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property real settingsSpinnerTailOpacity: 0.2
     // the spinner's right edge from the group edge, centred on the section title [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property real settingsSpinnerInset: 12.5
-    // the spinner's step: one spoke, 8 a second [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-    readonly property int settingsSpinnerStepMs: 125
     // how long a requested scan shows the spinner (NetworkManager answers RequestScan at once and scans for a few seconds) [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
     readonly property int settingsWifiScanMs: 8000
     // the pane asks for a new scan this often while it is open, as macOS keeps scanning [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
@@ -1646,10 +1715,10 @@ QtObject {
     readonly property real settingsServiceStatusInset: 61.5
     // an empty list's group (VPN: No VPN configurations): 36 tall, the text centred in the secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Network and VPN]
     readonly property int settingsEmptyListHeight: 36
-    // Bluetooth's header text: 12 pt (cap 9), larger than Wi-Fi's 11 [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
-    readonly property int settingsBtHeaderTextSize: 12
-    // Bluetooth's header text: lines 15 apart [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
-    readonly property int settingsBtHeaderTextLineHeight: 15
+    // Bluetooth's header text: 12 pt (cap 9), larger than Wi-Fi's 11 (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextSize: Math.round(12 * Appearance.textScale)
+    // Bluetooth's header text: lines 15 apart (follows Text size with its text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
+    readonly property int settingsBtHeaderTextLineHeight: Math.round(15 * Appearance.textScale)
     // Bluetooth's header text: first baseline 40 below the group top [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
     readonly property int settingsBtHeaderTextBaseline: 40
     // Bluetooth's header row: 13 under the text's last baseline (68 tall with two lines) [ref: docs/audits/settings-parity-2026-10-26.md § Bluetooth]
@@ -1696,8 +1765,8 @@ QtObject {
     readonly property int settingsChartWidth: 400
     // a chart's value labels (100 %, 50 %, 0 %) at 415 from the group edge, centred on their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
     readonly property int settingsChartLabelInset: 415
-    // a chart's labels: 12 pt, secondary colour [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
-    readonly property int settingsChartLabelSize: 12
+    // a chart's labels: 12 pt, secondary colour (follows Text size, as every app's text: ADR-0039 Q7, step 18) [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
+    readonly property int settingsChartLabelSize: Math.round(12 * Appearance.textScale)
     // a chart's time labels: baseline 37.5 below the plot, 3 after their line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
     readonly property real settingsChartAxisBaseline: 37.5
     // a time label 3 after its vertical line [ref: docs/audits/settings-parity-2026-10-26.md § Battery]
@@ -1872,8 +1941,6 @@ QtObject {
     readonly property var settingsAppearanceThumbLightX: [0.42, 0.56, 0.7]
     // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Auto: the dark desktop from this fraction of the picture's width to its right edge [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
     readonly property real settingsAppearanceThumbAutoSplit: 0.49
-    // Grassfield's own drawing of an appearance thumbnail (a small desktop, as macOS 27 draws one): Dark: the artwork under the shadow colour at this opacity (the darker wallpaper) [ref: docs/audits/settings-parity-2026-10-26.md § Appearance]
-    readonly property real settingsAppearanceThumbDarkWallpaper: 0.35
     // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock's size, a fraction of the picture's height
     readonly property real settingsSaverThumbClockSize: 0.3
     // ADR-0032: a screen saver's thumbnail, Grassfield's own drawing of what the shell shows (shell/saver/SaverView.qml): the clock alone, its left edge, a fraction of the picture's width (off the centre: it moves every minute)
@@ -2073,6 +2140,11 @@ QtObject {
     // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsPushRowHeight: 44
 
+    // estimate: how long a reload of the session configuration waits for pacman's database lock to go before it goes ahead anyway, under a display trial's 15 s so the trial's countdown is not what ends the wait (ADR-0041 step 2b, I-2's residual) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
+    readonly property int sessionConfigLockWaitMs: 10000
+    // estimate: how often that wait looks at the lock file again (ADR-0041 step 2b) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
+    readonly property int sessionConfigLockPollMs: 500
+
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164
     // estimate: widgets v1, px between widgets [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
@@ -2215,6 +2287,8 @@ QtObject {
     readonly property int filesSpringDelay: 500
     // own value: a window size is kept this long after the last resize step (one write per resize, not per frame) [ref: docs/specs/files.md § Tabs and windows]
     readonly property int filesWindowSizeDelay: 250
+    // own value: a folder that has listed nothing after this long shows the spinner in its view (ADR-0039 step 23), so a local folder never flashes it [ref: docs/specs/files.md § Views and selection; docs/decisions/ADR-0039-design-polish.md § Decision]
+    readonly property int filesLoadingDelay: 500
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPathBarHeight: 26
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
@@ -2339,10 +2413,18 @@ QtObject {
     readonly property int filesPrintSheetWidth: 480
     // estimate: the print sheet's pop-ups (Printer, Pages, Paper Size, Two-Sided, Colour), as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
     readonly property int filesPrintFieldWidth: 240
+    // estimate: the print sheet's preview column for a document sent first (step 6b), left of the settings as in macOS's print panel: the page area and its margins [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPreviewWidth: 300
+    // estimate: the page area of the print sheet's preview (a portrait A4 or US Letter page fills its height) [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPreviewHeight: 360
+    // estimate: the compact "PDF" pull-down at the bottom left of the print sheet, its label and chevron, as in macOS's print panel [ref: docs/specs/system-dialogs.md § 7. Print sheet]
+    readonly property int filesPrintPdfMenuWidth: 76
     // estimate: a panel that first gets the keyboard this long after it opened (it waited behind the lock) takes keys only after a click, the hold rule of the system dialogs [ref: docs/specs/system-dialogs.md § 1. Open and Save panels]
     readonly property int filesPanelLateFocusMs: 1500
-    // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery) [ref: docs/specs/files.md § Preview pane]
+    // macOS 27 Finder: the name lines every 21.5 (two-line name in Finder-Gallery); the pane scales it by Text size with the name (ADR-0039 step 23; a textScale token would round 21.5 to 22) [ref: docs/specs/files.md § Preview pane]
     readonly property real filesPreviewNameLineHeight: 21.5
+    // the icon view's file names and their rename field, a point above the caption (it was typography.captionSize + 1 in the views); follows Text size (ADR-0039 step 23) [ref: docs/specs/files.md § Views and selection]
+    readonly property int filesIconLabelSize: Math.round(12 * Appearance.textScale)
     // own value: the name wraps on at most three lines (two in the capture) [ref: docs/specs/files.md § Preview pane]
     readonly property int filesPreviewNameLines: 3
     // macOS 27 Finder: 10 between the name block and Information [ref: docs/specs/files.md § Preview pane]
@@ -2395,10 +2477,6 @@ QtObject {
     readonly property int filesListGroupHeight: 28
     // estimate: the header above each group of the icon view, its title and Show All (no capture of the Finder's grouped icon view) [ref: docs/specs/files.md § Views and selection]
     readonly property int filesIconGroupHeight: 32
-    // Height of a toolbar capsule (back/forward, view group, search), macOS 36 (was 28-32 bare buttons and rectangles); audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
-    readonly property int filesToolbarCapsule: 36
-    // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
-    readonly property int filesToolbarGroupButton: 34
     // macOS 27 Finder: the Group By capsule 46.5 wide, 36 high (Finder-Home at 2 px/pt) [ref: docs/specs/files.md § Views and selection]
     readonly property real filesGroupButtonWidth: 46.5
     // macOS 27 Finder: the groups glyph 8 from the capsule's left end [ref: docs/specs/files.md § Views and selection]
@@ -2641,8 +2719,6 @@ QtObject {
     readonly property int previewCodeFontSize: 12
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewControlsHeight: 40
-    // gs-092-232: toolbar capsule groups about 38 tall (meas-B ~38 +-2); 36 = 28-pt buttons + 2 x spacing xs, same as the Files capsules [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
-    readonly property int previewToolbarCapsuleHeight: 36
     // estimate: glyph size inside a 28-pt toolbar button (same as files.toolbarIconSize) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewToolbarIconSize: 16
     // F1 reference (meas-B, gs-019-035): inspector panel about 248 +-3 wide [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
@@ -2883,12 +2959,12 @@ QtObject {
     readonly property int switcherPitch: 134
     // F1 gap 19: selection square about 123 pt [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherSelectionSize: 123
-    // estimate: corner radius of the selection square (F1: rounded square, about a fifth of its side) [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
-    readonly property int switcherSelectionRadius: 26
-    // F1 gap 19: panel radius about 30 [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
-    readonly property int switcherPanelRadius: 30
-    // estimate: panel inner margin around the tile grid [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
-    readonly property int switcherPadding: 14
+    // corner of the selection square: macOS 27's App Switcher measures 32.4-34.1 at the 45-degree point, concentric with its panel (60 less its 27.5-pt inset: switcher.padding and the pitch's margin round the 123 square); was 26, an estimate (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int switcherSelectionRadius: 33
+    // the panel's corner: macOS 27's App Switcher measures 59.7 at the 45-degree point (512 Pixels release capture Finder-App-Switcher), concentric with its selection; was 30, the F1 value of the macOS 26 captures (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int switcherPanelRadius: 60
+    // panel inner margin around the tile grid: macOS 27's App Switcher sets its first tile 21.5 in (its selection 29 from the panel's edge), so the selection square sits concentric in the 60 corner; was 14, an estimate (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int switcherPadding: 22
     // estimate: app name under the selected icon [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
     readonly property int switcherNameSize: Math.round(15 * Appearance.textScale)
     // estimate: tile grid to app name [ref: docs/testing/f1-reference-gaps.md § App switcher; docs/specs/switcher.md]
@@ -2944,6 +3020,148 @@ QtObject {
     readonly property int wallpaperVideoToolTimeoutMs: 2400000
     // estimate: width of the About This Wallpaper card of the desktop menu (macOS shows a small panel of about this width) [ref: docs/testing/f1-reference-gaps.md § Desktop; docs/specs/desktop.md]
     readonly property int wallpaperAboutWidth: 360
+    // ADR-0040 IQ-W3 A (step 9): the moving Grassfield artwork advances on a timer of this period while it plays (the lock screen and the screen saver; the desktop draws it still, the integrator's review of e067f26f), never every frame (a cloud crossing a 1920 px sky in wallpaper.movingCloudMs moves under 1 px per step)
+    readonly property int wallpaperMovingFrameMs: 100
+    // ADR-0040 IQ-W3 A (step 9): the time a cloud of speed 1 takes to cross the sky of the moving Grassfield artwork (slow, as clouds; estimate)
+    readonly property int wallpaperMovingCloudMs: 240000
+    // ADR-0040 IQ-W3 A (step 9): the period over which the sun's glow of the moving Grassfield artwork brightens and softens ("the light changes slowly"; estimate)
+    readonly property int wallpaperMovingLightMs: 90000
+    // ADR-0040 IQ-W3 A (step 9): how much of the glow's opacity the slow light change takes away at its softest (estimate)
+    readonly property real wallpaperMovingLightDepth: 0.25
+    // ADR-0040 IQ-W3 A (step 9): the clouds' opacity over a sky of the light set (artwork.cloudLight)
+    readonly property real wallpaperMovingCloudOpacityLight: 0.5
+    // ADR-0040 IQ-W3 A (step 9): the clouds' opacity over a sky of the dark set (artwork.cloudDark): faint, so the night stays dark
+    readonly property real wallpaperMovingCloudOpacityDark: 0.14
+    // ADR-0040 section 6 (ID-3): the wallpaper window maps with its first frame (the output's last picture from the cache, else what the feed decides) at most this long after the shell starts or the output appears; then the artwork
+    readonly property int wallpaperFirstShowTimeoutMs: 1500
+    // ADR-0040 section 6 (IQ-W1 C): the slow crossfade between two phases of the Grassfield artwork through the two-slot model; Reduce Motion cuts
+    readonly property int wallpaperPhaseFadeMs: 20000
+    // ADR-0040 section 2 (the time-of-day rule): Dawn starts this many minutes before sunrise
+    readonly property int wallpaperPhaseDawnBeforeSunriseMin: 30
+    // ADR-0040 section 2 (the time-of-day rule): Day starts this many minutes after sunrise
+    readonly property int wallpaperPhaseDayAfterSunriseMin: 90
+    // ADR-0040 section 2 (the time-of-day rule): Evening starts this many minutes before sunset
+    readonly property int wallpaperPhaseEveningBeforeSunsetMin: 90
+    // ADR-0040 section 2 (the time-of-day rule): Night starts this many minutes after sunset
+    readonly property int wallpaperPhaseNightAfterSunsetMin: 30
+    // ADR-0040 section 2: Dawn's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedDawn: "06:00"
+    // ADR-0040 section 2: Day's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedDay: "08:00"
+    // ADR-0040 section 2: Evening's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedEvening: "18:00"
+    // ADR-0040 section 2: Night's local time where the zone gives no point or the sun neither rises nor sets that day
+    readonly property string wallpaperPhaseFixedNight: "20:30"
+
+    // ADR-0040 IQ-W3 A (step 9): the clouds of the moving Grassfield artwork in the light set, at wallpaper.movingCloudOpacityLight
+    readonly property string artworkCloudLight: "#FFFFFF"
+    // ADR-0040 IQ-W3 A (step 9): the clouds of the moving Grassfield artwork in the dark set (a cool grey, the moonlit side), at wallpaper.movingCloudOpacityDark
+    readonly property string artworkCloudDark: "#C8D3DC"
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDawnLightSky: ["#3B4F7A", "#B49AB4", "#F6C9A0"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDawnLightSun: "#FFE7C4"
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDawnLightSunAt: [0.3, 0.62, 0.2]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Dawn in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL dawn); the four hills, far to near
+    readonly property var artworkGrassfieldDawnLightHills: ["#6E8F7E", "#4E7A60", "#355E46", "#244833"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDayLightSky: ["#8FC1DA", "#CDE6EA", "#F6EAC8"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDayLightSun: "#FFFCEB"
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDayLightSunAt: [0.68, 0.4, 0.22]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Day in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL day); the four hills, far to near
+    readonly property var artworkGrassfieldDayLightHills: ["#8CC497", "#62A672", "#428554", "#2D6A41"]
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldEveningLightSky: ["#2C4466", "#B8806A", "#F2C07E"]
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldEveningLightSun: "#FFE3B0"
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldEveningLightSunAt: [0.7, 0.58, 0.24]
+    // estimate: the light set's Evening, a warm dusk between Day and Night drawn for ADR-0040 step 2 (section 2); its menu bar tone holds 4.5:1 at both ends of each change (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldEveningLightHills: ["#5E8458", "#4A6E43", "#365532", "#263F24"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldNightLightSky: ["#03070D", "#0B1B26", "#1C2A33"]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldNightLightSun: "#DDE6F0"
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldNightLightSunAt: [0.22, 0.24, 0.05]
+    // ADR-0040 section 2 (IQ-W1 C, ID-1): the Grassfield hills at Night in the light set, as docs/audits/identity-2026-10-29/mockups.py draws them (PAL night); the four hills, far to near
+    readonly property var artworkGrassfieldNightLightHills: ["#1A2E25", "#13241B", "#0D1A13", "#08120D"]
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDawnDarkSky: ["#162445", "#604C60", "#886646"]
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDawnDarkSun: "#DEC9AA"
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDawnDarkSunAt: [0.3, 0.62, 0.2]
+    // ADR-0040 section 2: the light Dawn darkened in OKLCH (lightness x0.62 for the sky, 0.66 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldDawnDarkHills: ["#3A5045", "#274333", "#183323", "#0E2618"]
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldDayDarkSky: ["#284F62", "#4D5F62", "#685F46"]
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldDayDarkSun: "#DEDBCC"
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldDayDarkSunAt: [0.68, 0.4, 0.22]
+    // ADR-0040 section 2: the light Day darkened in OKLCH (lightness x0.52 for the sky, 0.62 for the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldDayDarkHills: ["#42674A", "#2A5635", "#174425", "#0B351B"]
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldEveningDarkSky: ["#0F2A3F", "#2F6F7E", "#E8C98B"]
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldEveningDarkSun: "#FFF1C2"
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldEveningDarkSunAt: [0.68, 0.52, 0.25]
+    // ADR-0040 section 6: the dark Evening keeps the artwork as it was before step 2, the drawing the lock and the screen saver keep until step 4a; the four hills, far to near
+    readonly property var artworkGrassfieldEveningDarkHills: ["#3E7D5A", "#2E6B3F", "#1F4F2C", "#16391F"]
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sky gradient at 0, 0.55 and 0.78 of the height
+    readonly property var artworkGrassfieldNightDarkSky: ["#010407", "#05111A", "#111C24"]
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun (the moon at Night) and its glow
+    readonly property string artworkGrassfieldNightDarkSun: "#C0C8D1"
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the sun's centre (x, y as fractions of the width and height) and radius (a fraction of the height)
+    readonly property var artworkGrassfieldNightDarkSunAt: [0.22, 0.24, 0.05]
+    // ADR-0040 section 2: the light Night darkened in OKLCH (lightness x0.80 for the sky and the hills, chroma x0.85 for the sky, x0.72 for the hills), so the dark desktop never shows a bright sky; every dark phase keeps light menu bar text (tests/visual/test_contrast_tokens.py); the four hills, far to near
+    readonly property var artworkGrassfieldNightDarkHills: ["#121F19", "#0C1811", "#08100B", "#050A07"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient, top to bottom
+    readonly property var artworkMeadowLightSky: ["#EEF5E6", "#CFE4C3"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the four layers of grass blades, far to near
+    readonly property var artworkMeadowLightBlades: ["#9CCB8E", "#7BB572", "#5A9A5B", "#3F7E45"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient, top to bottom
+    readonly property var artworkMeadowDarkSky: ["#0B1712", "#183326"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Meadow artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the four layers of grass blades, far to near
+    readonly property var artworkMeadowDarkBlades: ["#1E3B2A", "#24472F", "#2D573A", "#356544"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Field Rows artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the bands of the field, repeated top to bottom
+    readonly property var artworkRowsLight: ["#A7CF8B", "#93C27A", "#B8D99A", "#7FB46A", "#D9CF8E", "#9CC783"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Field Rows artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the bands of the field, repeated top to bottom
+    readonly property var artworkRowsDark: ["#13261A", "#173020", "#1B3824", "#22412B", "#2A3A26", "#18301F"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient at 0, 0.6 and 1 of the height
+    readonly property var artworkRidgelineLightSky: ["#D6E7F1", "#EEF3F1", "#F8F0DF"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the two hill lines, far and near
+    readonly property var artworkRidgelineLightHills: ["#8DBB91", "#6EA376"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the low glow behind the ridge
+    readonly property string artworkRidgelineLightSun: "#FFFFFF"
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the sky gradient at 0, 0.6 and 1 of the height
+    readonly property var artworkRidgelineDarkSky: ["#0A1017", "#16222D", "#2A3640"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the two hill lines, far and near
+    readonly property var artworkRidgelineDarkHills: ["#132219", "#0C170F"]
+    // ADR-0040 section 2 (IQ-W2 C, ID-1): the Ridgeline artwork as docs/audits/identity-2026-10-29/mockups.py draws it; the low glow behind the ridge
+    readonly property string artworkRidgelineDarkSun: "#9FB4C4"
+
+    // ADR-0040 section 6 (ID-5): no surface of the entrance shows before the settings are read (Settings.loaded), at most this long after the shell starts; then the defaults
+    readonly property int sessionSettingsWaitMs: 500
+    // ADR-0040 section 6 (P-6, ID-20): the longest the menu bar, the Dock and the desktop icons wait for each other and for the wallpaper's first frame at the session's entrance (shell/services/Entrance.qml)
+    readonly property int sessionRevealTimeoutMs: 1500
+    // ADR-0040 section 6 (ID-20; ASSUMPTION for macOS, no capture): the one fade in which the menu bar, the Dock and the desktop icons appear together at the session's entrance; Reduce Motion caps it (Appearance.duration)
+    readonly property int sessionRevealMs: 250
+    // ADR-0040 ID-21 (section 5): Log Out, Restart and Shut Down proceed by themselves when their confirmation is left alone this many seconds, as macOS's (“… automatically in 60 seconds”, ASSUMPTION from memory)
+    readonly property int sessionExitCountdownSeconds: 60
+    // ADR-0040 section 6 (ID-10): the exit cover's one fade of the whole screen to the ground once the windows have closed; an estimate until P3 (Reduce Motion: motion.reducedMax)
+    readonly property int sessionExitFadeMs: 400
+    // ADR-0040 section 6 (ID-10): the longest packaging/bin/grassfield-session-end waits for the shell's exit cover, the ask included, before it ends the session (P-6 bounded waits; tests/shell/session_end.sh holds the helper's own bound to it)
+    readonly property int sessionExitWaitMs: 1000
+    // estimate: the exit cover lifts by itself when the session is still there this long after it came up (the helper that asked was killed before ending the session), so an exit that did not happen never leaves an opaque screen over the desktop (ADR-0040 ID-10, P-6 bounded waits)
+    readonly property int sessionExitCoverHoldMs: 20000
+    // ADR-0040 ID-2 (P-1 one ground): the default artwork's ground (Artwork.ground of the dark Grassfield evening, held equal by tests/unit/tst_artwork.qml), the session's Hyprland background_color of config/hypr/grassfield/looknfeel.lua (held equal by tests/unit/tst_sessionexit.qml); the shell replaces it with the shown wallpaper's (shell/services/Ground.qml) and falls back to it
+    readonly property string sessionGround: "#2F6D5F"
 
     // ADR-0015 / f1-reference-gaps.md:102: traffic-light diameter, 14 pt; the compositor plugin's kButtonDiameter must equal it
     readonly property int windowLightDiameter: 14
@@ -2987,6 +3205,26 @@ QtObject {
     readonly property int windowItemsGap: 8
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     readonly property int windowItemsInset: 8
+    // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property string windowEdgeDark: "#FFFFFF"
+    // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property string windowEdgeLight: "#000000"
+    // the active window's edge, dark appearance: unchanged from the config (rgba(ffffff26)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeActiveOpacityDark: 0.15
+    // an inactive window's edge, dark appearance: unchanged from the config (rgba(ffffff14)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeInactiveOpacityDark: 0.08
+    // the active window's edge, light appearance: macOS 27's contact edge, about black at 0.25 (measured 0.27 to 0.47 over its shadow in the release captures) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeActiveOpacityLight: 0.25
+    // estimate: an inactive window's edge in the light appearance, at the dark appearance's inactive-to-active ratio (0.08 / 0.15) of 0.25, not measured [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
+    readonly property real windowEdgeInactiveOpacityLight: 0.13
+    // a window that is not key, light appearance: its toolbar title and glyphs in the text colour at this opacity (macOS 27's inactive Finder and Settings: the title #B8B8B8 on white, the glyphs #B0B0B0 on #F0F0F0, black at 0.27-0.28; 512 Pixels release capture Finder-App-Switcher); an inactive control, exempt from WCAG 1.4.3 (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveTextOpacityLight: 0.28
+    // the same, dark appearance: macOS 27's inactive Settings title #747373 on #333131, white at 0.32 (512 Pixels release capture Apperance-Dark-Green) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveTextOpacityDark: 0.32
+    // a window that is not key, light appearance: its selection turns neutral, the hover ink at this opacity over its background with the label in the text colour (macOS 27's inactive Settings: #E8E7E6 on its #F3F2F1 sidebar, black at 0.045; 512 Pixels release capture Finder-App-Switcher) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveSelectionOpacityLight: 0.045
+    // estimate: the same, dark appearance (macOS's unemphasized dark selection, about #464646 on a #2B2B2B sidebar, white at 0.11; no dark macOS 27 inactive selection measured) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
+    readonly property real windowInactiveSelectionOpacityDark: 0.11
 
     // estimate: tile box the plugin fits a stage's windows into (macOS model: small live thumbnails in a left-edge strip)
     readonly property int stagesTileWidth: 160
@@ -3032,10 +3270,10 @@ QtObject {
     // estimate: after the window got the keyboard back, the action waits this long more so that the application has read its keyboard enter before the action arrives over D-Bus [ref: docs/specs/menu-bridge.md MB12]
     readonly property int focusReturnMenuActionSettleMs: 30
 
-    // compositor-drawn titlebar of server-side-decorated windows, dark appearance (grassfield-compositor Theme.hpp before UX-06: rgb 40,40,44; F2a chrome.sh); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarBackgroundDark: "#2A2824"
-    // the same in the light appearance (audit UX-06: titlebars follow the appearance; rgb 236,236,238, own value); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
-    readonly property string titlebarBackgroundLight: "#EFECE7"
+    // the compositor-drawn titlebar of server-side-decorated (third-party) windows, dark appearance: the window's own colour (color.dark.windowBackground), the owner's answer to ADR-0039 Q8 (a) of 2026-10-29, where it was a band of its own (#2A2824, the warm #28282C); a hairline under it (titlebar.rule*) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarBackgroundDark: "#2B2925"
+    // the same, light appearance: the window's own colour (color.light.windowBackground, the warm white), ADR-0039 Q8 (a), where it was a grey band (#EFECE7, the warm #ECECEE: 236 on a white window) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarBackgroundLight: "#FDFCF9"
     // window title on the dark titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEE at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property string titlebarTitleDark: "#EFECE7"
     // window title on the light titlebar, drawn at titleOpacity; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #28282C at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
@@ -3060,6 +3298,16 @@ QtObject {
     readonly property real titlebarPreviewRimOpacity: 0.22
     // the preview's edge, logical px (grassfield-compositor kTilePreviewRim before D-8) [ref: docs/specs/compositor.md § Functional requirements; docs/testing/f1-reference-gaps.md § Window chrome]
     readonly property int titlebarPreviewRimWidth: 2
+    // the hairline under the bar, light appearance: the apps' toolbar rule (color.light.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarRuleLight: "#000000"
+    // its opacity: the apps' separator opacity in the light appearance (material.separatorOpacityLight) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property real titlebarRuleOpacityLight: 0.08
+    // the hairline under the bar, dark appearance (color.dark.separator), ADR-0039 Q8 (a), step 21 [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property string titlebarRuleDark: "#FFFFFF"
+    // its opacity: the apps' separator opacity in the dark appearance (material.separatorOpacity) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property real titlebarRuleOpacityDark: 0.16
+    // its width, one point, as every separator (ADR-0039 D5) [ref: docs/decisions/ADR-0039-design-polish.md § Owner decisions]
+    readonly property int titlebarRuleWidth: 1
 
     // window 1180 pt wide (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeWindowWidth: 1180
@@ -3069,6 +3317,8 @@ QtObject {
     readonly property int storeWindowMinWidth: 760
     // estimate: the sidebar's items and the account row [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeWindowMinHeight: 520
+    // estimate: a notice that goes by itself (an app that could not be opened) stays this long, ms [ref: docs/decisions/ADR-0039-design-polish.md step 2]
+    readonly property int storeNoticeLifetime: 6000
     // sidebar 220 pt, flush with the window (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeSidebarWidth: 220
     // the selection pill and the search field 10 pt from both sidebar edges (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
@@ -3267,20 +3517,6 @@ QtObject {
     readonly property int storeButtonLargeMinWidth: 80
     // estimate: the product page's button label [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeButtonLargeTextSize: Math.round(14 * Appearance.textScale)
-    // estimate: the label of a button not offered yet (step 2: installing comes with step 3) [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property real storeButtonDisabledOpacity: 0.45
-    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingSize: 26
-    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property real storeRingStroke: 2.5
-    // estimate: the arc that turns while an operation waits or has no count yet (degrees) [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingSweep: 100
-    // estimate: one turn of that arc (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingTurnMs: 1100
-    // estimate: macOS 27 App Store's download ring in an app's button place [ref: docs/audits/store-2026-10-27/parity.md]: the square inside it, removing a waiting operation from the queue
-    readonly property int storeRingStopSize: 8
-    // estimate: that square's corner [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeRingStopRadius: 2
     // estimate: the package rows an install or uninstall sheet shows before it scrolls [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSheetListMaxRows: 8
     // estimate: one package row of that list [ref: docs/audits/store-2026-10-27/parity.md]
@@ -3366,6 +3602,15 @@ QtObject {
     // estimate: between a settings group's lines [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeSettingsLineGap: 8
 
+    // the light dimming slurp lays over the screen while the crosshair shows, and the fill of the boxes a click can pick (the same, so the veil is even; the box under the pointer takes the selection's fill and border), read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
+    readonly property string captureVeil: "#0000002E"
+    // the fill of the area being dragged, a light veil as the system's selection rectangle (ADR-0035 D-10, step 8); estimate
+    readonly property string captureSelection: "#FFFFFF24"
+    // the outline of the area being dragged, a near-white hairline (ADR-0035 D-10, step 8); estimate
+    readonly property string captureBorder: "#FFFFFFE6"
+    // the outline's width in pixels, a hairline (ADR-0035 D-10, step 8)
+    readonly property int captureBorderWidth: 1
+
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4
 
@@ -3413,6 +3658,8 @@ QtObject {
     readonly property int tilingSuggestTileWidth: 240
     // own value: a suggestion thumbnail's box, width over height (16:10; the window is fitted inside it with its own aspect, TL28) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     readonly property real tilingSuggestThumbAspect: 1.6
+    // a tiling suggestion's window thumbnail rounded as the Overview's (overview.thumbRadius 10); it was square (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
+    readonly property int tilingSuggestThumbRadius: 10
     // estimate until measured in nested against the owner's captures: the middle of the stretch two windows of a tile group share along an edge where a drag resizes every window along it (pt; outside it the edge resizes one window, TL30; parity rows M43 and W18) [ref: docs/specs/tiling.md § Functional requirements; docs/audits/tiling-2026-10-27/parity-matrix.md]
     readonly property int tilingHandleLength: 120
     // own value: the shared-edge handle is at least this wide across the edge (pt; the margin between tiled windows is 8; without margins the band takes half from each window, as Hyprland's border grab does, TL30) [ref: docs/specs/tiling.md § Functional requirements]
@@ -3521,4 +3768,68 @@ QtObject {
     readonly property int activitySwatchSize: 8
     // own value: the samples a graph shows, two minutes at Very Often and ten at Normally (AM29) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityHistorySamples: 120
+    // estimate: an Inspect window, the widest Statistics row ("Involuntary Context Switches:" and its count) with room for a path (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectWidth: 480
+    // estimate: an Inspect window, its header, the tabs and the sixteen Statistics rows without scrolling when no value wraps (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectHeight: 640
+    // estimate: an Inspect window's header and its three tabs on one line (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectMinWidth: 380
+    // estimate: an Inspect window's header, the tabs, a few rows and the Quit button (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectMinHeight: 360
+    // own value: the labels' column of an Inspect window's rows at least; it widens to its longest label (French ones run longer), right-aligned against the values as macOS's inspectors [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectLabelWidth: 120
+    // own value: the room an Inspect window's labels always leave to the values (a path or a command wraps in it) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityInspectValueMinWidth: 140
+    // own value: App History (Windows 11's, AM67) shows its five columns without a scroll at this width; no macOS counterpart [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryWidth: 720
+    // own value: App History's caption, its pop-up and about twelve rows [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryHeight: 440
+    // own value: App History's name column and its four figures still readable [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryMinWidth: 480
+    // own value: App History's caption, its pop-up and a few rows [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryMinHeight: 280
+    // own value: App History's name column (icon and app name); the figures share the rest [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityAppHistoryNameWidth: 200
+    // own value: the Performance window (Windows 11's, AM66) shows its sidebar, a large graph and two columns of figures without a scroll; no macOS counterpart [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceWidth: 860
+    // own value: the Performance window's large graph, the composition bar and its figures [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceHeight: 600
+    // own value: the sidebar and a readable graph [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceMinWidth: 640
+    // own value: the sidebar's first rows, the graph and a few figures [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceMinHeight: 440
+    // own value: a resource's small graph, its name, model and value on two lines [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceSidebarWidth: 230
+    // own value: a sidebar row's live graph (Windows 11's thumbnails are about this wide) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceSidebarGraphWidth: 64
+    // own value: a sidebar row's graph and its three lines of text [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceSidebarRowHeight: 56
+    // own value: the selected resource's large graph [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceGraphHeight: 200
+    // own value: one logical processor's small graph (CPU, Logical Processors; CPU History) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceTileHeight: 56
+    // own value: the narrowest small graph; the grid fits as many per row as the width allows [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceTileMinWidth: 120
+    // own value: Memory's composition bar [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceBarHeight: 14
+    // own value: the narrowest column of label and value pairs under the graph; as many columns as fit [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityPerformanceFigureWidth: 260
+    // estimate: a logical processor's bar in CPU Usage (AM71; macOS's narrow lit columns, no capture measured yet) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageBarWidth: 12
+    // estimate: CPU Usage's bars, twenty segments of 5 with their gaps [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageBarHeight: 120
+    // estimate: the lit segments of a CPU Usage bar (macOS draws segments, not a fill) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageSegments: 20
+    // own value: between two CPU Usage bars [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageGap: 4
+    // own value: CPU Usage's narrowest width, its title beside the window controls (a machine of few processors) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuUsageMinWidth: 190
+    // estimate: CPU History (AM72), two columns of small graphs [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuHistoryWidth: 420
+    // estimate: CPU History, about five rows of small graphs before a scroll [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityCpuHistoryHeight: 360
+    // estimate: GPU History (AM72), one graph per GPU [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityGpuHistoryWidth: 360
+    // estimate: GPU History, two GPUs' graphs [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityGpuHistoryHeight: 220
 }

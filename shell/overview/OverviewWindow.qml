@@ -128,9 +128,11 @@ Variants {
         property string layoutSignature: ""
 
         // The titlebar band of a window: the plugin's strip, or none for a window that draws its own chrome while the plugin
-        // advertises that it steps aside (ClientChrome.js; the tag is Hyprland's, set by the session rule gf-client-chrome).
+        // advertises that it steps aside (ClientChrome.js; the tag is Hyprland's, set by the session rule gf-client-chrome),
+        // nor for a Split View window whose titlebar the plugin keeps away (tiling step 6e, ADR-0036 D73).
         function bandOf(w: var): real {
-            return ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.overviewWindowTitlebarHeight);
+            const away = !!w && WindowTiling.splitTitleAway(TilingLink.splits, w.address, Compositor.splitTitlesAway);
+            return ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.overviewWindowTitlebarHeight, away);
         }
 
         // Window rectangles in this window's coordinates, laid out when the window ids, rects or
@@ -361,6 +363,19 @@ Variants {
                 Compositor.moveGroupToSpace(win.byKey[key].address, win.tiles[index].id); // with its tile group (TL29)
         }
 
+        // Overview.dropProbe's share (a dev-session test hook; the follow-up of #78: the drop rule had no test past
+        // WindowTiling.dropAllowed): window `address` dropped on Desktop `spaceId` through this output's own drop path. "" when
+        // this output's Overview shows neither; else "moved" or "refused" (dropAllowed), dropWindow having run either way.
+        function probeDrop(address: string, spaceId: int): string {
+            const key = Object.keys(win.byKey).find(k => WindowTiling.hexAddress(k) === WindowTiling.hexAddress(address)) ?? "";
+            const index = win.tiles.findIndex(t => !t.plus && t.id === spaceId);
+            if (key === "" || index < 0)
+                return "";
+            const allowed = win.dropAllowed(key, index);
+            win.dropWindow(key, index);
+            return allowed ? "moved" : "refused";
+        }
+
         // Used by the controller's arrow-key navigation: the window next to `key` in a direction on this output ("" none).
         function neighborOf(key: string, dir: string): string {
             const rects = placement.rects;
@@ -568,8 +583,10 @@ Variants {
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Desktops")
 
+                // Thumbnails on clear glass (ADR-0024 section 2: the band's class, 0.15; ADR-0039 step 22).
                 Material {
                     id: band
+                    glassClass: "gallery"
                     anchors.fill: parent
                     radius: 0
                     shadowEnabled: false
@@ -624,9 +641,12 @@ Variants {
                             width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
                             radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
                             // The add button is a bare plus at rest (macOS 27), a light glass circle under the pointer; a thumbnail
-                            // the material's fill.
+                            // the material's fill at rest, the neutral selection of an item on glass under the pointer or as a drop
+                            // target (which also takes the ring; one role each, ADR-0039 step 12, G6).
                             readonly property bool plusLit: tile.isPlus && (tileMouse.containsMouse || tile.focused)
-                            color: tile.isPlus ? (face.plusLit ? Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) : "transparent") : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (tile.dropTarget ? 3 : (tileMouse.containsMouse ? 2 : 1)))
+                            color: tile.isPlus ? (face.plusLit ? Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) : "transparent")
+                                : tile.dropTarget || tileMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
+                                : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                             border.width: tile.isPlus && !face.plusLit ? 0 : 1
                             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
@@ -638,7 +658,8 @@ Variants {
                                 color: "transparent"
                                 visible: tile.modelData.active || tile.focused || tile.dropTarget
                                 border.width: Tokens.overviewSelectionWidth
-                                border.color: Appearance.colors.accent
+                                // The focus ring colour, as every ring (ADR-0039 step 7).
+                                border.color: Appearance.focusRingColor
                             }
 
                             // A real miniature of the desktop: its windows at their place, captured (macOS), not a grey tile with icons.
@@ -735,28 +756,32 @@ Variants {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on ty {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on tw {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on th {
                         enabled: win.progress >= 1 && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
-                            easing.type: Easing.OutCubic
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.curve
                         }
                     }
                     Behavior on ox {
@@ -845,7 +870,7 @@ Variants {
                         radius: Tokens.overviewThumbRadius + Tokens.overviewSelectionWidth
                         color: "transparent"
                         border.width: Tokens.overviewSelectionWidth
-                        border.color: Appearance.colors.accent
+                        border.color: Appearance.focusRingColor
                         visible: thumb.isSelected
                     }
 
@@ -954,9 +979,12 @@ Variants {
                         width: mini.width
                         height: mini.box.h
                         radius: Tokens.overviewThumbRadius
-                        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * (miniMouse.containsMouse ? 3 : 2))
+                        // The panel's fill at rest; the neutral selection of an item on glass under the pointer or the keyboard
+                        // (one role each, ADR-0039 step 12, G6).
+                        color: mini.focused || miniMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
+                            : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                         border.width: mini.focused || miniMouse.containsMouse ? Tokens.overviewSelectionWidth : 1
-                        border.color: mini.focused || miniMouse.containsMouse ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+                        border.color: mini.focused || miniMouse.containsMouse ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
                         ScreencopyView {
                             // Fit inside the plate keeping the aspect ratio; live only in the full profile (a still icon otherwise).
@@ -1020,8 +1048,10 @@ Variants {
             }
 
             // App icon and name under the selected (hovered) window.
+            // The window's name on a plate: a text surface, the menus' class (ADR-0039 step 22).
             Material {
                 id: label
+                glassClass: "menu"
 
                 readonly property var info: win.marked !== "" && win.spaceFocus < 0 ? win.byKey[win.marked] : undefined
                 readonly property var rect: win.marked !== "" ? win.placedMap[win.marked] : undefined

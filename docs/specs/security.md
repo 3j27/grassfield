@@ -3,7 +3,7 @@
 Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 
 ## macOS reference behavior (described in words)
-- Lock screen: blurred wallpaper, large clock and date at the top center, user avatar (circle) and name near
+- Lock screen: the wallpaper, sharp (ADR-0040 IQ-W4 A; ASSUMPTION from memory), large clock and date at the top center, user avatar (circle) and name near
   the bottom center, a rounded password field with a return arrow; wrong password → the field shakes.
   "Cancel"/"Switch user" are not shown for a single user.
 - Authorization dialog: a compact centered sheet with a lock icon, "<App> wants to make changes.", the
@@ -194,6 +194,7 @@ does not check its gate.
 | idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
 | saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
+| secrets | state | dev | the secret sheets' state (ADR-0035 D-9, step 9b): the bridge connection, the name's state, counts of the shown, held, waiting and lingering requests; never a requester or a text (`tests/security/secret_bridge.sh`) |
 | search | toggle | action | SUPER+SPACE |
 | search | clipboard | action | SUPER+CTRL+V (Search in its Clipboard view, ADR-0034; again closes it; refused while locked through `show()`) |
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
@@ -201,11 +202,14 @@ does not check its gate.
 | clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |
 | anr | report | action | `packaging/session-bin/hyprland-dialog`, the stand-in Hyprland runs as its "not responding" dialog (ADR-0035 D-3). Only marks an app in Force Quit and its Dock menu ("(Not Responding)"); kills nothing, answers `ok` or `refused` (the reason goes to the journal only); refuses another compositor's report, a pid of 1 or below, and a window two processes share |
 | anr | status | dev | returns the marked apps' window titles |
-| update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
+| activity | quit | action | Activity Monitor's Quit of a process that owns windows (`apps/activity/src/actions.cpp`, through `shellIpcArgs()`; ADR-0038 AM52, AM61): closes the windows whose client is that pid, as the Dock's Quit (an xdg close: the app may ask to save); answers `ok`, `no-windows` (the app then sends SIGTERM itself) or `refused` (a pid of 1 or below); never kills, reads no title; a shell reaches its own compositor's windows only (a nested session's, the nested ones) |
+| picker | request | action | `packaging/session-bin/hyprland-share-picker`, the stand-in xdph runs as its screen-sharing picker (ADR-0035 D-6). Answers `accepted`, `busy` (one picker at a time), `locked` (refused while the session is locked, owner decision Q15) or `refused` (an id or socket not of the stand-in's form: a 128-bit hex id, a 128-bit hex name in `$XDG_RUNTIME_DIR/grassfield/picker/`); accepted, the shell connects to that socket only, shows the panel once the stand-in's window list has come, and answers one choice or a cancel there. The stand-in checks the answer again before xdph reads it (a listed window, a display Hyprland lists) |
+| picker | status, choose | dev | `status` returns the open request and xdph's window titles; `choose` answers the open panel as the user would (`tests/shell/share_picker_ipc.sh`) |
+| update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane); `packaging/bin/grassfield-pacman-watch` from `grassfield-pacman-watch.service`, started by its path unit when pacman's local database changed (ADR-0041 U31: origin `system`, announced as a scheduled check is). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
-| overview | holdNextRelease, status | dev | `status` lists window titles and app ids |
+| overview | holdNextRelease, status, dropProbe | dev | `status` lists window titles and app ids; `dropProbe` (tiling step 6e, the follow-up of #78) runs the Overview's own drop of a window on a Desktop (ADR-0036 D72) and answers moved, refused or absent |
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
@@ -221,7 +225,7 @@ does not check its gate.
 | controlcenter | state | dev | `tests/visual/flow-quicksettings.sh`, `flow-settings.sh`: what the shell applies (appearance, transparency, DND, Night Shift availability); read-only |
 | controlcenter | volume, brightness, volumeLevel, brightnessLevel | dev | `tests/shell/cc_sliders_ipc.sh` (REQ-QS-CC5/CC6); in a real session the acceptance uses the sliders themselves |
 | dock | keyboard, toggleAutohide | action | CTRL+F3, SUPER+ALT+D |
-| dock | reopen | action | a running single-instance app launched again while its window is off screen: Activity Monitor (`qs ipc -p <shell> call dock reopen org.grassfield.Activity`, apps/runmode.h shellIpcArgs; ADR-0038 AD34) and Settings (`... dock reopen org.grassfield.Settings`, apps/settings/src/settingsinstance.h; ADR-0040 step 1b). Brings that app's windows forward as a click on its tile does (a minimized one back, `Launch.activationPlan`); launches, closes and reads nothing; an id with no window in the Dock does nothing; refused while locked |
+| dock | reopen | action | a running single-instance app launched again while its window is off screen: Activity Monitor (`qs ipc -p <shell> call dock reopen org.grassfield.Activity`, apps/runmode.h shellIpcArgs; ADR-0038 AD34), Settings (`... dock reopen org.grassfield.Settings`, apps/settings/src/settingsinstance.h; ADR-0040 step 1b) and Grassfield Store (`... dock reopen org.grassfield.Store`, apps/store/src/storeinstance.h; ADR-0037 SD35). Brings that app's windows forward as a click on its tile does (a minimized one back, `Launch.activationPlan`); launches, closes and reads nothing; an id with no window in the Dock does nothing; refused while locked |
 | dock | hover, unhover, reveal, menu | dev | UI automation for tests |
 | dock | pinned, dragstate, forceinterrupt, forcehold, noactivate, holdmenu, popup, tiles, hidestate, screen, targetrect, autohide, size, position, sizenow, fitsize, magnify, click, centre, iconrect, stack, addfolder | fixtures | visual tests; `click` launches an app; `iconrect` reads the drawn icon rectangle; `noactivate` makes a Dock activation do nothing (click tests); `addfolder` changes `dock.folders` |
 | dockstack | state, depth, enter, back | fixtures | visual tests of the open folder stack (it lists a folder's file names) |
@@ -229,14 +233,38 @@ does not check its gate.
 | volume | up, down, mute | action | volume keys |
 | brightness | up, down | action | brightness keys |
 | keyboard | up, down | action | keyboard backlight keys (XF86KbdBrightnessUp/Down) |
-| capabilities | status | dev | visual tests wait on it |
+| capabilities | status, devBlock | dev | visual tests wait on `status`; `packaging/bin/grassfield-shell-watchdog` asks `status` as the shell's liveness question (ADR-0041 step 6a) and reads no answer: any answer, this `refused` of a real session included, is the GUI thread answering, so the gate stays and nothing is returned to it. `devBlock` holds the GUI thread 1 to 300 s (the probe's nested proof) |
+| session | cover, lift | action | `packaging/bin/grassfield-session-end` once every window has gone (ADR-0040 ID-10): `cover` brings up the exit cover, one opaque fade to the ground over every output (it answers the fade's length and lifts itself after `session.exitCoverHoldMs`), `lift` takes it down when the session could not be ended. Neither ends the session; another process of the user can hide the desktop for that long at most |
+| session | state | dev | the exit cover's nested check (`shown` or `hidden`) |
 | security | state, heartbeat | action | the security process's own target (`shell/security.qml`, ADR-0041 step 1 S1, a second `qs` instance at `/usr/share/grassfield/shell/security.qml`): what it hosts (`starting` at S1) and a sequence number; read by `packaging/bin/grassfield-security-status` and the S1 measurements; never private state, nothing locks or unlocks |
 | stages | activate, newStage | action | SUPER+ALT+1..4 (the n-th recent stage forward), SUPER+ALT+S (focused window to a stage of its own); they do nothing while Stages is off |
 | stages | status, enable | dev | `tests/visual/scenarios/stages.sh`; `enable` changes the persisted setting |
 | bartone | status | dev | visual tests |
-| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status | dev | wallpaper tests (`set` also needs the fixtures to show) |
+| wallpaper | loadDelay, fadeLength, progress, onlineClock, onlineStatus, videoIdle, videoBattery, videoStatus, set, status, phase | dev | wallpaper tests (`set` also needs the fixtures to show; `phase` shows a phase of the day, ADR-0040 IQ-W1 C) |
 | visual | glyphs | dev | contrast run |
 <!-- ipc-inventory:end -->
+
+### Private sockets of the security modules (not Quickshell IPC)
+Grassfield processes that serve the security modules over a Unix socket of their own, outside `qs ipc` (ADR-0035
+"Consequences": every such socket is listed here in the step that adds it).
+
+| Socket | Server | Who may connect | What it carries |
+|---|---|---|---|
+| `$XDG_RUNTIME_DIR/grassfield/prompter.sock` (directory 0700, socket 0600) | `grassfield-prompter` (ADR-0035 D-9, step 9a; `grassfield-prompter.service`) | one peer at a time, running as the user, whose cgroup is the unit of the bridge's `--peer-unit` (`grassfield-shell.service`, only slices above it up to the user's manager), read through `SO_PEERPIDFD` (a peer without a pidfd is refused, except on a kernel without `SO_PEERPIDFD`); a refused peer gets `refused` and is closed, the refusals logged once per 10 s | `prompter/1` (docs/specs/system-dialogs.md section 5): the bridge sends the requests of gcr callers (with the requester it resolved from their bus credentials) and, from step 9c, NetworkManager's (kind `nm`, only for calls from the owner of `org.freedesktop.NetworkManager`) and, from step 9e, KIO's (kind `kio`, with the requester resolved from the caller's credentials) and, from step 10, bluetoothd's pairing steps (kind `bluetooth`, only for calls from the owner of `org.bluez`, and `progress` for a code shown), and their withdrawals; the shell sends its hello and its answers, a password once per answer. Nothing it accepts runs a command, unlocks, or reaches polkit; a wrong or unattributable line cancels requests, never invents an answer. The shell's client (`shell/security/secret/PrompterClient.qml`, step 9b) connects in a real session to this socket only, and in a dev session only to the test socket that `GRASSFIELD_PROMPTER_SOCKET` names (ADR-0019 dev plumbing, passed by `shell.qml`; ignored in a real session); it reads the bridge strictly and closes the connection on any line it does not expect |
+
+### D-Bus objects of the security modules' processes (not Quickshell IPC)
+What the processes serving the secret sheets export on a message bus (ADR-0035 "Consequences": listed in the step that adds
+each one).
+
+| Bus, name, object | Process | Who is answered | What it does |
+|---|---|---|---|
+| session bus, `org.gnome.keyring.SystemPrompter` (owned only while the shell is connected and has said hello), `/org/gnome/keyring/Prompter`, `org.gnome.keyring.internal.Prompter` | `grassfield-prompter` (step 9a) | any gcr client of the session (gcr's protocol has no authorization: name ownership is the whole of it, ADR-0035 D-9); at most 8 open prompts per connection, 64 in all | libgcr's `GcrSystemPrompter` (mode MULTIPLE): each prompt is identified from its caller's pidfd and handed to the shell; a password goes back through gcr's `sx-aes-1` exchange |
+| session bus, `org.kde.kpasswdserver6` (requested with flags 0 only while a shell that draws kind `kio` is connected; queued behind a kiod6 that holds it; released 1 s after the shell goes, every open request answered first, unless kiod6 runs without it: then kept, and taken by a bridge that finds it so, until kiod6 leaves), `/modules/kpasswdserver`, `org.kde.KPasswdServer` (exported for the bridge's life) | `grassfield-prompter` (step 9e; ADR-0035 D-12 b, decisions 9-36 to 9-50) | any KIO client of the session (KIO's protocol has no authorization; who asks is resolved from the caller's pidfd, KIO's worker shown as `kio` only while it maps nothing but trusted code); at most 8 open requests per connection, 32 in all; AuthInfo bounded (InvalidArgs beyond) | `checkAuthInfoAsync`, `queryAuthInfoAsync` (the server sheet in the shell, held), `addAuthInfo` (answered at once; stored in the Secret Service through libsecret's asynchronous calls only when keepPassword says the user chose Remember), `removeAuthInfo` (the session cache only); each result a signal addressed to the caller's unique name, never broadcast; a call while no shell draws `kio`: answered as if nothing were known; the LEGACY `ay` methods not served |
+| system bus, no well-known name (the bridge's unique name), `/org/freedesktop/NetworkManager/SecretAgent`, `org.freedesktop.NetworkManager.SecretAgent` (exported for the bridge's life; registered with NetworkManager as `org.grassfield.prompter` only while a shell that draws kind `nm` is connected) | `grassfield-prompter` (step 9c; the system bus is `/run/dbus/system_bus_socket` in the session, whatever the environment says; a development run only a private test bus) | only the current owner of `org.freedesktop.NetworkManager`, asked from the bus at each call (anyone else: `PermissionDenied`, nothing shown); the system bus's policy already lets only root send this interface | `GetSecrets` for Wi-Fi secrets (WPA/WPA2, WPA3, WEP, WPA2 Enterprise) when interaction is allowed, through the shell's sheet; `CancelGetSecrets`; `SaveSecrets` refused (nothing stored); `DeleteSecrets` answered; VPN and everything else `NoSecrets` (ADR-0035 9-27 to 9-35) |
+| system bus, no well-known name (the bridge's unique name), `/org/grassfield/prompter/BluetoothAgent`, `org.bluez.Agent1` (exported for the bridge's life; registered with bluetoothd as a `KeyboardDisplay` agent, and asked to be its default, only while a shell that draws kind `bluetooth` is connected) | `grassfield-prompter` (step 10; ADR-0035 D-11, decisions 10-1 to 10-14; the same system bus as the NetworkManager agent) | only the current owner of `org.bluez`, asked from the bus at each call (anyone else: `org.bluez.Error.Rejected`, nothing shown); the system bus's policy already lets only root send this interface | `RequestPinCode`, `RequestPasskey`, `RequestConfirmation`, `RequestAuthorization`, `AuthorizeService` through the shell's pairing sheet (held until a click; never answered yes without it); `DisplayPinCode` and `DisplayPasskey` shown with Cancel alone, one at a time, until the device is paired, disconnects or is removed (Cancel asks bluetoothd to `CancelPairing` the device); `Cancel` withdraws the call awaiting a reply; `Release` (bluetoothd stopping) answered; every argument checked first (a device path of bluetoothd's form, a passkey of at most 999999, a PIN of 1 to 16 letters and digits, a canonical UUID) |
+
+`grassfield-askpass` (step 9c), udiskie's password command, exports nothing: it is a gcr client of the session bus and writes
+the passphrase on its standard output to udiskie, its parent (never to a terminal).
 
 ## Lock coverage: restart, Omarchy's sleep-lock, failing inhibitor (GF-030, D-12)
 macOS model: the screen always locks before sleep, and the lock never silently goes away.
@@ -255,7 +283,13 @@ macOS model: the screen always locks before sleep, and the lock never silently g
   is `qs ipc` to the shell, `config/hypr/grassfield/bindings.lua:148`); only a sleep or the lid locks, because Omarchy's
   sleep lock stays armed and its stand-in, like `grassfield-lid`'s fallback, starts the shell again and asks it to lock.
   Acceptable until S4 (the old start limit gave the same state; opus security review of b1d826b), written here so that
-  nobody takes a stopped shell for a locked one. Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
+  nobody takes a stopped shell for a locked one. A frozen shell (its GUI thread blocked, the process alive) fails nothing
+  by itself: `grassfield-shell-watchdog.timer` (ADR-0041 step 6a) asks it `capabilities status` every 30 s and, after three
+  questions in a row of one MainPID left unanswered for 5 s (20 s while the kernel's pressure files show a loaded machine),
+  sends that process SIGKILL (`systemctl --user kill
+  --kill-whom=main`), so the unit fails and the path above applies: the restart, the sleep lock armed, the counter (a hang
+  that repeats ends in its stop). The probe never stops or unlocks; the compositor keeps a lock across the restart.
+  `tests/shell/shell_watchdog.sh`. Tests: `tests/shell/shell_failures.sh` (the decisions, with mutants), `tests/shell/unit_restart_limits.sh` (the lifetime
   model: a 10 s loop must end), `tests/security/sleep_lock_units.sh`. A stop through systemd is never restarted (systemd
   semantics): logout stops `graphical-session.target`,
   which stops the shell (`PartOf=`), and `Requisite=graphical-session.target` refuses a restart once the target is gone,
@@ -460,6 +494,14 @@ shell no longer relies on that alone:
   `SessionState.refuses` first, from the tiling popover and the Window menu (refused surfaces while locked). Replace Tiled
   Window's picker is the Split View picker of step 6a (its suggestion lists window addresses only). The Overview's drop rule
   only refuses drops.
+  Tiling step 6e (ADR-0036 D73-D76) adds no verb, event field or popup kind: the feature `tiling-split-titles` only tells the
+  shell's Overview to lay a Split View member out without a strip. A member's hidden titlebar is revealed and takes presses
+  by the full-screen path (P6): never while the session is locked (`revealable()`), never under a layer popup or an Overlay
+  layer, never a press of a button another device holds; its press and release are cancelled together. A member's drag by
+  its revealed bar ends the moment the lock engages (the member back in its half; its release, still owed, stays
+  cancelled and swaps nothing), and on another press or a pointer device gone. A window that leaves a Split View is placed
+  below the menu bar only once the session is unlocked (D73 amended, review of #99). The development hook `overview dropProbe`
+  (D76, the table above) answers "refused" outside development and only ever refuses or performs the Overview's own drop.
 - When the lock engages each open surface closes: Popups, Search (its query is dropped), Apps, the Notification Center,
   the Overview (through its keyboard release), the Switcher, Dock keyboard mode, the desktop menu and card (the desktop
   lets the keyboard go), the widget menu. `Lock.lock()` also closes popups first.
@@ -683,9 +725,27 @@ Omarchy `no_screen_share` rule; fixture tree with a new app, a table match, an `
 never run; a `1password.lua` that stops before its rule still leaves 1Password protected; nothing readable;
 wiring; mutation "keep every rule" fails it), `Hyprland --verify-config` in `just check` (a misspelt key fails it), and
 nested `lock_privacy.sh screenshare` (DT-05: a window with app_id `Bitwarden` is black in a `grim` capture; NOT
-VERIFIED until run).
+VERIFIED until run). The same file hides the shell's secret sheets and its authorization sheet: layer rules
+`gf-no-screen-share-secret` (`^grassfield-secret$`) and `gf-no-screen-share-polkit` (`^grassfield-polkit$`), `no_screen_share`
+(ADR-0035 D-9, step 9b, decision 9-22; `screenshare_rules.sh` checks both regexes against the namespaces the agents set, with
+a mutation). Both layers cover the output, so a capture is black while either sheet is up (nested capture NOT VERIFIED).
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
+- **The order of idle, the screen saver and display-off (ADR-0040 step 5; ID-8, IQ-T4 A, IQ-T5 A).** The idle lock is
+  requested at once, as before; the dim stays until that lock holds (`Idle.dimUntilLock`, at most
+  `IdleModel.DIM_UNTIL_LOCK_MAX_MS`), and the lock's content starts at the dim's level (`Lock.fromDim`: a shadow layer at
+  `idle.dimOpacity` over the wallpaper gives way to the scrim and the text as they fade in); a request that fails lifts the
+  dim at once and is logged. A screen saver on screen when a lock starts stays until the lock holds
+  (`Saver.lockStarting && wasShown`, at most `SaverModel.UNTIL_LOCK_MAX_MS`), then it is under the lock surfaces. A display
+  that turns off for inactivity locks the session (`lock.requirePasswordAfterDisplayOff`, `IdleModel.requireAfterDisplayOffMs`,
+  anything unknown is "immediately"): at once, the displays staying on until the lock holds (`IdleModel.displaysOff`, so the
+  lock is drawn just before they go off), or after the delay without input, or never; `lock.idleMinutes` stays the
+  ceiling. A lock request of any reason also abandons a password check in flight (`controller.abort()`: PAM aborted, back to
+  `locked`, no failure counted; opus review of f66cf08e, MINOR 1), so a check submitted just before the lid closes cannot
+  unlock after the sleep request. IQ-T5 A: `misc.lockdead_screen_delay = 5000` (`looknfeel.lua`): while a restarted shell
+  takes its lock back (about 1 to 2 s) the compositor keeps the session locked and draws black; the red "lock screen died"
+  screen comes only after 5 s. NOT VERIFIED (nested): the order on screen, a lock at display-off on a real display, only
+  black during the delay (`reload_locked.sh`).
 - Lid: one binding, `switch:on:Lid Switch` in `config/hypr/grassfield/system.lua` (real session only, `locked = true`) →
   `/usr/lib/grassfield/grassfield-lid closed`, which first sends `qs ipc -p /usr/share/grassfield/shell call lock lid` on every close
   (it decides nothing about locking; it only switches the laptop panel off and on for clamshell mode,
@@ -749,6 +809,14 @@ the area takes no focus while AuthAgent keeps the keys. Unit-tested (`tst_authdi
 15 messages that must not be read, the other action; `tst_authdialog` test_12_storeRequestNamesPackagesAndProgram and
 test_13_storeRequestNamesEveryPackage: 64 names of 128 characters, the helper's most).
 
+Grassfield Store's session-bus name (ADR-0037 SD35, step 4): one Store per user, as Settings and Activity Monitor. The running
+Store owns `org.grassfield.Store` (`.Dev` and a digest of the state directory in a dev or isolated run), object
+/org/grassfield/Store, one scriptable method `Open(s page, s token)`: a second launch hands it its `--page` (printable, at most
+512 characters) and its xdg-activation token (printable ASCII, at most 256) and leaves. The window checks the page again
+(Main.qml's openPage: a section, a category, an app, a search, Installed, Updates, or `type:<type>` for a well-formed media
+type); anything else keeps the page shown. It opens a page and brings the window forward, nothing else: no plan, no
+install, no removal, no update (each still needs its own button and, for the system's packages, the helper's password).
+
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,
 `responseVisible`, `supplementaryMessage`, `supplementaryIsError`, `isCompleted`, `isSuccessful`, `isCancelled`,
@@ -762,6 +830,16 @@ theme's icon (Qt searches only directories the user cannot change, `ui/i18n/icon
 from a user icon of that name (see security-images.md, `tests/security/theme_icon_files.sh`); else the lock alone; the Image
 loads asynchronously, review of 100692f). Unit-tested (`tst_authdialogmodel` `test_iconNameIsAPlainThemeName`, `tst_authdialog`
 `test_10_programIconWithLockBadge`); visual NOT verified (a nested shell cannot register an agent: L5).
+
+**One queue with the secret sheets (ADR-0035 D-9, step 9b, decision 9-15).** The polkit sheet and the secret sheets of
+`shell/security/secret` share one queue (`shell/security/SheetQueue.qml`, made by `shell.qml`): one sheet on screen at a time,
+in arrival order. While a secret sheet came first, the polkit agent hands its model no request (`AuthAgent.waiting`, the gated
+`flow`): nothing of it is mapped, focused or held, and nothing is answered meanwhile. When the secret sheet is gone, the queue
+tells the polkit model a sheet ended before it hands the request over, so the request arrives held ("right after another
+one"), without the keyboard until a click past the guard. The polkit sheet keeps its place while it is present, its linger
+included (`AuthAgent.queuePresent`), so a secret sheet never shows over it. A polkit request is never refused by the secret
+sheets' bound of 8. The agent's window rules are unchanged (`tests/security/authagent_flows.sh`, `lock_surfaces.sh`);
+`tests/security/secret_sheets.sh` runs both agents and the queue together with real keys.
 
 ## L5 polkit (owner, real session)
 Never `pkexec` a real program for this test; `pkcheck` only asks polkit whether this terminal's shell may run the action
@@ -851,7 +929,7 @@ after the release while input reached windows; `lock lock` answered `already-loc
 the sleep delay was released on the stale `secure`.
 
 Behavior now (`Lock.qml`, `LockMachine.ownershipAction`):
-1. While this shell holds a lock the compositor confirmed (`locked`/`authenticating`, `WlSessionLock.secure`), it asks
+1. While this shell holds a lock the compositor confirmed (`locked`/`authenticating`/`releasing`, `WlSessionLock.secure`), it asks
    Hyprland for the real session lock state (`ownershipProbe`: one `Hyprland.refreshMonitors()` request through
    Quickshell.Hyprland, no `hyprctl` process, never while unlocked or locking) once per second, and every 100 ms while
    a takeover is suspected (`LockMachine.takeoverSuspected`, R12 review #3): no lock surface of this shell has the
@@ -936,6 +1014,59 @@ Independent guards here:
 Only wrong attempts are ever used for the L2 failure path, and only by the owner with `GRASSFIELD_DEV_ALLOW_PAM=1`
 (at most 3 per run; faillock deny=10).
 
+## The lock's backdrop and data (ADR-0040 step 4a, ID-7, ID-2, ID-15; ADR-0016 section 6, W8)
+Display only: nothing below can lock, unlock, delay engaging the lock or keep it from failing closed.
+- **Backdrop.** The wallpaper each output shows, sharp (IQ-W4 A): the desktop records it in `wallpaper.json` `shown`
+  (`WallpaperState.setShown`); `WallpaperState.lockBackdrop(output)` (`WallpaperConfig.lockBackdropOf`) gives the lock a
+  picture only as a plain cache name (`<32 hex>.jpg|png`) directly in the prepared or the video folder (a video's poster),
+  else the colour, else the artwork and variant the output draws (the artwork is also every picture's fallback).
+  `LockStill.qml` (one per output, in `LockStills.qml`, which `Lock.qml` creates at run time, last, never as a declared
+  child: a display file that fails to load costs the backdrop and the picture, never the lock) decides it while the
+  session is unlocked, when the wallpaper changes: a picture is checked again by absolute path and argument vector
+  (`/usr/bin/realpath -m -- <prepared> <video> <file>`: the file's real path must be a plain cache name directly in one of
+  the two folders' real paths; `/usr/bin/stat --printf %f|%s --`: the raw mode, which no locale translates, a regular file
+  of at most `wallpaper.lockStillMaxBytes`), one process per step and request, an answer of a superseded request dropped, then
+  decoded by a hidden `Image` (`cache: true`, no `sourceSize`: the helper wrote it at the output's physical size, and a
+  `sourceSize` would key Qt's pixmap cache on each window's scale; Qt's image allocation limit bounds a file that is not
+  what it should be; Qt's `@2x` lookup is off for the shell, `QT_HIGHDPI_DISABLE_2X_IMAGE_LOADING=1` in its unit, so the
+  decoded path is the checked one). Any failure (gone, outside the cache, too large, not decodable,
+  `wallpaper.toolTimeoutMs` without an answer) gives the artwork, logged. No user original and no video decoder enters the
+  module. Known limit (opus review of cbd6ef05, MINOR 1): a process of the same user writing the 0700 cache can still swap
+  the file between the check and the decode, or give another image format under the cache name; bounded by the size cap,
+  Qt's allocation limit and the timeout, and the lock itself is unaffected; ADR-0041 S2 narrows it.
+- **Taken once.** A lock surface (`LockView`) adopts its output's backdrop when it is created, or when it is first decided
+  (a hotplugged output, a wallpaper that changed just before the lock), at most `wallpaper.firstShowTimeoutMs` later, then
+  the artwork; until then the surface's own colour shows: the output's ground (`Ground.of`, ID-2, ID-15), under the scrim
+  and the text, which are there at once. Its `Image` asks for the url `LockStill` decoded, with the same options, so the
+  pixmap cache gives it already decoded. The account's full name and picture are taken at creation too: the picture only
+  when `Lock.qml`'s `avatarPreload` (the shell's PNG copy of at most 256 x 256, same options) has decoded it, else the
+  initials. Once the lock shows nothing on it changes but the clock, which `SleepInhibitor.afterResume` refreshes
+  (`Lock.resumed`, T-14), and the moving artwork's clouds (below).
+- **The moving artwork** (ADR-0040 step 9, as the integrator decided in the review of e067f26f, after P1 measured 3.70 %
+  with the clouds moving on the desktop): with `wallpaper.moving`, the Grassfield artwork's clouds move on the lock screen
+  only, as macOS's moving wallpapers do; the desktop draws them still. `LockView` takes the setting once, at creation, and
+  where the desktop's clouds rest until they first move (a surface whose output is known only after its creation starts
+  from that output's clouds) (`WallpaperState.motionOf`, through `LockStills` and `Lock.qml`'s `moving` and `motionOf`:
+  display data, without the stills off and from 0); they move by the artwork's own `wallpaper.movingFrameMs` Timer while the
+  backdrop is the artwork, not while releasing, not under Reduce Motion and not while `motionHeld`: `Lock.qml` holds them
+  while the displays are off (`Lock.displaysOff`, which Idle sets from its own `displayOff` in a change handler outside
+  `setDisplays`) and once the controller is unlocked, should a surface outlive the unlock (opus review of bdc11b2d). When the release fade starts they slow down
+  linearly to a stop within it (`Easing.OutQuad` over `Appearance.duration(lock.fadeOutMs)`, the controller's `releaseMs`,
+  from the running speed: `WallpaperConfig.lockMotionRest`, half the fade further on), and the view sets `motionRest`, which
+  `Lock.qml` hands to the desktop at once (`restMotion`, in a `try`; `WallpaperState.setMotion`), so the desktop under the
+  lock is the frame the lock comes to rest on. Nothing waits for it: the release stays the controller's timer, the view
+  emits no new signal and calls nothing; a lock request during the fade stops the slow-down and lets them move on from
+  there. Not on the lock path (`tst_lockbackdrop.qml`: `lock()`, `engage()`, `release()`, `restore()` read none of it).
+- **Scrim** (IQ-W4 A): see "Lock screen contrast" above; A2 holds per band by the same argument as before: every text line
+  lies on `lock.dimOpacity`.
+- Tests: `tst_wallpaper.qml` (`lockBackdropOf`, `withShown`; `motionIn`, `withMotion`, `lockMotionRest`), `tst_lockbackdrop.qml`
+  (`test_theCloudsMoveOnTheLockOnly`), `test_contrast_tokens.py` (the model matches the scrim's lines,
+  the clear band below the text bands), `lock_surfaces.sh` (the clock's one refresh), `tst_wallpaper.qml`
+  (`lockStillReal`, `lockStillStatOk`). The pixmap cache hit was checked offscreen on Qt 6.10 by the reviewer. NOT VERIFIED
+  (no Quickshell or nested session here; required before the merge): the real `Lock.qml` loading
+  (`tests/security/lock_monitor_model.sh`, `dev_gate.sh`, `reload_locked.sh`), L1 to L5, a hotplugged output while
+  locked, the clock after a real sleep, the A2 lock run over the new backdrops (`tests/visual/contrast.sh --surfaces lock`).
+
 ## Known limitations
 - Successful-unlock tests need the owner's password: the agent only verifies failure paths (L2 owner check).
 - L3 cannot be verified in nested.
@@ -1008,7 +1139,9 @@ same directory and the modules move without moving a file), one step at a time u
 | `shell/security/LockController.qml` | Auth controller over an injected PAM backend: one prompt answered, 30 s timeout, secret dropped on every outcome |
 | `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
 | `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
-| `shell/security/lock/LockView.qml` | Lock surface (display only): blurred `WallpaperArt` under a scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions) |
+| `shell/security/lock/LockView.qml` | Lock surface (display only): the output's wallpaper, sharp (the still LockStill decoded, else its colour or `WallpaperArt`), the banded scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions); backdrop, name and picture taken once (ADR-0040 step 4a) |
+| `shell/security/lock/LockStill.qml` | Per output (display only): the lock's backdrop decided while unlocked from `WallpaperState.lockBackdrop`; a picture checked (`/usr/bin/realpath -m`: a plain cache name in the real prepared or video folder; `/usr/bin/stat %f`: a regular file of at most `wallpaper.lockStillMaxBytes`) and decoded into Qt's pixmap cache before any lock (ADR-0040 ID-7, ADR-0016 W8) |
+| `shell/security/lock/LockStills.qml` | The display data the lock surfaces take (one LockStill per output, the account picture decoded ahead), created by `Lock.qml` at run time so that it can never keep the lock from loading |
 | `shell/security/polkit/` | `AuthAgent` (PolkitAgent + overlay window, IPC `polkit status`), `AuthDialog`, `AuthDialogModel` |
 | `shell/security/idle/` | `Idle` (IdleMonitor, dim layer, idle lock, display power-off on the lock screen, IPC `idle`), `SleepInhibitor` (delay inhibitor, PrepareForSleep watcher, retry and notice, logind budget), `IdleModel.js` |
 | `config/hypr/grassfield/privacy.lua` | Omarchy's `no_screen_share` rules read from Omarchy's own files (SEC-01) |
@@ -1027,7 +1160,7 @@ same directory and the modules move without moving a file), one step at a time u
 
 IPC (all on the shell instance; classes in "IPC surface"): `lock lock` → `ok` / `already-locked` / `refused: missing-pam`
 (when already locked, the session lock is re-verified, see "Lock ownership"); `lock lid` → the same or `docked`. Dev
-hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locking|locked|authenticating`;
+hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locking|locked|authenticating|releasing`;
 `lock devReload` → `reloading` (soft reload), `lock devPauseOwnershipCheck` → `paused` (periodic ownership check off
 for 10 s), `lock devForgeUnlockedAnswer` → `forged` | `not-holding` (counts one "unlocked" answer Hyprland never gave,
 as a stale answer would; only a confirmed relock can follow), `lock devLockView` → JSON {state, field: empty|filled,
@@ -1035,10 +1168,18 @@ message, failedAttempts, pamSuppressed} (never the text or its length), `idle de
 (before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`,
 `idle status` → JSON, `polkit status` → `registered|unregistered`.
 
-States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> unlocked`;
-`failure|error|timeout|abort` → `locked`; a lock dropped by the compositor, or a session found unlocked under a lock
-still reported secure (foreign takeover + release) → `locking` (fresh lock, re-requested every 500 ms);
-fingerprint success unlocks from `locked`. Unknown states/events never unlock (exhaustive test).
+States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> releasing
+-released-> unlocked`; `failure|error|timeout|abort` → `locked`; a lock dropped by the compositor, or a session found
+unlocked under a lock still reported secure (foreign takeover + release) → `locking` (fresh lock, re-requested every
+500 ms); fingerprint success enters `releasing` from `locked`. `releasing` (ADR-0040 step 4b, IQ-T2 A): the lock's scrim
+and text fade out over `lock.fadeOutMs` while the session is still locked (it counts as holding: the ownership check,
+`secure` and the sleep delay work as in `locked`); `released`, sent only by the controller's own Timer armed by the PAM
+success (never by the view's animation), unlocks; a lock request (any reason, `Lock.lock` → `interruptRelease`), an abort
+or an error during it → `locked`, a lost lock → `locking`, and the PAM success is spent: unlocking needs a new one. No
+input during `releasing` (the field is disabled, `canSubmit` false). The content fades in over `lock.fadeInMs` once a
+surface shows; the field takes input from the first frame (opacity stops no input). Reduce Motion caps both
+(`Appearance.duration`). Unknown states/events never unlock (exhaustive test, and every two-event path from `locking`
+or `locked`).
 
 Decisions:
 - Crash recovery marker: `$XDG_RUNTIME_DIR/grassfield-lock-<HYPRLAND_INSTANCE_SIGNATURE>` holds `locked`/`unlocked`,
@@ -1071,7 +1212,10 @@ Decisions:
 - Idle: `IdleMonitor { respectInhibitors: true }`, dim at T−10 s, lock at T; Quickshell 0.3.1 keeps the timeout an
   `IdleMonitor` was enabled with, so the monitor is re-enabled on every timeout change (verified in nested).
 - Lock screen contrast (gate A2, both appearances, any wallpaper): as on macOS, white text (dark palette, both appearances)
-  with a soft shadow over the blurred wallpaper darkened by a shadow-colour scrim (`lock.dimOpacity` 0.6), and a dark frosted
+  with a soft shadow over the wallpaper (sharp since ADR-0040 step 4a) darkened by a shadow-colour scrim (`lock.dimOpacity` 0.6
+  under the date and clock band and under the account column; `lock.scrimClearOpacity` 0.25 between them, where no text
+  lies, the `lock.scrimFeather` ramps on the clear side of each band edge, the edges bound to the two columns' geometry, so
+  every text line lies on 0.6 at every text scale; the whole surface at 0.6 when there is no room), and a dark frosted
   password field (shadow colour at `lock.fieldFillOpacity` 0.45, `textSecondary` placeholder, white focus ring at
   `lock.focusRingOpacity`). The scrim alone carries the contrast (the shadow is decoration). Minimum over 9 worst-case
   wallpaper colours (`tests/visual/test_contrast_tokens.py`, "lock ..." roles): text 5.27, initials 3.41 (large), placeholder

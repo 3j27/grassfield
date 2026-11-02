@@ -57,6 +57,15 @@ SettingsPage {
     readonly property bool shuffle: root.eff.shuffle
     readonly property bool videoOnBattery: root.store.value("wallpaper.videoOnBattery")
     readonly property string provider: root.store.value("wallpaper.online.provider")
+    // The Grassfield artworks (ADR-0040 step 2): which one the artwork source draws and which variant shows (stored values,
+    // normalised: an unknown one reads as the default).
+    readonly property var artworkCfg: WallpaperConfig.normalize({artwork: root.store.value("wallpaper.artwork"), artworkVariant: root.store.value("wallpaper.artworkVariant")})
+    readonly property string artwork: root.artworkCfg.artwork
+    readonly property string artworkVariant: root.artworkCfg.artworkVariant
+    // The four artworks, each tile drawn in the current appearance (macOS's dynamic wallpapers show the appearance's look).
+    readonly property var artworkModel: [{id: "grassfield", text: qsTr("Grassfield")}, {id: "meadow", text: qsTr("Meadow")}, {id: "rows", text: qsTr("Field Rows")}, {id: "ridgeline", text: qsTr("Ridgeline")}]
+    // The choice of variant: Time of Day for the Grassfield artwork only.
+    readonly property var variantModel: (root.artwork === "grassfield" ? [{id: "timeOfDay", text: qsTr("Time of Day")}] : []).concat([{id: "automatic", text: qsTr("Automatic")}, {id: "light", text: qsTr("Light")}, {id: "dark", text: qsTr("Dark")}])
     // The tool's answer for the output the user looks at: {state, reason, source, path, name, files, file, video, progress}.
     property var status: ({})
     // Every output's answer, by output name.
@@ -67,6 +76,20 @@ SettingsPage {
     // The opt-in disclosure is open (the tile was chosen, the source is not on yet).
     property bool disclosing: false
     readonly property var onlineEntry: root.online.entry || null
+
+    // The shipped photographs (ADR-0040 step 2c): their list beside them (photos.json), read once; none when the package did
+    // not install them. A photograph is a picture for the shell (source "file").
+    property var photos: []
+    readonly property string photosDir: root.backend.wallpaperPhotosDir || ""
+    readonly property string language: Qt.uiLanguage !== "" ? Qt.uiLanguage : Qt.locale().name
+    readonly property var currentPhoto: root.source === "file" ? WallpaperConfig.photoAt(root.photos, root.path) : null
+    // What About This Wallpaper shows: the picture of the day's attribution, or the photograph's.
+    readonly property var aboutEntry: root.source === "online" ? root.onlineEntry : WallpaperConfig.photoAbout(root.currentPhoto, root.language)
+
+    function loadPhotos(): void {
+        const r = root.photosDir !== "" ? root.backend.readText(root.photosDir + "/photos.json") : null;
+        root.photos = r && r.ok && r.exists ? WallpaperConfig.parsePhotos(r.text, root.photosDir) : [];
+    }
     // The refusal of a choice (outside the dev folder, bad path): shown under the grids.
     property string refusal: ""
     property var pictures: []
@@ -185,13 +208,15 @@ SettingsPage {
 
     readonly property string headline: {
         if (root.source === "builtin")
-            return qsTr("Grassfield");
+            return root.artworkModel.find(a => a.id === root.artwork).text;
         if (root.source === "color")
             return root.colorName(root.color);
         if (root.source === "online")
             return root.onlineEntry && root.onlineEntry.title ? root.onlineEntry.title : root.providerName(root.provider);
         if (root.source === "folder")
             return root.baseName(root.path);
+        if (root.currentPhoto)
+            return WallpaperConfig.photoName(root.currentPhoto, root.language);
         return root.displayName(root.path);
     }
 
@@ -245,14 +270,17 @@ SettingsPage {
         return WallpaperConfig.sourceProblem(p, root.backend.devSession, root.backend.devRoot);
     }
 
+    // False, with the refusal shown, for a path the dev guard or the path rules refuse.
+    function allowed(p: string): bool {
+        const why = root.problem(p);
+        if (why !== "")
+            root.refusal = root.reasonText(why === "outside-dev" ? "outside-dev" : "invalid-path", root.baseName(p));
+        return why === "";
+    }
+
     function choose(entries: var, recentKind: string, recentPath: string): bool {
-        if (recentKind !== "") {
-            const why = root.problem(recentPath);
-            if (why !== "") {
-                root.refusal = root.reasonText(why === "outside-dev" ? "outside-dev" : "invalid-path", root.baseName(recentPath));
-                return false;
-            }
-        }
+        if (recentKind !== "" && !root.allowed(recentPath))
+            return false;
         root.refusal = "";
         if (!root.writeFields(entries))
             return false;
@@ -291,8 +319,10 @@ SettingsPage {
         root.store.set("wallpaper.outputs", WallpaperConfig.withOutput(root.stored.outputs, root.currentDisplay, null));
     }
 
-    function useArtwork(): void {
-        root.choose({"wallpaper.source": "builtin"}, "", "");
+    // An artwork tile: the artwork source and which artwork (wallpaper.artwork is not per display: it applies everywhere the
+    // artwork shows).
+    function useArtwork(name: string): void {
+        root.choose({"wallpaper.source": "builtin", "wallpaper.artwork": name}, "", "");
     }
 
     // The online tile asks first: what is contacted is shown, and nothing is turned on until the user agrees.
@@ -351,7 +381,7 @@ SettingsPage {
             // Nothing to restore, and the choice was for All Displays: the artwork there, no override for the display shown.
             root.store.setMany({"wallpaper.source": "builtin"});
         else if (plan.action === "artwork")
-            root.useArtwork();
+            root.useArtwork(root.artwork);
     }
 
     function useColor(c: string): void {
@@ -360,6 +390,14 @@ SettingsPage {
 
     function usePicture(p: string): void {
         root.choose({"wallpaper.source": "file", "wallpaper.path": p}, "file", p);
+    }
+
+    // A shipped photograph: shown like a picture, not added to Folders and Pictures (it has its own section).
+    function usePhoto(p: string): void {
+        if (!root.allowed(p))
+            return;
+        root.refusal = "";
+        root.writeFields({"wallpaper.source": "file", "wallpaper.path": p});
     }
 
     function useFolder(p: string): void {
@@ -566,6 +604,7 @@ SettingsPage {
         root.loadStatus();
         root.loadRecents();
         root.refreshPictures();
+        root.loadPhotos();
         root.backend.query([root.backend.wallpaperTool, "formats"], "wp.formats", 5000);
     }
 
@@ -616,9 +655,12 @@ SettingsPage {
                         color: root.source === "color" ? root.color : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
                     }
 
+                    // The artwork and the variant the desktop shows (its phase of the day from the shell's report).
                     GrassfieldArtwork {
                         anchors.fill: parent
                         visible: root.source === "builtin" || (root.source !== "color" && preparedImage.status !== Image.Ready)
+                        artwork: root.artwork
+                        variant: WallpaperConfig.artworkVariantFor(root.artwork, root.artworkVariant, Appearance.dark, root.status.phase ?? "")
                     }
 
                     Image {
@@ -670,6 +712,17 @@ SettingsPage {
                     title: root.headline
                     subtitle: root.caption
 
+                    // The artwork's variant: Time of Day, Automatic, Light or Dark (ADR-0040 section 2, IQ-W1 C).
+                    ComboBox {
+                        visible: root.source === "builtin"
+                        inline: true
+                        accessibleName: qsTr("Appearance of the wallpaper")
+                        model: root.variantModel
+                        // Time of Day on another artwork reads as Automatic (WallpaperConfig.artworkVariantFor).
+                        value: root.variantModel.some(m => m.id === root.artworkVariant) ? root.artworkVariant : "automatic"
+                        onPicked: id => root.store.set("wallpaper.artworkVariant", id)
+                    }
+
                     ComboBox {
                         visible: root.source === "file" || root.source === "folder" || root.source === "online" || root.source === "video"
                         inline: true
@@ -686,6 +739,20 @@ SettingsPage {
                         color: root.color
                         presets: Tokens.iconModeTintColors.map((c, i) => ({color: c, name: root.colorNames[i]}))
                         onEdited: c => root.writeFields({"wallpaper.color": c})
+                    }
+                }
+
+                // The moving Grassfield artwork (ADR-0040 IQ-W3 A, step 9): off by default; it moves on the lock screen only (the
+                // integrator's decision in the review of e067f26f).
+                SettingsRow {
+                    visible: root.source === "builtin" && root.artwork === "grassfield"
+                    title: qsTr("Moving clouds")
+                    subtitle: qsTr("On the lock screen, clouds drift and the light changes slowly, coming to rest as you unlock; the desktop shows them still. Still with Reduce Motion.")
+
+                    Toggle {
+                        accessibleName: qsTr("Moving clouds")
+                        checked: root.store.value("wallpaper.moving") === true
+                        onToggled: c => root.store.set("wallpaper.moving", c)
                     }
                 }
 
@@ -749,7 +816,7 @@ SettingsPage {
                     Rectangle {
                         x: Tokens.settingsRowInset
                         width: parent.width - 2 * Tokens.settingsRowInset
-                        height: 1
+                        height: Tokens.appsBorderWidth
                         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                     }
 
@@ -795,7 +862,7 @@ SettingsPage {
                     visible: root.status.state === "error" && root.source !== "builtin"
                     push: true
                     text: qsTr("Use the Grassfield Wallpaper")
-                    onClicked: root.useArtwork()
+                    onClicked: root.useArtwork(root.artwork)
                 }
 
                 Button {
@@ -812,7 +879,7 @@ SettingsPage {
                 x: -root.columnX
                 y: Math.max(preview.y + preview.height + Tokens.settingsWallpaperSeparatorPreviewGap, (buttons.height > 0 ? buttons.y + buttons.height : options.y + options.height) + Tokens.settingsWallpaperSeparatorGap)
                 width: root.width
-                height: 1
+                height: Tokens.appsBorderWidth
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
         }
@@ -822,8 +889,21 @@ SettingsPage {
             // The first title is placed from the line's top.
             lead: Tokens.settingsWallpaperTitleBaseline - line.height
             title: qsTr("Grassfield")
-            model: [{kind: "art", label: qsTr("Grassfield"), selected: root.source === "builtin"}]
-            onActivated: root.useArtwork()
+            model: root.artworkModel.map(a => ({kind: "art", artwork: a.id, variant: WallpaperConfig.artworkVariantFor(a.id, "automatic", Appearance.dark, ""), label: a.text, selected: root.source === "builtin" && root.artwork === a.id}))
+            onActivated: index => root.useArtwork(root.artworkModel[index].id)
+        }
+
+        // The shipped photographs (ADR-0040 step 2c), named in the session's language; the section is absent without them.
+        WallpaperSection {
+            id: photosSection
+            visible: root.photos.length > 0
+            title: qsTr("Photographs")
+            model: root.photos.map(p => ({kind: "image", label: WallpaperConfig.photoName(p, root.language), thumb: root.thumbs[p.path] || "", selected: root.source === "file" && root.path === p.path}))
+            onActivated: index => root.usePhoto(root.photos[index].path)
+
+            // The thumbnails of the tiles drawn (the row, or all of them once shown).
+            readonly property var drawn: root.photos.slice(0, photosSection.grid.shown).map(p => p.path)
+            onDrawnChanged: root.requestThumbs(photosSection.drawn)
         }
 
         // Pictures and folders added here, after the tiles that add them: a picture shows its thumbnail, a folder reads
@@ -938,10 +1018,10 @@ SettingsPage {
             }
         }
 
-        // The attribution of the picture on screen (the same fields as the desktop menu's "About This Wallpaper"): a group, its
-        // title where the next section's would be.
+        // The attribution of the picture on screen (the same fields as the desktop menu's "About This Wallpaper"): the picture of
+        // the day's, or a shipped photograph's (ADR-0040 step 2c); a group, its title where the next section's would be.
         Item {
-            visible: root.source === "online" && root.onlineEntry !== null
+            visible: root.aboutEntry !== null
             width: parent.width
             height: visible ? aboutGroup.y + aboutGroup.height : 0
 
@@ -952,28 +1032,29 @@ SettingsPage {
                 caption: qsTr("About This Wallpaper")
 
                 SettingsRow {
-                    visible: !!(root.onlineEntry && root.onlineEntry.title)
+                    visible: !!(root.aboutEntry && root.aboutEntry.title)
                     title: qsTr("Title")
-                    valueText: root.onlineEntry ? root.onlineEntry.title : ""
+                    valueText: root.aboutEntry ? root.aboutEntry.title : ""
                 }
 
+                // A photograph's credit is its author's own attribution line, with its copyright notice (WallpaperConfig.photoAbout).
                 SettingsRow {
-                    visible: !!(root.onlineEntry && (root.onlineEntry.author || root.onlineEntry.credit))
-                    title: qsTr("Author")
-                    valueText: root.onlineEntry ? (root.onlineEntry.author || root.onlineEntry.credit) : ""
+                    visible: !!(root.aboutEntry && (root.aboutEntry.author || root.aboutEntry.credit))
+                    title: root.aboutEntry && root.aboutEntry.author ? qsTr("Author") : qsTr("Credit")
+                    valueText: root.aboutEntry ? (root.aboutEntry.author || root.aboutEntry.credit) : ""
                 }
 
                 SettingsRow {
                     id: sourceRow
-                    readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.sourceUrl) : ""
+                    readonly property string link: root.aboutEntry ? WallpaperConfig.linkOf(root.aboutEntry.sourceUrl) : ""
                     title: qsTr("Source")
-                    subtitle: sourceRow.link === "" && root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+                    subtitle: sourceRow.link === "" && root.aboutEntry ? root.sourceText(root.aboutEntry.sourceUrl) : ""
                     valueText: sourceRow.link === "" ? (root.provider === "apod" ? qsTr("NASA APOD") : qsTr("Wikimedia Commons")) : ""
 
                     LinkText {
                         visible: sourceRow.link !== ""
                         width: Math.min(implicitWidth, sourceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
-                        text: root.onlineEntry ? root.sourceText(root.onlineEntry.sourceUrl) : ""
+                        text: root.aboutEntry ? root.sourceText(root.aboutEntry.sourceUrl) : ""
                         target: sourceRow.link
                         maximumLineCount: 3
                         onActivated: root.openLink(sourceRow.link)
@@ -982,24 +1063,31 @@ SettingsPage {
 
                 SettingsRow {
                     id: licenceRow
-                    readonly property string link: root.onlineEntry ? WallpaperConfig.linkOf(root.onlineEntry.licenseUrl) : ""
-                    visible: !!(root.onlineEntry && root.onlineEntry.licenseShort)
+                    readonly property string link: root.aboutEntry ? WallpaperConfig.linkOf(root.aboutEntry.licenseUrl) : ""
+                    visible: !!(root.aboutEntry && root.aboutEntry.licenseShort)
                     title: qsTr("Licence")
-                    valueText: licenceRow.link === "" && root.onlineEntry ? root.onlineEntry.licenseShort : ""
+                    valueText: licenceRow.link === "" && root.aboutEntry ? root.aboutEntry.licenseShort : ""
 
                     LinkText {
                         visible: licenceRow.link !== ""
                         width: Math.min(implicitWidth, licenceRow.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg)
-                        text: root.onlineEntry ? root.onlineEntry.licenseShort : ""
+                        text: root.aboutEntry ? root.aboutEntry.licenseShort : ""
                         target: licenceRow.link
                         onActivated: root.openLink(licenceRow.link)
                     }
                 }
 
+                // What Grassfield did to a shipped photograph (THIRD_PARTY.md): the licence's "indicate if You modified" it.
                 SettingsRow {
-                    visible: !!root.onlineEntry && root.formatUpdated(root.onlineEntry.fetchedAt) !== ""
+                    visible: !!root.aboutEntry && root.aboutEntry.modified === true
+                    title: qsTr("Changes")
+                    valueText: qsTr("Resized and re-encoded by Grassfield, metadata removed")
+                }
+
+                SettingsRow {
+                    visible: !!root.aboutEntry && root.formatUpdated(root.aboutEntry.fetchedAt) !== ""
                     title: qsTr("Last updated")
-                    valueText: root.onlineEntry ? root.formatUpdated(root.onlineEntry.fetchedAt) : ""
+                    valueText: root.aboutEntry ? root.formatUpdated(root.aboutEntry.fetchedAt) : ""
                 }
             }
         }

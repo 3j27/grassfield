@@ -91,9 +91,11 @@ Limits:
 One full-screen transparent overlay layer per output (namespace `grassfield-switcher`), mapped on the focused output only
 while a session runs (exclusive keyboard); panel drawn after the show delay. Material per master-prompt 5.5: frosted tint
 from the compositor blur region (`BackgroundEffect`; layer rule fallback in `windows.lua`), never faked. Tokens
-`switcher.*`: icon 104, pitch 134, selection square 123 (radius 26), panel radius 30. Apps wrap into rows when the output
+`switcher.*`: icon 104, pitch 134, selection square 123 (radius 33), panel radius 60 and padding 22, the selection concentric
+with the panel's corner (macOS 27's App Switcher measured, ADR-0039 step 13). Apps wrap into rows when the output
 is narrower than the row (`SwitcherModel.grid`). The selected app's name sits under the row, centred on the selected
-column. The selection square has an accent border (visible keyboard focus). Fade and scale with `motion.fast`; Reduce
+column. The selection square carries the shared focus ring (visible keyboard focus; ADR-0039 step 7) on the neutral selection of an
+item on glass (`material.selectionOpacity`, step 12). Fade and scale with `motion.fast`; Reduce
 Motion: fade only.
 
 Accessibility: panel `Accessible.List` "Application Switcher", each tile a `Button` named after the app, `focused` on the

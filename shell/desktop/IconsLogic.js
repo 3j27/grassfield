@@ -7,6 +7,15 @@
 
 const VERSION = 1;
 
+// ---- label tone -----------------------------------------------------------------------------------
+
+// A label's ink over the wallpaper under it (ADR-0039 step 25, the menu bar's rule): dark (true) where the darkest of that
+// range is at or above `lightBelow` (menubar.toneLightBelow: black text holds 4.5:1 there), white with its halo otherwise,
+// and white when the range is unknown ({lumMin, lumMax} or null).
+function darkLabelOver(range, lightBelow) {
+    return range !== null && range !== undefined && typeof range.lumMin === "number" && range.lumMin >= lightBelow;
+}
+
 // ---- grid ---------------------------------------------------------------------------------------
 
 // {cols, rows} that fit in a work area of w x h px.

@@ -194,7 +194,7 @@ Window {
                         textFormat: Text.PlainText
                         width: parent.width
                         text: root.isApplication ? root.info.kind : root.info.isDir ? root.folderSize : root.info.sizeText
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
                     }
@@ -235,7 +235,7 @@ Window {
                     y: Tokens.spacingXs
                     horizontalAlignment: Text.AlignRight
                     text: qsTr("Tags:")
-                    color: Appearance.colors.textSecondary
+                    color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
                 }
@@ -286,7 +286,7 @@ Window {
                         width: line.isHeader ? parent.width : Tokens.filesInfoLabelWidth
                         horizontalAlignment: line.isHeader ? Text.AlignLeft : Text.AlignRight
                         text: line.isHeader ? line.modelData.header : line.modelData.label
-                        color: line.isHeader ? Appearance.colors.text : Appearance.colors.textSecondary
+                        color: line.isHeader ? Appearance.colors.text : Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
                         font.weight: line.isHeader ? Tokens.typographyMenuBoldWeight : Tokens.typographySmallWeight

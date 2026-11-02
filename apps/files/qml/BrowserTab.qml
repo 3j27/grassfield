@@ -1263,6 +1263,47 @@ FocusScope {
         onLoaded: Qt.callLater(root.focusView)
     }
 
+    // A folder that takes a while to list says so in its view (ADR-0039 step 23), not only in the status bar, which is hidden by
+    // default: the shared spinner (D4) over "Loading…" or "Searching…", once the listing has shown nothing for
+    // files.loadingDelay. The column view lists each column in place.
+    Item {
+        id: loadingNote
+        readonly property bool waiting: viewLoader.kind !== "columns" && root.folder !== null && root.folder.loading && root.folder.count === 0
+        property bool delayed: false
+
+        anchors.fill: viewLoader
+        visible: loadingNote.waiting && loadingNote.delayed
+        onWaitingChanged: if (!loadingNote.waiting)
+            loadingNote.delayed = false
+
+        Timer {
+            interval: Tokens.filesLoadingDelay
+            running: loadingNote.waiting && !loadingNote.delayed
+            onTriggered: loadingNote.delayed = true
+        }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: Tokens.spacingSm
+
+            Spinner {
+                anchors.horizontalCenter: parent.horizontalCenter
+                running: loadingNote.visible
+            }
+
+            Text {
+                textFormat: Text.PlainText
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: root.folder && root.folder.isSearch ? qsTr("Searching…") : qsTr("Loading…")
+                color: Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+        }
+    }
+
     // The preview pane beside the icon and list views (the gallery and the column view have their own), made while shown.
     Loader {
         id: previewPane

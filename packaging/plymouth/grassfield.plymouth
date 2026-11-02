@@ -1,0 +1,26 @@
+# Grassfield's boot theme (ADR-0042, ADR-0040 IQ-L1 C). Plymouth's own two-step module draws everything, the disk-password
+# prompt included (its entry, bullets and keyboard handling are the module's); this file only gives the colours and the images
+# packaging/plymouth/build.sh renders. No script. The ground is the default Grassfield artwork's (session.ground #2F6D5F).
+# Activated only by the owner (docs/owner-setup/login-boot-themes.md); Esc switches to Plymouth's text view at any time.
+[Plymouth Theme]
+Name=Grassfield
+Description=The Grassfield mark on the ground, with Plymouth's own password prompt
+ModuleName=two-step
+
+[two-step]
+Font=Inter 13
+TitleFont=Inter 13
+ImageDir=/usr/share/plymouth/themes/grassfield
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.62
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.38
+HorizontalAlignment=.5
+VerticalAlignment=.75
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.42
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x2f6d5f
+BackgroundEndColor=0x2f6d5f
+MessageBelowAnimation=true

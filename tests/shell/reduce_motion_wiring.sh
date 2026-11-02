@@ -8,7 +8,8 @@
 #    zoom 1, tiles at their opacity);
 #  * a banner and the Notification Center fade in where they stand under Reduce Motion instead of sliding in;
 #  * the stack fan's items stand at their places and only fade in;
-#  * the saver's slide crossfade is capped like every other duration (Appearance.duration).
+#  * a banner dropped short of dismissing is back in place at once;
+#  * the saver's slide crossfade stays a whole dissolve (not motion; macOS keeps its dissolves).
 set -uo pipefail
 root=${WIRING_ROOT:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}
 cd "$root" || exit 2
@@ -16,6 +17,7 @@ fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 
 surfaces=(shell/notifications/Banner.qml shell/notifications/Banners.qml shell/notifications/NotificationCenter.qml
+  shell/notifications/NotificationList.qml
   shell/overview/OverviewWindow.qml shell/search/SearchPanel.qml shell/overlay/StackPopup.qml shell/osd/OsdWindow.qml
   shell/saver/SaverView.qml)
 
@@ -52,7 +54,10 @@ check bash -c 'grep -q "readonly property real spread: Appearance.reduceMotion ?
   && grep -q "readonly property real side: at.side \* root.spread" "$0" \
   && grep -q "opacity: root.progress" "$0"' shell/overlay/StackPopup.qml
 
-desc="Saver: the slides' crossfade is capped under Reduce Motion"
-check grep -q "duration: Appearance.duration(Tokens.saverSlideFadeMs)" shell/saver/SaverView.qml
+desc="Banner: dropped short of dismissing, it is back in place at once under Reduce Motion"
+check bash -c 'grep -B1 -A1 "else if (Appearance.reduceMotion)" "$0" | grep -q "card.dragX = 0;"' shell/notifications/Banner.qml
+
+desc="Saver: the slides' crossfade stays a whole dissolve under Reduce Motion"
+check grep -q "duration: Tokens.saverSlideFadeMs$" shell/saver/SaverView.qml
 
 exit $fail

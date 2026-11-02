@@ -628,7 +628,9 @@ Variants {
                 enabled: !Appearance.reduceMotion
                 NumberAnimation {
                     duration: Appearance.duration(Tokens.motionFast)
-                    easing.type: Easing.OutCubic
+                    // A resize: the move curve (ADR-0039 step 20).
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.curve
                 }
             }
 

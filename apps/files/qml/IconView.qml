@@ -549,7 +549,7 @@ FocusScope {
         width: parent.width - 2 * Tokens.spacingLg
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.Wrap
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
     }
@@ -657,7 +657,7 @@ FocusScope {
             elide: Text.ElideRight
             color: cell.selected && cell.focused ? Appearance.colors.selectionText : Appearance.colors.text
             font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.typographyCaptionSize + 1
+            font.pixelSize: Tokens.filesIconLabelSize
         }
 
         Loader {

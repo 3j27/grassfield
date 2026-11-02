@@ -39,6 +39,7 @@ ShellRoot {
             "dock.minimizeIntoApp": "dockMinimizeIntoApp",
             "dock.animateOpening": "dockAnimateOpening",
             "dock.showIndicators": "dockShowIndicators",
+            "dock.endTask": "dockEndTask",
             "dock.minimizeEffect": "dockMinimizeEffect",
             "desktop.showIcons": "desktopShowIcons",
             "menubar.showBackground": "menubarShowBackground",
@@ -79,6 +80,7 @@ ShellRoot {
             "lock.showUser": "lockShowUser",
             "lock.showMessage": "lockShowMessage",
             "lock.message": "lockMessage",
+            "lock.requirePasswordAfterDisplayOff": "lockRequirePasswordAfterDisplayOff",
             "search.showApps": "searchShowApps",
             "search.showDocuments": "searchShowDocuments",
             "search.showRecents": "searchShowRecents",
@@ -119,6 +121,9 @@ ShellRoot {
             "wallpaper.shuffle": "wallpaper.shuffle",
             "wallpaper.videoOnBattery": "wallpaper.videoOnBattery",
             "wallpaper.online.provider": "wallpaper.online.provider",
+            "wallpaper.artwork": "wallpaper.artwork",
+            "wallpaper.artworkVariant": "wallpaper.artworkVariant",
+            "wallpaper.moving": "wallpaper.moving",
             "wallpaper.outputs": "wallpaper.outputs"
         })
 

@@ -6,8 +6,9 @@ Status: step 1 merged (PR #18: engine and placement, TL1-TL15); step 2 merged (P
 merged (PR #42: the shared edge, TL30); step 5 merged (PR #43: Settings > Desktop & Dock > Windows, TL32); step 6 is split
 in two, then five (ADR-0036 D40, D40 amended, D63, D70): 6a merged (PR #48: the Split View Desktop, TL33), 6b merged (PR
 #56: the separator's reset and the swap), 6c merged (PR #70: full screen's reveal, Dock and green button; windows gathered
-after an unplug), 6d on its branch (the Split View rows, the Overview's drop rule), 6e not built (the titles hidden and
-revealed at the top). Below, "Today" is the state before step 1. A requirement
+after an unplug), 6d merged (PR #78: the Split View rows, the Overview's drop rule), 6e merged (PR #99: the titles hidden
+and revealed at the top, the revealed bar's drag). ADR-0036's plan is done (D77): the parity matrix's Later rows stay
+recorded for their modules. Below, "Today" is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -135,6 +136,20 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   tile. The maximum, likewise, is the smaller of a `max_size` rule and the xdg protocol maximum (the commit clamp applies
   the protocol maximum too). The minimum is never under Hyprland's own floor, `MIN_WINDOW_SIZE` (20 px, what its resizes
   fall back to): an app that states no minimum is not squeezed to a 1 px frame (integrator review of a6d04df).
+  Since ADR-0036 D69 (capture defect of 2026-10-30: Quarters at 1440 x 900 with Settings, 420 px tall at least, came out
+  with shifted rows) a window is placed only in a zone it fits, its minimum with its titlebar band inside the zone's frame
+  as the glyph shows it (a half beside a neighbour: the TL7 frame): the popover and the Window menu grey the places,
+  arrangements and Layouts zones it does not fit (`unfitZones`, ADR-0007), `tile`, `arrange` and a pick refuse them, a drag
+  shows no preview there (a place on the frame `tile` applies, a half beside a neighbour included: `unfitPlaces`),
+  an arrangement's fill gives each remaining zone the topmost window that fits it (a zone no window
+  fits stays empty) and the suggestion offers only windows that fit. Fill and Center are always offered. The make-room
+  above now serves windows already placed whose work area shrinks (the margins switch, the Dock). The shell as built
+  (review of D69): greyed, never hidden, as macOS greys a tile it cannot make. The popover reads the event's lists
+  (WindowTiling.parseHover `fit`): a place by `unfitPlaces`, an arrangement by its first zone (the window's own) in
+  `unfitZones`, a Layouts zone by itself (TileGlyph `disabledZones`: fainter, no pointer, no press, no number key), a layout
+  none of whose zones fits greyed whole; the Window menu reads the reply's per-window lists when it opens (TilingLink
+  `unfitZones`, Compositor.fitOf) and greys those Halves, Quarters and Arrange items, their key texts kept; the keys
+  themselves reach the plugin, which refuses them.
 - **TL9** Not tileable (the menu items and popover glyphs greyed, no drag preview, never a suggestion): windows with a
   parent (dialogs), fixed-size windows (minimum equals maximum on an axis), X11 windows that Hyprland floats by type
   (dialog, splash, toolbar, utility, tooltip, menus, dock, KDE override) or as modal, transient, task dialog or pop-up
@@ -296,7 +311,12 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   A window of fixed size (minimum = maximum on both axes, core `fixedSize`; About This Computer, ADR-0040 step 1b) posts
   no `tile-hover` from its zoom light, which its app draws disabled, and `tile_popover` (Super+Ctrl+L) is refused for it:
   nothing opens, on hover or click (integrator nested pass of 85c2c10, scenario 6). The reply lists such windows
-  (`fixed`); `tests/compositor/tiling.sh` case `fixed`.
+  (`fixed`); `tests/compositor/tiling.sh` case `fixed`. Its review: the plugin's own titlebar draws that zoom light
+  disabled too (grey, no glyph) and its click, Alt-click and a double-click set to Zoom do nothing, unless the window is
+  zoomed or in full screen already (core `lightAvailable`; case `fixed bar`); Super+Alt+F (Zoom) and Super+Ctrl+F (Full
+  Screen) leave it alone the same way: `bindings.lua` asks the plugin's `window_size(mode)` at each press, which returns
+  Hyprland's own dispatcher or a no-op (core `sizeKeyActs`; Hyprland's dispatcher as before without the plugin;
+  `tests/compositor/size_keys.sh`, case `fixed keys`).
 - **TL25** Window menu (T0, `AppMenuModel.qml`, M26-M28): Minimize, Zoom, Fill, Center, —, Move & Resize ›, Full Screen
   Tile › (T4), —, Enter Full Screen, —, Move to Desktop ›, —, Bring All to Front, —, the windows. Move & Resize › has the
   headed sections Halves, Quarters, Arrange (with Quarters), then Return to Previous Size; each row has its glyph; Alt
@@ -536,9 +556,28 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   Move Window to Desktop (Exit Full Screen's effect, D44), Make Window Full Screen (back home, in full screen there) and
   Replace Tiled Window (only with two members: back home without showing it, the other keeps its half and waits, the picker
   offering the windows of that Desktop but the one replaced); the Window menu adds the last two after Exit Full Screen. All
-  through `unsplit(address[, how])` (core `unsplitHow`, `withoutWindow`), refused while locked. The Overview takes no window
-  onto a Split View Desktop and drags no member out of one (`WindowTiling.dropAllowed`). Step 6e: the titles hidden and
-  revealed at the top of a Split View Desktop, the revealed bar taking a member's drag (D59) as well as its lights.
+  through `unsplit(address[, how])` (core `unsplitHow`; `offerWindows` since 6e, its cap counted after the exclusion),
+  refused while locked. The Overview takes no window onto a Split View Desktop and drags no member out of one
+  (`WindowTiling.dropAllowed`; since 6e checked through the Overview's own path by the development hook `overview
+  dropProbe`, D76).
+  Step 6e as built (ADR-0036 D73-D76): a member's titlebar is away, whatever its state, and no band is kept above it
+  (core `band(clientChrome, splitMember)`): its half is filled from the output's top edge; a window that joins or leaves a
+  Split View has its titlebar refreshed (core `splitMembers`, `membersChanged`), and a pick joins the Split View before its
+  frame is fitted. The plugin advertises `tiling-split-titles`; with it the Overview lays a member out without a strip
+  (`WindowTiling.splitTitleAway`). The pointer at the top edge over a half reveals that half's bar alone, below the menu bar
+  and over the window's content (the full-screen path, ADR-0015 P6; core `nextRevealed` with `inSpan`); the menu bar comes
+  with it (`titlebar-reveal`); while it is there the pointer moving across within the bar's band brings the other half's
+  (`handOver`), the bar revealed owning the gap between the halves until the pointer is over the other half
+  (`overOther`, D74 amended); a member covered by its other member (zoomed or in full screen) shows none; while a press
+  on a revealed bar lasts no other bar comes. Its lights act as a full-screen window's (green
+  leaves the Split View, minimize grey and inert); a left press away from them starts the member's drag (core
+  `revealedPress`): once it moves, the window hangs below its bar, which follows the pointer from where it was pressed,
+  never higher, without the top clamp (D75 amended);
+  released over the other half the two swap (D59), anywhere else, on another press, a pointer device gone or the session
+  locked it goes back in its half. The press and its release are cancelled on the bus (Hyprland's held buttons
+  untouched). A window that leaves a Split View any way (a key, the unload) gets its frame with its titlebar band below
+  the menu bar (`TopClamp belowMenuBar`; a hidden one when it shows, not while locked; D73 amended); the unload puts a
+  member dragged by its revealed bar back in its half first.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
@@ -693,10 +732,11 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
 - A Split View Desktop is listed after the Desktop it came from, but Hyprland's next and previous Desktop keys, Ctrl+number
   and the three-finger swipe go by Hyprland's id order (ADR-0036 D41).
 - Without the plugin there is no tiling at all.
-- The popover's layout glyphs and rows and its suggestions mark the keyboard-current or hovered item with a neutral fill (the
-  text colour at `material.hoverOpacity`): 1.23:1 (light) and 1.30:1 (dark) at worst against the material
-  (`tests/visual/test_contrast_tokens.py`), under the 3:1 a state indicator should reach, where the menus use the accent.
-  Listed, not asserted, in `tests/visual/contrast-roles.json`; ADR-0039 step 12 (G6, the hover and selection roles) replaces
-  it.
+- The suggestions mark the keyboard-current or hovered window with the neutral selection of an item on glass (the hover ink
+  at `material.selectionOpacity` 0.25, one role since ADR-0039 step 12): 1.72:1 at worst against the material
+  (`tests/visual/test_contrast_tokens.py`; 1.23:1 before), under the 3:1 a state indicator should reach, as macOS 27 draws it
+  (its App Switcher: 1.8:1). Listed, not asserted, in `tests/visual/contrast-roles.json`. The popover's glyphs and rows take
+  the menus' selection, white on it, and its section titles the menus' header (`MenuHeader`), as this spec asks (ADR-0039
+  step 8).
 - Timings not published by Apple or Microsoft (hover delay, preview delay, animation curve) are estimates until measured
   in nested against the owner's material.

@@ -255,7 +255,7 @@ Window {
                 textFormat: Text.PlainText
                 text: String(alert.request.body)
                 visible: text !== ""
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 wrapMode: Text.WordWrap
@@ -376,7 +376,7 @@ Window {
                 horizontalAlignment: Text.AlignHCenter
                 textFormat: Text.PlainText
                 text: qsTr("Click the alert before you answer it.")
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
                 wrapMode: Text.WordWrap

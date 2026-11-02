@@ -4,28 +4,35 @@
 // unit-tested offscreen by tests/security/tst_lockmachine.qml.
 //
 //   unlocked -request-> locking -acquired-> locked -submit-> authenticating
-//   authenticating -success-> unlocked
+//   authenticating -success-> releasing -released-> unlocked
 //   authenticating -failure|error|timeout|abort-> locked
-//   locking|locked|authenticating -lost-> locking        (lock dropped, or the session found unlocked
-//                                                         under a lock still reported secure: re-acquire)
-//   locked|authenticating -fingerprint-> unlocked        (PAM success of omarchy-lock-fingerprint)
+//   locking|locked|authenticating|releasing -lost-> locking   (lock dropped, or the session found unlocked
+//                                                              under a lock still reported secure: re-acquire)
+//   locked|authenticating -fingerprint-> releasing       (PAM success of omarchy-lock-fingerprint)
+//   releasing -request|error|timeout|abort-> locked       (ADR-0040 step 4b: anything during the fade brings the lock back;
+//                                                          the PAM success is spent, unlocking needs a new one)
 //
-// Only a PAM success ("success", "fingerprint") ever leads to "unlocked". Unknown events and
-// events that do not apply to the current state leave the state unchanged (fail closed).
+// `releasing` (ADR-0040 step 4b, IQ-T2 A): after a PAM success the lock's text and scrim fade out (lock.fadeOutMs) while
+// the session is still locked; "released" (the end of that fade) is the only way to "unlocked", and only from
+// "releasing", which only a PAM success ("success", "fingerprint") enters. Unknown events and events that do not apply to
+// the current state leave the state unchanged (fail closed).
 
 var UNLOCKED = "unlocked";
 var LOCKING = "locking";
 var LOCKED = "locked";
 var AUTHENTICATING = "authenticating";
+var RELEASING = "releasing";
 
-var STATES = [UNLOCKED, LOCKING, LOCKED, AUTHENTICATING];
-var EVENTS = ["request", "acquired", "lost", "submit", "success", "fingerprint", "failure", "error", "timeout", "abort"];
+var STATES = [UNLOCKED, LOCKING, LOCKED, AUTHENTICATING, RELEASING];
+var EVENTS = ["request", "acquired", "lost", "submit", "success", "fingerprint", "failure", "error", "timeout", "abort", "released"];
 
 function next(state, event) {
     if (STATES.indexOf(state) === -1)
         return LOCKING; // corrupted state: never treat it as unlocked
     switch (event) {
     case "request":
+        if (state === RELEASING)
+            return LOCKED;
         return state === UNLOCKED ? LOCKING : state;
     case "acquired":
         return state === LOCKING ? LOCKED : state;
@@ -34,14 +41,17 @@ function next(state, event) {
     case "submit":
         return state === LOCKED ? AUTHENTICATING : state;
     case "success":
-        return state === AUTHENTICATING ? UNLOCKED : state;
+        return state === AUTHENTICATING ? RELEASING : state;
     case "fingerprint":
-        return state === LOCKED || state === AUTHENTICATING ? UNLOCKED : state;
+        return state === LOCKED || state === AUTHENTICATING ? RELEASING : state;
+    case "released":
+        return state === RELEASING ? UNLOCKED : state;
     case "failure":
+        return state === AUTHENTICATING ? LOCKED : state;
     case "error":
     case "timeout":
     case "abort":
-        return state === AUTHENTICATING ? LOCKED : state;
+        return state === AUTHENTICATING || state === RELEASING ? LOCKED : state;
     }
     return state;
 }
@@ -54,7 +64,7 @@ function isLocked(state) {
 // WlSessionLock.secure). Anything else, unknown states included, is not holding: a decision that waits for a held lock
 // (the sleep delay) then keeps waiting (fail closed).
 function isHolding(state) {
-    return state === LOCKED || state === AUTHENTICATING;
+    return state === LOCKED || state === AUTHENTICATING || state === RELEASING;
 }
 
 // Lid closed (Hyprland switch binding `switch:on:Lid Switch` in config/hypr/grassfield/system.lua, which runs

@@ -333,9 +333,9 @@ SettingsPage {
             }
         }
 
-        SettingsRow {
+        EmptyListRow {
             visible: otherModel.count === 0
-            title: root.scanning ? qsTr("Looking for networks…") : qsTr("No other networks found")
+            text: root.scanning ? qsTr("Looking for networks…") : qsTr("No other networks found")
         }
     }
 

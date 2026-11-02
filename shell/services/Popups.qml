@@ -11,7 +11,7 @@ import Quickshell.Io
 //
 // kind: "" or one of PopupKinds.kinds: "system" | "app" | "appfile" | "appwindow" | "appbridge" | "tray" | "nowplaying" | "volume"
 //       | "network" | "battery" | "controlcenter" | "dock" | "dockstack" | "forcequit" | "confirm" | "appabout" | "notice" | "tiling"
-//       | "tilingSuggest"; open() refuses any other kind.
+//       | "tilingSuggest" | "sharePicker" | "screenshare"; open() refuses any other kind.
 Singleton {
     id: root
 
@@ -108,6 +108,26 @@ Singleton {
     // keyboard when the button is up.
     property bool pointerHeld: false
 
+    // How the open popup was opened: true by the pointer (a press on the bar, the pointer moving onto another title or a
+    // press on one while a menu is open, a click on a menu item), false by the keyboard (a shortcut, Left/Right in a menu,
+    // Return on an item). A surface that gives an item the focus when it opens hands it to that item's KeyFocus (`pointer`),
+    // so that the item's ring shows after a key only (ADR-0039 step 8; the owner's decision of 2026-10-31).
+    property bool openedByPointer: false
+    // True while withPointer() runs a pointer's action: the opens it makes are the pointer's.
+    property bool pointerActing: false
+
+    // Runs `action`; when `pointer` is true, a popup it opens counts as opened by the pointer (openedByPointer). For the
+    // pointer paths that do not hold the button down (pointerHeld): the overlay's share of the bar strip, a menu item's click.
+    function withPointer(pointer: bool, action: var): void {
+        const was = root.pointerActing;
+        root.pointerActing = pointer;
+        try {
+            action();
+        } finally {
+            root.pointerActing = was;
+        }
+    }
+
     signal pointerTracked(string screen, real x, real y)
     signal pointerReleased(string screen, real x, real y)
 
@@ -146,6 +166,8 @@ Singleton {
             anchorX = x;
             anchorY = y;
             align = alignment;
+            // Before `kind`: the surface reads it when the Overlay creates it.
+            openedByPointer = root.pointerHeld || root.pointerActing;
             kind = popupKind;
         } finally {
             root.opening = false;

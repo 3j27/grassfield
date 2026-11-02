@@ -65,12 +65,10 @@ T.Control {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
+    // The shared ring outside the item (ADR-0039 step 7).
+    FocusRing {
         z: 10
-        radius: root.ringRadius
-        color: "transparent"
-        border.width: root.visualFocus ? Tokens.controlFocusOutline : 0
-        border.color: Appearance.focusRingColor
+        shapeRadius: root.ringRadius
+        visible: root.visualFocus
     }
 }

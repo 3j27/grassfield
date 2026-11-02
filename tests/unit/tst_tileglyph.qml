@@ -83,6 +83,25 @@ TestCase {
         compare(clicked.join(","), "2");
     }
 
+    // ADR-0036 D69: a zone the window does not fit is drawn unavailable (fainter than a light zone) and takes no click; the
+    // others still do.
+    function test_aDisabledZoneIsGreyAndTakesNoClick() {
+        const g = createTemporaryObject(glyphComponent, testCase, {zones: Tokens.tilingLayoutLeftQuarters, own: 3, interactive: true, width: Tokens.tilingLayoutGlyphWidth,
+            color: "#000000", disabledZones: [1, 2]});
+        const z = zonesOf(g);
+        compare(z.length, 3);
+        fuzzyCompare(z[0].color.a, Tokens.tilingGlyphOtherOpacity, 0.01, "an available zone at rest: light");
+        fuzzyCompare(z[1].color.a, Tokens.tilingGlyphOtherOpacity * Tokens.materialDisabledOpacity, 0.01, "a disabled zone: fainter");
+        const clicked = [];
+        g.zoneClicked.connect(i => clicked.push(i));
+        const at = r => r.mapToItem(testCase, r.width / 2, r.height / 2);
+        mouseClick(testCase, at(z[1]).x, at(z[1]).y);
+        mouseClick(testCase, at(z[0]).x, at(z[0]).y);
+        compare(clicked.join(","), "0", "only the available zone");
+        g.own = 1;
+        fuzzyCompare(z[1].color.a, Tokens.tilingGlyphOtherOpacity * Tokens.materialDisabledOpacity, 0.01, "never in full, even under the keyboard");
+    }
+
     function test_numberedShowsTheZoneNumbers() {
         const g = createTemporaryObject(glyphComponent, testCase, {zones: Tokens.tilingLayoutQuarters, own: 4, numbered: true, width: Tokens.tilingLayoutGlyphWidth});
         const numbers = zonesOf(g).map(r => r.children.find(c => c.text !== undefined)).map(t => t.visible ? t.text : "");

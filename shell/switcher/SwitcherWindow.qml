@@ -149,7 +149,9 @@ Variants {
             Behavior on scale {
                 NumberAnimation {
                     duration: Appearance.duration(Tokens.motionFast)
-                    easing.type: Easing.OutCubic
+                    // Arriving: the enter curve (ADR-0039 step 20).
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.curveEnter
                 }
             }
 
@@ -159,7 +161,9 @@ Variants {
                 acceptedButtons: Qt.AllButtons
             }
 
+            // The app's name under the selection: a text surface, the menus' class (ADR-0039 step 22).
             Material {
+                glassClass: "menu"
                 anchors.fill: parent
                 radius: Tokens.switcherPanelRadius
             }
@@ -189,9 +193,14 @@ Variants {
                         height: width
                         radius: Tokens.switcherSelectionRadius
                         visible: tile.current
-                        color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHighlightOpacity)
-                        border.width: Tokens.controlFocusOutline
-                        border.color: Appearance.focusRingColor
+                        // The neutral selection of an item on glass (macOS 27's App Switcher: black at 0.25 in light; one role,
+                        // ADR-0039 step 12, G6), no longer the material's rim token.
+                        color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
+
+                        // The shared ring outside the selection (ADR-0039 step 7).
+                        FocusRing {
+                            shapeRadius: Tokens.switcherSelectionRadius
+                        }
                     }
 
                     TintedIcon {

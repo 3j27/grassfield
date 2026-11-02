@@ -63,10 +63,18 @@ hl.window_rule({ name = "gf-glance", match = { class = "^org\\.grassfield\\.Prev
 
 -- Grassfield shell surfaces (layer-shell namespaces start with "grassfield-").
 -- Blur behind them comes from BackgroundEffect when available; this rule is the fallback (§5.5).
-hl.layer_rule({ name = "gf-shell-blur", match = { namespace = "^grassfield-(menubar|dock|overlay|overview|search|switcher|banners|notification-center|apps|osd|polkit|widgets|widgets-menu|stages)$" }, blur = true, ignore_alpha = 0.01 })
+hl.layer_rule({ name = "gf-shell-blur", match = { namespace = "^grassfield-(menubar|dock|overlay|overview|search|switcher|banners|notification-center|apps|osd|polkit|secret|widgets|widgets-menu|stages)$" }, blur = true, ignore_alpha = 0.01 })
 -- The desktop's context menu is an xdg popup of the icons layer; Hyprland 0.56.2 left it unblurred with
 -- BackgroundEffect alone. Only its popups blur (never the icons layer itself), limited to the menu's own pixels.
 hl.layer_rule({ name = "gf-desktop-menu-blur", match = { namespace = "^grassfield-desktop-icons$" }, blur_popups = true, ignore_alpha = 0.01 })
 
 -- The menu bar and dock must appear instantly; panels fade.
 hl.layer_rule({ name = "gf-bar-no-anim", match = { namespace = "^grassfield-(menubar|dock)$" }, no_anim = true })
+-- The wallpaper maps with its final first frame and changes by the shell's own crossfade (ADR-0040 ID-3, ID-4): the
+-- compositor never fades it in under that.
+hl.layer_rule({ name = "gf-wallpaper-no-anim", match = { namespace = "^grassfield-wallpaper$" }, no_anim = true })
+-- The exit cover fades itself (ADR-0040 ID-10, one owner of motion: ID-4); the compositor adds no fade in or out.
+hl.layer_rule({ name = "gf-exit-cover-no-anim", match = { namespace = "^grassfield-exit-cover$" }, no_anim = true })
+-- The screenshot crosshair (slurp's layer, namespace "selection") goes at once: grim takes the picture as slurp ends, and a
+-- fade would put slurp's veil and outline in it (ADR-0035 D-10, fourth review of step 8; Omarchy ships the same rule).
+hl.layer_rule({ name = "gf-capture-selection-no-anim", match = { namespace = "^selection$" }, no_anim = true })

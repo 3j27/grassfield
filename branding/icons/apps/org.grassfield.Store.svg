@@ -1,12 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <!-- Grassfield Store: an original tile with a white bag and a green sprout. CC-BY-SA-4.0, see branding/LICENSES.md. -->
+  <!-- Grassfield Store: a green tile, a white shopping bag with a sprout (ADR-0040 IQ-B5 C, the grammar of the own app icons:
+       one 104 px tile of radius 23.4 on the 128 grid, a top-to-bottom gradient, a light inner rim, one drawing inside 72 % of
+       the tile, no text). CC-BY-SA-4.0, see branding/LICENSES.md. -->
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#5BC27A"/>
       <stop offset="1" stop-color="#26763F"/>
     </linearGradient>
   </defs>
-  <rect x="12" y="12" width="104" height="104" rx="26" fill="url(#tile)"/>
+  <rect x="12" y="12" width="104" height="104" rx="23.4" fill="url(#tile)"/>
+  <rect x="12.5" y="12.5" width="103" height="103" rx="22.9" fill="none" stroke="#FFFFFF" stroke-opacity=".35"/>
   <path d="M50 52v-7a14 14 0 0 1 28 0v7" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"/>
   <path d="M38 54a6 6 0 0 1 6-6h40a6 6 0 0 1 6 6l-2 35a8 8 0 0 1-8 7.5H48a8 8 0 0 1-8-7.5z" fill="#FFFFFF"/>
   <path d="M64 88V73" fill="none" stroke="#26763F" stroke-width="5" stroke-linecap="round"/>

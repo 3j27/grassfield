@@ -15,6 +15,8 @@
 #include <QCryptographicHash>
 #include <QTimer>
 
+#include <functional>
+
 #include <gtest/gtest.h>
 
 using namespace grassfield::store;
@@ -986,13 +988,34 @@ active=$root/flatpak/appstream/flathub/$(uname -m)/active
 case "$1" in
   remotes) [ -f "$root/flatpak/remote" ] && echo flathub; exit 0 ;;
   remote-add) mkdir -p "$root/flatpak" && echo "$6" >"$root/flatpak/remote" ;;
-  update) mkdir -p "$active/icons/128x128" && cp "$root/../flathub.xml.gz" "$active/appstream.xml.gz" && echo png >"$active/icons/128x128/org.example.Notes.png" ;;
+  update)
+    if [ "$3" = --noninteractive ]; then  # step 4: each ref updated, out of fupdates (S31); pinned to its commit (S32)
+      shift 3
+      commit=
+      case "$1" in --commit=*) commit=${1#--commit=}; shift ;; esac
+      shift
+      [ -f "$root/slowupdate" ] && sleep 2
+      for ref; do
+        echo "Updating $ref"; grep -v "	$ref\$" "$root/fupdates" >"$root/u2"; mv "$root/u2" "$root/fupdates"
+        [ -n "$commit" ] && echo "$commit" >"$root/commit-$(echo "$ref" | cut -d/ -f2)"
+      done
+      exit 0
+    fi
+    mkdir -p "$active/icons/128x128" && cp "$root/../flathub.xml.gz" "$active/appstream.xml.gz" && echo png >"$active/icons/128x128/org.example.Notes.png" ;;
+  remote-ls) [ -f "$root/offline" ] && exit 1; cat "$root/fupdates" 2>/dev/null ;;
   list) cat "$root/flatpaks" 2>/dev/null ;;
-  info) for id; do :; done; grep -qx "$id" "$root/flatpaks" 2>/dev/null || exit 1
-        case "$3" in --show-metadata) printf '[Application]\nname=%s\n\n[Context]\nshared=network;\n' "$id" ;; *) printf 'Ref: app/%s/x86_64/stable\nVersion: 1.2\nInstalled: 2.0 MB\n' "$id" ;; esac ;;
+  info) for id; do :; done; id=${id#app/}; id=${id%%/*}; grep -qx "$id" "$root/flatpaks" 2>/dev/null || exit 1
+        case "$3" in --show-metadata) printf '[Application]\nname=%s\n\n[Context]\nshared=network;\n' "$id" ;;
+                     --show-commit) cat "$root/commit-$id" 2>/dev/null || exit 1 ;;
+                     *) printf 'Ref: app/%s/x86_64/stable\nVersion: 1.2\nInstalled: 2.0 MB\n' "$id" ;; esac ;;
   remote-info)
-    case "$3" in --show-metadata) [ -f "$root/nometa" ] && exit 1
-                                  printf '[Application]\nname=%s\n\n[Context]\nshared=network;\nfilesystems=home;\n' "$(echo "$5" | cut -d/ -f2)" ;;
+    for last; do :; done; name=$(echo "$last" | cut -d/ -f2)
+    case "$3" in --show-commit) [ -f "$root/nocommit" ] && exit 1
+                                cat "$root/commit" 2>/dev/null || printf '%064d\n' 7 ;;
+                 --show-metadata) [ -f "$root/slowmeta" ] && sleep 1
+                                  [ -f "$root/nometa" ] && exit 1
+                                  [ -f "$root/samemeta" ] && { printf '[Application]\nname=%s\n\n[Context]\nshared=network;\n' "$name"; exit 0; }
+                                  printf '[Application]\nname=%s\n\n[Context]\nshared=network;\nfilesystems=home;\n' "$name" ;;
                  *) printf '           Ref: %s\n       Version: 1.2\n       License: MIT\n Download Size: 1.5 MB\nInstalled Size: 4.0 MB\n' "$4" ;; esac ;;
   install)
     if [ "$3" = --noninteractive ]; then
@@ -1009,6 +1032,278 @@ case "$1" in
              grep -vx "$5" "$root/flatpaks" >"$root/f2"; mv "$root/f2" "$root/flatpaks" ;;
   *) exit 2 ;;
 esac)SH";
+
+// Step 4 (SR24, SR25): the Updates page's data. The system's from software-update.json and the shell's check (Check Now:
+// `qs ipc ... update check user`, ADR-0033 d.7; a refusal says so), the last system update unfinished (pacman -Qu, S12);
+// Flathub's updates (remote-ls --updates, S31; another remote's left to the user), the sidebar's count; an app's Update and
+// the group's Update All, each through its plan, which says what an update lets an app reach that it could not; the search
+// by document type.
+TEST(StoreBackend, Updates)
+{
+    Scratch s;
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("0"));
+    QDir().mkpath(s.path(QStringLiteral("shell")));
+    s.env->set("GRASSFIELD_SHELL_DIR", s.path(QStringLiteral("shell")));
+    storetest::script(s.path(QStringLiteral("fixture/bin/flatpak")), kFlatpak);
+    storetest::writeFile(s.path(QStringLiteral("flathub.xml.gz")), storetest::gzip(storetest::readFixture(QStringLiteral("appstream-flathub.xml"))));
+    storetest::writeFile(s.path(QStringLiteral("fixture/flatpaks")), "org.example.Notes\n");
+    const QString notesRef = QStringLiteral("app/org.example.Notes/x86_64/stable");
+    const QString platformRef = QStringLiteral("runtime/org.gnome.Platform/x86_64/50");
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")),
+                         "org.example.Notes\tstable\tflathub\tapp/org.example.Notes/x86_64/stable\n"
+                         "org.gnome.Platform\t50\tflathub\truntime/org.gnome.Platform/x86_64/50\n"
+                         "com.mine.App\tstable\tmine\tapp/com.mine.App/x86_64/stable\n");
+    // The shell's stand-in: its check writes a new checkedAt (one per call), then it answers "ok" (or "refused"); with
+    // qs-slow it answers at once and writes 2 s later, as the real shell's check runs after its IPC answered.
+    const QByteArray state = s.path(QStringLiteral("state")).toUtf8();
+    storetest::script(s.path(QStringLiteral("fixture/bin/qs")),
+                      "echo \"$*\" >>'" + state + "/qs-calls'\n"
+                      "n=$(wc -l <'" + state + "/qs-calls')\n"
+                      "[ -f '" + state + "/qs-refuses' ] && { echo refused; exit 0; }\n"
+                      "write() {\n"
+                      "  printf '{\"version\":1,\"state\":\"%s\",\"checkedAt\":\"2026-11-01T10:%02d:00Z\",\"others\":3,"
+                      "\"otherPackages\":[{\"name\":\"gimp\",\"installed\":\"3.0.4-1\",\"available\":\"3.0.6-1\"}]}' \"$1\" \"$n\" >'" + state + "/su.tmp'\n"
+                      "  mv '" + state + "/su.tmp' '" + state + "/software-update.json'\n"
+                      "}\n"
+                      "if [ -f '" + state + "/qs-slow' ]; then (sleep 2; write up-to-date) >/dev/null 2>&1 & echo ok; exit 0; fi\n"
+                      "write available\n"
+                      "echo ok\n");
+    storetest::writeFile(s.path(QStringLiteral("config/grassfield.json")), R"({"version":1,"store":{"sources":{"flathub":true}}})");
+    StoreBackend backend;
+    QList<std::pair<QString, QVariantMap>> plans;
+    QObject::connect(&backend, &StoreBackend::planReady, &backend,
+                     [&plans](const QString &app, const QString &kind, const QVariantMap &p) { if (kind == QLatin1String("update")) plans.append({app, p}); });
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    QEventLoop loop;
+    const auto waitFor = [&loop](const std::function<bool()> &done) {
+        for (int i = 0; i < 500 && !done(); ++i) {
+            QTimer::singleShot(20, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
+        return done();
+    };
+    const auto flatpak = [&backend] { return backend.updates().value(QStringLiteral("flatpak")).toMap(); };
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("state")).toString().isEmpty() && !flatpak().value(QStringLiteral("apps")).toList().isEmpty(); }))
+        << "checked when the Store opens";
+    QVariantMap u = backend.updates();
+    EXPECT_TRUE(flatpak().value(QStringLiteral("on")).toBool());
+    const QVariantList apps = flatpak().value(QStringLiteral("apps")).toList();
+    ASSERT_EQ(apps.size(), 1) << "Flathub's only";
+    EXPECT_EQ(apps.first().toMap().value(QStringLiteral("ref")).toString(), notesRef);
+    EXPECT_EQ(flatpak().value(QStringLiteral("runtimes")).toInt(), 1);
+    EXPECT_EQ(u.value(QStringLiteral("apps")).toList().size(), 1) << "gimp updates with the system";
+    EXPECT_EQ(u.value(QStringLiteral("count")).toInt(), 2) << "the sidebar's number, Flatpaks included";
+    EXPECT_EQ(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("update")).toString(), QString());
+    EXPECT_EQ(backend.actions(QStringLiteral("org.example.Paint")).value(QStringLiteral("update")).toString(), QStringLiteral("none"));
+    EXPECT_EQ(backend.actions(QStringLiteral("org.gimp.GIMP")).value(QStringLiteral("update")).toString(), QStringLiteral("none"))
+        << "a repository app updates with the system, never on its own";
+
+    // Its plan: Flathub's newer metadata reaches the home folder, which the installed one does not.
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == 1; }));
+    QVariantMap plan = plans.last().second;
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")).toString(), QString());
+    EXPECT_EQ(plan.value(QStringLiteral("refs")).toInt(), 1);
+    QVariantList widened = plan.value(QStringLiteral("widened")).toList();
+    ASSERT_EQ(widened.size(), 1);
+    EXPECT_EQ(widened.first().toMap().value(QStringLiteral("access")).toStringList(),
+              (QStringList{QStringLiteral("home"), QStringLiteral("login"), QStringLiteral("outside")}));
+    EXPECT_FALSE(backend.update(QStringLiteral("org.example.Paint"))) << "no plan for it";
+    ASSERT_TRUE(backend.update(QStringLiteral("org.example.Notes")));
+    EXPECT_FALSE(backend.update(QStringLiteral("org.example.Notes"))) << "its plan is used once";
+    ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
+    EXPECT_TRUE(backend.results().isEmpty());
+    QFile calls(s.path(QStringLiteral("fixture/flatpak-calls")));
+    ASSERT_TRUE(calls.open(QIODevice::ReadOnly));
+    // Pinned to the commit its plan read (S32): the one whose access the sheet said; done by that commit installed.
+    const QByteArray pinned = QByteArray(62, '0') + "07";
+    EXPECT_TRUE(calls.readAll().contains("update --user --noninteractive --commit=" + pinned + " -- " + notesRef.toUtf8() + "\n"));
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().isEmpty(); })) << "checked again after it";
+
+    // Update All: the runtime left; nothing new to reach, so no sheet would show.
+    storetest::writeFile(s.path(QStringLiteral("fixture/samemeta")), "");
+    backend.plan(kFlatpakUpdatesApp, QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == 2; }));
+    plan = plans.last().second;
+    EXPECT_EQ(plan.value(QStringLiteral("refs")).toInt(), 1);
+    EXPECT_TRUE(plan.value(QStringLiteral("widened")).toList().isEmpty());
+    EXPECT_TRUE(plan.value(QStringLiteral("unknown")).toStringList().isEmpty());
+    ASSERT_TRUE(backend.update(kFlatpakUpdatesApp));
+    ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
+    EXPECT_TRUE(backend.results().isEmpty());
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("runtimes")).toInt() == 0; }));
+    // Nothing left: refused with why.
+    backend.plan(kFlatpakUpdatesApp, QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == 3; }));
+    EXPECT_EQ(plans.last().second.value(QStringLiteral("refusal")).toString(), QStringLiteral("unavailable"));
+    EXPECT_EQ(plans.last().second.value(QStringLiteral("detail")).toString(), QStringLiteral("none"));
+    // An update a check found done since its plan (another Check Now, flatpak run by hand): nothing left to run.
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), "org.example.Notes\tstable\tflathub\tapp/org.example.Notes/x86_64/stable\n");
+    backend.updatesShown(true);
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().size() == 1 && !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == 4; }));
+    EXPECT_EQ(plans.last().second.value(QStringLiteral("refs")).toInt(), 1);
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), "");
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().isEmpty() && !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    EXPECT_FALSE(backend.update(QStringLiteral("org.example.Notes"))) << "its ref is no longer listed";
+
+    // A plan says what it checks while it runs (the integrator's MINOR 5 on #97): the app's Update waits ("checking"), the
+    // group's line counts the apps; asked again meanwhile, it is the same plan, answered once.
+    const QByteArray notesLine = "org.example.Notes\tstable\tflathub\tapp/org.example.Notes/x86_64/stable\n";
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), notesLine);
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().size() == 1 && !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/slowmeta")), "");
+    int asked = int(plans.size());
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    EXPECT_EQ(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("update")).toString(), QStringLiteral("checking"));
+    EXPECT_EQ(flatpak().value(QStringLiteral("planning")).toMap(), (QVariantMap{{QStringLiteral("done"), 0}, {QStringLiteral("total"), 1}}));
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == asked + 1; }));
+    for (int i = 0; i < 25; ++i) { // the second ask never answers on its own
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    EXPECT_EQ(plans.size(), asked + 1);
+    EXPECT_FALSE(flatpak().value(QStringLiteral("planning")).isValid());
+    EXPECT_EQ(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("update")).toString(), QString());
+    QFile::remove(s.path(QStringLiteral("fixture/slowmeta")));
+
+    // SD33: an update whose commit or metadata could not be read is said, by the app's name (the sheet then asks); with no
+    // commit read, the update is not pinned (the user agreed to it unchecked).
+    storetest::writeFile(s.path(QStringLiteral("fixture/nometa")), "");
+    asked = int(plans.size());
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == asked + 1; }));
+    EXPECT_EQ(plans.last().second.value(QStringLiteral("unknown")).toStringList(), QStringList{QStringLiteral("Example Notes")});
+    EXPECT_TRUE(plans.last().second.value(QStringLiteral("widened")).toList().isEmpty());
+    QFile::remove(s.path(QStringLiteral("fixture/nometa")));
+    storetest::writeFile(s.path(QStringLiteral("fixture/nocommit")), "");
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == asked + 2; }));
+    EXPECT_EQ(plans.last().second.value(QStringLiteral("unknown")).toStringList(), QStringList{QStringLiteral("Example Notes")});
+    QFile::remove(s.path(QStringLiteral("fixture/flatpak-calls")));
+    QFile::remove(s.path(QStringLiteral("fixture/nocommit")));
+    ASSERT_TRUE(backend.update(QStringLiteral("org.example.Notes")));
+    ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
+    QFile unpinned(s.path(QStringLiteral("fixture/flatpak-calls")));
+    ASSERT_TRUE(unpinned.open(QIODevice::ReadOnly));
+    EXPECT_TRUE(unpinned.readAll().contains("update --user --noninteractive -- " + notesRef.toUtf8() + "\n"));
+    EXPECT_TRUE(backend.results().isEmpty()) << "unpinned: done when a new check no longer lists it";
+
+    // Ctrl+Q while an update runs, then the Store asked for again (SD35's hand-over; the integrator's MAJOR on #97): the
+    // quit is off, and the update ends with the Store still there.
+    // The check an operation's end starts is over first (else it may read the list before it is written).
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("state")).toString().isEmpty(); }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), notesLine);
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().size() == 1 && !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    asked = int(plans.size());
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == asked + 1; }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/slowupdate")), "");
+    ASSERT_TRUE(backend.update(QStringLiteral("org.example.Notes")));
+    ASSERT_TRUE(waitFor([&] {
+        const QVariantList ops = backend.operations();
+        return !ops.isEmpty() && ops.first().toMap().value(QStringLiteral("state")).toString() == QLatin1String("running");
+    }));
+    EXPECT_FALSE(backend.quitPending());
+    backend.quitWhenIdle();
+    EXPECT_TRUE(backend.quitPending()) << "it waits for the update";
+    backend.reopened();
+    EXPECT_FALSE(backend.quitPending()) << "asked for again: it stays";
+    ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
+    EXPECT_FALSE(backend.quitPending());
+    QFile::remove(s.path(QStringLiteral("fixture/slowupdate")));
+
+    // Updated outside the Store between its plan and its update (#97's merge note): the plan read the installed commit, and
+    // the pinned one (perhaps older) is not installed over the newer one; it counts as done.
+    // The check an operation's end starts is over first (else it may read the list before it is written).
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("state")).toString().isEmpty(); }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), notesLine);
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().size() == 1 && !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/commit-org.example.Notes")), QByteArray(64, '1') + "\n");
+    asked = int(plans.size());
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == asked + 1; }));
+    storetest::writeFile(s.path(QStringLiteral("fixture/commit-org.example.Notes")), QByteArray(64, '2') + "\n");
+    QFile::remove(s.path(QStringLiteral("fixture/flatpak-calls")));
+    ASSERT_TRUE(backend.update(QStringLiteral("org.example.Notes")));
+    ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
+    QFile outside(s.path(QStringLiteral("fixture/flatpak-calls")));
+    ASSERT_TRUE(outside.open(QIODevice::ReadOnly));
+    const QByteArray outsideCalls = outside.readAll();
+    EXPECT_TRUE(outsideCalls.contains("info --user --show-commit -- " + notesRef.toUtf8() + "\n")) << outsideCalls.constData();
+    EXPECT_FALSE(outsideCalls.contains("update --user --noninteractive")) << outsideCalls.constData();
+    EXPECT_TRUE(backend.results().isEmpty());
+    EXPECT_TRUE(backend.operations().isEmpty());
+
+    // Check Now: the shell is asked; its answer is the file's new checkedAt.
+    backend.updatesShown(true);
+    backend.checkUpdates();
+    EXPECT_TRUE(backend.updates().value(QStringLiteral("checking")).toBool() || QFile::exists(s.path(QStringLiteral("state/qs-calls"))));
+    ASSERT_TRUE(waitFor([&] { return !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    QFile qs(s.path(QStringLiteral("state/qs-calls")));
+    ASSERT_TRUE(qs.open(QIODevice::ReadOnly));
+    EXPECT_TRUE(qs.readAll().contains("ipc -p " + s.path(QStringLiteral("shell")).toUtf8() + " call update check user\n"));
+    EXPECT_FALSE(backend.updates().value(QStringLiteral("askFailed")).toBool());
+    EXPECT_EQ(backend.updates().value(QStringLiteral("state")).toString(), QStringLiteral("available"));
+    // The shell answers before its check ends: the page shows the check until the file has a new checkedAt, not at the
+    // shell's answer nor at a look at the unchanged file (the state folder's own changes wake the Store).
+    storetest::writeFile(s.path(QStringLiteral("state/qs-slow")), "");
+    backend.checkUpdates();
+    EXPECT_TRUE(backend.updates().value(QStringLiteral("checking")).toBool());
+    for (int i = 0; i < 50; ++i) { // 1 s: the shell has answered, the file is unchanged
+        QTimer::singleShot(20, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    EXPECT_TRUE(backend.updates().value(QStringLiteral("checking")).toBool()) << "the file has not changed yet";
+    ASSERT_TRUE(waitFor([&] { return !backend.updates().value(QStringLiteral("checking")).toBool(); }));
+    EXPECT_EQ(backend.updates().value(QStringLiteral("state")).toString(), QStringLiteral("up-to-date")) << "the check's own answer";
+    QFile::remove(s.path(QStringLiteral("state/qs-slow")));
+    // A shell that refuses: said.
+    storetest::writeFile(s.path(QStringLiteral("state/qs-refuses")), "");
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return backend.updates().value(QStringLiteral("askFailed")).toBool(); }));
+    EXPECT_FALSE(backend.updates().value(QStringLiteral("checking")).toBool());
+
+    // The last system update unfinished (pacman -Qu lists packages, S12).
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "[ \"$1\" = -Qu ] && { echo 'gimp 3.0.4-1 -> 3.0.6-1'; echo 'held 1-1 -> 2-1 [ignored]'; exit 0; }\nexec '" + base.toUtf8() + "' \"$@\"");
+    backend.checkUpdates();
+    ASSERT_TRUE(waitFor([&] { return backend.updates().value(QStringLiteral("unfinished")).toInt() == 1; })) << "the [ignored] one is not";
+    backend.updatesShown(false);
+
+    // The search by document type (ADR-0035 5c-3): GIMP's AppStream says it opens PNG images.
+    QVariantMap found = backend.typeSearch(QStringLiteral("IMAGE/PNG"));
+    EXPECT_EQ(found.value(QStringLiteral("type")).toString(), QStringLiteral("image/png"));
+    const QVariantList openers = found.value(QStringLiteral("apps")).toList();
+    ASSERT_FALSE(openers.isEmpty());
+    EXPECT_EQ(openers.first().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("org.gimp.GIMP"));
+    EXPECT_FALSE(found.value(QStringLiteral("description")).toString().isEmpty());
+    EXPECT_TRUE(backend.typeSearch(QStringLiteral("application/x-nothing-opens-this")).value(QStringLiteral("apps")).toList().isEmpty());
+    EXPECT_TRUE(backend.typeSearch(QStringLiteral("not a type")).isEmpty());
+    EXPECT_TRUE(backend.typeSearch(QStringLiteral("image/png;x")).isEmpty());
+
+    // Offline (dev plumbing): an update a check listed cannot run; its Update says why, and so does Update All.
+    s.env->set("GRASSFIELD_STORE_OFFLINE", QStringLiteral("1"));
+    storetest::writeFile(s.path(QStringLiteral("fixture/fupdates")), "org.example.Notes\tstable\tflathub\tapp/org.example.Notes/x86_64/stable\n");
+    StoreBackend offline;
+    offline.start();
+    ASSERT_TRUE(settle(offline));
+    const auto offlineFlatpak = [&offline] { return offline.updates().value(QStringLiteral("flatpak")).toMap(); };
+    ASSERT_TRUE(waitFor([&] { return offlineFlatpak().value(QStringLiteral("apps")).toList().size() == 1; }));
+    const QString listed = offlineFlatpak().value(QStringLiteral("apps")).toList().first().toMap().value(QStringLiteral("id")).toString();
+    EXPECT_EQ(offline.actions(listed).value(QStringLiteral("update")).toString(), QStringLiteral("offline")) << listed.toStdString();
+    EXPECT_EQ(offlineFlatpak().value(QStringLiteral("block")).toString(), QStringLiteral("offline"));
+}
 
 // Flathub turned on (step 3c part 2): added to the user's installation and its AppStream read, its apps offered with
 // flatpak's own plan and what they can reach, installed and removed as the Store's own child, listed in Installed with the

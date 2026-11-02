@@ -4,8 +4,8 @@ import Grassfield.Ui
 import "../../shell/services/PopupKinds.js" as PopupKinds
 
 // The Overlay's blur region has the corner its popup draws (ADR-0039 step 4, G2): Force Quit and an app's About are sheets
-// (radius.sheet 26), a confirmation and a notice are alerts (radius.alert 24); the region once asked radius.alert for all four,
-// so a sheet's blur was 2 pt squarer than its glass. The rule is PopupKinds.blurCorner, run here; its list of dialog kinds is
+// (radius.sheet, 16 since step 10), a confirmation and a notice are alerts (radius.alert, 26 since step 10); the region once
+// asked radius.alert for all four, so a sheet's blur did not follow its glass. The rule is PopupKinds.blurCorner, run here; its list of dialog kinds is
 // held to what the Overlay builds (every kind of its Loader, the root type of the component it loads), so a new kind built on
 // Dialog cannot fall back to a menu's corner unnoticed. The Overlay needs Quickshell: that it hands the loaded Dialog's corner
 // to the rule is read from its source. The Dialog itself (Grassfield.Ui only) is built and measured.
@@ -52,24 +52,35 @@ TestCase {
         return kinds;
     }
 
-    // The root type of a shell QML type (its file in one of the shell's modules).
-    function rootType(type) {
+    // The file of a shell QML type in one of the shell's modules, or "" (a type of Grassfield.Ui or Qt).
+    function fileOf(type) {
         for (const dir of ["overlay", "overlay/controlcenter", "menubar", "dock", "services", "platform"]) {
             const path = "shell/" + dir + "/" + type + ".qml";
-            if (exists(path)) {
-                const m = /^(?:[A-Za-z]+\.)?([A-Z][A-Za-z]*) \{$/m.exec(source(path));
-                verify(m !== null, path + " has a root object");
-                return m[1];
-            }
+            if (exists(path))
+                return path;
         }
-        fail("no file for " + type);
         return "";
+    }
+
+    // The chain of root types under a shell QML type, followed through the shell's own types (a kind built on a type built on
+    // Dialog is built on Dialog): ["ForceQuitPanel", "Dialog", "FocusScope"].
+    function rootChain(type) {
+        const chain = [type];
+        for (let path = fileOf(type); path !== ""; path = fileOf(chain[chain.length - 1])) {
+            const m = /^(?:[A-Za-z]+\.)?([A-Z][A-Za-z]*) \{$/m.exec(source(path));
+            verify(m !== null, path + " has a root object");
+            if (chain.indexOf(m[1]) >= 0)
+                break;
+            chain.push(m[1]);
+        }
+        return chain;
     }
 
     function test_theDialogKindsAreTheOverlaysDialogs() {
         const kinds = overlayKinds();
         compare(Object.keys(kinds).sort(), PopupKinds.kinds.slice().sort(), "every kind is built by the Overlay");
-        const built = Object.keys(kinds).filter(k => rootType(kinds[k]) === "Dialog").sort();
+        verify(fileOf(Object.values(kinds)[0]) !== "", "the kinds' types are found in the shell");
+        const built = Object.keys(kinds).filter(k => rootChain(kinds[k]).indexOf("Dialog") >= 0).sort();
         compare(built, PopupKinds.dialogs.slice().sort(), "PopupKinds.dialogs are exactly the kinds built on Dialog");
     }
 
@@ -83,6 +94,12 @@ TestCase {
     function test_theBlurTakesTheDialogsCorner(data) {
         for (const kind of PopupKinds.dialogs)
             compare(PopupKinds.blurCorner(kind, data.corner, Tokens), data.corner, kind + ", " + data.tag);
+    }
+
+    // A type built on a type built on Dialog is a dialog too (the chain is followed, not the direct root alone).
+    function test_theChainIsFollowed() {
+        compare(rootChain("ForceQuitPanel").slice(0, 2), ["ForceQuitPanel", "Dialog"]);
+        verify(rootChain("ForceQuitPanel").length > 2, "Dialog's own root is read too: " + rootChain("ForceQuitPanel"));
     }
 
     function test_theOtherKinds() {

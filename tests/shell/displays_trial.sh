@@ -3,7 +3,8 @@
 # offscreen, against a fake Hyprland: a request
 # socket that records every request and answers it ("[]" for the JSON queries; "ok" to a reload a moment later, as Hyprland
 # answers once it has read its configuration: the second, t1's, after 1.4 s, longer than a blur push waits but within a
-# display trial's settings.displayTrialAnswerMs; the fifth it refuses), and a silent event socket. Runs
+# display trial's settings.displayTrialAnswerMs; the fifth it refuses), and a silent event socket; then the lock wait (ADR-0041
+# step 2b: the tenth reload is asked while a fake pacman lock file exists and reaches the fake once it is gone). Runs
 # tests/shell/displays_trial.d/trial.qml as a dev session (the trial and state files under GRASSFIELD_STATE_HOME), then checks
 # that the fake saw exactly the reloads the QML counted. Nothing here can reach a real Hyprland: HYPRLAND_INSTANCE_SIGNATURE
 # and XDG_RUNTIME_DIR point at the test's own directory.
@@ -14,11 +15,14 @@ cd "$root"
 unset QT_QPA_PLATFORMTHEME
 fail=0
 tmp=$(mktemp -d "$root/.dev/displays-trial.XXXXXX" 2>/dev/null || { mkdir -p "$root/.dev" && mktemp -d "$root/.dev/displays-trial.XXXXXX"; })
+# The runtime folder (the fake Hyprland's sockets) under a short base: a Unix socket path holds at most 107 bytes, and
+# "$root/.dev/..." of a deep checkout went past it, so nothing could connect (integrator, 2026-11-02).
+rt=$(mktemp -d "${TMPDIR:-/tmp}/gf-rt.XXXXXX")
 fake=""
-trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp"' EXIT
+trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp" "$rt"' EXIT
 sig=gf-displays-trial
-mkdir -p "$tmp/runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg"
-chmod 700 "$tmp/runtime" "$tmp/cache"
+mkdir -p "$rt/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg"
+chmod 700 "$rt" "$tmp/cache"
 # The test shell.qml next to links to every module of the real shell (qs.platform's qmldir names singletons of its siblings).
 for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
@@ -64,21 +68,21 @@ def serve_events():
 threading.Thread(target=serve_events, daemon=True).start()
 serve_requests()
 PY
-python3 -I "$tmp/fake.py" "$tmp/runtime/hypr/$sig" "$tmp/requests.log" &
+python3 -I "$tmp/fake.py" "$rt/hypr/$sig" "$tmp/requests.log" &
 fake=$!
-for _ in $(seq 50); do [[ -S $tmp/runtime/hypr/$sig/.socket.sock && -S $tmp/runtime/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
+for _ in $(seq 50); do [[ -S $rt/hypr/$sig/.socket.sock && -S $rt/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
 
 # A trial a shell left behind when it stopped: the new shell must take it back at start.
 printf 'trial old until %s\nv1\tdesc:GF Reference\t1920x1080@60\t0x0\t1\t0\n' "$(($(date +%s) + 60))" >"$tmp/state/display-trial.conf"
 
 out=$(env -u WAYLAND_DISPLAY -u GRASSFIELD_SESSION -u DBUS_SESSION_BUS_ADDRESS GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$tmp/state" \
-  GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig" XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache" \
+  GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig" XDG_RUNTIME_DIR="$rt" XDG_CACHE_HOME="$tmp/cache" \
   QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" timeout 60 qs -p "$tmp/cfg" --no-color 2>&1) || true
 res=$(grep -o 'displays-trial: .*' <<<"$out" || true)
 echo "${res:-FAIL: displays-trial: no result}"
 grep -q 'displays-trial: PASS' <<<"$res" || { fail=1; echo "$out" | tail -20; }
 reloads=$(grep -cx 'reload' "$tmp/requests.log" 2>/dev/null || true)
-if [[ $reloads == 9 ]]; then echo "PASS: displays_trial the fake Hyprland received the 9 reloads"; else echo "FAIL: displays_trial the fake Hyprland received ${reloads:-0} reloads, not 9"; fail=1; fi
+if [[ $reloads == 10 ]]; then echo "PASS: displays_trial the fake Hyprland received the 10 reloads"; else echo "FAIL: displays_trial the fake Hyprland received ${reloads:-0} reloads, not 10"; fail=1; fi
 if grep -qvE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log"; then
   echo "FAIL: displays_trial a request other than reload or a JSON query: $(grep -vE '^(reload|j/.*|\[\[BATCH\]\].*)$' "$tmp/requests.log" | head -3)"; fail=1
 else

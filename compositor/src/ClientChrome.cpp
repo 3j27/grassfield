@@ -2,6 +2,7 @@
 
 #include "Ipc.hpp"
 #include "Plugin.hpp"
+#include "Tiling.hpp"
 #include "core/ClientChrome.hpp"
 
 #include <hyprland/src/desktop/Workspace.hpp>
@@ -248,7 +249,7 @@ namespace gf::chrome {
     }
 
     double bandOf(const PHLWINDOW& w) {
-        return band(isClientChrome(w));
+        return band(isClientChrome(w), gf::tiler::inSplit(w)); // a Split View member's bar is away (TL33, step 6e)
     }
 
     bool start() {

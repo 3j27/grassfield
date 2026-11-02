@@ -2,12 +2,14 @@
 #include <QCommandLineParser>
 #include <QDir>
 #include <QQmlApplicationEngine>
+#include <QQuickWindow>
 #include <QUrl>
 
 #include "translationloader.h"
 #include "applicationslogic.h"
 #include "filesapp.h"
 #include "globalmenu.h"
+#include "keywindow.h"
 #include "windowchrome.h"
 #include "appicons.h"
 #include "imageproviders.h"
@@ -27,6 +29,9 @@ int main(int argc, char *argv[])
     // QApplication (not QGuiApplication): KIO's widgets library (KDirLister, its job delegate class) expects one; its
     // dialogs are not used (Grassfield's sheets, ADR-0035 D-12 a, src/kioprompts.h).
     QApplication app(argc, argv);
+    // The app's static text is rasterised natively (ADR-0039 Q5, step 19): distance-field glyphs carry 8 to 20 % less ink than
+    // macOS's, so text read greyer and softer; no app text is scaled or animated (an item that is sets its own renderType).
+    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
     // Before any QML: no global menu item may hold Qt's first shortcut id (globalmenu.h).
     grassfield::apps::reserveFirstShortcutId(app);
     // ADR-0015: windows that draw their own chrome (QML property gfChromeRole) are tagged for the compositor plugin.
@@ -66,6 +71,8 @@ int main(int argc, char *argv[])
     FilesApp files(urls);
 
     QQmlApplicationEngine engine;
+    // ADR-0039 step 17: the window keeps its key look while a shell menu or the Control Center holds the keyboard (keywindow.h).
+    new grassfield::apps::KeyWindow(&engine);
     // Installed Grassfield.Ui lives in the system QML directory; QML_IMPORT_PATH adds the repo in dev.
     engine.addImportPath(QStringLiteral("/usr/lib/qt6/qml"));
     // addImportPath puts a path before the ones searched so far, so the system directory above would shadow the tree's own

@@ -98,6 +98,7 @@ Singleton {
             splitBlocked: Compositor.splitBlocked,
             splittable: focusedHere ? Compositor.fitsHalf(focusedHere) : true,
             fixedSize: focusedHere ? Compositor.fixedSize(focusedHere) : false,
+            fit: focusedHere ? Compositor.fitOf(focusedHere) : null,
             outputs: focusedHere ? Compositor.otherOutputs(focusedHere) : []
         };
     }

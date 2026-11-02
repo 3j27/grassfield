@@ -424,7 +424,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     name: "chevron-right"
                     size: Tokens.filesChevronSize
-                    color: entry.emphasized ? Appearance.colors.selectionText : Appearance.colors.textSecondary
+                    color: entry.emphasized ? Appearance.colors.selectionText : Appearance.windowSecondary
                 }
 
                 DropArea {

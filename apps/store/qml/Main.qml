@@ -43,7 +43,7 @@ Window {
                 title: s.builtIn ? qsTr("Discover") : s.title,
                 icon: Store.symbolIcon(s.symbol)
             })).concat([{key: "categories", page: "categories", id: "", title: qsTr("Categories"), icon: "grid"},
-                {key: "updates", page: "updates", id: "", title: qsTr("Updates"), icon: "arrow-down-circle"}])
+                {key: "updates", page: "updates", id: "", title: qsTr("Updates"), icon: "arrow-down-circle", count: root.backend.updates.count || 0}])
 
     function reload(): void {
         root.sections = root.backend.sections();
@@ -145,6 +145,22 @@ Window {
         opSheet.show(Object.assign({}, app, root.backend.app(app.id)), "remove");
     }
 
+    // A Flatpak's Update, and Update All of the Flatpak group (step 4): the sheet asks only when an update lets an app reach
+    // more than before (OperationSheet.showUpdate).
+    function requestUpdate(app: var): void {
+        opSheet.showUpdate(Object.assign({}, app, root.backend.app(app.id)));
+    }
+
+    function updateAllFlatpaks(): void {
+        opSheet.showUpdate({id: "store:flatpak-updates", name: qsTr("Flatpak apps"), kind: "flatpak"});
+    }
+
+    // The search by document type (ADR-0035 5c-3): Files' "Search the Store" opens it (--page=type:<type>).
+    function openType(type: string): void {
+        sidebar.search.text = "";
+        root.visit({page: "type", id: type, tab: ""});
+    }
+
     function launchApp(app: var): void {
         if (!root.backend.open(app.id))
             root.transientNotice = qsTr("“%1” could not be opened.").arg(app.name || "");
@@ -218,7 +234,7 @@ Window {
     property string transientNotice: ""
     Timer {
         running: root.transientNotice !== ""
-        interval: 6000
+        interval: Tokens.storeNoticeLifetime
         onTriggered: root.transientNotice = ""
     }
     // How an operation ended, while it says something (the latest one first), and a lock pacman left (SR19, SR20).
@@ -247,7 +263,7 @@ Window {
         pageLoader.sourceComponent = null;
         pageLoader.sourceComponent = c.page === "section" ? sectionPage : c.page === "categories" ? categoriesPage
             : c.page === "category" ? categoryPage : c.page === "app" ? productPage : c.page === "search" ? searchPage
-            : c.page === "installed" ? installedPage : c.page === "updates" ? updatesPage : null;
+            : c.page === "installed" ? installedPage : c.page === "updates" ? updatesPage : c.page === "type" ? typePage : null;
         if (pageLoader.item && scroll > 0)
             (pageLoader.item as ScrollPage).restoreScroll(scroll);
     }
@@ -264,6 +280,8 @@ Window {
             root.openApp(arg);
         else if (kind === "installed")
             root.openInstalled();
+        else if (kind === "type" && /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/.test(arg.toLowerCase()))
+            root.openType(arg.toLowerCase());
         else if (kind === "search") {
             sidebar.search.text = arg;
             root.search(arg);
@@ -499,6 +517,10 @@ Window {
                     const a = Object.assign({id: app, name: r.name}, root.backend.app(app));
                     if (r.kind === "remove")
                         root.requestUninstall(a);
+                    else if (r.kind === "update" && app === "store:flatpak-updates")
+                        root.updateAllFlatpaks();
+                    else if (r.kind === "update")
+                        root.requestUpdate(a);
                     else
                         root.requestGet(a);
                 } else if (id === "details") {
@@ -549,16 +571,16 @@ Window {
             leading: RimmedCapsule {
                 visible: root.canBack || root.canForward
                 width: navRow.width + Tokens.spacingXs
-                height: Tokens.filesToolbarCapsule
-                fillOpacity: Tokens.settingsToolbarFillOpacity
+                height: Tokens.toolbarCapsule
+                fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 Accessible.role: Accessible.Grouping
                 Accessible.name: qsTr("Navigation")
 
                 Rectangle {
                     anchors.centerIn: parent
                     width: parent.hairline
-                    height: Tokens.settingsToolbarDividerHeight
-                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.settingsToolbarDividerOpacity)
+                    height: Tokens.toolbarDividerHeight
+                    color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.toolbarDividerOpacity)
                 }
 
                 Row {
@@ -567,7 +589,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         iconRotation: 180
                         enabled: root.canBack
@@ -577,7 +599,7 @@ Window {
 
                     ToolButton {
                         capsule: true
-                        buttonSize: Tokens.filesToolbarGroupButton
+                        buttonSize: Tokens.toolbarGroupButton
                         iconName: "chevron-right"
                         enabled: root.canForward
                         accessibleName: qsTr("Forward")
@@ -701,7 +723,20 @@ Window {
     Component {
         id: updatesPage
         UpdatesPage {
-            updates: root.backend.updates()
+            updates: root.backend.updates
+            onOpened: id => root.openApp(id)
+            onCheckRequested: root.backend.checkUpdates()
+            onSoftwareUpdateRequested: root.backend.openSoftwareUpdate()
+            onFlatpakUpdateAllRequested: root.updateAllFlatpaks()
+            Component.onCompleted: root.backend.updatesShown(true)
+            Component.onDestruction: root.backend.updatesShown(false)
+        }
+    }
+
+    Component {
+        id: typePage
+        TypePage {
+            search: root.backend.typeSearch(pageLoader.entry ? pageLoader.entry.id : "")
             onOpened: id => root.openApp(id)
         }
     }

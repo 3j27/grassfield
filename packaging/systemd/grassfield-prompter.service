@@ -1,0 +1,66 @@
+# gcr's system prompter for the Grassfield session (ADR-0035 D-9, owner decision Q1 = S2; docs/specs/system-dialogs.md
+# section 5). Started by config/hypr/grassfield/autostart.lua before the shell, without waiting for it. It owns
+# org.gnome.keyring.SystemPrompter only while the shell is connected to its socket and has said hello, so with no shell
+# connected (step 9a ships the bridge before the shell's sheets, step 9b) it changes nothing: the stock gcr-prompter is
+# activated for every prompt, as before.
+[Unit]
+Description=Grassfield password prompts (gcr's system prompter, drawn by the shell)
+Documentation=file:///usr/share/doc/grassfield/README.md
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+# Only inside the Grassfield session, never in the Omarchy session.
+ConditionEnvironment=GRASSFIELD_SESSION=1
+
+[Service]
+Type=simple
+Slice=session.slice
+# --peer-unit: the only process that may connect as the shell runs in this unit's cgroup (an argument, never an
+# environment variable). The secret sheets share one queue with the polkit sheet, so they follow the polkit agent: when it
+# moves to grassfield-security.service (ADR-0041 step 1, S3), so does this value (ADR-0035 decision 9-7).
+# Omarchy's pairing agent must not run beside this one (ADR-0035 decision 10-1): one left running from an Omarchy session
+# in the same user manager is stopped first ("-": nothing to stop on a system without it). Not Conflicts=, which works both
+# ways: a `systemctl --user start bt-agent.service` in this session would stop this unit even though bt-agent's own
+# drop-in condition then skips it (checked under a systemd 262 user manager, ADR-0035 decision 10-1).
+ExecStartPre=-/usr/bin/systemctl --user stop bt-agent.service
+ExecStart=/usr/lib/grassfield/grassfield-prompter --peer-unit grassfield-shell.service
+Restart=on-failure
+# Back-off between restarts (systemd >= 254): 1 s, growing to 30 s.
+RestartSec=1
+RestartSteps=5
+RestartMaxDelaySec=30
+TimeoutStopSec=5
+# Socket: $XDG_RUNTIME_DIR/grassfield/prompter.sock (directory 0700, socket 0600), next to the menu bridge's; the directory
+# is kept when either unit stops.
+RuntimeDirectory=grassfield
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+# GDBus, GLib and Qt print messages and their arguments under these; Qt without its GLib event loop cannot run libgcr's
+# callbacks; GLib's fatal-warnings would let a caller's malformed property stop the bridge. The bridge clears the first
+# ones again itself.
+UnsetEnvironment=G_DBUS_DEBUG G_MESSAGES_DEBUG G_DEBUG QDBUS_DEBUG QT_NO_GLIB
+# Passwords pass through its memory: never in a core file or in swap (the bridge also makes itself non-dumpable).
+LimitCORE=0
+MemorySwapMax=0
+# Hardening without namespaces (ADR-0035 decisions 2c-6 and 9-8). In a user unit, ProtectSystem=, ProtectHome=, PrivateTmp=,
+# PrivateNetwork= and the other mount, network or kernel protections make systemd add PrivateUsers=self, and from that user
+# namespace /proc/<pid>/exe of the callers cannot be read and root's files show as nobody's: no requester could ever be
+# identified. tests/shell/session_services.sh keeps those options out of this unit; the seccomp-based ones below need no
+# namespace.
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+# Resource budget (measured in step 9a, Qt 6.12 and gcr 4.4.1): 18.5 MB resident idle, most of it pages of Qt Core, GLib and
+# libgcr that other processes map too, 21.1 MB after ten prompts, 4 threads. At most 64 prompts open, 8 outstanding.
+MemoryHigh=48M
+MemoryMax=128M
+TasksMax=16

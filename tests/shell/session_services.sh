@@ -83,8 +83,10 @@ check bash -c '[[ $("$1" status) == off ]] && "$1" toggle && [[ $("$1" status) =
 
 # --- screenshots, autostart, units, packaging ---------------------------------------------------------------------------
 sys=$root/config/hypr/grassfield/system.lua
-desc="screenshots: Super+Shift+3/4/5 (by keycode) and Print run Omarchy's capture tool (screen, selection, picker)"
-check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"fullscreen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"region\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"smart\")" "$1" && grep -q "bind(\"PRINT\"" "$1" || grep -q "hl.bind(\"PRINT\", capture(\"smart\")" "$1"' _ "$sys"
+desc="screenshots: Super+Shift+3 (by keycode) runs Grassfield's capture of the screen, Super+Shift+4/5 and Print a selection, never Omarchy's tool (ADR-0035 D-10)"
+check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"screen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"selection\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"selection\")" "$1" && grep -q "hl.bind(\"PRINT\", capture(\"selection\")" "$1" && grep -q "exec_cmd(\"/usr/lib/grassfield/grassfield-capture \" .. mode)" "$1" && ! grep -q "omarchy-capture" "$1"' _ "$sys"
+desc="screenshots: slurp's crosshair layer (namespace selection) is never faded out, so no picture shows it (ADR-0035 D-10)"
+check grep -q 'hl.layer_rule({ name = "gf-capture-selection-no-anim", match = { namespace = "^selection\$" }, no_anim = true })' "$root/config/hypr/grassfield/windows.lua"
 
 auto=$root/config/hypr/grassfield/autostart.lua
 for unit in crash-watch battery-watch migrate-notify automount; do
@@ -95,8 +97,8 @@ done
 # The Secret Service handover (ADR-0035 D-12): its first phase (a leftover ksecretd lets go of org.freedesktop.secrets) ends
 # before the shell starts, so no app opened from the Dock reaches KWallet there; the shell never waits more than 10 s for it.
 u=$pk/systemd/grassfield-secrets-handover.service
-desc="grassfield-secrets-handover.service, grassfield-portal-settings.service and grassfield-security.service (the last two not waited for): started before the shell in the same chain, after the menu bridge"
-check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
+desc="grassfield-prompter.service, grassfield-secrets-handover.service, grassfield-portal-settings.service and grassfield-security.service (the prompter, the portal backend and the security process not waited for): started before the shell in the same chain, after the menu bridge"
+check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start --no-block grassfield-prompter.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
 desc="grassfield-secrets-handover.service: started by the session, skips itself outside it, NoNewPrivileges, seccomp, installed by the PKGBUILD"
 check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -q "for unit in .*secrets-handover" "$2"' _ "$u" "$pk/arch/PKGBUILD"
 desc="grassfield-secrets-handover.service: no core file, no swap, no Qt D-Bus message dump (secret values pass through it)"
@@ -108,7 +110,79 @@ desc="grassfield-secrets-handover.service: none of the options that would put it
 check bash -c '! grep -qE "^(PrivateUsers|PrivateTmp|PrivateDevices|PrivateNetwork|NetworkNamespacePath|PrivateIPC|IPCNamespacePath|PrivateMounts|PrivatePIDs|MountAPIVFS|BindLogSockets|BindPaths|BindReadOnlyPaths|TemporaryFileSystem|RootDirectory|RootImage|ExtensionDirectories|ExtensionImages|ProtectSystem|ProtectHome|ProtectProc|ProcSubset|ProtectKernelTunables|ProtectKernelModules|ProtectKernelLogs|ProtectControlGroups|ProtectClock|ProtectHostname|ReadWritePaths|ReadOnlyPaths|InaccessiblePaths|ExecPaths|NoExecPaths)=" "$1"' _ "$u"
 desc="grassfield-secrets-handover.service: Type=notify with a 10 s start limit, no [Install], runs the helper where CMake installs it"
 check bash -c 'grep -qx "Type=notify" "$1" && grep -qx "NotifyAccess=main" "$1" && grep -qx "TimeoutStartSec=10" "$1" && ! grep -q "^\[Install\]" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-secrets-handover" "$1" && grep -q "RUNTIME DESTINATION lib/grassfield" "$2" && grep -q "cmake --install \"\$srcdir/secrets-handover-build\"" "$3"' _ "$u" "$root/apps/secrets-handover/CMakeLists.txt" "$pk/arch/PKGBUILD"
-for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify; do
+# ADR-0041 step 2b (U31): pacman's local database watched by a path unit; its oneshot service waits for a transaction's
+# burst to settle and asks the shell for a check (`update check system`); both start with the session and skip themselves
+# outside it; nothing runs as root.
+p=$pk/systemd/grassfield-pacman-watch.path
+u=$pk/systemd/grassfield-pacman-watch.service
+h=$pk/bin/grassfield-pacman-watch
+desc="grassfield-pacman-watch.path: watches /var/lib/pacman/local (PathChanged), starts its service, session-only, part of the session target, a trigger limit set, started by autostart and installed by the PKGBUILD"
+check bash -c 'grep -qx "PathChanged=/var/lib/pacman/local" "$1" && grep -qx "Unit=grassfield-pacman-watch.service" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qE "^TriggerLimitIntervalSec=[0-9]+$" "$1" && grep -qE "^TriggerLimitBurst=[0-9]+$" "$1" && grep -q "grassfield-pacman-watch.path" "$2" && grep -q "grassfield-pacman-watch.path\" \"\$pkgdir/usr/lib/systemd/user/grassfield-pacman-watch.path\"" "$3"' _ "$p" "$auto" "$pk/arch/PKGBUILD"
+desc="grassfield-pacman-watch.service: oneshot, runs the helper, session-only, hardened, Quickshell's option variables and the helper's knobs cleared, a start limit, a start timeout past the lock wait, installed by the PKGBUILD"
+check bash -c 'grep -qx "Type=oneshot" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-pacman-watch" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "ProtectSystem=strict" "$1" && grep -qx "PrivateTmp=yes" "$1" && grep -qx "UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_PACMAN_WATCH_LOCK GRASSFIELD_PACMAN_WATCH_LOCK_WAIT GRASSFIELD_PACMAN_WATCH_SETTLE GRASSFIELD_PACMAN_WATCH_IPC" "$1" && grep -qE "^StartLimitIntervalSec=[0-9]+$" "$1" && grep -qE "^StartLimitBurst=[0-9]+$" "$1" && t=$(sed -nE "s/^TimeoutStartSec=([0-9]+)$/\1/p" "$1") && [[ -n $t ]] && ((t > 1800)) && grep -q "for unit in .*pacman-watch" "$2"' _ "$u" "$pk/arch/PKGBUILD"
+desc="grassfield-pacman-watch: executable, clears Quickshell's option variables, waits for pacman's lock, asks the shell by its path (update check system) and nothing else (no systemctl, pacman or privilege)"
+check bash -c '[[ -x "$1" ]] && grep -q "unset QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST" "$1" && grep -q "lock=/var/lib/pacman/db.lck" "$1" && grep -q "qs ipc -p /usr/share/grassfield/shell call update check system" "$1" && ! grep -v "^#" "$1" | grep -qE "systemctl|sudo|pkexec|pacman |hyprctl"' _ "$h"
+# The helper under test never reaches a live shell: GRASSFIELD_SESSION is unset for the dev-session cases, and the
+# real-session case (the knobs ignored) runs against a fake `qs` on a private PATH that only logs its arguments (the
+# integrator's review of 69757ef, major 5).
+watch_dir=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/pacman-watch.XXXXXX")
+mkdir -p "$watch_dir/bin"
+printf '#!/bin/sh\necho "qs $*" >>"$FAKE_QS_LOG"\necho "No running instances"\nexit 1\n' >"$watch_dir/bin/qs"
+printf '#!/bin/sh\necho "asked $*" >>"$FAKE_IPC_LOG"\necho "ok"\n' >"$watch_dir/ipc.sh"
+chmod +x "$watch_dir/bin/qs" "$watch_dir/ipc.sh"
+desc="grassfield-pacman-watch: a dev session outside the real one may replace the call and shorten the waits (the knobs); the real session ignores them and asks the shell by its path (a fake qs here, never the live shell)"
+check bash -c ': >"$2/ipc.log"; : >"$2/qs.log"
+  out=$(env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/none" GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" "$1") && [[ $out == ok ]] && [[ $(cat "$2/ipc.log") == "asked call update check system" ]] || exit 1
+  out2=$(env GRASSFIELD_DEV=1 GRASSFIELD_SESSION=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/none" GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" FAKE_QS_LOG="$2/qs.log" PATH="$2/bin:$PATH" XDG_RUNTIME_DIR="$2" timeout 30 "$1"; echo "rc=$?")
+  [[ $out2 == *"rc=0" ]] && [[ $(cat "$2/ipc.log") == "asked call update check system" ]] && [[ $(cat "$2/qs.log") == "qs ipc -p /usr/share/grassfield/shell call update check system" ]]' _ "$h" "$watch_dir"
+desc="grassfield-pacman-watch: waits while pacman's lock file exists (the transaction runs) and asks once it is gone; the wait is bounded"
+check bash -c ': >"$2/db.lck"; : >"$2/ipc.log"
+  env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/db.lck" GRASSFIELD_PACMAN_WATCH_LOCK_WAIT=60 GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" "$1" >/dev/null & pid=$!
+  sleep 2.5; [[ ! -s "$2/ipc.log" ]] || { kill "$pid" 2>/dev/null; echo "asked while locked"; exit 1; }
+  rm -f "$2/db.lck"; wait "$pid"; [[ $(cat "$2/ipc.log") == "asked call update check system" ]] || { echo "not asked after the lock went"; exit 1; }
+  : >"$2/db.lck"; : >"$2/ipc.log"
+  env -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_PACMAN_WATCH_SETTLE=0 GRASSFIELD_PACMAN_WATCH_LOCK="$2/db.lck" GRASSFIELD_PACMAN_WATCH_LOCK_WAIT=2 GRASSFIELD_PACMAN_WATCH_IPC="$2/ipc.sh" FAKE_IPC_LOG="$2/ipc.log" timeout 30 "$1" >/dev/null
+  [[ $(cat "$2/ipc.log") == "asked call update check system" ]] || { echo "not asked after the bound"; exit 1; }' _ "$h" "$watch_dir"
+rm -rf "$watch_dir"
+# ADR-0041 step 6a (SQ-5 A): the shell's liveness probe, a timer every 30 s and its oneshot service; both start with the
+# session and skip themselves outside it; the probe's logic is tests/shell/shell_watchdog.sh.
+t=$pk/systemd/grassfield-shell-watchdog.timer
+u=$pk/systemd/grassfield-shell-watchdog.service
+desc="grassfield-shell-watchdog.timer: every 30 s from its start, accurate to a second, starts its service, session-only, part of the session target, started by autostart and installed by the PKGBUILD"
+check bash -c 'grep -qx "OnActiveSec=30s" "$1" && grep -qx "OnUnitActiveSec=30s" "$1" && grep -qx "AccuracySec=1s" "$1" && grep -qx "Unit=grassfield-shell-watchdog.service" "$1" &&
+  grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "Requisite=graphical-session.target" "$1" &&
+  grep -qE "^  local services = \".* grassfield-shell-watchdog.timer\"$" "$2/config/hypr/grassfield/autostart.lua" &&
+  grep -qF "packaging/systemd/grassfield-shell-watchdog.timer\" \"\$pkgdir/usr/lib/systemd/user/grassfield-shell-watchdog.timer\"" "$2/packaging/arch/PKGBUILD"' _ "$t" "$root"
+desc="grassfield-shell-watchdog.service: oneshot, runs the probe, session-only, hardened, Quickshell's option variables and the probe's test variable cleared, its runtime directory kept, a start timeout past the loaded bound, no restart of its own, installed by the PKGBUILD"
+check bash -c 'grep -qx "Type=oneshot" "$1" && grep -qx "ExecStart=/usr/lib/grassfield/grassfield-shell-watchdog" "$1" && grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" &&
+  grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "ProtectSystem=strict" "$1" && grep -qx "ProtectHome=read-only" "$1" && grep -qx "ReadWritePaths=%t" "$1" &&
+  grep -qx "PrivateNetwork=yes" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "CapabilityBoundingSet=" "$1" &&
+  grep -qx "UnsetEnvironment=QS_CONFIG_PATH QS_CONFIG_NAME QS_MANIFEST GRASSFIELD_SHELL_WATCHDOG_PRESSURE" "$1" && grep -qx "RuntimeDirectoryPreserve=yes" "$1" && grep -qx "TimeoutStartSec=45" "$1" &&
+  ! grep -q "^Restart=" "$1" && grep -qE "^  for unit in .* shell-watchdog; do$" "$2/packaging/arch/PKGBUILD"' _ "$u" "$root"
+# The password-prompt bridge (ADR-0035 D-9): it identifies its callers through /proc/<pid>/exe, so no option may put it in a
+# user namespace of its own (decision 9-8, as 2c-6); passwords pass through it.
+u=$pk/systemd/grassfield-prompter.service
+desc="grassfield-prompter.service: skips itself outside the session, NoNewPrivileges, seccomp, AF_UNIX only, no capability"
+check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -qx "CapabilityBoundingSet=" "$1" && grep -qx "MemoryDenyWriteExecute=yes" "$1"' _ "$u"
+desc="grassfield-prompter.service: no core file, no swap, no GDBus or Qt message dump, Qt keeps GLib's event loop"
+check bash -c 'grep -qx "LimitCORE=0" "$1" && grep -qx "MemorySwapMax=0" "$1" && grep -qx "UnsetEnvironment=G_DBUS_DEBUG G_MESSAGES_DEBUG G_DEBUG QDBUS_DEBUG QT_NO_GLIB" "$1"' _ "$u"
+desc="grassfield-prompter.service: none of the options that would put it in a user namespace of its own"
+check bash -c '! grep -qE "^(PrivateUsers|PrivateTmp|PrivateDevices|PrivateNetwork|NetworkNamespacePath|PrivateIPC|IPCNamespacePath|PrivateMounts|PrivatePIDs|MountAPIVFS|BindLogSockets|BindPaths|BindReadOnlyPaths|TemporaryFileSystem|RootDirectory|RootImage|ExtensionDirectories|ExtensionImages|ProtectSystem|ProtectHome|ProtectProc|ProcSubset|ProtectKernelTunables|ProtectKernelModules|ProtectKernelLogs|ProtectControlGroups|ProtectClock|ProtectHostname|ReadWritePaths|ReadOnlyPaths|InaccessiblePaths|ExecPaths|NoExecPaths)=" "$1"' _ "$u"
+desc="grassfield-prompter.service: the shell's unit is an argument (--peer-unit grassfield-shell.service), the socket directory is kept for the menu bridge, no [Install]"
+check bash -c 'grep -qx "ExecStart=/usr/lib/grassfield/grassfield-prompter --peer-unit grassfield-shell.service" "$1" && grep -qx "RuntimeDirectory=grassfield" "$1" && grep -qx "RuntimeDirectoryPreserve=yes" "$1" && grep -qx "UMask=0077" "$1" && ! grep -q "^\[Install\]" "$1" && ! grep -q "^Environment=" "$1"' _ "$u"
+desc="grassfield-prompter: installed where its unit runs it, built, tested and packaged by the PKGBUILD, which declares gcr-4 and libsecret (step 9e)"
+check bash -c 'grep -q "RUNTIME DESTINATION lib/grassfield" "$1" && grep -q "packaging/systemd/grassfield-prompter.service DESTINATION lib/systemd/user" "$1" && grep -q "cmake --install \"\$srcdir/prompter-build\"" "$2" && grep -q "\"\$srcdir/prompter-build/prompter-unit-tests\"" "$2" && grep -qE "^  depends=\(.* gcr-4 libsecret\)" "$2" && grep -qE "^ +quickshell gcr-4 libsecret\)" "$2"' _ "$root/bridges/prompter/CMakeLists.txt" "$pk/arch/PKGBUILD"
+# ADR-0035 decision 10-1 (opus review of step 10, MAJOR): Omarchy's bt-agent never runs beside the bridge's pairing agent.
+# Its drop-in skips it in this session and stops it with the session that started it (Omarchy's unit has no PartOf=, and
+# the user manager can outlive a logout); the bridge's unit stops one still running before it starts, one way only
+# (Conflicts= would let any start of bt-agent in this session stop the bridge, although bt-agent's condition then skips it).
+desc="the bt-agent drop-in skips it in this session and stops it with the session; grassfield-prompter.service stops a leftover one first, without Conflicts="
+check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "ExecStartPre=-/usr/bin/systemctl --user stop bt-agent.service" "$2" && ! grep -q "^Conflicts=" "$2"' _ "$pk/systemd/bt-agent.service.d/10-grassfield.conf" "$u"
+# udiskie's password command (ADR-0035 D-9, step 9c): grassfield-askpass, built and installed with the bridge, where the
+# automount unit runs it, the disk's name one argument of udiskie's own formatting.
+desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
+check bash -c 'grep -qxF "ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray --password-prompt \"/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}\"" "$1" && grep -qF "install(TARGETS grassfield-prompter grassfield-askpass RUNTIME DESTINATION lib/grassfield)" "$2" && grep -qF "add_executable(grassfield-askpass src/askpass.cpp" "$2"' _ "$pk/systemd/grassfield-automount.service" "$root/bridges/prompter/CMakeLists.txt"
+for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify bt-agent; do
   desc="drop-in keeps Omarchy's $unit.service out of the Grassfield session only"
   d=$pk/systemd/$unit.service.d/10-grassfield.conf
   check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -q "$2" "$3"' _ "$d" "$unit" "$pk/arch/PKGBUILD"

@@ -15,7 +15,7 @@ Rectangle {
     width: parent ? parent.width : implicitWidth
     implicitWidth: Tokens.settingsContentMaxWidth
     implicitHeight: Math.round(body.y + body.baselineOffset + (body.lineCount - 1) * Tokens.settingsBannerTextLineHeight + Tokens.settingsBannerBottom)
-    radius: Tokens.radiusMenu
+    radius: Tokens.radiusGroup
     color: Appearance.colors.groupFill
     // Increase Contrast outlines the card, as it does the groups (SettingsGroup).
     border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
@@ -56,7 +56,8 @@ Rectangle {
         id: body
         textFormat: Text.PlainText
         x: Tokens.settingsBannerTextX
-        y: Tokens.settingsBannerTextBaseline - baselineOffset
+        // The text's first baseline its measured gap under the title's, growing with Text size (ADR-0039 step 18).
+        y: Tokens.settingsBannerTitleBaseline + (Tokens.settingsBannerTextBaseline - Tokens.settingsBannerTitleBaseline) * Appearance.textScale - baselineOffset
         width: root.width - x - Tokens.settingsRowInset
         text: root.text
         wrapMode: Text.Wrap

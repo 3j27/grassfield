@@ -19,6 +19,7 @@
 #include "storemodel.h"
 #include "storeview.h"
 
+#include <QDateTime>
 #include <QFileSystemWatcher>
 #include <QLocale>
 #include <QObject>
@@ -36,6 +37,8 @@ namespace grassfield::store {
 
 // "Get Flatpak…" (step 3c part 3, SD24): the operation's app id (no app of a source takes a colon after "store").
 inline const QString kGetFlatpakApp = QStringLiteral("store:flatpak");
+// Update All of the Flatpak group (step 4): the operation of all the Flathub updates at once.
+inline const QString kFlatpakUpdatesApp = QStringLiteral("store:flatpak-updates");
 
 // Everything one load read and made; never changed once built (StoreApp::entry points into `catalog`).
 struct Snapshot {
@@ -120,6 +123,8 @@ class StoreBackend : public QObject
     Q_PROPERTY(QVariantMap results READ results NOTIFY operationsChanged)
     // pacman stopped mid-way and left its lock (db.lck there, no pacman running): SR20's explanation, then Arch's recovery.
     Q_PROPERTY(bool staleLock READ staleLock NOTIFY operationsChanged)
+    // Updates (SR24, SR25; step 4): see updates() below.
+    Q_PROPERTY(QVariantMap updates READ updates NOTIFY updatesChanged)
 
 public:
     explicit StoreBackend(QObject *parent = nullptr);
@@ -178,8 +183,21 @@ public:
     // (sizes as the locale writes them), access (flatpak.h flatpakAccess's keys)}, from `remote-info` while it is not
     // installed (online only), else from `info --user`; {} when flatpak could not say.
     Q_INVOKABLE void requestFlatpakInfo(const QString &id);
-    // Updates (SR24, read only): software-update.json read again.
-    Q_INVOKABLE QVariantMap updates() const;
+    // Updates (SR24, SR25; step 4): software-update.json as view::updates reads it, with: checking (the shell was asked for a
+    // check, not answered yet), askFailed (no shell answered), running (Omarchy's update lock held by another program, or
+    // the checker says an update runs), unfinished (pacman -Qu's packages while no update runs: the last system update did
+    // not finish, S12), flatpak {on, state: "" | checking | failed, apps (summaries with ref), runtimes (their count),
+    // block ("" or why no Flatpak update can run now)}, and count (the apps with an update, Flatpaks included: the
+    // sidebar's number).
+    QVariantMap updates() const;
+    // Check Now (SR24): the shell's check (ADR-0033 d.7), pacman -Qu, and the Flatpaks' (remote-ls --updates, S31).
+    Q_INVOKABLE void checkUpdates();
+    // The Updates page shown or left: shown, it checks as Settings' pane does (the shell, unless a check finished less
+    // than a minute ago; the Flatpaks, unless checked less than a minute ago) and follows the update lock every 2 s.
+    Q_INVOKABLE void updatesShown(bool shown);
+    // The search by document type (ADR-0035 5c-3; `--page=type:<type>`): {type, description (the MIME database's), apps
+    // (summaries, those that open the type first, then a parent type)}; {} for a malformed type.
+    Q_INVOKABLE QVariantMap typeSearch(const QString &type) const;
     // Ctrl+R: everything read again and the catalog fetched, metered or not.
     Q_INVOKABLE void refresh();
     // grassfield.json for the settings window's switches (SD20, as the Settings app writes its keys, ADR-0020): {exists, ok,
@@ -192,7 +210,10 @@ public:
     Q_INVOKABLE QString screenshotSource(const QString &url) const;
     // Get and Uninstall… (SR14, SR22): what the operation would do, answered by planReady(app, kind, plan): {refusal: "" |
     // busy | unfinished | outdated | offline | dependency | protected | failed | unavailable, packages [{name, version, repo,
-    // size}], download, installed, unfinished, upgrades, dependents, protected, detail}. kind: install or remove.
+    // size}], download, installed, unfinished, upgrades, dependents, protected, detail}. kind: install or remove; update for
+    // a Flatpak with an update or kFlatpakUpdatesApp (step 4): {refusal: "" | unavailable, detail, refs (their count),
+    // widened [{name, access}] (what each update lets an app reach that it could not), unknown [names whose access could
+    // not be read]}: the sheet asks only when one of the two lists is not empty.
     Q_INVOKABLE void plan(const QString &id, const QString &kind);
     // What the app's buttons may do now: {installed, launcher, get: "" or why not, uninstall: "" or why not} (getBlock,
     // uninstallBlock). Read again with `revision` and `operations`.
@@ -201,6 +222,8 @@ public:
     // none, or the app cannot be installed or removed).
     Q_INVOKABLE bool install(const QString &id);
     Q_INVOKABLE bool uninstall(const QString &id);
+    // A Flatpak's Update, or Update All of the group (kFlatpakUpdatesApp), with the plan made last for it: the refs it checked.
+    Q_INVOKABLE bool update(const QString &id);
     Q_INVOKABLE bool removeWaiting(const QString &operationId);
     // The running Flatpak install stops (the ring's square, SD26); false when it cannot.
     Q_INVOKABLE bool stopOperation(const QString &operationId);
@@ -209,6 +232,11 @@ public:
     Q_INVOKABLE bool open(const QString &id);
     // Ctrl+Q: quits at once, or once the running operation ended (the window closes meanwhile; waiting ones are dropped).
     Q_INVOKABLE void quitWhenIdle();
+    // The Store asked for again (a second launch handed over its page, SD35): the window is back, so the quit Ctrl+Q or the
+    // closed window asked for is off; the running operation ends with the window still there.
+    void reopened();
+    // A quit waits for the running operation to end (quitWhenIdle, not reopened since).
+    bool quitPending() const { return m_quitWhenIdle; }
     // "Open Software Update" of a refused plan (SR15): Settings at General, where Software Update lives (ADR-0033); false
     // when it did not start (in a dev session only through the fake program).
     Q_INVOKABLE bool openSoftwareUpdate();
@@ -235,6 +263,7 @@ signals:
     void aurInfo(const QString &id);
     void buildScript(const QString &id, const QString &text, bool ok);
     void flatpakInfo(const QString &id, const QVariantMap &facts);
+    void updatesChanged();
 
 protected:
     // The snapshot in use from now on. Protected for the unit tests (tst_storebackend), which hand it states a load
@@ -296,6 +325,18 @@ private:
     // The packages installed from outside the repositories, asked of the AUR once (Installed's "AUR" group).
     void askAurForForeign();
     QVariantMap withActions(QVariantMap map, const StoreApp &a) const;
+    // Updates (step 4): the shell asked for a check (ADR-0033 d.7), pacman -Qu read, Flathub's updates listed, the file and
+    // the update lock read again (updatesChanged when what the page shows moved).
+    void askShellToCheck();
+    void readUnfinished();
+    void checkFlatpakUpdates();
+    void followUpdates();
+    // The installed Flathub app `flatpakId` names (an AppStream app of Flathub, else ""), and the update of an app id.
+    const StoreApp *flatpakApp(const QString &flatpakId) const;
+    std::optional<FlatpakUpdate> flatpakUpdateOf(const QString &id) const;
+    // Why no Flatpak update can run now, or "": flatpakBlock()'s reasons, offline.
+    QString flatpakUpdateBlock() const;
+    void planFlatpakUpdate(const QString &id);
     PlanTools planTools() const;
     void checkStaleLock();
 
@@ -338,8 +379,30 @@ private:
     QSet<QString> m_aurAsked;                 // the installed foreign names asked of the AUR already
     QHash<QString, StoreApp> m_aurApps;       // "aur:<name>" -> its app
     bool m_staleLock = false;
+    // Updates (step 4).
+    QList<FlatpakUpdate> m_flatpakUpdates; // Flathub's only
+    QString m_flatpakUpdatesState;          // "", checking, failed
+    QDateTime m_flatpakCheckedAt;
+    bool m_systemChecking = false;
+    bool m_askFailed = false;
+    QString m_askedCheckedAt; // the file's checkedAt when the shell was asked: a new one is its answer
+    int m_unfinished = 0;
+    bool m_lockHeld = false;
+    QByteArray m_updatesFile; // what the page showed last
+    QTimer m_checkDeadline;   // the checker's 200 s backstop (ADR-0033 d.7)
+    QTimer m_updatesPoll;     // while the page is shown
+    QFileSystemWatcher m_stateWatcher;
+    // An update's plan (SD33): the refs it checked and, for each, the commit it checked ("" when unread: a runtime, or an
+    // app the sheet said it could not check) and the commit installed then ("" unread): another one by the update's turn
+    // means it was updated outside the Store, and it is left as it is (never downgraded).
+    struct UpdatePlan {
+        QStringList refs, commits, fromCommits;
+    };
+    QHash<QString, UpdatePlan> m_updatePlans;              // app id or kFlatpakUpdatesApp -> its last plan
+    QHash<QString, std::pair<int, int>> m_updatePlanning; // a plan running: the apps checked, of how many
     bool m_quitWhenIdle = false;
-    QThreadPool m_pool; // last member: waits for the jobs while the rest is still there
+    QThreadPool m_updatePool; // Updates' jobs (step 4); with m_pool, after every other member: they wait for their jobs,
+    QThreadPool m_pool;       // last member: waits for the jobs while the rest is still there; m_cancel stops their children
 };
 
 } // namespace grassfield::store

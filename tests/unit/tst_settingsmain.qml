@@ -120,6 +120,64 @@ TestCase {
     }
 
     // UPower's display device decides: a laptop battery shows Battery, none (or no answer) hides it.
+    // The toolbar's edge (ADR-0039 D3, step 15): no rule while the page is at its top, a hairline once its content has scrolled
+    // under the toolbar, as Files does.
+    function test_theToolbarRuleShowsOnceScrolled() {
+        const t = make(touchpad);
+        t.win.select("desktop");
+        wait(50);
+        const rule = find(t.win.contentItem, i => i.objectName === "toolbarRule");
+        verify(rule !== null);
+        const flick = rule.flick;
+        verify(flick !== null, "the page is a Flickable");
+        flick.contentY = flick.originY;
+        verify(!rule.visible, "at the top: no rule");
+        flick.contentY = flick.originY + Tokens.spacingLg;
+        verify(rule.visible, "scrolled: the rule");
+        compare(rule.height, Tokens.appsBorderWidth);
+        flick.contentY = flick.originY;
+        verify(!rule.visible);
+    }
+
+    Component {
+        id: otherWindow
+        Window {
+            width: 60
+            height: 60
+            visible: true
+        }
+    }
+
+    // A window that is not key (ADR-0039 step 17): its sidebar selection turns neutral, the hover ink at the inactive opacity
+    // with the label in the text colour, and takes the accent back when the window is key.
+    function test_theSelectionTurnsNeutralWhileNotKey() {
+        const t = make(touchpad);
+        t.win.select("desktop");
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000);
+        wait(50);
+        const fillOf = () => find(t.win.contentItem, i => String(i).indexOf("QQuickRectangle") === 0 && i.visible
+                                  && (Qt.colorEqual(i.color, Appearance.colors.selection)
+                                      || Qt.colorEqual(i.color, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity))));
+        let fill = fillOf();
+        verify(fill !== null, "the selected row's fill");
+        verify(Qt.colorEqual(fill.color, Appearance.colors.selection), "key: the accent");
+        const other = createTemporaryObject(otherWindow, null);
+        other.requestActivate();
+        tryVerify(() => !t.win.active, 2000);
+        verify(Qt.colorEqual(fill.color, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)), "not key: neutral");
+        // A shell menu or the Control Center holds the keyboard for this window (the app holds it key, apps/keywindow.h): the
+        // accent stays (the integrator's macOS decision on #88).
+        Appearance.heldKeyWindow = t.win;
+        verify(Qt.colorEqual(fill.color, Appearance.colors.selection), "held key: the accent");
+        Appearance.heldKeyWindow = null;
+        verify(Qt.colorEqual(fill.color, Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)), "released: neutral");
+        other.close();
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000);
+        verify(Qt.colorEqual(fill.color, Appearance.colors.selection), "key again: the accent");
+    }
+
     function test_hasBattery() {
         const t = make(testCase.touchpad);
         compare(t.backend.busQueries.filter(q => q.tag === "main.power").map(q => q.what), ["power.state"]);

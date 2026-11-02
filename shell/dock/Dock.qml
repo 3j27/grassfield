@@ -18,6 +18,7 @@ import "Attention.js" as Attention
 import "Magnify.js" as Magnify
 import "Geometry.js" as Geometry
 import "Stacks.js" as Stacks
+import "TileGraph.js" as TileGraph
 
 // Bottom dock, one per screen: pinned apps (Settings) and running apps (foreign-toplevel app ids
 // mapped to desktop entries), a separator and the Trash. Click launches, focuses the most recent
@@ -404,6 +405,8 @@ Scope {
     }
 
     Component.onCompleted: {
+        // The entrance waits for the Dock's first layout (ADR-0040 step 6).
+        Entrance.expect("dock");
         rebuild();
         latchStartScreen();
         if (inputsFinal)
@@ -443,6 +446,9 @@ Scope {
             // shown otherwise): a machine that began shown would slide out in front of the user.
             windows.instances.forEach(w => w.resetHide());
             settled = true;
+            // No window shows the Dock (no output has it): nothing to wait for.
+            if (!windows.instances.some(w => w.isDockScreen))
+                Entrance.ready("dock");
         }
     }
 
@@ -1062,12 +1068,14 @@ Scope {
                 collapseAnim.start();
             }
 
+            // Sizes and places that change in place: the move curve (ADR-0039 step 25, the roles of step 20).
             NumberAnimation {
                 id: collapseAnim
                 target: win
                 property: "dragCollapse"
                 duration: Appearance.duration(Tokens.motionFast)
-                easing.type: Easing.OutQuad
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curve
             }
 
             // A folder dragged over the shelf (macOS: dropped in the right section it becomes a stack): the slot it would take
@@ -1090,7 +1098,8 @@ Scope {
                 target: win
                 property: "gapGrow"
                 duration: Appearance.duration(Tokens.motionFast)
-                easing.type: Easing.OutQuad
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curve
             }
 
             // Layout transition (DockModel.layoutTransition): position along the Dock of every tile (window coordinates) before a rebuild.
@@ -1153,7 +1162,9 @@ Scope {
                 from: 0
                 to: 1
                 duration: Appearance.duration(Tokens.dockPoofDuration)
-                easing.type: Easing.OutQuad
+                // Leaving: the exit curve (ADR-0039 step 25).
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.curveExit
             }
             // This output has the Dock (modelData is null while the window is destroyed: the name is kept in screenName).
             readonly property bool isDockScreen: screenName !== "" && screenName === root.dockScreen
@@ -1325,7 +1336,8 @@ Scope {
             // the compositor answers an anchor change with a new size a frame or two later); the timer lets go of `placed`.
             readonly property bool placed: screen !== null && Geometry.placed(edge, width, height, depth)
             property bool placedGivenUp: false
-            readonly property bool revealWanted: root.settled && (placed || placedGivenUp)
+            // And the session's entrance (ADR-0040 step 6, ID-20): with the menu bar and the desktop icons, in their one fade.
+            readonly property bool revealWanted: root.settled && (placed || placedGivenUp) && Entrance.revealed
             // Latched: a later change of the Dock's edge (Settings) re-places the surface but never hides the Dock.
             property bool reveal: false
             onRevealWantedChanged: {
@@ -1336,6 +1348,17 @@ Scope {
                 interval: Tokens.dockSettleTimeout
                 running: root.settled && !win.reveal && !win.placedGivenUp
                 onTriggered: win.placedGivenUp = true
+            }
+            // The Dock's own window says the Dock is ready once it is settled AND placed (review of 3a5e1b80), so the entrance
+            // never fades the menu bar and the icons in before it.
+            readonly property bool entranceReady: root.settled && (placed || placedGivenUp)
+            onEntranceReadyChanged: {
+                if (entranceReady && isDockScreen)
+                    Entrance.ready("dock");
+            }
+            onIsDockScreenChanged: {
+                if (entranceReady && isDockScreen)
+                    Entrance.ready("dock");
             }
             anchors {
                 bottom: true
@@ -1439,7 +1462,15 @@ Scope {
             function resetHide(): void {
                 hideMachine = AutoHide.initial(autohide);
             }
-            Component.onDestruction: Compositor.unregisterDock(screenName, win)
+            Component.onDestruction: {
+                Compositor.unregisterDock(screenName, win);
+                if (win.reveal && win.isDockScreen)
+                    Journal.hidden("dock", screenName);
+            }
+            onRevealChanged: {
+                if (reveal && isDockScreen)
+                    Journal.shown("dock", screenName);
+            }
 
             onPointerActiveChanged: {
                 if (pointerActive)
@@ -1480,8 +1511,14 @@ Scope {
             Item {
                 id: area
                 anchors.fill: parent
-                // Nothing is drawn before the reveal; at it the Dock appears whole, in one frame (no fade, with or without Reduce Motion).
+                // Nothing is drawn before the reveal; at it the Dock appears whole, in the entrance's one fade (session.revealMs,
+                // ADR-0040 ID-20; Reduce Motion caps it), with the menu bar and the desktop icons.
                 opacity: win.reveal ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.duration(Tokens.sessionRevealMs)
+                    }
+                }
 
                 HoverHandler {
                     id: areaHover
@@ -1544,16 +1581,20 @@ Scope {
                 Material {
                     id: shelf
                     // Centred along the Dock, a margin off the screen edge, slid toward the edge while the Dock hides (any edge).
-                    readonly property var r: Geometry.shelfRect(win.edge, win.width, win.height, win.shelfWidth, win.shelfHeight, Tokens.dockBottomMargin, (1 - AutoHide.ease(win.hideMachine.visible)) * (win.shelfHeight + Tokens.dockBottomMargin + shadowMargin))
+                    // Under Reduce Motion the Dock fades where it stands instead of sliding (ADR-0039 D2, step 25): in place while
+                    // any of it shows, out of the window once hidden (its blur region and input with it).
+                    readonly property real hidden: Appearance.reduceMotion ? (win.hideMachine.visible > 0 ? 0 : 1) : 1 - AutoHide.ease(win.hideMachine.visible)
+                    readonly property var r: Geometry.shelfRect(win.edge, win.width, win.height, win.shelfWidth, win.shelfHeight, Tokens.dockBottomMargin, shelf.hidden * (win.shelfHeight + Tokens.dockBottomMargin + shadowMargin))
                     x: r.x
                     y: r.y
                     width: r.w
                     height: r.h
+                    opacity: Appearance.reduceMotion ? AutoHide.ease(win.hideMachine.visible) : 1
                     radius: Tokens.radiusDock
                     tintAlphaOverride: Appearance.dark ? Tokens.dockTintAlphaDark : Tokens.dockTintAlphaLight
+                    // The glass edge of every surface (ADR-0024 section 2.5, ADR-0039 step 25): Material's darker outer edge,
+                    // then the bright inner rim; the shelf's light outer rim (dock.rimOpacity) goes.
                     highlightOpacity: Tokens.dockHighlightOpacity
-                    borderOpacity: Tokens.dockRimOpacity
-                    borderColor: Appearance.colors.materialHighlight
 
                     // Folders dragged from Files, the desktop or anywhere that offers text/uri-list: dropped in the right section
                     // (after the divider) they are kept in the Dock as stacks, at the slot where the gap opened. Under the tiles:
@@ -1709,7 +1750,8 @@ Scope {
                                     enabled: win.reveal && !tile.dragging && !win.dragSnap
                                     NumberAnimation {
                                         duration: Appearance.duration(Tokens.motionFast)
-                                        easing.type: Easing.OutQuad
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.curve
                                     }
                                 }
                                 function glideFrom(dx: real, dy: real): void {
@@ -1749,7 +1791,9 @@ Scope {
                                     property: "opacity"
                                     to: 1
                                     duration: Appearance.duration(Tokens.motionNormal)
-                                    easing.type: Easing.OutQuad
+                                    // Arriving: the enter curve (ADR-0039 step 25).
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Appearance.curveEnter
                                 }
 
                                 width: win.vertical ? win.tileCross : (isSeparator ? win.separatorWidth : iconPx)
@@ -2115,9 +2159,9 @@ Scope {
                                     }
                                 }
 
-                                // Apps: the icon theme's org.grassfield.Apps (grassfield-icons maps it to the pack's app grid,
-                                // packaging/arch/icons-aliases.txt), in the user's icon mode; a rounded tile with our own grid glyph
-                                // when the theme has none (another icon theme, a dev session without the pack).
+                                // Apps: org.grassfield.Apps, Grassfield's own drawing (ADR-0040 IQ-B5 C; grassfield-desktop installs it
+                                // in hicolor, which every icon theme falls back to), in the user's icon mode; a rounded tile with our
+                                // own grid glyph when no theme has it (a dev session without the package).
                                 TintedIcon {
                                     id: appsThemed
                                     readonly property string themed: Quickshell.iconPath("org.grassfield.Apps", true)
@@ -2147,6 +2191,20 @@ Scope {
                                         size: Math.round(tile.iconPx * Tokens.dockTrashIconScale)
                                         name: "apps"
                                         color: Appearance.colors.selectionText
+                                    }
+                                }
+
+                                // Activity Monitor's live graph over its tile (ADR-0038 AM62), moving with the icon's hops.
+                                TileGraphView {
+                                    graph: tile.isApp && tile.running && String(tile.modelData.key).toLowerCase() === "org.grassfield.activity" ? TileGraph.parse(ActivityLink.tileText, ActivityLink.tilePids) : null
+                                    width: tile.iconPx
+                                    height: tile.iconPx
+                                    x: tile.iconPos.x
+                                    y: tile.iconPos.y
+                                    radius: win.dockMetrics.iconRadius * tile.tileScale
+                                    transform: Translate {
+                                        x: win.outDir.x * appIcon.lift
+                                        y: win.outDir.y * appIcon.lift
                                     }
                                 }
 
@@ -2429,7 +2487,7 @@ Scope {
                                         tile.menuByHold = true;
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: menu-by-hold", Date.now());
-                                        win.openMenu(tile.index);
+                                        Popups.withPointer(true, () => win.openMenu(tile.index));
                                     }
                                     onTapped: {
                                         if (tile.menuByHold || !tile.ownsPress)
@@ -2450,7 +2508,8 @@ Scope {
                                         }
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: tap", Date.now(), "tile", tile.tileId);
-                                        root.activateItem(tile.modelData);
+                                        // A click: a stack or menu it opens shows its ring only after a key (ADR-0039 steps 8 and 25).
+                                        Popups.withPointer(true, () => root.activateItem(tile.modelData));
                                     }
                                 }
 
@@ -2462,7 +2521,7 @@ Scope {
                                     onPressedChanged: if (pressed && win.tileOwningPress(point.scenePosition) === tile.index) {
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: menu-by-right-press", Date.now());
-                                        win.openMenu(tile.index);
+                                        Popups.withPointer(true, () => win.openMenu(tile.index));
                                     }
                                 }
                             }

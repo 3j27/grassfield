@@ -157,8 +157,18 @@ Scope {
             file: status === "ready" || (status === "error" && currentFile !== "") ? currentFile : "",
             video: videoFile,
             // 0..1 while a video is being transcoded, -1 otherwise.
-            progress: progress
+            progress: progress,
+            // The phase of the day the Grassfield artwork shows (ADR-0040 IQ-W1 C; Settings' preview draws the same variant).
+            phase: DayPhase.shown
         });
+    }
+
+    Connections {
+        target: DayPhase
+        function onShownChanged(): void {
+            if (root.cfg.source === "builtin")
+                root.publish();
+        }
     }
 
     function showNone(state: string): void {
@@ -327,7 +337,7 @@ Scope {
                 videoFile = r.video;
                 strip = r.strip || null;
                 imageUrl = "file://" + r.file;
-                display = {kind: "picture", color: cfg.color, url: imageUrl, strip: strip, video: blocked ? "" : "file://" + r.video, fit: cfg.fit === "fit" ? "fit" : "fill", posterMs: typeof r.posterMs === "number" ? r.posterMs : 0, path: cfg.path};
+                display = {kind: "picture", color: cfg.color, url: imageUrl, strip: strip, mean: typeof r.mean === "string" ? r.mean : "", video: blocked ? "" : "file://" + r.video, fit: cfg.fit === "fit" ? "fit" : "fill", posterMs: typeof r.posterMs === "number" ? r.posterMs : 0, path: cfg.path};
                 progress = -1;
                 status = "ready";
                 // The poster is shown and the video is not played again: said once, by the Settings pane.
@@ -468,7 +478,8 @@ Scope {
                 imageUrl = "file://" + o.file;
                 // `image`: the whole picture's luminance {mean, p5, p95} (the helper's sidecar; absent from older caches): the
                 // backdrop of the adaptive glass on a bare desktop (Backdrop.qml).
-                display = {kind: "picture", color: "", url: imageUrl, strip: strip, image: o.image || null, video: ""};
+                // `mean`: the picture's mean colour, its ground (ADR-0040 ID-2).
+                display = {kind: "picture", color: "", url: imageUrl, strip: strip, image: o.image || null, mean: typeof o.mean === "string" ? o.mean : "", video: ""};
                 videoFile = "";
                 progress = -1;
                 status = "ready";

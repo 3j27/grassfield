@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Templates as T
+import QtQuick.Window
 
 // Toolbar button (QtQuick.Templates ToolButton): a Grassfield symbolic icon (`iconName`), any glyph the app draws (put it
 // inside as a child: it is centred), or a short caption (`text`). `accessibleName` is what assistive technology reads
@@ -24,8 +25,13 @@ T.ToolButton {
     property real glyphSize: Tokens.controlToolIconSize
     // Glyphs drawn by the app (a view glyph, a theme icon): centred in the button, dimmed with it when disabled.
     default property alias glyph: slot.data
+    // What the tooltip under the button says while the pointer rests on it: an icon-only button names itself (macOS; ADR-0039
+    // step 14). A host that shows its own tooltip for the button sets "".
+    property string tooltip: root.text === "" ? root.accessibleName : ""
 
-    readonly property color foreground: !enabled ? Appearance.withAlpha(root.tint, Tokens.materialDisabledOpacity) : root.tint
+    // Dimmed while the window is not key, as macOS 27 draws a toolbar's glyphs then (ADR-0039 step 17).
+    readonly property color foreground: !enabled ? Appearance.withAlpha(root.tint, Tokens.materialDisabledOpacity)
+        : root.Window.window !== null && !Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.withAlpha(root.tint, Appearance.inactiveTextOpacity) : root.tint
 
     implicitWidth: root.text !== "" ? Math.max(root.buttonSize, caption.implicitWidth + 2 * Tokens.spacingSm) : root.buttonSize
     implicitHeight: root.buttonSize
@@ -106,5 +112,19 @@ T.ToolButton {
     FocusRing {
         shapeRadius: root.capsule ? root.height / 2 : Tokens.radiusControl
         visible: root.visualFocus
+    }
+
+    // The tooltip, over the window's content (a toolbar's sibling content would cover it otherwise), centred under the button
+    // and kept inside the window, after the shared delay.
+    Tooltip {
+        id: tip
+        readonly property Item host: root.Window.contentItem ? root.Window.contentItem : root
+        readonly property point place: tip.shown ? root.mapToItem(tip.host, root.width / 2, root.height + Tokens.spacingXs) : Qt.point(0, 0)
+        parent: tip.host
+        z: Number.MAX_SAFE_INTEGER
+        x: Math.max(0, Math.min(tip.host.width - tip.width, tip.place.x - tip.width / 2))
+        y: tip.place.y
+        text: root.tooltip
+        shown: root.tooltip !== "" && root.hovered && !root.down && root.visible
     }
 }

@@ -93,21 +93,8 @@ SettingsPage {
         visible: root.answered && vpnModel.count === 0
         footnote: !root.available ? qsTr("VPN is not available: NetworkManager did not answer.") : ""
 
-        Item {
-            width: parent.width
-            height: Tokens.settingsEmptyListHeight
-            Accessible.role: Accessible.StaticText
-            Accessible.name: empty.text
-
-            Text {
-                id: empty
-                textFormat: Text.PlainText
-                anchors.centerIn: parent
-                text: qsTr("No VPN configurations")
-                color: Appearance.windowSecondary
-                font.family: Appearance.fontFamily
-                font.pixelSize: Tokens.typographyBodySize
-            }
+        EmptyListRow {
+            text: qsTr("No VPN configurations")
         }
     }
 

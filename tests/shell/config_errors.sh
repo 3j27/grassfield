@@ -24,10 +24,13 @@ fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 tmp=$(mktemp -d "$root/.dev/config-errors.XXXXXX" 2>/dev/null || { mkdir -p "$root/.dev" && mktemp -d "$root/.dev/config-errors.XXXXXX"; })
 fake=""
-trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp"' EXIT
+# The runtime folder (the fake Hyprland's sockets, qs ipc's) under a short base: a Unix socket path holds at most 107
+# bytes, and "$root/.dev/..." of an agent's worktree goes past it (as displays_trial.sh, ad044d4d).
+rt=$(mktemp -d "${TMPDIR:-/tmp}/gf-rt.XXXXXX")
+trap '[[ -n $fake ]] && kill "$fake" 2>/dev/null; rm -rf "$tmp" "$rt"' EXIT
 sig=gf-config-errors
-mkdir -p "$tmp/runtime/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg" "$tmp/ce"
-chmod 700 "$tmp/runtime" "$tmp/cache"
+mkdir -p "$rt/hypr/$sig" "$tmp/cache" "$tmp/state" "$tmp/config" "$tmp/cfg" "$tmp/ce"
+chmod 700 "$rt" "$tmp/cache"
 for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
 done
@@ -74,12 +77,12 @@ def serve_events():
 threading.Thread(target=serve_events, daemon=True).start()
 serve_requests()
 PY
-python3 -I "$tmp/fake.py" "$tmp/runtime/hypr/$sig" "$tmp/ce" &
+python3 -I "$tmp/fake.py" "$rt/hypr/$sig" "$tmp/ce" &
 fake=$!
-for _ in $(seq 50); do [[ -S $tmp/runtime/hypr/$sig/.socket.sock && -S $tmp/runtime/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
+for _ in $(seq 50); do [[ -S $rt/hypr/$sig/.socket.sock && -S $rt/hypr/$sig/.socket2.sock ]] && break; sleep 0.1; done
 
 out=$(env -u WAYLAND_DISPLAY -u GRASSFIELD_SESSION -u DBUS_SESSION_BUS_ADDRESS GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$tmp/state" \
-  GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig" XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache" \
+  GRASSFIELD_CONFIG_HOME="$tmp/config" HYPRLAND_INSTANCE_SIGNATURE="$sig" XDG_RUNTIME_DIR="$rt" XDG_CACHE_HOME="$tmp/cache" \
   CE_DIR="$tmp/ce" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" timeout 60 qs -p "$tmp/cfg" --no-color 2>&1) || true
 got=$(grep -o 'ce: .*' <<<"$out" || true)
 want='ce: appeared ["a","b"] 0 body "a\nb"

@@ -3,7 +3,7 @@ Status: Proposed (cloud session, owner brief 2026-10-27, step 0; docs only, no c
 PASS). The owner answered ST1 to ST10 on 2026-10-27, recorded below in the owner's own words. Later questions follow the
 owner's working rule of 2026-10-27: decided in this session, recorded in "Decisions delegated by the owner" (SD1 to SD5,
 then SD6 to SD10 with step 2, SD11 to SD17 with step 3a, SD18 and SD19 with step 3b1, SD20 to SD23 with step 3b2, SD25 to
-SD31 with step 3c), checked
+SD31 with step 3c, SD32 to SD35 with step 4), checked
 by the integrator. The first opus review (FAIL, 3 MAJOR) and the counter-review (FAIL, 1 MAJOR) are answered in
 "Review history". · Date: 2026-10-27 · Decider: owner (ST1 to ST10), delegated (SD1 to SD5), integrator (merge after the
 opus PASS) · Number: 0037 (0033 Software Update, 0034 clipboard, 0035 dialogs and 0036 tiling are merged)
@@ -231,7 +231,8 @@ flathub https://dl.flathub.org/repo/flathub.flatpakrepo`, S8, S21: a second, no 
 while offline, it is added once the Store is online. Everything happens in that installation, as the user, without root or
 terminal: `flatpak install --user --noninteractive flathub <ref>` (the ref Flathub's AppStream names,
 `app/<id>/<arch>/<branch>`), `flatpak uninstall --user --noninteractive <app-id>` then `--unused` (SD27; the app's data in
-`~/.var/app/<app-id>` is kept, and the sheet says where), `flatpak update --user --noninteractive <app-id>` (step 4). The
+`~/.var/app/<app-id>` is kept, and the sheet says where), `flatpak update --user --noninteractive [--commit=<c>] -- <ref>`
+(step 4, SD33). The
 sheet adds what a Flatpak can reach (every grant of its metadata, `flatpak remote-info --show-metadata`, in plain words:
 the classes the Store knows, each bus name it may talk to or own outside a short harmless list, and any grant the Store
 does not know as flatpak writes it; "only its own window and files" only when nothing more is granted, and nothing said
@@ -489,13 +490,22 @@ nothing ever signals pacman.
   (`otherPackagesTruncated: true`), then the notes; the counts always stay, and the Store then says "N other updates"
   without names (SD3).
 - **Updates page.** The apps (entries with a desktop id) that the next system update upgrades, each marked "Updates with the
-  system" (no per-app button), then "N other system packages", then "Update All…", which starts ADR-0033's "Update Now" (the
-  same command and lock checks). While Omarchy's update runs: "Update in progress". When `pacman -Qu` lists packages while
+  system" (no per-app button), then "N other system packages", then "Update All…", which opens Software Update, where
+  ADR-0033's "Update Now" updates the whole system (since ADR-0033's step 3 a run Settings owns, with its password, progress
+  and restart; SD32). While Omarchy's update runs: "Update in progress". When `pacman -Qu` lists packages while
   no update runs (an update that stopped, S12), the page says the last system update did not finish, with "Update All…",
   and every "Get" of a repository, AUR or setup app is refused until then (e.4).
 - **Flatpak updates (Flathub on).** A Flatpak updates outside pacman's transaction: the Updates page lists them in their own
-  group with "Update" per app and "Update All" for that group (`flatpak update --user`), checked by the Store when it opens
-  and on "Check Now" (`flatpak remote-ls --user --updates`). `omarchy update` does not update Flatpaks.
+  group with "Update" per app and "Update All" for that group (every ref the check lists, 512 at most: one operation),
+  checked by the Store when it opens and on "Check Now" (`flatpak remote-ls --user --updates`, S31; Flathub's refs only).
+  Its plan reads, for each app, the commit Flathub serves (`remote-info --show-commit`) and that commit's metadata
+  (`--commit=<c> --show-metadata`, S32a), shown as it goes ("Checking what the updates change: N of M apps…"); an update
+  that lets an app reach more than the installed version, or whose commit or metadata could not be read, says so in a sheet
+  first (SD33). Each app is then updated to the commit its plan checked, on its own (`flatpak update --user --noninteractive
+  --commit=<c> -- <ref>`: `--commit` takes one ref, S32d), the rest together; a newer commit published meanwhile is not
+  taken (S32c) but listed again and asked about by a new plan (S32e). A pinned ref is done when its installed commit is that
+  one, another when a new check no longer lists it, never on flatpak's exit code alone (S31d); a command that fails ends
+  the update ("interrupted", N of M). `omarchy update` does not update Flatpaks.
 - **Badge (owner, ST8).** The only Dock badge for updates stays on Settings (ADR-0033 U18: Grassfield and Omarchy releases).
   The Store's tile has no badge, Flatpaks included; the Store's sidebar shows the number of apps with an update.
 
@@ -841,6 +851,10 @@ irreversible action on the owner's machine. The integrator checks each row in th
 | SD29 | How the Store knows the system is older than its mirror before anything downloads (the integrator's note on PR #36: "a sync DB older than a threshold, Software Update's own staleness rule"; amended after the review of ff2fd83, which found the first rule read only the `available` state, never written for Arch's updates alone nor with Grassfield's repository off, the owner's case) | Software Update's own answer, whatever the state it carries the counts in (up-to-date, available, not-set-up; a failed check's `previous`): pending other updates or an Omarchy release, checked after pacman last completed a sync (the newest database's ctime, S27; amended again after PR #54's merge, which found pacman.log's line counted a failed sync); then a HEAD of every file of the plan, all at once with one deadline; pacman's 404, 410 or oversize after the fact · an age of our own for the databases (a week), or the mirror's database date against ours · the Store refreshes the databases (`pacman -Sy`) | Software Update's answer, the HEADs, pacman's errors | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: Software Update has no age rule (its only freshness is the pane's 60 s, ADR-0033); its checker's count is the mirror's own answer (checkupdates against a fresh copy of the mirror's databases), where an age, or a database date on a mirror that changes every hour (Arch's own), says nothing of whether the files are still there. The HEADs are the exact test, its count the early one. (a) macOS's App Store sends to Software Update first; (b) one button, never a command; a refresh of the databases alone is the partial upgrade e.4 forbids |
 | SD30 | AUR packages with a name of the deny list (the integrator's note on PR #36: "refuse `grassfield-*`/`omarchy-*` on the AUR path, or label by origin") | refused: every name b.1's deny list names (the system's, Omarchy's prefix and lists, `yay`, Grassfield's prefix, `HoldPkg`), the app's and every package its plan builds from the AUR, in the Store (Get dimmed with the reason, the plan refused) and again in the script (exit 7); Omarchy's lists unread refuse · only `grassfield-*` and `omarchy-*` · labelled by origin, installable | the whole deny list, refused | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (b) what the Store installs, it can remove again (b.1's list refuses the removal of every such name); an AUR package that takes Omarchy's or Grassfield's name is not theirs, and the user should not have to tell. An AUR app whose name only looks like the system's (`linux-wifi-hotspot`) is refused too, as its removal would be |
 | SD31 | A "flathub" remote the user's installation already has, and how Flathub's key is trusted (the integrator's INFO on PR #58) | `remote-add --if-not-exists`: the user's own remote is kept, whatever its address (a mirror the user set) or signature setting; Flathub's key as its `.flatpakrepo` carries it, over TLS to dl.flathub.org, no fingerprint pinned · check the existing remote's address and signature setting and refuse another (the user repairs it in a terminal) · say where it points in the settings · pin Flathub's key fingerprint in Grassfield (a release for every rotation) | keep the user's remote; trust Flathub's key by TLS, as Flathub's own instructions do | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS's App Store has one source the user never sets up, and Flathub's switch keeps that; (b) refusing would leave a switch that only a terminal repairs; the remote's file is in the user's own installation, writable only by the account that runs the Store, so a refusal protects nothing that account could not change; flatpak still checks each commit against the remote's key unless that account turned it off. Revisit with step 4 if the integrator wants the settings to say where Flathub points |
+| SD32 | What the Updates page's "Update All…" does for the system (d), now that ADR-0033's Update Now is a run Settings owns (its step 3, SU-M1: Grassfield's password dialog, the progress, Restart or a terminal for what needs a person) | it opens Software Update (Settings > General, the Store's "Open Software Update" path), where Update Now updates the whole system; the page names what the update brings and follows Omarchy's update lock while it runs · the Store starts `grassfield-update-run` itself and shows the run (a second launcher of the run, its progress, Restart and terminal paths repeated in the Store) · a new request to Settings over its D-Bus name that starts Update Now (a new IPC method that starts a root-asking run) | Software Update opened | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) on macOS the App Store sends system updates to Software Update; (b) one click to Software Update, then its own Update Now and password: nothing technical, and one owner of the run, its password and its end |
+| SD33 | How a Flatpak updates, and what it says first (d, SD25 for an update) | `flatpak update --user --noninteractive -- <refs>` as the Store's child (an app's ref, or the group's apps and runtimes from Flathub); before it, what the newer commit's metadata (`remote-info --show-metadata`) lets the app reach that the installed one's (`info --show-metadata`) does not: nothing new, it starts at once; something new, or unread, a sheet says it with Update and Cancel; done when a new check no longer lists the refs (S31d: offline, flatpak exits 0 with "Nothing to update.") · always a sheet · never a sheet (flatpak's `--noninteractive` accepts new permissions silently) · `flatpak update` with no ref (every remote's, the user's own too) | a sheet only when it reaches more. **Amended after PR #97's review** (MINOR 6: a newer commit published between the plan and the update was accepted silently): the plan reads each app's commit (`remote-info --show-commit`) and that commit's metadata (`--commit=<c>`); the update deploys that commit (`--commit=<c>`, one ref per command, S32), done when it is installed; Update All takes every listed ref (MINOR 4: no 64-ref dead end). **After PR #97's merge** (its note): the plan also reads each pinned app's installed commit, and an app installed with another commit by its turn was updated outside the Store (a terminal, another store) and is left as it is: its pinned command is not run (never a downgrade), and it counts as done | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS updates an app without asking, and asks when an app wants something new; (b) one click; an update the Store could not check is never silent |
+| SD34 | How the Store searches by document type (ADR-0035 5c-3's follow-up: Files' "Search the Store") | the media types AppStream gives (`<provides><mediatype>`, the older `<mimetypes>`, Arch's and Flathub's), the type first, then its parents in the MIME database's order (never `application/octet-stream`), by name in each; `grassfield-store --page=type:<type>`; Files offers the button only when the Store is installed and the type is well formed · the type alone (a C file finds no text editor) · the words of the type's description as a text search (finds apps by name, not by what they open) | AppStream's types, then parents | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) Finder's alert has "App Store…", which searches by the document's type; (b) one click from the alert to the apps that open it |
+| SD35 | One Store window (the page Files asks for while the Store runs) | one Store per user: the running Store owns `org.grassfield.Store` on the session bus (`.Dev` and a digest of the state directory in a dev or isolated run, as Settings'), a second launch hands it its `--page` and activation token (`Open(s page, s token)`) and leaves; the page is checked again by the window (StoreNav); the Dock brings an off-screen window back (`dock reopen`) · a second Store process (two queues, two windows) | one Store per user | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: (a) macOS has one App Store window; (b) nothing for the user to close or choose. The method opens a page and brings the window forward, nothing else: no install, no plan (docs/specs/security.md) |
 
 ## Amendments made in this PR (other documents)
 - **master-prompt §4** (ST1): the non-goal "a pacman-based app store" is amended for Grassfield Store.
@@ -852,6 +866,9 @@ irreversible action on the owner's machine. The integrator checks each row in th
 - **ADR-0028**: its R12 sentence names `grassfield-store-helper` beside ADR-0033's two programs.
 - **ADR-0030**: an amendment for the Store's helper and its polkit policy (`auth_admin`, never kept; the names in the
   message), beside ADR-0033's.
+- **ADR-0035** (step 4): 5c-3's follow-up done: Finder's alert gets "Search the Store" once Grassfield Store is installed
+  (SD34); its spec `docs/specs/system-dialogs.md` likewise.
+- **docs/specs/security.md** (step 4): the Store's session-bus name (SD35) and the Store among `dock reopen`'s callers.
 
 ## Evidence
 - `docs/audits/store-2026-10-27/store-probes.sh` (S0 to S15) and its output `probes-output.txt` (docker exit 0). It ran in this
@@ -876,6 +893,15 @@ irreversible action on the owner's machine. The integrator checks each row in th
   that moment and its mtime to the mirror's Last-Modified (2026-10-19 and 2026-10-20); the same sync again (not modified)
   and a forced `-Syy` to a mirror that does not exist (exit 1) change neither, while pacman.log has the same "synchronizing
   package lists" line for all three.
+- S29 to S32 (`store-probes-6.sh`, `store-probes-7.sh`, `store-probes-8.sh`, outputs `probes-6-output.txt` to
+  `probes-8-output.txt`; flatpak 1:1.18.4-2 in throwaway containers): how flatpak reads a filesystems entry (S29), what the
+  package installs for system installs (S30), and its updates (S31): `remote-ls --user --updates` lists apps and runtimes
+  with their origin and ref; an app's update takes the newer runtime it needs with it (S31b); nothing to update says
+  "Nothing to update." and exits 0, and so does an update offline, which updated nothing (S31d). Pinning (S32):
+  `remote-info --show-commit` prints the 64-digit commit, and `--commit=<c> --show-metadata` that commit's metadata even
+  once a newer one is published (S32a, S32b); `update --commit=<c>` deploys that commit while a newer one is the newest
+  (S32c), which a new check then lists (S32e); `--commit` with two refs is refused ("With --commit, only one REF may be
+  specified", exit 1), an unknown or malformed commit exits 1 (status 404) (S32d).
 - `tests/integration/store_flatpak.sh` (step 3c part 2; S28): the real flatpak 1.18.4 in a throwaway Arch container, with a
   local repository standing for Flathub (a runtime with a 20 MB file and an app made with flatpak's own `build-export` and
   `build-update-repo`, served slowly over http on 127.0.0.1, added as `flathub` to root's own installation; nothing reaches
@@ -980,12 +1006,22 @@ irreversible action on the owner's machine. The integrator checks each row in th
     `tests/integration/store_helper.sh` (the real `flatpak` package through Omarchy's own `omarchy-pkg-add`).
     grassfield-packages pins and scans `omarchy-pkg-add` always and checks the `flatpak` package on Omarchy's mirror.
 - **Step 4:** the Updates page (system updates through ADR-0033's checker and its `otherPackages`, SD3; Flatpak updates checked by the Store) and the sidebar count; no Dock badge of the
-  Store's own (ST8).
-- **IPC.** Steps 1 to 3 add no shell IPC. Any new `IpcHandler` function (for example, asking the shell to check for updates
-  if ADR-0033's own call does not fit) is added to `docs/specs/security.md`'s table in the same PR (`ipc_inventory`).
+  Store's own (ST8). Built (`docs/audits/store-2026-10-27/step4.md`):
+  - the page: the file watched and the shell asked to check (Check Now, the page's opening), `pacman -Qu` for an unfinished
+    update, Omarchy's update lock followed while it is shown, "Update All…" opening Software Update (SD32);
+  - Flatpak updates: `remote-ls --user --updates` (S31), each app's Update and the group's Update All as the Store's child,
+    the product page's Update, a sheet only when an update reaches more (SD33), each app pinned to the commit its plan read
+    (S32), done by that commit installed or a new check (S31d);
+  - the sidebar's count; the remaining step 3 follow-ups (the dimmed Sources line names Flathub, the notice's lifetime a
+    token, `store.noticeLifetime`);
+  - the search by document type (SD34) and Files' "Search the Store" (ADR-0035 5c-3), with one Store per user (SD35).
+- **IPC.** Steps 1 to 4 add no shell IPC function: Check Now calls ADR-0033's `update check user`, whose row already names the
+  Store, and an off-screen window asks the Dock's `dock reopen` (its row now names the Store). Step 4 adds the Store's own
+  session-bus name `org.grassfield.Store` (SD35: `Open(page, token)` opens a page and brings the window forward, nothing
+  else), recorded in `docs/specs/security.md` (Grassfield Store's session-bus name).
 - **Known limits** (spec): a password for every repository install or removal (no grace period); "Uninstall…" only for apps
   the user installed, never for Omarchy's, Grassfield's or the system's packages; no per-app update for repository and AUR
-  apps (Flatpaks have one); nothing installs while the last
+  apps (Flatpaks have one; the system's Update All… opens Software Update, SD32); nothing installs while the last
   system update is unfinished; Flatpak updates are not part of `omarchy update` and have no Dock badge; no ratings or
   reviews; no pause or resume; the AUR and setups cancel only in Omarchy's terminal; apps outside AppStream and our catalog
   show pacman's text only; Omarchy's recipes are Omarchy's, their effects as they are in the installed release; a replayed
@@ -1283,3 +1319,27 @@ the reviewer's own driver); four understatements to fix before the merge, and NI
 - NIT, follow-ups: the dimmed Sources line does not name Flathub (a text change for the next step's settings work);
   the reviewer's mutants B2, P10 and R5 are not this branch's names (this branch's R5, an id that is only the start of
   an escape, is killed since 0f1481c), asked for.
+
+Store step 4, grassfieldhq/grassfield#97 (opus review of a8f9c7c5 merged with main c6ea2f30: FAIL on one MAJOR; the
+security review clean), answered in the next commit:
+- MAJOR: the Store could quit with its window open: Ctrl+Q or a closed window while an operation ran left the quit
+  pending, and SD35's hand-over brought that process's window back, which disappeared when the operation ended. A launch
+  handed over (`Open`) clears it (`StoreBackend::reopened`), and an operation's end keeps a shown window.
+- MINOR: SD33's sheet for an update the Store could not check now has tests (an unread commit or metadata names the app;
+  a cut access list counts as added; the sheet opens on `unknown` alone).
+- MINOR: Files' alert test is hermetic (no Store on the PATH, not a dev session).
+- MINOR: Update All above 64 refs had no way through: it takes every ref the check lists (512 at most, the check's cap).
+- MINOR: Updates' jobs held a quit (the global pool, no cancel): they run on their own pool, and the cancel flag stops a
+  child within 100 ms; a plan says what it checks while it runs.
+- MINOR: the commit could change between the plan and the update: SD33 amended, the update pinned to the commit checked
+  (S32).
+- NITs: security.md's comma; the French sheet title without a gender agreement (and the group's own words); the update's
+  "interrupted" outcome is reachable (a command that fails after others).
+
+After PR #97's merge (2ac0ff8f, opus delta PASS), its note's follow-ups, answered in the next pull request:
+- e0f5be2e (the integrator's: `tst_kiodialogs` leaves the session's `GRASSFIELD_SESSION` out) confirmed: files-kio-tests 58
+  passed in Arch, also as from a session terminal with a Store installed and a dev build beside the test binary.
+- NIT: a pin could downgrade an app updated outside the Store after its plan: the plan reads its installed commit, and a
+  pinned command runs only while that commit is still installed (SD33's amendment).
+- NIT: « %1 apps sur %2 » had no plural form: one app has its own text ("Checking what the update changes…"), more say
+  "%1 of %2 apps" (« %1 sur %2 apps »), the noun plural whatever %1.

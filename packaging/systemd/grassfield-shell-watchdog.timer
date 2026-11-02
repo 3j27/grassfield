@@ -1,0 +1,22 @@
+[Unit]
+Description=Grassfield shell liveness probe (every 30 s)
+Documentation=file:///usr/share/doc/grassfield/README.md
+# ADR-0041 step 6a (owner decision SQ-5 A): every 30 s it starts grassfield-shell-watchdog.service, which asks the shell one
+# question and, after three unanswered questions in a row of the same shell process, kills that frozen process so that its
+# unit fails and restarts it (packaging/bin/grassfield-shell-watchdog). Started by the session's autostart with the other
+# units; nothing runs as root.
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=GRASSFIELD_SESSION=1
+
+[Timer]
+# 30 s after the timer starts, then 30 s after each probe started. AccuracySec: systemd's default (1 min) lets a timer
+# coalesce its elapses up to a minute late, and three misses would then take minutes instead of about 90 s.
+OnActiveSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+Unit=grassfield-shell-watchdog.service
+
+[Install]
+WantedBy=graphical-session.target

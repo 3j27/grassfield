@@ -25,6 +25,8 @@ TestCase {
         compare(props.source.enum, WallpaperConfig.SOURCES);
         compare(props.fit.enum, WallpaperConfig.FITS);
         compare(props.interval.enum, WallpaperConfig.INTERVAL_NAMES);
+        compare(props.artwork.enum, WallpaperConfig.ARTWORKS);
+        compare(props.artworkVariant.enum, WallpaperConfig.ARTWORK_VARIANTS);
         compare(Object.keys(props).sort(), Object.keys(WallpaperConfig.WALLPAPER_DEFAULTS).sort());
         compare(Object.keys(props.outputs.items.properties).sort(), ["color", "display", "fit", "interval", "path", "shuffle", "source"]);
         compare(read("../../config/defaults/grassfield.json").wallpaper, WallpaperConfig.WALLPAPER_DEFAULTS);
@@ -884,5 +886,429 @@ TestCase {
         compare(both[0].display, B);
         compare(both[0].source, "color");
         compare(WallpaperConfig.withoutSource(null, A), []);
+    }
+
+    // ADR-0040 step 2c: the shipped photographs' list. An entry of the wrong shape is left out, never shown half, and an id
+    // is a plain name: it becomes a file name in the folder.
+    function photoEntry(over) {
+        return Object.assign({id: "golden-mist", name: {en: "Golden Mist", fr: "Brume dorée"}, author: "A", credit: "© A, CC BY 4.0 <https://creativecommons.org/licenses/by/4.0>, via Wikimedia Commons",
+            licenseShort: "CC BY 4.0", licenseUrl: "https://creativecommons.org/licenses/by/4.0/", sourceUrl: "https://commons.wikimedia.org/wiki/File:X.jpg",
+            file: "Mist v1.2 over the field.JPEG"}, over || {});
+    }
+
+    function test_photosParse() {
+        const dir = "/usr/share/grassfield/wallpapers/photos";
+        const one = WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), dir);
+        compare(one.length, 1);
+        compare(one[0].path, dir + "/golden-mist.jpg");
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), dir + "/")[0].path, dir + "/golden-mist.jpg");
+        compare(WallpaperConfig.photoName(one[0], "fr_FR"), "Brume dorée");
+        compare(WallpaperConfig.photoName(one[0], "fr"), "Brume dorée");
+        compare(WallpaperConfig.photoName(one[0], "en_US"), "Golden Mist");
+        compare(WallpaperConfig.photoName(one[0], "fy_NL"), "Golden Mist");
+        compare(WallpaperConfig.photoAt(one, dir + "/golden-mist.jpg").id, "golden-mist");
+        compare(WallpaperConfig.photoAt(one, dir + "/other.jpg"), null);
+        // As its licence asks to be credited (the integrator's review of e067f26f): the work's own title (its file name without
+        // the extension), the author's line with its copyright notice (the licence's address is the Licence row's link), and
+        // Grassfield's changes; no author field, so the row reads Credit.
+        compare(one[0].title, "Mist v1.2 over the field");
+        const about = WallpaperConfig.photoAbout(one[0], "fr_FR");
+        compare(about.title, "Mist v1.2 over the field");
+        compare(about.credit, "© A, CC BY 4.0, via Wikimedia Commons");
+        compare(about.author, undefined);
+        compare(about.modified, true);
+        compare(about.licenseUrl, "https://creativecommons.org/licenses/by/4.0/");
+        compare(WallpaperConfig.photoAbout(null, "en"), null);
+        compare(WallpaperConfig.photoCredit("A <https://x.org/a>, B <http://y.org/b>, C"), "A, B, C");
+        compare(WallpaperConfig.photoCredit("A <not a link>"), "A <not a link>");
+        compare(WallpaperConfig.photoCredit(undefined), "");
+        for (const [file, title] of [["a.jpg", "a"], ["a.png", "a"], ["a.tif", "a"], ["a.b.webp", "a.b"], ["no extension", "no extension"], ["a.svg", "a.svg"]])
+            compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry({file: file})]}), dir)[0].title, title, file);
+        for (const text of ["", "{", "[]", "null", JSON.stringify({photos: {}}), JSON.stringify({photos: [null, 3, "x"]})])
+            compare(WallpaperConfig.parsePhotos(text, dir), [], text);
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), "relative/dir"), []);
+        const bad = [{id: "../etc/passwd"}, {id: "a/b"}, {id: "Golden"}, {id: ""}, {id: 3}, {name: {en: "x"}}, {name: {en: "x\u202ey", fr: "y"}},
+            {author: ""}, {credit: undefined}, {licenseUrl: "http://creativecommons.org/"}, {sourceUrl: "file:///etc/passwd"},
+            {licenseShort: "x".repeat(600)}, {file: ""}, {file: undefined}, {file: "a\u202eb.jpg"}];
+        for (const over of bad)
+            compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry(over)]}), dir), [], JSON.stringify(over));
+        // Each id once: the second is left out.
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry(), photoEntry({author: "B"})]}), dir).map(p => p.author), ["A"]);
+        // At most 64.
+        const many = [];
+        for (let i = 0; i < 80; i++)
+            many.push(photoEntry({id: "p" + i}));
+        compare(WallpaperConfig.parsePhotos(JSON.stringify({photos: many}), dir).length, 64);
+    }
+
+    // The desktop's About This Wallpaper (ADR-0040 step 2c): the online picture's attribution or the shown photograph's, only
+    // while that output shows it, ready.
+    function test_aboutEntryOf() {
+        const dir = "/usr/share/grassfield/wallpapers/photos";
+        const photos = WallpaperConfig.parsePhotos(JSON.stringify({photos: [photoEntry()]}), dir);
+        const online = {entry: {title: "Day", author: "B", sourceUrl: "https://commons.wikimedia.org/wiki/File:D.jpg"}};
+        compare(WallpaperConfig.aboutEntryOf({source: "online", state: "ready"}, online, photos, "en_US").title, "Day");
+        compare(WallpaperConfig.aboutEntryOf({source: "online", state: "waiting"}, online, photos, "en_US"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "online", state: "ready"}, {}, photos, "en_US"), null);
+        const shown = WallpaperConfig.aboutEntryOf({source: "file", state: "ready", path: dir + "/golden-mist.jpg"}, online, photos, "fr_FR");
+        compare(shown.title, "Mist v1.2 over the field");
+        compare(shown.credit, "© A, CC BY 4.0, via Wikimedia Commons");
+        compare(shown.modified, true);
+        compare(shown.licenseShort, "CC BY 4.0");
+        compare(shown.sourceUrl, "https://commons.wikimedia.org/wiki/File:X.jpg");
+        compare(WallpaperConfig.aboutEntryOf({source: "file", state: "preparing", path: dir + "/golden-mist.jpg"}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "file", state: "ready", path: "/home/a/Pictures/golden-mist.jpg"}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "folder", state: "ready", path: dir}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "builtin", state: "builtin"}, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf(undefined, online, photos, "en"), null);
+        compare(WallpaperConfig.aboutEntryOf({source: "file", state: "ready", path: dir + "/golden-mist.jpg"}, online, [], "en"), null);
+    }
+
+    // The desktop uses that one rule for its menu item and its card, and the shell reads the shipped list (shell/ needs
+    // Quickshell: read from the sources).
+    function test_aboutEntryWiring() {
+        function read(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("../../" + rel), false);
+            xhr.send();
+            return xhr.responseText.replace(/\/\/.*$/gm, "");
+        }
+        // The card labels a photograph's row Credit and adds Grassfield's changes.
+        const card = read("shell/desktop/AttributionCard.qml");
+        verify(/\{label: root\.entry\.author \? root\.authorLabel : root\.creditLabel, value: root\.entry\.author \|\| root\.entry\.credit \|\| ""/.test(card));
+        verify(/\{label: root\.changesLabel, value: root\.entry\.modified === true \? root\.changesText : ""/.test(card));
+        const icons = read("shell/desktop/IconsView.qml");
+        verify(/aboutWallpaper: WallpaperState\.aboutEntry\(root\.screen\.name\) !== null/.test(icons), "the menu item for either attribution");
+        verify(/AttributionCard \{\s*entry: WallpaperState\.aboutEntry\(root\.screen\.name\)/.test(icons), "the card shows the same entry");
+        const state = read("shell/services/WallpaperState.qml");
+        verify(/WallpaperConfig\.aboutEntryOf\(outputs\[output\], online, photos, Qt\.locale\(\)\.name\)/.test(state));
+        verify(/onLoaded: root\.photos = WallpaperConfig\.parsePhotos\(text\(\), root\.photosDir\)/.test(state), "the list read as Settings reads it");
+        verify(/photosDir: dev \? repoRoot \+ "\/\.dev\/photos" : "\/usr\/share\/grassfield\/wallpapers\/photos"/.test(state), "the folders of scripts/dev/photos.sh and of the package");
+    }
+
+    // ADR-0040 step 9, as the integrator decided in the review of e067f26f: the clouds move on the lock screen only; the desktop
+    // draws them still where the last lock left them.
+    function test_lockMotion() {
+        // Where they rest per output: 0 for anything not a finite number of at least 0.
+        compare(WallpaperConfig.motionIn({"DP-1": 1500}, "DP-1"), 1500);
+        compare(WallpaperConfig.motionIn({"DP-1": 1500}, "HDMI-A-1"), 0);
+        for (const bad of [-1, NaN, Infinity, "1500", null, undefined, {}])
+            compare(WallpaperConfig.motionIn({"DP-1": bad}, "DP-1"), 0, String(bad));
+        for (const map of [null, undefined, [], "x", 3])
+            compare(WallpaperConfig.motionIn(map, "DP-1"), 0);
+        for (const inherited of ["__proto__", "constructor", "toString"])
+            compare(WallpaperConfig.motionIn({}, inherited), 0, inherited);
+        // A new map; the old one unchanged; nothing taken that is not valid.
+        const a = {"DP-1": 10};
+        const b = WallpaperConfig.withMotion(a, "HDMI-A-1", 250);
+        compare(JSON.stringify(b), JSON.stringify({"DP-1": 10, "HDMI-A-1": 250}));
+        compare(JSON.stringify(a), JSON.stringify({"DP-1": 10}));
+        for (const [o, at] of [["", 5], ["DP-1", -5], ["DP-1", NaN], ["DP-1", Infinity], [null, 5], ["DP-1", "5"]])
+            compare(WallpaperConfig.withMotion(a, o, at), a, String(o) + " " + String(at));
+        compare(JSON.stringify(WallpaperConfig.withMotion(null, "DP-1", 0)), JSON.stringify({"DP-1": 0}));
+        // The rest: half the fade further on while moving (linear slow-down from the running speed); else where they are.
+        compare(WallpaperConfig.lockMotionRest(1000, true, 200), 1100);
+        compare(WallpaperConfig.lockMotionRest(1000, false, 200), 1000);
+        compare(WallpaperConfig.lockMotionRest(1000, true, 0), 1000, "Reduce Motion: no fade, no motion");
+        compare(WallpaperConfig.lockMotionRest(-3, true, 200), 100);
+        compare(WallpaperConfig.lockMotionRest(NaN, false, 200), 0);
+        compare(WallpaperConfig.lockMotionRest(1000, "yes", 200), 1000);
+        compare(WallpaperConfig.lockMotionRest(1000, true, NaN), 1000);
+    }
+
+    // The desktop never runs the motion: no Timer plays it (the slot sets no `playing`), the idle monitor is a video's only, and
+    // the clouds are drawn where WallpaperState says the last lock left them.
+    function test_theDesktopDrawsTheCloudsStill() {
+        function read(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("../../" + rel), false);
+            xhr.send();
+            verify(xhr.responseText.length > 0, rel);
+            return xhr.responseText.replace(/\/\/.*$/gm, "");
+        }
+        const slot = read("shell/desktop/WallpaperSlot.qml");
+        verify(!/playing:/.test(slot), "the slot never plays the artwork");
+        verify(/WallpaperArt \{[^}]*moving: root\.moving\s*motionMs: root\.motionMs/.test(slot));
+        const wall = read("shell/desktop/Wallpaper.qml");
+        verify(!/movingWanted/.test(wall));
+        verify(/IdleMonitor \{\s*id: idleMonitor\s*enabled: win\.videoWanted\n/.test(wall), "the idle monitor for a video only");
+        compare((wall.match(/motionMs: WallpaperState\.motionOf\(win\.modelData \? win\.modelData\.name : ""\)/g) || []).length, 2, "both slots");
+        const state = read("shell/services/WallpaperState.qml");
+        verify(/readonly property bool moving: WallpaperConfig\.normalize\(Settings\.wallpaper\)\.moving/.test(state));
+        verify(/function motionOf\(output: string\): real \{\s*return WallpaperConfig\.motionIn\(root\.motion, output\);/.test(state));
+        verify(/root\.motion = WallpaperConfig\.withMotion\(root\.motion, output, at\);/.test(state));
+        // The artwork's Timer is the only thing that advances it, and only while playing.
+        const art = read("ui/Grassfield/Ui/GrassfieldArtwork.qml");
+        verify(/running: root\.movingOn && root\.playing/.test(art));
+        compare((art.match(/root\.motionMs \+=/g) || []).length, 1);
+    }
+
+    // The list the package installs: every photograph reads, sixteen of them (the owner's call of 2026-10-31).
+    function test_photosShippedList() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../packaging/arch/wallpaper-photos.json"), false);
+        xhr.send();
+        const photos = WallpaperConfig.parsePhotos(xhr.responseText, "/usr/share/grassfield/wallpapers/photos");
+        compare(photos.length, 16);
+        compare(photos.length, JSON.parse(xhr.responseText).photos.length, "no entry is left out");
+        // Each one's About This Wallpaper: its own title, a credit naming its author and licence, and the changes.
+        for (const p of photos) {
+            const a = WallpaperConfig.photoAbout(p, "fr_FR");
+            verify(a.title !== "" && a.title !== p.name.en && a.title !== p.name.fr, p.id);
+            verify(a.credit.indexOf(p.author) >= 0, p.id + ": " + a.credit);
+            verify(!/<https?:/.test(a.credit), p.id);
+            if (p.licenseShort.indexOf("CC BY") === 0)
+                verify(a.credit.indexOf(p.licenseShort) >= 0, p.id + ": " + a.credit);
+            compare(a.modified, true);
+        }
+        // The copyright notice the author asked for stays (Argenberg's).
+        compare(WallpaperConfig.photoAbout(photos.find(p => p.id === "mountain-pasture"), "en").credit.indexOf("© Vyacheslav Argenberg, CC BY 4.0"), 0);
+    }
+
+    // ADR-0040 step 2: the artwork and its variant (wallpaper.artwork, wallpaper.artworkVariant).
+    function test_artworkKeys() {
+        const d = WallpaperConfig.normalize({});
+        compare(d.artwork, "grassfield");
+        compare(d.artworkVariant, "timeOfDay");
+        compare(WallpaperConfig.normalize({artwork: "meadow", artworkVariant: "dark"}).artwork, "meadow");
+        compare(WallpaperConfig.normalize({artwork: "meadow", artworkVariant: "dark"}).artworkVariant, "dark");
+        compare(WallpaperConfig.normalize({artwork: "Meadow", artworkVariant: 3}).artwork, "grassfield");
+        compare(WallpaperConfig.normalize({artwork: "Meadow", artworkVariant: 3}).artworkVariant, "timeOfDay");
+    }
+
+    // The desktop reads the resolved settings (WallpaperFeed.cfg): the artwork and its variant must reach every display (a
+    // resolve() that dropped them drew the Grassfield hills whatever was chosen).
+    function test_resolveCarriesTheArtwork() {
+        const cfg = {source: "builtin", artwork: "ridgeline", artworkVariant: "dark", outputs: [{display: {name: "eDP-1", model: "", serial: ""}, color: "#102030"}]};
+        for (const d of [panel, other]) {
+            const r = WallpaperConfig.resolve(cfg, d);
+            compare(r.artwork, "ridgeline", d.name);
+            compare(r.artworkVariant, "dark", d.name);
+        }
+        compare(WallpaperConfig.resolve({}, panel).artwork, "grassfield");
+        // ADR-0040 step 9: the moving artwork, off by default, for every display.
+        compare(WallpaperConfig.resolve({}, panel).moving, false);
+        compare(WallpaperConfig.resolve({moving: true}, other).moving, true);
+        compare(WallpaperConfig.normalize({moving: "yes"}).moving, false);
+        compare(WallpaperConfig.resolve({}, panel).artworkVariant, "timeOfDay");
+    }
+
+    function test_artworkVariant() {
+        const v = WallpaperConfig.artworkVariantFor;
+        // Time of Day: the phase in the appearance's set; the Evening until the phase is known.
+        compare(v("grassfield", "timeOfDay", false, "dawn"), "dawn.light");
+        compare(v("grassfield", "timeOfDay", true, "night"), "night.dark");
+        compare(v("grassfield", "timeOfDay", true, ""), "evening.dark");
+        compare(v("grassfield", "timeOfDay", false, "noon"), "evening.light");
+        // Automatic: Day in the light appearance, Evening in the dark one; Light and Dark whatever the appearance.
+        compare(v("grassfield", "automatic", false, "night"), "day.light");
+        compare(v("grassfield", "automatic", true, "day"), "evening.dark");
+        compare(v("grassfield", "light", true, "night"), "day.light");
+        compare(v("grassfield", "dark", false, "day"), "evening.dark");
+        // The other artworks follow the appearance; Time of Day reads as Automatic.
+        compare(v("meadow", "timeOfDay", true, "day"), "dark");
+        compare(v("rows", "automatic", false, ""), "light");
+        compare(v("ridgeline", "light", true, ""), "light");
+        compare(v("ridgeline", "dark", false, ""), "dark");
+        // An unknown choice reads as the default (Time of Day).
+        compare(v("grassfield", "sometimes", false, "day"), "day.light");
+    }
+
+    // ---- the first frame and the ground (ADR-0040 step 3, ID-2 and ID-3) ----
+    readonly property string prep: "/home/u/.cache/grassfield/wallpapers/prepared"
+    readonly property var stripStats: ({all: {mean: 0.4, p5: 0.1, p95: 0.7}})
+
+    function test_stillOfReadsOnlyTheHelpersOwnPictures() {
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const good = {shown: {"eDP-1": {kind: "picture", file: prep + "/" + name, strip: stripStats, image: {mean: 0.3, p5: 0.1, p95: 0.6}, mean: "#336699"}}};
+        const s = WallpaperConfig.stillOf(good, "eDP-1", prep);
+        compare(s.file, prep + "/" + name);
+        compare(s.strip.all.mean, 0.4);
+        compare(s.image.p95, 0.6);
+        compare(s.mean, "#336699");
+        // The prepared folder may carry a trailing slash.
+        compare(WallpaperConfig.stillOf(good, "eDP-1", prep + "/").file, prep + "/" + name);
+        // Another output, nothing shown, nothing stored: null.
+        compare(WallpaperConfig.stillOf(good, "DP-3", prep), null);
+        compare(WallpaperConfig.stillOf({}, "eDP-1", prep), null);
+        compare(WallpaperConfig.stillOf(null, "eDP-1", prep), null);
+        compare(WallpaperConfig.stillOf({shown: []}, "0", prep), null);
+        // Anything that is not a cache name directly in the prepared folder is never decoded (ADR-0016).
+        for (const f of [prep + "/sub/" + name, prep + "/../" + name, "/etc/passwd", prep + "/" + name + ".png", prep + "/0123456789ABCDEF0123456789ABCDEF.jpg", prep + "/x.jpg", "/tmp/" + name, prep + name, 12])
+            compare(WallpaperConfig.stillOf({shown: {o: {kind: "picture", file: f}}}, "o", prep), null, String(f));
+        // Not a picture, or a video's poster: no still (the poster lives in the video cache; the desktop waits for the feed).
+        compare(WallpaperConfig.stillOf({shown: {o: {kind: "art", file: prep + "/" + name}}}, "o", prep), null);
+        compare(WallpaperConfig.stillOf({shown: {o: {kind: "picture", video: true, file: prep + "/" + name}}}, "o", prep), null);
+        // No usable prepared folder: nothing is read.
+        compare(WallpaperConfig.stillOf(good, "eDP-1", ""), null);
+        compare(WallpaperConfig.stillOf(good, "eDP-1", "relative/prepared"), null);
+        // Statistics of another shape are dropped, the picture stays.
+        const odd = WallpaperConfig.stillOf({shown: {o: {kind: "picture", file: prep + "/" + name, strip: {all: {mean: "x"}}, image: [1], mean: "red"}}}, "o", prep);
+        compare(odd.strip, null);
+        compare(odd.image, null);
+        compare(odd.mean, "");
+        // An inherited key is not a stored output.
+        compare(WallpaperConfig.stillOf({shown: {}}, "constructor", prep), null);
+    }
+
+    function test_withShownRecordsWhatIsOnScreen() {
+        const url = "file://" + prep + "/0123456789abcdef0123456789abcdef.jpg";
+        const pic = {kind: "picture", color: "", url: url, strip: stripStats, image: null, mean: "#112233", video: ""};
+        const art = {artwork: "meadow", variant: "dark"};
+        const saved = {displays: {k: {seed: 1}}};
+        const a = WallpaperConfig.withShown(saved, "eDP-1", pic, art);
+        compare(a.displays, saved.displays, "the carousel is kept");
+        compare(a.shown["eDP-1"], {kind: "picture", artwork: "meadow", variant: "dark", file: prep + "/0123456789abcdef0123456789abcdef.jpg", video: false, strip: stripStats, image: null, mean: "#112233"});
+        verify(saved.shown === undefined, "a new object: the stored state is not changed in place");
+        // What is written reads back.
+        compare(WallpaperConfig.stillOf(a, "eDP-1", prep).file, prep + "/0123456789abcdef0123456789abcdef.jpg");
+        // The artwork and a colour replace the picture; a video keeps its poster, marked.
+        compare(WallpaperConfig.withShown(a, "eDP-1", {kind: "art", artwork: "rows", variant: "light"}, art).shown["eDP-1"], {kind: "art", artwork: "rows", variant: "light"});
+        compare(WallpaperConfig.withShown(a, "eDP-1", {kind: "color", color: "#102030"}, art).shown["eDP-1"], {kind: "color", artwork: "meadow", variant: "dark", color: "#102030"});
+        compare(WallpaperConfig.withShown(a, "eDP-1", Object.assign({}, pic, {video: "file:///v.mp4"}), art).shown["eDP-1"].video, true);
+        // Nothing usable: the record goes.
+        verify(!("eDP-1" in WallpaperConfig.withShown(a, "eDP-1", null, art).shown));
+        verify(!("eDP-1" in WallpaperConfig.withShown(a, "eDP-1", {kind: "color", color: "red"}, art).shown));
+        // At most 16 outputs, the newest kept (a rewrite moves an output to the end).
+        let many = {};
+        for (let i = 0; i < 20; i++)
+            many = WallpaperConfig.withShown(many, "out-" + i, pic, art);
+        compare(Object.keys(many.shown).length, 16);
+        verify("out-19" in many.shown && !("out-3" in many.shown));
+        many = WallpaperConfig.withShown(many, "out-4", pic, art);
+        many = WallpaperConfig.withShown(many, "out-20", pic, art);
+        verify("out-4" in many.shown && !("out-5" in many.shown));
+    }
+
+    // ADR-0040 step 4a (ID-7): what the lock draws, from the same record.
+    function test_lockBackdropOf() {
+        const vid = "/home/u/.cache/grassfield/wallpapers/video";
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const of = r => WallpaperConfig.lockBackdropOf({shown: {o: r}}, "o", prep, vid);
+        compare(of({kind: "picture", file: prep + "/" + name, artwork: "rows", variant: "light"}), {kind: "picture", file: prep + "/" + name, color: "", artwork: "rows", variant: "light"});
+        // A video's poster is in the video cache.
+        compare(of({kind: "picture", video: true, file: vid + "/" + name}).file, vid + "/" + name);
+        // Any other file: the artwork (the lock never decodes it).
+        for (const f of ["/etc/passwd", prep + "/../" + name, vid + "/sub/" + name, "/tmp/" + name, prep + "/" + name + ".gif", null])
+            compare(of({kind: "picture", file: f}), {kind: "art", file: "", color: "", artwork: "grassfield", variant: "evening.dark"}, String(f));
+        compare(of({kind: "color", color: "#ABCDEF"}).color, "#ABCDEF");
+        compare(of({kind: "color", color: "#ABCDEF"}).kind, "color");
+        compare(of({kind: "color", color: "url(x)"}).kind, "art");
+        // Unknown names read as the default artwork.
+        compare(of({kind: "art", artwork: "nope", variant: "noon.light"}), {kind: "art", file: "", color: "", artwork: "grassfield", variant: "evening.dark"});
+        compare(of({kind: "art", artwork: "grassfield", variant: "night.dark"}).variant, "night.dark");
+        // Never shown: null (the lock waits for it, bounded).
+        compare(WallpaperConfig.lockBackdropOf({shown: {}}, "o", prep, vid), null);
+        compare(WallpaperConfig.lockBackdropOf(undefined, "o", prep, vid), null);
+    }
+
+    // The lock's checks of a still (ADR-0040 step 4a; review of cbd6ef05: the real folders, a mode no locale translates).
+    function test_lockStillChecks() {
+        const vid = "/home/u/.cache/grassfield/wallpapers/video";
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const real = (a, b, f) => WallpaperConfig.lockStillReal(a + "\n" + b + "\n" + f + "\n");
+        compare(real(prep, vid, prep + "/" + name), prep + "/" + name);
+        compare(real(prep, vid, vid + "/" + name), vid + "/" + name);
+        // The folders as realpath printed them (a cache reached through a symbolic link): the file is checked against those.
+        compare(real("/data/cache/prepared", vid, "/data/cache/prepared/" + name), "/data/cache/prepared/" + name);
+        for (const f of ["/etc/passwd", prep + "/sub/" + name, "/tmp/" + name, prep + "/" + name + ".svg", prep + "/x.jpg"])
+            compare(real(prep, vid, f), "", f);
+        // Anything but three lines (realpath failed, a newline in a path) is refused.
+        compare(WallpaperConfig.lockStillReal(prep + "\n" + prep + "/" + name + "\n"), "");
+        compare(WallpaperConfig.lockStillReal(prep + "\n" + vid + "\n" + prep + "/" + name + "\nx\n"), "");
+        compare(WallpaperConfig.lockStillReal(""), "");
+        compare(WallpaperConfig.lockStillReal(undefined), "");
+        // stat --printf %f|%s: a regular file (0x8000) of 1 to max bytes.
+        const max = 64 * 1024 * 1024;
+        verify(WallpaperConfig.lockStillStatOk("81a4|123456", max));
+        verify(WallpaperConfig.lockStillStatOk("8180|" + max + "\n", max));
+        for (const t of ["41ed|4096", "a1ff|12", "11b6|0", "61b0|0", "81a4|0", "81a4|" + (max + 1), "regular file|12", "fichier|12", "81a4", "", "81a4|12|x", "zz|12"])
+            verify(!WallpaperConfig.lockStillStatOk(t, max), t);
+    }
+
+    function test_groundOf() {
+        compare(WallpaperConfig.groundOf({kind: "picture", mean: "#a0b0c0"}, "#2F6D5F", "#000000"), "#A0B0C0");
+        compare(WallpaperConfig.groundOf({kind: "color", color: "#ff8800"}, "#2F6D5F", "#000000"), "#FF8800");
+        compare(WallpaperConfig.groundOf({kind: "art"}, "#2f6d5f", "#000000"), "#2F6D5F");
+        // Nothing usable: the static default.
+        compare(WallpaperConfig.groundOf({kind: "picture", mean: ""}, "#2F6D5F", "#000001"), "#000001");
+        compare(WallpaperConfig.groundOf({kind: "color", color: "red"}, "#2F6D5F", "#000001"), "#000001");
+        compare(WallpaperConfig.groundOf({kind: "art"}, "", "#000001"), "#000001");
+        compare(WallpaperConfig.groundOf(null, "#2F6D5F", "#000001"), "#000001");
+    }
+
+    // Review of 4457edc1 (M1): a phase or an appearance known before the feed's first result never chooses the first frame.
+    function test_firstFrameChoice() {
+        const c = WallpaperConfig.firstFrameChoice;
+        // Before wallpaper.json was read: nothing (the stored still is not known yet).
+        compare(c(false, false, false), "wait");
+        compare(c(true, false, true), "wait");
+        // The stored still until the feed's first result, which then decides.
+        compare(c(false, true, true), "still");
+        compare(c(true, true, true), "feed");
+        compare(c(true, true, false), "feed");
+        // No still and no result yet: the window stays unmapped (bounded by the timeout).
+        compare(c(false, true, false), "wait");
+        // The window's wiring: only the feed marks its first result; a phase or appearance event goes through the choice.
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../shell/desktop/Wallpaper.qml"), false);
+        xhr.send();
+        const w = xhr.responseText;
+        compare((w.match(/win\.feedSeen = true;/g) || []).length, 1);
+        verify(/onDisplayChanged: \{\s*win\.feedSeen = true;\s*win\.show\(/.test(w));
+        verify(/if \(!win\.firstReady\) \{\s*win\.begin\(\);\s*return;\s*\}/.test(w), "show() before the first frame only asks the choice");
+        // After the first frame too: a phase or an appearance acts on the artwork only once the feed has given its first result
+        // (counter-review of c5d43be4: a mapped still was cut to the placeholder artwork).
+        compare((w.match(/feed\.display\.kind === "art"/g) || []).length, 3);
+        compare((w.match(/win\.artLive && feed\.display\.kind === "art"/g) || []).length, 3);
+        verify(/readonly property bool artLive: win\.feedSeen \|\| win\.fallbackArt/.test(w), "a fallback artwork follows the phase too");
+        compare((w.match(/win\.fallbackArt = true;/g) || []).length, 2);
+    }
+
+    function test_groundFor() {
+        compare(WallpaperConfig.groundFor({a: "#102030"}, "a", "#000000"), "#102030");
+        compare(WallpaperConfig.groundFor({a: "#102030"}, "b", "#000000"), "#000000");
+        compare(WallpaperConfig.groundFor({a: "red"}, "a", "#000000"), "#000000");
+        compare(WallpaperConfig.groundFor({}, "constructor", "#000000"), "#000000");
+        compare(WallpaperConfig.groundFor(null, "a", ""), "");
+    }
+
+    // wallpaper.json keeps every part: the carousel, the last wallpaper shown, the video markers.
+    function test_stateTextKeepsEveryPart() {
+        const shown = {o: {kind: "art", artwork: "rows", variant: "dark"}};
+        let saved = {displays: {k: {seed: 1}}, shown: shown};
+        saved = WallpaperConfig.withCarousel(saved, "k2", {seed: 2});
+        compare(saved.shown, shown, "a carousel step keeps the record");
+        compare(saved.displays.k2.seed, 2);
+        const o = JSON.parse(WallpaperConfig.stateText(saved, {"eDP-1": "/v.mp4", "DP-1": "/v.mp4"}, ["/b.mp4"], 42));
+        compare(o.displays.k.seed, 1);
+        compare(o.shown, shown);
+        compare(o.videoStarting, [{path: "/v.mp4", at: 42}]);
+        compare(o.videoBlocked, ["/b.mp4"]);
+        // The empty parts are left out.
+        compare(JSON.parse(WallpaperConfig.stateText({displays: {}}, {}, [], 1)), {displays: {}});
+        compare(JSON.parse(WallpaperConfig.stateText(null, null, null, 1)), {displays: {}});
+    }
+
+    // The window needs Quickshell, so its contract is read from the sources (ADR-0040 ID-3, ID-4, ID-16): it maps only with
+    // its first frame, bounded by the token; the compositor adds no fade; the journal lines are logged.
+    function test_theWindowMapsOnceWithItsFirstFrame() {
+        function text(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl(rel), false);
+            xhr.send();
+            verify(xhr.responseText.length > 0, rel);
+            return xhr.responseText;
+        }
+        const w = text("../../shell/desktop/Wallpaper.qml");
+        verify(/visible: win\.firstReady/.test(w));
+        verify(/interval: Tokens\.wallpaperFirstShowTimeoutMs/.test(w));
+        compare(Tokens.wallpaperFirstShowTimeoutMs, 1500);
+        verify(/color: Ground\.of\(/.test(w), "the ground under the wallpaper");
+        verify(/Journal\.shown\("wallpaper"/.test(w) && /Journal\.hidden\("wallpaper"/.test(w));
+        verify(/WallpaperState\.setShown\(/.test(w) && /WallpaperState\.stillOf\(/.test(w));
+        const lua = text("../../config/hypr/grassfield/windows.lua");
+        const noAnim = (lua.match(/^hl\.layer_rule\(\{.*no_anim = true.*\}\)$/gm) || []).map(r => /namespace = "([^"]+)"/.exec(r)[1]);
+        verify(noAnim.some(p => new RegExp(p).test("grassfield-wallpaper")), "a no_anim layer rule matches the wallpaper");
     }
 }

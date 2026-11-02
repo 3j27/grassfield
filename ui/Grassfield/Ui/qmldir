@@ -4,6 +4,7 @@ singleton Appearance 1.0 Appearance.qml
 Material 1.0 Material.qml
 Icon 1.0 Icon.qml
 MenuItem 1.0 MenuItem.qml
+MenuHeader 1.0 MenuHeader.qml
 MenuSeparator 1.0 MenuSeparator.qml
 PopupMenu 1.0 PopupMenu.qml
 Slider 1.0 Slider.qml
@@ -12,6 +13,7 @@ Tooltip 1.0 Tooltip.qml
 Button 1.0 Button.qml
 FocusRing 1.0 FocusRing.qml
 FocusGuard 1.0 FocusGuard.qml
+KeyFocus 1.0 KeyFocus.qml
 ActivationKeys 1.0 ActivationKeys.js
 ToolButton 1.0 ToolButton.qml
 CheckBox 1.0 CheckBox.qml
@@ -23,6 +25,9 @@ SpinBox 1.0 SpinBox.qml
 SegmentedControl 1.0 SegmentedControl.qml
 ComboBox 1.0 ComboBox.qml
 ProgressBar 1.0 ProgressBar.qml
+Spinner 1.0 Spinner.qml
+ProgressRing 1.0 ProgressRing.qml
+MenuPopup 1.0 MenuPopup.qml
 ScrollBar 1.0 ScrollBar.qml
 Sheet 1.0 Sheet.qml
 LinkText 1.0 LinkText.qml
@@ -41,6 +46,7 @@ FolderIcon 1.0 FolderIcon.qml
 PointerSize 1.0 PointerSize.js
 PointerColors 1.0 PointerColors.js
 WallpaperConfig 1.0 WallpaperConfig.js
+TimeOfDay 1.0 TimeOfDay.js
 GrassfieldArtwork 1.0 GrassfieldArtwork.qml
 DevicePicture 1.0 DevicePicture.qml
 MenuPlace 1.0 MenuPlace.js

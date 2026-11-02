@@ -19,7 +19,7 @@ Text {
     rightPadding: Tokens.spacingMd
     wrapMode: Text.Wrap
     text: root.reason === "-" ? qsTr("The action failed.") : qsTr("The action failed: %1").arg(root.reason)
-    color: Appearance.colors.textSecondary
+    color: Appearance.windowSecondary
     font.family: Appearance.fontFamily
     font.pixelSize: Tokens.typographyCaptionSize
     Accessible.role: Accessible.StaticText

@@ -194,6 +194,13 @@ down, how sleep behaves) is written in the table at the end of this step.
   lost push with the compositor's signal set, and a stopped security unit (mutants on each); a scan that no `Lock.lock`
   caller is left in the UI tree (`ipc_inventory.sh`). Owner, real session: DT-01 and DT-21 re-run (kill the UI while
   locked, kill the security process while locked), L3 (lock before sleep) and the lid. Review: opus security.
+  ADR-0040 step 4a (2026-10-31; opus review of cbd6ef05, MINOR 1 and 2) leaves S2 three things: the lock's backdrop reads
+  `wallpaper.json` `shown` through the desktop's `WallpaperState`, which reads the file once and is a desktop store with
+  side effects (it starts processes and writes `wallpaper-state.json`): the security process needs its own watched reader
+  of `shown` with the pure `WallpaperConfig.lockBackdropOf`. The preloaded stills are decoded at full size, one per output
+  (about 33 MB per 4K output, up to Qt's 256 MiB allocation limit for a hostile file): measure them against
+  `MemoryHigh=320M`. And the decode: only the JPEG image plugin (PNG is built in) and a file the process opened itself
+  (`O_NOFOLLOW`, `fstat`), so that the checked file is the decoded one.
 - **S3. The polkit agent moves.** `AuthAgent` and its dialog run in the security process, drawn with `Grassfield.Ui`
   only; exactly one agent in the session (L5: registration, action id and program shown, cancel works, never
   auto-approves); the UI's `polkit status` dev hook moves with it. Tests: `authagent_flows.sh`, `tst_authdialog*`,
@@ -518,6 +525,151 @@ of the session, never in a terminal.
   unit case covers the toolkit-only title. The integrator runs the offscreen and unit suites (none here).
 - Review: the checker reads two more world-readable files and runs `pacman -Q` five times more; nothing runs as root;
   nothing under `shell/security/` changes.
+- Merged 2026-11-01 as 5eaf9d25 (#77, the integrator's opus review PASS at round 4; the integration branch #90 carried
+  it). The integrator ran `software_update_service.sh` outside the sandbox on the merge: exit 0, step k counted 1.
+
+### Step 2b as built, second slice (2026-11-01, the branch of the stability lane; the watch of pacman's database, the lock wait)
+- `packaging/systemd/grassfield-pacman-watch.path`: `PathChanged=/var/lib/pacman/local` (the directory changes at every
+  transaction, one entry per package created and removed; readable by every user), session-only (`ConditionEnvironment`,
+  `PartOf`/`Requisite=graphical-session.target`), a trigger limit of 100 in 60 s (systemd's default of 200 in 2 s would
+  put the unit in failed, watching no more, on a long transaction), started by `autostart.lua` with the session's other
+  units and installed by the PKGBUILD. It starts `grassfield-pacman-watch.service` (oneshot, hardened as the session's
+  other helpers, Quickshell's option variables and the helper's knobs cleared, 20 starts in 60 s), which runs
+  `packaging/bin/grassfield-pacman-watch`: a 5 s settle (so one transaction is one or two checks, not hundreds: events
+  during a run are kept and start it once more after it), then one `qs ipc -p /usr/share/grassfield/shell call update
+  check system`. The shell's `update check` accepts the origin `system` (not a user's check: a toolkit replaced under the
+  session is announced as a scheduled check's is); the IPC surface table names the caller. A check that finds pacman
+  mid-transaction is followed by the next trigger's. Nothing runs as root (ADR-0009's amendment).
+- `shell/platform/SessionConfig.qml`: a reload asked while pacman holds its database lock (`/var/lib/pacman/db.lck`,
+  root's and unreadable: it exists whenever the read fails for any reason but "no such file", `FileViewError.FileNotFound`
+  as the lock's marker is read) waits, polled every `Tokens.sessionConfigLockPollMs` (500 ms), at most
+  `Tokens.sessionConfigLockWaitMs` (10 s, under a display trial's 15 s so the trial's countdown is not what ends the wait),
+  then goes ahead anyway with a warning; the requests keep their order and their tickets. I-2's residual: a display trial
+  never reloads a half-written Lua tree.
+- The compositor rebuild's opt-in at login needs nothing from this slice: `ExtensionStatus` already reads the plugin's
+  hello and Hyprland's version at start, and a Hyprland that moved past the plugin's ABI shows as `mismatch` (rebuilt in
+  the background when `windows.rebuildExtension` is on, step 2d's notice otherwise).
+- Tests: `tests/shell/session_services.sh` (the path unit's watch, trigger limit, session condition, autostart and package
+  lines; the service's oneshot, helper, hardening, cleared environment and start limit; the helper's call, no privilege,
+  the knobs honoured in a dev session outside the real one and ignored inside it); `tests/shell/displays_trial.sh`
+  (`trial.qml` gains the lock wait: a reload asked while the lock file exists waits with its ticket out, goes once the
+  file is gone, and Hyprland's answer reaches `answered`; the fake counts ten reloads).
+- Evidence (this container; no Quickshell): `tests/shell/session_services.sh` exit 0; `sh -n` on the helper; qmllint 6.4
+  parses `SessionConfig.qml`, `SoftwareUpdate.qml` and `Tokens.qml`; `python3 -I tests/ci/inventory.py` ok; `git diff
+  --check` clean. NOT VERIFIED here: `displays_trial.sh` (offscreen Quickshell), the units under systemd (the path unit's
+  activations through a real transaction, the service's sandbox against `qs ipc`), `ipc_inventory.sh` (Qt's tools).
+- Review: the integrator's nested pass (a `pacman -S --noconfirm <small package>` in a terminal: one or two checks in the
+  journal, none as root; a display trial while a transaction runs: the reload waits, then goes).
+- Review round 1 (2026-11-01, the integrator's opus review of 69757ef: FAIL, five majors): the two tokens were written
+  into the generated `Tokens.qml` by hand (now in `ui/tokens/tokens.json`, a `sessionConfig` group, the file
+  regenerated); a comment line of the helper held both "qs ipc" and "call must not", which `ipc_inventory.sh` read as
+  a caller "must.not" (reworded); `FileView.reload()` reads later even with `blockLoading`, so the first reload after
+  pacman took its lock went straight through (`waitForJob()` after `reload()` makes the read the one judged, as the
+  display trial's probe reads its files); the helper asked after a fixed 5 s with pacman still running (a terminal
+  `pacman -Syu` takes no Omarchy lock), so U31's "Log out to finish updating" could show mid-transaction and a log out
+  would stop it: the helper now waits while `/var/lib/pacman/db.lck` exists, at most 30 min (the unit's start timeout
+  past it), then settles, then asks once (tested with a fake lock: nothing while it exists, one call once it is gone,
+  one call after the bound); the knob test ran the real `qs ipc` with the inherited `GRASSFIELD_SESSION=1`, which on
+  the owner's machine would have reached the live shell: it runs with `GRASSFIELD_SESSION` unset for the dev-session
+  cases and against a fake `qs` on a private PATH for the real-session case (the fake logs the exact command). Minor: a
+  mutant refusing the origin `system` passed every test: `software_update_service.sh` now asks `update check system`
+  over IPC (ok, one run) beside `user` (ok) and `bogus` (refused).
+- Review round 2 (2026-11-01, opus review of e6f4ddaa: FAIL, one major in a test): `trial.qml` set
+  `SessionConfig.pacmanLockPath` in the same handler that asked the lock step's reload, and a `FileView` read in the turn
+  of its path change is stale even through `waitForJob()`, so the reload went straight through (step 21 failed inside and
+  outside the sandbox, and a mutant without `waitForJob()` was not caught): the seam is set at the probe's first step, many
+  turns earlier, and the lock file is written (synchronously) at step 20 before the reload is asked. Nit: the probe's step
+  k sent `user` then `system` back to back, and a request made during a run joins it (U4): the probe logs every run that
+  ends once it is ready (`ipc-run-done <n>`) and the script sends `system` only after the user run's line.
+- Follow-up (2026-11-02, the integrator's note on #93): once the fake Hyprland was reachable (ad044d4d, the sockets under a
+  short base), `displays_trial.sh` steps 21 and 24 failed: the probe recorded every `answered()` of `SessionConfig`, so the
+  answers to the nine earlier reloads were in the lock step's list (inside the sandbox the fake was never reached and
+  nothing was answered, which hid it). The probe records the lock step's own ticket only.
+
+### Step 2d as built (2026-11-01, the branch of the stability lane; the extension notice without a command)
+- The two degraded notices shown without the opt-in setting (`stale-manual`: "Grassfield was updated. Click to update
+  its compositor extension, then log out and back in. Window titlebars and minimize are unavailable until then.";
+  `mismatch-manual`: "It is not built for %1 yet, so window titlebars and minimize are unavailable. Click to build it,
+  then log out and back in.") no longer name `grassfield-compositor-rebuild` as a command to type (SP-6): they are
+  posted with `Notifications.postInternalAction`, whose click (the banner or the Center's entry, as Software Update's
+  notices open the pane) runs `shell.qml`'s `startExtensionRebuild("the notice")`, the same `--session` run the setting
+  starts (`grassfield-compositor-rebuild --session`, as the user, in the background, once per shell run; a second click
+  or a click while it runs starts nothing), and the result notice then says what is next ("Log out to finish updating"
+  with "The compositor extension was updated. Log out and back in to use it.", or "Compositor extension updated" when
+  it loaded into the running Hyprland). The setting keeps its default; the `-rebuilding` notices and the plain one
+  carry no click. The French entries follow. `ExtensionStatus.manualAction(key)` names the two keys (unit tested).
+- Still naming the command, on purpose: the two failure results ("The build tools are missing or another build is
+  running. Run grassfield-compositor-rebuild in a terminal to see why.", "The build failed. …"): a diagnosis, not a
+  recovery; the journal holds the reason too. A known limit under SP-6 until step 8 (crash reports) gives a place for it.
+- Tests: `tests/unit/tst_extensionstatus.qml` `test_theManualNoticesCarryTheRebuildAsTheirClick`. No offscreen test
+  drives a click on a shell notice today (the Notifications module's internal actions have none): the nested pass is
+  the check (a stale build and the setting off: the notice; a click: `--session` runs, the result notice follows).
+- Evidence (this container): qmllint 6.4 parses `shell.qml` and the test; the JS parses; `check-i18n.py --no-lupdate`
+  ok (3158 messages, 0 unfinished; the two old entries replaced by hand); `git diff --check` clean. NOT VERIFIED here:
+  `i18n-update.sh --check`, `tst_extensionstatus.qml` (QtTest), the click in nested.
+
+### Step 2c as built (2026-11-01, the branch of the stability lane; the rc-channel gate)
+- `scripts/gates/rc-toolkit.sh` (`just gate-rc`; T-5, T-10, C3): a throwaway Arch container (`archlinux:base` at the digest
+  the integration tests pin, only the script mounted read-only, the report directory mounted; docker's default network)
+  set up as an Omarchy machine
+  of the channel (`--channel rc`, the default, or `stable`): pacman's configuration in Omarchy 4.0.6's layout, `[omarchy]`
+  first (`https://pkgs.omarchy.org/<channel>/$arch`: Omarchy's own builds win, and Quickshell is one of them, `quickshell
+  0.3.2.r7.g2b4501a-1` in both channels' databases on 2026-11-01, where Arch's `[extra]` has 0.3.2-1), then `[core]` and
+  `[extra]` from the channel's dated Arch mirror (`https://<channel>-mirror.omarchy.org/$repo/os/$arch`, Omarchy's
+  `mirrorlist-<channel>`: where Hyprland, Qt and KDE Frameworks come from), packages signed; Omarchy's key from
+  keys.openpgp.org, signed locally, then `omarchy-keyring`, as Omarchy's own bootstrap does. `pacman -Syuu` brings the whole
+  base to the channel's snapshot (downgrades allowed: the image may be newer than it), then the PKGBUILD's makedepends and
+  the desktop package's depends, read from the PKGBUILD itself (version constraints off, Grassfield's own packages out:
+  they are built from the tree), so the set never drifts from what such a machine installs. A `git archive HEAD` made on
+  the host and handed over in the report directory (package scripts run as root in the container: they never see the
+  working tree, its untracked files or its `.dev` logs) runs as an unprivileged user, three steps, each logged and timed: `lint` (`scripts/dev/qmllint.sh`: the tree's QML
+  against the installed Quickshell's `qmltypes`, T-10),
+  `test` (`scripts/dev/test.sh --layer data,logic,headless`: the offscreen suites on the rc Qt, Quickshell and KDE
+  Frameworks, T-5), `plugin` (the compositor plugin and its unit tests with CMake/Ninja against the rc Hyprland headers,
+  C3; the ABI stamp in the note). The report (`.dev/rc-toolkit/<timestamp>/`, its files given back to the host's user):
+  `result.tsv`, `toolkit.txt` (`pacman -Q` of qt6-base, qt6-declarative, quickshell, hyprland, aquamarine, hyprutils,
+  hyprlang, kcoreaddons, kio in the container, and how many Quickshell `qmltypes` the lint saw), `sources.txt` (the package
+  file each came from: which repository served it), `snapshot.txt` (the channel's two databases and their dates),
+  `stable.txt` (the same packages on the machine that runs the gate, when pacman knows them) and `summary.json`: the record
+  the watch job of ADR-0033 f reads (the channel's toolkit, what moved against this machine, the sources, each step's
+  result, the verdict). Exit 0 PASS, 1 FAIL,
+  2 INCONCLUSIVE (no docker, a failed setup, a wanted step without a result: never a pass). `just release-check --rc` runs
+  it as its step 8 on the snapshot (its report beside the run's logs); without `--rc` the summary says the gate did not run.
+- Incident I-1 as a regression (step 7's row, the r7 proof as a container case): `tests/shell/hypr_socket_errors.sh` runs the
+  real `SessionConfig` offscreen against a fake Hyprland whose request socket is first missing (a connect error), then hangs
+  up without an answer, then answers, then stays silent past the answer bound and hangs up late. Every request is judged
+  exactly once (`answered(ticket, ok)`: false, false, true, false), nothing twice, and Quickshell exits 0 (a crash is its
+  exit code: 139). In the headless layer it runs on every machine with Quickshell; in the gate it runs on the rc channel's
+  Quickshell, which is what the 2026-10-29 proof with a 0.3.2.r7 built from source showed by hand.
+- Tests: `scripts/gates/rc-toolkit.sh --selftest` (the container's network; the channel's pacman configuration and
+  mirrorlist; the dependency
+  reader on a fixture PKGBUILD with comments, quotes, constraints and another package's depends; the moved table; the
+  verdict's three words and the partial run; the record) from `tests/shell/gates.sh`; `tests/shell/hypr_socket_errors.sh`
+  (headless).
+- Evidence (this container; no docker daemon, no Quickshell): `tests/shell/gates.sh` exit 0 (the selftest's 16 cases
+  among it); `bash -n` on the gate, the release check and the test; `python3 -I tests/ci/inventory.py` ok (605 tests);
+  `tests/ci/socket_errors.py` ok; `tests/tools/check-isolation.py` ok; qmllint 6.4 parses `probe.qml`; `git diff --check`
+  clean. NOT VERIFIED here: the container run itself (the rc mirror's snapshot, the time it takes, the suites' skips on
+  it), `hypr_socket_errors.sh` against a real Quickshell, `release-check --rc`.
+- Review: the integrator runs `just gate-rc` once (docker, the network): the three steps and the toolkit table, and
+  `tests/shell/hypr_socket_errors.sh` on the installed Quickshell; the watch job (ADR-0033 f) stays disabled until the
+  repository is published and reads `summary.json` then.
+- Review round 1 (2026-11-02, the integrator's opus review of f6f3361: FAIL on gate S1). MAJOR: gitleaks' generic-api-key
+  flagged Omarchy's public fingerprint, held as `OMARCHY_KEY` (f4ecdbc6, line 40): renamed `FPR`, as
+  `tests/integration/update_helper.sh` names it, and the committed line listed in `.gitleaksignore` (the file's rule: a
+  false positive already committed is listed, a new one fixed in the file). MINOR: `--network host` gave a root container
+  the host's localhost services: docker's default network now, the host's only when a proxy listens on this machine's
+  loopback (localhost, ::1 or a numeric 127.x address; the run says so); the whole working tree was mounted, readable by
+  package scripts running as root: only the script goes in, the snapshot already arrives in the report directory. NIT:
+  the selftest counts its own cases (16 now: five for the network rule, one of which caught `127.example.org` taken for
+  loopback); `--only`, `--channel` and `--logs` without a value are usage errors (exit 2); the INCONCLUSIVE text says
+  rootless podman is not supported.
+- Follow-up (2026-11-02, the integrator's note on #104): `hypr_socket_errors.sh` steps 9 and 12 failed and the fake saw no
+  connection: the fake waited for the probe's `go` file in the Hyprland instance directory, while the probe writes it to
+  `Mode.stateDir` (`GRASSFIELD_STATE_HOME`, the test's `state` folder), so the request socket never came and every reload
+  met a connect error. The fake is given that path, and it counts only `reload` requests (a JSON query of Quickshell's
+  Hyprland module gets `[]` and is not counted, so it cannot shift the order). The fake alone, driven by a client that
+  replays the probe's sequence (no socket before `go`, a JSON query, three reloads), logs "1 hangup;2 answered;3 late".
 
 ### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
 Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.
@@ -604,6 +756,68 @@ Goal: no input a process reads from the system, a file or another process can cr
   case; the hook under `qs` offscreen.
 - Integrator, nested: both proofs. Owner, real session: nothing specific.
 - Review: security (the probe restarts the process that holds the lock; the dev hook's gate); R13 for `compositor.lua`.
+
+### Step 6a as built (2026-11-02, the branch of the stability lane; the liveness probe)
+- `packaging/systemd/grassfield-shell-watchdog.timer`: `OnActiveSec=30s`, `OnUnitActiveSec=30s`, `AccuracySec=1s`
+  (systemd's default of a minute would let the probes slide up to a minute late), session-only (`ConditionEnvironment`,
+  `PartOf`/`Requisite=graphical-session.target`), started by `autostart.lua` with the session's other units and installed
+  by the PKGBUILD. It starts `grassfield-shell-watchdog.service` (oneshot, hardened as the failure counter: AF_UNIX only,
+  `ProtectSystem=strict`, `ReadWritePaths=%t`, no network, Quickshell's option variables cleared, the runtime directory
+  kept, 45 s start timeout, 128M and 16 tasks for the qs binary it runs), which runs
+  `packaging/bin/grassfield-shell-watchdog`.
+- The question is the planned one, `capabilities status` on the shell's system path, and nothing in its answer is read:
+  any answer, the `refused` the dev gate gives in a real session included, is the GUI thread answering (the IPC handlers
+  run there). So the function keeps its dev gate and nothing new is exposed; the IPC surface table names the caller. The
+  inventory accepts a session helper asking a dev function (it rejects only an action without a caller, a dev function
+  without its gate and a caller of a function that does not exist).
+- A miss is a question that ran into its 5 s bound (timeout's 124, or 137 once its KILL followed) and took that long. A
+  question that fails at once (no instance yet, a refused connection, a qs killed early by the unit's memory limit) or
+  just under the bound with an error is no evidence of a hang and counts nothing. The misses belong to one MainPID (the
+  state file `$XDG_RUNTIME_DIR/grassfield/shell-watchdog`, "<pid> <misses>", 0600, replaced by a rename, never written
+  through a link): a shell that restarted between two questions or during one starts from zero; an answer forgets them.
+  Nothing is asked while the unit is not active/running, nor once the compositor is gone (`session-gone`, as the failure
+  counter asks).
+- The third miss in a row sends SIGKILL to the hung main process only (`systemctl --user kill --kill-whom=main
+  --signal=SIGKILL grassfield-shell.service`, the plan's kill narrowed to the main process): the unit fails, Restart=always
+  brings the shell back within a second, OnFailure= arms the sleep lock and runs step 1a's counter (a hang that repeats
+  ends in the loop detector's stop); the unit's other processes get the restart's usual SIGTERM. The probe never stops,
+  restarts, starts or unlocks anything, and no environment variable moves its bounds.
+- Timing: the third miss comes 60 s after the first at the earliest, so a stall shorter than about 65 s is never killed,
+  and one longer than about 95 s (the first question up to 30 s after it began, plus 60 s, plus the 5 s bound) always is.
+  The plan's proof ("blocks the GUI thread 20 s → restart within 100 s") cannot hold as written: 20 s gives one miss at
+  most. The dev hook is `capabilities devBlock <seconds>` (1 to 300, `Mode.dev`, `refused` otherwise): the nested proof is
+  `devBlock 120` (the shell restarted within 100 s, the lock kept) and `devBlock 20` (no restart: a long but finite stall
+  survives).
+- Tests: `tests/shell/shell_watchdog.sh` (logic; the helper's scratch copy against a fake `qs` that answers, hangs, fails at
+  once, fails just under the bound, is killed at once or sees a restart during the question, and a fake `systemctl` that
+  reports the unit's state and logs every call: alive, two misses kept, an answer forgets them, the third miss kills once
+  with the exact command and nothing else, another MainPID starts from zero, a unit not running asks nothing, the session's
+  end asks nothing, a link at the state's path is not followed, the file modes; 23 cases, about 45 s);
+  `tests/shell/shell_watchdog_hook.sh` (headless: the real `Capabilities` offscreen answers, `devBlock 4` holds the thread
+  so a 2 s question times out, then it answers again; outside a dev session `devBlock` is refused at once and `status`
+  answers `refused`); `tests/shell/session_services.sh` (the two units, the autostart and PKGBUILD lines).
+- Evidence (this container; no Quickshell, no systemd user manager): `shell_watchdog.sh` exit 0 (23 PASS) and five mutants
+  of the helper caught (the threshold at 2, no exit-code guard, no elapsed-time guard, no restart check after the
+  question, a `systemctl restart` instead of the kill); `session_services.sh` exit 0; `shell_unit.sh` exit 0 (the qs caller
+  scan); the IPC inventory's reading of the caller and the row simulated (the helper calls `capabilities status`, the table
+  and the handler both name `status, devBlock`); inventory ok; i18n 0 bare literals; isolation ok; qmllint 6.4 parses
+  `Capabilities.qml` and the probe; `sh -n`; `git diff --check` clean. NOT VERIFIED here: `shell_watchdog_hook.sh` (no
+  Quickshell: SKIP), `ipc_inventory.sh` end to end (Qt's tools), the units under systemd (the timer's cadence, the
+  service's sandbox against the qs binary and the user manager), the nested proof.
+- Review: opus security (the probe kills the process that holds the lock; the dev hook's gate); the integrator's nested
+  pass: `devBlock 120` → a restart within 100 s with the lock kept, `devBlock 20` → none.
+- Review round 1 (2026-11-02, PR #106, the integrator's opus review of f01a0b9f with a security lens: FAIL on its new
+  test; the probe itself held: only the shell's main process, a kill while locked fails closed, the thresholds, off in dev
+  and nested sessions). MAJOR: `shell_watchdog_hook.sh` set `rc` inside a command substitution, so `set -u` stopped it at
+  the first check on any machine with Quickshell: the answers go to a file now, `rc` stays in the test's shell (the
+  plumbing run against a Quickshell stand-in passes, and fails when the stand-in's hook does not hold the thread; with
+  Quickshell itself NOT VERIFIED here). MINOR, load: the 5 s bound includes starting the qs client, so on a loaded machine
+  a healthy shell could miss three times and that kill would count toward the loop detector: while `/proc/pressure/cpu`
+  `some avg10` is 40 % or more, or memory's 10 % or more, the bound is 20 s (the service's start timeout 45 s). Extended,
+  never skipped: a shell spinning in a loop raises the pressure itself on a small machine and must still be found
+  (`GRASSFIELD_SHELL_WATCHDOG_PRESSURE` points the tests at fixture files; the unit clears it). NIT: the MainPID is read
+  once more right before the kill; a shell that restarted since is not killed. `shell_watchdog.sh` 27 cases; mutants
+  caught: no extension, skipping under load, no read before the kill.
 
 ### Step 7: the known incidents as regressions, and the two open ones (T-8, I-2, I-3, I-4, I-5)
 - A package-upgrade simulation in nested: replace the installed-layout copy of `config/hypr` under a running session

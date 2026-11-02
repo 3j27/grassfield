@@ -415,13 +415,19 @@ If Grassfield does not start at all: Ctrl+Alt+F3, log in, run `grassfield-login 
 ## 9. Uninstall
 
 ```bash
-sudo pacman -Rns grassfield-desktop grassfield-compositor grassfield-icons
+sudo pacman -Rns grassfield-login-themes grassfield-desktop grassfield-wallpapers grassfield-compositor grassfield-icons
 ```
 
-All three packages: `grassfield-icons` (the icon theme, 30,000 files, 60 MiB) is installed with the others and is not
-removed when it is left out of the command (GF-046). This removes only Grassfield: every dependency is either
+`grassfield-login-themes` (ADR-0042) is built and installed by the same `makepkg -si` and depends on `grassfield-desktop`, so
+it goes in the same command; it activates nothing by itself. If you made its login or boot theme the current one, revert
+them first ([login-boot-themes.md](login-boot-themes.md), section 3).
+
+Every package the build installed: `grassfield-icons` (the icon theme, 30,000 files, 60 MiB) and `grassfield-wallpapers`
+(the sixteen photographs, ADR-0040 step 2c; `grassfield-desktop` depends on it) are installed with the others, explicitly,
+and are not removed when they are left out of the command (GF-046). This removes only Grassfield: every dependency is either
 explicitly installed or required by other packages (checked with `pacman -Qi`). Check afterwards with
-`pacman -Q grassfield-desktop grassfield-compositor grassfield-icons` (all three: "was not found"). Left behind in your home (only Grassfield's own paths; remove if you want a clean state):
+`pacman -Q grassfield-login-themes grassfield-desktop grassfield-wallpapers grassfield-compositor grassfield-icons` (each:
+"was not found"). Left behind in your home (only Grassfield's own paths; remove if you want a clean state):
 
 ```bash
 rm -rf ~/.config/grassfield ~/.local/state/grassfield ~/.local/share/icons/grassfield-cursors-custom

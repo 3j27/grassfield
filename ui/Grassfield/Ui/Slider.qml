@@ -12,7 +12,10 @@ T.Control {
     property real value: 0
     property real stepSize: 0.05
     property string accessibleName: ""
-    property color fillColor: Appearance.colors.accent
+    // The fill: the selection colour, as a switch that is on, a checked box and a default button (ADR-0039 step 11, D-Q4).
+    property color fillColor: Appearance.colors.selection
+    // The white knob is outlined in the fill's mark colour where it holds under 3:1 on the fill (Accent.knobOutlined).
+    readonly property bool knobOutlined: !root.knobless && root.position > 0 && Accent.knobOutlined(String(Appearance.colors.knob), String(root.fillColor), Tokens.controlKnobMinContrast)
     // Up/Down change the value too. Quick Settings turns this off: there the vertical arrows move focus between
     // modules (macOS model), and a focused slider changes with Left/Right, Home/End only.
     property bool verticalKeys: true
@@ -167,7 +170,7 @@ T.Control {
         anchors.verticalCenter: parent.verticalCenter
         color: Appearance.colors.knob
         border.width: Tokens.controlBorderWidth
-        border.color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
+        border.color: root.knobOutlined ? Appearance.colors.selectionText : Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
 
         FocusRing {
             shapeRadius: parent.radius

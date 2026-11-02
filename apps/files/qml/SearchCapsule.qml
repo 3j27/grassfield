@@ -1,10 +1,12 @@
 import QtQuick
+import QtQuick.Templates as T
 import Grassfield.Ui
 
 // The search field of a Files toolbar: a 36-pt circle that expands to a capsule while it has the focus or text (macOS).
 // The browser window's searches (ADR-0027: BrowserTab.setSearch shows a search location); the Open and Save panels'
-// (FilePanel.qml) filters the shown folder.
-Rectangle {
+// (FilePanel.qml) filters the shown folder. The toolbar's rimmed capsule (step 14's RimmedCapsule: the group's fill while a
+// button, the field's once open), the shared focus ring outside it, and the shared field's clear button (ADR-0039 step 23).
+RimmedCapsule {
     id: root
 
     // The BrowserTab it searches (null: nothing to search).
@@ -19,19 +21,22 @@ Rectangle {
         search.forceActiveFocus();
     }
 
-    width: expanded ? root.expandedWidth : Tokens.filesToolbarCapsule
-    height: Tokens.filesToolbarCapsule
-    radius: height / 2
-    color: Appearance.buttonFill
-    border.width: search.activeFocus ? Tokens.controlFocusOutline : 0
-    border.color: Appearance.focusRingColor
-    clip: true
+    width: expanded ? root.expandedWidth : Tokens.toolbarCapsule
+    height: Tokens.toolbarCapsule
+    fillOpacity: expanded ? Tokens.toolbarFieldFillOpacity : Tokens.toolbarCapsuleFillOpacity
 
+    // A size that changes in place: the move curve (ADR-0039 step 20).
     Behavior on width {
         NumberAnimation {
             duration: Appearance.duration(Tokens.motionNormal)
-            easing.type: Easing.OutQuad
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.curve
         }
+    }
+
+    FocusRing {
+        shapeRadius: root.height / 2
+        visible: search.activeFocus
     }
 
     // A click on the collapsed circle opens it.
@@ -46,7 +51,7 @@ Rectangle {
         id: searchIcon
         name: "search"
         size: Tokens.menuIconSize
-        color: Appearance.colors.textSecondary
+        color: Appearance.windowSecondary
         x: root.expanded ? Tokens.spacingMd : (root.width - width) / 2
         anchors.verticalCenter: parent.verticalCenter
     }
@@ -93,32 +98,33 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             visible: search.text === ""
             text: qsTr("Search")
-            color: Appearance.colors.textSecondary
+            color: Appearance.windowSecondary
             font: search.font
         }
     }
 
-    // Clears the field (and ends a typed search), as the shared SearchField's clear button.
-    MouseArea {
+    // The shared field's clear button (SearchField): the text goes, the field keeps the focus.
+    T.AbstractButton {
         id: clearButton
+        objectName: "clearButton"
         visible: root.expanded && search.text !== ""
         width: Tokens.menuIconSize + Tokens.spacingSm
         height: parent.height
         anchors.right: parent.right
         anchors.rightMargin: Tokens.spacingXs
+        focusPolicy: Qt.NoFocus
+        hoverEnabled: true
         Accessible.role: Accessible.Button
         Accessible.name: qsTr("Clear search")
-        Accessible.onPressAction: root.tab.setSearch("")
         onClicked: {
             root.tab.setSearch("");
             search.forceActiveFocus();
         }
 
-        Icon {
-            anchors.centerIn: parent
+        contentItem: Icon {
             name: "close-glyph"
             size: Tokens.menuIconSize - Tokens.spacingXs
-            color: Appearance.colors.textSecondary
+            color: clearButton.hovered ? Appearance.colors.text : Appearance.windowSecondary
         }
     }
 }

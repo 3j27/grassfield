@@ -7,10 +7,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-# Activity Monitor (ADR-0038). Step 1: the sampler (plain C++17 and POSIX, no Qt; step 2c's signal path with it), its unit
-# tests and its bench (tests/apps/activity_cost.sh). Step 2: the window's backend (Qt Core, Gui and DBus) and the app with
-# its QML, its desktop entry and its icon, packaged in grassfield-desktop (AD2).
+# Activity Monitor (ADR-0038). Step 1: the sampler (plain C++17 and POSIX, no Qt; step 2c's signal path and step 2d's
+# Inspect reader with it), its unit tests and its bench (tests/apps/activity_cost.sh). Step 2: the window's backend (Qt
+# Core, Gui and DBus) and the app with its QML, its desktop entry and its icon, packaged in grassfield-desktop (AD2).
 add_library(grassfield-activity-sampler STATIC
+    src/inspect.cpp src/inspect.h
+    src/machine.cpp src/machine.h
     src/netdiag.cpp src/netdiag.h
     src/procparse.cpp src/procparse.h
     src/sampler.cpp src/sampler.h
@@ -30,13 +32,18 @@ find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
 add_library(grassfield-activity-window STATIC
     src/actions.cpp src/actions.h
     src/activityapp.cpp src/activityapp.h
+    src/apphistory.cpp src/apphistory.h
     src/activitystate.cpp src/activitystate.h
     src/battery.cpp src/battery.h
     src/columns.cpp src/columns.h
     src/desktopapps.cpp src/desktopapps.h
+    src/efficiency.cpp src/efficiency.h
     src/format.cpp src/format.h
     src/inhibitors.cpp src/inhibitors.h
+    src/inspection.cpp src/inspection.h src/shownwatch.h
+    src/performance.cpp src/performance.h
     src/processtable.cpp src/processtable.h
+    src/runtimefiles.cpp src/runtimefiles.h
     src/samplerworker.cpp src/samplerworker.h
     src/summary.cpp src/summary.h)
 target_include_directories(grassfield-activity-window PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -62,6 +69,8 @@ find_package(GTest)
 if(GTest_FOUND)
     enable_testing()
     add_executable(activity-unit-tests
+        ../../tests/unit/activity/tst_inspect.cpp
+        ../../tests/unit/activity/tst_machine.cpp
         ../../tests/unit/activity/tst_memory.cpp
         ../../tests/unit/activity/tst_netdiag.cpp
         ../../tests/unit/activity/tst_procparse.cpp
@@ -77,16 +86,23 @@ if(GTest_FOUND)
     add_executable(activity-window-tests
         ../../tests/unit/activity/window/tst_actions.cpp
         ../../tests/unit/activity/window/tst_activityapp.cpp
+        ../../tests/unit/activity/window/tst_apphistory.cpp
+        ../../tests/unit/activity/window/tst_efficiency.cpp
         ../../tests/unit/activity/window/tst_format.cpp
+        ../../tests/unit/activity/window/tst_inspection.cpp
         ../../tests/unit/activity/window/tst_main.cpp
+        ../../tests/unit/activity/window/tst_performance.cpp
         ../../tests/unit/activity/window/tst_processtable.cpp
+        ../../tests/unit/activity/window/tst_runtimefiles.cpp
         ../../tests/unit/activity/window/tst_summary.cpp)
     target_include_directories(activity-window-tests PRIVATE ../../tests/unit/activity)
     target_link_libraries(activity-window-tests PRIVATE grassfield-activity-window Qt6::Test GTest::gtest)
     add_test(NAME activity-window-tests COMMAND activity-window-tests)
 
     # A-W1: the window with its real backend on a fixture tree, offscreen (its own main).
-    add_executable(activity-window-qml-tests ../../tests/unit/activity/qml/tst_window.cpp)
+    add_executable(activity-window-qml-tests ../../tests/unit/activity/qml/tst_window.cpp
+        ../../tests/unit/activity/qml/tst_keywindow.cpp)
+    # tst_keywindow: apps/keywindow.h, shared by the five apps (the focus taken away through Qt's window-system API).
     target_include_directories(activity-window-qml-tests PRIVATE ../../tests/unit/activity)
     target_compile_definitions(activity-window-qml-tests PRIVATE ACTIVITY_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/../..")
     target_link_libraries(activity-window-qml-tests PRIVATE grassfield-activity-window Qt6::Gui Qt6::GuiPrivate Qt6::Qml

@@ -116,7 +116,8 @@ if want headless && compgen -G "tests/security/tst_*.qml" >/dev/null; then
   qs_root=$(mktemp -d)
   ln -s "$root/shell" "$qs_root/qs"
   rc=0
-  QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || rc=1
+  # QML_XHR_ALLOW_FILE_READ: tst_lockbackdrop.qml reads the module's sources (as tests/unit does).
+  QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import ui -import "$qs_root" -input tests/security || rc=1
   rm -rf "$qs_root"
   ((rc == 0)) || status=1
   record_run headless "tests/security (qmltestrunner)" "$rc" "PASS"
@@ -135,15 +136,19 @@ for dir in tests/shell/*/ tests/security/*/; do
   # Private runtime/cache dirs: works inside the Claude Code sandbox (no writes to /run/user or ~/.cache).
   mkdir -p -m 700 "$GRASSFIELD_TEST_TMP/runtime" "$GRASSFIELD_TEST_TMP/cache"
   # A test that loads the real notification singleton carries a `dev-session` marker file: it runs as a dev session
-  # (GRASSFIELD_DEV=1: no D-Bus server on the owner's bus) with its state and config under the scratch dir.
+  # (GRASSFIELD_DEV=1: no D-Bus server on the owner's bus) with its state and config under the scratch dir, its own
+  # (a settings file one test writes, e.g. notif_image_files, made the next one start on it: search_clipboard failed).
   dev_env=()
+  scratch=${dir%/}
+  scratch=${scratch//\//_}
+  mkdir -p -m 700 "$GRASSFIELD_TEST_TMP/state" "$GRASSFIELD_TEST_TMP/config"
   # A test that runs real, heavy work (the cursor builder) names its own limit in a `timeout` marker file (seconds).
   limit=60
   if [[ -f ${dir}timeout ]]; then
     limit=$(<"${dir}timeout")
     [[ $limit =~ ^[0-9]+$ ]] || { echo "FAIL: ${dir}timeout is not a number of seconds"; status=1; record "$layer" "${dir}shell.qml" fail; continue; }
   fi
-  [[ -f ${dir}dev-session ]] && dev_env=(-u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$GRASSFIELD_TEST_TMP/state" GRASSFIELD_CONFIG_HOME="$GRASSFIELD_TEST_TMP/config")
+  [[ -f ${dir}dev-session ]] && dev_env=(-u DBUS_SESSION_BUS_ADDRESS -u GRASSFIELD_SESSION GRASSFIELD_DEV=1 GRASSFIELD_STATE_HOME="$GRASSFIELD_TEST_TMP/state/$scratch" GRASSFIELD_CONFIG_HOME="$GRASSFIELD_TEST_TMP/config/$scratch")
   out=$(env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE "${dev_env[@]}" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" GRASSFIELD_TRANSLATIONS_DIR="$root/.dev/translations" GRASSFIELD_LANG=en \
     XDG_RUNTIME_DIR="$GRASSFIELD_TEST_TMP/runtime" XDG_CACHE_HOME="$GRASSFIELD_TEST_TMP/cache" \
     timeout "$limit" qs -p "$dir" --no-color 2>&1) || { echo "$out"; echo "FAIL: $dir"; status=1; record "$layer" "${dir}shell.qml" fail; continue; }
@@ -273,6 +278,11 @@ gtest_suite tests/unit/activity "apps/activity/build-direct.sh --tests >/dev/nul
 # Built twice: plain, then with ASan and UBSan.
 gtest_suite tests/unit/menu-bridge "bridges/menu-bridge/build-direct.sh --tests >/dev/null && bridges/menu-bridge/build-direct.sh --tests --asan" \
   ".dev/build/menu-bridge-unit-tests --gtest_brief=1" ".dev/build/menu-bridge-unit-tests-asan --gtest_brief=1"
+# grassfield-prompter (ADR-0035 D-9) logic: the caller's text made plain, the prompter/1 parser and messages, the bound of 8,
+# the shell's cgroup and the socket peer, the trusted requesters (temporary trees), the bus filter, the GcrPrompt object.
+# Built twice: plain, then with ASan and UBSan. The process on a private bus: tests/security/prompter_bridge.sh.
+gtest_suite tests/unit/prompter "bridges/prompter/build-direct.sh --tests >/dev/null && bridges/prompter/build-direct.sh --tests --asan" \
+  ".dev/build/prompter-unit-tests --gtest_brief=1" ".dev/build/prompter-unit-tests-asan --gtest_brief=1"
 # Isolation: no test or dev script may start an app (grassfield-settings/files/preview, foot, ...) without
 # scripts/dev/isolated.sh (nothing may be written to the owner's home), and the checker itself is tested.
 if want logic; then
@@ -342,6 +352,19 @@ if want logic; then
   python3 -I tests/ci/mark_places.py || rc=1
   ((rc == 0)) || status=1
   record_run logic tests/ci/mark_places.py "$rc" PASS
+  # The shipped wallpaper photographs (ADR-0040 step 2c): their one list, the pins, the PKGBUILD and the legal texts agree.
+  rc=0
+  python3 -I tests/ci/wallpaper_photos.py --selftest || rc=1
+  python3 -I tests/ci/wallpaper_photos.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/wallpaper_photos.py "$rc" PASS
+  # The login and boot themes (ADR-0042): the checks on planted mutants, then the themes and their package (draw only, the
+  # password only to sddm.login, two-step images on the ground, nothing activated by the package).
+  rc=0
+  python3 -I tests/ci/login_themes.py --selftest || rc=1
+  python3 -I tests/ci/login_themes.py || rc=1
+  ((rc == 0)) || status=1
+  record_run logic tests/ci/login_themes.py "$rc" PASS
   # Token source pointers (GF-095): the lint on samples, then every token of tokens.json.
   rc=0
   python3 -I tests/ci/token_sources.py || rc=1

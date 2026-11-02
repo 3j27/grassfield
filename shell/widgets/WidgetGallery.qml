@@ -21,8 +21,10 @@ FocusScope {
     Accessible.name: qsTr("Widget gallery")
     Keys.onEscapePressed: root.closed()
 
+    // Clear glass under the widgets' previews (ADR-0024 section 2: the gallery's class, 0.15; ADR-0039 step 22).
     Material {
         id: glass
+        glassClass: "gallery"
         anchors.fill: parent
         radius: Tokens.radiusPanel
     }

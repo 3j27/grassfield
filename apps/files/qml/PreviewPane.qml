@@ -272,7 +272,7 @@ Item {
                         maximumLineCount: Tokens.filesPreviewNameLines
                         elide: Text.ElideRight
                         lineHeightMode: Text.FixedHeight
-                        lineHeight: Tokens.filesPreviewNameLineHeight
+                        lineHeight: Tokens.filesPreviewNameLineHeight * Appearance.textScale // with the name under Text size (ADR-0039 step 23)
                         color: Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyTitleSize
@@ -287,7 +287,7 @@ Item {
                         visible: text !== ""
                         text: !root.info ? "" : root.info.isDir || root.info.size < 0 ? root.info.kind : qsTr("%1 – %2").arg(root.info.kind).arg(root.info.sizeText)
                         wrapMode: Text.Wrap
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
                     }
@@ -375,7 +375,7 @@ Item {
                         width: Tokens.filesInfoLabelWidth
                         text: line.modelData.label
                         elide: Text.ElideRight
-                        color: Appearance.colors.textSecondary
+                        color: Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyCaptionSize
                     }
@@ -436,6 +436,8 @@ Item {
                 Rectangle {
                     width: parent.width
                     height: Tokens.filesPreviewTagsFieldHeight
+                    // A field's corner, which its ring follows (ADR-0039 step 23; the ring was square).
+                    radius: Tokens.radiusControl
                     color: Appearance.colors.windowBackground
 
                     MouseArea {
@@ -488,7 +490,7 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: tagInput.text === "" && tagsBlock.names.length === 0
                                 text: qsTr("Add Tags…")
-                                color: Appearance.colors.textSecondary
+                                color: Appearance.windowSecondary
                                 font: tagInput.font
                             }
 
@@ -511,7 +513,7 @@ Item {
                     }
 
                     FocusRing {
-                        shapeRadius: 0
+                        shapeRadius: Tokens.radiusControl
                         visible: tagInput.activeFocus
                     }
                 }
@@ -546,9 +548,18 @@ Item {
 
                     width: (actions.width - 2 * Tokens.filesPreviewInset) / Tokens.filesPreviewActionSlots
                     height: actionColumn.implicitHeight
+                    // A Tab stop that Space or Return runs, with the shared ring on keyboard focus (ADR-0039 step 23).
+                    activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: action.modelData.text
+                    Accessible.focusable: true
                     Accessible.onPressAction: root.runAction(action.modelData.id, action)
+                    Keys.onPressed: event => {
+                        if (ActivationKeys.activation(event.key)) {
+                            root.runAction(action.modelData.id, action);
+                            event.accepted = true;
+                        }
+                    }
 
                     Column {
                         id: actionColumn
@@ -559,7 +570,7 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             name: action.modelData.icon
                             size: Tokens.filesPreviewActionIcon
-                            color: actionMouse.pressed ? Appearance.colors.text : Appearance.colors.textSecondary
+                            color: actionMouse.pressed ? Appearance.colors.text : Appearance.windowSecondary
                         }
 
                         Text {
@@ -568,7 +579,7 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             text: action.modelData.text
                             elide: Text.ElideRight
-                            color: actionMouse.pressed ? Appearance.colors.text : Appearance.colors.textSecondary
+                            color: actionMouse.pressed ? Appearance.colors.text : Appearance.windowSecondary
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.typographyCaptionSize
                         }
@@ -578,6 +589,14 @@ Item {
                         id: actionMouse
                         anchors.fill: parent
                         onClicked: root.runAction(action.modelData.id, action)
+                    }
+
+                    FocusRing {
+                        visible: actionFocus.active
+                    }
+
+                    KeyFocus {
+                        id: actionFocus
                     }
                 }
             }

@@ -3,6 +3,10 @@ singleton Settings 1.0 Settings.qml
 singleton SystemInfo 1.0 SystemInfo.qml
 singleton Popups 1.0 Popups.qml
 singleton Power 1.0 Power.qml
+singleton DayPhase 1.0 DayPhase.qml
+singleton Ground 1.0 Ground.qml
+singleton Journal 1.0 Journal.qml
+singleton Entrance 1.0 Entrance.qml
 singleton Trash 1.0 Trash.qml
 singleton Audio 1.0 Audio.qml
 singleton Apps 1.0 Apps.qml
@@ -31,4 +35,7 @@ singleton Clipboard 1.0 Clipboard.qml
 singleton TilingHover 1.0 TilingHover.qml
 singleton TilingSuggest 1.0 TilingSuggest.qml
 singleton NotResponding 1.0 NotResponding.qml
+singleton SharePicker 1.0 SharePicker.qml
 singleton SoftwareUpdate 1.0 SoftwareUpdate.qml
+singleton ActivityLink 1.0 ActivityLink.qml
+singleton KeyWindow 1.0 KeyWindow.qml

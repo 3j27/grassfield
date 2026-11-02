@@ -48,10 +48,11 @@ for c in omarchy-restart-shell omarchy-launch-shell; do
 done
 have "omarchy-update-restart still restarts the shell by the name omarchy-restart-shell (the stand-in is in the update's path)" has_grep omarchy-restart-shell "$omarchy/bin/omarchy-update-restart"
 have "omarchy-launch-shell is still the only command that starts the Omarchy shell (quickshell -n -p)" bash -c '[[ $(grep -Rl "quickshell -n -p" "$1/bin" 2>/dev/null | wc -l) == 1 ]] && grep -Rq "quickshell -n -p" "$1/bin/omarchy-launch-shell"' _ "$omarchy"
-for c in omarchy-capture-screenshot omarchy-capture-region omarchy-hook omarchy-powerprofiles-init omarchy-powerprofiles-set omarchy-migrate omarchy-launch-floating-terminal-with-presentation omarchy-migrate-notify; do
-  have "command $c exists (used by screenshots, hooks, power profile, migration notice)" test -x "$omarchy/bin/$c"
+# Screenshots are Grassfield's own since ADR-0035 step 8 (packaging/bin/grassfield-capture): Omarchy's capture commands are no
+# longer used.
+for c in omarchy-hook omarchy-powerprofiles-init omarchy-powerprofiles-set omarchy-migrate omarchy-launch-floating-terminal-with-presentation omarchy-migrate-notify; do
+  have "command $c exists (used by hooks, power profile, migration notice)" test -x "$omarchy/bin/$c"
 done
-have "omarchy-capture-screenshot still takes the modes fullscreen, region and smart" bash -c 'grep -q "smart" "$1" && grep -q "region" "$1" && grep -q "fullscreen" "$1"' _ "$omarchy/bin/omarchy-capture-screenshot"
 have "omarchy-migrate still has --pending (the migration notice asks it)" has_grep '--pending' "$omarchy/bin/omarchy-migrate"
 have "omarchy-hook still runs ~/.config/omarchy/hooks/<name>(.d)" has_grep 'config/omarchy/hooks' "$omarchy/bin/omarchy-hook"
 # D-12 fail-safe: Grassfield's omarchy-shell stand-in answers exactly these two calls and this status contract.
@@ -64,6 +65,15 @@ for u in omarchy-sleep-lock omarchy-crash-watch omarchy-migrate-notify; do
   have "user unit $u.service exists (Grassfield's drop-in keeps it out of the session)" test -r "$units/$u.service"
 done
 [[ -r $units/omarchy-update-user-notify.service ]] && ok "legacy unit omarchy-update-user-notify.service (drop-in installed)" || info "legacy unit omarchy-update-user-notify.service is gone (its drop-in is harmless)"
+# ADR-0035 decision 10-1: Omarchy's pairing agent (bt-agent, NoInputNoOutput) is kept out of the session by name, so the
+# bridge is bluetoothd's only agent there. Under another unit name it would run in both sessions and answer pairings.
+if [[ -r $units/bt-agent.service ]]; then
+  ok "user unit bt-agent.service exists (Grassfield's drop-in keeps Omarchy's pairing agent out of the session)"
+elif grep -lq 'bin/bt-agent' "$units"/*.service 2>/dev/null; then
+  bad "Omarchy's pairing agent runs under another unit name ($(grep -l 'bin/bt-agent' "$units"/*.service | xargs -n1 basename | tr '\n' ' ')): it would answer pairings in the Grassfield session"
+else
+  info "user unit bt-agent.service is gone (its drop-in is harmless)"
+fi
 for u in "$units"/omarchy-*.service; do
   [[ -e $u ]] || continue
   n=$(basename "$u" .service)

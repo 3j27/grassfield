@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Templates as T
 
 // On/off switch on a QtQuick.Templates Control: the host owns the value. checked is set from outside; toggled() reports a user
@@ -19,6 +20,9 @@ T.Control {
     // on white too), the knob fades, and the accent when on. Disabled through a container (Settings' blocked page), the
     // container dims it once already.
     readonly property bool dimmed: !root.enabled && (!root.parent || root.parent.enabled)
+    // On, the track takes the selection colour, the fill of a checked box and a default button (ADR-0039 step 11, D-Q4); the
+    // white knob is outlined in the fill's mark colour where it holds under 3:1 there (Accent.knobOutlined).
+    readonly property bool knobOutlined: root.checked && Accent.knobOutlined(String(Appearance.colors.knob), String(Appearance.colors.selection), Tokens.controlKnobMinContrast)
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.CheckBox
@@ -47,7 +51,7 @@ T.Control {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: root.checked ? Appearance.withAlpha(Appearance.colors.accent, root.dimmed ? Tokens.materialDisabledOpacity : 1)
+        color: root.checked ? Appearance.withAlpha(Appearance.colors.selection, root.dimmed ? Tokens.materialDisabledOpacity : 1)
                             : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
         // Increase Contrast outlines the track, as the other controls: the off track alone is barely apart from its backdrop.
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
@@ -75,10 +79,22 @@ T.Control {
         y: inset
         x: root.checked ? root.width - width - inset : inset
         color: Appearance.colors.knob
-        // Increase Contrast outlines the knob too: white on a light track is 1.57:1 without it.
-        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
-        border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
+        // Increase Contrast outlines the knob too: white on a light track is 1.57:1 without it. On a fill where white holds
+        // under 3:1, the fill's mark colour outlines it.
+        border.width: Appearance.increaseContrast || root.knobOutlined ? Tokens.controlBorderWidth : 0
+        border.color: root.knobOutlined ? Appearance.colors.selectionText : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         opacity: root.dimmed ? Tokens.controlToggleDisabledKnobOpacity : 1
+
+        // The knob's soft drop shadow, which sets it apart from a light off track (macOS 27, measured: ADR-0039 step 28, G9 with
+        // Increase Contrast off): drawn under the knob (z -1) and faded with it.
+        RectangularShadow {
+            anchors.fill: parent
+            z: -1
+            radius: parent.radius
+            blur: Tokens.controlKnobShadowBlur
+            offset: Qt.vector2d(0, Tokens.controlKnobShadowOffsetY)
+            color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.controlKnobShadowOpacity)
+        }
 
         // Under Reduce Motion the knob jumps to its side; the track's colour still crossfades (ADR-0039 step 5).
         Behavior on x {

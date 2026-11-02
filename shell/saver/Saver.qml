@@ -43,10 +43,25 @@ Scope {
     // The first input ended it: hidden at once, before the compositor's activity report reaches the monitor.
     property bool dismissed: false
 
-    readonly property bool shown: !Lock.locked && !root.dismissed && (root.devShown || (monitor.enabled && monitor.isIdle))
+    // ADR-0040 step 5 (ID-8): a saver on screen when a lock starts stays until the lock holds (then it is under the lock
+    // surfaces), so the lock is not preceded by a flash of the desktop; at most SaverModel.UNTIL_LOCK_MAX_MS (a lock that
+    // never confirms keeps trying on its own). `wasShown` is what was on screen before the lock flipped `locked`.
+    property bool wasShown: false
+    readonly property bool lockStarting: Lock.locked && !Lock.holding
+    readonly property bool shown: (root.lockStarting && root.wasShown) || (!Lock.locked && !root.dismissed && (root.devShown || (monitor.enabled && monitor.isIdle)))
+    onLockStartingChanged: {
+        if (root.lockStarting && root.wasShown)
+            untilLockBound.restart();
+    }
+    Timer {
+        id: untilLockBound
+        interval: SaverModel.UNTIL_LOCK_MAX_MS
+        onTriggered: root.wasShown = false
+    }
 
     onShownChanged: {
         console.info("grassfield-saver: " + (shown ? "shown (" + kind + ")" : "hidden"));
+        root.wasShown = shown;
         if (!shown)
             root.slideFiles = {};
     }

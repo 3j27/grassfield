@@ -120,8 +120,31 @@ TestCase {
     }
 
     // A dark display is not a locked one: the note under the delays says so when a display turns off before the session locks.
+    // ADR-0040 IQ-T4 A: the display-off lock (macOS's Require password after the display is turned off), Immediately by
+    // default, and the note that follows it.
+    function test_requirePasswordAfterDisplayOff() {
+        const t = make(true);
+        const note = () => find(t.page.contentItem, i => i.footnote !== undefined && i.footnote !== "" && i.visible).footnote;
+        const pop = find(t.page.contentItem, i => i.accessibleName === "Require password after the display turns off" && i.picked !== undefined);
+        verify(pop);
+        compare(pop.model.map(m => m.id), ["immediately", "5s", "1m", "5m", "15m", "1h", "never"]);
+        compare(pop.value, "immediately");
+        compare(note(), "The session locks after this much time without keyboard or pointer input, or as soon as a display turns off.");
+        pop.picked("5m");
+        compare(last(t.store), {"lock.requirePasswordAfterDisplayOff": "5m"});
+        verify(note().indexOf("once a display has been off for the time set below") >= 0, note());
+        t.store.set("lock.idleMinutes", 0);
+        verify(note().indexOf("locks when a display turns off") >= 0, note());
+        // Displays that never turn off: the display-off lock has nothing to follow.
+        t.store.set("lock.displayOffBattery", 0);
+        t.store.set("lock.displayOffPower", 0);
+        verify(note().indexOf("does not lock by itself") >= 0, note());
+    }
+
     function test_lockNote() {
         const t = make(true);
+        // The notes of a display that does not lock the session ("Never").
+        t.store.set("lock.requirePasswordAfterDisplayOff", "never");
         const note = () => find(t.page.contentItem, i => i.footnote !== undefined && i.footnote !== "" && i.visible).footnote;
         // The defaults: off at 2 minutes on battery, locked at 5.
         verify(t.page.offFirst);
@@ -137,6 +160,7 @@ TestCase {
         verify(note().indexOf("does not lock by itself") >= 0, note());
         // Without a battery, the battery's delay does not count.
         const desk = make(false);
+        desk.store.set("lock.requirePasswordAfterDisplayOff", "never");
         desk.store.set("lock.displayOffPower", 10);
         verify(!desk.page.offFirst, "battery 2 does not apply");
     }

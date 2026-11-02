@@ -9,7 +9,9 @@ hl.config({
     float_gaps = 0,
     border_size = 1,
     col = {
-      -- Hairline window outline, like the macOS window edge.
+      -- Hairline window outline, like the macOS window edge: the dark appearance's (tokens window.edgeDark and
+      -- window.edge*OpacityDark). The shell pushes the current appearance's pair at start, on a change and after a reload
+      -- (dark in the light appearance, ADR-0039 step 6, C-4; shell/platform/Compositor.qml pushEdge).
       active_border = "rgba(ffffff26)",
       inactive_border = "rgba(ffffff14)",
     },
@@ -82,6 +84,11 @@ hl.config({
     animate_manual_resizes = false,
     animate_mouse_windowdragging = false,
     allow_session_lock_restore = true,
+    -- ADR-0040 IQ-T5 A (the owner's « Le retarder »): the red "lock screen died" screen waits past a normal shell restart
+    -- (the shell is back with its lock in about 1 to 2 s); the session stays locked by the compositor meanwhile and the screen
+    -- is black; a shell that does not come back still shows the red screen after the delay. VERIFY on 0.56.2 in the nested
+    -- pass: only black is drawn during the delay (tests/security/reload_locked.sh).
+    lockdead_screen_delay = 5000,
     session_lock_xray = false,
     -- The shell switches the displays off on an idle lock screen (D-4, shell/security/idle/Idle.qml); the compositor
     -- itself wakes them on any key or pointer motion, so a shell that is restarting can never leave the screen dark
@@ -90,7 +97,9 @@ hl.config({
     mouse_move_enables_dpms = true,
     on_focus_under_fullscreen = 1,
     initial_workspace_tracking = 0,
-    background_color = "rgba(1c1c1eff)",
+    -- The ground behind every surface (ADR-0040 ID-2): the default artwork's (the dark Grassfield evening, session.ground);
+    -- the shell sets the shown wallpaper's at its start and on each change (shell/platform/Compositor.qml).
+    background_color = "rgba(2f6d5fff)",
     -- ADR-0035 D-3: an app is "not responding" after three missed pings, about 4.5 s (Omarchy's own value); the shell then
     -- marks it in Force Quit and its Dock menu (packaging/session-bin/hyprland-dialog).
     anr_missed_pings = 3,

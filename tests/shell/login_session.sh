@@ -92,10 +92,47 @@ printf '[Autologin]\nSession=omarchy.desktop\n' >"$fx/etc/sddm.conf.d/zz-autolog
 out=$(PATH="$tmp/fakebin:$PATH" chk)
 check bash -c 'grep -q "^WARN: autologin starts .omarchy.desktop" <<<"$1"' _ "$out"
 rm "$fx/etc/sddm.conf.d/zz-autologin.conf"
+# ADR-0035 decision 10-15: bluetoothd's AlwaysPairable (BlueZ 5.87 reads /etc/bluetooth/main.conf as a GLib key file).
+mkdir -p "$fx/etc/bluetooth"
+desc="login-check: no /etc/bluetooth/main.conf, or BlueZ's own file with AlwaysPairable commented out: no warning"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c '! grep -q "AlwaysPairable=" <<<"$1" && grep -q "^ok: Bluetooth: no /etc/bluetooth/main.conf" <<<"$1"' _ "$out"
+printf '[General]\n#AlwaysPairable = true\n#PairableTimeout = 0\n[Policy]\nAutoEnable=true\n' >"$fx/etc/bluetooth/main.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c '! grep -q "^WARN: /etc/bluetooth" <<<"$1" && grep -q "^ok: Bluetooth: AlwaysPairable is not set" <<<"$1"' _ "$out"
+desc="login-check warns when bluetoothd keeps the adapter pairable without an agent (AlwaysPairable = true, or 1), and --strict fails"
+printf '[General]\nName = box\n  AlwaysPairable = true  \n' >"$fx/etc/bluetooth/main.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+status=0; PATH="$tmp/fakebin:$PATH" chk --strict >/dev/null || status=$?
+check bash -c 'grep -q "^WARN: /etc/bluetooth/main.conf sets AlwaysPairable=true: while Grassfield.s shell is not running" <<<"$1" && [[ $2 == 1 ]]' _ "$out" "$status"
+printf '[General]\nAlwaysPairable=1\n' >"$fx/etc/bluetooth/main.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c 'grep -q "^WARN: /etc/bluetooth/main.conf sets AlwaysPairable=1" <<<"$1"' _ "$out"
+desc="login-check reads it as BlueZ does: only [General], the last value, \"true\" and \"1\" only"
+printf '[Policy]\nAlwaysPairable=true\n' >"$fx/etc/bluetooth/main.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c '! grep -q "^WARN: /etc/bluetooth" <<<"$1"' _ "$out"
+printf '[General]\nAlwaysPairable=true\nAlwaysPairable=false\n' >"$fx/etc/bluetooth/main.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c '! grep -q "^WARN: /etc/bluetooth" <<<"$1"' _ "$out"
+printf '[General]\nAlwaysPairable=false\n[Policy]\nAutoEnable=true\n[General]\nAlwaysPairable=true\n' >"$fx/etc/bluetooth/main.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c 'grep -q "^WARN: /etc/bluetooth/main.conf sets AlwaysPairable=true" <<<"$1"' _ "$out"
+printf '[General]\nAlwaysPairable=yes\n' >"$fx/etc/bluetooth/main.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c '! grep -q "^WARN: /etc/bluetooth" <<<"$1"' _ "$out"
+rm -r "$fx/etc/bluetooth"
 desc="login-check warns when the greeter theme changed in a way it does not know"
 printf 'import QtQuick 2.0\nRectangle {}\n' >"$fx/usr/share/sddm/themes/omarchy/Main.qml"
 out=$(PATH="$tmp/fakebin:$PATH" chk)
 check bash -c 'grep -q "^WARN: theme .omarchy. selects sessions" <<<"$1"' _ "$out"
+desc="login-check knows Grassfield's own theme (ADR-0042) when the owner made it the current one"
+mkdir -p "$fx/usr/share/sddm/themes/grassfield"
+cp "$pk/sddm/theme/Main.qml" "$pk/sddm/theme/Strings.js" "$fx/usr/share/sddm/themes/grassfield/"
+printf '[Theme]\nCurrent=grassfield\n' >"$fx/etc/sddm.conf.d/zz-grassfield-theme.conf"
+out=$(PATH="$tmp/fakebin:$PATH" chk)
+check bash -c 'grep -q "^ok: login screen (logout): Grassfield.s theme selects .Grassfield (uwsm). first" <<<"$1" && ! grep -q "^WARN: theme" <<<"$1"' _ "$out"
+rm "$fx/etc/sddm.conf.d/zz-grassfield-theme.conf"
 desc="login-check warns when the drop-in is missing (login starts Omarchy)"
 rm "$fx/etc/sddm.conf.d/grassfield.conf"
 out=$(PATH="$tmp/fakebin:$PATH" chk)

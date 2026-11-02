@@ -1,6 +1,7 @@
 // $XDG_STATE_HOME/grassfield/activity.json (spec AM74, ADR-0020): version 1, written by the app only. What the window
 // remembers: its size, the tab, the view, the update frequency, per tab the columns shown (in order), their widths and
-// the sort, and what the Disk and Network graphs show (step 2b). A broken file or another version is set aside (renamed
+// the sort, and what the Disk and Network graphs show (step 2b); the Dock icon, Efficiency Mode's "Don't ask again" and App
+// History's period (steps 3 and 4). A broken file or another version is set aside (renamed
 // .bad) and the defaults are used.
 #pragma once
 
@@ -8,7 +9,9 @@
 #include "processtable.h"
 
 #include <QHash>
+#include <QSize>
 #include <QString>
+#include <QStringList>
 
 #include <map>
 #include <vector>
@@ -30,7 +33,18 @@ struct ActivityState {
     std::map<Tab, TabState> tabs;
     QString diskGraph = QStringLiteral("io");          // AM42: "io" or "data"
     QString networkGraph = QStringLiteral("packets");  // AM44: "packets" or "data"
+    QString dockIcon = QStringLiteral("icon");          // AM62: "icon", "network", "disk", "cpu-usage" or "cpu-history"
+    bool askEfficiency = true;                          // AM68: false once "Don't ask again" was checked
+    QString appHistoryPeriod = QStringLiteral("12h");   // AM67: "12h", "7d" or "30d"
+    // AM74: the other windows' sizes, by kind (windowKinds()); a kind absent opens at its token size.
+    QHash<QString, QSize> windows;
 };
+
+// AM74: the windows whose size is remembered beside the main window's (CPU Usage is as wide as its bars).
+const QStringList &windowKinds();
+
+// AM62: View > Dock Icon's choices, in the menu's order.
+const QStringList &dockIconKinds();
 
 // The defaults: every tab with its default columns and sort.
 ActivityState defaultState();
