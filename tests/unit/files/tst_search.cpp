@@ -207,6 +207,33 @@ TEST(SearchCriteria, RowsHoldOnTheFacts)
     EXPECT_FALSE(matchesCriteria(q, folder, now)) << "folders have no size here";
 }
 
+TEST(SearchCriteria, HugeNumbersSaturateInsteadOfOverflowing)
+{
+    const QDateTime now = at("2026-11-01T12:00:00");
+    Facts f;
+    f.name = QStringLiteral("a.bin");
+    f.size = 2500000;
+    f.modified = at("2026-10-30T09:00:00");
+    auto holds = [&](const Criterion &row) {
+        Query q;
+        q.criteria = {row};
+        return matchesCriteria(q, f, now);
+    };
+    // 10^10 GB is 10^19 bytes, more than a signed 64-bit size holds: it is "bigger than any file", never a negative size
+    // (which made every file "greater than" it).
+    for (const char *unit : {"GB", "MB", "KB"}) {
+        const QString big = QStringLiteral("9999999999999999");
+        EXPECT_FALSE(holds({Attribute::Size, Op::Greater, big, QString::fromLatin1(unit)})) << unit;
+        EXPECT_TRUE(holds({Attribute::Size, Op::Less, big, QString::fromLatin1(unit)})) << unit;
+    }
+    EXPECT_FALSE(holds({Attribute::Size, Op::Greater, QStringLiteral("9223372036854775807"), QStringLiteral("GB")}));
+    // The largest number that still fits is exact.
+    EXPECT_TRUE(holds({Attribute::Size, Op::Less, QStringLiteral("9223372036"), QStringLiteral("GB")}));
+    // A huge span of days, months or years reaches back past every file and does not wrap the date.
+    for (const char *unit : {"days", "weeks", "months", "years"})
+        EXPECT_TRUE(holds({Attribute::Modified, Op::WithinLast, QStringLiteral("9999999999999999"), QString::fromLatin1(unit)})) << unit;
+}
+
 TEST(SearchCriteria, TextAndTerms)
 {
     EXPECT_TRUE(textMatchesName(QStringLiteral("final resume"), QStringLiteral("Résumé Final.pdf"))) << "every word, any order";

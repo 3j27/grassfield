@@ -1,6 +1,7 @@
 #include "searchlogic.h"
 
 #include <algorithm>
+#include <limits>
 
 #include <QJsonArray>
 #include <QUrlQuery>
@@ -99,16 +100,17 @@ bool dateHolds(const Criterion &c, const QDateTime &when, const QDateTime &now)
     case Op::After:
         return day > isoDate(c.value);
     case Op::WithinLast: {
-        const qint64 n = positiveNumber(c.value);
+        // Capped: a span of more than ten thousand years is "ever", and Qt's date arithmetic stays in range.
+        const qint64 n = qMin<qint64>(positiveNumber(c.value), 10000 * 366);
         if (n < 0)
             return true;
         QDateTime from = now;
         if (c.unit == QLatin1String("weeks"))
             from = now.addDays(-7 * n);
         else if (c.unit == QLatin1String("months"))
-            from = now.addMonths(-int(n));
+            from = now.addMonths(-int(qMin<qint64>(n, 10000 * 12)));
         else if (c.unit == QLatin1String("years"))
-            from = now.addYears(-int(n));
+            from = now.addYears(-int(qMin<qint64>(n, 10000)));
         else
             from = now.addDays(-n);
         return when >= from;
@@ -123,11 +125,16 @@ qint64 sizeInBytes(const Criterion &c)
     const qint64 n = positiveNumber(c.value);
     if (n < 0)
         return -1;
+    qint64 unit = 1000;
     if (c.unit == QLatin1String("GB"))
-        return n * 1000 * 1000 * 1000;
-    if (c.unit == QLatin1String("MB"))
-        return n * 1000 * 1000;
-    return n * 1000;
+        unit = 1000 * 1000 * 1000;
+    else if (c.unit == QLatin1String("MB"))
+        unit = 1000 * 1000;
+    // A number too large for the unit saturates: "99999999999 GB" is bigger than any file, not a negative size.
+    qint64 bytes = 0;
+    if (__builtin_mul_overflow(n, unit, &bytes))
+        return std::numeric_limits<qint64>::max();
+    return bytes;
 }
 
 bool tagMatches(const QStringList &tags, const QString &wanted)
