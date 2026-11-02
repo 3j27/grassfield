@@ -314,10 +314,9 @@ Scope {
                     const ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(grab.url, 0, 0, width, height);
-                    // The whole picture at the window's pixel ratio (see the tone probe above).
-                    const k = Math.max(1, win.devicePixelRatio);
-                    const gw = Math.round(width * k), gh = Math.round(height * k);
-                    const grid = GlassTint.gridOf(ctx.getImageData(0, 0, gw, gh).data, gw, gh, Tokens.glassGridColumns, Tokens.glassGridRows, win.width, win.height);
+                    // width x height as is, not at the window's ratio: the grab is tagged at the window's ratio, and drawImage to
+                    // width x height fills only its top-left 1/ratio of a canvas that has that ratio (tests/unit/tst_wallpapergrab.qml).
+                    const grid = GlassTint.gridOf(ctx.getImageData(0, 0, width, height).data, width, height, Tokens.glassGridColumns, Tokens.glassGridRows, win.width, win.height);
                     unloadImage(grab.url);
                     win.gridGrab = null;
                     // Not inside the paint: the glass bindings must change outside the render sync.

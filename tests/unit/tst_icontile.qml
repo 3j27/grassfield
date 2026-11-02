@@ -198,7 +198,7 @@ TestCase {
 
     // The icons of the Dock's apps in the installed grassfield-icons (only where the package is installed): the tile ones are read as
     // tiles and drawn as ONE tile (scale > the glyph scale), the Files app icon (a folder) is not. tests/shell/icontile_hidpi.sh runs
-    // this file again at a window pixel ratio of 1.5 and 2, where every icon once read as "off centre": a pale plate around a
+    // this file again at window pixel ratios of 1.05, 1.25, 1.5 and 2, where drawImage of an icon once left every icon "empty": a pale plate around a
     // coloured tile on every Dock icon.
     function test_installedTileIconsAreTiles() {
         const dir = "file:///usr/share/icons/grassfield-icons/";
@@ -274,32 +274,51 @@ TestCase {
         verify(white / total > 0.15, "white share of the symbol box " + (white / total));
     }
 
-    // Cost (load-sensitive: a budget measured on a quiet machine): one shape read (createImageData and the sampled measure) of a 200 px picture.
+
+    Component {
+        id: costCanvasComponent
+
+        Canvas {
+            width: 1
+            height: 1
+            renderTarget: Canvas.Image
+            renderStrategy: Canvas.Immediate
+        }
+    }
+
+    // Cost of the shape read of a 200 px picture (what an image://icon pixmap is): `IconTile.sideOfImageData` alone, averaged over 40 reads, with its
+    // number in the log. A budget of a quiet machine: skipped, not passed, while the 1-minute load is above the cores (scripts/dev/test.sh's rule).
     function test_aShapeReadIsCheap() {
+        const canvas = createTemporaryObject(costCanvasComponent, testCase);
+        const url = testCase.fixtureDir + "own-tile-squircle-200.png";
+        canvas.loadImage(url);
+        tryVerify(() => canvas.isImageLoaded(url), 5000, "fixture loaded");
+        tryVerify(() => canvas.available, 5000, "canvas available");
+        const ctx = canvas.getContext("2d");
+        const img = ctx.createImageData(url);
+        compare(img.width, 200);
+        verify(IconTile.sideOfImageData(img, Tokens.iconModeOwnTileProbeSize, Tokens) > 0.8, "a tile");
+        const reads = 40;
         const t0 = Date.now();
-        const icon = testCase.read("own-tile-squircle-200.png", "dark");
-        verify(icon.ownTile);
-        const x = new XMLHttpRequest();
-        const cores = (() => {
-            x.open("GET", "file:///proc/cpuinfo", false);
+        for (let i = 0; i < reads; i++)
+            IconTile.sideOfImageData(img, Tokens.iconModeOwnTileProbeSize, Tokens);
+        const each = (Date.now() - t0) / reads;
+        console.log("COST sideOfImageData of a 200 px picture: " + each.toFixed(2) + " ms per read");
+        const read = path => {
+            const x = new XMLHttpRequest();
+            x.open("GET", "file://" + path, false);
             try {
                 x.send();
             } catch (e) {
-                return 1;
+                return "";
             }
-            return Math.max(1, x.responseText.split("\n").filter(l => l.startsWith("processor")).length);
-        })();
-        const l = new XMLHttpRequest();
-        l.open("GET", "file:///proc/loadavg", false);
-        let busy = false;
-        try {
-            l.send();
-            busy = parseFloat(l.responseText) > cores;
-        } catch (e) {
-            busy = false;
-        }
-        if (!busy)
-            verify(Date.now() - t0 < 1500, "the read took " + (Date.now() - t0) + " ms");
+            return x.responseText;
+        };
+        const cores = Math.max(1, read("/proc/cpuinfo").split("\n").filter(l => l.startsWith("processor")).length);
+        const load = parseFloat(read("/proc/loadavg"));
+        if (load > cores)
+            skip("timing budget not judged at load " + load + " (above " + cores + " cores)");
+        verify(each <= 2, "one read took " + each.toFixed(2) + " ms (budget 2 ms)");
     }
 
     Component {

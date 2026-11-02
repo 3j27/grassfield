@@ -476,7 +476,8 @@ TestCase {
             verify(FolderPlate.plateOf("k|64", "default", "", color, true) !== undefined);
         }
         compare(FolderPlate.count, counts, "no further read");
-        // A timing budget of a quiet machine (the repo's rule, scripts/dev/test.sh): not judged while the 1-minute load is above the cores.
+        compare(FolderPlate.plateOf("other|64", "default", "", "", true), undefined, "an icon not read yet");
+        // A timing budget of a quiet machine (the repo's rule, scripts/dev/test.sh): skipped, not passed, while the 1-minute load is above the cores.
         const text = path => {
             const x = new XMLHttpRequest();
             x.open("GET", "file://" + path, false);
@@ -488,10 +489,10 @@ TestCase {
             return x.responseText;
         };
         const cores = Math.max(1, text("/proc/cpuinfo").split("\n").filter(l => l.startsWith("processor")).length);
-        const busy = parseFloat(text("/proc/loadavg")) > cores;
-        if (!busy)
-            verify(Date.now() - started < 500, "100 plates in " + (Date.now() - started) + " ms");
-        compare(FolderPlate.plateOf("other|64", "default", "", "", true), undefined, "an icon not read yet");
+        const load = parseFloat(text("/proc/loadavg"));
+        if (load > cores)
+            skip("timing budget not judged at load " + load + " (above " + cores + " cores)");
+        verify(Date.now() - started < 500, "100 plates in " + (Date.now() - started) + " ms");
     }
 
     // One read at a time, application wide.

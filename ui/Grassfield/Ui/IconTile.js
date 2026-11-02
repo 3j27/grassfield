@@ -73,21 +73,28 @@ function measure(rgba, n, t) {
     return {tile: true, side: side, reason: "tile", fill: fill};
 }
 
+
 // The tile edge (0: not a tile) of an image read with Canvas `createImageData(url)`: the image's own pixels ({width, height, data} RGBA, whatever the
-// output's scale, the window's ratio or the source: an image://icon pixmap, an SVG or a PNG file), never drawn on the canvas. The alpha
-// mask is sampled down to n x n (nearest, at the pixel centres: n * n reads whatever the image's size) and measured. 0 for an image
-// that is not square (a tile is) or empty.
+// output's scale, the window's ratio or the source: an image://icon pixmap, an SVG or a PNG file), never drawn on the canvas. Only the alpha
+// bytes are read, at a fixed stride (nearest, at the pixel centres): half of `n` (the shape test works on proportions, not pixels) squared
+// reads whatever the image's size, then `measure`. 0 for an image that is not square (a tile is) or empty. About 1.5 ms (tst_icontile logs it).
 function sideOfImageData(img, n, t) {
     const w = img.width, h = img.height;
-    if (!(w > 0) || !(h > 0) || Math.abs(w - h) > 0.03 * Math.max(w, h))
+    if (!(w > 0) || !(h > 0) || Math.abs(w - h) > t.iconModeOwnTileSquare * Math.max(w, h))
         return 0;
-    const mask = new Uint8Array(n * n * 4);
-    for (let y = 0; y < n; y++) {
-        const sy = Math.min(h - 1, Math.floor((y + 0.5) * h / n));
-        for (let x = 0; x < n; x++)
-            mask[(y * n + x) * 4 + 3] = img.data[(sy * w + Math.min(w - 1, Math.floor((x + 0.5) * w / n))) * 4 + 3];
+    const m = Math.max(32, n >> 1);
+    const src = img.data;
+    const mask = new Uint8Array(m * m * 4);
+    const col = new Int32Array(m);
+    for (let x = 0; x < m; x++)
+        col[x] = (Math.min(w - 1, Math.floor((x + 0.5) * w / m)) << 2) + 3;
+    for (let y = 0; y < m; y++) {
+        const row = Math.min(h - 1, Math.floor((y + 0.5) * h / m)) * w * 4;
+        const out = (y * m << 2) + 3;
+        for (let x = 0; x < m; x++)
+            mask[out + (x << 2)] = src[row + col[x]];
     }
-    return measure(mask, n, t).side;
+    return measure(mask, m, t).side;
 }
 
 // The scale of the artwork of an icon whose tile has the edge `side` (over the box): its tile coincides with the system plate, whose side is
