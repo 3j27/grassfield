@@ -525,6 +525,62 @@ of the session, never in a terminal.
   unit case covers the toolkit-only title. The integrator runs the offscreen and unit suites (none here).
 - Review: the checker reads two more world-readable files and runs `pacman -Q` five times more; nothing runs as root;
   nothing under `shell/security/` changes.
+- Merged 2026-11-01 as 5eaf9d25 (#77, the integrator's opus review PASS at round 4; the integration branch #90 carried
+  it). The integrator ran `software_update_service.sh` outside the sandbox on the merge: exit 0, step k counted 1.
+
+### Step 2b as built, second slice (2026-11-01, the branch of the stability lane; the watch of pacman's database, the lock wait)
+- `packaging/systemd/grassfield-pacman-watch.path`: `PathChanged=/var/lib/pacman/local` (the directory changes at every
+  transaction, one entry per package created and removed; readable by every user), session-only (`ConditionEnvironment`,
+  `PartOf`/`Requisite=graphical-session.target`), a trigger limit of 100 in 60 s (systemd's default of 200 in 2 s would
+  put the unit in failed, watching no more, on a long transaction), started by `autostart.lua` with the session's other
+  units and installed by the PKGBUILD. It starts `grassfield-pacman-watch.service` (oneshot, hardened as the session's
+  other helpers, Quickshell's option variables and the helper's knobs cleared, 20 starts in 60 s), which runs
+  `packaging/bin/grassfield-pacman-watch`: a 5 s settle (so one transaction is one or two checks, not hundreds: events
+  during a run are kept and start it once more after it), then one `qs ipc -p /usr/share/grassfield/shell call update
+  check system`. The shell's `update check` accepts the origin `system` (not a user's check: a toolkit replaced under the
+  session is announced as a scheduled check's is); the IPC surface table names the caller. A check that finds pacman
+  mid-transaction is followed by the next trigger's. Nothing runs as root (ADR-0009's amendment).
+- `shell/platform/SessionConfig.qml`: a reload asked while pacman holds its database lock (`/var/lib/pacman/db.lck`,
+  root's and unreadable: it exists whenever the read fails for any reason but "no such file", `FileViewError.FileNotFound`
+  as the lock's marker is read) waits, polled every `Tokens.sessionConfigLockPollMs` (500 ms), at most
+  `Tokens.sessionConfigLockWaitMs` (10 s, under a display trial's 15 s so the trial's countdown is not what ends the wait),
+  then goes ahead anyway with a warning; the requests keep their order and their tickets. I-2's residual: a display trial
+  never reloads a half-written Lua tree.
+- The compositor rebuild's opt-in at login needs nothing from this slice: `ExtensionStatus` already reads the plugin's
+  hello and Hyprland's version at start, and a Hyprland that moved past the plugin's ABI shows as `mismatch` (rebuilt in
+  the background when `windows.rebuildExtension` is on, step 2d's notice otherwise).
+- Tests: `tests/shell/session_services.sh` (the path unit's watch, trigger limit, session condition, autostart and package
+  lines; the service's oneshot, helper, hardening, cleared environment and start limit; the helper's call, no privilege,
+  the knobs honoured in a dev session outside the real one and ignored inside it); `tests/shell/displays_trial.sh`
+  (`trial.qml` gains the lock wait: a reload asked while the lock file exists waits with its ticket out, goes once the
+  file is gone, and Hyprland's answer reaches `answered`; the fake counts ten reloads).
+- Evidence (this container; no Quickshell): `tests/shell/session_services.sh` exit 0; `sh -n` on the helper; qmllint 6.4
+  parses `SessionConfig.qml`, `SoftwareUpdate.qml` and `Tokens.qml`; `python3 -I tests/ci/inventory.py` ok; `git diff
+  --check` clean. NOT VERIFIED here: `displays_trial.sh` (offscreen Quickshell), the units under systemd (the path unit's
+  activations through a real transaction, the service's sandbox against `qs ipc`), `ipc_inventory.sh` (Qt's tools).
+- Review: the integrator's nested pass (a `pacman -S --noconfirm <small package>` in a terminal: one or two checks in the
+  journal, none as root; a display trial while a transaction runs: the reload waits, then goes).
+- Review round 1 (2026-11-01, the integrator's opus review of 69757ef: FAIL, five majors): the two tokens were written
+  into the generated `Tokens.qml` by hand (now in `ui/tokens/tokens.json`, a `sessionConfig` group, the file
+  regenerated); a comment line of the helper held both "qs ipc" and "call must not", which `ipc_inventory.sh` read as
+  a caller "must.not" (reworded); `FileView.reload()` reads later even with `blockLoading`, so the first reload after
+  pacman took its lock went straight through (`waitForJob()` after `reload()` makes the read the one judged, as the
+  display trial's probe reads its files); the helper asked after a fixed 5 s with pacman still running (a terminal
+  `pacman -Syu` takes no Omarchy lock), so U31's "Log out to finish updating" could show mid-transaction and a log out
+  would stop it: the helper now waits while `/var/lib/pacman/db.lck` exists, at most 30 min (the unit's start timeout
+  past it), then settles, then asks once (tested with a fake lock: nothing while it exists, one call once it is gone,
+  one call after the bound); the knob test ran the real `qs ipc` with the inherited `GRASSFIELD_SESSION=1`, which on
+  the owner's machine would have reached the live shell: it runs with `GRASSFIELD_SESSION` unset for the dev-session
+  cases and against a fake `qs` on a private PATH for the real-session case (the fake logs the exact command). Minor: a
+  mutant refusing the origin `system` passed every test: `software_update_service.sh` now asks `update check system`
+  over IPC (ok, one run) beside `user` (ok) and `bogus` (refused).
+- Review round 2 (2026-11-01, opus review of e6f4ddaa: FAIL, one major in a test): `trial.qml` set
+  `SessionConfig.pacmanLockPath` in the same handler that asked the lock step's reload, and a `FileView` read in the turn
+  of its path change is stale even through `waitForJob()`, so the reload went straight through (step 21 failed inside and
+  outside the sandbox, and a mutant without `waitForJob()` was not caught): the seam is set at the probe's first step, many
+  turns earlier, and the lock file is written (synchronously) at step 20 before the reload is asked. Nit: the probe's step
+  k sent `user` then `system` back to back, and a request made during a run joins it (U4): the probe logs every run that
+  ends once it is ready (`ipc-run-done <n>`) and the script sends `system` only after the user run's line.
 
 ### Step 3: chaos: every process killed, every return verified; R1 measured (T-2, T-4, M-3)
 Goal: the inventory's "how it comes back" column becomes a test, and every silent loss becomes at least a journal line.

@@ -2101,6 +2101,11 @@ QtObject {
     // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsPushRowHeight: 44
 
+    // estimate: how long a reload of the session configuration waits for pacman's database lock to go before it goes ahead anyway, under a display trial's 15 s so the trial's countdown is not what ends the wait (ADR-0041 step 2b, I-2's residual) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
+    readonly property int sessionConfigLockWaitMs: 10000
+    // estimate: how often that wait looks at the lock file again (ADR-0041 step 2b) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
+    readonly property int sessionConfigLockPollMs: 500
+
     // F1 gap 16: small widget 164 +-2 (medium 343x164 with the 16 gap) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetCell: 164
     // estimate: widgets v1, px between widgets [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]

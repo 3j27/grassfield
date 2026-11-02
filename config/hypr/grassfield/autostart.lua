@@ -39,7 +39,10 @@ hl.on("hyprland.start", function()
   -- Session services that Omarchy's own session provides through its shell or its autostart (02 §5.3): crash and
   -- low-battery notifications, the pending-migrations notice, removable media (udiskie). Each unit has the same
   -- ConditionEnvironment and skips itself where it does not apply (no battery, no udiskie).
-  local services = "grassfield-crash-watch.service grassfield-battery-watch.service grassfield-migrate-notify.service grassfield-automount.service"
+  -- grassfield-pacman-watch.path (ADR-0041 step 2b, U31) watches pacman's local database and asks the shell for a check
+  -- once a transaction's burst settled: a package installed from a terminal is seen without waiting for the next
+  -- scheduled check.
+  local services = "grassfield-crash-watch.service grassfield-battery-watch.service grassfield-migrate-notify.service grassfield-automount.service grassfield-pacman-watch.path"
   hl.exec_cmd("{ " .. import_env .. "; } && systemctl --user start grassfield-menu-bridge.service; systemctl --user start --no-block grassfield-prompter.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service; systemctl --user start " .. services)
 
   -- What Omarchy's autostart does besides starting its shell: the power profile for the current power source, the
