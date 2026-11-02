@@ -86,7 +86,7 @@ done <<'EOF'
 trailing-semicolon-optional^if (!(QLatin1Char(';') + categories).contains(QLatin1String(";TerminalEmulator;")))^if (!categories.contains(QLatin1String("TerminalEmulator")))
 trimmed-lines^const QString line = QString::fromUtf8(raw);^const QString line = QString::fromUtf8(raw).trimmed();
 no-disambiguation^    disambiguate(result);^
-nodisplay-ignored^    if (f.noDisplay == QLatin1String("true") || f.hidden == QLatin1String("true"))^    if (f.hidden == QLatin1String("true"))
+nodisplay-ignored^    if ((f.noDisplay == QLatin1String("true") && !asked) || f.hidden == QLatin1String("true"))^    if (f.hidden == QLatin1String("true"))
 depth-limit^constexpr int kMaxDepth = 32;^constexpr int kMaxDepth = 8;
 first-of-a-folder-wins^            winner.insert(file.first, {file.second, text});^            if (!winner.contains(file.first)) winner.insert(file.first, {file.second, text});
 invalid-masks^            if (fields.type != QLatin1String("Application") || nameOf(fields, env.locales).isEmpty())^            if (false)
