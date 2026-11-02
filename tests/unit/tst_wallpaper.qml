@@ -1290,6 +1290,45 @@ TestCase {
         compare(JSON.parse(WallpaperConfig.stateText(null, null, null, 1)), {displays: {}});
     }
 
+    // Defect of rc1-16: a flat green screen, then the default artwork, then the configured wallpaper. The feed answered from the
+    // default settings before grassfield.json was read (the default artwork became the first frame), a stored still of another
+    // wallpaper showed first, and the first-frame bound painted the default artwork while a picture was still being prepared.
+    function test_noDefaultOrOtherWallpaperBeforeTheConfiguredOne() {
+        function text(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl(rel), false);
+            xhr.send();
+            verify(xhr.responseText.length > 0, rel);
+            return xhr.responseText;
+        }
+        // The feed waits for the settings (read, or their bound).
+        const f = text("../../shell/desktop/WallpaperFeed.qml");
+        verify(/readonly property bool ready: [^\n]*Entrance\.settingsFinal/.test(f), "the feed waits for the settings");
+        // A still belongs to the setting it was shown for.
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const pic = {kind: "picture", color: "", url: "file://" + prep + "/" + name, strip: stripStats, image: null, mean: "#112233", video: ""};
+        const file = {source: "file", path: "/usr/share/grassfield/wallpapers/photos/valley-fog.jpg"};
+        const key = WallpaperConfig.sourceKey(file);
+        const rec = WallpaperConfig.withShown({}, "o", pic, {artwork: "grassfield", variant: "evening.dark", src: key});
+        const still = WallpaperConfig.stillOf(rec, "o", prep);
+        compare(still.src, key);
+        verify(WallpaperConfig.stillMatches(still, key));
+        verify(!WallpaperConfig.stillMatches(still, WallpaperConfig.sourceKey({source: "file", path: "/other.jpg"})), "another file");
+        verify(!WallpaperConfig.stillMatches(still, WallpaperConfig.sourceKey({source: "video", path: file.path})), "another source");
+        verify(!WallpaperConfig.stillMatches(still, WallpaperConfig.sourceKey({source: "builtin", path: file.path})), "the artwork");
+        const old = WallpaperConfig.stillOf(WallpaperConfig.withShown({}, "o", pic, {}), "o", prep);
+        verify(!WallpaperConfig.stillMatches(old, key), "a record without its setting never matches");
+        verify(!WallpaperConfig.stillMatches(null, key));
+        const w = text("../../shell/desktop/Wallpaper.qml");
+        verify(/Entrance\.settingsFinal \? WallpaperState\.stillOf\(/.test(w) && /WallpaperConfig\.stillMatches\(st, WallpaperConfig\.sourceKey\(feed\.cfg\)\)/.test(w), "only the matching still, once the settings are read");
+        verify(/src: WallpaperConfig\.sourceKey\(feed\.cfg\)/.test(w), "the record keeps its setting");
+        // The bound does not paint the default artwork while the chosen picture or video is being prepared.
+        verify(/win\.holds < 3 && feed\.status === "preparing" && Settings\.loaded/.test(w));
+        // The compositor's ground at the session's start is the last picture's mean, the default's green only without one.
+        const lua = text("../../config/hypr/grassfield/looknfeel.lua");
+        verify(/wallpaper\.json/.test(lua) && /misc = \{ background_color = "rgba\(" \.\. mean:lower\(\)/.test(lua));
+    }
+
     // The window needs Quickshell, so its contract is read from the sources (ADR-0040 ID-3, ID-4, ID-16): it maps only with
     // its first frame, bounded by the token; the compositor adds no fade; the journal lines are logged.
     function test_theWindowMapsOnceWithItsFirstFrame() {

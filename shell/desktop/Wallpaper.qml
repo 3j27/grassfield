@@ -343,7 +343,10 @@ Scope {
             property bool fallbackArt: false
             readonly property bool artLive: win.feedSeen || win.fallbackArt
             function stillDesc(): var {
-                const st = win.modelData ? WallpaperState.stillOf(win.modelData.name) : null;
+                const st = win.modelData && Entrance.settingsFinal ? WallpaperState.stillOf(win.modelData.name) : null;
+                // Only the still of the wallpaper now chosen (settings read): any other would show first and change after.
+                if (st !== null && !WallpaperConfig.stillMatches(st, WallpaperConfig.sourceKey(feed.cfg)))
+                    return null;
                 return st ? {kind: "picture", color: "", url: "file://" + st.file, strip: st.strip, image: st.image, mean: st.mean, video: ""} : null;
             }
             function begin(): void {
@@ -413,8 +416,9 @@ Scope {
                 if (!win.modelData)
                     return;
                 Ground.report(win.modelData.name, WallpaperConfig.groundOf(desc, slot.artPalette.ground, Tokens.sessionGround));
-                WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant});
+                WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant, src: WallpaperConfig.sourceKey(feed.cfg)});
             }
+            property int holds: 0
             Timer {
                 id: firstTimer
                 interval: Tokens.wallpaperFirstShowTimeoutMs
@@ -422,6 +426,13 @@ Scope {
                 onTriggered: {
                     if (win.firstReady)
                         return;
+                    // A configured picture or video still being prepared is waited for (a few more bounds): the default artwork
+                    // is never the first frame of an owner who chose another wallpaper.
+                    if (win.holds < 3 && feed.status === "preparing" && Settings.loaded) {
+                        win.holds++;
+                        restart();
+                        return;
+                    }
                     console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": the first frame took longer than " + interval + " ms; the artwork shows");
                     win.fallbackArt = true;
                     win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
@@ -430,6 +441,12 @@ Scope {
             Connections {
                 target: WallpaperState
                 function onStateReadyChanged(): void {
+                    win.begin();
+                }
+            }
+            Connections {
+                target: Entrance
+                function onSettingsFinalChanged(): void {
                     win.begin();
                 }
             }

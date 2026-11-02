@@ -124,6 +124,31 @@ hl.config({
   },
 })
 
+-- The ground of an owner who chose a picture (ADR-0040 ID-2, P-1): before the shell has drawn, the screen shows the mean colour
+-- of the wallpaper it showed last (wallpaper.json `shown`, the helper's own measurement), not the default artwork's green. A
+-- fresh account, a colour or the artwork has no mean there: the static ground above stays. A bounded read (64 KiB), any
+-- failure leaves the default; the shell sets the exact ground of the shown wallpaper once it is known.
+do
+  local home = os.getenv("GRASSFIELD_STATE_HOME")
+  if not home or home == "" then
+    local xdg = os.getenv("XDG_STATE_HOME")
+    local base = (xdg and xdg ~= "") and xdg or ((os.getenv("HOME") or "") .. "/.local/state")
+    home = base .. "/grassfield"
+  end
+  local f = io.open(home .. "/wallpaper.json", "r")
+  if f then
+    local text = f:read(65536) or ""
+    f:close()
+    local mean
+    for m in text:gmatch('"mean"%s*:%s*"#(%x%x%x%x%x%x)"') do
+      mean = m
+    end
+    if mean then
+      hl.config({ misc = { background_color = "rgba(" .. mean:lower() .. "ff)" } })
+    end
+  end
+end
+
 -- Motion curves (tokens "motion.curve.*").
 hl.curve("gfStandard", { type = "bezier", points = { { 0.2, 0.0 }, { 0.0, 1.0 } } })
 hl.curve("gfDecelerate", { type = "bezier", points = { { 0.32, 0.72 }, { 0.0, 1.0 } } })

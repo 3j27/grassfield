@@ -79,7 +79,9 @@ Scope {
     property bool advanceRequested: false
     property bool completed: false
 
-    readonly property bool ready: WallpaperState.stateReady && WallpaperState.toolChecked
+    // The settings are read too (Entrance.settingsFinal: read, or the bound ran out): before that `cfg` is the defaults, and
+    // the feed would answer with the default artwork, the first frame, ahead of the configured wallpaper.
+    readonly property bool ready: WallpaperState.stateReady && WallpaperState.toolChecked && Entrance.settingsFinal
 
     onCfgKeyChanged: schedule()
     onReadyChanged: schedule()

@@ -1069,7 +1069,19 @@ function stillOf(saved, output, preparedDir) {
         return null;
     const stats = v => isPlainObject(v) && typeof v.mean === "number" && typeof v.p5 === "number" && typeof v.p95 === "number" ? v : null;
     const strip = isPlainObject(s.strip) && stats(s.strip.all) ? s.strip : null;
-    return {file: file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : ""};
+    return {file: file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : "", src: typeof s.src === "string" ? s.src : ""};
+}
+
+// What the wallpaper settings of an output choose, as one string ("<source>|<path>"; a colour or the artwork has no path): a
+// stored still belongs to the setting it was shown for.
+function sourceKey(cfg) {
+    return isPlainObject(cfg) ? String(cfg.source) + "|" + (cfg.source === "file" || cfg.source === "folder" || cfg.source === "video" ? String(cfg.path) : "") : "";
+}
+
+// A stored still is the first frame only while the setting that showed it is the current one: a changed wallpaper (a record
+// from before, a video's, another file) never shows first, then the other after it. A record without its setting never matches.
+function stillMatches(still, key) {
+    return isPlainObject(still) && typeof still.src === "string" && still.src !== "" && still.src === key;
 }
 
 // The stored state with `output`'s record set from the description now on screen (`art`: {artwork, variant}, what the output
@@ -1078,6 +1090,9 @@ function withShown(saved, output, desc, art) {
     const base = isPlainObject(saved) ? saved : {};
     const a = isPlainObject(art) ? art : {};
     const r = {kind: "art", artwork: typeof a.artwork === "string" ? a.artwork : "grassfield", variant: typeof a.variant === "string" ? a.variant : "evening.dark"};
+    // The setting this record was shown for (sourceKey): the still of the next start is used only while it still holds.
+    if (typeof a.src === "string" && a.src !== "")
+        r.src = a.src;
     let keep = true;
     if (desc && desc.kind === "picture" && typeof desc.url === "string" && desc.url.indexOf("file://") === 0) {
         r.kind = "picture";
