@@ -58,7 +58,9 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
-CapabilityBoundingSet=
+# No CapabilityBoundingSet= here: a user manager has no CAP_SETPCAP, so it can drop the bounding set only inside a user
+# namespace, which this unit must not have (above). On the owner's machine the line made every start fail at step
+# CAPABILITIES (status 218, rc1-16 L2). NoNewPrivileges=yes already keeps the process from gaining any capability.
 # Resource budget (measured in step 9a, Qt 6.12 and gcr 4.4.1): 18.5 MB resident idle, most of it pages of Qt Core, GLib and
 # libgcr that other processes map too, 21.1 MB after ten prompts, 4 threads. At most 64 prompts open, 8 outstanding.
 MemoryHigh=48M
