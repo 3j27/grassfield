@@ -122,6 +122,9 @@ Singleton {
     property var videoBlockedPaths: []
     // owner (output name) -> path of the video that output is starting.
     property var videoStartingBy: ({})
+    // The output whose feed is transcoding a video now ("" = none): the outputs take turns, so that two feeds never run the
+    // helper's transcode and its cache pruning at once (one of them failed with "write").
+    property string transcodeOwner: ""
 
     function isVideoBlocked(path: string): bool {
         return WallpaperConfig.videoBlocked(videoBlockedPaths, path);

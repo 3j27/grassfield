@@ -86,7 +86,8 @@ Singleton {
     // the entrance's.
     Timer {
         id: hardTimer
-        interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs        onTriggered: root.reveal("timeout")
+        interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs
+        onTriggered: root.reveal("timeout")
     }
 
     Timer {

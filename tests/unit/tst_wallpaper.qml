@@ -1329,6 +1329,8 @@ TestCase {
         // On the bound nothing paints the artwork unless the source failed: the timer only ends the entrance's hold.
         const timer = /id: firstTimer[\s\S]*?\n            \}\n/.exec(w)[0];
         verify(!/showFirst\(/.test(timer) && /Entrance\.ready\(win\.entranceKey\)/.test(timer), "the bound never paints");
+        // Two outputs never transcode at once (one failed with "write"): they take turns through WallpaperState.transcodeOwner.
+        verify(/WallpaperState\.transcodeOwner !== "" && WallpaperState\.transcodeOwner !== root\.outputName/.test(f) && /releaseTranscode\(\);\s*transcoded\(/.test(f), "the transcode takes turns");
         // A file wallpaper prepares: an omitted typed argument arrives as "undefined" (invalid-path, the artwork for good).
         verify(/function startPrepare\(path: string, fit: var, color: var\)/.test(f), "startPrepare takes untyped fit and color");
         verify(/typeof fit === "string" && fit !== "" \? fit : cfg\.fit/.test(f) && /typeof color === "string" && color !== "" \? color : cfg\.color/.test(f));
