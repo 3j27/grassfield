@@ -1204,6 +1204,19 @@ function firstFrameChoice(feedSeen, stateReady, hasStill) {
     return hasStill ? "still" : "wait";
 }
 
+// What an output without its first frame does (ADR-0040 ID-3, amended): the default artwork is a FALLBACK for a source that
+// failed ("fallback": the feed's status is "error", applied once), never a replacement for a wallpaper still loading. On the
+// first-frame bound ("bound") a loading wallpaper ("release") only ends the entrance's hold on that output, whatever the phase
+// (the feed not started, a list or a prepare running, a transcode, the online entry not loaded, a decode in progress); its
+// decode is never cancelled. `when` is "bound" or "status"; `status` the feed's.
+function firstFrameStep(when, status, applied, firstReady) {
+    if (firstReady)
+        return "none";
+    if (status === "error" && (applied || when === "bound"))
+        return "fallback";
+    return when === "bound" ? "release" : "none";
+}
+
 // The ground of `output` in `grounds` ({output name: "#RRGGBB"}), else `fallback`.
 function groundFor(grounds, output, fallback) {
     return isPlainObject(grounds) && typeof output === "string" && Object.prototype.hasOwnProperty.call(grounds, output) && HEX.test(grounds[output]) ? grounds[output] : fallback;
@@ -1224,6 +1237,9 @@ function stateText(saved, startingBy, blocked, now) {
     const o = {displays: isPlainObject(s.displays) ? s.displays : {}};
     if (isPlainObject(s.shown) && Object.keys(s.shown).length > 0)
         o.shown = s.shown;
+    // The ground the compositor was last given (Ground.accepted): looknfeel.lua starts the next session on it.
+    if (typeof s.ground === "string" && HEX.test(s.ground))
+        o.ground = s.ground.toUpperCase();
     const starting = [];
     const by = isPlainObject(startingBy) ? startingBy : {};
     for (const owner of Object.keys(by)) {

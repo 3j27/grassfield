@@ -202,7 +202,8 @@ Scope {
     function apply(): void {
         supersede();
         advanceRequested = false;
-        const c = cfg;        // The block of a video that crashed the shell is for the automatic restart only. A change of wallpaper after the shell started
+        const c = cfg;
+        // The block of a video that crashed the shell is for the automatic restart only. A change of wallpaper after the shell started
         // is the user's own choice, and a choice is consent to try again: the video left and the video chosen are both unblocked.
         // (The first apply of the shell's life is the automatic one: it keeps the block.)
         const firstApply = !appliedOnce;
@@ -356,7 +357,6 @@ Scope {
         return path.substring(path.lastIndexOf("/") + 1);
     }
 
-    // `fit` and `color` are the settings' own unless the caller decides (the online aspect rule).
     // `fit` and `color` are the settings' own unless given. `var`, not `string`: an omitted argument of a typed `string`
     // parameter arrives as the text "undefined" (Qt 6.11), which no fit accepts, so a file wallpaper never prepared
     // ("invalid-path" in the journal, the artwork shown for good).

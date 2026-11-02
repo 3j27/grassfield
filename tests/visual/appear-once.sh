@@ -35,6 +35,10 @@ journal_checks() {
   state=$(find "$VS_DEV/state" -name wallpaper.json 2>/dev/null | head -1 || true)
   final=$([[ -n $state ]] && jq -r --arg o "$out" '.shown[$o].kind // ""' "$state" 2>/dev/null || true)
   check "$label: the first wallpaper is the final one (first $first, final $final)" test -n "$first" -a "$first" = "$final"
+  # A picture is configured: the first frame and the final one are that picture, never the default artwork (the artwork is the
+  # fallback of a failed source only; a run that ends on it, with everything else "consistent", was once a pass).
+  check "$label: the configured picture, never the artwork (first $first, final $final)" test "$first" = picture -a "$final" = picture
+  check "$label: no wallpaper first-frame fallback to the artwork" test -z "$(grep -m1 'the artwork shows' "$log" || true)"
   # shown/hidden pairs per surface and output: a second `shown` needs a `hidden` before it.
   local twice
   twice=$(grep -o "grassfield-shell: \(shown\|hidden\) [a-z]* [^ ]* [0-9]*" "$log" | awk '

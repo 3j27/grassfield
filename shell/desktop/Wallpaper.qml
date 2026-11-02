@@ -422,7 +422,17 @@ Scope {
                 Ground.report(win.modelData.name, WallpaperConfig.groundOf(desc, slot.artPalette.ground, Tokens.sessionGround));
                 WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant, src: WallpaperConfig.sourceKey(feed.cfg)});
             }
-            property int holds: 0
+            // The default artwork is a FALLBACK for a source that failed, never a replacement for a wallpaper that is still
+            // loading (macOS: the owner's picture or its poster, or the ground until it is there). On the bound the entrance's
+            // hold on this output ends (the bar and the Dock come in over the ground, the wallpaper's mean colour); the
+            // window maps when the picture, the poster or the feed's answer is there, and no decode is ever cancelled.
+            function artFallback(why: string): void {
+                if (win.firstReady)
+                    return;
+                console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": " + why + "; the artwork shows");
+                win.fallbackArt = true;
+                win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
+            }
             Timer {
                 id: firstTimer
                 interval: Tokens.wallpaperFirstShowTimeoutMs
@@ -430,17 +440,20 @@ Scope {
                 onTriggered: {
                     if (win.firstReady)
                         return;
-                    // A configured picture or video still being prepared, or a feed that has not started yet (a slow start: the
-                    // settings, the helper's check), is waited for (a few more bounds): the default artwork is never the first
-                    // frame of an owner who chose another wallpaper.
-                    if (win.holds + 1 < Entrance.firstShowBounds && (!feed.appliedOnce || feed.status === "preparing")) {
-                        win.holds++;
-                        restart();
+                    if (WallpaperConfig.firstFrameStep("bound", feed.status, feed.appliedOnce, win.firstReady) === "fallback") {
+                        win.artFallback("the first frame took longer than " + interval + " ms and the source failed");
                         return;
                     }
-                    console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": the first frame took longer than " + interval + " ms; the artwork shows");
-                    win.fallbackArt = true;
-                    win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
+                    console.info("grassfield-shell: wallpaper " + (win.modelData ? win.modelData.name : "") + " still loading after " + interval + " ms; the entrance goes on over the ground");
+                    Entrance.ready(win.entranceKey);
+                }
+            }
+            Connections {
+                target: feed
+                // The source failed (an error, a missing file, a failed transcode) before anything was shown: the artwork.
+                function onStatusChanged(): void {
+                    if (WallpaperConfig.firstFrameStep("status", feed.status, feed.appliedOnce, win.firstReady) === "fallback")
+                        win.artFallback("the source failed (" + feed.reason + ")");
                 }
             }
             Connections {
