@@ -351,10 +351,9 @@ Window {
             // Sharing & Permissions (Finder): Name and Privilege, one row each for the owner, the group and everyone.
             Column {
                 visible: root.permissionsShown
-                // The table runs a little wider than the sections' text, as Finder's does: the Name column keeps room for a
-                // short name next to a Privilege pop-up that hugs its widest choice (French: "Lecture et écriture").
-                x: -Tokens.spacingSm
-                width: content.width + 2 * Tokens.spacingSm
+                // The table keeps the window's one content margin (the macOS 27 inspector); the Privilege pop-up hugs its
+                // widest choice and the Name column takes the rest.
+                width: content.width
                 spacing: Tokens.spacingXs
                 Accessible.role: Accessible.Table
                 Accessible.name: qsTr("Sharing & Permissions")
@@ -373,7 +372,7 @@ Window {
                         height: privilege.implicitHeight
                         // The Name column takes what the Privilege column leaves (Finder's table): it never runs under it, and a
                         // long name elides.
-                        readonly property real nameWidth: Math.max(0, permissionRow.width - privilege.width)
+                        readonly property real nameWidth: Math.max(0, permissionRow.width - privilege.width - Tokens.spacingSm)
                         Accessible.role: Accessible.Row
                         Accessible.name: DisplayName.text(permissionRow.modelData.name)
 
@@ -382,7 +381,11 @@ Window {
                             id: groupChoice
                             objectName: "groupChoice"
                             visible: permissionRow.modelData.who === 1 && root.permissions.editable && root.permissions.groups.length > 1
-                            width: permissionRow.nameWidth
+                            // Inline, like the Privilege cell: the group's name as text with the up-down disc, at the Name
+                            // column's start, as wide as it needs up to the column's width.
+                            inline: true
+                            minimumWidth: 0
+                            width: Math.min(implicitWidth, permissionRow.nameWidth)
                             anchors.verticalCenter: parent.verticalCenter
                             accessibleName: qsTr("Group")
                             model: visible ? root.permissions.groups.map(g => ({id: g, text: g})) : []
@@ -406,6 +409,9 @@ Window {
                         ComboBox {
                             id: privilege
                             objectName: "privilege"
+                            // A table cell's pop-up (Finder's Privilege column, macOS 27): the value as text and the up-down disc,
+                            // no bezel, so the Name column keeps room for a short name in every language.
+                            inline: true
                             minimumWidth: Tokens.filesInfoPrivilegeMinWidth
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
