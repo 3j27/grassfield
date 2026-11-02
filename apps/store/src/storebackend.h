@@ -393,9 +393,10 @@ private:
     QTimer m_updatesPoll;     // while the page is shown
     QFileSystemWatcher m_stateWatcher;
     // An update's plan (SD33): the refs it checked and, for each, the commit it checked ("" when unread: a runtime, or an
-    // app the sheet said it could not check).
+    // app the sheet said it could not check) and the commit installed then ("" unread): another one by the update's turn
+    // means it was updated outside the Store, and it is left as it is (never downgraded).
     struct UpdatePlan {
-        QStringList refs, commits;
+        QStringList refs, commits, fromCommits;
     };
     QHash<QString, UpdatePlan> m_updatePlans;              // app id or kFlatpakUpdatesApp -> its last plan
     QHash<QString, std::pair<int, int>> m_updatePlanning; // a plan running: the apps checked, of how many

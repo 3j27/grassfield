@@ -1309,7 +1309,7 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
     m_updatePool.start([self, id, kind, refs, apps, tools, cancel] {
         QVariantList widened;
         QStringList unknown;
-        QHash<QString, QString> pinned;
+        QHash<QString, QString> pinned, installedThen;
         int done = 0;
         for (const auto &[ref, name] : apps) {
             if (*cancel)
@@ -1320,8 +1320,10 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
                 unknown.append(name);
             else if (!added->isEmpty())
                 widened.append(QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("access"), *added}});
-            if (!commit.isEmpty())
+            if (!commit.isEmpty()) {
                 pinned.insert(ref, commit);
+                installedThen.insert(ref, flatpakInstalledCommit(tools, ref));
+            }
             QMetaObject::invokeMethod(self.data(), [self, id, done = ++done] {
                 if (!self || !self->m_updatePlanning.contains(id))
                     return;
@@ -1333,8 +1335,10 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
             return;
         UpdatePlan plan;
         plan.refs = refs;
-        for (const QString &ref : refs)
+        for (const QString &ref : refs) {
             plan.commits.append(pinned.value(ref));
+            plan.fromCommits.append(installedThen.value(ref));
+        }
         const QVariantMap out{{QStringLiteral("refusal"), QString()},
                               {QStringLiteral("refs"), int(refs.size())},
                               {QStringLiteral("widened"), widened},
@@ -1359,12 +1363,13 @@ bool StoreBackend::update(const QString &id)
     const auto it = m_updatePlans.constFind(id);
     if (it == m_updatePlans.cend() || m_operations->queued(id) || !flatpakUpdateBlock().isEmpty())
         return false;
-    QStringList refs, commits;
+    QStringList refs, commits, fromCommits;
     for (qsizetype i = 0; i < it->refs.size(); ++i) {
         const QString &ref = it->refs.at(i);
         if (std::any_of(m_flatpakUpdates.cbegin(), m_flatpakUpdates.cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; })) {
             refs.append(ref);
             commits.append(it->commits.value(i));
+            fromCommits.append(it->fromCommits.value(i));
         }
     }
     m_updatePlans.remove(id);
@@ -1377,6 +1382,7 @@ bool StoreBackend::update(const QString &id)
     r.path = QStringLiteral("flatpak");
     r.packages = refs;
     r.commits = commits;
+    r.fromCommits = fromCommits;
     if (id == kFlatpakUpdatesApp) {
         r.name = QCoreApplication::translate("StoreBackend", "Flatpak apps");
     } else {

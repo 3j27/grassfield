@@ -250,10 +250,12 @@ Updates (step 4; ADR-0037 d, owner ST8)
   app with "Update" (« Mettre à jour »), the runtimes counted, and "Update All" (« Tout mettre à jour ») for the group. An
   update starts at once, unless it lets an app reach more than the installed version can, or that could not be read: then
   a sheet says what it adds first (SD33, SD25 for an update); while its plan reads each app's commit and access, the
-  group's line says "Checking what the updates change: N of M apps…" and the app's Update waits. Each app is updated to the
-  commit its plan checked (a newer one published meanwhile is listed again and asked about again, S32); it is done when that
-  commit is installed (an unpinned ref: when a new check no longer lists it), never on flatpak's exit code alone (offline it
-  exits 0 with "Nothing to update.", S31d). Update All takes every listed update; its sheet says "Update the Flatpak apps?".
+  group's line says "Checking what the updates change: N of M apps…" ("Checking what the update changes…" for one app) and
+  the app's Update waits. Each app is updated to the commit its plan checked (a newer one published meanwhile is listed
+  again and asked about again, S32), unless it was updated outside the Store since its plan (another commit installed):
+  then it is left as it is, never downgraded; it is done when that commit is installed (an unpinned ref: when a new check
+  no longer lists it), never on flatpak's exit code alone (offline it exits 0 with "Nothing to update.", S31d). Update All
+  takes every listed update; its sheet says "Update the Flatpak apps?".
 - SR25. The sidebar's Updates row shows the number of apps with an update, Flatpaks included. The Store's Dock tile has no
   badge: the only update badge is Software Update's, on Settings (owner, ST8).
 

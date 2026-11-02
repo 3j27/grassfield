@@ -63,6 +63,9 @@ struct OperationRecord {
     // flatpak update: the commit each ref of `packages` is pinned to (its plan checked that commit's access, SD33), "" for
     // a ref updated to whatever Flathub serves (a runtime, or an app whose commit could not be read: the sheet said so).
     QStringList commits;
+    // flatpak update: each pinned ref's installed commit when its plan read it ("" unread). Installed with another commit
+    // by the time its turn comes, the ref was updated outside the Store and is left as it is: never put back to an older one.
+    QStringList fromCommits;
     QDateTime startedAt;
 
     QJsonObject toJson() const;
@@ -72,6 +75,8 @@ struct OperationRecord {
 // A Flatpak update's commands, in order (S32): each pinned app on its own (`--commit` takes one ref, S32d), then the
 // unpinned refs together; each `flatpak update --user --noninteractive [--commit=<c>] -- <refs>`.
 QList<QStringList> flatpakUpdateCommands(const OperationRecord &record);
+// For each of those commands, the ref it pins and the commit that ref must still have installed to run it ("" for the rest).
+QList<std::pair<QString, QString>> flatpakUpdateGuards(const OperationRecord &record);
 
 QString newOperationId();
 bool isOperationId(const QString &id);
@@ -227,6 +232,8 @@ private:
     std::optional<int> m_firstExit; // a Flatpak removal's own exit code, while `--unused` runs after it
     QByteArray m_flatpakOutput;     // what flatpak printed (1 MiB at most): its progress
     QList<QStringList> m_flatpakSteps; // an update's commands still to run, each after the one before succeeded
+    QList<std::pair<QString, QString>> m_flatpakGuards; // with each, its ref and the commit it must still have ("" none)
+    void startUpdateStep();
 };
 
 } // namespace grassfield::store
