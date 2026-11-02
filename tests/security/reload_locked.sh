@@ -78,7 +78,15 @@ nested() { env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" "$@"; 
 ipc() { nested qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; status=1; }
-shot() { "$root/scripts/dev/shot.sh" "$1-gfref" GF-REF >/dev/null && "$root/scripts/dev/shot.sh" "$1-window" WAYLAND-1; }
+# Captures are evidence only (no check reads them), so each has a deadline and a missing one is a note. grim waits for
+# the output's next frame: GF-REF (headless) draws on its own, WAYLAND-1 only while the owner's compositor draws the
+# nested window (an integrator run hung here before the l1 kill, as lock_privacy.sh once did for 25 min).
+shot() {
+  timeout -k 2 10 "$root/scripts/dev/shot.sh" "$1-gfref" GF-REF >/dev/null 2>&1 ||
+    echo "NOTE no GF-REF capture for $1 within 10 s"
+  timeout -k 2 10 "$root/scripts/dev/shot.sh" "$1-window" WAYLAND-1 >/dev/null 2>&1 ||
+    echo "NOTE no WAYLAND-1 capture for $1 within 10 s (is the nested window shown on the owner's screen?)"
+}
 
 # Read-only compositor view of the lock: Hyprland lists LOCK in solitaryBlockedBy while a session lock
 # is held, including one whose client died.
