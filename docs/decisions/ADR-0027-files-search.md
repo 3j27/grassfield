@@ -70,4 +70,3 @@ Save makes a smart folder (`.savedSearch`), optionally in the sidebar.
 - Differences from the text above: a Contents row without the index says so in the status bar, not in the row; a
   search with no text and no complete row (a new smart folder) lists nothing; results are not live (a new search shows
   new files). Tests: `tests/unit/files/tst_search.cpp`, `tests/unit/tst_filesbrowser.qml` (`test_searchAsYouType`).
-

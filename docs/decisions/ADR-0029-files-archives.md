@@ -53,4 +53,3 @@ Archive Utility, as described above; Compress never asks for a format.
 - Progress: the status bar ("Compressing “Archive.zip”…"); the copy window (FP-68) shows KIO's jobs only.
 - Tests: `tests/unit/files/tst_archive.cpp` (real bsdtar round trips with an `@name`, a folder and a link; a member
   named `../payload-out` writes nothing outside; a cancel and a broken archive leave no temporary name).
-
