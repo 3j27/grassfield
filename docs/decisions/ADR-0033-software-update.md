@@ -301,6 +301,33 @@ a rotation done wrong, the only key revoked, an upload caught half way. The defe
    Q6: after `pacman-key --delete`, a package signed by that key is refused in any repository ("key … is unknown"). After
    `pacman -R` of a package whose `pre_remove` deletes it, the key is absent from pacman's keyring.
 
+9. **Renewing the key's expiry (security review of 2026-11-04).** The key made by `docs/owner-setup/make-signing-key.sh` is
+   an Ed25519 sign-only primary key with no subkey and **expires after 2 years**. After that date pacman rejects the key's
+   signatures: every client's `[grassfield]` sync fails (a2), and an extended key cannot reach a client through a keyring that
+   is itself signed by the expired key. So the expiry is a deadline, with a margin:
+   - **Procedure.** The owner runs `docs/owner-setup/renew-signing-key.sh --secret <offline copy> --fingerprint <pinned>`:
+     a throwaway GNUPGHOME on tmpfs (same safety as the creation script: never `~/.gnupg`, passphrase never on a command line,
+     cleanup on every exit but SIGKILL), `--quick-set-expire` on **the same primary key**, so the fingerprint, the pin in
+     `repository.conf` and `grassfield-trusted` do not change. It proves its output (a signature made from a fresh home that
+     holds only the new SECRET file, checked with gpgv against the new public key alone) and writes the extended public key,
+     the new SECRET file, `expiry.txt` and a README with the dates. The revocation certificate is not remade: it stays valid.
+   - **Margin.** The integrator puts the extended public key in `grassfield-keyring` (and
+     `packaging/pacman/grassfield-signing-key.asc`) and publishes it in both channels **at least 6 months before the expiry
+     date**. That is far above b.4's minimum for a new key (30 days in both channels and one release) because most machines
+     update rarely, and a machine that misses the deadline can no longer update at all. The owner replaces
+     `GRASSFIELD_SIGNING_KEY` in `publish-stable` and `publish-beta` and the two offline copies at the same time (gpg
+     refuses to sign with an expired key, so CI needs the extended secret key before the expiry date too).
+   - **A client that missed it** proceeds as in b.5's compromise case: "Turn Off…", then b.3a with the extended key.
+   - **Reminder (proposal; not built here, grassfield-packages is not touched).** A scheduled workflow in grassfield-packages
+     (weekly) reads the expiry date of the key in its `keyring/` (`gpg --with-colons --show-keys`) and of the last published
+     database's signing key, and **fails the run when either expires within 9 months** (a failed scheduled run emails the
+     owner; it can also open or refresh one issue). 9 months leaves three months to renew before the 6-month shipping
+     deadline. The creation and renewal scripts print the expiry date, the shipping deadline and the date from which the
+     reminder is expected.
+   - NOT VERIFIED: that `pacman-key --populate-from` of the extended public key updates the expiry of a key already in
+     pacman's keyring (gpg merges the new self-signature on import). To be tested in the container before the first renewal;
+     if it does not, the keyring's scriptlet must delete and re-add the key.
+
 ### c. Changing the channel: a helper behind Grassfield's own polkit action (owner decision O1)
 Writing `/etc/pacman.d/*` and `/etc/pacman.conf` needs root, and no system service owns these files, so there is no service
 polkit action to call (ADR-0030's route). The owner chose a Grassfield helper behind its own polkit action (option B). The
@@ -553,7 +580,11 @@ Rejected:
      cache**, so a pointer write is seen at once by both the database and its signature (a stale `.db` next to a fresh
      `.sig` is the R4 failure); (2) `/snap/`, `*.pkg.tar.zst`, `*.pkg.tar.zst.sig` and `/catalog/*.png`: **eligible, Edge
      TTL and Browser TTL one year** (immutable names; a snapshot's files never change, and a snapshot deleted after 7 days
-     only leaves a copy nobody is pointed to). The publisher also sets the headers on upload, so the rule is not the only
+     only leaves a copy nobody is pointed to). **Rule (2) carries a status-code TTL**, because an overriding Edge TTL would
+     otherwise cache errors for a year: `404` (and every other 4xx and 5xx) is **not cached** (`status_code_ttl` with value
+     -1, "no store"). Without it, a file requested a moment before its upload would stay "not found" at the edge for a
+     year. The exact `status_code_ttl` value for "do not cache" is to be confirmed in the dashboard (NOT VERIFIED here).
+     The publisher also sets the headers on upload, so the rule is not the only
      line: `Cache-Control: no-store` on `pointer`, `public, max-age=31536000, immutable` on packages, signatures,
      snapshot files and catalog images. Keep Always Online and Cache Reserve off, and no Cloudflare feature that rewrites
      bodies (Rocket Loader, minify, Polish) for this host.
