@@ -48,7 +48,14 @@ Item {
         width: root.tileSize
         height: width
         radius: Math.round(root.tileSize * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
-        color: root.tileColor === "grassfield" ? (Appearance.dark ? Tokens.colorDark.accent : Tokens.colorLight.accent) : (Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite)
+        // The brand green stays flat; the other tiles are the vivid gradient.
+        color: Appearance.dark ? Tokens.colorDark.accent : Tokens.colorLight.accent
+        gradient: root.tileColor === "grassfield" ? null : tileGradient
+
+        TileGradient {
+            id: tileGradient
+            name: root.tileColor
+        }
 
         Icon {
             anchors.centerIn: parent

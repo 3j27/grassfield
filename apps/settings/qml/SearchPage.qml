@@ -66,7 +66,9 @@ SettingsPage {
             width: Tokens.settingsResultIconSize
             height: width
             radius: Math.round(width * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
-            color: Tokens.colorAccentLight[result.tileColor] || Tokens.colorAccentLight.graphite
+            gradient: TileGradient {
+                name: result.tileColor
+            }
 
             Icon {
                 anchors.centerIn: parent

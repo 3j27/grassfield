@@ -197,6 +197,20 @@ TestCase {
         compare(Appearance.focusRingColor.toString(), Qt.color(Tokens.colorAccentLight.blue).toString(), "light blue: the accent");
     }
 
+    // A QML colour value (a `color` property or function result, such as Appearance.windowFill) is an object, not a string: the
+    // contrast and the focus ring read it like its "#rrggbb" form. The swatch ring of Settings > Appearance relies on it (it fell
+    // back to the accent while rgb() parsed strings only: #1F5FCC around the vivid #0167FD disc).
+    function test_contrastAndFocusRingAcceptColourValues() {
+        const ground = Qt.color(Tokens.colorLight.windowBackground);
+        const disc = Qt.color(Tokens.colorSwatch.blue);
+        const asString = Accent.contrast(Tokens.colorSwatch.blue, Tokens.colorLight.windowBackground);
+        verify(asString > 4, "the blue disc on the light window as strings: " + asString);
+        compare(Accent.contrast(disc, ground), asString, "colour values read like their strings");
+        compare(Accent.focusRing(disc, ground, Tokens.colorLight.text, Tokens.controlFocusRingMinContrast), disc, "the vivid disc is its own ring");
+        const yellow = Qt.color(Tokens.colorSwatch.yellow);
+        compare(Accent.focusRing(yellow, ground, Tokens.colorLight.text, Tokens.controlFocusRingMinContrast), Tokens.colorLight.text, "a disc under 3:1 falls back");
+    }
+
     function test_increaseContrastAndTextSizeFollowTheSettings() {
         const base = Tokens.materialBorderOpacity;
         const body = Tokens.typographyBodySize;

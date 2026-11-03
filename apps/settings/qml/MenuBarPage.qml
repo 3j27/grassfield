@@ -61,7 +61,9 @@ SettingsPage {
             width: Tokens.settingsMenuBarTileSize
             height: width
             radius: Math.round(width * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
-            color: Tokens.colorAccentLight[control.tileColor] || Tokens.colorAccentLight.graphite
+            gradient: TileGradient {
+                name: control.tileColor
+            }
 
             Icon {
                 anchors.centerIn: parent

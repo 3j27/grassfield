@@ -36,6 +36,12 @@ SettingsPage {
         return r ? r.accent : (Appearance.dark ? Tokens.colorDark.accent : Tokens.colorLight.accent);
     }
 
+    // The colour of an accent's swatch disc: the vivid color.swatch value (no text sits on a disc; ADR-0024 amendment 2026-11-03);
+    // Grassfield is the brand green.
+    function swatchOf(name: string): color {
+        return Tokens.colorSwatch[name] || root.accentOf(name);
+    }
+
     // The palette entry a stored "#rrggbb" is (its token spelling), or the setting itself.
     function paletteId(setting: string): string {
         const hit = Tokens.iconModeTintColors.find(c => c.toLowerCase() === String(setting).toLowerCase());
@@ -134,7 +140,7 @@ SettingsPage {
                 anchors.rightMargin: Tokens.settingsRowInset - ringPad
                 y: parent.contentY + Tokens.settingsAccentSwatchTop - ringPad
                 accessibleName: qsTr("Accent colour")
-                model: Accent.NAMES.map(n => ({color: root.accentOf(n), name: root.colorNames[n]}))
+                model: Accent.NAMES.map(n => ({color: root.swatchOf(n), name: root.colorNames[n]}))
                 currentIndex: Accent.NAMES.indexOf(Accent.normalize(root.store.value("accent.color")))
                 onChosen: index => root.store.set("accent.color", Accent.NAMES[index])
             }
@@ -145,7 +151,7 @@ SettingsPage {
 
             ColorPopup {
                 accessibleName: qsTr("Text highlight colour")
-                model: [{id: "automatic", text: qsTr("Automatic"), color: Appearance.colors.accent}].concat(Accent.NAMES.slice(1).map(n => ({id: n, text: root.colorNames[n], color: root.accentOf(n)})))
+                model: [{id: "automatic", text: qsTr("Automatic"), color: Appearance.colors.accent}].concat(Accent.NAMES.slice(1).map(n => ({id: n, text: root.colorNames[n], color: root.swatchOf(n)})))
                 value: Accent.normalizeHighlight(root.store.value("accent.highlight"))
                 onPicked: id => root.store.set("accent.highlight", id)
             }

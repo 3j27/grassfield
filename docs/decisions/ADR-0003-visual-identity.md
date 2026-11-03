@@ -81,7 +81,9 @@ SF Pro and SF Symbols are Apple-licensed and must not be used or redistributed.
   "symbols heavier everywhere" (2026-10-26), not a menu-bar-only rule**: in-app and in-panel glyphs are still at 1.75 only until
   the rest of the set follows; the final weight for every glyph is that decision's, and the `icons-bar` set is kept as the
   heavy set it will generalise from. `tests/ci/icon_strokes.py` checks both sets, the second against its twins.
-- **Traffic lights**: own glyphs and own colors (close #E5534B, minimize #D9A93B, zoom #4FA64F), shown
+- **Traffic lights**: own glyphs and own colors (close #E83A52, minimize #E6C619, zoom #2DC47A since 2026-11-03: as vivid as
+  the macOS lights, shifted in hue and lightness to CIE76 dE 9 or more from each of the 62 known macOS colours of the test list (not every macOS colour); validated by the owner on 2026-11-03 with that floor, after being shown dE 10.5, 9.5 and 18.2 to the measured macOS lights; the legal review before any public release still applies; pinned by
+  `test_no_token_copies_a_macos_system_colour`; before: #E5534B, #D9A93B, #4FA64F), shown
   without symbols until hover, then own symbols (×, −, ⤢). Recorded in `docs/legal/visual-review.md`.
 - **Material**: frosted "restrained glass" (§5.5): blur from ext-background-effect-v1 (`BackgroundEffect`)
   or Hyprland layer-rule blur, then tint alpha = `mix(0.94, 0.62, transparency)` (dark) — exact curve in

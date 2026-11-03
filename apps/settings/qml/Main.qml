@@ -24,10 +24,10 @@ Window {
     property string gfChromeRole: "settings"
     // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b).
     property bool canMinimize: true
-    // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
+    // Colour of each section's icon tile: a vivid color.tile family name (a soft vertical gradient, TileGradient), white glyph on it.
     readonly property var tileColors: ({
-            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
-            accessibility: "blue", desktop: "graphite", menubar: "graphite", search: "graphite", notifications: "red", focus: "purple", lock: "graphite",
+            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "black", wallpaper: "cyan",
+            accessibility: "blue", desktop: "black", menubar: "graphite", search: "blue", notifications: "red", focus: "purple", lock: "black",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             "software-update": "graphite",
             datetime: "blue", language: "blue", login: "graphite", privacy: "blue",
@@ -473,14 +473,44 @@ Window {
                     // The section's coloured tile with a white glyph (macOS 27); it keeps its colour when the row is selected.
                     Rectangle {
                         id: glyph
-                        x: Tokens.spacingSm
-                        y: Math.round((parent.height - height) / 2)
+                        // The tile sits on whole device pixels in WINDOW coordinates (the row itself does not: the panel, the list and
+                        // the row heights are fractional at 1.25), so its 1-pixel rim and its edge are crisp. `origin` is the row's
+                        // place in the window; it is read again when the row moves (scrolling, a group gap).
+                        readonly property real pixelRatio: Math.max(1, glyph.Window.window ? glyph.Window.window.devicePixelRatio : Screen.devicePixelRatio)
+                        readonly property point origin: {
+                            entry.y;
+                            entry.gap;
+                            list.contentY;
+                            list.y;
+                            list.x;
+                            search.height;
+                            return glyph.parent.mapToItem(null, 0, 0);
+                        }
+                        x: Math.round((glyph.origin.x + Tokens.spacingSm) * glyph.pixelRatio) / glyph.pixelRatio - glyph.origin.x
+                        y: Math.round((glyph.origin.y + (glyph.parent.height - height) / 2) * glyph.pixelRatio) / glyph.pixelRatio - glyph.origin.y
                         width: Tokens.settingsSidebarIconSize
                         height: Tokens.settingsSidebarIconSize
                         radius: Tokens.settingsSidebarTileRadius
                         // A mid grey while the window is not key, as macOS greys its sidebar tiles; the white glyph keeps 3:1.
-                        color: root.keyLook ? Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
-                                            : (Appearance.dark ? Tokens.settingsSidebarTileInactiveDark : Tokens.settingsSidebarTileInactiveLight)
+                        // Key: the vivid gradient (no flat fill); not key: the flat grey.
+                        readonly property bool lit: root.keyLook
+                        color: glyph.lit ? "transparent" : (Appearance.dark ? Tokens.settingsSidebarTileInactiveDark : Tokens.settingsSidebarTileInactiveLight)
+                        gradient: glyph.lit ? tileGradient : null
+
+                        TileGradient {
+                            id: tileGradient
+                            name: root.tileColors[entry.modelData.id] || "graphite"
+                        }
+
+                        // A lit tile in the dark appearance has a 1-device-pixel inner rim, so it reads off the dark panel.
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: "transparent"
+                            border.width: 1 / glyph.pixelRatio
+                            border.color: Appearance.withAlpha(Tokens.settingsSidebarTileGlyph, Tokens.settingsSidebarTileRimOpacityDark)
+                            visible: glyph.lit && Appearance.dark
+                        }
 
                         Icon {
                             anchors.centerIn: parent

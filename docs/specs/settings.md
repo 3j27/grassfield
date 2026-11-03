@@ -4,7 +4,7 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
 
 ## macOS reference behavior (described in words)
 - Settings is one opaque window (740 x 690 in macOS 27): a sidebar on the left with a search field on top and
-  one row per section (a 20-pt coloured icon tile with a white glyph, the name), a detail pane on the right with the
+  one row per section (a 20-pt coloured icon tile with a white glyph, the name; the tiles are the vivid `color.tile` gradients, grey while the window is not key: ADR-0024 amendment 2026-11-03, `apps/settings/qml/TileGradient.qml`), a detail pane on the right with the
   title in the toolbar and grouped, rounded "inset" lists. Rows hold a label (optionally a grey caption) and a control on
   the right: switch, slider, pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
 - macOS 27 layout (ADR-0024, measured on release captures, `docs/audits/ui-finesse-2026-10-25.md` section 7): the sidebar

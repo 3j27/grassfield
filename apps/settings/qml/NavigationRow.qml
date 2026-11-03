@@ -80,7 +80,9 @@ T.AbstractButton {
             height: width
             // The compact tile keeps the large one's proportions.
             radius: Math.round(root.tileSize * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
-            color: Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite
+            gradient: TileGradient {
+                name: root.tileColor
+            }
 
             Icon {
                 anchors.centerIn: parent

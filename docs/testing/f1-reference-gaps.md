@@ -115,7 +115,7 @@ Fidelity pass 2026-10-19 (docs/specs/dock.md): shelf glass material (`dock.tintA
 | Unified toolbar height | 52 ± 1; traffic lights and items share one row | Files: 32-px titlebar + 52 toolbar (two rows); `files.toolbarHeight` 52 | +32 overall | missing |
 | Toolbar items | separate 36-pt glass capsules (back/forward pair 72.5 x 36, view group, actions group, search circle opening to a ~200-pt field); group gaps 16-20; insets 8 | `files.toolbarButtonSize` 28, `preview.toolbarButtonSize` 28, flat buttons | −8 | large |
 | Window title in toolbar windows | ~15 bold, left-aligned after back/forward | centred 13-pt semibold title in the plugin titlebar, plus a folder title in the toolbar | — | missing |
-| Traffic-light colours (sampled, JPEG/ICC caveat) | close ≈ #FF5C60, minimise ≈ #FAC800, zoom ≈ #35C759; inactive ≈ #D4D4D4 | own values #E5534B / #D9A93B / #4FA64F | deliberate | n/a (own palette) |
+| Traffic-light colours (sampled, JPEG/ICC caveat) | close ≈ #FF5C60, minimise ≈ #FAC800, zoom ≈ #35C759; inactive ≈ #D4D4D4 | own values #E83A52 / #E6C619 / #2DC47A: as vivid as the sampled ones, shifted in hue and lightness to CIE76 dE 9 or more from every macOS system colour (window.closeColor, minimizeColor, zoomColor; ADR-0003, docs/legal/visual-review.md E18; was own #E5534B / #D9A93B / #4FA64F, then the exact macOS values for one day, refinement batch 5) | deliberate | own palette |
 | Tiling margins | 8 ± 1 outer and between windows (off by default in Settings) | `gaps_out` 8, `gaps_in` 4 (8 between) | 0 | match |
 | Tiling popover on green-button hover | Move & Resize (4 halves), Fill & Arrange (fill, 2-up, 3-up, quarters), Full Screen submenu, move to display; 230 x 251, radius 12 | none (Window menu only) | — | missing |
 
