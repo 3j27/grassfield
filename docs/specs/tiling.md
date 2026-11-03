@@ -590,14 +590,20 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   zoomed window keeps `tiling.margin` from the menu bar, the Dock and the screen's edges while "Tiled windows have margins"
   is on and touches them when it is off, as macOS does. The same Zoom of a window placed as Fill (its record Tiled with
   place `fill`) puts back its box from before (Return to Previous Size, TL10). A window in Hyprland's maximized mode (a
-  dispatcher, another client) leaves it into Fill; client chrome (ADR-0015 Q4: its own zoom control is a maximize request
-  that Hyprland toggles, its only one) keeps that mode for its own control, and Zoom only takes it out of it. Unchanged:
+  dispatcher, another client) leaves it into Fill. Client chrome zooms the same way from its own controls (D78 amended,
+  ADR-0015 amendment 2026-11-03): while `window-tiling` is advertised its own maximize request (its green light, its
+  toolbar double-click) is this Zoom, Hyprland told to ignore it. A window moved to another output since it was filled
+  (move_to) unzooms on that output and its Desktop; a window at the Fill frame whose record a plugin reload forgot unzooms to
+  the Center place's frame (TL4), Free. The Window menu says Unzoom for a filled window. Unchanged:
   Alt+zoom light is true full screen (ADR-0015 P6); a window in full screen and a Split View member (D50) keep Hyprland's
   maximized toggle; a window that cannot be tiled (TL9: Fill refused) gets Hyprland's maximized mode; a window of fixed size
   that is not zoomed gets nothing (TL24). Without the plugin's `window-tiling` (no plugin, a degraded one) and while the
   session is locked, Zoom is Hyprland's maximized mode as before (C2).
-  As built: core `zoomStep` (Fill, Previous, UnzoomToFill, Hyprland, Refused; `TilingZoom.*`), glue `gf::tiler::zoom`
-  (Tiling.cpp) for the titlebar's light and double-click (Titlebar.cpp `toggleZoom`); `window_size("maximized")` zooms the
+  As built: core `zoomStep` (Fill, Previous, UnzoomToFill, Hyprland, Refused, Unfill; `TilingZoom.*`), glue
+  `gf::tiler::zoom` (Tiling.cpp) for the titlebar's light and double-click (Titlebar.cpp `toggleZoom`) and for client
+  chrome's own request (ClientChrome.cpp: `SUPPRESS_MAXIMIZE` set by the plugin only, again on every rule change, cleared at
+  unload; the xdg `stateChanged` listener; the echo after full screen swallowed, core `maximizeEcho`; `ClientChromeZoom.*`);
+  the shell's `WindowTiling.parseFilled` for the Window menu's Unzoom; `window_size("maximized")` zooms the
   focused window itself and returns Hyprland's dispatcher only for the Hyprland step (bindings.lua unchanged); `tile(address,
   "zoom")` with feature `zoom-fill`, always right after `window-tiling` (ADR-0007), which the shell's `Compositor.toggleZoom`
   sends with that feature, Hyprland's maximized dispatcher otherwise (`Minimized.zoomRequest`). Settings:
@@ -605,8 +611,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   `tiling-arrange` (D36) and a stored choice is kept; Fill and Zoom are the same toggle in the plugin. A drag that starts on
   a window in Hyprland's maximized mode still only leaves that mode under the pointer (FR8). Nested:
   `tests/compositor/zoom_fill.sh` (the light with and without margins, the key, Hyprland's maximized mode, the verb, the
-  default double-click, Alt+zoom, scale 1.25, the plugin unloaded); `zoom_restore.sh`, `double_click_setting.sh` and the
-  controls of `tiling.sh` follow it.
+  default double-click, Alt+zoom, scale 1.25, move_to, a plugin reload, the plugin unloaded),
+  `tests/compositor/zoom_fill_apps.sh` (Settings and Files: their own light, their toolbar double-click with the default and
+  with zoom, Window > Zoom, the light under its popover, the plugin unloaded); `zoom_restore.sh`,
+  `double_click_setting.sh`, `client_chrome.sh`, `third_party_chrome.sh` and the controls of `tiling.sh` follow it.
 
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
@@ -763,9 +771,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   and the three-finger swipe go by Hyprland's id order (ADR-0036 D41).
 - Without the plugin there is no tiling at all, and Zoom is Hyprland's maximized mode: the window fills the work area
   without margins (TL35, C2).
-- Client chrome (ADR-0015: Grassfield's Files, Settings, Preview, Store and Activity; Chromium, Obsidian, Evince, Nautilus)
-  zooms with its own control into Hyprland's maximized mode, glued to the work area's edges (its toolbar double-click
-  too: the apps read `fill` as their zoom); Super+Alt+F and Window > Zoom fill it (TL35).
+- Without `window-tiling` a client-chrome app's own zoom control is Hyprland's maximized mode, glued to the work area's
+  edges, as every Zoom then (ADR-0015 Q4; TL35).
 - The suggestions mark the keyboard-current or hovered window with the neutral selection of an item on glass (the hover ink
   at `material.selectionOpacity` 0.25, one role since ADR-0039 step 12): 1.72:1 at worst against the material
   (`tests/visual/test_contrast_tokens.py`; 1.23:1 before), under the 3:1 a state indicator should reach, as macOS 27 draws it

@@ -13,7 +13,8 @@ import "WindowActions.js" as Actions
 // Items: `leading` (after the lights and before the title), `trailing` (right-aligned) and, for a layout of its own, the
 // default property (a layer over the whole toolbar). Empty
 // space is the window's drag area: a drag starts the compositor's interactive move (xdg_toplevel.move) and a double-click
-// does what `doubleClickAction` says (`windows.titlebarDoubleClick`: zoom, minimize or none).
+// does what `doubleClickAction` says (`windows.titlebarDoubleClick`: fill, the default, or zoom: the zoom request, which the
+// compositor plugin turns into Fill, ADR-0036 D78; minimize or none).
 Item {
     id: root
 
@@ -25,7 +26,8 @@ Item {
     property bool showTitle: true
     // Draw the three lights here (false where another toolbar over the sidebar holds them).
     property bool showControls: true
-    // windows.titlebarDoubleClick of grassfield.json: "zoom" (default), "minimize" or "none".
+    // windows.titlebarDoubleClick of grassfield.json: "fill" (the settings default) or "zoom" (both the zoom request),
+    // "minimize" or "none"; the apps start from "zoom" until they read the file.
     property string doubleClickAction: "zoom"
     property bool canMinimize: true
     property string accessibleName: qsTr("Toolbar")

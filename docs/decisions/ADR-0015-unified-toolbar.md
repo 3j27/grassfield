@@ -851,3 +851,19 @@ Consequences:
   window at its box, focused, own close closes it; Obsidian's log shows the installed package and no update check; foot
   and the web app keep the plugin's strip), `client_chrome.sh` PASS, `chrome.sh` PASS, `minimize.sh` PASS. One set of
   controls on every window tested.
+
+## Amendment 2026-11-03: Q4's zoom becomes Grassfield's Zoom while the plugin's tiling runs (ADR-0036 D78)
+Opus review of fix/zoom-is-fill (MAJOR): with Zoom made Fill (ADR-0036 D78), a client-chrome window zoomed two ways.
+Settings' own green light (and its toolbar double-click, which reads `fill` as its zoom) sent its maximize request, which
+Q4 left to Hyprland: the maximized mode, glued at (1,25) 1918x1054 under the menu bar; Window > Zoom and the light under
+its popover filled it at (8,32); the own light on the filled window glued it again, and it never came back to its 740x690.
+
+| Question | Options | Choice | Rule applied |
+|---|---|---|---|
+| Who handles a client-chrome window's own maximize request (`xdg_toplevel.set_maximized` or `unset_maximized`, which Hyprland toggles whatever its value) now that Grassfield's Zoom is Fill? | (a) the plugin, while it advertises `window-tiling`: it sets `SUPPRESS_MAXIMIZE` on client-chrome windows (only what it set, again on every rule change, cleared at unload) and its xdg `stateChanged` listener turns the request into Grassfield's Zoom (`gf::tiler::zoom`: Fill, and back to the box from before); the echo a client may send right after leaving full screen is swallowed for 1 s, as Hyprland does; without the plugin, or without `window-tiling`, Hyprland's maximized mode as Q4 decided (C2); no app change; (b) the apps ask the plugin through the shell; (c) keep Q4: the app's own zoom stays Hyprland's maximized mode | (a) | « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »: on macOS a window's green button and its title bar double-click are one Zoom, whoever draws the title bar; (a) gives Grassfield's apps and the third-party apps of the 2026-10-25 amendment the same Fill as the plugin's own light, Window > Zoom and Super+Alt+F, without a change in any app, and the unload gives Hyprland its own handling back; (b) needs every app (Chromium, Obsidian, Evince, Nautilus included) to know the plugin; (c) keeps two zooms. A window of fixed size that sends the request is left as it is (its zoom does nothing, as a disabled zoom light). No user step. |
+
+Unchanged: the session rules S2 (the maximize exemption of the client-chrome list), P4 (a drag from the toolbar of a window
+in Hyprland's maximized mode) and P5/P8. A Fill-zoomed window dragged from its toolbar leaves its tile at its size from
+before under the pointer (ADR-0036 TL16). Tests: `tests/compositor/zoom_fill_apps.sh` (Settings and Files: own light,
+double-click with the default and with zoom, Window > Zoom, the light under its popover, and the plugin unloaded),
+`client_chrome.sh`, `third_party_chrome.sh`; units `ClientChromeZoom.*`.
