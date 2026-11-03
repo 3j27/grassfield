@@ -180,8 +180,8 @@ desc="the bt-agent drop-in skips it in this session and stops it with the sessio
 check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "ExecStartPre=-/usr/bin/systemctl --user stop bt-agent.service" "$2" && ! grep -q "^Conflicts=" "$2"' _ "$pk/systemd/bt-agent.service.d/10-grassfield.conf" "$u"
 # 2026-11-03: bt-agent's condition must be read after the session imports GRASSFIELD_SESSION (After= the target), and a stop
 # must not wait 90 s on an agent that ignores SIGTERM (it ran in the Grassfield session and timed the prompter's start out).
-desc="the bt-agent drop-in orders it after graphical-session.target (its condition sees GRASSFIELD_SESSION) and stops it within 2 s"
-check bash -c 'grep -qx "After=graphical-session.target" "$1" && grep -qx "\[Service\]" "$1" && grep -qx "TimeoutStopSec=2s" "$1"' _ "$pk/systemd/bt-agent.service.d/10-grassfield.conf"
+desc="the session environment carries GRASSFIELD_SESSION=1 before the compositor starts; the bt-agent drop-in orders it after graphical-session.target and kills it at once (it ignores SIGTERM)"
+check bash -c 'grep -qx "export GRASSFIELD_SESSION=1" "$1" && grep -qx "After=graphical-session.target" "$2" && grep -qx "\[Service\]" "$2" && grep -qx "KillSignal=SIGKILL" "$2"' _ "$pk/uwsm/env-grassfield" "$pk/systemd/bt-agent.service.d/10-grassfield.conf"
 # udiskie's password command (ADR-0035 D-9, step 9c): grassfield-askpass, built and installed with the bridge, where the
 # automount unit runs it, the disk's name one argument of udiskie's own formatting.
 desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
