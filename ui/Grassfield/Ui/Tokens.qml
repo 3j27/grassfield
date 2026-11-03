@@ -259,8 +259,8 @@ QtObject {
     readonly property int radiusSearch: 26
     // macOS 27 alerts: 25.6-27.3 at the 45-degree point (Mail's Save this message as a draft?, Finder's Empty Trash; 512 Pixels release captures), rounder than the window; the owner's choice of 2026-10-31 over ADR-0039 Q2 (a), which gave alerts the window's 16 when no macOS 27 alert was measured; was 24, the macOS 26 value (Dialog frame: confirm, notice) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
     readonly property int radiusAlert: 26
-    // the window's corner (its 45-degree point, Hyprland rounding 20 at power 2.6: ADR-0024), the owner's answer to ADR-0039 Q2 (a) of 2026-10-29; macOS 27 sheets measure 15.4-17.1 (Print, TextEdit's Open); was 26, the macOS 26 value (the shared Sheet, the shell's Force Quit and About) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
-    readonly property int radiusSheet: 16
+    // the window's corner, the circle through its 45-degree point: Hyprland rounding 17 at power 2.6 measures 16.7 on GF-REF at 1.25 (ADR-0024 C-1, note 2026-11-04; 16 when 20 was believed to measure 16.0), the owner's answer to ADR-0039 Q2 (a) of 2026-10-29; macOS 27 sheets measure 15.4-17.1 (Print, TextEdit's Open); was 26, the macOS 26 value (the shared Sheet, the shell's Force Quit and About) [ref: docs/audits/design-polish-2026-10-29.md § 3.8 macOS 27 sheets and alerts]
+    readonly property int radiusSheet: 17
 
     // estimate, no measured value yet, F1 sign-off pending (no F1 capture) [ref: docs/specs/ui.md § Functional requirements; no F1 measurement of a shadow exists]
     readonly property int shadowBlur: 18

@@ -4,7 +4,7 @@ import Grassfield.Ui
 import "../../shell/services/PopupKinds.js" as PopupKinds
 
 // The Overlay's blur region has the corner its popup draws (ADR-0039 step 4, G2): Force Quit and an app's About are sheets
-// (radius.sheet, 16 since step 10), a confirmation and a notice are alerts (radius.alert, 26 since step 10); the region once
+// (radius.sheet, the window's corner: 16 since step 10, 17 since ADR-0024's note of 2026-11-04), a confirmation and a notice are alerts (radius.alert, 26 since step 10); the region once
 // asked radius.alert for all four, so a sheet's blur did not follow its glass. The rule is PopupKinds.blurCorner, run here; its list of dialog kinds is
 // held to what the Overlay builds (every kind of its Loader, the root type of the component it loads), so a new kind built on
 // Dialog cannot fall back to a menu's corner unnoticed. The Overlay needs Quickshell: that it hands the loaded Dialog's corner
