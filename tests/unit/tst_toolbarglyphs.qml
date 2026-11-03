@@ -42,6 +42,21 @@ TestCase {
             }
         }
 
+        // The Files sidebar's busy eject: a disabled button whose theme icon takes no colour of its own.
+        ToolButton {
+            id: busy
+            enabled: false
+            accessibleName: "Busy"
+
+            FilesQml.ThemeIcon {
+                id: busyIcon
+                anchors.centerIn: parent
+                name: "media-eject-symbolic"
+                size: Tokens.filesSidebarEjectSize
+                tint: true
+            }
+        }
+
         ToolButton {
             id: plain
             iconName: "gear"
@@ -102,6 +117,12 @@ TestCase {
         // The columns' dividers lie inside the frame's outline: no overlap.
         const dividers = find(hostedGlyph, i => i.height !== undefined && i.y === Tokens.filesViewGlyphStroke && i.width === Tokens.filesViewGlyphStroke);
         verify(dividers !== null, "a divider starts inside the frame");
+    }
+
+    function test_aBusyEjectLooksDisabled() {
+        verify(Qt.colorEqual(busyIcon.color, busy.glyphColor), "no colour of its own: the button's");
+        fuzzyCompare(busyIcon.color.a, Tokens.controlToolGlyphOpacity * Tokens.materialDisabledOpacity, 0.01);
+        compare(busyIcon.parent.opacity, 1);
     }
 
     function test_theGlyphColourFollowsTheButtonsState() {

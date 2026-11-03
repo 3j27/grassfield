@@ -35,6 +35,8 @@ Item {
         autoPaddingEnabled: false
         brightness: 1.0
         colorization: 1.0
-        colorizationColor: root.color
+        // Full alpha, the colour's alpha as the opacity (see Icon.qml).
+        colorizationColor: Qt.rgba(root.color.r, root.color.g, root.color.b, 1)
+        opacity: root.color.a
     }
 }

@@ -168,6 +168,7 @@
  {"path": "tests/unit/tst_radiusroles.qml", "layer": "headless"},
  {"path": "tests/unit/tst_toolbarsearch.qml", "layer": "headless"},
  {"path": "tests/unit/tst_toolbarglyphs.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_iconalpha.qml", "layer": "headless"},
  {"path": "tests/unit/tst_settingsfinish.qml", "layer": "headless"},
  {"path": "tests/unit/tst_inactivewindow.qml", "layer": "headless"},
  {"path": "tests/unit/tst_motionroles.qml", "layer": "headless"},

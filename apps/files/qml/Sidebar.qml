@@ -324,7 +324,6 @@ FocusScope {
                 name: "media-eject-symbolic"
                 size: Tokens.filesSidebarEjectSize
                 tint: true
-                color: Appearance.colors.text
             }
         }
 
