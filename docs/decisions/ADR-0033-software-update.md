@@ -260,6 +260,8 @@ a rotation done wrong, the only key revoked, an upload caught half way. The defe
    5. `grassfield-channel-set stable`. It rewrites the hand-written file from the packaged template (with the mirrors),
       populates the installed keyring (b.3), and links the Omarchy hook (a.4). Until then, an Omarchy channel change would
       drop the section.
+   The same five steps, with the fingerprint pinned in the script and the preconditions checked first, are automated by the
+   public installation script (ADR-0043, Proposed; not published until O8 and O11).
    The owner's own `makepkg -si` build trusts the owner's own checkout and needs `grassfield-keyring` installed first (O12).
 4. **Rotation, with an overlap.** A new key K2 is added to `grassfield-keyring`'s trusted list while K1 still signs. CI starts
    signing with K2 only after that keyring has been in both channels for at least 30 days and one release. K1 stays trusted
