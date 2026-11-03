@@ -194,3 +194,30 @@ Decisions:
 - **Component.** `SidebarPanel` (Grassfield.Ui) draws the panel, so the three apps share one shape and one rim.
 - **Open and Save panels.** The portal's panel (Files `FilePanel`) takes the same floating sidebar, as macOS's panel has one;
   it has no lights, so the rows start one inset and one gap inside the panel.
+
+## Amendment (2026-11-03): colour life, where vivid and where darkened (refinement batch 5)
+
+A2 asks 4.5:1 for text on an accent fill, which is why `color.accentLight` is darkened. It never asked that of a colour under
+no text, and the darkened values made Settings read muddy beside macOS (docs/audits/refinement-2026-11-02.md § 08, § 09-11,
+§ 05-07). The rule from now on:
+
+- **Vivid, where no text sits.** Settings icon tiles (`color.tile.<name>` bottom and `<name>Top`, a soft vertical gradient,
+  `TileGradient`), the Appearance accent swatch discs (`color.swatch.<accent>`), the window lights (`window.closeColor`,
+  `minimizeColor`, `zoomColor`, shared with the compositor plugin through `ThemeTokens.hpp`). Measured on the macOS captures
+  at 2 px/pt (ss-004-005, ss-010-037, ss-032-145, 2026-11-03): tiles blue #45A7FF to #0088FF, red #FF6667 to #FF383C, pink
+  #FF5F7D to #FF2C55, purple #887CFF to #6155F5, graphite #B7B7BA to #8E8E93, black #323132 to #000000; lights #FF5C60,
+  #FAC800, #35C759.
+- **Darkened (A2), where text sits.** Selection pills, buttons with labels, focus rings and every accent fill that carries text
+  keep `color.accentLight` / `accentDark` and `color.selectionDark`: unchanged.
+- **The glyph floor.** The white glyph on a tile is a graphic and holds 3:1 on the gradient's lightest point (its top):
+  macOS's own tops are 2.55:1 (blue), 2.86 (red), 2.92 (pink), 2.00 (graphite) and 1.56 to 1.74 (cyan, green). So each top
+  is the lightest shade of the macOS ramp that holds 3.05:1, the bottom kept; cyan, green and orange, whose macOS colour fails
+  even at the bottom, keep the hue and saturation with the lightness lowered (green #2CA84B to #22843B, cyan #03A0C2 to
+  #027B94, orange #EA7102 to #D06502). Pinned by `test_vivid_tile_gradients_keep_the_glyph_at_3_to_1`.
+- **Inactive windows** keep the grey tiles and grey lights (`settings.sidebarTileInactive*`, `window.inactiveLight*`).
+- **Dark appearance.** The macOS captures are all light; the same vivid tiles are used in both appearances (macOS's tiles do
+  not change with the appearance). A black tile on the dark panel reads by its top #323132 and the 1-pt rim only.
+- **Hover glyph of a light** stays black at `window.glyphOpacity`: legible on every vivid light (pinned by
+  `test_vivid_lights_keep_their_glyph_legible`).
+- Swatch purple is macOS's magenta-leaning #923B93, 33 degrees from the violet fill #7A3FC4 it picks; the hue tolerance of
+  `test_vivid_swatches_keep_the_hue_of_their_accent` says so.

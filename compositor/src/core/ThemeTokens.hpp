@@ -67,12 +67,12 @@ namespace gf::theme::tokens {
     inline constexpr double kWindowGlyphStroke = 0.12;
     // plugin kGlyphColor alpha: the glyph darkens the light under it by this much [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr double kWindowGlyphOpacity = 0.5;
-    // plugin kCloseColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
-    inline constexpr uint32_t kWindowCloseColor = 0xE5534B;
-    // plugin kMinimizeColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
-    inline constexpr uint32_t kWindowMinimizeColor = 0xD9A93B;
-    // plugin kZoomColor: own value, not copied [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
-    inline constexpr uint32_t kWindowZoomColor = 0x4FA64F;
+    // plugin kCloseColor: the macOS light measured on ss-004-005 at 2 px/pt (2026-11-03), a flat disc; no text sits on a light and the hover glyph is black at window.glyphOpacity, so A2 leaves it vivid (was own #E5534B, about 35 % less saturated) [ref: docs/audits/refinement-2026-11-02.md § 05-windows-getinfo-titlebar, 06-windows-inactive, 07-windows-under-menubar; ADR-0024 amendment 2026-11-03; ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowCloseColor = 0xFF5C60;
+    // plugin kMinimizeColor: the macOS light measured on ss-004-005 at 2 px/pt (2026-11-03), a flat disc; no text sits on a light and the hover glyph is black at window.glyphOpacity, so A2 leaves it vivid (was own #D9A93B, about 35 % less saturated) [ref: docs/audits/refinement-2026-11-02.md § 05-windows-getinfo-titlebar, 06-windows-inactive, 07-windows-under-menubar; ADR-0024 amendment 2026-11-03; ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowMinimizeColor = 0xFAC800;
+    // plugin kZoomColor: the macOS light measured on ss-004-005 at 2 px/pt (2026-11-03), a flat disc; no text sits on a light and the hover glyph is black at window.glyphOpacity, so A2 leaves it vivid (was own #4FA64F, about 35 % less saturated) [ref: docs/audits/refinement-2026-11-02.md § 05-windows-getinfo-titlebar, 06-windows-inactive, 07-windows-under-menubar; ADR-0024 amendment 2026-11-03; ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
+    inline constexpr uint32_t kWindowZoomColor = 0x35C759;
     // plugin titlebarPalette(Dark).inactiveLight: grey light of an inactive window, dark appearance; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #5A5A5E at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
     inline constexpr uint32_t kWindowInactiveLightDark = 0x5C5A56;
     // plugin titlebarPalette(Light).inactiveLight: grey light of an inactive window, light appearance; warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #D1D1D3 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: ADR-0015; docs/testing/f1-reference-gaps.md § Window chrome; docs/specs/compositor.md § Plugin work item: client chrome]
