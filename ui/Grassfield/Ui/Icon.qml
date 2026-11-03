@@ -7,7 +7,7 @@ Item {
 
     // File name without extension in branding/icons/symbolic, e.g. "wifi-3".
     property string name: ""
-    property color color: Appearance.colors.text
+    property color color: Appearance.glyphTint(root)
     // The heavier variant (icons-bar/, stroke 2.4 against 1.75): the menu bar's status glyphs, which macOS draws solid.
     property bool heavy: false
     property int size: Tokens.menubarIconSize

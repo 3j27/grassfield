@@ -10,7 +10,7 @@ Item {
     property string name: ""
     property int size: Tokens.filesListIconSize
     property bool tint: root.name.endsWith("-symbolic")
-    property color color: Appearance.colors.text
+    property color color: Appearance.glyphTint(root)
 
     implicitWidth: size
     implicitHeight: size

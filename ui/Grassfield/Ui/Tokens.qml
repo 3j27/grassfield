@@ -2276,6 +2276,8 @@ QtObject {
     readonly property int filesToolbarHeight: 52
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarButtonSize: 28
+    // the sidebar eject glyph keeps its pre-batch-6 size, 16, smaller than the 18-pt row icon (no Finder eject capture to measure) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int filesSidebarEjectSize: 16
     // refinement batch 6: as control.toolIconSize (was 16); estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarIconSize: 18
     // Expanded width of the search capsule (macOS ~200); collapsed it is a 36-pt circle; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
@@ -3472,6 +3474,8 @@ QtObject {
     readonly property int storeCarouselArrowSize: 32
     // estimate: the arrows 12 pt in from the carousel's edges [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeCarouselArrowInset: 12
+    // the carousel arrow's chevron keeps its pre-batch-6 size, 16 (the toolbar glyphs grew to 18 in a 36-pt capsule; this one sits in a 32-pt disc) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int storeCarouselArrowGlyphSize: 16
     // estimate: the arrow's disc over the cards [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property real storeCarouselArrowFillOpacity: 0.85
     // estimate: a carousel's turn (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]

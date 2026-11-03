@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import Grassfield.Ui
+import "../../apps/files/qml" as FilesQml
 
 // Toolbar glyphs (refinement batch 6): 18 pt boxes, a dark grey rather than the full text colour, and Back / Forward as an
 // 8 x 14 pt drawn chevron (macOS 27: ss-004-005, gs-010-011).
@@ -28,6 +29,17 @@ TestCase {
             navigation: "forward"
             enabled: false
             accessibleName: "Forward"
+        }
+
+        ToolButton {
+            id: hosted
+            accessibleName: "Hosted"
+
+            FilesQml.ViewGlyph {
+                id: hostedGlyph
+                anchors.centerIn: parent
+                kind: "columns"
+            }
         }
 
         ToolButton {
@@ -71,13 +83,35 @@ TestCase {
     }
 
     function test_glyphsAreDarkGreyAndADisabledOneLighter() {
-        compare(back.glyphOpacity, Tokens.controlToolGlyphOpacity);
-        verify(back.glyphOpacity > 0.7 && back.glyphOpacity < 1);
         const on = find(back.contentItem, i => i.forward !== undefined && i.width === Tokens.toolbarNavChevronWidth);
         const off = find(forward.contentItem, i => i.forward !== undefined && i.width === Tokens.toolbarNavChevronWidth);
-        compare(on.opacity, Tokens.controlToolGlyphOpacity);
-        verify(Qt.colorEqual(on.color, Appearance.colors.text), "enabled: the text colour, dimmed by the opacity");
+        compare(on.opacity, 1, "the dimming is in the colour, not an item opacity");
+        verify(Qt.colorEqual(Qt.rgba(on.color.r, on.color.g, on.color.b, 1), Appearance.colors.text), "enabled: the text colour");
+        fuzzyCompare(on.color.a, Tokens.controlToolGlyphOpacity, 0.01);
         verify(off.color.a < on.color.a, "disabled: lighter");
-        compare(off.color.a, Tokens.materialDisabledOpacity);
+        fuzzyCompare(off.color.a, Tokens.controlToolGlyphOpacity * Tokens.materialDisabledOpacity, 0.01);
+    }
+
+    // Qt applies an item's opacity to each part of a glyph drawn from several items, so their overlaps would draw darker: the
+    // slot never has an opacity, and the host's glyph takes the dimming in its colour.
+    function test_aHostDrawnGlyphIsDimmedInItsColourNotByAnOpacity() {
+        compare(hostedGlyph.parent.opacity, 1, "the slot opacity is 1");
+        compare(hostedGlyph.opacity, 1);
+        verify(Qt.colorEqual(hostedGlyph.color, hosted.glyphColor), "the glyph takes the button's glyph colour by default");
+        fuzzyCompare(hostedGlyph.color.a, Tokens.controlToolGlyphOpacity, 0.01);
+        // The columns' dividers lie inside the frame's outline: no overlap.
+        const dividers = find(hostedGlyph, i => i.height !== undefined && i.y === Tokens.filesViewGlyphStroke && i.width === Tokens.filesViewGlyphStroke);
+        verify(dividers !== null, "a divider starts inside the frame");
+    }
+
+    function test_theGlyphColourFollowsTheButtonsState() {
+        const live = Appearance.withAlpha(Appearance.colors.text, Tokens.controlToolGlyphOpacity);
+        verify(Qt.colorEqual(plain.glyphColor, live));
+        plain.enabled = false;
+        const disabled = Appearance.withAlpha(Appearance.colors.text, Tokens.controlToolGlyphOpacity * Tokens.materialDisabledOpacity);
+        fuzzyCompare(plain.glyphColor.a, disabled.a, 0.01);
+        plain.enabled = true;
+        // Disabled and not key dim together, never to a darker glyph than an enabled one.
+        verify(plain.dimAlpha <= 1);
     }
 }

@@ -311,7 +311,7 @@ FocusScope {
             ThemeIcon {
                 anchors.centerIn: parent
                 name: "media-eject-symbolic"
-                size: Tokens.filesToolbarIconSize
+                size: Tokens.filesSidebarEjectSize
                 tint: true
                 color: Appearance.colors.text
             }

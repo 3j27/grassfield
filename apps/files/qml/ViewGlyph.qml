@@ -11,7 +11,7 @@ Item {
     id: root
 
     property string kind: "icons"
-    property color color: Appearance.colors.text
+    property color color: Appearance.glyphTint(root)
     property int size: Tokens.filesToolbarIconSize
 
     readonly property real stroke: Math.max(1, Math.round(root.size / 10))
@@ -83,8 +83,10 @@ Item {
                 required property int index
                 // The dividers split the inside of the frame in three.
                 x: Tokens.filesViewGlyphStroke + (columnsBox.width - 2 * Tokens.filesViewGlyphStroke) * (index + 1) / 3 - width / 2
+                // Inside the frame's outline: the parts never overlap, so a translucent glyph colour never draws darker.
+                y: Tokens.filesViewGlyphStroke
                 width: Tokens.filesViewGlyphStroke
-                height: columnsBox.height
+                height: columnsBox.height - 2 * Tokens.filesViewGlyphStroke
                 color: root.color
             }
         }
@@ -171,23 +173,34 @@ Item {
         }
     }
 
-    // plus
-    Item {
+    // plus: one outline (a cross with round ends), so the arms never overlap and a translucent glyph colour never draws darker.
+    Shape {
+        id: plusShape
         visible: root.kind === "plus"
         anchors.fill: parent
-        Rectangle {
-            anchors.centerIn: parent
-            width: root.size * 0.75
-            height: root.stroke * 1.5
-            radius: height / 2
-            color: root.color
-        }
-        Rectangle {
-            anchors.centerIn: parent
-            width: root.stroke * 1.5
-            height: root.size * 0.75
-            radius: width / 2
-            color: root.color
+        preferredRendererType: Shape.CurveRenderer
+        readonly property real h: root.stroke * 0.75
+        readonly property real a: root.size * 0.375
+        readonly property real cx: width / 2
+        readonly property real cy: height / 2
+
+        ShapePath {
+            fillColor: root.color
+            strokeWidth: -1
+            startX: plusShape.cx - plusShape.h
+            startY: plusShape.cy - plusShape.h
+            PathLine { x: plusShape.cx - plusShape.h; y: plusShape.cy - plusShape.a + plusShape.h }
+            PathArc { x: plusShape.cx + plusShape.h; y: plusShape.cy - plusShape.a + plusShape.h; radiusX: plusShape.h; radiusY: plusShape.h }
+            PathLine { x: plusShape.cx + plusShape.h; y: plusShape.cy - plusShape.h }
+            PathLine { x: plusShape.cx + plusShape.a - plusShape.h; y: plusShape.cy - plusShape.h }
+            PathArc { x: plusShape.cx + plusShape.a - plusShape.h; y: plusShape.cy + plusShape.h; radiusX: plusShape.h; radiusY: plusShape.h }
+            PathLine { x: plusShape.cx + plusShape.h; y: plusShape.cy + plusShape.h }
+            PathLine { x: plusShape.cx + plusShape.h; y: plusShape.cy + plusShape.a - plusShape.h }
+            PathArc { x: plusShape.cx - plusShape.h; y: plusShape.cy + plusShape.a - plusShape.h; radiusX: plusShape.h; radiusY: plusShape.h }
+            PathLine { x: plusShape.cx - plusShape.h; y: plusShape.cy + plusShape.h }
+            PathLine { x: plusShape.cx - plusShape.a + plusShape.h; y: plusShape.cy + plusShape.h }
+            PathArc { x: plusShape.cx - plusShape.a + plusShape.h; y: plusShape.cy - plusShape.h; radiusX: plusShape.h; radiusY: plusShape.h }
+            PathLine { x: plusShape.cx - plusShape.h; y: plusShape.cy - plusShape.h }
         }
     }
 
