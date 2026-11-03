@@ -2737,10 +2737,6 @@ none widens a rule of Q12's text, which names "BlueZ pairing").
   the next log-in. In the Omarchy session the bridge never starts (`ConditionEnvironment=GRASSFIELD_SESSION=1`, started only
   by Grassfield's `autostart.lua`), and bt-agent starts with the session and now stops with it. `systemd-analyze --user
   verify` of both units (systemd 262): rc 0. Rule applied: fail closed, never another agent beside the sheet.
-  (Amended 2026-11-03: the stop is `systemctl --user --no-block stop bt-agent.service`. On the owner's first rc1-18 login,
-  the synchronous stop, run from a unit starting with the session, waited for the session's start transaction until the
-  90 s start timeout, so no secret sheet could appear for a minute and a half. Queued, the stop still removes a leftover
-  bt-agent shortly after, and bt-agent's own drop-in condition keeps it from starting in a Grassfield session.)
 - **10-2. When is the agent registered, with which capability, and is it the default?** **Choice:** registered (`KeyboardDisplay`:
   every method can be drawn, D-11) only while a shell whose hello lists `bluetooth` is connected, then `RequestDefaultAgent`
   (an `AlreadyExists` answer means this connection's agent is still registered, and the default is asked all the same);
