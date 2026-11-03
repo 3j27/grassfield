@@ -22,7 +22,7 @@ Item {
 
     // Validated value of a dotted key, or the schema default.
     function value(key: string): var {
-        root.revision;
+        void root.revision;
         return Store.read(root.config, key);
     }
 

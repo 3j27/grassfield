@@ -63,7 +63,7 @@ Singleton {
 
     // Context for AppMenuModel; re-evaluates with the topology and desktop entries.
     function context(appId: string): var {
-        Apps.revision;
+        void Apps.revision;
         const hasApp = appId !== "";
         const entry = hasApp ? Apps.lookup(appId) : null;
         const wins = hasApp ? Compositor.toplevelsFor(appId) : [];
