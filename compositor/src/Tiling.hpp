@@ -88,6 +88,20 @@ namespace gf::tiler {
     // `w` can be tiled now (TL9): what the tiling popover greys when not (the tile-hover event's "tileable").
     bool tileable(const PHLWINDOW& w);
 
+    // Grassfield's Zoom (ADR-0036 D78, tiling.md TL35: Zoom is Fill), from the zoom light without Alt, a titlebar double-click
+    // set to Zoom or Fill, Super+Alt+F (window_size("maximized")) and tile(address, "zoom") (Window > Zoom, the light under its
+    // popover). Core zoomStep decides: Fill (tile(w, Fill), with the margins), Previous (back to its box from before, as Return
+    // to Previous Size), UnzoomToFill (out of Hyprland's maximized mode, then Fill), Hyprland or Refused. The plugin applies the
+    // first three; Hyprland's maximized mode is toggled here only when `toggleHyprland` (the titlebar and tile(address, "zoom")),
+    // else left to the caller (window_size returns Hyprland's own dispatcher). A Fill that tile() refuses (TL9: a dialog, a
+    // window on a special workspace, one whose minimum does not fit) falls back to Hyprland's maximized mode, as before.
+    // Returns the step taken.
+    tiling::ZoomStep zoom(const PHLWINDOW& w, bool toggleHyprland);
+
+    // window_size("maximized") (Super+Alt+F): zoom() of the focused window, Hyprland's maximized mode left to the dispatcher
+    // window_size returns. Hyprland with no focused window (its dispatcher then does nothing itself).
+    tiling::ZoomStep zoomFocused();
+
     // `w` is of fixed size (core fixedSize: minimum = maximum on both axes): hovering its zoom light opens no tiling popover
     // and tile_popover is refused (a Grassfield app draws that light disabled: ADR-0040 step 1b's About This Computer, the
     // nested pass of 85c2c10); the reply's "fixed" lists it.
@@ -181,8 +195,9 @@ namespace gf::tiler {
     // ends (Free), so leaving the zoom does not put it back in its tile mid-drag.
     void leave(const PHLWINDOW& w);
 
-    // hl.plugin.grassfield.tile(address, place): `place` is a core/Tiling.hpp name or "previous" (back to the box from
-    // before tiling). Untrusted: the address is compared with the live windows, never dereferenced. Refused while locked.
+    // hl.plugin.grassfield.tile(address, place): `place` is a core/Tiling.hpp name, "previous" (back to the box from before
+    // tiling) or "zoom" (zoom() above, feature zoom-fill). Untrusted: the address is compared with the live windows, never
+    // dereferenced. Refused while locked.
     void tileRequest(std::string_view address, std::string_view place);
 
     // hl.plugin.grassfield.arrange(json) (core parseArrange): a layout of the catalogue filled with the given windows, then

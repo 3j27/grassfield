@@ -742,6 +742,11 @@ Singleton {
         return WindowTiling.isFixed(TilingLink.fixed, addressOf(toplevel));
     }
 
+    // The window is filled by Zoom or Fill (ADR-0036 D78; from the plugin's last reply: not known yet counts as not).
+    function isFilled(toplevel: var): bool {
+        return WindowTiling.isFilled(TilingLink.filled, addressOf(toplevel));
+    }
+
     // The zones and the places the window does not fit, {zones, places} (ADR-0036 D69; from the plugin's last reply: not known
     // yet, nothing is greyed and the plugin still refuses what does not fit).
     function fitOf(toplevel: var): var {
@@ -1239,12 +1244,13 @@ Singleton {
             activate(top);
     }
 
-    // Zoom = the "maximized" fullscreen mode, toggled by a dispatch (the foreign-toplevel
-    // `maximized` request is ignored: windows.lua suppresses maximize events). Full screen = fullscreen
-    // (ADR-0002), through the foreign-toplevel protocol.
+    // Zoom is Fill (ADR-0036 D78): with the plugin's "zoom-fill" the plugin's zoom toggle (the window fills its work area as
+    // a tile, with the margins, and a second Zoom brings back its box from before); without it the "maximized" fullscreen
+    // mode, toggled by a dispatch (the foreign-toplevel `maximized` request is ignored: windows.lua suppresses maximize
+    // events). Full screen = fullscreen (ADR-0002), through the foreign-toplevel protocol.
     function toggleZoom(toplevel: var): void {
         const top = hyprlandToplevel(toplevel);
-        if (top && dispatchRequest(Minimized.fullscreenRequest(top.address, "maximized")))
+        if (top && dispatchRequest(Minimized.zoomRequest(top.address, Capabilities.has("zoom-fill"))))
             requestWindowRefresh();
     }
 

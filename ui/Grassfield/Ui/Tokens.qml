@@ -171,6 +171,8 @@ QtObject {
     readonly property int typographyMenuWeight: 400
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographyMenuBoldWeight: 700
+    // semibold for toolbar and window titles; macOS titles are semibold, alert titles and the menu bar app name stay bold [ref: docs/audits/refinement-2026-11-02.md § Proposed fix batches]
+    readonly property int typographyTitleWeight: 600
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)
     readonly property int typographyBodySize: Math.round(13 * Appearance.textScale)
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menu bar and Menus and popovers)

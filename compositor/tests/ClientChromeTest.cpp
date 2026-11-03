@@ -484,3 +484,24 @@ TEST(ClientChromeTokens, ThePluginsLightsAreTheAppsLights) {
     EXPECT_TRUE(same(titlebarPalette(Appearance::Dark).inactiveLight, t::kWindowInactiveLightDark));
     EXPECT_TRUE(same(titlebarPalette(Appearance::Light).inactiveLight, t::kWindowInactiveLightLight));
 }
+
+// ADR-0036 D78, ADR-0015 Q4 amended (opus review of fix/zoom-is-fill: Settings' own green light glued the window in
+// Hyprland's maximized mode while Window > Zoom filled it): while window-tiling is advertised the plugin owns a
+// client-chrome window's maximize requests (Zoom is Fill); otherwise Hyprland's own, as before (gate C2).
+TEST(ClientChromeZoom, ThePluginOwnsAClientChromeMaximizeOnlyWithWindowTiling) {
+    using gf::chrome::ownsMaximize;
+    EXPECT_TRUE(ownsMaximize(true, true, true));
+    EXPECT_FALSE(ownsMaximize(true, false, true)) << "no window-tiling (a degraded plugin): Hyprland's maximized mode";
+    EXPECT_FALSE(ownsMaximize(false, true, true)) << "the bridge stopped (unload): Hyprland's maximized mode";
+    EXPECT_FALSE(ownsMaximize(true, true, false)) << "not client chrome: its maximize stays whatever the session rules say";
+}
+
+TEST(ClientChromeZoom, TheEchoAfterFullScreenIsSwallowedForABoundedTime) {
+    using gf::chrome::kMaximizeEchoMs;
+    using gf::chrome::maximizeEcho;
+    EXPECT_FALSE(maximizeEcho(0, 5000)) << "never left full screen";
+    EXPECT_TRUE(maximizeEcho(5000, 5000));
+    EXPECT_TRUE(maximizeEcho(5000, 5000 + kMaximizeEchoMs));
+    EXPECT_FALSE(maximizeEcho(5000, 5001 + kMaximizeEchoMs)) << "a later request is the user's zoom";
+    EXPECT_FALSE(maximizeEcho(5000, 4999)) << "a clock that went back counts as no echo";
+}

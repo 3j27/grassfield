@@ -245,6 +245,18 @@ TEST(Protocol, EveryEventStaysUnderHyprlandsSocket2Limit) {
     EXPECT_TRUE(under(gf::tiling::noticeJson(std::numeric_limits<uint64_t>::max(), gf::tiling::Reason::Unavailable)));
 }
 
+// ADR-0036 D78: zoom-fill (tile(address, "zoom"), Zoom is Fill) always right after window-tiling, never without it: the
+// shell's Window > Zoom asks for Fill only with it, Hyprland's maximized mode otherwise (gate C2).
+TEST(Protocol, ZoomFillComesRightAfterWindowTiling) {
+    EXPECT_EQ(kFeatureZoomFill, "zoom-fill");
+    EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true)),
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill"]})");
+    EXPECT_EQ(capabilitiesJson(features(true, true, true, true, true, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true))
+                  .find("zoom-fill"),
+              std::string::npos)
+        << "never without window-tiling";
+}
+
 // ADR-0036 step 1: tiling-arrange (hl.plugin.grassfield.arrange, the tiling notice and its hyprctl state) comes only with
 // window-tiling, last in the list; step 4a: tiling-layouts (arrange's "with", the reply's suggestion) right after it.
 TEST(Protocol, TilingArrangeComesWithWindowTiling) {
@@ -253,7 +265,7 @@ TEST(Protocol, TilingArrangeComesWithWindowTiling) {
     EXPECT_EQ(kLuaArrange, "arrange");
     EXPECT_EQ(kHyprctlTilingCommand, "grassfield-tiling");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tiling-arrange","tiling-layouts"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
         << "never without window-tiling";
@@ -265,9 +277,9 @@ TEST(Protocol, TilingGroupsComeWithTilingArrange) {
     EXPECT_EQ(kFeatureTilingGroups, "tiling-groups");
     EXPECT_EQ(kLuaGroupFront, "group_front");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover","tiling-groups"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tiling-arrange","tiling-layouts","tile-hover","tiling-groups"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling"]})")
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill"]})")
         << "never without tiling-arrange";
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
@@ -278,12 +290,12 @@ TEST(Protocol, TilingGroupsComeWithTilingArrange) {
 TEST(Protocol, TilingSharedEdgeComesWithTilingArrange) {
     EXPECT_EQ(kFeatureTilingSharedEdge, "tiling-shared-edge");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tiling-shared-edge"]})")
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tiling-arrange","tiling-layouts","tiling-shared-edge"]})")
         << "without the groups' verb";
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling"]})")
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill"]})")
         << "never without tiling-arrange";
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
@@ -298,11 +310,11 @@ TEST(Protocol, TilingSplitComesWithTilingArrange) {
     EXPECT_EQ(kLuaSplit, "split");
     EXPECT_EQ(kLuaUnsplit, "unsplit");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge","tiling-split","tiling-split-rows","tiling-split-titles"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tiling-arrange","tiling-layouts","tile-hover","tiling-groups","tiling-shared-edge","tiling-split","tiling-split-rows","tiling-split-titles"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tiling-split","tiling-split-rows","tiling-split-titles"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tiling-arrange","tiling-layouts","tiling-split","tiling-split-rows","tiling-split-titles"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling"]})")
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill"]})")
         << "never without tiling-arrange";
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")
@@ -314,9 +326,9 @@ TEST(Protocol, TileHoverComesWithWindowTiling) {
     EXPECT_EQ(kLuaTilePopover, "tile_popover");
     EXPECT_EQ(kLuaMoveTo, "move_to");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tiling-arrange","tiling-layouts","tile-hover"]})");
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tiling-arrange","tiling-layouts","tile-hover"]})");
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, false, true)),
-              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","tile-hover"]})")
+              R"({"v":"gfc/1","type":"capabilities","features":["decorations","config","window-tiling","zoom-fill","tile-hover"]})")
         << "independent of tiling-arrange";
     EXPECT_EQ(capabilitiesJson(features(false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true)),
               R"({"v":"gfc/1","type":"capabilities","features":["decorations","config"]})")

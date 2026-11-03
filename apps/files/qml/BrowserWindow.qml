@@ -750,7 +750,7 @@ Window {
                 text: win.title
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.windowTitleSize
-                font.weight: Tokens.typographyMenuBoldWeight
+                font.weight: Tokens.typographyTitleWeight
             }
 
             // Over the title only: a plain press still moves the window (the toolbar's drag area below).

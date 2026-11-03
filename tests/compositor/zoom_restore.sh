@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Regression scenario (FR8): the zoom toggle must always restore the floating geometry the window had before
-# it was maximized, whatever happened on the maximized titlebar.
+# it was zoomed, whatever happened on the zoomed titlebar. Since ADR-0036 D78 the zoom is Fill (the window fills the work
+# area as a tile, fullscreen 0, larger on both axes; tests/compositor/zoom_fill.sh measures its margins); without the
+# plugin's window-tiling it is Hyprland's maximized mode (fullscreen 1), which these cases accept too.
 #
 # Usage: tests/compositor/zoom_restore.sh
 # NESTED only: needs scripts/dev/nested-up.sh with grassfield-compositor loaded. Pointer input goes through
@@ -9,10 +11,10 @@
 #
 # One foot window, all titlebar targets computed from its geometry and tests/compositor/titlebar_geometry.sh (the zoom
 # button centre right of the surface's left edge, the bar middle above the surface):
-#   1 zoom button -> maximized; double-click on the maximized bar -> floating geometry back (bug before the
+#   1 zoom button -> zoomed (filled); double-click on the zoomed bar -> floating geometry back (bug before the
 #     fix: the first click's release wrote the maximized box into the floating geometry);
-#   2 zoom button; single click on the maximized bar; zoom button -> floating geometry back;
-#   3 zoom button; drag the maximized bar from 25 % of its width -> un-zoomed under the pointer: floating size,
+#   2 zoom button; single click on the zoomed bar; zoom button -> floating geometry back;
+#   3 zoom button; drag the zoomed bar from 25 % of its width -> un-zoomed under the pointer: floating size,
 #     pointer at 25 % of the width and still on the titlebar (macOS);
 #   4 plain drag of the floating window -> moved by exactly the pointer delta;
 #   6 Option(Alt)+click on the zoom button (ADR-0015 P6, REQ-ADR0002-6): true full screen (fullscreen 2), not zoomed. Alt is
@@ -90,7 +92,10 @@ bar_y=$((y0 - GF_TB_MID))
 zoom_in() {
   pointer abs "$zoom_x" "$bar_y" sleep 50 click sleep 600
   read -r mx my mw mh mfs < <(geom)
-  [[ ${mfs:-} == 1 ]] || { say "  zoom button did not maximize (fullscreen=${mfs:-?})"; fail=1; return 1; }
+  # Zoom is Fill (ADR-0036 D78): out of any full screen, larger on both axes; Hyprland's maximized mode (1) without window-tiling.
+  [[ ${mfs:-} == 1 || ( ${mfs:-} == 0 && ${mw:-0} -gt $w0 && ${mh:-0} -gt $h0 ) ]] ||
+    { say "  zoom button did not zoom (fullscreen=${mfs:-?}, ${mw:-?}x${mh:-?}, was ${w0}x${h0})"; fail=1; return 1; }
+  say "  zoomed: ${mw}x${mh} at ($mx,$my) fullscreen $mfs"
 }
 same_as_start() { # <label>
   local x y w h fs
@@ -99,20 +104,20 @@ same_as_start() { # <label>
   check "$1" $? "now ${w}x${h} at ($x,$y) fullscreen $fs; expected ${w0}x${h0} at ($x0,$y0)"
 }
 
-say "1 double-click on the maximized titlebar"
+say "1 double-click on the zoomed titlebar"
 if zoom_in; then
   pointer abs $((mx + mw / 2)) $((my - GF_TB_MID)) sleep 50 click sleep 60 click sleep 600
   same_as_start "double-click restores"
 fi
 
-say "2 single click on the maximized titlebar, then the zoom button"
+say "2 single click on the zoomed titlebar, then the zoom button"
 if zoom_in; then
   pointer abs $((mx + mw / 2)) $((my - GF_TB_MID)) sleep 50 click sleep 500
   pointer abs $((mx + GF_TB_ZOOM_X)) $((my - GF_TB_MID)) sleep 50 click sleep 600
   same_as_start "click + zoom button restores"
 fi
 
-say "3 drag on the maximized titlebar un-zooms under the pointer"
+say "3 drag on the zoomed titlebar un-zooms under the pointer"
 if zoom_in; then
   px=$((mx + mw / 4))
   py=$((my - GF_TB_MID))

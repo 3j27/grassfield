@@ -435,6 +435,13 @@ TestCase {
         compare(items.find(i => i.id === "zoom").text, "Unzoom");
     }
 
+    // ADR-0036 D78: Zoom is Fill, so a filled window says Unzoom too, of fixed size or not.
+    function test_windowMenuSaysUnzoomForAFilledWindow() {
+        compare(model.windowMenu(ctx({filled: true})).find(i => i.id === "zoom").text, "Unzoom");
+        compare(model.windowMenu(ctx({filled: false})).find(i => i.id === "zoom").text, "Zoom");
+        compare(model.windowMenu(ctx({})).find(i => i.id === "zoom").text, "Zoom", "an older shell context has no filled");
+    }
+
     function test_windowMenuDisablesActionsWithoutFocusedWindow() {
         const items = model.windowMenu(ctx({focusedWindow: null}));
         verify(!items.find(i => i.id === "minimize").enabled);

@@ -20,10 +20,13 @@
 #   4  APP      the close light (26, 26 from the surface's top-left) closes the window, with and without the plugin
 #   5  PLUGIN   the minimize light puts the window on special:minimized (the bridge: requestsMinimize -> minimize-request);
 #               skipped with --no-plugin (the light is greyed there, ADR-0015 Q4)
-#   6  SESSION  the zoom light gives fullscreen=1 (maximized); a second press restores the same box (same with --no-plugin)
+#   6  SESSION  the zoom light zooms; a second press restores the same box. Zoom is Fill (ADR-0036 D78, ADR-0015 Q4
+#               amended): with the plugin's zoom-fill the app's request is the plugin's (fullscreen 0, larger on both axes);
+#               with --no-plugin Hyprland's maximized mode (fullscreen 1), as before
 #   7  APP      a press on empty toolbar space and a drag of 200,100 moves the window by about that delta (Qt's drag
 #               threshold makes it lag by up to 10 px: tolerance 12), a drag from a light does not move it
-#   8  APP      a double-click on empty toolbar space follows windows.titlebarDoubleClick (zoom: fullscreen=1)
+#   8  APP      a double-click on empty toolbar space follows windows.titlebarDoubleClick (fill, the default, is the app's
+#               zoom: zoomed as in 6, a second double-click restores)
 #   9  PLUGIN   plugin unload and reload while the window is mapped: never two sets of lights, never a strip: run by hand,
 #               see the end of this file (scripts/nestctl plugin unload|load are owner-approved nested commands)
 #   10 PLUGIN   a drag on empty toolbar space of the zoomed window takes it out of the zoom at its floating size, under the
@@ -78,6 +81,15 @@ check() { # <label> <0 ok / 1 fail> <details>
   if [[ $2 == 0 ]]; then say "  $1: OK   ($3)"; else say "  $1: FAIL ($3)"; fail=1; fi
 }
 skip() { say "  $1: SKIP ($2)"; }
+
+# Zoom is Fill (ADR-0036 D78) with the plugin's zoom-fill; Hyprland's maximized mode otherwise.
+zoomfill=0
+((plugin)) && ctl -j grassfield 2>/dev/null | jq -e '.features | index("zoom-fill")' >/dev/null 2>&1 && zoomfill=1
+# The Settings window is zoomed: <fullscreen> <w> <h> now, against the box it had (w0 h0).
+zoomed() { # <fullscreen> <w> <h>
+  if ((zoomfill)); then [[ $1 == 0 ]] && (($2 > w0 && $3 > h0)); else [[ $1 == 1 ]]; fi
+}
+zoom_want() { if ((zoomfill)); then echo "fullscreen 0, larger than ${w0}x${h0} (Fill)"; else echo "fullscreen 1"; fi; }
 
 # Field of the client with class $1: jq expression $2.
 client() { ctl clients -j | jq -r --arg c "$1" ".[] | select(.class == \$c) | $2" | head -1; }
@@ -194,26 +206,26 @@ mapped org.grassfield.Settings || { say "  the minimize light drag minimized or 
 check "drag from a light does not move" $? "now ($x2,$y2), was ($x1,$y1)"
 read -r x0 y0 w0 h0 fs0 < <(geom org.grassfield.Settings)
 
-say "6 zoom light toggles maximized, same box back"
+say "6 zoom light zooms, same box back"
 read -r zx zy < <(light 2)
 pointer abs "$zx" "$zy" sleep 50 click sleep 700
-read -r _ _ _ _ fs < <(geom org.grassfield.Settings)
-[[ $fs == 1 ]]
-check "zoom (SESSION: maximize exemption)" $? "fullscreen $fs, want 1"
+read -r _ _ w h fs < <(geom org.grassfield.Settings)
+zoomed "$fs" "$w" "$h"
+check "zoom (SESSION: maximize exemption; Fill with zoom-fill)" $? "${w}x${h} fullscreen $fs, want $(zoom_want)"
 read -r zx zy < <(light 2)
 pointer abs "$zx" "$zy" sleep 50 click sleep 700
 read -r x y w h fs < <(geom org.grassfield.Settings)
 [[ $fs == 0 && $x == "$x0" && $y == "$y0" && $w == "$w0" && $h == "$h0" ]]
 check "second press restores" $? "now ${w}x${h} at ($x,$y) fullscreen $fs; want ${w0}x${h0} at ($x0,$y0)"
 
-say "8 double-click on empty toolbar space (windows.titlebarDoubleClick = zoom by default)"
+say "8 double-click on empty toolbar space (windows.titlebarDoubleClick: fill by default, the zoom request)"
 read -r x0 y0 w0 h0 _ < <(geom org.grassfield.Settings)
 ex=$((x0 + w0 - 120))
 ey=$((y0 + 26))
 pointer abs "$ex" "$ey" sleep 50 click sleep 60 click sleep 700
-read -r _ _ _ _ fs < <(geom org.grassfield.Settings)
-[[ $fs == 1 ]]
-check "double-click zooms (SESSION)" $? "fullscreen $fs, want 1"
+read -r _ _ w h fs < <(geom org.grassfield.Settings)
+zoomed "$fs" "$w" "$h"
+check "double-click zooms (SESSION; Fill with zoom-fill)" $? "${w}x${h} fullscreen $fs, want $(zoom_want)"
 # The zoomed window's own toolbar row: the point is computed again from its zoomed geometry.
 read -r zx0 zy0 zw0 _ _ < <(geom org.grassfield.Settings)
 ex=$((zx0 + zw0 - 120))
@@ -225,7 +237,7 @@ check "double-click restores" $? "now ${w}x${h} fullscreen $fs"
 
 say "10 drag of the zoomed window from its toolbar (P4)"
 read -r x0 y0 w0 h0 fs0 < <(geom org.grassfield.Settings)
-if [[ $fs0 == 1 ]]; then # a step above left it zoomed: back to its floating box first
+if [[ $fs0 == 1 ]] || ((zoomfill && w0 > mon_w / 2)); then # a step above left it zoomed: back to its floating box first
   read -r zx zy < <(light 2)
   pointer abs "$zx" "$zy" sleep 50 click sleep 700
   read -r x0 y0 w0 h0 _ < <(geom org.grassfield.Settings)
@@ -233,7 +245,7 @@ fi
 read -r zx zy < <(light 2)
 pointer abs "$zx" "$zy" sleep 50 click sleep 700
 read -r zxx zyy zw zh fs < <(geom org.grassfield.Settings)
-if [[ $fs == 1 ]]; then
+if zoomed "$fs" "$zw" "$zh"; then
   # Empty toolbar space three quarters across the zoomed window, in the row (26 px below its top edge).
   px=$((zxx + zw * 3 / 4)) py=$((zyy + 26)) tx=$((mon_w / 2)) ty=$((mon_h / 2))
   pointer abs "$px" "$py" sleep 50 down drag "$tx" "$ty" sleep 50 up sleep 700

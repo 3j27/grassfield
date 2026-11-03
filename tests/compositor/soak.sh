@@ -12,7 +12,8 @@
 # minimize button + restore through a click on the Dock tile. Every 6th round, when the plugin advertises
 # tiling-shared-edge, the two long-lived windows are arranged left and right and their shared edge's handle is dragged
 # (tiling.md TL30; counted and reported, not part of the verdict).
-# The double-click rounds expect Settings windows.titlebarDoubleClick = zoom (the default).
+# The double-click rounds expect Settings windows.titlebarDoubleClick = fill (the default) or zoom: Zoom is Fill since
+# ADR-0036 D78 (the window fills, a second double-click brings back its box); the rounds count a size change and back.
 # The Dock tile is clicked only after the window was seen moving to special:minimized (socket2 movewindowv2), at the
 # centre of the rectangle the shell sent for that window (the plugin's log line, as in tests/compositor/minimize.sh), or,
 # when the plugin's request log budget held that line back, the previous such rectangle while exactly one window is

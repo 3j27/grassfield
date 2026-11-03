@@ -8,7 +8,8 @@ in two, then five (ADR-0036 D40, D40 amended, D63, D70): 6a merged (PR #48: the 
 #56: the separator's reset and the swap), 6c merged (PR #70: full screen's reveal, Dock and green button; windows gathered
 after an unplug), 6d merged (PR #78: the Split View rows, the Overview's drop rule), 6e merged (PR #99: the titles hidden
 and revealed at the top, the revealed bar's drag). ADR-0036's plan is done (D77): the parity matrix's Later rows stay
-recorded for their modules. Below, "Today" is the state before step 1. A requirement
+recorded for their modules. After the plan, ADR-0036 D78 (owner report on rc1-16) made Zoom Fill: TL35. Below, "Today"
+is the state before step 1. A requirement
 marked (T<n>) follows the owner decision T<n> of `docs/audits/tiling-2026-10-27/decisions.md`, answered on 2026-10-27
 (the recommended option each time). The parity matrix (`docs/audits/tiling-2026-10-27/parity-matrix.md`,
 rows M01-M56 and W01-W31) gives the source of each behaviour. UI names follow master-prompt §14: no Apple or Microsoft
@@ -45,7 +46,7 @@ spec extends them and takes precedence where it is more precise.
   above or below the handle resizes one. A window tiled next to a resized tiled window takes the space left.
 - **Settings** (Desktop & Dock > Windows, macOS 26/27 labels): "Drag windows to left or right edge of screen to tile",
   "Drag windows to menu bar to fill screen", "Hold ⌥ key while dragging windows to tile", "Tiled windows have margins"
-  (all on); "Window title bar double-click action": Fill, Zoom, Minimize, No Action (Zoom).
+  (all on); "Window title bar double-click action": Fill, Zoom, Minimize, No Action (Fill since macOS 15; Zoom before).
 - **Edge cases.** A window whose minimum size is larger than its tile overlaps its neighbours; full-screen windows do not
   tile; tiling works inside the current Stage Manager set and on every Space and display; the tile area leaves out the
   visible menu bar and Dock.
@@ -462,7 +463,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   while dragging windows to tile" (`windows.tilingOptionDrag`, on), "Tiled windows have margins" (`windows.tilingMargins`,
   on), then the switches of the features taken with the T3 names: "Show layouts when hovering over the green button"
   (`windows.tilingLayouts`, on), "Suggest windows to fill the rest of a layout" (`windows.tilingSuggestions`, on), "Bring
-  tile groups forward together" (`windows.tilingGroups`, on). "Window title bar double-click action" gains Fill
+  tile groups forward together" (`windows.tilingGroups`, on). "Window title bar double-click action" gains Fill (the default
+  since ADR-0036 D78, TL35)
   (`windows.titlebarDoubleClick` = `fill`). Each key is pushed with `config(...)` once the plugin advertises its feature;
   without the plugin the rows show the existing footnote and do nothing. The settings contract (ADR-0020) and the schema
   in `config/schema/` gain the keys in the same commit.
@@ -579,6 +581,41 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   the menu bar (`TopClamp belowMenuBar`; a hidden one when it shows, not while locked; D73 amended); the unload puts a
   member dragged by its revealed bar back in its half first.
 
+### Zoom (ADR-0036 D78, after the plan)
+- **TL35** Zoom is Fill (owner report on rc1-16: a zoomed foot window sat glued under the menu bar and against the left
+  edge, Hyprland's maximized mode at [1, 57] 1534x741 on eDP-1 1920x1080 at scale 1.25, reserved [0, 24, 0, 65], its
+  rounded corners against the menu bar). Grassfield's Zoom, from the zoom light without Alt, a titlebar double-click set
+  to Fill (the default) or Zoom, Super+Alt+F (`window_size("maximized")`), Window > Zoom and the green light clicked under
+  its popover (D64), places the window as Fill (TL4: the work area of TL1 with the margins of TL2, on the grid of TL3), so a
+  zoomed window keeps `tiling.margin` from the menu bar, the Dock and the screen's edges while "Tiled windows have margins"
+  is on and touches them when it is off, as macOS does. The same Zoom of a window placed as Fill (its record Tiled with
+  place `fill`) puts back its box from before (Return to Previous Size, TL10). A window in Hyprland's maximized mode (a
+  dispatcher, another client) leaves it into Fill. Client chrome zooms the same way from its own controls (D78 amended,
+  ADR-0015 amendment 2026-11-03): while `window-tiling` is advertised its own maximize request (its green light, its
+  toolbar double-click) is this Zoom, Hyprland told to ignore it. A window moved to another output since it was filled
+  (move_to) unzooms on that output and its Desktop; a window at the Fill frame whose record a plugin reload forgot unzooms to
+  the Center place's frame (TL4), Free. The Window menu says Unzoom for a filled window. Unchanged:
+  Alt+zoom light is true full screen (ADR-0015 P6); a window in full screen and a Split View member (D50) keep Hyprland's
+  maximized toggle; a window that cannot be tiled (TL9: Fill refused) gets Hyprland's maximized mode; a window of fixed size
+  that is not zoomed gets nothing (TL24). Without the plugin's `window-tiling` (no plugin, a degraded one) and while the
+  session is locked, Zoom is Hyprland's maximized mode as before (C2).
+  As built: core `zoomStep` (Fill, Previous, UnzoomToFill, Hyprland, Refused, Unfill; `TilingZoom.*`), glue
+  `gf::tiler::zoom` (Tiling.cpp) for the titlebar's light and double-click (Titlebar.cpp `toggleZoom`) and for client
+  chrome's own request (ClientChrome.cpp: `SUPPRESS_MAXIMIZE` set by the plugin only, again on every rule change, cleared at
+  unload; the xdg `stateChanged` listener; the echo after full screen swallowed, core `maximizeEcho`; `ClientChromeZoom.*`);
+  the shell's `WindowTiling.parseFilled` for the Window menu's Unzoom; `window_size("maximized")` zooms the
+  focused window itself and returns Hyprland's dispatcher only for the Hyprland step (bindings.lua unchanged); `tile(address,
+  "zoom")` with feature `zoom-fill`, always right after `window-tiling` (ADR-0007), which the shell's `Compositor.toggleZoom`
+  sends with that feature, Hyprland's maximized dispatcher otherwise (`Minimized.zoomRequest`). Settings:
+  `windows.titlebarDoubleClick` defaults to `fill` (schema, contract, defaults); the shell still sends `zoom` without
+  `tiling-arrange` (D36) and a stored choice is kept; Fill and Zoom are the same toggle in the plugin. A drag that starts on
+  a window in Hyprland's maximized mode still only leaves that mode under the pointer (FR8). Nested:
+  `tests/compositor/zoom_fill.sh` (the light with and without margins, the key, Hyprland's maximized mode, the verb, the
+  default double-click, Alt+zoom, scale 1.25, move_to, a plugin reload, the plugin unloaded),
+  `tests/compositor/zoom_fill_apps.sh` (Settings and Files: their own light, their toolbar double-click with the default and
+  with zoom, Window > Zoom, the light under its popover, the plugin unloaded); `zoom_restore.sh`,
+  `double_click_setting.sh`, `client_chrome.sh`, `third_party_chrome.sh` and the controls of `tiling.sh` follow it.
+
 ### Session lock (every step that adds an entry point)
 - **TL34** Nothing of tiling opens or acts over the lock (security.md "Nothing opens over the lock", GF-116): the popover
   (popup kind `tiling`, through `Popups.open`), the suggestions overlay, the Layouts section, the shared-edge handle and
@@ -626,7 +663,8 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   `motion.curveStandard`. No duration or curve outside the tokens.
 
 ## Interfaces / contracts (proposed; payloads fixed in each step and recorded in ADR-0007's contract table then)
-- **Plugin verbs (gfc/1, additive):** `tile(address, place)` with the TL4 places; `arrange(json)`
+- **Plugin verbs (gfc/1, additive):** `tile(address, place)` with the TL4 places, `previous` and `zoom` (TL35, feature
+  `zoom-fill`); `arrange(json)`
   `{"layout":"<catalogue id>","windows":["0x…",…],"output":"<name>"?}` (at most 4 windows, 4 KiB); `config` keys
   `tilingOptionDrag`, `tilingLayouts`, `tilingSuggestions`, `tilingGroups` and `titlebarDoubleClick` = `fill`.
 - **Plugin events:** `tiling` notice `{gen, reason}` (bounded); `tile-hover` `{address, state: enter|leave|open, x, y, w,
@@ -731,7 +769,10 @@ the top (M04, Overview) and a Desktop change on a held edge (M05, Desktops); res
   (step 6b); Left and Right of Screen are refused while Stages shows its strip (ADR-0036 D47).
 - A Split View Desktop is listed after the Desktop it came from, but Hyprland's next and previous Desktop keys, Ctrl+number
   and the three-finger swipe go by Hyprland's id order (ADR-0036 D41).
-- Without the plugin there is no tiling at all.
+- Without the plugin there is no tiling at all, and Zoom is Hyprland's maximized mode: the window fills the work area
+  without margins (TL35, C2).
+- Without `window-tiling` a client-chrome app's own zoom control is Hyprland's maximized mode, glued to the work area's
+  edges, as every Zoom then (ADR-0015 Q4; TL35).
 - The suggestions mark the keyboard-current or hovered window with the neutral selection of an item on glass (the hover ink
   at `material.selectionOpacity` 0.25, one role since ADR-0039 step 12): 1.72:1 at worst against the material
   (`tests/visual/test_contrast_tokens.py`; 1.23:1 before), under the 3:1 a state indicator should reach, as macOS 27 draws it

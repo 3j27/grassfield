@@ -597,6 +597,20 @@ TestCase {
         verify(!WindowTiling.isFixed(["a1"], ""), "no window");
     }
 
+    // ADR-0036 D78 (review of fix/zoom-is-fill, NIT): the windows Zoom or Fill filled, for the Window menu's Unzoom.
+    function test_parseFilledReadsTheFilledWindows() {
+        const reply = '{"v":"gfc/1","type":"tiling","gen":3,"outputs":[{"name":"GF-REF","windows":['
+            + '{"address":"A1","state":"tiled","place":"fill"},{"address":"b2","state":"suspended","place":"fill"},'
+            + '{"address":"c3","state":"tiled","place":"left"},{"address":"xyz","state":"tiled","place":"fill"}]}],"suggestion":null}';
+        compare(JSON.stringify(WindowTiling.parseFilled(reply)), JSON.stringify(["a1"]), "tiled in the place fill only; a malformed address left out");
+        compare(JSON.stringify(WindowTiling.parseFilled('{"v":"gfc/1","type":"tiling","gen":1,"outputs":[],"suggestion":null}')), "[]");
+        for (const bad of ["", "not json", "null", '{"v":"gfc/2","type":"tiling","outputs":[]}', '{"v":"gfc/1","type":"tiling"}'])
+            compare(WindowTiling.parseFilled(bad), null, bad);
+        verify(WindowTiling.isFilled(["a1"], "0xA1"), "listed: filled, any address form");
+        verify(!WindowTiling.isFilled(["a1"], "b2"), "not listed");
+        verify(!WindowTiling.isFilled(null, "a1"), "not known: not");
+    }
+
     // #48 nested pass, MINOR D: the first window is selected as the picker opens, and a first Return takes it.
     function test_keptSelectionStartsOnTheFirstTile() {
         const three = ["a", "b", "c"];

@@ -557,6 +557,19 @@ TestCase {
         compare(Minimized.fullscreenRequest("zz", "maximized"), "");
     }
 
+    // ADR-0036 D78: Zoom is Fill with the plugin's "zoom-fill" (its tile verb, place "zoom"); Hyprland's maximized mode
+    // without it (gate C2). Never "zoom" through the tiling keys' place list.
+    function test_zoomRequest() {
+        const guard = "function() local p = hl.plugin and hl.plugin.grassfield; if p and p.tile then p.tile(";
+        compare(Minimized.zoomCall("0xAB12"), guard + "\"0xab12\", \"zoom\") end end");
+        compare(Minimized.zoomRequest("0xAB12", true), guard + "\"0xab12\", \"zoom\") end end");
+        compare(Minimized.zoomRequest("0xAB12", false), "hl.dsp.window.fullscreen({ mode = \"maximized\", window = \"address:0xab12\" })");
+        compare(Minimized.zoomRequest("0xAB12", undefined), Minimized.fullscreenRequest("0xAB12", "maximized"));
+        for (const address of ["", "zz", "0x12345678901234567", "ab12\" end os.exit() --", null])
+            compare(Minimized.zoomRequest(address, true) + Minimized.zoomRequest(address, false), "", String(address));
+        compare(Minimized.tileCall("0xAB12", "zoom"), "", "the keys' tile places stay the tiling places");
+    }
+
     function test_finiteRect() {
         verify(Minimized.finiteRect({x: 1, y: 2, w: 3, h: 4}) !== null);
         compare(Minimized.finiteRect({x: NaN, y: 2, w: 3, h: 4}), null);
