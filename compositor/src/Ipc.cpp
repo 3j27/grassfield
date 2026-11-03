@@ -14,6 +14,7 @@
 #include "Stages.hpp"
 #include "Tiling.hpp"
 #include "Titlebar.hpp"
+#include "WindowRim.hpp"
 #include "core/Minimize.hpp"
 #include "core/Overview.hpp"
 #include "core/OverviewFocus.hpp"
@@ -336,18 +337,20 @@ namespace gf::ipc {
                     logRequest(Log::INFO, "config: {} = {}", minimize::kConfigMinimizeEffect, value.view());
                     return;
                 }
-                // The appearance the chrome follows (audit UX-06): every titlebar is drawn again in its palette.
+                // The appearance the chrome follows (audit UX-06): every titlebar is drawn again in its palette, every rim comes
+                // (dark) or goes (light).
                 if (key.ok && value.ok && key.view() == gfc::kConfigAppearance) {
                     const auto appearance = gfc::parseAppearance(key.view(), value.view());
                     if (!appearance) {
                         logRequest(Log::WARN, "config: rejected ({} = dark|light)", gfc::kConfigAppearance);
                         return;
                     }
-                    const bool changed  = state().appearance != *appearance;
-                    state().appearance = *appearance;
+                    const bool changed = state().appearance.push(*appearance);
                     logRequest(Log::INFO, "config: {} = {}", gfc::kConfigAppearance, value.view());
-                    if (changed)
+                    if (changed) {
                         CGrassfieldTitlebar::onAppearanceChanged();
+                        CGrassfieldRim::onAppearanceChanged(); // the dark appearance's inner rim comes or goes
+                    }
                     return;
                 }
                 // Window tiling (core/Tiling.hpp): the switches of Desktop & Dock > Windows (tiling.md TL32).

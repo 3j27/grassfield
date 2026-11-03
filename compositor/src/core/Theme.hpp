@@ -131,6 +131,28 @@ namespace gf::theme {
     // "appearance"; Grassfield's default appearance is dark).
     inline constexpr Appearance kDefaultAppearance = Appearance::Dark;
 
+    // The appearance the shell pushed, and whether it pushed one since this load (the dark rim waits for it, WindowRim.hpp).
+    // Reset at unload: Hyprland 0.56.2 keeps an unloaded plugin's library mapped ("this library stays in memory"), so a
+    // reload would otherwise find the previous load's appearance, and a session turned light meanwhile would get a dark rim
+    // until the shell's next push.
+    struct PushedAppearance {
+        Appearance current = kDefaultAppearance;
+        bool       known   = false;
+
+        // The shell's push: true when the chrome must be drawn again (another value, or the first push since the load).
+        bool push(Appearance pushed) {
+            const bool changed = pushed != current || !known;
+            current            = pushed;
+            known              = true;
+            return changed;
+        }
+
+        // Unload: as on a fresh load.
+        void reset() {
+            *this = PushedAppearance{};
+        }
+    };
+
     // The width of the hairline under the bar (one point, ADR-0039 D5).
     inline constexpr double kTitlebarRuleWidth = tokens::kTitlebarRuleWidth;
 

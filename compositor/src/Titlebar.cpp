@@ -681,6 +681,20 @@ bool CGrassfieldTitlebar::revealed() const {
     return m_revealed;
 }
 
+double CGrassfieldTitlebar::shownBarHeight(const PHLWINDOW& w) {
+    if (!w)
+        return 0.0;
+    for (const auto* deco : gf::state().titlebars) {
+        if (deco->window() != w)
+            continue;
+        if (!deco->shouldShow())
+            return 0.0;
+        const CBox bar = deco->layoutBox(); // what drawTitlebar draws: nothing until the positioner placed it
+        return bar.w > 0 && bar.h > 0 ? bar.h : 0.0;
+    }
+    return 0.0;
+}
+
 std::optional<CBox> CGrassfieldTitlebar::zoomLightOf(const PHLWINDOW& w) {
     if (!w)
         return std::nullopt;
@@ -899,7 +913,7 @@ void CGrassfieldTitlebar::drawPreview(const PHLMONITOR& monitor, float alpha) {
     const float  scale    = monitor->m_scale;
     const double rounding = std::max(0.0, static_cast<double>(w->rounding()));
     const float  power    = w->roundingPower();
-    const auto   palette  = theme::titlebarPalette(gf::state().appearance);
+    const auto   palette  = theme::titlebarPalette(gf::state().appearance.current);
     const int    roundPx  = static_cast<int>(std::round(rounding * scale));
     CBox preview = snap->frame;
     preview.translate(-monitor->m_position);
@@ -929,7 +943,7 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
     const float  scale    = monitor->m_scale;
     const double rounding = std::max(0.0, static_cast<double>(w->rounding()));
     const float  power    = w->roundingPower();
-    const auto   appearance = gf::state().appearance; // follows the shell (config "appearance", audit UX-06)
+    const auto   appearance = gf::state().appearance.current; // follows the shell (config "appearance", audit UX-06)
     const auto   palette    = theme::titlebarPalette(appearance);
     const auto   bgColor    = toColor(palette.background, alpha);
 
@@ -953,7 +967,7 @@ void CGrassfieldTitlebar::drawTitlebar(const PHLMONITOR& monitor, float alpha) {
 }
 
 void CGrassfieldTitlebar::drawBar(const PHLWINDOW& w, const CBox& bar, float scale, double rounding, float power, float alpha, bool hovered, bool fullscreen) {
-    const auto appearance = gf::state().appearance;
+    const auto appearance = gf::state().appearance.current;
     const auto palette    = theme::titlebarPalette(appearance);
     const auto bgColor    = toColor(palette.background, alpha);
     const int  roundPx    = static_cast<int>(std::round(rounding * scale));
