@@ -3292,7 +3292,7 @@ QtObject {
     readonly property real windowSidebarPanelShadowOpacity: 0.08
     // estimate: the same in the dark appearance, stronger so it still reads on the dark window (no dark capture) [ref: ADR-0024 amendment 2026-11-03]
     readonly property real windowSidebarPanelShadowOpacityDark: 0.3
-    // the window's contact edge in the dark appearance: macOS 27 draws one device pixel of near black outside the window (its light inner rim inside it is deferred to the plugin, ADR-0024 note 2026-11-03); Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua); was the white rim at 0.15 (ADR-0024 note 2026-11-03) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/decisions/ADR-0039-design-polish.md step 6; tests/compositor/window_edge.sh]
+    // the window's contact edge in the dark appearance: macOS 27 draws one device pixel of near black outside the window (its light inner rim inside it is drawn by the compositor plugin, window.rimDark*, ADR-0024 note 2026-11-03); Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua); was the white rim at 0.15 (ADR-0024 note 2026-11-03) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/decisions/ADR-0039-design-polish.md step 6; tests/compositor/window_edge.sh]
     readonly property string windowEdgeDark: "#000000"
     // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
     readonly property string windowEdgeLight: "#000000"
@@ -3304,6 +3304,12 @@ QtObject {
     readonly property real windowEdgeActiveOpacityLight: 0.125
     // an inactive window's edge in the light appearance: 0.18 over its shadow (the inactive Settings window of the Finder App Switcher release capture), 0.18 x 0.5 / 0.8 [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
     readonly property real windowEdgeInactiveOpacityLight: 0.11
+    // the dark appearance's light inner rim, in points: macOS 27 draws 1 pt of white (two device pixels at 2 px per pt in the Appearance Dark release captures) just inside every window's edge, continuous round the corner arcs; the compositor plugin draws it over the window and its titlebar (CGrassfieldRim), in whole device pixels as Hyprland's border is (1 at 1 and 1.25, 2 at 1.5 and 2); none in the light appearance, none in full screen [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
+    readonly property int windowRimDarkWidth: 1
+    // the rim's white per point, active window: macOS 27's Notes in the Appearance Dark release captures, window 41 and rim 62 over its two device pixels (white 0.10); the plugin draws the same light per point in its whole device pixels (0.125 in the one device pixel, 0.8 pt, at 1.25) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
+    readonly property real windowRimDarkActiveOpacity: 0.1
+    // the same, a window that is not key: white 0.08 per point (the inactive Settings window of the same captures; 0.10 in one device pixel at 1.25) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
+    readonly property real windowRimDarkInactiveOpacity: 0.08
     // a window that is not key, light appearance: its toolbar title and glyphs in the text colour at this opacity (macOS 27's inactive Finder and Settings: the title #B8B8B8 on white, the glyphs #B0B0B0 on #F0F0F0, black at 0.27-0.28; 512 Pixels release capture Finder-App-Switcher); an inactive control, exempt from WCAG 1.4.3 (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
     readonly property real windowInactiveTextOpacityLight: 0.28
     // the same, dark appearance: macOS 27's inactive Settings title #747373 on #333131, white at 0.32 (512 Pixels release capture Apperance-Dark-Green) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]

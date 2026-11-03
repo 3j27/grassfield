@@ -4,6 +4,8 @@ Hyprland plugin for the Grassfield session (master-prompt §5.6):
 
 - titlebars on floating windows: close / minimize / zoom buttons on the left, centered title,
   drag to move (a maximized window un-zooms under the pointer), double-click per Settings (zoom by default);
+- the dark appearance's inner rim (FR57, ADR-0024 note 2026-11-03): 1 pt of white just inside every window's frame (its
+  titlebar included), continuous round the rounded corners, drawn over the content with Hyprland's border shader;
 - minimize / restore with a funnel (default) or shrink animation into / out of the Dock tile the shell sends (M2,
   FR44-FR46), hidden state `special:minimized` (shared with the shell's fallback);
 - appmenu protocol (feature 3, D4): the `org_kde_kwin_appmenu_manager` global (version 2); each window's

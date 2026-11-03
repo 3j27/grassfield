@@ -19,6 +19,7 @@
 #include "Tiling.hpp"
 #include "Titlebar.hpp"
 #include "TopClamp.hpp"
+#include "WindowRim.hpp"
 #include "core/Notices.hpp"
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
@@ -67,11 +68,19 @@ namespace {
         return nullptr;
     }
 
+    bool hasRim(const PHLWINDOW& w) {
+        return w && std::ranges::any_of(state().rims, [&w](const CGrassfieldRim* deco) { return deco->window() == w; });
+    }
+
+    // Every mapped window gets the plugin's titlebar (shown or not, CGrassfieldTitlebar::shouldShow) and its rim (drawn in
+    // the dark appearance only, core/WindowRim.hpp).
     void decorate(const PHLWINDOW& w) {
-        if (!w || !w->m_isMapped || titlebarFor(w))
+        if (!w || !w->m_isMapped)
             return;
-        if (!HyprlandAPI::addWindowDecoration(state().handle, w, makeUnique<CGrassfieldTitlebar>(w)))
+        if (!titlebarFor(w) && !HyprlandAPI::addWindowDecoration(state().handle, w, makeUnique<CGrassfieldTitlebar>(w)))
             gf::log(Log::WARN, "addWindowDecoration failed for window {:x}", reinterpret_cast<uintptr_t>(w.get()));
+        if (!hasRim(w) && !HyprlandAPI::addWindowDecoration(state().handle, w, makeUnique<CGrassfieldRim>(w)))
+            gf::log(Log::WARN, "addWindowDecoration (rim) failed for window {:x}", reinterpret_cast<uintptr_t>(w.get()));
     }
 
     void refreshFor(const PHLWINDOW& w) {
@@ -91,7 +100,10 @@ namespace {
         l.push_back(ev.window.floating.listen([](const PHLWINDOW& w) { gf::guarded("window.floating", [&] { refreshFor(w); }); }));
         l.push_back(ev.window.fullscreen.listen([](const PHLWINDOW& w) { gf::guarded("window.fullscreen", [&] { refreshFor(w); }); }));
         l.push_back(ev.window.updateRules.listen([](const PHLWINDOW& w) { gf::guarded("window.updateRules", [&] { refreshFor(w); }); }));
-        l.push_back(ev.window.active.listen([](const PHLWINDOW& w, Desktop::eFocusReason /*reason*/) { CGrassfieldTitlebar::onActiveWindowChanged(w); }));
+        l.push_back(ev.window.active.listen([](const PHLWINDOW& w, Desktop::eFocusReason /*reason*/) {
+            CGrassfieldTitlebar::onActiveWindowChanged(w);
+            CGrassfieldRim::onActiveWindowChanged(w);
+        }));
         l.push_back(ev.window.title.listen([](const PHLWINDOW& w) {
             gf::guarded("window.title", [&] {
                 if (auto* deco = titlebarFor(w))
@@ -162,13 +174,13 @@ namespace {
         }));
     }
 
-    // The window whose m_windowDecorations owns `deco` (normally deco->window(); scanned as a fallback).
-    PHLWINDOW ownerOf(const CGrassfieldTitlebar* deco) {
+    // The window whose m_windowDecorations owns `deco` (normally its own window, `hint`; scanned as a fallback).
+    PHLWINDOW ownerOf(const IHyprWindowDecoration* deco, const PHLWINDOW& hint) {
         const auto owns = [deco](const PHLWINDOW& w) {
             return w && std::ranges::any_of(w->m_windowDecorations, [deco](const UP<IHyprWindowDecoration>& d) { return d.get() == deco; });
         };
-        if (const auto w = deco->window(); owns(w))
-            return w;
+        if (owns(hint))
+            return hint;
         for (const auto& w : Desktop::windowState()->windows()) {
             if (owns(w))
                 return w;
@@ -176,13 +188,14 @@ namespace {
         return nullptr;
     }
 
-    // Destroys a titlebar now, whatever its window's state. HyprlandAPI::removeWindowDecoration only queues
-    // the removal (CWindow::m_decosToRemove) and runs CWindow::updateWindowDecos(), which in 0.56.2 returns
-    // at once for an unmapped or hidden window (it tests m_isMapped, then isHidden(); read from the binary):
-    // such a titlebar would survive dlclose. This does what updateWindowDecos does for a queued removal
-    // (uncache it from the positioner, erase it from m_windowDecorations) without that early return.
-    bool destroyNow(CGrassfieldTitlebar* deco) {
-        const auto w = ownerOf(deco);
+    // Destroys one of the plugin's decorations (a titlebar or a rim) now, whatever its window's state.
+    // HyprlandAPI::removeWindowDecoration only queues the removal (CWindow::m_decosToRemove) and runs
+    // CWindow::updateWindowDecos(), which in 0.56.2 returns at once for an unmapped or hidden window (it tests m_isMapped,
+    // then isHidden(); read from the binary): such a decoration would survive dlclose. This does what updateWindowDecos
+    // does for a queued removal (uncache it from the positioner, erase it from m_windowDecorations) without that early
+    // return.
+    bool destroyNow(IHyprWindowDecoration* deco, const PHLWINDOW& hint) {
+        const auto w = ownerOf(deco, hint);
         if (!w)
             return false;
         auto&      decos = w->m_windowDecorations;
@@ -194,18 +207,19 @@ namespace {
             g_pDecorationPositioner->uncacheDecoration(deco); // pointer comparison only; deco still alive
         UP<IHyprWindowDecoration> owned = std::move(*it);
         decos.erase(it);
-        owned.reset(); // ~CGrassfieldTitlebar runs here, while this library is still loaded
+        owned.reset(); // its destructor runs here, while this library is still loaded
         if (g_pDecorationPositioner)
             g_pDecorationPositioner->forceRecalcFor(w);
         return true;
     }
 
-    void removeAllTitlebars() {
-        CGrassfieldTitlebar::cancelPointerGrab();
-
+    // Removes every decoration of one kind (`live`: state().titlebars or state().rims, which each decoration leaves in its
+    // destructor).
+    template <typename Deco>
+    void removeAll(const std::vector<Deco*>& live, const char* what) {
         // Visible windows: Hyprland's own removal path, which also lays the window out again without the
-        // titlebar. It destroys the decoration synchronously for a mapped, visible window.
-        for (auto* deco : std::vector(state().titlebars)) { // copy: removal destroys entries
+        // decoration. It destroys the decoration synchronously for a mapped, visible window.
+        for (auto* deco : std::vector(live)) { // copy: removal destroys entries
             const auto w = deco->window();
             if (w && w->m_isMapped && !w->isHidden())
                 HyprlandAPI::removeWindowDecoration(state().handle, deco);
@@ -214,14 +228,26 @@ namespace {
         // Everything left (unmapped or hidden windows): destroy directly, so that no object of this library
         // outlives dlclose.
         size_t direct = 0;
-        for (auto* deco : std::vector(state().titlebars)) {
-            if (destroyNow(deco))
+        for (auto* deco : std::vector(live)) {
+            if (destroyNow(deco, deco->window()))
                 ++direct;
             else
-                gf::log(Log::ERR, "titlebar {:x} has no owning window; cannot destroy it before unload", reinterpret_cast<uintptr_t>(deco));
+                gf::log(Log::ERR, "{} {:x} has no owning window; cannot destroy it before unload", what, reinterpret_cast<uintptr_t>(deco));
         }
         if (direct > 0)
-            gf::log(Log::INFO, "destroyed {} titlebar(s) of unmapped or hidden windows directly", direct);
+            gf::log(Log::INFO, "destroyed {} {}(s) of unmapped or hidden windows directly", direct, what);
+    }
+
+    void removeAllTitlebars() {
+        CGrassfieldTitlebar::cancelPointerGrab();
+        removeAll(state().titlebars, "titlebar");
+    }
+
+    // The rims go with the plugin (gate C2): where each was is drawn again first, so that none stays on screen.
+    void removeAllRims() {
+        for (auto* deco : state().rims)
+            deco->damageEntire();
+        removeAll(state().rims, "rim");
     }
 
     void teardown() {
@@ -252,6 +278,7 @@ namespace {
         step("appmenu", [] { gf::appmenuServer::stop(); }); // no wl_resource may point into this library after dlclose
         step("events", [] { gf::ipc::stopEvents(); });      // after the appmenu clears: waiting events posted, timer removed
         step("ipc", [] { gf::ipc::unregisterAll(); });
+        step("rims", [] { removeAllRims(); }); // before the titlebars: a rim's frame (its damage) still has the bar's band
         step("titlebars", [] { removeAllTitlebars(); });
         step("withdraw", [] { gf::ipc::postWithdrawn(); }); // last: the shell drops every feature and uses its fallbacks
         s.active = false;

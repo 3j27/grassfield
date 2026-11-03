@@ -21,6 +21,7 @@
 #include <string_view>
 #include <vector>
 
+class CGrassfieldRim;
 class CGrassfieldTitlebar;
 class IHyprWindowDecoration;
 
@@ -75,9 +76,14 @@ namespace gf {
         bool tilingSuggestions = true;
         // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise.
         theme::Appearance appearance = theme::kDefaultAppearance;
+        // The shell has pushed the appearance since this load: the dark rim waits for it (WindowRim.hpp, gate C2).
+        bool appearanceKnown = false;
 
         // Live titlebars. Owned by their windows; each removes itself in its destructor.
         std::vector<CGrassfieldTitlebar*> titlebars;
+        // Live window rims (WindowRim.hpp, the dark appearance's inner rim), one per window next to its titlebar. Owned by
+        // their windows; each removes itself in its destructor.
+        std::vector<CGrassfieldRim*> rims;
 
         // Log lines that requests trigger (see logRequest).
         events::CLogLimiter requestLog{20, std::chrono::seconds(1)};

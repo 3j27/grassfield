@@ -681,6 +681,20 @@ bool CGrassfieldTitlebar::revealed() const {
     return m_revealed;
 }
 
+double CGrassfieldTitlebar::shownBarHeight(const PHLWINDOW& w) {
+    if (!w)
+        return 0.0;
+    for (const auto* deco : gf::state().titlebars) {
+        if (deco->window() != w)
+            continue;
+        if (!deco->shouldShow())
+            return 0.0;
+        const CBox bar = deco->layoutBox(); // what drawTitlebar draws: nothing until the positioner placed it
+        return bar.w > 0 && bar.h > 0 ? bar.h : 0.0;
+    }
+    return 0.0;
+}
+
 std::optional<CBox> CGrassfieldTitlebar::zoomLightOf(const PHLWINDOW& w) {
     if (!w)
         return std::nullopt;

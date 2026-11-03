@@ -118,6 +118,11 @@ class CGrassfieldTitlebar : public IHyprWindowDecoration {
     // The titlebar of this full-screen window (or Split View member) is revealed.
     bool revealed() const;
 
+    // The height of `w`'s titlebar while it is drawn above the surface (shown, and placed by the positioner), 0 otherwise
+    // (client chrome, a window that is not floating, full screen, a Split View member): the window rim's frame
+    // (WindowRim.cpp) starts at its top.
+    static double shownBarHeight(const PHLWINDOW& w);
+
     // TL22, TL24 (docs/specs/tiling.md): the zoom light of `w` in global layout coordinates: its titlebar's while the bar is
     // shown or revealed, or the light a Grassfield app draws itself (the client-chrome tag on an org.grassfield.* window,
     // its row named by its xdg-toplevel tag: "info" the titlebar row, any other role the unified toolbar row); nullopt for
