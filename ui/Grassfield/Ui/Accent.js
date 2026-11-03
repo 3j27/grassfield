@@ -85,8 +85,11 @@ function withSelection(palette, pair) {
 
 // ---- Focus ring colour and Increase Contrast ----
 
-// Channels (0..1) of a "#rrggbb" or "#aarrggbb" string; null for anything else.
+// Channels (0..1) of a "#rrggbb" or "#aarrggbb" string, or of a QML colour value (a `color` property or function result is
+// an object with r, g and b, not a string); null for anything else.
 function rgb(hex) {
+    if (hex !== null && typeof hex === "object" && typeof hex.r === "number" && typeof hex.g === "number" && typeof hex.b === "number")
+        return [hex.r, hex.g, hex.b];
     if (typeof hex !== "string" || !/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(hex))
         return null;
     const h = hex.slice(-6);

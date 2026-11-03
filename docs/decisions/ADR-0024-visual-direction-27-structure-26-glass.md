@@ -206,9 +206,12 @@ no text, and the darkened values made Settings read muddy beside macOS (docs/aud
   `minimizeColor`, `zoomColor`, shared with the compositor plugin through `ThemeTokens.hpp`).
 - **Vivid but our own (ADR-0003, docs/legal/visual-review.md E18, E34).** The macOS captures were measured at 2 px/pt
   (ss-004-005, ss-010-037, ss-032-145) for saturation and lightness only. Copying them (a first version did) is a 1:1 copy,
-  which the owner's E18 acceptance does not cover (it covers shifted colours, CIE76 dE 7.9 to 29.5). Every value is shifted in
-  hue and lightness to dE 9 or more from every known macOS system colour: `test_no_token_copies_a_macos_system_colour`
-  (greys and near-blacks, the warm neutrals of ADR-0040, are exempt).
+  which Grassfield's rule of choosing its own exact colours forbids (ADR-0003). Every value is shifted in hue and lightness to
+  CIE76 dE 9 or more from each of the 62 known macOS colours of the test list: `test_no_token_copies_a_macos_system_colour`
+  (not every macOS colour). The owner validated these values on 2026-11-03 with that floor, after being shown the dE to the
+  measured macOS references (lights: close 10.5, minimize 9.5, zoom 18.2; tiles 10.1 to 25.8 and swatches 9.9 to 12.7 to the
+  closest macOS colour; per colour in docs/legal/visual-review.md E18, E34). This records the owner's decision and states no
+  legal conclusion (section 14); the legal review before any public release still applies. Greys and near-blacks (the warm neutrals of ADR-0040) are exempt.
 
   | Role | Own value (top / bottom, or disc) | Measured macOS (not used) |
   |---|---|---|

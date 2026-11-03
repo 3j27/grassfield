@@ -760,8 +760,9 @@ class ContrastTokens(unittest.TestCase):
 
     # Known macOS system colours (several releases, light and dark, the lights, and values measured on the reference captures:
     # tile ramps, swatches): Grassfield chooses its own exact colours (ADR-0003; docs/legal/visual-review.md E18, E34), so no
-    # tile, swatch or light token may equal or nearly equal one. E18 accepted CIE76 dE 7.9 to 29.5 for the lights; the floor
-    # here is 9. A neutral grey (saturation under 8 %) is exempt: a grey is not a distinctive colour, and ours are the warm
+    # tile, swatch or light token may equal or nearly equal one. The floor, CIE76 dE 9 from each colour of this list (62, not
+    # every macOS colour), was validated by the owner on 2026-11-03 (docs/legal/visual-review.md E18, E34; no legal conclusion).
+    # A neutral grey (saturation under 8 %) is exempt: a grey is not a distinctive colour, and ours are the warm
     # neutrals of ADR-0040.
     MACOS_SYSTEM_COLOURS = (
         "#FF5F57 #FEBC2E #28C840 #FF5C60 #FAC800 #35C759 #FF3B30 #FF453A #FF383C #FF9500 #FF9F0A #FF8D28 #FFCC00 #FFD60A "
