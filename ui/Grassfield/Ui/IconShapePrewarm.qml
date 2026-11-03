@@ -79,11 +79,8 @@ Item {
                 if (probe.key === "")
                     return;
                 const n = Tokens.iconModeOwnTileProbeSize;
-                const ctx = canvas.getContext("2d");
-                ctx.clearRect(0, 0, n, n);
-                ctx.drawImage(probe.key, 0, 0, n, n);
-                const data = ctx.getImageData(0, 0, n, n);
-                probe.finish(IconTile.measure(data.data, n, Tokens).side);
+                // The image's own pixels, never drawn (see TintedIcon).
+                probe.finish(IconTile.sideOfImageData(canvas.getContext("2d").createImageData(probe.key), n, Tokens));
             }
 
             width: Tokens.iconModeOwnTileProbeSize

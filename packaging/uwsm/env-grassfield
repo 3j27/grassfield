@@ -9,6 +9,14 @@
 # recognise exactly that). XDG_SESSION_DESKTOP=Grassfield identifies the session; applications cannot use OnlyShowIn=Grassfield.
 # POSIX sh only (uwsm sources it with its own shell).
 
+# ADR-0035 decision 10-1 (amended 2026-11-03): GRASSFIELD_SESSION=1 reaches the systemd user manager here, before the
+# compositor starts. Hyprland itself reports the session ready, so graphical-session.target is reached before
+# autostart.lua's `uwsm finalize` imports the compositor's copy, and Omarchy's units that a Grassfield drop-in keeps out
+# of this session (bt-agent, an auto-accepting pairing agent; crash-watch; migrate-notify) read
+# ConditionEnvironment=!GRASSFIELD_SESSION=1 without it and started (the owner's rc1-17 and rc1-18 logins). uwsm unsets
+# it again at the end of the session; the Omarchy session never sources this file.
+export GRASSFIELD_SESSION=1
+
 # ADR-0035 D-6 (step 7a): xdg-desktop-portal-hyprland, which the systemd user manager starts, runs its screen-sharing picker
 # by name through PATH (`hyprland-share-picker`, or Omarchy's `hyprland-preview-share-picker` from xdph.conf); the session's
 # stand-ins come first so that the Grassfield picker shows. The directory also holds hyprland-dialog, which only Hyprland runs

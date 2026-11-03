@@ -2737,6 +2737,21 @@ none widens a rule of Q12's text, which names "BlueZ pairing").
   the next log-in. In the Omarchy session the bridge never starts (`ConditionEnvironment=GRASSFIELD_SESSION=1`, started only
   by Grassfield's `autostart.lua`), and bt-agent starts with the session and now stops with it. `systemd-analyze --user
   verify` of both units (systemd 262): rc 0. Rule applied: fail closed, never another agent beside the sheet.
+  (Amended 2026-11-03, opus security review of the owner's rc1-17 and rc1-18 logins: the condition did not hold.
+  Omarchy's bt-agent.service is WantedBy graphical-session.target with no ordering, so it started, and its
+  `ConditionEnvironment=!GRASSFIELD_SESSION=1` was read, before autostart.lua's `uwsm finalize` imported the variable. In
+  the Grassfield session it registered and asked to be bluetoothd's default agent at 01:05:47. bt-agent also ignores
+  SIGTERM, so the prompter's synchronous stop waited for the 90 s stop timeout and timed out the prompter's own start: an
+  auto-accepting agent was the default for 90 s at every log-in. Ordering it after the target is not enough, because
+  Hyprland itself reports the session ready, so the target is reached before `uwsm finalize`; Omarchy's crash-watch and
+  migrate-notify, already ordered so, ran in the Grassfield session too.
+  Now `packaging/uwsm/env-grassfield`, which uwsm's preloader sources only for the Grassfield session before the compositor
+  starts, exports `GRASSFIELD_SESSION=1`, so every such condition reads it; uwsm unsets it at the session's end. The
+  drop-in also orders bt-agent `After=graphical-session.target` and sets `KillSignal=SIGKILL`, since bt-agent ignores
+  SIGTERM, holds no state, and bluetoothd drops an agent whose D-Bus connection closes. A leftover from an Omarchy session
+  is gone at once. The prompter's stop stays synchronous, so its pairing agent never asks to be the default while
+  bt-agent still runs. To check at the next real log-in: `journalctl --user -u bt-agent -u grassfield-prompter` shows
+  bt-agent skipped by its condition and the prompter started within seconds.)
 - **10-2. When is the agent registered, with which capability, and is it the default?** **Choice:** registered (`KeyboardDisplay`:
   every method can be drawn, D-11) only while a shell whose hello lists `bluetooth` is connected, then `RequestDefaultAgent`
   (an `AlreadyExists` answer means this connection's agent is still registered, and the default is asked all the same);
