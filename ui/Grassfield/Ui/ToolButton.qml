@@ -12,6 +12,8 @@ T.ToolButton {
 
     property string iconName: ""
     property real iconRotation: 0
+    // "back" or "forward": the toolbar's navigation chevron (8 x 14 pt, drawn; the Back and Forward of a capsule) instead of an icon.
+    property string navigation: ""
     property string accessibleName: ""
     // One choice of a group of sibling buttons.
     property bool radio: false
@@ -30,6 +32,11 @@ T.ToolButton {
     property string tooltip: root.text === "" ? root.accessibleName : ""
 
     // Dimmed while the window is not key, as macOS 27 draws a toolbar's glyphs then (ADR-0039 step 17).
+    // The tint of a glyph a host draws inside the button: the button dims it (disabled, not key), not the glyph's own colour.
+    readonly property color glyphColor: root.tint
+    // Dark grey, not the full text colour (macOS 27 toolbar glyphs; token control.toolGlyphOpacity).
+    readonly property real glyphOpacity: Tokens.controlToolGlyphOpacity
+    readonly property bool windowInactive: root.Window.window !== null && !Appearance.looksKey(root.Window.window, root.Window.active)
     readonly property color foreground: !enabled ? Appearance.withAlpha(root.tint, Tokens.materialDisabledOpacity)
         : root.Window.window !== null && !Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.withAlpha(root.tint, Appearance.inactiveTextOpacity) : root.tint
 
@@ -85,18 +92,27 @@ T.ToolButton {
 
     contentItem: Item {
         Icon {
-            visible: root.iconName !== ""
+            visible: root.iconName !== "" && root.navigation === ""
             anchors.centerIn: parent
             name: root.iconName
             size: root.glyphSize
             color: root.foreground
+            opacity: root.glyphOpacity
             rotation: root.iconRotation
+        }
+
+        NavChevron {
+            visible: root.navigation !== ""
+            anchors.centerIn: parent
+            forward: root.navigation === "forward"
+            color: root.foreground
+            opacity: root.glyphOpacity
         }
 
         Item {
             id: slot
             anchors.fill: parent
-            opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+            opacity: root.glyphOpacity * (root.enabled ? 1 : Tokens.materialDisabledOpacity) * (root.windowInactive ? Appearance.inactiveTextOpacity : 1)
         }
 
         Text {

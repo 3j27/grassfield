@@ -18,6 +18,7 @@ add Tokens singleton
 add Appearance singleton
 add Material
 add Icon
+add NavChevron
 add MenuItem
 add MenuSeparator
 add PopupMenu
