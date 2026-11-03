@@ -79,8 +79,15 @@ settings_backup=$run/settings.backup
 had_settings=0
 [[ -f $settings_file ]] && { cp "$settings_file" "$settings_backup"; had_settings=1; }
 # The appearance shown (the dev settings' default is dark): with the plugin, the dark one has the inner rim (FR57), one device
-# pixel just inside the frame at scale 1 (the bar's first row, the window's side columns).
+# pixel just inside the frame at scale 1 (the bar's first row, the window's side columns). The plugin draws it once the
+# shell has pushed the appearance: in a session just started, wait for that push (15 s) before measuring.
 look=dark
+if ((plugin)); then
+  for _ in $(seq 1 150); do
+    grep -q "compositor setting appearance = " "$dev/shell.log" 2>/dev/null && break
+    sleep 0.1
+  done
+fi
 rim_px() { if ((plugin)) && [[ $look == dark ]]; then echo 1; else echo 0; fi; }
 set_appearance() { # <dark|light>: rewrite the dev settings file, wait for the shell's push to the plugin
   local base=$root/config/defaults/grassfield.json n
