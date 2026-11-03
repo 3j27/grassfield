@@ -491,6 +491,7 @@ Window {
                     id: searchIcon
                     visible: viewerWin.searchOpen
                     kind: "search"
+                    size: Tokens.menuIconSize
                     color: Appearance.colors.textSecondary
                     x: Tokens.spacingMd
                     anchors.verticalCenter: parent.verticalCenter

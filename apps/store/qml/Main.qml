@@ -590,8 +590,7 @@ Window {
                     ToolButton {
                         capsule: true
                         buttonSize: Tokens.toolbarGroupButton
-                        iconName: "chevron-right"
-                        iconRotation: 180
+                        navigation: "back"
                         enabled: root.canBack
                         accessibleName: qsTr("Back")
                         onClicked: root.goBack()
@@ -600,7 +599,7 @@ Window {
                     ToolButton {
                         capsule: true
                         buttonSize: Tokens.toolbarGroupButton
-                        iconName: "chevron-right"
+                        navigation: "forward"
                         enabled: root.canForward
                         accessibleName: qsTr("Forward")
                         onClicked: root.goForward()

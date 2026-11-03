@@ -667,8 +667,10 @@ QtObject {
     readonly property int controlTooltipTailHeight: 7
     // GF-085: toolbar button, a square 28 (the Files and Preview toolbars, which keep their own tokens for the bars) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlToolButtonSize: 28
-    // GF-085: glyph inside a tool button [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
-    readonly property int controlToolIconSize: 16
+    // refinement batch 6: a toolbar glyph measures 16 to 18 pt tall in Finder and 8 x 14 for the chevron (ss-004-005 at 2 px/pt, gs-010-011), so the box is 18 (the stroke of the 24-unit symbolic glyphs, 2, is 1.5 pt at 18, the 1.5 measured); was 16; GF-085: glyph inside a tool button [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
+    readonly property int controlToolIconSize: 18
+    // a toolbar glyph is a dark grey, not the full text colour: ss-004-005 back chevron #4C4C4C and gs-010-011 glyphs #393939 to #404040 on white, the text colour #1D1B18 at about 0.85 (so a disabled glyph at 0.38 of it reads about #B6B6B6, the 181 to 190 measured) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property real controlToolGlyphOpacity: 0.85
     // GF-085: check box and radio button box, 14 as the AppKit control [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlCheckSize: 14
     // GF-085: check box corner radius [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
@@ -827,6 +829,12 @@ QtObject {
     readonly property int toolbarCapsule: 36
     // A button inside a toolbar capsule: two make the 72-pt back/forward capsule, four the 146-pt view group; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) (moved from files.toolbarGroupButton: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int toolbarGroupButton: 34
+    // the back / forward chevron is 16 x 28 px at 2 px/pt, 8 x 14 pt (ss-004-005; 9 x 15 px in gs-010-011); our symbolic chevron was 4.3 x 8.7 pt at 16 [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int toolbarNavChevronWidth: 8
+    // see navChevronWidth: 14 pt tall [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int toolbarNavChevronHeight: 14
+    // the back / forward chevron stroke is 3 px at 2 px/pt (ss-004-005 apex row: 4 px of #4C4C4C across a 41 degree line), 1.5 pt, drawn in device pixels at any scale [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property real toolbarNavChevronStroke: 1.5
     // a search field (SearchField: the rimmed capsule of an app window's sidebar and toolbar), Settings' 28 (moved from settings.searchHeight, an estimate of the Settings app; ADR-0039 step 14) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int toolbarSearchHeight: 28
 
@@ -2272,8 +2280,10 @@ QtObject {
     readonly property int filesToolbarHeight: 52
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesToolbarButtonSize: 28
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesToolbarIconSize: 16
+    // the sidebar eject glyph keeps its pre-batch-6 size, 16, smaller than the 18-pt row icon (no Finder eject capture to measure) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int filesSidebarEjectSize: 16
+    // refinement batch 6: as control.toolIconSize (was 16); estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
+    readonly property int filesToolbarIconSize: 18
     // Expanded width of the search capsule (macOS ~200); collapsed it is a 36-pt circle; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int filesSearchWidth: 200
     // macOS 26 AppKit tab bar (the Finder's): the capsule track 27.5 tall, measured on a Tahoe capture at 2 px/pt; also the round + button [ref: docs/specs/files.md § Tabs and windows]
@@ -2740,8 +2750,8 @@ QtObject {
     readonly property int previewCodeFontSize: 12
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewControlsHeight: 40
-    // estimate: glyph size inside a 28-pt toolbar button (same as files.toolbarIconSize) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
-    readonly property int previewToolbarIconSize: 16
+    // refinement batch 6: as control.toolIconSize (was 16); estimate: glyph size inside a 28-pt toolbar button (same as files.toolbarIconSize) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
+    readonly property int previewToolbarIconSize: 18
     // F1 reference (meas-B, gs-019-035): inspector panel about 248 +-3 wide [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewInfoWidth: 248
     // F1 reference (meas-B, gs-019-035): inspector info rows 23 [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
@@ -3492,6 +3502,8 @@ QtObject {
     readonly property int storeCarouselArrowSize: 32
     // estimate: the arrows 12 pt in from the carousel's edges [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeCarouselArrowInset: 12
+    // the carousel arrow's chevron keeps its pre-batch-6 size, 16 (the toolbar glyphs grew to 18 in a 36-pt capsule; this one sits in a 32-pt disc) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int storeCarouselArrowGlyphSize: 16
     // estimate: the arrow's disc over the cards [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property real storeCarouselArrowFillOpacity: 0.85
     // estimate: a carousel's turn (none with Reduce Motion) [ref: docs/audits/store-2026-10-27/parity.md]
