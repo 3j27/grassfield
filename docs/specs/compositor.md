@@ -88,7 +88,12 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   Radius since ADR-0024 lot 2 (C-1): one radius for every window, 20 at rounding_power 2.6 (global
   `decoration.rounding` and the rules `gf-third-party-rounding` and `gf-client-chrome-info-rounding`), replacing 26 for
   `org.grassfield.*` and 12 otherwise; the window shadow is the macOS 27 fit (range 68, render_power 4, black 0.25,
-  offset 0 16). Not yet measured in the nested session: `tests/compositor/chrome.sh` expects corner insets of 5-7 px.
+  offset 0 16), rendered as that model within 0.023 on GF-REF at 1.25; the window border is macOS 27's dark contact
+  pixel, pushed by the shell with the appearance (ADR-0024 note 2026-11-03; `tests/compositor/window_edge.sh`, with and
+  without the plugin: none of it is the plugin's). Plugin work, deferred: the dark appearance's light inner rim, drawn
+  with the bar, continuous round the corner arcs and masking the client's top row under the bar (Hyprland 0.56.2's
+  inner glow cannot: no window rule, no rim along the rounded corners). `tests/compositor/chrome.sh` expects corner
+  insets of 5-7 px (6 measured at scale 1 on 2026-11-03 with the new edge).
 - **FR4** Close, minimize, zoom buttons: 14 px circles, 9 px gaps (23 px pitch), first one 9 px from the left
   edge (centres at x 16, 39, 62), vertically centered (y 16); each is hit inside its circle grown by 1/6 of the
   diameter (2.33 px), and the gaps between the buttons stay drag area; colors from `compositor/src/core/Theme.hpp` (close `#FF5C60`, minimize `#FAC800`,

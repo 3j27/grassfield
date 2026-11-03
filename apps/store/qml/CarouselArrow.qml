@@ -11,6 +11,7 @@ ToolButton {
     buttonSize: Tokens.storeCarouselArrowSize
     iconName: "chevron-right"
     iconRotation: back ? 180 : 0
+    glyphSize: Tokens.storeCarouselArrowGlyphSize
     focusPolicy: Qt.NoFocus
     accessibleName: back ? qsTr("Previous") : qsTr("Next")
     opacity: shown ? 1 : 0

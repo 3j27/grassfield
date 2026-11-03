@@ -36,7 +36,7 @@ to what is behind them) follow macOS 26.** Where a macOS 27 trait concerns both 
 | Toolbars | bars, one height, a continuous bar under the controls once content scrolls under them | — |
 | Menus | an icon only on the rows that have one, text otherwise about 16 pt from the edge; highlight 24 pt tall, about 5 pt from the sides, radius 7 (concentric with 12) | icon column in every menu, radius 6 |
 | Accent fills | white text on the accent fill in both appearances; the dark appearance gets a deeper selection fill that holds 4.5:1 with white (A2) | dark text on a bright green in the dark appearance |
-| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16; a dark contact edge through the window border in the light appearance (about black 0.25), a light inner rim in the dark one | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
+| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16 (rendered as that model, note 2026-11-03); the contact edge, the window border's one device pixel: black 0.125 in the light appearance, black 0.58 in the dark one; the dark appearance's light inner rim deferred to the plugin (note 2026-11-03) | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
 | Dark windows | neutral greys: window about #292929, groups about #313131 | #1D1F24 |
 | Search | a neutral light fill on the selected row; result type about 17.7 / 15 pt | accent-filled row (F2c), 13 / 11 |
 | Light window content | white windows, groups #F7F7F7 without a border, radius 12, margins 20 (unchanged from 26) | grey window, 14 % black groups with a border |
@@ -221,3 +221,80 @@ no text, and the darkened values made Settings read muddy beside macOS (docs/aud
   `test_vivid_lights_keep_their_glyph_legible`).
 - Swatch purple is macOS's magenta-leaning #923B93, 33 degrees from the violet fill #7A3FC4 it picks; the hue tolerance of
   `test_vivid_swatches_keep_the_hue_of_their_accent` says so.
+
+## Note (2026-11-03): the window edge and shadow, measured on the GPU
+The owner's decision of 2026-11-02 ("Golden Gate 27"): the window edge and shadow follow macOS 27, not the Tahoe 26
+captures that `docs/audits/refinement-2026-11-02.md` (03-windows-corner-shadow, item 1) compared them with. That audit had
+not checked the real GPU; `tests/compositor/window_edge.sh` now does: a Settings window on flat wallpapers (#E6E6E6,
+#808080), GF-REF at 1.25, light and dark, active and inactive, the darkening of the backdrop per device pixel along the
+middle of each side (`tests/compositor/edge_measure.py`, which holds the target below).
+
+**The macOS 27 target.** Measured on three 512 Pixels Golden Gate window crops (Settings General, Finder Home, Force Quit;
+the shadow is their alpha channel, 2 px per pt), which agree within 0.005. Darkening (black's alpha) against pt from the
+window's edge:
+
+| | contact (0-0.5) | 1 | 2 | 4 | 8 | 12 | 16 | 24 | 32 | 40 | 48 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sides | 0.374 | 0.190 | 0.182 | 0.167 | 0.137 | 0.108 | 0.083 | 0.044 | 0.020 | 0.009 | 0.003 |
+| top | 0.277 | 0.066 | 0.062 | 0.051 | 0.038 | 0.025 | 0.018 | 0.007 | 0.002 | 0 | 0 |
+| bottom | 0.474 | 0.320 | 0.313 | 0.302 | 0.275 | 0.244 | 0.213 | 0.152 | 0.094 | 0.052 | 0.025 |
+
+- The contact edge: one device pixel (half a point) that darkens the shadow under it by 0.20 on every side; 0.18 for an
+  inactive window (Finder App Switcher capture).
+- The dark appearance (Appearance Dark captures, over the wallpaper): an outer device pixel of black 0.92 over the shadow
+  (0.83 inactive), then two device pixels (1 pt) of white 0.10 inside the window (0.08 inactive).
+- The light appearance has no visible inner rim (at most white 0.07 over one device pixel, on the sidebar).
+- Inactive shadow (low confidence: a gradient wallpaper): about 0.13 at 4 pt, 0.06 at 8 pt, gone by 16 pt.
+
+**Ours before (main 293a5d55, Hyprland 0.56.2).** The render is Hyprland's model (`shadow.glsl`: alpha × (1 − d / range) ^
+power outside the window box moved by the offset), within 0.012 beside the window, 0.005 above and 0.023 below. Range and
+offset are in points at 1.25. So C-3 renders as fitted.
+- Shadow, active, at 1, 4, 8, 16, 24 and 32 pt: sides 0.243, 0.213, 0.165, 0.087, 0.048 and 0.022 (27: 0.192, 0.172,
+  0.142, 0.082, 0.047, 0.022). Bottom: 0.252 flat to 16 pt (27: 0.322 down to 0.212), then 0.174, 0.100 and 0.026 at 24,
+  32 and 48 pt (27: 0.157, 0.099, 0.027).
+- Contact edge: the 1-pt border is ONE device pixel (0.8 pt) at 1.25, black 0.25 over the shadow, 0.44 in all. That is
+  twice macOS 27's darkness per point (0.2 over half a point).
+- Dark appearance: a white 0.15 pixel outside the window, no dark edge, no inner rim.
+- The audit's "77 % of the background ten points out" is below the window, where macOS 27 is at 74 % (0.26). The Tahoe 26
+  capture's 95 % is 26's lighter shadow. The excess against 27 was the contact edge and the flat bottom.
+
+**Fit.**
+- Shadow values unchanged. They remain the least-squares fit of one offset box to the 27 profile: rms 0.0139 over the three
+  sides. The best of a grid over range 30-100, power 1-6 and offset 0-24, with the alpha solved, is 0.0135 (range 94, power
+  6, alpha 0.26, offset 16): no visible gain.
+- What Hyprland's model cannot draw: 27's slope under the window. The box holds its alpha over the offset's 16 pt, where 27
+  goes from 0.34 to 0.21: the plateau, at most 0.07 off. Its sides also start at 0.24 where 27 has 0.19 (0.05 off at the
+  first pixels). Closer needs a second shadow or a shader of our own, not in this batch.
+- Edge: the same darkness per point as 27's half-point line, drawn in Hyprland's one device pixel (0.8 pt at 1.25).
+  Light: black 0.2 × 0.5 / 0.8 = 0.125 (inactive 0.11). Dark: black 0.92 × 0.625 = 0.58 (inactive 0.52).
+- The values are tokens, `window.edge*`. The config holds the dark appearance's pair
+  (`config/hypr/grassfield/looknfeel.lua`); the shell pushes the current appearance's (`Minimized.edgeCall`).
+
+**The dark inner rim: tried with Hyprland's inner glow, deferred to the plugin.** Hyprland 0.56's inner glow
+(`decoration.glow`, range 1, render_power 1) draws over the window content and lit the first device pixel inside every
+window at half its colour's alpha (white 0.25 gave 0.125, the same light per point as 27's 0.10 over 1 pt). The nested
+review (2026-11-03) failed it:
+- On every third-party window with the plugin's titlebar, the glow follows the client surface (the bar is a decoration
+  outside it). It lit the client's top row right under the bar's hairline: the separator became two light lines (74, then
+  63, against 40 and 36), the second stopping about 22 px short of each side. The bar's top and sides got no rim, and the
+  side rims started 16 pt below the bar.
+- Hyprland 0.56.2 limits: no window rule scopes the glow (so the config cannot leave those windows out), and the glow is not
+  drawn along the rounded corners (34 or less on the 20-pt arcs against 62 on the straight edges, where macOS 27 keeps the
+  rim continuous).
+- Decision (integrator, closest to macOS 27 with nothing broken): ship the per-point edge without the rim; the glow stays
+  at Hyprland's default (off). The plugin is to draw the rim in a later compositor batch, with its bar: continuous round
+  the corner arcs and over the bar, masking the client's top row under it.
+- The dark edge without the rim, measured (levels, active): over #E6E6E6 the window 38, the contact pixel 72, the shadow
+  174; over #808080, 38, 40 and 97. macOS 27 (Notes): window 41, rim 62, outer pixel 11, shadow 153. Against the backdrop the
+  pixel takes the same darkness per point as 27's; against a dark window it reads as a soft step (lighter than the window
+  over light backdrops, merged with it over mid-tones), not as a hard line, so 0.58 is kept. What the missing rim loses is
+  the window's separation over dark backdrops.
+
+**After (GF-REF 1.25, with and without the plugin).**
+- Light contact edge: 0.138 over the shadow (0.348 in all) on the sides and 0.128 above and below; inactive 0.111.
+- Dark: outer pixel 0.586 over the shadow (inactive 0.520); no rim in either appearance.
+- The shadow as before. The same with the plugin unloaded: the edge and the shadow are Hyprland's and the shell's.
+
+**Limits.**
+- Other scales: the border is a whole number of device pixels (one at 1 and 1.25), so the edge there is up to 25 % darker
+  per point than at 1.25.

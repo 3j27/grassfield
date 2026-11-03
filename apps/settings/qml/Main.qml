@@ -576,8 +576,7 @@ Window {
                     ToolButton {
                         capsule: true
                         buttonSize: Tokens.toolbarGroupButton
-                        iconName: "chevron-right"
-                        iconRotation: 180
+                        navigation: "back"
                         enabled: NavHistory.canBack(root.navState)
                         accessibleName: qsTr("Back")
                         onClicked: root.navBack()
@@ -586,7 +585,7 @@ Window {
                     ToolButton {
                         capsule: true
                         buttonSize: Tokens.toolbarGroupButton
-                        iconName: "chevron-right"
+                        navigation: "forward"
                         enabled: NavHistory.canForward(root.navState)
                         accessibleName: qsTr("Forward")
                         onClicked: root.navForward()

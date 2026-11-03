@@ -112,7 +112,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     size: 2 * Tokens.filesViewIconsSquare + Tokens.filesViewIconsGap
                     kind: root.tab !== null ? root.tab.viewMode : "icons"
-                    color: viewPopup.foreground
+                    color: viewPopup.glyphColor
                 }
 
                 Repeater {
@@ -126,7 +126,7 @@ Item {
                         name: "chevron-down"
                         rotation: modelData < 0 ? 180 : 0
                         size: Tokens.filesViewPopupChevronSize
-                        color: viewPopup.foreground
+                        color: viewPopup.glyphColor
                     }
                 }
             }

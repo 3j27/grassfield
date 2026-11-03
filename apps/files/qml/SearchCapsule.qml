@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Templates as T
+import QtQuick.Window
 import Grassfield.Ui
 
 // The search field of a Files toolbar: a 36-pt circle that expands to a capsule while it has the focus or text (macOS).
@@ -50,7 +51,8 @@ RimmedCapsule {
         id: searchIcon
         name: "search"
         size: Tokens.menuIconSize
-        color: Appearance.windowSecondary
+        // Dims while the window is not key, as the toolbar's glyphs.
+        color: Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.windowSecondary : Appearance.withAlpha(Appearance.windowSecondary, Appearance.inactiveTextOpacity)
         x: root.expanded ? Tokens.spacingMd : (root.width - width) / 2
         anchors.verticalCenter: parent.verticalCenter
     }

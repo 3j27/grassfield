@@ -9,11 +9,14 @@ hl.config({
     float_gaps = 0,
     border_size = 1,
     col = {
-      -- Hairline window outline, like the macOS window edge: the dark appearance's (tokens window.edgeDark and
-      -- window.edge*OpacityDark). The shell pushes the current appearance's pair at start, on a change and after a reload
-      -- (dark in the light appearance, ADR-0039 step 6, C-4; shell/platform/Compositor.qml pushEdge).
-      active_border = "rgba(ffffff26)",
-      inactive_border = "rgba(ffffff14)",
+      -- The window's contact edge, macOS 27's dark device pixel outside the window: the dark appearance's (tokens
+      -- window.edgeDark and window.edge*OpacityDark). The shell pushes the current appearance's pair at start, on a change
+      -- and after a reload (fainter in the light appearance; ADR-0039 step 6, C-4; ADR-0024 note 2026-11-03;
+      -- shell/platform/Compositor.qml pushEdge). At 1.25 the border is one device pixel (0.8 pt). The dark appearance's light
+      -- inner rim is left to the plugin: Hyprland 0.56.2's inner glow (decoration.glow) has no window rule and skips the
+      -- rounded corners, and it lit the client's top row under a third-party window's titlebar (ADR-0024 note 2026-11-03).
+      active_border = "rgba(00000094)",
+      inactive_border = "rgba(00000085)",
     },
     resize_on_border = true,
     extend_border_grab_area = 8,
@@ -42,6 +45,9 @@ hl.config({
 
     -- Diffused shadow fitted to the macOS 27 window shadow (ADR-0024 C-3, docs/audits/ui-finesse-2026-10-25.md 7.3:
     -- alpha = 0.25 x (1 - d / 68)^4, offset 16 down); inactive windows keep today's ratio to the active shadow (0.2 / 0.35).
+    -- Measured on the GPU at 1.25 (ADR-0024 note 2026-11-03, tests/compositor/window_edge.sh): the render is this model within
+    -- 0.023, and these values stay its least-squares fit to the 27 profile; one offset box cannot draw 27's slope under the
+    -- window (0.34 at 1 pt to 0.21 at 16 pt), it holds 0.25 over those 16 pt.
     shadow = {
       enabled = true,
       range = 68,
