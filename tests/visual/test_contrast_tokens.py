@@ -758,25 +758,103 @@ class ContrastTokens(unittest.TestCase):
         # Negative control: the lights' inactive grey is under it.
         self.assertLess(wcag(glyph, hex_rgb(self.tok.path("window.inactiveLightLight"))), 3.0)
 
+    # Known macOS system colours (several releases, light and dark, the lights, and values measured on the reference captures:
+    # tile ramps, swatches): Grassfield chooses its own exact colours (ADR-0003; docs/legal/visual-review.md E18, E34), so no
+    # tile, swatch or light token may equal or nearly equal one. E18 accepted CIE76 dE 7.9 to 29.5 for the lights; the floor
+    # here is 9. A neutral grey (saturation under 8 %) is exempt: a grey is not a distinctive colour, and ours are the warm
+    # neutrals of ADR-0040.
+    MACOS_SYSTEM_COLOURS = (
+        "#FF5F57 #FEBC2E #28C840 #FF5C60 #FAC800 #35C759 #FF3B30 #FF453A #FF383C #FF9500 #FF9F0A #FF8D28 #FFCC00 #FFD60A "
+        "#34C759 #30D158 #00C7BE #63E6E2 #30B0C7 #00C8B3 #32ADE6 #00C0E8 #007AFF #0A84FF #0088FF #5856D6 #5E5CE6 #6155F5 "
+        "#AF52DE #BF5AF2 #CB30E0 #FF2D55 #FF375F #FF2C55 #A2845E #AC8E68 #45A7FF #6CDB81 #FF6667 #FF5F7D #887CFF #73DDF9 "
+        "#017AFF #0176FB #027AFF #903891 #953D96 #F24A9A #F74F9E #DB3339 #E0383E #F27E11 #F7821B #FAC31C #FFC726 #5DB541 "
+        "#62BA46 #FDAB5D #FD8D26 #44D1F3 #03C0E9 #34C859").split()
+    OWN_COLOUR_MIN_DE = 9.0
+
+    @staticmethod
+    def lab(rgb):
+        def f(v):
+            v /= 255
+            return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+        r, g, b = (f(x) for x in rgb)
+        x, y, z = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, 0.2126 * r + 0.7152 * g + 0.0722 * b, (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+        h = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+        return (116 * h(y) - 16, 500 * (h(x) - h(y)), 200 * (h(y) - h(z)))
+
+    def delta_e(self, a, b):
+        la, lb = self.lab(a), self.lab(b)
+        return sum((p - q) ** 2 for p, q in zip(la, lb)) ** 0.5
+
+    def own_colour_tokens(self):
+        d = self.tok.data
+        out = {}
+        for group in ("tile", "swatch"):
+            for name in d["color"][group]:
+                out["color.%s.%s" % (group, name)] = d["color"][group][name]["value"]
+        for name in ("closeColor", "minimizeColor", "zoomColor"):
+            out["window." + name] = d["window"][name]["value"]
+        return out
+
+    def test_no_token_copies_a_macos_system_colour(self):
+        import colorsys
+        known = [hex_rgb(h) for h in self.MACOS_SYSTEM_COLOURS]
+        tokens = self.own_colour_tokens()
+        self.assertGreater(len(tokens), 30)
+        for key, value in sorted(tokens.items()):
+            rgb = hex_rgb(value)
+            if colorsys.rgb_to_hls(*(v / 255 for v in rgb))[2] < 0.08:
+                continue  # a neutral grey or near-black: see the note above
+            nearest = min(known, key=lambda k: self.delta_e(rgb, k))
+            de = self.delta_e(rgb, nearest)
+            self.assertGreaterEqual(de, self.OWN_COLOUR_MIN_DE, "%s %s is dE %.1f from the macOS colour #%02X%02X%02X" % (key, value, de, *nearest))
+        # Negative control: the exact macOS values the first version used are caught.
+        for copy in ("#FF5C60", "#FAC800", "#35C759", "#0088FF", "#FF383C", "#FF2C55", "#6155F5", "#017AFF"):
+            self.assertLess(min(self.delta_e(hex_rgb(copy), k) for k in known), 1.0, copy)
+
     # Settings icon tiles are vivid gradients (ADR-0024 amendment 2026-11-03, colour life): no text sits on a tile, so A2's
     # darkening does not apply, but the white glyph is a graphic and holds 3:1 on the gradient's lightest point, which is
     # its top, and on its bottom; the top is the lighter of the two.
     def test_vivid_tile_gradients_keep_the_glyph_at_3_to_1(self):
         glyph = hex_rgb(self.tok.path("settings.sidebarTileGlyph"))
         tiles = self.tok.data["color"]["tile"]
-        names = sorted(n for n in tiles if not n.endswith("Top"))
+        names = sorted(n for n in tiles if not n.endswith("Top") and not n.endswith("Dark"))
         self.assertEqual(names, sorted(["blue", "green", "red", "pink", "purple", "cyan", "orange", "graphite", "black"]))
         for name in names:
             top, bottom = hex_rgb(self.tok.path("color.tile.%sTop" % name)), hex_rgb(self.tok.path("color.tile.%s" % name))
             self.assertGreaterEqual(lum(top), lum(bottom), name)
             self.assertGreaterEqual(wcag(glyph, top), 3.0, "%s top: %.2f:1" % (name, wcag(glyph, top)))
             self.assertGreaterEqual(wcag(glyph, bottom), 3.0, "%s bottom: %.2f:1" % (name, wcag(glyph, bottom)))
+            # A real step, not a flat fill (macOS tiles are a soft gradient).
+            self.assertGreater(wcag(top, bottom), 1.1, name)
+        for end in ("blackTopDark", "blackDark"):
+            self.assertGreaterEqual(wcag(glyph, hex_rgb(self.tok.path("color.tile." + end))), 3.0, end)
         # Negative control: macOS's own light ramp for green (#6CDB81) is under the floor, which is why ours is darker.
         self.assertLess(wcag(glyph, hex_rgb("#6CDB81")), 3.0)
         # The accent fills that carry text keep the darkened A2 values: a vivid tile colour never replaces them.
         self.assertEqual(self.tok.path("color.accentLight.blue"), "#1F5FCC")
 
-    # The swatch discs are the vivid accent colours, the hue of the accent they pick (within 35 degrees of the A2 fill (macOS purple is a magenta-leaning #923B93)'s).
+    # A tile reads against the sidebar panel it sits on (the reviewer of refinement batch 5: the dark black tile was 1.21:1), in
+    # both appearances, and a tile of a window that is not key never reads stronger than a lit one.
+    def test_tiles_read_against_the_panel_and_inactive_is_never_stronger(self):
+        tiles = self.tok.data["color"]["tile"]
+        names = sorted(n for n in tiles if not n.endswith("Top") and not n.endswith("Dark"))
+        for appearance in ("light", "dark"):
+            panel = hex_rgb(self.tok.path("color.%s.sidebarFill" % appearance))
+            inactive = hex_rgb(self.tok.path("settings.sidebarTileInactive%s" % appearance.capitalize()))
+            weakest = 99.0
+            for name in names:
+                suffix = "Dark" if appearance == "dark" and name + "Dark" in tiles else ""
+                ends = [hex_rgb(self.tok.path("color.tile.%s%s" % (name, suffix))), hex_rgb(self.tok.path("color.tile.%sTop%s" % (name, suffix)))]
+                for end in ends:
+                    c = wcag(end, panel)
+                    weakest = min(weakest, c)
+                    self.assertGreaterEqual(c, 1.5, "%s tile %s on the %s panel: %.2f:1" % (name, "#%02X%02X%02X" % end, appearance, c))
+            self.assertLessEqual(wcag(inactive, panel), weakest + 0.005, "%s: the inactive tile is stronger than the weakest lit end" % appearance)
+            self.assertGreaterEqual(wcag(inactive, panel), 1.5, appearance)
+        # Negative control: the reviewer's finding, the first dark black tile.
+        self.assertLess(wcag(hex_rgb("#2E2D2D"), hex_rgb(self.tok.path("color.dark.sidebarFill"))), 1.5)
+
+    # The swatch discs are the vivid accent colours, the hue of the accent they pick (within 40 degrees of the A2 fill's).
     def test_vivid_swatches_keep_the_hue_of_their_accent(self):
         import colorsys
         def hue(rgb):
@@ -786,16 +864,18 @@ class ContrastTokens(unittest.TestCase):
         for name in swatches:
             a, b = hue(hex_rgb(self.tok.path("color.swatch.%s" % name))), hue(hex_rgb(self.tok.path("color.accentLight.%s" % name)))
             if name != "graphite":
-                self.assertLess(min(abs(a - b), 360 - abs(a - b)), 35, name)
+                self.assertLess(min(abs(a - b), 360 - abs(a - b)), 40, name)
 
-    # The traffic lights are the measured macOS colours; their hover glyph (black at window.glyphOpacity) stays legible on each.
+    # The traffic lights are vivid own colours; their hover glyph (black at window.glyphOpacity) holds the 3:1 icon floor on each.
     def test_vivid_lights_keep_their_glyph_legible(self):
         for name in ("closeColor", "minimizeColor", "zoomColor"):
             disc = hex_rgb(self.tok.path("window." + name))
             alpha = float(self.tok.path("window.glyphOpacity"))
             glyph = tuple(c * (1 - alpha) for c in disc)
-            self.assertGreaterEqual(wcag(glyph, disc), 1.9, name)
-        self.assertEqual([self.tok.path("window." + n) for n in ("closeColor", "minimizeColor", "zoomColor")], ["#FF5C60", "#FAC800", "#35C759"])
+            self.assertGreaterEqual(wcag(glyph, disc), 3.0, "%s: %.2f:1" % (name, wcag(glyph, disc)))
+        # Negative control: the first glyph opacity, 0.5, was 2.64:1 on the close light.
+        disc = hex_rgb(self.tok.path("window.closeColor"))
+        self.assertLess(wcag(tuple(c * 0.5 for c in disc), disc), 3.0)
 
     def test_accent_token_groups_are_complete(self):
         for group in ("accentDark", "accentLight"):

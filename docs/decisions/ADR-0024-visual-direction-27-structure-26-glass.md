@@ -203,24 +203,43 @@ no text, and the darkened values made Settings read muddy beside macOS (docs/aud
 
 - **Vivid, where no text sits.** Settings icon tiles (`color.tile.<name>` bottom and `<name>Top`, a soft vertical gradient,
   `TileGradient`), the Appearance accent swatch discs (`color.swatch.<accent>`), the window lights (`window.closeColor`,
-  `minimizeColor`, `zoomColor`, shared with the compositor plugin through `ThemeTokens.hpp`). Measured on the macOS captures
-  at 2 px/pt (ss-004-005, ss-010-037, ss-032-145, 2026-11-03): tiles blue #45A7FF to #0088FF, red #FF6667 to #FF383C, pink
-  #FF5F7D to #FF2C55, purple #887CFF to #6155F5, graphite #B7B7BA to #8E8E93, black #323132 to #000000; lights #FF5C60,
-  #FAC800, #35C759.
+  `minimizeColor`, `zoomColor`, shared with the compositor plugin through `ThemeTokens.hpp`).
+- **Vivid but our own (ADR-0003, docs/legal/visual-review.md E18, E34).** The macOS captures were measured at 2 px/pt
+  (ss-004-005, ss-010-037, ss-032-145) for saturation and lightness only. Copying them (a first version did) is a 1:1 copy,
+  which the owner's E18 acceptance does not cover (it covers shifted colours, CIE76 dE 7.9 to 29.5). Every value is shifted in
+  hue and lightness to dE 9 or more from every known macOS system colour: `test_no_token_copies_a_macos_system_colour`
+  (greys and near-blacks, the warm neutrals of ADR-0040, are exempt).
+
+  | Role | Own value (top / bottom, or disc) | Measured macOS (not used) |
+  |---|---|---|
+  | Lights close, minimize, zoom | `#E83A52`, `#E6C619`, `#2DC47A` | `#FF5C60`, `#FAC800`, `#35C759` |
+  | Tile blue | `#0097FC` / `#007CCE` | `#45A7FF` / `#0088FF` |
+  | Tile green | `#2CA84B` / `#22843B` | `#6CDB81` / `#34C859` |
+  | Tile red | `#FF5D38` / `#FF3B0F` | `#FF6667` / `#FF383C` |
+  | Tile pink | `#FF538B` / `#FF2C71` | `#FF5F7D` / `#FF2C55` |
+  | Tile purple | `#8568FF` / `#6142F4` | `#887CFF` / `#6155F5` |
+  | Tile cyan | `#039FC9` / `#027B9B` | `#73DDF9` / `#03BFE7` |
+  | Tile orange | `#F66702` / `#C85402` | `#FDAB5D` / `#FD8D26` |
+  | Tile graphite, black | `#8F8D88` / `#7A7873`, `#3A3835` / `#100F0D` (dark `#6A6863` / `#46443F`) | greys: exempt |
+  | Swatches blue, purple, pink, red, orange, yellow, green | `#0167FD`, `#783B93`, `#F54C85`, `#DE3651`, `#F56A16`, `#FCEA21`, `#7FB844` | `#0178FD`, `#923B93`, `#F54C9C`, `#DE363B`, `#F58016`, `#FCC521`, `#60B844` |
+
 - **Darkened (A2), where text sits.** Selection pills, buttons with labels, focus rings and every accent fill that carries text
   keep `color.accentLight` / `accentDark` and `color.selectionDark`: unchanged.
 - **The glyph floor.** The white glyph on a tile is a graphic and holds 3:1 on the gradient's lightest point (its top):
-  macOS's own tops are 2.55:1 (blue), 2.86 (red), 2.92 (pink), 2.00 (graphite) and 1.56 to 1.74 (cyan, green). So each top
-  is the lightest shade of the macOS ramp that holds 3.05:1, the bottom kept; cyan, green and orange, whose macOS colour fails
-  even at the bottom, keep the hue and saturation with the lightness lowered (green #2CA84B to #22843B, cyan #03A0C2 to
-  #027B94, orange #EA7102 to #D06502). Pinned by `test_vivid_tile_gradients_keep_the_glyph_at_3_to_1`.
-- **Inactive windows** keep the grey tiles and grey lights (`settings.sidebarTileInactive*`, `window.inactiveLight*`).
-- **Dark appearance.** The macOS captures are all light; the same vivid tiles are used in both appearances (macOS's tiles do
-  not change with the appearance). A black tile on the dark panel reads by its top #323132 and the 1-pt rim only.
-- **Hover glyph of a light** stays black at `window.glyphOpacity`: legible on every vivid light (pinned by
-  `test_vivid_lights_keep_their_glyph_legible`).
-- Swatch purple is macOS's magenta-leaning #923B93, 33 degrees from the violet fill #7A3FC4 it picks; the hue tolerance of
-  `test_vivid_swatches_keep_the_hue_of_their_accent` says so.
+  every top holds 3.05:1 or more (`test_vivid_tile_gradients_keep_the_glyph_at_3_to_1`); green, cyan and orange are darkened
+  further to get there.
+- **Tiles read against the panel (reviewer, batch 5).** Every tile end holds 1.5:1 on the sidebar panel in both appearances.
+  The dark black tile is `#6A6863` / `#46443F` (the reviewer's `#5E5C57` / `#3A3835` was 1.34:1 at the bottom) with a
+  1-device-pixel inner rim, white at `settings.sidebarTileRimOpacityDark` 0.12, snapped to device pixels (`Main.qml`).
+  Graphite has a real step (4.41:1 at the bottom).
+- **Inactive windows** keep grey tiles (`settings.sidebarTileInactiveLight` `#96948F`, 3.03:1 under the glyph; dark `#46443F`,
+  9.73:1) and grey lights (`window.inactiveLight*`). An inactive tile never reads stronger against the panel than the
+  weakest lit end (`test_tiles_read_against_the_panel_and_inactive_is_never_stronger`).
+- **Dark appearance.** The macOS captures are all light; the same vivid tiles are used in both appearances except black.
+- **Hover glyph of a light** is black at `window.glyphOpacity` 0.62, which holds 3:1 on each light (the close light was 2.64:1
+  at 0.5; `test_vivid_lights_keep_their_glyph_legible`).
+- **Swatch ring.** The chosen swatch's ring is its own vivid colour where that holds the focus ring's contrast on the window,
+  else the accent colour (`AccentPicker.qml`). The Storage page's bar and legend use the same vivid tile colours as its row tiles.
 
 ## Note (2026-11-03): the window edge and shadow, measured on the GPU
 The owner's decision of 2026-11-02 ("Golden Gate 27"): the window edge and shadow follow macOS 27, not the Tahoe 26

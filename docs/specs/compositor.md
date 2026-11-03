@@ -96,8 +96,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   insets of 5-7 px (6 measured at scale 1 on 2026-11-03 with the new edge).
 - **FR4** Close, minimize, zoom buttons: 14 px circles, 9 px gaps (23 px pitch), first one 9 px from the left
   edge (centres at x 16, 39, 62), vertically centered (y 16); each is hit inside its circle grown by 1/6 of the
-  diameter (2.33 px), and the gaps between the buttons stay drag area; colors from `compositor/src/core/Theme.hpp` (close `#FF5C60`, minimize `#FAC800`,
-  zoom `#35C759` (the macOS lights as measured, refinement batch 5; ADR-0024 amendment 2026-11-03); background dark `rgba(40,40,44,1)` / light `rgba(236,236,238,1)`, dark in S2).
+  diameter (2.33 px), and the gaps between the buttons stay drag area; colors from `compositor/src/core/Theme.hpp` (close `#E83A52`, minimize `#E6C619`,
+  zoom `#2DC47A` (own values as vivid as the macOS lights, shifted to dE 9 or more from every macOS system colour; ADR-0003, ADR-0024 amendment 2026-11-03); background dark `rgba(40,40,44,1)` / light `rgba(236,236,238,1)`, dark in S2).
 - **FR4b** Hover glyphs (macOS): while the pointer is over the group of lights (the box of the three hit circles,
   gaps included) of the topmost window under it, all three lights show their glyph: × close, − minimize, + zoom (the
   zoom action; macOS shows + for zoom and arrows for full screen). Glyph box 0.55 of the diameter (8 px at scale 1,
