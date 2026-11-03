@@ -12,6 +12,8 @@ T.ToolButton {
 
     property string iconName: ""
     property real iconRotation: 0
+    // "back" or "forward": the toolbar's navigation chevron (8 x 14 pt, drawn; the Back and Forward of a capsule) instead of an icon.
+    property string navigation: ""
     property string accessibleName: ""
     // One choice of a group of sibling buttons.
     property bool radio: false
@@ -23,15 +25,22 @@ T.ToolButton {
     property color tint: Appearance.colors.text
     property real buttonSize: Tokens.controlToolButtonSize
     property real glyphSize: Tokens.controlToolIconSize
-    // Glyphs drawn by the app (a view glyph, a theme icon): centred in the button, dimmed with it when disabled.
+    // Glyphs drawn by the app (a view glyph, a theme icon): centred in the button, in `glyphColor`.
     default property alias glyph: slot.data
     // What the tooltip under the button says while the pointer rests on it: an icon-only button names itself (macOS; ADR-0039
     // step 14). A host that shows its own tooltip for the button sets "".
     property string tooltip: root.text === "" ? root.accessibleName : ""
 
-    // Dimmed while the window is not key, as macOS 27 draws a toolbar's glyphs then (ADR-0039 step 17).
-    readonly property color foreground: !enabled ? Appearance.withAlpha(root.tint, Tokens.materialDisabledOpacity)
-        : root.Window.window !== null && !Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.withAlpha(root.tint, Appearance.inactiveTextOpacity) : root.tint
+    // Not key: a toolbar's glyphs dim, as macOS 27 (ADR-0039 step 17); disabled and not key dim together.
+    readonly property bool windowInactive: root.Window.window !== null && !Appearance.looksKey(root.Window.window, root.Window.active)
+    readonly property real dimAlpha: (root.enabled ? 1 : Tokens.materialDisabledOpacity) * (root.windowInactive ? Appearance.inactiveTextOpacity : 1)
+    // Icon, caption and text colour of the button's own content, dimmed (disabled, not key).
+    readonly property color foreground: root.dimAlpha === 1 ? root.tint : Appearance.withAlpha(root.tint, root.dimAlpha)
+    // A glyph's colour, dimmed as `foreground` and a dark grey as macOS 27 draws toolbar glyphs (token control.toolGlyphOpacity).
+    // The dimming is in the colour, never in an item opacity: Qt applies an opacity to each part of a glyph drawn from several
+    // items, so their overlaps would draw darker. The glyphs of ViewGlyph, Glyph, Icon and ThemeIcon inside the button take it
+    // by default (Appearance.glyphTint); a host that colours its own glyph uses this.
+    readonly property color glyphColor: Appearance.withAlpha(root.tint, Tokens.controlToolGlyphOpacity * root.dimAlpha)
 
     implicitWidth: root.text !== "" ? Math.max(root.buttonSize, caption.implicitWidth + 2 * Tokens.spacingSm) : root.buttonSize
     implicitHeight: root.buttonSize
@@ -85,18 +94,24 @@ T.ToolButton {
 
     contentItem: Item {
         Icon {
-            visible: root.iconName !== ""
+            visible: root.iconName !== "" && root.navigation === ""
             anchors.centerIn: parent
             name: root.iconName
             size: root.glyphSize
-            color: root.foreground
+            color: root.glyphColor
             rotation: root.iconRotation
+        }
+
+        NavChevron {
+            visible: root.navigation !== ""
+            anchors.centerIn: parent
+            forward: root.navigation === "forward"
+            color: root.glyphColor
         }
 
         Item {
             id: slot
             anchors.fill: parent
-            opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
         }
 
         Text {

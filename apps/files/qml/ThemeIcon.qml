@@ -10,7 +10,7 @@ Item {
     property string name: ""
     property int size: Tokens.filesListIconSize
     property bool tint: root.name.endsWith("-symbolic")
-    property color color: Appearance.colors.text
+    property color color: Appearance.glyphTint(root)
 
     implicitWidth: size
     implicitHeight: size
@@ -35,6 +35,8 @@ Item {
         autoPaddingEnabled: false
         brightness: 1.0
         colorization: 1.0
-        colorizationColor: root.color
+        // Full alpha, the colour's alpha as the opacity (see Icon.qml).
+        colorizationColor: Qt.rgba(root.color.r, root.color.g, root.color.b, 1)
+        opacity: root.color.a
     }
 }

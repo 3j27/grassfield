@@ -23,8 +23,7 @@ RimmedCapsule {
         ToolButton {
             capsule: true
             buttonSize: Tokens.toolbarGroupButton
-            iconName: "chevron-right"
-            iconRotation: 180
+            navigation: "back"
             enabled: root.tab !== null && root.tab.canBack
             accessibleName: qsTr("Back")
             onClicked: root.tab.back()
@@ -33,7 +32,7 @@ RimmedCapsule {
         ToolButton {
             capsule: true
             buttonSize: Tokens.toolbarGroupButton
-            iconName: "chevron-right"
+            navigation: "forward"
             enabled: root.tab !== null && root.tab.canForward
             accessibleName: qsTr("Forward")
             onClicked: root.tab.forward()

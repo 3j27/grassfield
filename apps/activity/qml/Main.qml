@@ -303,6 +303,8 @@ Window {
                         capsule: true
                         buttonSize: Tokens.toolbarGroupButton
                         iconName: "ellipsis-circle"
+                        // The glyph's circle fills its 24-unit box, the neighbours' (info, stop) 20 of 24: the same drawn size.
+                        glyphSize: Tokens.controlToolIconSize * 5 / 6
                         accessibleName: qsTr("Actions")
                         onClicked: {
                             const p = moreButton.mapToItem(root.contentItem, 0, moreButton.height + Tokens.spacingXs);

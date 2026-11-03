@@ -85,6 +85,16 @@ QtObject {
         return active || (!!window && window === heldKeyWindow);
     }
 
+    // The colour of a glyph by default: inside a ToolButton, its `glyphColor` (the button dims the glyph in its colour), anywhere
+    // else the text colour. `item` is the glyph.
+    function glyphTint(item: var): color {
+        for (let p = item.parent; p; p = p.parent) {
+            if (p.glyphColor !== undefined)
+                return p.glyphColor;
+        }
+        return colors.text;
+    }
+
     // Secondary text drawn directly on the opaque window surface or on its group fill (Settings): the lighter app-only grey, as
     // macOS. Text on a field, tab or chip fill keeps `colors.textSecondary`, which holds 4.5:1 on those fills (A2); outside an
     // app window this is textSecondary, and Increase Contrast makes it the primary text colour.

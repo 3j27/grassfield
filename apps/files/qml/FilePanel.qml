@@ -868,7 +868,7 @@ Window {
                                         anchors.verticalCenter: parent.verticalCenter
                                         name: "folder"
                                         size: Tokens.menuIconSize
-                                        color: pathTool.foreground
+                                        color: pathTool.glyphColor
                                     }
 
                                     Text {
@@ -887,7 +887,7 @@ Window {
                                         anchors.verticalCenter: parent.verticalCenter
                                         name: "chevron-down"
                                         size: Tokens.filesViewPopupChevronSize
-                                        color: pathTool.foreground
+                                        color: pathTool.glyphColor
                                     }
                                 }
                             }
