@@ -179,9 +179,9 @@ TestCase {
         verify(settings.indexOf("readonly property bool keyLook: Appearance.looksKey(root, root.active)") > 0);
         compare(settings.split("root.keyLook").length - 1, 2, "the sidebar's selection and its label");
         const viewer = source("apps/preview/qml/Viewer.qml");
-        verify(viewer.indexOf("readonly property bool keyLook: Appearance.looksKey(win, win.active)") > 0);
-        compare(viewer.split("win.keyLook ?").length - 1, 3);
-        compare(viewer.indexOf("win.active ?"), -1);
+        verify(viewer.indexOf("readonly property bool keyLook: Appearance.looksKey(viewerWin, viewerWin.active)") > 0);
+        compare(viewer.split("viewerWin.keyLook ?").length - 1, 3);
+        compare(viewer.indexOf("viewerWin.active ?"), -1);
         for (const app of ["activity", "files", "preview", "settings", "store"]) {
             const main = source("apps/" + app + "/src/main.cpp");
             verify(/QQmlApplicationEngine engine;\n[^\n]*\n\s*new grassfield::apps::KeyWindow\(&engine\);/.test(main), app);
