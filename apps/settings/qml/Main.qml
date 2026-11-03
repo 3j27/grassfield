@@ -473,8 +473,10 @@ Window {
                     // The section's coloured tile with a white glyph (macOS 27); it keeps its colour when the row is selected.
                     Rectangle {
                         id: glyph
-                        x: Tokens.spacingSm
-                        y: Math.round((parent.height - height) / 2)
+                        // The tile sits on whole device pixels, so its 1-pixel rim and its edge are crisp.
+                        readonly property real pixelRatio: Math.max(1, glyph.Window.window ? glyph.Window.window.devicePixelRatio : Screen.devicePixelRatio)
+                        x: Math.round(Tokens.spacingSm * glyph.pixelRatio) / glyph.pixelRatio
+                        y: Math.round((parent.height - height) / 2 * glyph.pixelRatio) / glyph.pixelRatio
                         width: Tokens.settingsSidebarIconSize
                         height: Tokens.settingsSidebarIconSize
                         radius: Tokens.settingsSidebarTileRadius
@@ -491,11 +493,10 @@ Window {
 
                         // A lit tile in the dark appearance has a 1-device-pixel inner rim, so it reads off the dark panel.
                         Rectangle {
-                            readonly property real pixelRatio: Math.max(1, glyph.Window.window ? glyph.Window.window.devicePixelRatio : Screen.devicePixelRatio)
                             anchors.fill: parent
                             radius: parent.radius
                             color: "transparent"
-                            border.width: 1 / pixelRatio
+                            border.width: 1 / glyph.pixelRatio
                             border.color: Appearance.withAlpha(Tokens.settingsSidebarTileGlyph, Tokens.settingsSidebarTileRimOpacityDark)
                             visible: glyph.lit && Appearance.dark
                         }
