@@ -138,6 +138,63 @@ Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/a
 ## Note (2026-10-29): the menu bar's band
 Integrator decision under the owner's delegation, closest to macOS 26/27. The band the menu bar shows (the setting, the automatic assist of ADR-0016 D1, or a full-screen window) is glass of the "menu" class, and its tone adapts to the wallpaper strip under it (point 3), whatever the appearance: dark glass with light text over a dark strip, light glass with dark text over a light one. The unclassed material gave 0.82 at transparency 0.49. Over the owner's video strip (p5 0.0528, p95 0.35) the band is now dark glass at alpha 0.64 (0.65 at 0.25), judged at rest (7.73:1), under the open title's capsule (4.73:1) and dimmed (3.06:1); the appearance's own light glass would have needed 0.79. The strip is used only while it is what lies behind the bar (no window under it, no full-screen window); otherwise the surface keeps the appearance's material at the worst case. Reduce Transparency stays opaque in the appearance's colours. Detail: docs/specs/menubar.md item 0b.
 
+## Amendment 2026-11-03 toolbar capsules have no dark rim
+
+Section 2 point 5 (rims) governs `Material` glass: surfaces that blur the wallpaper behind them. The capsules of an app
+window's toolbar (`RimmedCapsule`: back / forward, the view group, the search capsule) sit on an opaque window and blur
+nothing. Measured on the macOS 27 Settings capture ss-004-005 (2 px/pt, 2026-11-03), the back / forward capsule is white
+(#FEFEFE) with a white device-pixel edge and no darker outline: across its edge the pixels step from the shadow grey
+(#F1F1F1 below, #F5F5F5 beside, #F7F7F7 above) straight to white, and the grey fades over about 14 px. The sidebar search
+field is a flat #E1E1E1 on the #FAFAFA sidebar, with no rim and no shadow. The earlier reading of a dark rim at #BDBDBD was
+the shadow's first pixel.
+
+Decision: `RimmedCapsule` draws a white fill (`toolbar.capsuleFillOpacity` 0.7) lifted by a soft shadow
+(`toolbar.shadow*`: blur 8, offset 2, opacity 0.10), and the field a flat tinted fill (`toolbar.fieldFillOpacity` 0.10); the
+`toolbar.rimOpacity*` and `innerRimOpacity*` tokens are removed. Increase Contrast keeps the control outline. The dark
+appearance values are estimates (no dark capture). Gate A2 holds: the capsule and field fills are still tested as backdrops
+of the `window` role (tests/visual/test_contrast_tokens.py); white at 0.7 only lightens the light window. Blur is
+untouched: a drop shadow is not blur and nothing is faked. A toolbar search field is a lifted white capsule like the
+other toolbar items; only the sidebar's search is the flat field. Side effect: pink's accent ink is no longer needed (ADR-0040
+amendment 2026-11-03).
+
+## Amendment (2026-11-03): floating sidebars from macOS 26
+Owner decision of 2026-11-02 (docs/STATE.md): **the sidebars float**, as the macOS 26 inset panel, replacing §1's "Sidebars"
+row (edge to edge, flush). Everything else of §1 stands: the window corner, the window edge and shadow stay on macOS 27, and
+the selection, search field and tile values of the old row are kept. Scope: Settings, Files and Preview (the Store's flush
+sidebar follows in its own step; it already takes the calmer fill below).
+
+Measured on the macOS 26 System Settings capture (system-settings ss-004-005, 2 px/pt, 1446 px = 723 pt wide; and the
+Finder capture getting-started gs-010-011 at 1.0748 px/pt), 2026-11-03:
+
+| Trait | Value | Token |
+|---|---|---|
+| Panel inset from the window's left, top, bottom edges | 8 pt (x 16, y 16 px; bottom 1785 of 1801 px); Finder 8-9 px | `window.sidebarPanelInset` 8 |
+| Panel corner | 18 to 19 pt, concentric with the 26-pt window corner (26 - 8 = 18) | `window.sidebarPanelRadius` 18 |
+| Panel width (Settings) | 215 pt, so a slot of 8 + 215 = 223 pt | `settings.sidebarWidth` 223 |
+| Panel fill | 249 against the 252 content ground (the window edge is 255): 6 levels under the window; the dark appearance keeps its own 6 (no dark capture: estimate) | `color.light.sidebarFill` #F7F6F3 (was #EEECE7, 15 under); `color.dark.sidebarFill` unchanged #25231F |
+| Rim | 1 pt (2 px at 2x), pure white (255) on the panel's edge, drawn as whole device pixels (1 px at 1.25) with its far edges snapped down, so it never splits between two pixels | `window.sidebarPanelRimWidth` 1, `window.sidebarPanelRimOpacity` 1.0 (dark: 0.08, estimate) |
+| Shadow | soft, about 10 pt: 242 at the right edge fading to the 252 ground over 20 px, 240 to 243 below over 14 px, 244 in the left gutter; a drop shadow (`RectangularShadow`, z -1) on an opaque window, not blur | `window.sidebarPanelShadowBlur` 12, `ShadowOffsetY` 1, `ShadowOpacity` 0.08 (a blurred edge shows half: black 0.04; dark 0.3, estimate) |
+| Lights | first centre at (25.75, 25.75) from the window corner: inside the panel, 17.75 pt from its edge | unchanged `window.unifiedLightCentre` 26 |
+| Selection pill | 195 x 32 pt, 10 pt from the panel's edges, radius about 9 (kept 8), accent fill | unchanged `settings.sidebarInset` 10 |
+| Search field | 195 x 28 pt, top at 61 pt, 10 pt inset | unchanged |
+| Content beside the panel | the toolbar capsule 8.5 pt right of the panel; groups 20 pt from it | the slot ends at the panel's right edge |
+| Finder sidebar icons | monochrome, #2A3135 (the label's own dark), not the accent | the text colour; `accentInk` only on the selected row |
+
+Decisions:
+- **Material.** An app window is opaque, so the panel is an opaque fill at the measured value; there is nothing behind it to
+  blur, and nothing is faked. Real translucency would need a per-region compositor effect: not done (the macOS 26 panel is
+  glass over a window that is itself the wallpaper's tint; ours reads the same on an opaque window).
+- **Calm.** The light panel is 6 levels under the window instead of 15, so the sidebar stops being the heaviest area. The
+  lighter ground lets the light pink accent hold 4.5:1 on its own (4.92:1 at the worst, on the bare sidebar, since the capsules turned white), so `color.accentInkLight.pink` goes;
+  yellow and green keep their ink. A2 (white on the accent fill, 4.5:1) is unchanged.
+- **Inactive window.** The sidebar tiles of Settings turn a mid grey (`settings.sidebarTileInactiveLight` #8C8A86, 3.45:1 under the white glyph; the lights' #D4D1CC was 1.52:1; dark #5C5A56, 6.88:1; pinned by `test_inactive_sidebar_tile_keeps_the_glyph_at_3_to_1`) and the selection pill goes neutral
+  (already); the Files sidebar's selected icon turns from the accent to the text colour.
+- **Preview.** Its toolbar spans the window, so its lights stay in the toolbar above the panel; moving them into the panel is
+  the Preview alignment step.
+- **Component.** `SidebarPanel` (Grassfield.Ui) draws the panel, so the three apps share one shape and one rim.
+- **Open and Save panels.** The portal's panel (Files `FilePanel`) takes the same floating sidebar, as macOS's panel has one;
+  it has no lights, so the rows start one inset and one gap inside the panel.
+
 ## Note (2026-11-03): the window edge and shadow, measured on the GPU
 The owner's decision of 2026-11-02 ("Golden Gate 27"): the window edge and shadow follow macOS 27, not the Tahoe 26
 captures that `docs/audits/refinement-2026-11-02.md` (03-windows-corner-shadow, item 1) compared them with. That audit had

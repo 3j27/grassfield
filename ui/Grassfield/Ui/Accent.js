@@ -20,7 +20,7 @@ function normalize(setting) {
 // {accent, accentText, accentInk} for a setting in the dark or the light appearance, or null when the palette's own roles
 // apply (multicolor, or anything invalid: a hand-edited value reads as the default). accentInk: the colour of text and glyphs
 // drawn in the accent colour (a link-like label, a checkmark, a sidebar glyph); the accent itself, or in the light appearance
-// the darker shade a light accent has in `color.accentInkLight` (yellow, green, pink: 4.5:1 on an app window, as macOS draws
+// the darker shade a light accent has in `color.accentInkLight` (yellow, green: 4.5:1 on an app window; pink since the 2026-11-03 sidebar needs none, as macOS draws
 // a light accent's text darker; the integrator's review of 5391761, ADR-0040 step 1c).
 function resolve(setting, dark, tokens) {
     const name = normalize(setting);

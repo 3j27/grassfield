@@ -8,8 +8,8 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
   title in the toolbar and grouped, rounded "inset" lists. Rows hold a label (optionally a grey caption) and a control on
   the right: switch, slider, pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
 - macOS 27 layout (ADR-0024, measured on release captures, `docs/audits/ui-finesse-2026-10-25.md` section 7): the sidebar
-  runs edge to edge, 232 wide, a step darker than the white detail pane (light #ECECEC on #FFFFFF; dark tokens
-  `color.dark.sidebarFill` / `windowBackground`), with no dividing line; selection 212 x 32, radius 8, 10 from both
+  floats as an inset rounded panel (ADR-0024 amendment 2026-11-03: `window.sidebarPanelInset` 8, `window.sidebarPanelRadius` 18, a white rim), a 223-pt slot, 6 levels under the window (light #F7F6F3 on #FDFCF9; dark tokens
+  `color.dark.sidebarFill` / `windowBackground`), with no dividing line; selection 195 x 32 (the 215-pt panel less 10 each side; measured), radius 8, 10 from both
   sidebar edges, in the selection colour with white text; a 28-pt capsule search field; groups #F7F7F7 without a border,
   radius 12, 468 wide with 20-pt margins, 10 apart, the first 12 below the toolbar; rows 38, labels and separators 10
   inside the group; section headers 13 bold in the text colour.
@@ -21,8 +21,9 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
   48-pt tile, the name in bold, what it holds), then navigation rows (a 24-pt tile, the name, a chevron; 48 tall, 49
   apart) that open its sub-panes; the sidebar keeps General selected while one is open, the toolbar shows the sub-pane's
   title (none on the hub itself) and its back button returns to the hub. The search also finds the sub-panes. The search
-  field and the toolbar's back / forward capsule are glass, as in macOS 27: an almost clear fill with a dark rim outside
-  and a light rim inside, one device pixel each, and a hairline between back and forward (`RimmedCapsule.qml`). A
+  field and the toolbar's back / forward capsule have no outline, as in macOS 27 (ADR-0024 amendment 2026-11-03): the
+  sidebar's search is a flat grey field, the back / forward capsule a white fill lifted by a soft shadow with a hairline
+  between back and forward (`RimmedCapsule.qml`; Increase Contrast draws the control outline). A
   pop-up in a row is the macOS 27 one: the value as plain text, then a 20-pt disc with two chevrons (`ComboBox.inline`).
 
 ## macOS 27 parity inventory (owner brief 2026-10-26)
@@ -329,4 +330,4 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
 - Without the AT-SPI bus the Qt accessibility tree is not published (Accessible properties are set but only verified by code review, not by a screen reader).
 
 ## Toolbar navigation and secondary text (visual audit 2026-10-25, kept under ADR-0024)
-The sidebar is the flush macOS 27 one of ADR-0024 lot 1 (the floating panel of the audit's priority 10 was dropped). On top of it: the toolbar over the detail pane carries a 72 x 36 back / forward capsule (`toolbar.capsule`, `toolbar.groupButton`) that walks the panes visited (`NavHistory.js`, tests `tst_navhistory.qml`; a new pane forgets the forward list). Secondary text drawn directly on the window or on a group uses `Appearance.windowSecondary` (`color.*.windowTextSecondary`, the lighter macOS grey, 4.7:1 on the window and on `groupFill`); text on a hovered device row uses `textSecondary` (4.5:1 on the hover fill). Tests: `tst_visualaudit.qml`, `WindowSurfacePairs` in `test_contrast_tokens.py`.
+The sidebar is the floating macOS 26 panel (ADR-0024 amendment 2026-11-03; ADR-0024 lot 1 had made it flush). On top of it: the toolbar over the detail pane carries a 72 x 36 back / forward capsule (`toolbar.capsule`, `toolbar.groupButton`) that walks the panes visited (`NavHistory.js`, tests `tst_navhistory.qml`; a new pane forgets the forward list). Secondary text drawn directly on the window or on a group uses `Appearance.windowSecondary` (`color.*.windowTextSecondary`, the lighter macOS grey, 4.7:1 on the window and on `groupFill`); text on a hovered device row uses `textSecondary` (4.5:1 on the hover fill). Tests: `tst_visualaudit.qml`, `WindowSurfacePairs` in `test_contrast_tokens.py`.

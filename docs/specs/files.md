@@ -9,7 +9,7 @@
   item is 8 from the trailing edge (`window.itemsInset`), and there is no line under the toolbar until the icons or the
   list scroll under it (or a tab bar sits there).
 - Window and sidebar (macOS 27 Finder, ADR-0024 lot 2): a white content area (#292929 in the dark appearance); the sidebar
-  edge to edge in `color.*.sidebarFill` with no dividing line; 32-pt rows under 34-pt section headers; the current place
+  a floating panel in `color.*.sidebarFill` (ADR-0024 amendment 2026-11-03), icons in the text colour; 32-pt rows under 34-pt section headers; the current place
   a neutral fill (`files.sidebarSelectionOpacity`, 10 from both sidebar edges, radius 8) under a bold label, not the
   accent. A focused selection in the views is the selection pair (white on the light accent in both appearances).
 - Icon view shows large icons or thumbnails with names below; a selected item gets a grey rounded backdrop and an
@@ -832,4 +832,4 @@ macOS: the Finder is the first Dock tile, cannot be removed, and opens every fol
 ## Toolbar capsules (visual audit 2026-10-25, priority 11)
 macOS model, measured: back/forward are one 72 x 36 capsule (`toolbar.groupButton` 34 each), the view switcher a 36-pt capsule whose selected view is a lighter pill, the search a 36-pt circle that expands to `files.searchWidth` 200 while it has the focus or text. Settings has the same back/forward capsule over its detail pane (history of the panes, `apps/settings/qml/NavHistory.js`, `tst_navhistory.qml`). Fills are `Appearance.buttonFill` (6 % grey in light), the pill `Appearance.chipFill`; contrast in `WindowSurfacePairs`.
 
-Design polish step 23 (ADR-0039): every toolbar capsule is the shared `RimmedCapsule` (`toolbar.*`), Tags and Action share one capsule (Finder groups Share, Tags and Action; Files has no Share), and the search circle is rimmed with the shared focus ring outside it and a clear button. A folder that has listed nothing after `files.loadingDelay` shows the shared `Spinner` and "Loading…" in its view. Files reads Increase Contrast and Text size; the path bar's segments and the preview pane's actions take the keyboard.
+Design polish step 23 (ADR-0039): every toolbar capsule is the shared `RimmedCapsule` (`toolbar.*`: a white fill lifted by a soft shadow, no outline; ADR-0024 amendment 2026-11-03), Tags and Action are two bare glyphs with no capsule (as Finder draws Share, Tags and Action on a white window), and the search circle is a lifted capsule that stays one once open, with the shared focus ring outside it and a clear button. A folder that has listed nothing after `files.loadingDelay` shows the shared `Spinner` and "Loading…" in its view. Files reads Increase Contrast and Text size; the path bar's segments and the preview pane's actions take the keyboard.

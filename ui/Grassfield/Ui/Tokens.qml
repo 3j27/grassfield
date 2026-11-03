@@ -31,7 +31,7 @@ QtObject {
         statusOn: "#45C565",  // own green of a status dot, dark appearance: 5.8:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusWarn: "#E0B000",  // own yellow of a status dot, dark appearance: 6.4:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusOff: "#FF6B63",  // own red of a status dot, dark appearance: 4.7:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-        sidebarFill: "#25231F",  // estimate: app sidebar, dark appearance, a step below the window as in the light appearance (no dark macOS 27 sidebar measured yet); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #232323 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
+        sidebarFill: "#25231F",  // estimate: the floating sidebar panel, dark appearance, 6 levels under the window (#2B2925), the same step as the light appearance's 6 (no dark macOS 26 or 27 sidebar captured, so this is a proportional estimate and unchanged by the 2026-11-03 floating-sidebar amendment); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #232323 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
         windowTextSecondary: "#A4A19C",  // Secondary text drawn directly on the opaque app window, on its group fill or on its sidebar, dark appearance (Appearance.windowSecondary): the owner's answer to ADR-0039 Q3 (2026-10-29), #A1A1A6, close to macOS's secondary label, warm as the owner's warm neutrals of 2026-10-30 make every neutral (ADR-0040: OKLCH hue 85, chroma 0.0075, its lightness kept); 5.6:1 on the window, 5.0:1 on a group, 6.1:1 on the sidebar, tested (tests/visual/test_contrast_tokens.py WindowSurfacePairs); was #DFDDD7, the material's textSecondary, which read like the titles (10.7:1 against the text's 13.4:1); fields, tabs and chips keep textSecondary on their own fills [ref: docs/decisions/ADR-0039-design-polish.md § Questions for the owner]
         chipFill: "#FFFFFF",  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#FF6B63",  // own value: the CPU Load graph's System share (AM29), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -72,7 +72,7 @@ QtObject {
         statusOn: "#2E9E48",  // own green of a status dot (Wi-Fi Connected, a service that is up): 3.2:1 on the light group fill (a graphic: 3:1), the text beside it says the same [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusWarn: "#B78300",  // own yellow of a status dot (a service that is up without an address): 3.1:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusOff: "#D7372F",  // own red of a status dot (a service that is not connected): 4.4:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-        sidebarFill: "#EEECE7",  // app sidebar, light appearance: macOS 27 System Settings sidebar 235-236, edge to edge, no dividing line (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #ECECEC at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        sidebarFill: "#F7F6F3",  // the floating sidebar panel, light appearance: 6 levels under the window (#FDFCF9), the owner's calm-sidebar request of 2026-11-02 (was 15 under: #EEECE7); macOS 26 System Settings measures the panel at 249 against a 252 content ground, a white rim lighting it (system-settings ss-004-005 at 2 px/pt, measured 2026-11-03); the window's own warmth kept (R-G 1, G-B 3) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md § 08-settings-sidebar]
         windowTextSecondary: "#716E6A",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #6E6E73 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         chipFill: "#FDFCF9",  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): the white of #FFFFFF, warmed [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#D7372F",  // own value: the CPU Load graph's System share (AM29), light appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -129,7 +129,6 @@ QtObject {
 
     // color roles, accentInkLight appearance
     readonly property var colorAccentInkLight: ({
-        pink: "#BD2F6C",  // the lightest shade of the light pink accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
         yellow: "#816500",  // the lightest shade of the light yellow accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
         green: "#467427"  // the lightest shade of the light green accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
     })
@@ -804,18 +803,22 @@ QtObject {
     // estimate: a permission alert takes no click, key or close this long after it became the active window, so one meant for what was there before never answers it (ADR-0035 5a-5) [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
     readonly property int panelAlertArmMs: 500
 
-    // the sidebar search field: #E9E9E9 in its middle on the #ECECEC sidebar, the text colour at 0.012 (moved from settings.fieldFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarFieldFillOpacity: 0.012
-    // the dark rim of the search field and the toolbar capsule, one device pixel: #BDBDBD on the sides, black at 0.2 (moved from settings.rimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarRimOpacity: 0.2
-    // estimate: the dark rim in the dark appearance (no macOS 27 dark capture) (moved from settings.rimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarRimOpacityDark: 0.5
-    // the light rim inside the dark one, one device pixel: #FFFFFF / #F8F8F8 against the #F1F1F1 fill, white at 0.7 (moved from settings.innerRimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarInnerRimOpacity: 0.7
-    // estimate: the light inner rim in the dark appearance (no macOS 27 dark capture) (moved from settings.innerRimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarInnerRimOpacityDark: 0.08
-    // the toolbar's back / forward capsule: #FAFAFA on the white pane, the text colour at 0.02 (moved from settings.toolbarFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarCapsuleFillOpacity: 0.02
+    // the sidebar search field: a flat #E1E1E1 on the #FAFAFA sidebar at 2 px/pt, no rim and no shadow (macOS 27 ss-004-005, measured 2026-11-03), the text colour at 0.10; was 0.012 inside a dark and a light rim [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarFieldFillOpacity: 0.1
+    // estimate: the search field in the dark appearance, the text colour (light) at 0.05: more lightens the dark window past the 4.5:1 of the accent text, tests/visual/test_contrast_tokens.py (no macOS 27 dark capture) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarFieldFillOpacityDark: 0.05
+    // the toolbar's back / forward capsule: white #FEFEFE with a white device-pixel edge and no dark outline, lifted by a soft shadow (macOS 27 ss-004-005, measured 2026-11-03); white (colors.knob) at 0.7 over the window; was the text colour at 0.02 inside two rims [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarCapsuleFillOpacity: 0.7
+    // estimate: the toolbar capsule in the dark appearance, white at 0.05 over the dark window, with the 0.30 shadow, so it reads without a rim and the accent text keeps 4.5:1 (no macOS 27 dark capture) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarCapsuleFillOpacityDark: 0.05
+    // the soft shadow under a toolbar capsule fades over about 7 pt (ss-004-005: #F1F1F1 at the capsule edge to the page grey in 14 px at 2 px/pt, measured 2026-11-03; the audit proposes blur 8) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property int toolbarShadowBlur: 8
+    // the capsule shadow is deeper below than above (ss-004-005: #F1F1F1 below the capsule, #F7F7F7 above, measured 2026-11-03) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property int toolbarShadowOffsetY: 2
+    // the capsule shadow colour at this opacity, light appearance (the edge darkens the page by 0.05 to 0.07 in ss-004-005; 0.10 at the peak of the blurred shape) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarShadowOpacity: 0.1
+    // estimate: the capsule shadow in the dark appearance (a shadow on a dark window is faint, so deeper than the light one; no macOS 27 dark capture) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarShadowOpacityDark: 0.3
     // the hairline between back and forward: #C7C7C7 on #FAFAFA, black at 0.2 (moved from settings.toolbarDividerOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
     readonly property real toolbarDividerOpacity: 0.2
     // the hairline between back and forward is 19.5 tall, centred (moved from settings.toolbarDividerHeight: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
@@ -1273,8 +1276,8 @@ QtObject {
     readonly property int settingsWindowMinWidth: 560
     // estimate: Settings app (docs/specs/settings.md) [ref: docs/testing/f1-reference-gaps.md § Settings]
     readonly property int settingsWindowMinHeight: 420
-    // macOS 27 System Settings sidebar 232 pt, edge to edge (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
-    readonly property int settingsSidebarWidth: 232
+    // the sidebar's slot, the floating panel plus the window.sidebarPanelInset gutter on its left: macOS 26 System Settings gutter 8 + panel 215 = 223 (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int settingsSidebarWidth: 223
     // macOS 27 System Settings sidebar row pitch and selection height 32 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
     readonly property int settingsSidebarItemHeight: 32
     // macOS 27 System Settings sidebar icon tiles 20 x 20 (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
@@ -1297,6 +1300,10 @@ QtObject {
     readonly property int settingsSidebarTileRadius: 5
     // white glyph on the coloured sidebar tile: 5.3:1 or more on every tile colour used (color.accentLight blue, purple, pink, red, green, graphite; computed, 3:1 needed for a graphic) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
     readonly property string settingsSidebarTileGlyph: "#FFFFFF"
+    // the sidebar tile of a window that is not key, light appearance: macOS turns the coloured tiles a mid grey (systemGray, about #8E8E93) and keeps the white glyph; warm, and 3.45:1 under the white glyph (the 3:1 icon floor; tests/visual/test_contrast_tokens.py) [ref: docs/audits/refinement-2026-11-02.md § 05-windows-getinfo-titlebar, 06-windows-inactive, 07-windows-under-menubar]
+    readonly property string settingsSidebarTileInactiveLight: "#8C8A86"
+    // the same, dark appearance: the lights' inactive grey (window.inactiveLightDark), 6.88:1 under the white glyph [ref: docs/audits/refinement-2026-11-02.md § 05-windows-getinfo-titlebar, 06-windows-inactive, 07-windows-under-menubar]
+    readonly property string settingsSidebarTileInactiveDark: "#5C5A56"
     // estimate: the white glyph drawn on a sidebar icon tile [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
     readonly property int settingsSidebarGlyphSize: 14
     // macOS 26/27 System Settings groups about 10 apart (visual-tahoe-2026-10-25.md Settings) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
@@ -3213,6 +3220,24 @@ QtObject {
     readonly property int windowItemsGap: 8
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     readonly property int windowItemsInset: 8
+    // the floating sidebar panel's distance from the window's left, top and bottom edges, and the gutter between it and the content: macOS 26 System Settings panel at x 16, y 16, bottom 1785 of 1801 px at 2 px/pt = 8 pt (ss-004-005, measured 2026-11-03; Finder 8-9 px at 1.07) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int windowSidebarPanelInset: 8
+    // the floating sidebar panel's corner, concentric with the 26-pt window corner at the 8-pt inset (26 - 8 = 18); circle fit on the capture's corner edge points 18 to 19 (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md]
+    readonly property int windowSidebarPanelRadius: 18
+    // the light rim that lights the floating sidebar panel, 1 pt wide (2 px at 2x), snapped to whole device pixels: pure white (255) on the 249 panel in the light appearance, so the knob colour at full opacity (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property real windowSidebarPanelRimOpacity: 1.0
+    // estimate: the same rim in the dark appearance, the knob colour at the toolbar's inner-rim 0.08 (no dark capture of the panel) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property real windowSidebarPanelRimOpacityDark: 0.08
+    // the floating sidebar panel's rim, 1 pt: 2 px at 2x on ss-004-005 (x 16-17 and 444-445), drawn as a whole number of device pixels (1 px at 1.25) so its edge never splits between two pixels [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int windowSidebarPanelRimWidth: 1
+    // the floating sidebar panel's soft shadow reaches about 10 pt: right of the panel 242 at the edge to the 252 ground over 20 px, below 240 to 243 over 14 px (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int windowSidebarPanelShadowBlur: 12
+    // the shadow sits a little lower than it is wide: 240 below the panel against 242 beside it (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int windowSidebarPanelShadowOffsetY: 1
+    // light appearance: the shadow colour at this opacity (a blurred edge shows half of it): 10 levels under the 252 ground at the edge, about black at 0.04 there (ss-004-005, measured 2026-11-03); an opaque app window, so a drop shadow and not a blur [ref: ADR-0024 amendment 2026-11-03]
+    readonly property real windowSidebarPanelShadowOpacity: 0.08
+    // estimate: the same in the dark appearance, stronger so it still reads on the dark window (no dark capture) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property real windowSidebarPanelShadowOpacityDark: 0.3
     // the window's contact edge in the dark appearance: macOS 27 draws one device pixel of near black outside the window, then the light inner rim (window.rim*); Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua); was the white rim at 0.15 (ADR-0024 note 2026-11-03) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/decisions/ADR-0039-design-polish.md step 6; tests/compositor/window_edge.sh]
     readonly property string windowEdgeDark: "#000000"
     // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]

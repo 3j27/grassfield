@@ -177,7 +177,7 @@ TestCase {
         verify(source("ui/Grassfield/Ui/WindowControls.qml").indexOf("property bool active: root.window ? Appearance.looksKey(root.window, root.window.active) : true") > 0, "the lights");
         const settings = source("apps/settings/qml/Main.qml");
         verify(settings.indexOf("readonly property bool keyLook: Appearance.looksKey(root, root.active)") > 0);
-        compare(settings.split("root.keyLook").length - 1, 2, "the sidebar's selection and its label");
+        compare(settings.split("root.keyLook").length - 1, 3, "the sidebar's selection, its label and its tile");
         const viewer = source("apps/preview/qml/Viewer.qml");
         verify(viewer.indexOf("readonly property bool keyLook: Appearance.looksKey(viewerWin, viewerWin.active)") > 0);
         compare(viewer.split("viewerWin.keyLook ?").length - 1, 3);
