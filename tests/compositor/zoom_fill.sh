@@ -23,9 +23,16 @@
 #   alt-zoom       Alt held (tests/tools/vkbd), a click on the zoom light: true full screen (fullscreen 2), not Fill; out again
 #   scale 1.25     (skipped with --no-scale) a headless output GF-ZOOM made by scripts/nestctl with a monitor rule at scale 1.25
 #                  (1920x1080: 1536x864 logical, the owner's eDP-1): the window moved there, the zoom light: the margins on
-#                  the 4 px grid (captured), and back; the output removed
+#                  the 4 px grid (captured), and back. Then move-to (review of fix/zoom-is-fill, MINOR): the window filled on
+#                  GF-REF, move_to GF-ZOOM keeps it filled there, and Zoom brings back its size from before on GF-ZOOM, on
+#                  GF-ZOOM's Desktop (it went back to GF-REF while its Desktop stayed GF-ZOOM's); the output removed
+#   reload         (review, MINOR) the window filled, the plugin unloaded and loaded again (its tile records are gone): Zoom
+#                  unfills it to the Center place's frame (no box from before is known), the next Zoom fills it, the one
+#                  after brings back that frame
 #   no-plugin      (last) the plugin unloaded through scripts/nestctl: Super+Alt+F is Hyprland's maximized mode (fullscreen 1),
 #                  again: back (gate C2: bindings.lua's own dispatcher); the plugin loaded again and advertising zoom-fill
+# A click on a zoom light that changed nothing within 2 s (it came while the bar still moved: the reviewer's first run lost
+# one) is logged and made once more after the pointer rested on the light again; a second miss fails the check.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error. Logs and captures: .dev/zoom-fill/run-<timestamp>/.
 set -uo pipefail
 
@@ -182,12 +189,31 @@ close_popup() { # output
   done
 }
 # A click on the zoom light, then the pointer off it at once (a pointer resting there opens the popover after
-# tiling.hoverDelay, which would take the next click).
+# tiling.hoverDelay, which would take the next click). The bar must have stopped moving first (its box read twice the same,
+# the move's animation over), and the pointer rests on the light before the press; a click that changed nothing within 2 s
+# is made once more (logged).
+settled_box() { # wait until the foot's box reads the same twice, 200 ms apart (at most 3 s)
+  local a b
+  for _ in $(seq 1 15); do
+    a=$(geometry) && sleep 0.2 && b=$(geometry)
+    [[ -n $a && $a == "$b" ]] && return 0
+  done
+  return 0
+}
 click_light() { # output
-  local lx ly
-  read -r lx ly < <(light "$1")
-  pointer "$1" abs "$lx" "$ly" sleep 150 click sleep 100 abs $((lx + 400)) $((ly + 300)) sleep 900
-  close_popup "$1"
+  local lx ly before try
+  settled_box
+  before=$(geometry)
+  for try in 1 2; do
+    read -r lx ly < <(light "$1")
+    pointer "$1" abs "$lx" "$ly" sleep 300 click sleep 100 abs $((lx + 400)) $((ly + 300))
+    for _ in $(seq 1 20); do [[ $(geometry) != "$before" ]] && break; sleep 0.1; done
+    close_popup "$1"
+    [[ $(geometry) != "$before" ]] && break
+    say "  the click on the zoom light at $lx,$ly changed nothing: once more ($try)"
+    sleep 0.5
+  done
+  sleep 0.6
 }
 place_start() { # output x y (relative to the output): the foot out of any zoom, at a known floating box there
   local ox oy _r fs
@@ -334,15 +360,67 @@ if ((scale_case)); then
       shot zoom-fill-scale125-no-margins "$zoom_out"
       click_light "$zoom_out"
       nestctl dispatch "hl.plugin.grassfield.config(\"tilingMargins\", \"true\")" >>"$log" 2>&1
+      sleep 0.5
+      say "move-to"
+      place_start "$out" 300 200
+      mw0=$w0 mh0=$h0
+      click_light "$out"
+      check "move-to: filled on $out first" gaps_ok "$out" 8 "move-to fill"
+      nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$zoom_out\")" >>"$log" 2>&1
+      sleep 1.2
+      check "move-to: move_to keeps it filled, on $zoom_out" gaps_ok "$zoom_out" 8 "move-to there"
+      click_light "$zoom_out"
+      zws=$(nestctl monitors -j | jq -r --arg o "$zoom_out" '.[] | select(.name == $o) | .activeWorkspace.id')
+      on_zoom_out() {
+        local x y w h fs _a wid zox zoy zlw zlh _r
+        read -r x y w h fs _a < <(geometry)
+        read -r zox zoy zlw zlh _r < <(output_facts "$zoom_out")
+        wid=$(nestctl clients -j | jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.id')
+        say "  move-to: foot ${w}x${h} at $x,$y fullscreen $fs on Desktop $wid; want ${mw0}x${mh0} inside $zoom_out (${zlw}x${zlh} at $zox,$zoy) on its Desktop $zws"
+        ((fs == 0 && w == mw0 && h == mh0 && x >= zox && y >= zoy && x + w <= zox + zlw && y + h <= zoy + zlh)) && [[ $wid == "$zws" ]]
+      }
+      check "move-to: Zoom brings back its size from before on $zoom_out and its Desktop (review MINOR)" on_zoom_out
     else
       check "scale 1.25: the monitor rule set the scale" false
     fi
+    # Back on GF-REF with its Desktop (Hyprland's move dispatcher moves the box, not the Desktop: the window would stay on
+    # GF-ZOOM's Desktop, hidden once that output goes).
+    nestctl dispatch "hl.plugin.grassfield.move_to(\"$addr\", \"$out\")" >>"$log" 2>&1
+    sleep 1
     place_start "$out" 300 200
     nestctl output remove "$zoom_out" >>"$log" 2>&1
     sleep 1
   else
     say "SKIP: scale 1.25 (nestctl output create headless failed)"
   fi
+fi
+
+say "reload"
+place_start "$out" 300 200
+click_light "$out"
+check "reload: filled before the reload" gaps_ok "$out" 8 "reload fill"
+if nestctl plugin unload "$plugin_so" >>"$log" 2>&1 && sleep 1 && nestctl plugin load "$plugin_so" >>"$log" 2>&1; then
+  sleep 2
+  check "reload: the plugin is back with zoom-fill" has_feature zoom-fill
+  check "reload: still at the Fill frame (nothing moved it)" gaps_ok "$out" 8 "after the reload"
+  click_light "$out"
+  unfilled() {
+    local x y w h fs _a ox oy lw lh sc g ax ay aw ah
+    read -r x y w h fs _a < <(geometry)
+    read -r ox oy lw lh sc g ax ay aw ah < <(output_facts "$out")
+    say "  reload: foot ${w}x${h} at $x,$y fullscreen $fs; work area ${aw}x${ah} at $ax,$ay (Center: at most 0.9 of it, centred)"
+    ((fs == 0 && w > aw / 2 && w < aw - 16 && w <= aw * 9 / 10 + 1 && x - ax >= 8 && ax + aw - x - w >= 8))
+  }
+  check "reload: Zoom of the filled window whose record the reload forgot unfills it (review MINOR)" unfilled
+  check "reload: the plugin logged the step" plugin_logged "zoom ${addr#0x}: unfill"
+  read -r ux uy uw uh _ _ < <(geometry)
+  click_light "$out"
+  check "reload: the next Zoom fills it again" gaps_ok "$out" 8 "reload refill"
+  click_light "$out"
+  back_to_unfill() { local x y w h fs _a; read -r x y w h fs _a < <(geometry); say "  reload: ${w}x${h} at $x,$y (want ${uw}x${uh} at $ux,$uy)"; ((fs == 0 && x == ux && y == uy && w == uw && h == uh)); }
+  check "reload: and the one after brings back that frame" back_to_unfill
+else
+  check "reload: scripts/nestctl unloaded and loaded the plugin" false
 fi
 
 say "no-plugin"
