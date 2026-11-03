@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Pdf
 import Grassfield.Ui
 
@@ -38,50 +39,69 @@ ListView {
         Accessible.name: qsTr("Page %1").arg(cell.index + 1)
         Accessible.selected: cell.selected
 
-        // The plate (macOS Preview, gs-092-232): the page and its number on a rounded plate, filled in the accent for the
-        // current page, a light plate under the hovered one.
+        // The plate (macOS Preview, gs-092-232): the page and its number on a rounded plate, filled in the selection colour for
+        // the current page (the inactive selection while the window is not key), a light plate under the hovered one. Its size
+        // is fixed by the tokens, not by the list's width: the list keeps its place when the sidebar is hidden and shown again.
         Rectangle {
             id: plate
             x: Tokens.spacingSm
-            width: root.width - 2 * Tokens.spacingSm
+            width: Tokens.previewThumbnailWidth + 2 * Tokens.previewPlatePad
             height: Tokens.previewPlatePad + thumb.height + Tokens.previewPlateCaption
             radius: Tokens.previewPlateRadius
-            color: cell.selected ? (cell.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.filesSidebarSelectionOpacity))
+            color: cell.selected ? (cell.keyLook ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity))
                 : cellMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
         }
 
-        Rectangle {
-            anchors.fill: thumb
-            color: Tokens.previewPaper
-        }
-
-        PdfPageImage {
+        // The page with its corners rounded (gs-092-232).
+        Item {
             id: thumb
+            x: plate.x + Tokens.previewPlatePad
             y: Tokens.previewPlatePad
-            anchors.horizontalCenter: parent.horizontalCenter
-            document: root.document
-            currentFrame: cell.index
-            asynchronous: true
-            fillMode: Image.PreserveAspectFit
-            width: Math.min(Tokens.previewThumbnailWidth, plate.width - 2 * Tokens.previewPlatePad)
+            width: Tokens.previewThumbnailWidth
             height: Math.max(1, Math.round(width * cell.pageSize.height / Math.max(1, cell.pageSize.width)))
-            sourceSize.width: width
-            sourceSize.height: height
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: pageMask
+            }
+
+            Rectangle {
+                id: pageMask
+                anchors.fill: parent
+                radius: Tokens.previewPageRadius
+                visible: false
+                layer.enabled: true
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: Tokens.previewPaper
+            }
+
+            PdfPageImage {
+                anchors.fill: parent
+                document: root.document
+                currentFrame: cell.index
+                asynchronous: true
+                fillMode: Image.PreserveAspectFit
+                sourceSize.width: width
+                sourceSize.height: height
+            }
         }
 
-        // The page number under the page, in the plate's strip: white (the accent's text) on the accent plate, the secondary
-        // colour otherwise (gs-092-232: 13-pt regular).
+        // The page number under the page, in the plate's strip: the selection text on the selection plate, the secondary
+        // colour otherwise (the primary one on the hovered plate, which holds 4.5:1 there) (gs-092-232: 13-pt regular).
         Text {
             id: label
             anchors {
                 top: thumb.bottom
                 bottom: plate.bottom
-                horizontalCenter: parent.horizontalCenter
+                horizontalCenter: plate.horizontalCenter
             }
             verticalAlignment: Text.AlignVCenter
             textFormat: Text.PlainText
             text: cell.index + 1
-            color: cell.selected ? (cell.keyLook ? Appearance.colors.accentText : Appearance.colors.text) : Appearance.windowSecondary
+            color: cell.selected ? (cell.keyLook ? Appearance.colors.selectionText : Appearance.colors.text) : (cellMouse.containsMouse ? Appearance.colors.text : Appearance.windowSecondary)
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
             font.weight: Tokens.typographySmallWeight
