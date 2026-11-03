@@ -36,7 +36,7 @@ to what is behind them) follow macOS 26.** Where a macOS 27 trait concerns both 
 | Toolbars | bars, one height, a continuous bar under the controls once content scrolls under them | — |
 | Menus | an icon only on the rows that have one, text otherwise about 16 pt from the edge; highlight 24 pt tall, about 5 pt from the sides, radius 7 (concentric with 12) | icon column in every menu, radius 6 |
 | Accent fills | white text on the accent fill in both appearances; the dark appearance gets a deeper selection fill that holds 4.5:1 with white (A2) | dark text on a bright green in the dark appearance |
-| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16; a dark contact edge through the window border in the light appearance (about black 0.25), a light inner rim in the dark one | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
+| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16 (rendered as that model, note 2026-11-03); the contact edge, the window border's one device pixel: black 0.125 in the light appearance, black 0.58 in the dark one; a light inner rim in the dark one (Hyprland's inner glow, white 0.125 over one device pixel) | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
 | Dark windows | neutral greys: window about #292929, groups about #313131 | #1D1F24 |
 | Search | a neutral light fill on the selected row; result type about 17.7 / 15 pt | accent-filled row (F2c), 13 / 11 |
 | Light window content | white windows, groups #F7F7F7 without a border, radius 12, margins 20 (unchanged from 26) | grey window, 14 % black groups with a border |
@@ -137,3 +137,71 @@ Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/a
 
 ## Note (2026-10-29): the menu bar's band
 Integrator decision under the owner's delegation, closest to macOS 26/27. The band the menu bar shows (the setting, the automatic assist of ADR-0016 D1, or a full-screen window) is glass of the "menu" class, and its tone adapts to the wallpaper strip under it (point 3), whatever the appearance: dark glass with light text over a dark strip, light glass with dark text over a light one. The unclassed material gave 0.82 at transparency 0.49. Over the owner's video strip (p5 0.0528, p95 0.35) the band is now dark glass at alpha 0.64 (0.65 at 0.25), judged at rest (7.73:1), under the open title's capsule (4.73:1) and dimmed (3.06:1); the appearance's own light glass would have needed 0.79. The strip is used only while it is what lies behind the bar (no window under it, no full-screen window); otherwise the surface keeps the appearance's material at the worst case. Reduce Transparency stays opaque in the appearance's colours. Detail: docs/specs/menubar.md item 0b.
+
+## Note (2026-11-03): the window edge and shadow, measured on the GPU
+The owner's decision of 2026-11-02 ("Golden Gate 27"): the window edge and shadow follow macOS 27, not the Tahoe 26
+captures that `docs/audits/refinement-2026-11-02.md` (03-windows-corner-shadow, item 1) compared them with. That audit had
+not checked the real GPU; `tests/compositor/window_edge.sh` now does: a Settings window on flat wallpapers (#E6E6E6,
+#808080), GF-REF at 1.25, light and dark, active and inactive, the darkening of the backdrop per device pixel along the
+middle of each side (`tests/compositor/edge_measure.py`, which holds the target below).
+
+**The macOS 27 target.** Measured on three 512 Pixels Golden Gate window crops (Settings General, Finder Home, Force Quit;
+the shadow is their alpha channel, 2 px per pt), which agree within 0.005. Darkening (black's alpha) against pt from the
+window's edge:
+
+| | contact (0-0.5) | 1 | 2 | 4 | 8 | 12 | 16 | 24 | 32 | 40 | 48 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| sides | 0.374 | 0.190 | 0.182 | 0.167 | 0.137 | 0.108 | 0.083 | 0.044 | 0.020 | 0.009 | 0.003 |
+| top | 0.277 | 0.066 | 0.062 | 0.051 | 0.038 | 0.025 | 0.018 | 0.007 | 0.002 | 0 | 0 |
+| bottom | 0.474 | 0.320 | 0.313 | 0.302 | 0.275 | 0.244 | 0.213 | 0.152 | 0.094 | 0.052 | 0.025 |
+
+- The contact edge: one device pixel (half a point) that darkens the shadow under it by 0.20 on every side; 0.18 for an
+  inactive window (Finder App Switcher capture).
+- The dark appearance (Appearance Dark captures, over the wallpaper): an outer device pixel of black 0.92 over the shadow
+  (0.83 inactive), then two device pixels (1 pt) of white 0.10 inside the window (0.08 inactive).
+- The light appearance has no visible inner rim (at most white 0.07 over one device pixel, on the sidebar).
+- Inactive shadow (low confidence: a gradient wallpaper): about 0.13 at 4 pt, 0.06 at 8 pt, gone by 16 pt.
+
+**Ours before (main 293a5d55, Hyprland 0.56.2).** The render is Hyprland's model (`shadow.glsl`: alpha × (1 − d / range) ^
+power outside the window box moved by the offset), within 0.012 beside the window, 0.005 above and 0.023 below. Range and
+offset are in points at 1.25. So C-3 renders as fitted.
+- Shadow, active, at 1, 4, 8, 16, 24 and 32 pt: sides 0.243, 0.213, 0.165, 0.087, 0.048 and 0.022 (27: 0.192, 0.172,
+  0.142, 0.082, 0.047, 0.022). Bottom: 0.252 flat to 16 pt (27: 0.322 down to 0.212), then 0.174, 0.100 and 0.026 at 24,
+  32 and 48 pt (27: 0.157, 0.099, 0.027).
+- Contact edge: the 1-pt border is ONE device pixel (0.8 pt) at 1.25, black 0.25 over the shadow, 0.44 in all. That is
+  twice macOS 27's darkness per point (0.2 over half a point).
+- Dark appearance: a white 0.15 pixel outside the window, no dark edge, no inner rim.
+- The audit's "77 % of the background ten points out" is below the window, where macOS 27 is at 74 % (0.26). The Tahoe 26
+  capture's 95 % is 26's lighter shadow. The excess against 27 was the contact edge and the flat bottom.
+
+**Fit.**
+- Shadow values unchanged. They remain the least-squares fit of one offset box to the 27 profile: rms 0.0139 over the three
+  sides. The best of a grid over range 30-100, power 1-6 and offset 0-24, with the alpha solved, is 0.0135 (range 94, power
+  6, alpha 0.26, offset 16): no visible gain.
+- What Hyprland's model cannot draw: 27's slope under the window. The box holds its alpha over the offset's 16 pt, where 27
+  goes from 0.34 to 0.21: the plateau, at most 0.07 off. Its sides also start at 0.24 where 27 has 0.19 (0.05 off at the
+  first pixels). Closer needs a second shadow or a shader of our own, not in this batch.
+- Edge: the same darkness per point as 27's half-point line, drawn in Hyprland's one device pixel (0.8 pt at 1.25).
+  Light: black 0.2 × 0.5 / 0.8 = 0.125 (inactive 0.11). Dark: black 0.92 × 0.625 = 0.58 (inactive 0.52).
+- Dark inner rim: Hyprland 0.56's inner glow (`decoration.glow`, range 1, render_power 1). It draws over the window content
+  and lights the first device pixel inside every window at half its colour's alpha (measured at 1.25). White 0.25 gives
+  0.125 over 0.8 pt (inactive 0.2 gives 0.1), the same light per point as 27's 0.10 over 1 pt. Off in the light appearance.
+- The values are tokens: `window.edge*` and `window.rim*`. The config holds the dark appearance's
+  (`config/hypr/grassfield/looknfeel.lua`, the glow in its own guarded call). The shell pushes the current appearance's
+  with the border, as a second `hl.config` call (`Minimized.edgeCall`), so a Hyprland without the glow still takes the
+  border.
+
+**After (same run, GF-REF 1.25).**
+- Light contact edge: 0.138 over the shadow (0.348 in all) on the sides and 0.128 above and below; inactive 0.111.
+- Dark: outer pixel 0.586 over the shadow (inactive 0.520); inner rim white 0.125 (inactive 0.100) on every side.
+- Light appearance: no rim.
+- The shadow as before.
+- The same with the plugin unloaded: the edge, the rim and the shadow are Hyprland's and the shell's, not the plugin's.
+
+**Limits.**
+- Third-party windows with the plugin's titlebar: the glow follows the client surface, the bar being a decoration outside
+  it. In the dark appearance it lights a pixel under the bar's hairline, and none along the bar's top. Fixing that is
+  plugin work (a rim drawn with the bar).
+- The glow is one more pass over each window that redraws, in the dark appearance only. P3 has not been re-measured.
+- Other scales: the border is a whole number of device pixels (one at 1 and 1.25), so the edge there is up to 25 % darker
+  per point than at 1.25. The glow's range has been measured only at 1.25.
