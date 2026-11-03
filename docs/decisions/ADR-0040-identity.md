@@ -866,7 +866,7 @@ to the text prompt, which this container cannot test); every root step is the ow
   failed transcode), never a replacement for a wallpaper that is still loading. P-3 holds: on the bound
   (`wallpaper.firstShowTimeoutMs`) a loading wallpaper changes nothing, neither the artwork nor a release of the bars; the
   bar, the Dock and the icons come after the desktop picture, together, at its first frame, or at the entrance's own hard
-  bound if it never comes (journal `entrance (hard bound)`). Only a failed source shows the artwork, and with it the bars
+  bound (the reveal bound plus four wallpaper bounds, 7.5 s; a first prepare at a fractional scale takes 4 to 5 s under load) if it never comes (journal `entrance (hard bound)`). Only a failed source shows the artwork, and with it the bars
   (`entrance (wallpaper error)`). No decode is cancelled (`WallpaperConfig.firstFrameStep`). A stored still is used only for
   the setting it was shown for (`src`).
 - **ID-3** The wallpaper's first frame is the cached still of the last applied wallpaper, with its tone (section 2).

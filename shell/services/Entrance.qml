@@ -20,6 +20,10 @@ Singleton {
     property bool revealed: false
     // The bound ran out while a wallpaper still drew its first frame: the entrance follows that frame (review of 3a5e1b80).
     property bool timedOut: false
+    // The hard bound allows a wallpaper this many of its own first-frame bounds (wallpaper.firstShowTimeoutMs): a first prepare
+    // of a photograph at a fractional scale takes 4 to 5 s on a loaded machine, and the picture comes first (P-3). A video
+    // still being transcoded is the long case: its bars come at this bound, over the ground.
+    readonly property int wallpaperBounds: 4
     property bool settingsWaited: false
     // A wallpaper's source failed and the artwork shows instead (Wallpaper.qml): the journal says so when the entrance ends.
     property bool wallpaperFailed: false
@@ -92,7 +96,7 @@ Singleton {
     // the entrance's.
     Timer {
         id: hardTimer
-        interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs
+        interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs * root.wallpaperBounds
         onTriggered: root.reveal("hard bound")
     }
 

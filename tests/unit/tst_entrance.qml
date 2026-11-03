@@ -78,7 +78,7 @@ TestCase {
         // On its bound the latch waits for the wallpapers' own bound.
         verify(/else if \(root\.timedOut && !Logic\.wallpaperPending\(root\.expected\)\)/.test(e));
         // And a hard bound past both (re-check of 89390113: a leaked key never holds the entrance for good).
-        verify(/interval: Tokens\.sessionRevealTimeoutMs \+ Tokens\.wallpaperFirstShowTimeoutMs\s*onTriggered: root\.reveal\("hard bound"\)/.test(e));
+        verify(/interval: Tokens\.sessionRevealTimeoutMs \+ Tokens\.wallpaperFirstShowTimeoutMs \* root\.wallpaperBounds\s*onTriggered: root\.reveal\("hard bound"\)/.test(e));
         // Each surface takes its key once, at creation, and forgets that same key.
         for (const t of [w, bar]) {
             verify(/Entrance\.expect\(win\.entranceKey\);/.test(t) && /Entrance\.forget\(win\.entranceKey\);/.test(t) && /Entrance\.ready\(win\.entranceKey\);/.test(t));
