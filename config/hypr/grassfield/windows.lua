@@ -45,18 +45,19 @@ hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chr
 hl.window_rule({ name = "gf-client-chrome-panel", match = { xdg_tag = "^file-panel$" }, tag = "+grassfield-client-chrome" })
 
 -- The permission alerts (grassfield-portal, ADR-0035 D-5) draw the alert shape, its own buttons and no lights: no plugin
--- titlebar. Their radius is every window's (20, ADR-0024 C-1): a rule cannot go past decoration.rounding (ADR-0035 5a-4).
+-- titlebar. Their radius is every window's (17, ADR-0024 C-1): a rule cannot go past decoration.rounding (ADR-0035 5a-4).
 hl.window_rule({ name = "gf-client-chrome-alert", match = { xdg_tag = "^access-alert$" }, tag = "+grassfield-client-chrome" })
 
 -- Get Info and Customize Folder draw the titlebar-only style (role "info"). macOS 27 has one radius for every window
--- (ADR-0024 C-1, replacing ADR-0015 Q5's 26 / 12): 20, the global decoration.rounding (looknfeel.lua).
-hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 20 })
+-- (ADR-0024 C-1, replacing ADR-0015 Q5's 26 / 12): 17, the global decoration.rounding (looknfeel.lua).
+hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^org\\.grassfield\\.Files$", xdg_tag = "^info$" }, rounding = 17 })
 
--- Corner radius (ADR-0024 C-1, one radius for every window as in macOS 27): Grassfield's windows take 20 from
--- decoration.rounding (looknfeel.lua); every other window, matched by a negated class regex (also a window without a
--- class), gets the same 20 from this rule (the rule's cap). Rule regexes match the whole class: the pattern must cover
--- all of it (a bare prefix never matches, so its negation would match every window).
-hl.window_rule({ name = "gf-third-party-rounding", match = { class = "negative:^org\\.grassfield\\..*$" }, rounding = 20 })
+-- Corner radius (ADR-0024 C-1, one radius for every window as in macOS 27): Grassfield's windows take 17 from
+-- decoration.rounding (looknfeel.lua: 16.7 pt circle-equivalent on screen, macOS 27's 16.5 to 16.7); every other window,
+-- matched by a negated class regex (also a window without a class), gets the same 17 from this rule. Rule regexes match
+-- the whole class: the pattern must cover all of it (a bare prefix never matches, so its negation would match every
+-- window).
+hl.window_rule({ name = "gf-third-party-rounding", match = { class = "negative:^org\\.grassfield\\..*$" }, rounding = 17 })
 
 -- Glance (quick look of Preview): a floating panel centered on the screen, without the plugin titlebar.
 hl.window_rule({ name = "gf-glance", match = { class = "^org\\.grassfield\\.Preview\\.Glance$" }, float = true, center = true, decorate = false })

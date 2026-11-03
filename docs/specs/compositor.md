@@ -27,8 +27,9 @@ Code: `compositor/`. Build and run: `compositor/README.md`.
 
 - Every standard window has a titlebar strip about 32 pt tall that is part of the window: same corner
   radius as the window at the top, square joint with the content, one continuous outline and shadow.
-  Titlebar-only windows have a corner radius of about 13 pt; toolbar windows about 26 pt
-  (docs/testing/f1-reference-gaps.md, "Window chrome").
+  macOS 26: titlebar-only windows have a corner radius of about 13 pt, toolbar windows about 26 pt
+  (docs/testing/f1-reference-gaps.md, "Window chrome"); macOS 27, the target: one corner for every window, 16.5–16.7 pt
+  circle-equivalent at 45° (ADR-0024 C-1).
 - Three circular buttons on the left, 14 pt diameter, evenly spaced (9 pt gaps, 23 pt pitch), the first centre
   about 15.6 pt from the window's left and top edges, vertically centered: close, minimize, zoom. Glyphs appear on
   hover; inactive windows show grey buttons.
@@ -85,14 +86,19 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   arc at the join (radius 12 and 26, scale 1 and 2; the patch is drawn, the anti-aliased edge of the rounded surface
   still blends with what is behind it, cause not proven); a translucent window (foot at alpha 0.5) shows lighter
   corner squares and the curve (before F2a: dark squares).
-  Radius since ADR-0024 lot 2 (C-1): one radius for every window, 20 at rounding_power 2.6 (global
-  `decoration.rounding` and the rules `gf-third-party-rounding` and `gf-client-chrome-info-rounding`), replacing 26 for
-  `org.grassfield.*` and 12 otherwise; the window shadow is the macOS 27 fit (range 68, render_power 4, black 0.25,
+  Radius since ADR-0024 lot 2 (C-1): one radius for every window, 17 at rounding_power 2.6 since the note of 2026-11-04
+  (20 before; global `decoration.rounding` and the rules `gf-third-party-rounding` and `gf-client-chrome-info-rounding`),
+  replacing 26 for `org.grassfield.*` and 12 otherwise. Hyprland 0.56.2 draws `CWindow::rounding()` = rounding x
+  rounding_power / 2 (22.1 pt) times the scale, cut to whole device pixels (27 px at 1.25), at the power 2.6: measured
+  16.7 pt circle-equivalent at 45° on GF-REF at 1.25, macOS 27's 16.5–16.7. The bar's top corners, the tiling preview
+  and the rim (FR57) take that same int (core `windowCornerPx`): the bar rounded 32.5 px up to 33 before, a corner a
+  device pixel rounder than the window's edge; the window shadow is the macOS 27 fit (range 68, render_power 4, black 0.25,
   offset 0 16), rendered as that model within 0.023 on GF-REF at 1.25; the window border is macOS 27's dark contact
   pixel, pushed by the shell with the appearance (ADR-0024 note 2026-11-03; `tests/compositor/window_edge.sh`, with and
   without the plugin: the edge and the shadow are not the plugin's). The dark appearance's light inner rim is the
   plugin's (FR57; Hyprland 0.56.2's inner glow cannot draw it: no window rule, no rim along the rounded corners).
-  `tests/compositor/chrome.sh` expects corner insets of 5-7 px (6 measured at scale 1 on 2026-11-03 with the new edge).
+  `tests/compositor/chrome.sh` expects the corner's first fill pixel on the diagonal within 1 px of the drawn corner's
+  45-degree point (5 px at rounding 17, scale 1; 6 was measured at 20 on 2026-11-03 with the new edge).
 - **FR57** The dark appearance's inner rim (ADR-0024 note 2026-11-03; core `WindowRim.*`, glue `WindowRim.*`): in the dark
   appearance every window whose edges Hyprland draws (mapped and shown, not an X11 window that wants no border,
   `decorate` not false) gets 1 pt of white just inside its frame, 0.10 per point on the key window and 0.08 on the others
@@ -102,7 +108,8 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   sides, never under its hairline. One `CBorderPassElement` per window from a decoration on Hyprland's OVER layer (after
   the surface, so over the client's edge pixels; under the window's popups): Hyprland's border shader drawn inside the
   frame, its outer arc the window's own corner (Hyprland 0.56.2's `CWindow::rounding()`, decoration.rounding x
-  rounding_power / 2 = 26 pt, times the scale: 32 px at 1.25, at the rounding power) and its inner arc concentric, so the
+  rounding_power / 2 = 22.1 pt, times the scale and cut, core `windowCornerPx`: 27 px at 1.25, at the rounding power) and
+  its inner arc concentric, so the
   rim is continuous round the corners; Hyprland draws a border only on its ring's band, so no offscreen pass. None in the light appearance and none in full screen (macOS); Hyprland's maximized mode and Fill keep
   it, inside the frame (a filled window's margins stay the wallpaper). A change of key window or appearance damages the
   rims concerned (their bands). The rim waits for the shell's first `appearance` push after a load; the unload resets
