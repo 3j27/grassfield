@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Effects
 import Grassfield.Ui
 
 // Grassfield Preview: floating toolbar (sidebar, title and "n of N", previous/next, zoom, rotate, info, search), thumbnail
@@ -41,6 +40,20 @@ Window {
     readonly property real toolbarMin: Math.max(toolbar.controls.contentStart, Tokens.windowItemsInset) + viewerWin.toolbarRest
     readonly property bool roomForSidebar: viewerWin.width >= Tokens.previewSidebarWidth + viewerWin.toolbarNeed
     readonly property bool showSidebar: viewerWin.sidebarOpen && viewerWin.hasSidebar && viewerWin.roomForSidebar
+    // The sidebar toggle (button and shortcut): asked for in a window too narrow for it, the window widens to fit it when the
+    // screen allows (as macOS), else nothing changes.
+    function toggleSidebar(): void {
+        if (viewerWin.sidebarOpen && viewerWin.hasSidebar && !viewerWin.roomForSidebar) {
+            const want = Math.ceil(Tokens.previewSidebarWidth + viewerWin.toolbarNeed);
+            const room = viewerWin.screen ? viewerWin.screen.desktopAvailableWidth : want;
+            if (room >= want)
+                viewerWin.width = want;
+            return;
+        }
+        viewerWin.sidebarOpen = !viewerWin.sidebarOpen;
+        if (viewerWin.sidebarOpen && viewerWin.hasSidebar && !viewerWin.roomForSidebar)
+            viewerWin.toggleSidebar();
+    }
     readonly property int pages: viewerWin.view ? viewerWin.view.pageCount : 1
     readonly property bool onImage: content.info.kind === "image" && content.info.ok === true
     // Second line of the title: the position among the files, then the page of a document.
@@ -161,8 +174,8 @@ Window {
     Shortcut {
         sequences: ["Ctrl+Alt+2", "Ctrl+Shift+S"]
         enabled: viewerWin.hasSidebar
-        onActivated: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
-        onActivatedAmbiguously: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
+        onActivated: viewerWin.toggleSidebar()
+        onActivatedAmbiguously: viewerWin.toggleSidebar()
     }
     Shortcut {
         sequence: "Ctrl+I"
@@ -298,7 +311,7 @@ Window {
                 checked: viewerWin.showSidebar
                 // One white disc, as macOS 27: the group's own capsule is the disc; a checked pill inside it would be a second one.
                 checkedColor: "transparent"
-                onClicked: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
+                onClicked: viewerWin.toggleSidebar()
 
                 Glyph {
                     anchors.centerIn: parent
@@ -728,7 +741,10 @@ Window {
                     readonly property real captionHeight: Math.max(Tokens.previewPlateCaption, labelText.implicitHeight + Tokens.spacingSm)
                     readonly property color plateColor: viewerWin.keyLook ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)
                     // The plate: the page thumbnails' (a fixed width, 8 in from the list's left edge, the right gap holding the scroll bar).
-                    readonly property real plateWidth: Tokens.previewThumbnailWidth + 2 * Tokens.previewPlatePad
+                    readonly property real plateSlot: Tokens.previewThumbnailWidth + 2 * Tokens.previewPlatePad
+                    // The plate hugs the picture: the same padding on all sides, centred in the slot (a portrait one is narrower).
+                    readonly property real plateWidth: row.cellWidth + 2 * Tokens.previewPlatePad
+                    readonly property real plateX: Tokens.spacingSm + (row.plateSlot - row.plateWidth) / 2
 
                     width: fileList.width
                     height: fileList.compact ? Tokens.previewSidebarItemHeight : Tokens.previewPlatePad + row.cellHeight + row.captionHeight
@@ -741,8 +757,8 @@ Window {
                     Rectangle {
                         anchors {
                             fill: parent
-                            leftMargin: fileList.compact ? 0 : Tokens.spacingSm
-                            rightMargin: fileList.compact ? 0 : Math.max(0, row.width - Tokens.spacingSm - row.plateWidth)
+                            leftMargin: fileList.compact ? 0 : row.plateX
+                            rightMargin: fileList.compact ? 0 : Math.max(0, row.width - row.plateX - row.plateWidth)
                         }
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.previewPlateRadius
                         color: row.selected && !fileList.compact ? row.plateColor
@@ -754,24 +770,10 @@ Window {
                     Item {
                         id: thumb
                         visible: !fileList.compact
-                        x: Tokens.spacingSm + (row.plateWidth - width) / 2
+                        x: row.plateX + Tokens.previewPlatePad
                         y: Tokens.previewPlatePad
                         width: row.cellWidth
                         height: row.cellHeight
-                        // The picture's corners rounded as the page thumbnails'.
-                        layer.enabled: row.modelData.kind === "image"
-                        layer.effect: MultiEffect {
-                            maskEnabled: true
-                            maskSource: picMask
-                        }
-
-                        Rectangle {
-                            id: picMask
-                            anchors.fill: parent
-                            radius: Tokens.previewPageRadius
-                            visible: false
-                            layer.enabled: true
-                        }
 
                         Image {
                             id: pic
@@ -823,8 +825,8 @@ Window {
                         anchors {
                             left: parent.left
                             right: parent.right
-                            leftMargin: Tokens.spacingSm * 2
-                            rightMargin: fileList.compact ? Tokens.spacingSm : Math.max(Tokens.spacingSm, row.width - Tokens.spacingSm - row.plateWidth + Tokens.spacingSm)
+                            leftMargin: fileList.compact ? Tokens.spacingSm * 2 : row.plateX + Tokens.spacingXs
+                            rightMargin: fileList.compact ? Tokens.spacingSm : Math.max(Tokens.spacingXs, row.width - row.plateX - row.plateWidth + Tokens.spacingXs)
                             top: fileList.compact ? undefined : thumb.bottom
                             verticalCenter: fileList.compact ? parent.verticalCenter : undefined
                         }

@@ -2708,8 +2708,6 @@ QtObject {
     readonly property int previewPlateCaption: 19
     // gs-092-232: the plate's corner, a circle fit of about 10 px, 9 pt [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md; docs/audits/refinement-2026-11-02.md § 15-preview-window]
     readonly property int previewPlateRadius: 9
-    // gs-092-232: the page thumbnail's corners, rounded by about 4 px, 4 pt [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md; docs/audits/refinement-2026-11-02.md § 15-preview-window]
-    readonly property int previewPageRadius: 4
     // estimate: Preview app (docs/specs/preview.md); a PDF's file-name row, which grows with Text size so the selection ring keeps clear of its descenders (ADR-0039 step 4) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSidebarItemHeight: Math.round(28 * Appearance.textScale)
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]

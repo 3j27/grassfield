@@ -272,7 +272,6 @@ TestCase {
         compare(plate, 164);
         compare(Tokens.previewThumbnailWidth, plate - 2 * Tokens.previewPlatePad, "the page fills the plate less its padding");
         compare(Tokens.previewPlateCaption, 19);
-        compare(Tokens.previewPageRadius, 4);
         compare(Tokens.previewPlateRadius, 9);
     }
 
@@ -294,6 +293,16 @@ TestCase {
             const toggleRight = toggle.mapToItem(toolbar, toggle.width, 0).x;
             verify(tools.x >= toggleRight, v.title + ": the tools (x " + tools.x + ") clear the toggle (right " + toggleRight + ")");
             verify(tools.x + tools.width <= toolbar.width, v.title + ": the tools stay in the toolbar");
+            // Asking for the sidebar in a window too narrow for it widens the window when the screen allows.
+            const want = Math.ceil(Tokens.previewSidebarWidth + v.toolbarNeed);
+            v.toggleSidebar();
+            wait(300);
+            if (v.screen.desktopAvailableWidth >= want) {
+                verify(v.width >= want, v.title + ": the window widened to " + want + ", is " + v.width);
+                verify(v.showSidebar, v.title + ": the sidebar shows after the toggle");
+            }
+            v.width = v.minimumWidth;
+            wait(300);
             v.width = 900;
             wait(300);
             verify(v.showSidebar, v.title + ": the sidebar comes back when the window widens");

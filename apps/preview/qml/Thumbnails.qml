@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Pdf
 import Grassfield.Ui
 
@@ -52,26 +51,13 @@ ListView {
                 : cellMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
         }
 
-        // The page with its corners rounded (gs-092-232).
+        // The page, square-cornered: a corner mask (MultiEffect) blurred the text and left jagged corners on a 1.25 output.
         Item {
             id: thumb
             x: plate.x + Tokens.previewPlatePad
             y: Tokens.previewPlatePad
             width: Tokens.previewThumbnailWidth
             height: Math.max(1, Math.round(width * cell.pageSize.height / Math.max(1, cell.pageSize.width)))
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                maskEnabled: true
-                maskSource: pageMask
-            }
-
-            Rectangle {
-                id: pageMask
-                anchors.fill: parent
-                radius: Tokens.previewPageRadius
-                visible: false
-                layer.enabled: true
-            }
 
             Rectangle {
                 anchors.fill: parent
