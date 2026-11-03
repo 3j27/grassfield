@@ -86,6 +86,7 @@ Singleton {
             canSplitRows: Compositor.canSplitRows,
             splitPair: focusedHere ? Compositor.splitPair(focusedHere) : false,
             maximized: focusedHere ? Compositor.isZoomed(focusedHere, rev) : false,
+            filled: focusedHere ? Compositor.isFilled(focusedHere) : false,
             windowSpaceId: focusedHere ? Compositor.spaceOf(focusedHere) : 0,
             othersCount: hasApp ? Compositor.othersCount(appId, rev) : 0,
             hiddenCount: Compositor.hiddenWindows(rev).length,

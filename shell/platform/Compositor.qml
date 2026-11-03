@@ -740,6 +740,11 @@ Singleton {
         return WindowTiling.isFixed(TilingLink.fixed, addressOf(toplevel));
     }
 
+    // The window is filled by Zoom or Fill (ADR-0036 D78; from the plugin's last reply: not known yet counts as not).
+    function isFilled(toplevel: var): bool {
+        return WindowTiling.isFilled(TilingLink.filled, addressOf(toplevel));
+    }
+
     // The zones and the places the window does not fit, {zones, places} (ADR-0036 D69; from the plugin's last reply: not known
     // yet, nothing is greyed and the plugin still refuses what does not fit).
     function fitOf(toplevel: var): var {
