@@ -374,6 +374,27 @@ TestCase {
 
     // The sidebar's list is taller than a short window: the wheel scrolls it and stops at the ends, a click on a row still
     // selects it (no drag), and a selection made by key, search or deep link brings its row into view.
+    // The floating panel moved the list (ADR-0024 amendment 2026-11-03): at the top the first row is fully inside the list's
+    // visible area, under the search field with the same gap as before, and inside the panel's left and bottom edges.
+    function test_sidebarFirstRowIsFullyVisible() {
+        const t = make(testCase.touchpad);
+        const win = t.win;
+        const list = findDeep(win.contentItem, i => i.Accessible.name === "Sections" && i.contentY !== undefined);
+        verify(list, "the sections list");
+        tryVerify(() => list.height > 0);
+        list.positionViewAtBeginning();
+        wait(50);
+        const first = list.itemAtIndex(0);
+        verify(first, "the first row");
+        const top = first.mapToItem(list, 0, 0).y;
+        verify(top >= 0, "the first row's top " + top + " is at or below the list's visible top");
+        const search = win.searchField;
+        const gap = list.mapToItem(win.contentItem, 0, 0).y - (search.mapToItem(win.contentItem, 0, 0).y + search.height);
+        compare(gap, Tokens.spacingMd, "the gap under the search field");
+        const panelBottom = Tokens.windowSidebarPanelInset;
+        compare(list.mapToItem(win.contentItem, 0, list.height).y, win.contentItem.height - panelBottom, "the list ends at the panel's bottom");
+    }
+
     function test_sidebarScrolls() {
         const t = make(testCase.touchpad, {height: 360});
         const win = t.win;
