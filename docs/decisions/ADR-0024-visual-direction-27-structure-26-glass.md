@@ -36,7 +36,7 @@ to what is behind them) follow macOS 26.** Where a macOS 27 trait concerns both 
 | Toolbars | bars, one height, a continuous bar under the controls once content scrolls under them | — |
 | Menus | an icon only on the rows that have one, text otherwise about 16 pt from the edge; highlight 24 pt tall, about 5 pt from the sides, radius 7 (concentric with 12) | icon column in every menu, radius 6 |
 | Accent fills | white text on the accent fill in both appearances; the dark appearance gets a deeper selection fill that holds 4.5:1 with white (A2) | dark text on a bright green in the dark appearance |
-| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16 (rendered as that model, note 2026-11-03); the contact edge, the window border's one device pixel: black 0.125 in the light appearance, black 0.58 in the dark one; the dark appearance's light inner rim deferred to the plugin (note 2026-11-03) | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
+| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16 (rendered as that model, note 2026-11-03); the contact edge, the window border's one device pixel: black 0.125 in the light appearance, black 0.58 in the dark one; the dark appearance's light inner rim, 1 pt of white 0.10 (0.08 not key) just inside every window and its titlebar, continuous round the corners, drawn by the plugin (note 2026-11-03) | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
 | Dark windows | neutral greys: window about #292929, groups about #313131 | #1D1F24 |
 | Search | a neutral light fill on the selected row; result type about 17.7 / 15 pt | accent-filled row (F2c), 13 / 11 |
 | Light window content | white windows, groups #F7F7F7 without a border, radius 12, margins 20 (unchanged from 26) | grey window, 14 % black groups with a border |
@@ -292,7 +292,7 @@ offset are in points at 1.25. So C-3 renders as fitted.
 - The values are tokens, `window.edge*`. The config holds the dark appearance's pair
   (`config/hypr/grassfield/looknfeel.lua`); the shell pushes the current appearance's (`Minimized.edgeCall`).
 
-**The dark inner rim: tried with Hyprland's inner glow, deferred to the plugin.** Hyprland 0.56's inner glow
+**The dark inner rim: tried with Hyprland's inner glow, then drawn by the plugin (below).** Hyprland 0.56's inner glow
 (`decoration.glow`, range 1, render_power 1) draws over the window content and lit the first device pixel inside every
 window at half its colour's alpha (white 0.25 gave 0.125, the same light per point as 27's 0.10 over 1 pt). The nested
 review (2026-11-03) failed it:
@@ -304,7 +304,7 @@ review (2026-11-03) failed it:
   drawn along the rounded corners (34 or less on the 20-pt arcs against 62 on the straight edges, where macOS 27 keeps the
   rim continuous).
 - Decision (integrator, closest to macOS 27 with nothing broken): ship the per-point edge without the rim; the glow stays
-  at Hyprland's default (off). The plugin is to draw the rim in a later compositor batch, with its bar: continuous round
+  at Hyprland's default (off). The plugin was to draw the rim in a later compositor batch, with its bar: continuous round
   the corner arcs and over the bar, masking the client's top row under it.
 - The dark edge without the rim, measured (levels, active): over #E6E6E6 the window 38, the contact pixel 72, the shadow
   174; over #808080, 38, 40 and 97. macOS 27 (Notes): window 41, rim 62, outer pixel 11, shadow 153. Against the backdrop the
@@ -320,3 +320,49 @@ review (2026-11-03) failed it:
 **Limits.**
 - Other scales: the border is a whole number of device pixels (one at 1 and 1.25), so the edge there is up to 25 % darker
   per point than at 1.25.
+
+**The dark inner rim, drawn by the plugin (compositor follow-up, 2026-11-03).**
+- What: in the dark appearance, 1 pt of white just inside every window's frame, 0.10 per point on the key window and 0.08
+  on the others (tokens `window.rimDark{Width,ActiveOpacity,InactiveOpacity}`, macOS 27's values). The frame is the
+  surface and, on a third-party window, the plugin's titlebar above it: the rim runs along the bar's top and sides and
+  never under its hairline. Grassfield's apps, third-party windows under the plugin's bar and third-party windows with
+  their own chrome all get it. None in the light appearance (macOS 27 has none visible there) and none in full screen;
+  Hyprland's maximized mode and Fill keep it, inside the frame, so a filled window's margins stay the wallpaper.
+- How (`compositor/src/WindowRim.*`, pure geometry and rules in `compositor/src/core/WindowRim.*`; spec FR57): a second
+  window decoration, `CGrassfieldRim`, on Hyprland's OVER layer, so drawn after the surface (over the client's edge
+  pixels, as macOS lights the content's edge) and under the window's popups. It adds one `CBorderPassElement` per window:
+  Hyprland's own border shader turned inward. Its box is the frame less the rim's width; Hyprland 0.56.2's renderBorder
+  (read from the binary) grows it back by that width, so the ring's outer edge is the frame on whole device pixels, its
+  outer arc the window's own corner and its inner arc concentric: the light follows the arc the surface is cut along.
+  That corner is Hyprland's `CWindow::rounding()`, which 0.56.2 makes decoration.rounding x rounding_power / 2
+  ("perceived roundness", read from the binary): 26 pt for our 20 at 2.6, 32 px at 1.25, at the power 2.6. The width
+  is whole device pixels as Hyprland rounds a border (`roundf(scale)`: 1 at 1 and 1.25, 2 at 1.5 and 2) with the same
+  light per point (0.125 in the one device pixel, 0.8 pt, at 1.25; 0.075 in two at 1.5), the per-point rule of the edge
+  above.
+  renderBorder draws only on the ring's band (the damage less the inner box), so there is no offscreen pass.
+- The plugin learns the appearance as the titlebar does (the shell's `config("appearance")`), and the rim waits for the
+  shell's first push after a load: a plugin reloaded in a light session never flashes a dark rim. A change of key window
+  or of appearance damages the rims concerned (their bands); the unload damages every rim's band, then removes it (C2).
+- Measured (GF-REF 1.25, Hyprland 0.56.2, `tests/compositor/window_edge.sh`; levels, the mean of the channels; macOS 27's
+  Notes: window 41, rim 62, the white 0.10 of 1 pt over its two device pixels):
+  - Settings (a Grassfield app, its own chrome): window 39, rim 66 on all four sides, white 0.100 per point (0.125 in
+    the one device pixel); inactive 61, 0.081. The corner arcs, every 15-degree sector of the four corners over the
+    dark wallpaper: rim 65 to 66 (inactive 60 to 61) over window 38 to 40, the straight sides' step within a level,
+    where Hyprland's glow left 34. Over the light and mid wallpapers the same, 65 to 69.
+  - foot under the plugin's titlebar: the bar's top row 67 over the bar's 40, its sides 63 over the client's 36; under
+    the bar the hairline 75 then the client's rows 36 and 36: no second line.
+  - Evince (its own header bar, dark theme): 78 over 53 on its sides and bottom, 0.10 per point; its header bar lights
+    its own top row, with or without the plugin.
+  - None in the light appearance, none without the plugin (C2: unloaded with foot and a second window open, the rim and
+    the titlebar gone, 0 levels; loaded again, the shell's appearance push, the rim back at 27 levels on the four
+    sides; no plugin exception).
+  - The contact edge and the shadow are unchanged (checks 1 to 3 as above).
+- Cost (`window_edge.sh cost 6`: Settings moved back and forth over foot and Evince, Hyprland's move animation redrawing
+  them every frame; the plugin's appearance alone switched, so the rim is the only difference): render CPU time per
+  frame, median 2.17 ms with the rim against 2.13 ms without (95th percentile 2.98 against 2.80 ms; 1731 and 1732
+  frames); presented at 60 Hz either way (median interval 16.66 and 16.67 ms).
+- C1: `soak.sh 480` PASS with the rim drawn (481 s, 166 rounds, 0 plugin exceptions, no core dump).
+- Found on the way, not changed here: since Hyprland draws every window at `CWindow::rounding()` = 20 x 2.6 / 2 = 26 pt,
+  C-1's arithmetic ("20 at rounding_power 2.6 puts that point 4.7 in") holds for 20 pt, not for the corner on screen:
+  its 45-degree point is 26 x (1 - 2^(-1/2.6)) = 6.1 pt in, against macOS 27's 4.9 (what chrome.sh measures as 6 px at
+  scale 1). A rounding of 16 (20.8 pt drawn, 4.9 pt in) would match; left to a design batch.
