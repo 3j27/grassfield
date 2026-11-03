@@ -127,18 +127,28 @@ FocusScope {
         }
     }
 
-    // macOS 27: an edge-to-edge sidebar a step darker than the white content, with no dividing line.
-    Rectangle {
-        anchors.fill: parent
-        color: Appearance.colors.sidebarFill
+    // The window is key (the toolbar's own test); an inactive window greys the sidebar's selection icon (macOS).
+    readonly property bool keyLook: Appearance.looksKey(root.Window.window, root.Window.active)
+
+    // The floating panel (macOS 26; ADR-0024 amendment 2026-11-03): inset from the window's left, top and bottom edges, the
+    // content straight beside it. The rows keep window coordinates, so the lights (drawn over the panel) sit at the macOS position.
+    SidebarPanel {
+        id: panel
+        anchors {
+            fill: parent
+            leftMargin: Tokens.windowSidebarPanelInset
+            topMargin: Tokens.windowSidebarPanelInset
+            bottomMargin: Tokens.windowSidebarPanelInset
+        }
     }
 
     ListView {
         id: list
         anchors.fill: parent
-        anchors.topMargin: root.topInset + Tokens.spacingSm
-        anchors.leftMargin: Tokens.filesSidebarInset
+        anchors.topMargin: Math.max(root.topInset, Tokens.windowSidebarPanelInset) + Tokens.spacingSm
+        anchors.leftMargin: Tokens.windowSidebarPanelInset + Tokens.filesSidebarInset
         anchors.rightMargin: Tokens.filesSidebarInset
+        anchors.bottomMargin: Tokens.windowSidebarPanelInset
         model: root.places
         clip: true
         focus: true
@@ -267,7 +277,8 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             name: entry.iconName
             size: Tokens.filesSidebarIconSize
-            color: Appearance.colors.accentInk
+            // Monochrome in the text colour; the accent only on the selected row of a key window (macOS).
+            color: entry.current && root.keyLook ? Appearance.colors.accentInk : Appearance.colors.text
         }
 
         // A tag: its colour dot, or a hollow ring for a tag without a colour (from another application).

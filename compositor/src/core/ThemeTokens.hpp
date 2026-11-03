@@ -87,6 +87,24 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowItemsGap = 8;
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     inline constexpr int kWindowItemsInset = 8;
+    // the floating sidebar panel's distance from the window's left, top and bottom edges, and the gutter between it and the content: macOS 26 System Settings panel at x 16, y 16, bottom 1785 of 1801 px at 2 px/pt = 8 pt (ss-004-005, measured 2026-11-03; Finder 8-9 px at 1.07) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr int kWindowSidebarPanelInset = 8;
+    // the floating sidebar panel's corner, concentric with the 26-pt window corner at the 8-pt inset (26 - 8 = 18); circle fit on the capture's corner edge points 18 to 19 (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md]
+    inline constexpr int kWindowSidebarPanelRadius = 18;
+    // the light rim that lights the floating sidebar panel, 1 pt wide (2 px at 2x), snapped to whole device pixels: pure white (255) on the 249 panel in the light appearance, so the knob colour at full opacity (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr double kWindowSidebarPanelRimOpacity = 1.0;
+    // estimate: the same rim in the dark appearance, the knob colour at the toolbar's inner-rim 0.08 (no dark capture of the panel) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr double kWindowSidebarPanelRimOpacityDark = 0.08;
+    // the floating sidebar panel's rim, 1 pt: 2 px at 2x on ss-004-005 (x 16-17 and 444-445), drawn as a whole number of device pixels (1 px at 1.25) so its edge never splits between two pixels [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr int kWindowSidebarPanelRimWidth = 1;
+    // the floating sidebar panel's soft shadow reaches about 10 pt: right of the panel 242 at the edge to the 252 ground over 20 px, below 240 to 243 over 14 px (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr int kWindowSidebarPanelShadowBlur = 12;
+    // the shadow sits a little lower than it is wide: 240 below the panel against 242 beside it (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr int kWindowSidebarPanelShadowOffsetY = 1;
+    // light appearance: the shadow colour at this opacity (a blurred edge shows half of it): 10 levels under the 252 ground at the edge, about black at 0.04 there (ss-004-005, measured 2026-11-03); an opaque app window, so a drop shadow and not a blur [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr double kWindowSidebarPanelShadowOpacity = 0.08;
+    // estimate: the same in the dark appearance, stronger so it still reads on the dark window (no dark capture) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr double kWindowSidebarPanelShadowOpacityDark = 0.3;
     // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
     inline constexpr uint32_t kWindowEdgeDark = 0xFFFFFF;
     // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]

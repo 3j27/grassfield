@@ -748,6 +748,16 @@ class ContrastTokens(unittest.TestCase):
             needs = min(wcag(light, g) for g in grounds) < 4.5
             self.assertEqual(accent in inks, needs, accent)
 
+    # The sidebar tile of a window that is not key is a mid grey under the white glyph, which holds the 3:1 icon floor in both
+    # appearances (macOS keeps the white glyph on its grey tiles; the first version, the lights' #D4D1CC, was 1.52:1).
+    def test_inactive_sidebar_tile_keeps_the_glyph_at_3_to_1(self):
+        glyph = hex_rgb(self.tok.path("settings.sidebarTileGlyph"))
+        for name in ("sidebarTileInactiveLight", "sidebarTileInactiveDark"):
+            grey = hex_rgb(self.tok.path("settings." + name))
+            self.assertGreaterEqual(wcag(glyph, grey), 3.0, "%s: %.2f:1" % (name, wcag(glyph, grey)))
+        # Negative control: the lights' inactive grey is under it.
+        self.assertLess(wcag(glyph, hex_rgb(self.tok.path("window.inactiveLightLight"))), 3.0)
+
     def test_accent_token_groups_are_complete(self):
         for group in ("accentDark", "accentLight"):
             roles = self.tok.data["color"][group]

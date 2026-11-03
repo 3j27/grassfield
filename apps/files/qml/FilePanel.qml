@@ -809,6 +809,7 @@ Window {
 
             Sidebar {
                 id: sidebar
+                z: 1 // above the content: the panel's shadow falls on it
                 width: Tokens.filesSidebarWidth
                 height: parent.height
                 app: panel.app
@@ -1194,6 +1195,7 @@ Window {
     // KIO's questions about the panel's own work (a certificate, a name that exists), as in Files (ADR-0035 D-12 a).
     KioSheets {
         id: kioSheets
+        z: 900 // with the panel's other sheets, above its content
         readonly property bool sheetShown: kioSheets.shownId >= 0
         prompts: panel.app.prompts ?? null
         shown: panel.manager.promptWindow === panel && !goSheet.shown && !newFolderSheet.shown && !alertSheet.shown && !menus.visible
