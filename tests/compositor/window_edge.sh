@@ -284,12 +284,16 @@ if [[ $mode == cost ]]; then
       dispatch "hl.dsp.focus({ window = 'address:$s_addr' })"
       sleep 0.5
       ctl grassfield-frames-start >>"$log" 2>&1
+      # The probe keeps its rings across recordings: this segment is what comes after the last render recorded now.
+      ctl grassfield-frames 2>>"$log" | jq -r --arg o "$out" '[.monitors[] | select(.name == $o) | .renders[][0]] | max // 0' \
+        >"$run/frames-$rim-$i.from"
       for k in $(seq 1 30); do
         dispatch "hl.dsp.window.move({ x = $((mon_x + wx + (k % 2) * 60)), y = $((mon_y + wy)), window = 'address:$s_addr' })"
         sleep 0.1
       done
       ctl grassfield-frames >"$run/frames-$rim-$i.json" 2>>"$log"
-      say "round $i, rim $rim: $(jq -r --arg o "$out" '.monitors[] | select(.name == $o) | "\(.renders | length) renders, \(.presented | length) frames presented"' "$run/frames-$rim-$i.json" 2>/dev/null)"
+      say "round $i, rim $rim: $(jq -r --arg o "$out" --argjson f "$(<"$run/frames-$rim-$i.from")" '.monitors[] | select(.name == $o)
+        | "\([.renders[] | select(.[0] > $f)] | length) renders, \([.presented[] | select(. > $f)] | length) frames presented"' "$run/frames-$rim-$i.json" 2>/dev/null)"
     done
   done
   ctl dispatch 'hl.plugin.grassfield.config("appearance", "dark")' >>"$log" 2>&1
@@ -300,9 +304,11 @@ if [[ $mode == cost ]]; then
   }
   for rim in on off; do
     say "rim $rim: $(for f in "$run"/frames-"$rim"-*.json; do
-      jq -r --arg o "$out" '.monitors[] | select(.name == $o) | .renders[] | .[1]' "$f"; done | sort -n | summary "render CPU")"
+      jq -r --arg o "$out" --argjson f "$(<"${f%.json}.from")" '.monitors[] | select(.name == $o) | .renders[] | select(.[0] > $f) | .[1]' "$f"
+    done | sort -n | summary "render CPU")"
     say "rim $rim: $(for f in "$run"/frames-"$rim"-*.json; do
-      jq -r --arg o "$out" '.monitors[] | select(.name == $o) | .presented | . as $p | range(1; length) | $p[.] - $p[. - 1]' "$f"
+      jq -r --arg o "$out" --argjson f "$(<"${f%.json}.from")" '.monitors[] | select(.name == $o) | [.presented[] | select(. > $f)]
+        | . as $p | range(1; length) | $p[.] - $p[. - 1]' "$f"
     done | sort -n | summary "presented interval")"
   done
   say "frames: $run"
