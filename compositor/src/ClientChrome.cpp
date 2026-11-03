@@ -35,6 +35,9 @@ namespace gf::chrome {
             CHyprSignalListener      stateChanged;
             CHyprSignalListener      requestMove;
             CapabilityTell           caps;
+            bool                     suppressAdded    = false; // D78: the plugin set SUPPRESS_MAXIMIZE on it (only that is cleared)
+            bool                     wasFullscreen    = false; // in Hyprland's full screen at the last window.fullscreen
+            uint64_t                 leftFullscreenMs = 0;     // when it last left full screen (core maximizeEcho), 0: never
         };
 
         struct SState {
@@ -70,13 +73,81 @@ namespace gf::chrome {
             return xdg ? xdg->m_toplevel.lock() : nullptr;
         }
 
+        SWatch* watchOf(const PHLWINDOW& w) {
+            for (auto& e : st().watches) {
+                if (e.window.lock() == w)
+                    return &e;
+            }
+            return nullptr;
+        }
+
+        // ADR-0036 D78, ADR-0015 Q4 amended: while the plugin owns a client-chrome window's maximize requests (core
+        // ownsMaximize: window-tiling advertised), Hyprland ignores them (SUPPRESS_MAXIMIZE, set here only when it was not set,
+        // and cleared only if set here: a session rule's own suppression is never touched). Called at open, on every rule
+        // change (the tag may come or go; a rule evaluation may rewrite the window's suppressed events), once the IPC is
+        // registered (window-tiling known) and at unload (cleared: C2, Hyprland's own maximize again).
+        void syncMaximize(SWatch& e, bool own) {
+            const auto w = e.window.lock();
+            if (!w)
+                return;
+            const bool suppressed = (w->m_suppressedEvents & Desktop::View::SUPPRESS_MAXIMIZE) != 0;
+            if (own && !suppressed) {
+                w->m_suppressedEvents |= Desktop::View::SUPPRESS_MAXIMIZE;
+                e.suppressAdded = true;
+                logRequest(Log::DEBUG, "client chrome: {:x} maximize requests are the plugin's zoom (D78)", addressOf(w));
+            } else if (!own && e.suppressAdded) {
+                if (suppressed)
+                    w->m_suppressedEvents &= ~static_cast<uint64_t>(Desktop::View::SUPPRESS_MAXIMIZE);
+                e.suppressAdded = false;
+                logRequest(Log::DEBUG, "client chrome: {:x} maximize requests are Hyprland's again", addressOf(w));
+            }
+        }
+
+        bool ownsMaximizeOf(const PHLWINDOW& w) {
+            return ownsMaximize(st().ready, ipc::tilingAvailable(), isClientChrome(w));
+        }
+
+        // D78: the app's own maximize request (its green light, its toolbar double-click; Qt sends unset_maximized, which Hyprland
+        // toggles whatever its value) is Grassfield's Zoom, as the plugin's own light: Fill and back (gf::tiler::zoom). Only
+        // while the plugin suppressed it for Hyprland; in full screen nothing (its lights are away; Hyprland's would have left
+        // full screen for the maximized mode); the echo a client may send right after leaving full screen is swallowed, as
+        // Hyprland does (core maximizeEcho).
+        void onMaximizeRequest(const PHLWINDOW& w) {
+            SWatch* e = watchOf(w);
+            if (!e || !e->suppressAdded || (w->m_suppressedEvents & Desktop::View::SUPPRESS_MAXIMIZE) == 0)
+                return; // Hyprland handled it as before
+            if (maximizeEcho(e->leftFullscreenMs, nowMs())) {
+                e->leftFullscreenMs = 0;
+                logRequest(Log::DEBUG, "client chrome: {:x} maximize request right after full screen: its echo, ignored", addressOf(w));
+                return;
+            }
+            if (modeOf(w) == Fullscreen::FSMODE_FULLSCREEN) {
+                logRequest(Log::DEBUG, "client chrome: {:x} maximize request in full screen: ignored", addressOf(w));
+                return;
+            }
+            logRequest(Log::DEBUG, "client chrome: {:x} asks to zoom: {}", addressOf(w), tiling::nameOf(gf::tiler::zoom(w, true)));
+        }
+
+        // The full-screen state of a watched window, for the echo above.
+        void onFullscreen(const PHLWINDOW& w) {
+            SWatch* e = watchOf(w);
+            if (!e)
+                return;
+            const bool now = modeOf(w) == Fullscreen::FSMODE_FULLSCREEN;
+            if (e->wasFullscreen && !now)
+                e->leftFullscreenMs = nowMs();
+            e->wasFullscreen = now;
+        }
+
         // P5: the app asked to be minimized (xdg_toplevel.set_minimized; Hyprland does nothing with it on its own, spike
-        // step 5): the minimize path of the titlebar's own light.
+        // step 5): the minimize path of the titlebar's own light. D78: its maximize request is the plugin's zoom.
         void onStateChanged(const PHLWINDOWREF& ref, const WP<CXDGToplevelResource>& weakTop) {
             const auto w   = ref.lock();
             const auto top = weakTop.lock();
             if (!w || !top || !w->m_isMapped || !isClientChrome(w))
                 return;
+            if (top->m_state.requestsMaximize.has_value())
+                onMaximizeRequest(w);
             if (!top->m_state.requestsMinimize.value_or(false))
                 return;
             if (w->m_workspace && w->m_workspace->m_isSpecialWorkspace)
@@ -186,11 +257,14 @@ namespace gf::chrome {
             logRequest(Log::DEBUG, "client chrome: {:x} told {} capabilities{}", addressOf(e.window.lock()), caps.size(), withMinimize ? " (minimize)" : "");
         }
 
-        // The capabilities of a watched window after an open or a rule change (the tag may come or go).
+        // The capabilities of a watched window after an open or a rule change (the tag may come or go), and who owns its
+        // maximize requests (D78).
         void syncCapabilities(const PHLWINDOW& w) {
             for (auto& e : st().watches) {
-                if (e.window.lock() == w)
+                if (e.window.lock() == w) {
                     tellCapabilities(e, isClientChrome(w), st().ready);
+                    syncMaximize(e, ownsMaximizeOf(w));
+                }
             }
         }
 
@@ -200,6 +274,7 @@ namespace gf::chrome {
             const auto top = toplevelOf(w);
             if (!top || std::ranges::any_of(s.watches, [&w](const SWatch& e) { return e.window.lock() == w; }))
                 return;
+            const bool  fullscreen = modeOf(w) == Fullscreen::FSMODE_FULLSCREEN;
             SWatch      e;
             PHLWINDOWREF ref = w;
             WP<CXDGToplevelResource> weakTop = top;
@@ -207,8 +282,10 @@ namespace gf::chrome {
             e.toplevel     = weakTop;
             e.stateChanged = top->m_events.stateChanged.listen([ref, weakTop] { guarded("client chrome stateChanged", [&] { onStateChanged(ref, weakTop); }); });
             e.requestMove  = top->m_events.requestMove.listen([ref](const SXDGToplevelMoveRequest& /*request*/) { guarded("client chrome requestMove", [&] { onRequestMove(ref); }); });
+            e.wasFullscreen = fullscreen;
             s.watches.push_back(std::move(e));
             tellCapabilities(s.watches.back(), isClientChrome(w), true);
+            syncMaximize(s.watches.back(), ownsMaximizeOf(w));
         }
 
         // window.close comes with the unmap. A toolkit that hides a window may keep its xdg_toplevel and map it again
@@ -220,6 +297,8 @@ namespace gf::chrome {
             for (auto& e : st().watches) {
                 if (e.caps.minimizeTold && e.window.lock() == w)
                     tellCapabilities(e, false, false, false);
+                if (e.window.lock() == w)
+                    syncMaximize(e, false); // a toolkit that maps the window again starts from Hyprland's own state
             }
             std::erase_if(st().watches, [&w](const SWatch& e) {
                 const auto mine = e.window.lock();
@@ -264,6 +343,7 @@ namespace gf::chrome {
         s.listeners.push_back(ev.close.listen([](const PHLWINDOW& w) { guarded("client chrome window.close", [&] { forget(w); }); }));
         // The tag is a dynamic effect of the session rules: a rule change can make a window client chrome or not (P8).
         s.listeners.push_back(ev.updateRules.listen([](const PHLWINDOW& w) { guarded("client chrome window.updateRules", [&] { syncCapabilities(w); }); }));
+        s.listeners.push_back(ev.fullscreen.listen([](const PHLWINDOW& w) { guarded("client chrome window.fullscreen", [&] { onFullscreen(w); }); }));
         if (Desktop::windowState()) {
             for (const auto& w : Desktop::windowState()->windows()) {
                 if (w && w->m_isMapped)
@@ -281,6 +361,7 @@ namespace gf::chrome {
         for (auto& e : s.watches) {
             if (e.caps.minimizeTold)
                 guarded("client chrome capabilities on stop", [&] { tellCapabilities(e, false, false); });
+            guarded("client chrome maximize on stop", [&] { syncMaximize(e, false); }); // D78: Hyprland's own maximize again (C2)
         }
         s.watches.clear();
         s.listeners.clear();
@@ -290,6 +371,13 @@ namespace gf::chrome {
 
     bool ready() {
         return st().ready;
+    }
+
+    void syncMaximizeAll() {
+        for (auto& e : st().watches) {
+            if (const auto w = e.window.lock())
+                syncMaximize(e, ownsMaximizeOf(w));
+        }
     }
 
     void beforePointerButton(bool pressed) {

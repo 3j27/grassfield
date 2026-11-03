@@ -28,6 +28,9 @@ Singleton {
     // The windows of fixed size (WindowTiling.parseFixed: the Window menu greys their Zoom, Enter Full Screen and tiling items,
     // ADR-0040 step 1b); [] without one, a malformed reply or window-tiling. Read again when the Window menu opens.
     property var fixed: []
+    // The windows filled by Zoom or Fill (WindowTiling.parseFilled: the Window menu says Unzoom for them, ADR-0036 D78); [] without
+    // one, a malformed reply or window-tiling. Read again when the Window menu opens and after the tiling notices.
+    property var filled: []
     // The zones and the places each window does not fit (WindowTiling.parseUnfitZones, ADR-0036 D69: the Window menu greys
     // those Halves, Quarters and Arrange items), keyed by address; {} without one, a malformed reply or window-tiling. Read
     // again when the Window menu opens.
@@ -123,6 +126,7 @@ Singleton {
                 root.fetch();
             } else {
                 root.fixed = [];
+                root.filled = [];
                 root.unfitZones = {};
             }
         }
@@ -166,6 +170,9 @@ Singleton {
                 const fixed = Compositor.canTile ? WindowTiling.parseFixed(text) : null;
                 if (fixed !== null)
                     root.fixed = fixed;
+                const filled = Compositor.canTile ? WindowTiling.parseFilled(text) : null;
+                if (filled !== null)
+                    root.filled = filled;
                 const unfitZones = Compositor.canTile ? WindowTiling.parseUnfitZones(text) : null;
                 if (unfitZones !== null)
                     root.unfitZones = unfitZones;

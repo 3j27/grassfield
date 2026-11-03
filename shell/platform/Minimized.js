@@ -45,6 +45,20 @@ function tileCall(address, place) {
     return guardedPluginCall("tile", ["\"0x" + hex + "\"", "\"" + place + "\""]);
 }
 
+// Window > Zoom and the green light clicked under its popover (ADR-0036 D78, capability "zoom-fill"): Zoom is Fill, the
+// plugin's zoom toggle (hl.plugin.grassfield.tile(address, "zoom")). Without the capability the caller uses
+// fullscreenRequest(address, "maximized"). "" for an invalid address (callers must not dispatch it).
+function zoomCall(address) {
+    const hex = normalizeAddress(address);
+    return hex === "" ? "" : guardedPluginCall("tile", ["\"0x" + hex + "\"", "\"zoom\""]);
+}
+
+// The zoom request for `address`: the plugin's Fill toggle when it advertises "zoom-fill" (`canZoomFill`), else Hyprland's
+// maximized mode as before (gate C2). "" for an invalid address.
+function zoomRequest(address, canZoomFill) {
+    return canZoomFill === true ? zoomCall(address) : fullscreenRequest(address, "maximized");
+}
+
 // hl.plugin.grassfield.arrange(json) (capability "tiling-arrange", docs/specs/tiling.md TL6): the window takes the first zone of
 // the layout, the next windows in stacking order on its output fill the others. The layout is one of these catalogue ids
 // (the Arrange rows and their Alt alternates, TL25, TL26); "" when anything is invalid (callers must not dispatch it).

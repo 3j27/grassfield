@@ -457,6 +457,36 @@ function isFixed(fixed, address) {
     return a !== "" && (fixed || []).indexOf(a) >= 0;
 }
 
+// gfc1-reply: grassfield-tiling
+// The windows the reply of `hyprctl grassfield-tiling` lists as tiled in the place "fill" (Zoom is Fill, ADR-0036 D78: the
+// Window menu says Unzoom for them, as for Hyprland's maximized mode), lower-case hex without 0x, a malformed one left out;
+// null when the reply is malformed.
+function parseFilled(text) {
+    let msg = null;
+    try {
+        msg = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!msg || msg.v !== "gfc/1" || msg.type !== "tiling" || !Array.isArray(msg.outputs))
+        return null;
+    const out = [];
+    for (const o of msg.outputs) {
+        for (const w of (o && Array.isArray(o.windows) ? o.windows : [])) {
+            const address = w && w.state === "tiled" && w.place === "fill" ? hexAddress(w.address) : "";
+            if (address !== "")
+                out.push(address);
+        }
+    }
+    return out;
+}
+
+// Window `address` (any address form) is filled: it is among `filled` (parseFilled; null or [] when not known: it is not).
+function isFilled(filled, address) {
+    const a = hexAddress(address);
+    return a !== "" && (filled || []).indexOf(a) >= 0;
+}
+
 // The Split View Desktop of `splits` (parseSplits) whose workspace is `workspace`, or null.
 function splitOfWorkspace(splits, workspace) {
     return (splits || []).find(d => d.workspace === workspace) || null;

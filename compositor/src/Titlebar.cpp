@@ -237,19 +237,21 @@ namespace {
         gf::ipc::postMinimizeRequest(reinterpret_cast<uintptr_t>(w.get()));
     }
 
-    // The one zoom toggle, shared by the zoom button and the double-click on the drag area. A window of fixed size is not
-    // zoomed (its zoom light is disabled, core lightAvailable; ADR-0040 step 1b's review); a zoomed one still unzooms.
+    // The one zoom toggle, shared by the zoom button (without Alt) and the double-click on the drag area (Zoom or Fill).
+    // Zoom is Fill (ADR-0036 D78, gf::tiler::zoom): the window fills the work area as a tile, with the margins, and a second
+    // zoom brings back its box from before; Hyprland's maximized mode without window-tiling (gate C2). A window of fixed
+    // size is not zoomed (its zoom light is disabled, core lightAvailable; ADR-0040 step 1b's review); a zoomed one still
+    // unzooms.
     void toggleZoom(const PHLWINDOW& w) {
-        auto& fs = Fullscreen::controller();
-        if (!fs)
-            return;
-        const auto current = fs->getFullscreenModes(w).internal;
-        if (current == Fullscreen::FSMODE_NONE && gf::tiler::fixedSize(w)) {
+        if (gf::tiler::zoom(w, true) == gf::tiling::ZoomStep::Refused && gf::tiler::fixedSize(w))
             gf::logRequest(Log::DEBUG, "titlebar zoom: refused for a window of fixed size");
-            return;
-        }
-        const auto target  = current == Fullscreen::FSMODE_MAXIMIZED ? Fullscreen::FSMODE_NONE : Fullscreen::FSMODE_MAXIMIZED;
-        fs->setFullscreenMode(w, target, target, false);
+    }
+
+    // Out of Hyprland's maximized mode only (a drag that starts on a zoomed window), never into Fill.
+    void leaveMaximized(const PHLWINDOW& w) {
+        auto& fs = Fullscreen::controller();
+        if (fs && fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_MAXIMIZED)
+            fs->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE, false);
     }
 
     Fullscreen::eFullscreenMode fullscreenMode(const PHLWINDOW& w) {
@@ -299,8 +301,7 @@ namespace {
     // area (decorations included), hence the surface box recorded at the press as the reference.
     void unzoomUnderPointer(SPointerGrab& grab, const PHLWINDOW& w, const SP<Layout::ITarget>& target, const Vector2D& pointer) {
         gf::tiler::leave(w); // a tile kept while zoomed (tiling.md TL12) ends: the window leaves under the pointer
-        if (fullscreenMode(w) == Fullscreen::FSMODE_MAXIMIZED)
-            toggleZoom(w);
+        leaveMaximized(w);
         const CBox  restored = target->position();
         const CBox& zoomed   = grab.zoomedSurface;
         const auto  box      = tb::unzoomedDragBox(tb::Rect{zoomed.x, zoomed.y, zoomed.w, zoomed.h}, restored.w, restored.h, grab.pressPos.x, grab.pressPos.y, pointer.x, pointer.y);
@@ -1190,23 +1191,20 @@ bool CGrassfieldTitlebar::onButtonPress(const Vector2D& coords, const IPointer::
     }
 
     // Drag area: a double-click does what Settings say (windows.titlebarDoubleClick, pushed by the shell with
-    // hl.plugin.grassfield.config): the zoom button's toggle, the minimize button's path, Fill (tiling.md M40), or
-    // nothing (the press is then a single press). Otherwise the press starts an interactive move.
+    // hl.plugin.grassfield.config): Fill (tiling.md M40, the default since ADR-0036 D78) and Zoom are the zoom button's
+    // toggle (Zoom is Fill: the window fills, a second double-click brings back its box from before, as macOS 15+), the
+    // minimize button's path, or nothing (the press is then a single press). Otherwise the press starts an interactive move.
     if (m_clicks.press(e.timeMs, coords.x, coords.y)) {
         switch (gf::state().doubleClickAction) {
+            case gf::gfc::DoubleClickAction::Fill:
             case gf::gfc::DoubleClickAction::Zoom:
-                gf::logRequest(Log::DEBUG, "titlebar double-click -> toggle zoom");
+                gf::logRequest(Log::DEBUG, "titlebar double-click -> {}", gf::state().doubleClickAction == gf::gfc::DoubleClickAction::Fill ? "fill" : "toggle zoom");
                 toggleZoom(w);
                 input.presses.claim(e.button, false); // acts now; its release is still the titlebar's
                 return true;
             case gf::gfc::DoubleClickAction::Minimize:
                 gf::logRequest(Log::DEBUG, "titlebar double-click -> minimize");
                 requestMinimize(w);
-                input.presses.claim(e.button, false);
-                return true;
-            case gf::gfc::DoubleClickAction::Fill:
-                gf::logRequest(Log::DEBUG, "titlebar double-click -> fill");
-                gf::tiler::tile(w, gf::tiling::Place::Fill);
                 input.presses.claim(e.button, false);
                 return true;
             case gf::gfc::DoubleClickAction::None: break;

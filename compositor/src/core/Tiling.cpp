@@ -1354,6 +1354,30 @@ namespace gf::tiling {
         return !fixed || inMode;
     }
 
+    ZoomStep zoomStep(const ZoomFacts& f) {
+        if (f.fixedSize && !f.maximized && !f.fullscreen)
+            return ZoomStep::Refused;
+        if (!f.tiling || f.fullscreen || f.splitMember)
+            return ZoomStep::Hyprland;
+        if (f.maximized)
+            return f.fixedSize ? ZoomStep::Hyprland : ZoomStep::UnzoomToFill;
+        if (f.filled)
+            return ZoomStep::Previous;
+        return f.atFill ? ZoomStep::Unfill : ZoomStep::Fill;
+    }
+
+    std::string_view nameOf(ZoomStep step) {
+        switch (step) {
+            case ZoomStep::Fill: return "fill";
+            case ZoomStep::Previous: return "previous";
+            case ZoomStep::UnzoomToFill: return "unzoom-to-fill";
+            case ZoomStep::Hyprland: return "hyprland";
+            case ZoomStep::Refused: return "refused";
+            case ZoomStep::Unfill: return "unfill";
+        }
+        return "?";
+    }
+
     bool fitsZone(const Constraints& c, const Zone& zone, const Area& area) {
         return fitsFrame(c, zoneFrame(zone, area));
     }

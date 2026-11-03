@@ -7,7 +7,7 @@ import "../../platform/WindowTiling.js" as WindowTiling
 //
 // ctx: {displayOnly?: bool (app named from the Stages event, no key window: window commands disabled), hasApp, appName, entry: {id, actions: [{id, name}]} | null, singleMain: bool,
 //       windows: [{ref, title, focused, minimized}], focusedWindow: ref | null,
-//       fullscreen: bool, maximized: bool, windowSpaceId: int,
+//       fullscreen: bool, maximized: bool, filled: bool (Zoom is Fill, ADR-0036 D78), windowSpaceId: int,
 //       othersCount: int, hiddenCount: int, spaces: [{id}], newSpaceId: int, canTile?: bool (plugin "window-tiling"),
 //       canArrange?: bool (plugin "tiling-arrange"), outputs?: [{name, model, builtIn}] (the other outputs, plugin "tile-hover"),
 //       canLayouts?: bool (plugin "tiling-layouts"), outputClass?: string (WindowTiling.outputClass, the popover's Layouts section),
@@ -397,7 +397,8 @@ QtObject {
         const items = [
             // A window in full screen or on a Split View Desktop is not minimized (macOS; D56, D61).
             {id: "minimize", text: qsTr("Minimize"), shortcut: root.shortcuts.minimize, enabled: canAct && ctx.inSplit !== true && ctx.fullscreen !== true},
-            {id: "zoom", text: ctx.maximized ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true && (ctx.maximized || !fixed)}
+            // Zoom is Fill (ADR-0036 D78): a filled window says Unzoom, as one in Hyprland's maximized mode.
+            {id: "zoom", text: ctx.maximized || ctx.filled === true ? qsTr("Unzoom") : qsTr("Zoom"), shortcut: root.shortcuts.zoom, enabled: canAct && ctx.inSplit !== true && (ctx.maximized || ctx.filled === true || !fixed)}
         ].concat(tiling, fullScreen, [
             {separator: true},
             {id: "moveMenu", text: qsTr("Move to Desktop"), enabled: canAct, submenu: spaces},
