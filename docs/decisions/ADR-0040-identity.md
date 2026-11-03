@@ -1126,4 +1126,4 @@ where plain light pink holds 4.5:1 (tests/visual/test_contrast_tokens.py, `test_
 green keep their inks. Pink accent text is therefore the pink accent itself in both appearances.
 
 The floating sidebar (ADR-0024 amendment 2026-11-03, second one) adds a second reason: its light fill goes from 15 to 6 levels
-under the window (#F7F6F3), a lighter ground, so plain pink holds 4.75:1 on it at the worst.
+under the window (#F7F6F3), a lighter ground, so plain pink holds 4.92:1 on it at the worst (the bare sidebar, since the capsules turned white).

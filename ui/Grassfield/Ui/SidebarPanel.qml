@@ -11,7 +11,9 @@ import QtQuick.Window
 Rectangle {
     id: root
 
-    readonly property real pixelRatio: Math.max(1, Screen.devicePixelRatio)
+    // The window's own ratio (what its surface is drawn at), the screen's where there is no window yet: on a fractional-scale
+    // surface the two can differ.
+    readonly property real pixelRatio: Math.max(1, root.Window.window ? root.Window.window.devicePixelRatio : Screen.devicePixelRatio)
     // The rim, a whole number of device pixels (1 pt: 1 px at 1.25), so it never splits between two pixels.
     readonly property real rimWidth: Math.max(1, Math.round(Tokens.windowSidebarPanelRimWidth * root.pixelRatio)) / root.pixelRatio
 

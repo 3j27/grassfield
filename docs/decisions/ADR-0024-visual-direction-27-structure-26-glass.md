@@ -185,7 +185,7 @@ Decisions:
   blur, and nothing is faked. Real translucency would need a per-region compositor effect: not done (the macOS 26 panel is
   glass over a window that is itself the wallpaper's tint; ours reads the same on an opaque window).
 - **Calm.** The light panel is 6 levels under the window instead of 15, so the sidebar stops being the heaviest area. The
-  lighter ground lets the light pink accent hold 4.5:1 on its own (4.75:1 at the worst), so `color.accentInkLight.pink` goes;
+  lighter ground lets the light pink accent hold 4.5:1 on its own (4.92:1 at the worst, on the bare sidebar, since the capsules turned white), so `color.accentInkLight.pink` goes;
   yellow and green keep their ink. A2 (white on the accent fill, 4.5:1) is unchanged.
 - **Inactive window.** The sidebar tiles of Settings turn a mid grey (`settings.sidebarTileInactiveLight` #8C8A86, 3.45:1 under the white glyph; the lights' #D4D1CC was 1.52:1; dark #5C5A56, 6.88:1; pinned by `test_inactive_sidebar_tile_keeps_the_glyph_at_3_to_1`) and the selection pill goes neutral
   (already); the Files sidebar's selected icon turns from the accent to the text colour.

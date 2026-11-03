@@ -1361,6 +1361,9 @@ Window {
     // AppKit queues a window's sheets and holds them while a menu is open: a question waits while Go to Folder, a
     // confirmation or a menu is open, and comes after.
     KioSheets {
+        // The wrapper stacks with the window's other sheets (Sheet's own 900), above the sidebar (1) and the lights' toolbar (2):
+        // inside it the sheet's z only orders it among its own children.
+        z: 900
         prompts: win.app.prompts ?? null
         shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !renameSheet.shown && !tagsSheet.shown && !menuLayer.visible
         focusBack: win.tab ? win.tab.view : null
