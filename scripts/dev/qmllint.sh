@@ -27,6 +27,27 @@ for entry in /usr/lib/qt6/qml/*; do
   [[ ${entry##*/} == Grassfield ]] || ln -s "$entry" "$sysqml/"
 done
 
-/usr/lib/qt6/bin/qmllint --bare -I ui -I "$root/.dev/build/qml" -I "$tmp" -I "$sysqml" --max-warnings 0 "${files[@]}"
-echo "qmllint: ${#files[@]} files, 0 warnings"
+# qmllint 6.12.0 reports "Type X not declared as singleton in qmldir but using pragma Singleton [import]" for singletons
+# that their qmldir does declare (Tokens, Appearance, every qs.* service; it reproduces on a three-line module and goes away
+# only when that module's qmldir is passed with -i, which breaks the rest). That one message is set aside; every other
+# warning, the other [import] ones included, still fails the gate. Remove the filter once qmllint no longer reports it.
+out="$tmp/qmllint.out"
+set +e
+/usr/lib/qt6/bin/qmllint --bare -I ui -I "$root/.dev/build/qml" -I "$tmp" -I "$sysqml" --max-warnings -1 "${files[@]}" >"$out" 2>&1
+lint_rc=$?
+set -e
+false_positive='not declared as singleton in qmldir but using pragma Singleton \[import\]$'
+grep -vE "$false_positive" "$out" || true
+counted=$(grep -E '^(Warning|Error|Critical): ' "$out" | grep -vcE "$false_positive" || true)
+set_aside=$(grep -cE "$false_positive" "$out" || true)
+if ((counted > 0)); then
+  echo "qmllint: $counted warning(s) (gate Q1 allows none)" >&2
+  exit 1
+fi
+# Without a counted warning qmllint still fails on what it does not print as one (a file it cannot read or parse).
+if ((lint_rc != 0 && set_aside == 0)); then
+  echo "qmllint: exit $lint_rc without a warning line" >&2
+  exit 1
+fi
+echo "qmllint: ${#files[@]} files, 0 warnings ($set_aside qmllint 6.12 singleton false positives set aside)"
 python3 -I "$root/scripts/dev/check-textformat.py"

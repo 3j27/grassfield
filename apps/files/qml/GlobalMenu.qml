@@ -29,12 +29,12 @@ Platform.MenuBar {
     readonly property bool editable: bar.folder !== null && !bar.inTrash && (bar.folder.writable || bar.folder.isSearch)
     // Colour tags of the selection, read again on every selection change and every tag write.
     readonly property string tagsReason: {
-        bar.app.tagRevision;
+        void bar.app.tagRevision;
         const f = bar.folder;
         return f && f.selectedCount > 0 ? bar.app.tagsUnavailable(f.selectedUrls()) : "";
     }
     readonly property var tagStates: {
-        bar.app.tagRevision;
+        void bar.app.tagRevision;
         const f = bar.folder;
         return f && f.selectedCount > 0 && bar.tagsReason === "" ? bar.app.colorTagStates(f.selectedUrls()) : [];
     }
@@ -66,7 +66,7 @@ Platform.MenuBar {
     // selection change, also from one item to another one: a binding on `count` does not, and canCustomize() reads no
     // property, so the menu item stayed stale: the bug class above) and from the folder style revision.
     readonly property bool customizeEnabled: {
-        bar.app.folderStyleRevision;
+        void bar.app.folderStyleRevision;
         const f = bar.folder;
         if (!f || f.selectedCount === 0)
             return false;

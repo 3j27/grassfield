@@ -201,7 +201,7 @@ Singleton {
             "serial": id,
             "path": root.socketPath,
             "line": line
-        });
+        }) as Socket;
         root.conn = sock;
         watchdog.restart();
         sock.connected = true;

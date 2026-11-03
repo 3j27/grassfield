@@ -11,7 +11,7 @@ TestCase {
     when: viewer.visible
 
     QtObject {
-        id: backend
+        id: backendItem
         property var files: [{name: "b.png", path: "/x/b.png", url: "file:///x/b.png", kind: "image"}]
         property var errors: []
         property bool glance: false
@@ -31,7 +31,7 @@ TestCase {
 
     Viewer {
         id: viewer
-        backend: backend
+        backend: backendItem
         globalMenu: false
     }
 
@@ -41,13 +41,13 @@ TestCase {
         compare(viewer.subtitle, "");
         compare(viewer.canGoNext, false);
         compare(viewer.hasSidebar, false);
-        backend.files = [
+        backendItem.files = [
             {name: "a.png", path: "/x/a.png", url: "file:///x/a.png", kind: "image"},
             {name: "b.png", path: "/x/b.png", url: "file:///x/b.png", kind: "image"},
             {name: "c.png", path: "/x/c.png", url: "file:///x/c.png", kind: "image"}
         ];
-        backend.startIndex = 1;
-        backend.listing = false;
+        backendItem.startIndex = 1;
+        backendItem.listing = false;
         compare(viewer.current, 1);
         compare(viewer.title, "b.png", "still the opened file");
         compare(viewer.subtitle, "2 of 3");

@@ -22,13 +22,13 @@ Item {
     // AM52: Quit waits for the shell to close the process's windows (at most a second): the sheet takes no click or key.
     property bool waiting: false
     // The tests read them.
-    readonly property alias quitSheet: quitSheet
-    readonly property alias sessionSheet: sessionSheet
-    readonly property alias signalSheet: signalSheet
+    readonly property alias quitSheet: quitSheetItem
+    readonly property alias sessionSheet: sessionSheetItem
+    readonly property alias signalSheet: signalSheetItem
     readonly property alias signalPicker: signalPicker
-    readonly property alias efficiencySheet: efficiencySheet
-    readonly property alias efficiencyError: efficiencyError
-    readonly property bool shown: quitSheet.shown || sessionSheet.shown || signalSheet.shown || efficiencySheet.shown || efficiencyError.shown
+    readonly property alias efficiencySheet: efficiencySheetItem
+    readonly property alias efficiencyError: efficiencyErrorItem
+    readonly property bool shown: quitSheetItem.shown || sessionSheetItem.shown || signalSheetItem.shown || efficiencySheetItem.shown || efficiencyErrorItem.shown
 
     anchors.fill: parent
 
@@ -47,7 +47,7 @@ Item {
         if (root.shown || !root.backend)
             return;
         dontAsk.checked = false;
-        efficiencySheet.open();
+        efficiencySheetItem.open();
     }
 
     function open(action: string): void {
@@ -59,8 +59,8 @@ Item {
         root.info = info;
         root.forceOnly = false;
         if (info.session !== "") {
-            sessionSheet.action = action;
-            sessionSheet.open();
+            sessionSheetItem.action = action;
+            sessionSheetItem.open();
         } else {
             root.show(action);
         }
@@ -70,11 +70,11 @@ Item {
         if (action === "signal") {
             const choices = root.info.signals || [];
             root.signalChoice = choices.some(c => c.number === 15) ? "15" : choices.length > 0 ? String(choices[0].number) : "";
-            signalSheet.open();
+            signalSheetItem.open();
             if (root.info.self)
-                signalSheet.errorText = qsTr("This app can't send a signal to itself.");
+                signalSheetItem.errorText = qsTr("This app can't send a signal to itself.");
         } else {
-            quitSheet.open();
+            quitSheetItem.open();
         }
     }
 
@@ -106,22 +106,22 @@ Item {
 
     // AM54: before acting on a session process.
     Sheet {
-        id: sessionSheet
+        id: sessionSheetItem
         objectName: "sessionSheet"
         property string action: "quit"
-        title: sessionSheet.action === "signal"
+        title: sessionSheetItem.action === "signal"
             ? qsTr("Sending a signal to “%1” may end your session or stop part of it.").arg(root.info.session || "")
             : qsTr("Quitting “%1” may end your session or stop part of it.").arg(root.info.session || "")
         confirmText: qsTr("Continue")
         destructive: true
         returnCancels: true
         focusBack: root.focusBack
-        onAccepted: root.show(sessionSheet.action)
+        onAccepted: root.show(sessionSheetItem.action)
         onCanceled: root.release()
     }
 
     Sheet {
-        id: quitSheet
+        id: quitSheetItem
         objectName: "quitSheet"
         title: (root.info.count || 1) === 1 ? qsTr("Are you sure you want to quit this process?")
             : qsTr("Are you sure you want to quit these %1 processes?").arg(root.info.count) // two or more: plural in English and French
@@ -139,9 +139,9 @@ Item {
         onExtra: id => {
             const error = root.outcome(root.actions.forceQuit());
             if (error === "")
-                quitSheet.close();
+                quitSheetItem.close();
             else
-                quitSheet.errorText = error;
+                quitSheetItem.errorText = error;
         }
         onCanceled: root.release()
     }
@@ -153,15 +153,15 @@ Item {
             root.waiting = false;
             const error = root.outcome(result);
             if (error === "")
-                quitSheet.close();
+                quitSheetItem.close();
             else
-                quitSheet.errorText = error;
+                quitSheetItem.errorText = error;
         }
     }
 
     // AM68: what Efficiency Mode does, before the first time; "Don't ask again" is remembered (AM74).
     Sheet {
-        id: efficiencySheet
+        id: efficiencySheetItem
         objectName: "efficiencySheet"
         title: qsTr("Turn on Efficiency Mode for “%1”?").arg(root.backend ? root.backend.efficiency.appName : "")
         message: qsTr("The whole app runs at the lowest priority whenever the computer is busy, so other apps stay responsive. It may run more slowly until you turn Efficiency Mode off or quit it.")
@@ -183,7 +183,7 @@ Item {
 
     // AM68: the user manager refused the weight (or the process ended, or is not an app's any more).
     Sheet {
-        id: efficiencyError
+        id: efficiencyErrorItem
         objectName: "efficiencyError"
         showCancel: false
         focusBack: root.focusBack
@@ -199,15 +199,15 @@ Item {
             Qt.callLater(() => {
                 if (root.shown)
                     return;
-                efficiencyError.title = error;
-                efficiencyError.open();
+                efficiencyErrorItem.title = error;
+                efficiencyErrorItem.open();
             });
         }
     }
 
     // AM55: one process, a signal from the pop-up.
     Sheet {
-        id: signalSheet
+        id: signalSheetItem
         objectName: "signalSheet"
         title: qsTr("Choose a signal to send to “%1” (PID %2).").arg(root.info.name || "").arg(root.info.pid || 0)
         confirmText: qsTr("Send")

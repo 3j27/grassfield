@@ -72,7 +72,9 @@ ShellRoot {
     Component.onCompleted: {
         Qt.callLater(() => {
             // Idle time after the list is built, before the window is ever shown (AppsWindow.onItemsChanged).
+            // qmllint disable missing-property
             grid.items = root.items();
+            // qmllint enable missing-property
             grid.warmPool();
             Qt.callLater(() => {
                 // The opening (AppsWindow.onShownChanged).

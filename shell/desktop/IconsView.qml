@@ -696,20 +696,20 @@ FocusScope {
         // The popup covers the whole desktop surface and never resizes or repositions: the menu is placed inside it by
         // MenuPlace.place (pure) and a submenu opens inside it too (PopupMenu.bounds), so nothing the compositor does to fit
         // a growing popup (flip, slide) can move the menu once it is open (macOS: a context menu never moves).
-        // qmllint disable missing-type
+        // qmllint disable missing-type incompatible-type
         anchor.window: root.hostWindow
         anchor.rect: Qt.rect(0, 0, root.hostWindow.width, root.hostWindow.height)
         anchor.edges: Edges.Top | Edges.Left
         anchor.gravity: Edges.Bottom | Edges.Right
         anchor.adjustment: PopupAdjustment.None
-        // qmllint enable missing-type
+        // qmllint enable missing-type incompatible-type
         implicitWidth: Math.max(1, root.hostWindow.width)
         implicitHeight: Math.max(1, root.hostWindow.height)
         color: "transparent"
         grabFocus: true
-        // qmllint disable missing-type
+        // qmllint disable missing-type incompatible-type
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && visible ? menuBlur : null
-        // qmllint enable missing-type
+        // qmllint enable missing-type incompatible-type
 
         // Dismissed by the compositor (a click elsewhere): the grab ended, the click was swallowed.
         onVisibleChanged: {
@@ -779,20 +779,20 @@ FocusScope {
         // qmllint enable uncreatable-type
         id: aboutPopup
 
-        // qmllint disable missing-type
+        // qmllint disable missing-type incompatible-type
         anchor.window: root.hostWindow
         anchor.rect: Qt.rect(root.menuAt.x, root.menuAt.y, 1, 1)
         anchor.edges: Edges.Top | Edges.Left
         anchor.gravity: Edges.Bottom | Edges.Right
         anchor.adjustment: PopupAdjustment.All
-        // qmllint enable missing-type
+        // qmllint enable missing-type incompatible-type
         implicitWidth: (aboutLoader.item as Item)?.width ?? 1
         implicitHeight: (aboutLoader.item as Item)?.height ?? 1
         color: "transparent"
         grabFocus: true
-        // qmllint disable missing-type
+        // qmllint disable missing-type incompatible-type
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && visible ? aboutBlur : null
-        // qmllint enable missing-type
+        // qmllint enable missing-type incompatible-type
 
         onVisibleChanged: {
             if (visible) {

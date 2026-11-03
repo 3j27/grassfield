@@ -202,7 +202,7 @@ Singleton {
     }
 
     function lookup(id: string): var {
-        revision;
+        void revision;
         if (!id)
             return null;
         const byId = DesktopEntries.byId(id);

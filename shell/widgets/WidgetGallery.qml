@@ -41,7 +41,7 @@ FocusScope {
     }
 
     Item {
-        id: header
+        id: galleryHeader
         x: Tokens.spacingLg
         y: Tokens.spacingLg
         width: parent.width - 2 * Tokens.spacingLg
@@ -80,7 +80,7 @@ FocusScope {
     ListView {
         id: list
         x: Tokens.spacingLg
-        y: header.y + header.height + Tokens.spacingMd
+        y: galleryHeader.y + galleryHeader.height + Tokens.spacingMd
         width: parent.width - 2 * Tokens.spacingLg
         height: Math.max(0, noteLabel.y - y - Tokens.spacingSm)
         clip: true

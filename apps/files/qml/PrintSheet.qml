@@ -17,7 +17,7 @@ import Grassfield.Ui
 //   Available" with Add Printer… when there is none; a printer whose options have not come yet keeps the choices as they are.
 // - A sheet that gets the keyboard late takes keys only after a click in it (the panels' rule, FilePanel.qml).
 Window {
-    id: sheet
+    id: sheetItem
 
     // Print (apps/portal/src/print.h).
     required property var host
@@ -42,7 +42,7 @@ Window {
         })
     property bool reading: false
     // The sheet's choices (print::toQml(Choices)).
-    property var choices: sheet.request.choices
+    property var choices: sheetItem.request.choices
     property bool answered: false
     // Save as PDF's Save panel is up: the sheet steps aside meanwhile.
     property bool saving: false
@@ -53,7 +53,7 @@ Window {
     property bool testAnswered: false
 
     // A document sent first: its pages (-1 while it is read, 0 when they cannot be drawn), the one shown and its image.
-    readonly property bool document: sheet.request.document === true
+    readonly property bool document: sheetItem.request.document === true
     property int pages: -1
     property int page: 0
     property string pageSource: ""
@@ -61,9 +61,9 @@ Window {
     property bool pageDrawing: false
     // The printer's own options (print::toQml(Capabilities).options) and the disclosure sections that hold them, as macOS
     // groups them; the sections open ({id: true}).
-    readonly property var optionList: sheet.capabilities.options ? sheet.capabilities.options : []
+    readonly property var optionList: sheetItem.capabilities.options ? sheetItem.capabilities.options : []
     readonly property var sectionList: [{id: "quality", title: qsTr("Media & Quality")}, {id: "printer", title: qsTr("Printer Options")}].filter(
-        section => sheet.optionList.some(o => o.section === section.id))
+        section => sheetItem.optionList.some(o => o.section === section.id))
     property var openSections: ({})
 
     // ADR-0015: the sheet draws its own frame, as the panels do (gf-client-chrome-panel).
@@ -78,67 +78,67 @@ Window {
         font.pixelSize: Tokens.typographyBodySize
     }
 
-    readonly property bool rangesValid: sheet.choices.pages !== "ranges" || sheet.host.tidyRanges(String(sheet.choices.ranges)) !== ""
+    readonly property bool rangesValid: sheetItem.choices.pages !== "ranges" || sheetItem.host.tidyRanges(String(sheetItem.choices.ranges)) !== ""
     // A document sent first is printed, saved or opened once it is kept, whatever its preview does (documentRead).
     property bool documentKept: false
-    readonly property bool documentRead: !sheet.document || sheet.documentKept
+    readonly property bool documentRead: !sheetItem.document || sheetItem.documentKept
     // The user chose a paper: the document's own (documentPaper) no longer replaces it.
     property bool paperPicked: false
     // Not while the printer's options are read: Return would print with none of them (review of step 6a, MINOR 4).
-    readonly property bool canPrint: !sheet.answered && sheet.printer !== "" && !sheet.reading && sheet.rangesValid && sheet.documentRead
-    readonly property string acceptText: sheet.request.acceptLabel ? String(sheet.request.acceptLabel) : qsTr("Print")
+    readonly property bool canPrint: !sheetItem.answered && sheetItem.printer !== "" && !sheetItem.reading && sheetItem.rangesValid && sheetItem.documentRead
+    readonly property string acceptText: sheetItem.request.acceptLabel ? String(sheetItem.request.acceptLabel) : qsTr("Print")
 
-    title: sheet.request.title ? String(sheet.request.title) : qsTr("Print")
+    title: sheetItem.request.title ? String(sheetItem.request.title) : qsTr("Print")
     color: Appearance.colors.windowBackground
-    modality: sheet.request.modal && sheet.request.parented ? Qt.WindowModal : Qt.NonModal
+    modality: sheetItem.request.modal && sheetItem.request.parented ? Qt.WindowModal : Qt.NonModal
     readonly property real contentHeight: Math.max(formColumn.implicitHeight + 2 * Tokens.panelSheetPadding, preview.implicitHeight) + footer.height
     readonly property real contentWidth: Tokens.filesPrintSheetWidth + preview.width
-    width: sheet.contentWidth
-    height: sheet.contentHeight
-    minimumWidth: sheet.contentWidth
-    maximumWidth: sheet.contentWidth
-    minimumHeight: sheet.contentHeight
-    maximumHeight: sheet.contentHeight
+    width: sheetItem.contentWidth
+    height: sheetItem.contentHeight
+    minimumWidth: sheetItem.contentWidth
+    maximumWidth: sheetItem.contentWidth
+    minimumHeight: sheetItem.contentHeight
+    maximumHeight: sheetItem.contentHeight
 
     function setChoice(key: string, value: var): void {
-        const next = Object.assign({}, sheet.choices);
+        const next = Object.assign({}, sheetItem.choices);
         next[key] = value;
-        sheet.choices = next;
+        sheetItem.choices = next;
     }
 
     function choosePrinter(name: string): void {
         if (name === "__add") {
-            sheet.host.addPrinter();
+            sheetItem.host.addPrinter();
             return;
         }
-        if (name === "" || name === sheet.printer)
+        if (name === "" || name === sheetItem.printer)
             return;
-        sheet.printer = name;
-        sheet.reading = true;
-        sheet.host.choosePrinter(sheet.requestId, name, Object.assign({}, sheet.choices, {
+        sheetItem.printer = name;
+        sheetItem.reading = true;
+        sheetItem.host.choosePrinter(sheetItem.requestId, name, Object.assign({}, sheetItem.choices, {
             printer: name
         }));
     }
 
     function setOption(name: string, value: string): void {
-        const next = Object.assign({}, sheet.choices);
-        next.options = Object.assign({}, sheet.choices.options || {});
+        const next = Object.assign({}, sheetItem.choices);
+        next.options = Object.assign({}, sheetItem.choices.options || {});
         next.options[name] = value;
-        sheet.choices = next;
+        sheetItem.choices = next;
     }
 
     // The Presets pop-up: Print applies it (the printer's options are needed) and answers with the choices (printerChosen).
     function choosePreset(preset: string): void {
-        if (preset === String(sheet.choices.preset))
+        if (preset === String(sheetItem.choices.preset))
             return;
-        sheet.setChoice("preset", preset);
-        sheet.host.choosePreset(sheet.requestId, preset, sheet.choices);
+        sheetItem.setChoice("preset", preset);
+        sheetItem.host.choosePreset(sheetItem.requestId, preset, sheetItem.choices);
     }
 
     function toggleSection(id: string): void {
-        const next = Object.assign({}, sheet.openSections);
+        const next = Object.assign({}, sheetItem.openSections);
         next[id] = !next[id];
-        sheet.openSections = next;
+        sheetItem.openSections = next;
     }
 
     // The label of a printer's option, and its name for assistive technology.
@@ -223,135 +223,135 @@ Window {
 
     // The preview of a document sent first: the page shown, drawn for the page area's pixels.
     function requestPage(): void {
-        if (!sheet.document || sheet.pages <= 0)
+        if (!sheetItem.document || sheetItem.pages <= 0)
             return;
         const ratio = Math.max(1, Screen.devicePixelRatio);
-        sheet.host.renderPage(sheet.requestId, sheet.page, Math.round(pageArea.width * ratio), Math.round(pageArea.height * ratio));
+        sheetItem.host.renderPage(sheetItem.requestId, sheetItem.page, Math.round(pageArea.width * ratio), Math.round(pageArea.height * ratio));
     }
 
     function turnPage(step: int): void {
-        const next = Math.max(0, Math.min(sheet.pages - 1, sheet.page + step));
-        if (next === sheet.page)
+        const next = Math.max(0, Math.min(sheetItem.pages - 1, sheetItem.page + step));
+        if (next === sheetItem.page)
             return;
-        sheet.page = next;
+        sheetItem.page = next;
         // The page before goes at once (never under the new number): "Preparing Preview…" until this one is drawn.
-        sheet.pageSource = "";
-        sheet.pageDrawing = true;
-        sheet.requestPage();
+        sheetItem.pageSource = "";
+        sheetItem.pageDrawing = true;
+        sheetItem.requestPage();
     }
 
     function pressPrint(): void {
-        if (!sheet.canPrint || sheet.keysHeld)
+        if (!sheetItem.canPrint || sheetItem.keysHeld)
             return;
-        const given = Object.assign({}, sheet.choices, {
-            printer: sheet.printer,
+        const given = Object.assign({}, sheetItem.choices, {
+            printer: sheetItem.printer,
             outputUri: "",
             preview: false
         });
         if (given.pages === "ranges")
-            given.ranges = sheet.host.tidyRanges(String(given.ranges));
-        sheet.answered = sheet.host.answer(sheet.requestId, 0, given);
+            given.ranges = sheetItem.host.tidyRanges(String(given.ranges));
+        sheetItem.answered = sheetItem.host.answer(sheetItem.requestId, 0, given);
     }
 
     function cancel(): void {
-        if (sheet.answered)
+        if (sheetItem.answered)
             return;
-        sheet.answered = true;
-        sheet.host.answer(sheet.requestId, 1, {});
+        sheetItem.answered = true;
+        sheetItem.host.answer(sheetItem.requestId, 1, {});
     }
 
     // Open in Preview: the document goes to Grassfield's Preview (a private copy), not to a printer.
     function openInPreview(): void {
-        if (sheet.answered || sheet.saving || !sheet.request.canSavePdf || !sheet.rangesValid || !sheet.documentRead)
+        if (sheetItem.answered || sheetItem.saving || !sheetItem.request.canSavePdf || !sheetItem.rangesValid || !sheetItem.documentRead)
             return;
-        const given = Object.assign({}, sheet.choices, {
+        const given = Object.assign({}, sheetItem.choices, {
             printer: "",
             outputUri: "",
             preview: true
         });
         if (given.pages === "ranges")
-            given.ranges = sheet.host.tidyRanges(String(given.ranges));
-        sheet.answered = sheet.host.answer(sheet.requestId, 0, given);
+            given.ranges = sheetItem.host.tidyRanges(String(given.ranges));
+        sheetItem.answered = sheetItem.host.answer(sheetItem.requestId, 0, given);
     }
 
     function savePdf(): void {
-        if (sheet.answered || sheet.saving || !sheet.request.canSavePdf || !sheet.rangesValid || !sheet.documentRead)
+        if (sheetItem.answered || sheetItem.saving || !sheetItem.request.canSavePdf || !sheetItem.rangesValid || !sheetItem.documentRead)
             return;
-        sheet.saving = true;
-        sheet.visible = false;
-        const name = sheet.request.outputBasename ? String(sheet.request.outputBasename) : qsTr("Untitled");
-        sheet.host.savePdf(sheet.requestId, name, qsTr("Save as PDF"));
+        sheetItem.saving = true;
+        sheetItem.visible = false;
+        const name = sheetItem.request.outputBasename ? String(sheetItem.request.outputBasename) : qsTr("Untitled");
+        sheetItem.host.savePdf(sheetItem.requestId, name, qsTr("Save as PDF"));
     }
 
     Connections {
-        target: sheet.host
+        target: sheetItem.host
         function onPrintersListed(id: int, printers: var, current: string, ok: bool): void {
-            if (id !== sheet.requestId)
+            if (id !== sheetItem.requestId)
                 return;
-            sheet.printers = printers;
-            sheet.listing = false;
-            sheet.listFailed = !ok;
-            if (current !== "" && current !== sheet.printer) {
-                sheet.printer = current;
-                sheet.reading = true;
+            sheetItem.printers = printers;
+            sheetItem.listing = false;
+            sheetItem.listFailed = !ok;
+            if (current !== "" && current !== sheetItem.printer) {
+                sheetItem.printer = current;
+                sheetItem.reading = true;
             }
             if (current === "")
-                sheet.printer = "";
+                sheetItem.printer = "";
         }
         function onPrinterChosen(id: int, printer: string, capabilities: var, choices: var): void {
-            if (id !== sheet.requestId || printer !== sheet.printer)
+            if (id !== sheetItem.requestId || printer !== sheetItem.printer)
                 return;
-            sheet.capabilities = capabilities;
-            sheet.choices = choices;
-            sheet.reading = false;
-            sheet.testPrint();
+            sheetItem.capabilities = capabilities;
+            sheetItem.choices = choices;
+            sheetItem.reading = false;
+            sheetItem.testPrint();
         }
         function onPdfChosen(id: int, uri: string): void {
-            if (id !== sheet.requestId || sheet.answered)
+            if (id !== sheetItem.requestId || sheetItem.answered)
                 return;
-            sheet.saving = false;
-            const given = Object.assign({}, sheet.choices, {
+            sheetItem.saving = false;
+            const given = Object.assign({}, sheetItem.choices, {
                 printer: "",
                 outputUri: uri,
                 preview: false
             });
             if (given.pages === "ranges")
-                given.ranges = sheet.host.tidyRanges(String(given.ranges));
-            sheet.answered = sheet.host.answer(sheet.requestId, 0, given);
-            if (!sheet.answered)
-                sheet.host.reshow(sheet.requestId);
+                given.ranges = sheetItem.host.tidyRanges(String(given.ranges));
+            sheetItem.answered = sheetItem.host.answer(sheetItem.requestId, 0, given);
+            if (!sheetItem.answered)
+                sheetItem.host.reshow(sheetItem.requestId);
         }
         function onDocumentRead(id: int): void {
-            if (id === sheet.requestId)
-                sheet.documentKept = true;
+            if (id === sheetItem.requestId)
+                sheetItem.documentKept = true;
         }
         function onDocumentPaper(id: int, media: var): void {
-            if (id === sheet.requestId && !sheet.paperPicked)
-                sheet.setChoice("media", media);
+            if (id === sheetItem.requestId && !sheetItem.paperPicked)
+                sheetItem.setChoice("media", media);
         }
         function onDocumentReady(id: int, pages: int): void {
-            if (id !== sheet.requestId)
+            if (id !== sheetItem.requestId)
                 return;
-            sheet.pages = pages;
-            sheet.page = 0;
-            sheet.pageDrawing = pages > 0;
-            sheet.requestPage();
-            sheet.testPrint();
+            sheetItem.pages = pages;
+            sheetItem.page = 0;
+            sheetItem.pageDrawing = pages > 0;
+            sheetItem.requestPage();
+            sheetItem.testPrint();
         }
         function onPageRendered(id: int, page: int, source: string): void {
-            if (id !== sheet.requestId || page !== sheet.page)
+            if (id !== sheetItem.requestId || page !== sheetItem.page)
                 return;
-            sheet.pageSource = source;
-            sheet.pageDrawing = false;
+            sheetItem.pageSource = source;
+            sheetItem.pageDrawing = false;
         }
         function onPdfCancelled(id: int): void {
-            if (id !== sheet.requestId)
+            if (id !== sheetItem.requestId)
                 return;
             // Cancel in the Save panel: back to the print sheet (macOS ends the print there; Grassfield keeps the choices made).
-            sheet.saving = false;
+            sheetItem.saving = false;
             // Shown again under the application's id, as it first was (Print's reshow).
-            sheet.host.reshow(sheet.requestId);
-            sheet.requestActivate();
+            sheetItem.host.reshow(sheetItem.requestId);
+            sheetItem.requestActivate();
         }
     }
 
@@ -359,55 +359,55 @@ Window {
     // cancels once the sheet has drawn.
     function testPrint(): void {
         // A document sent first: once its pages are counted too (the integration test checks the backend's child did it).
-        if (sheet.manager.testAnswer !== "accept" || sheet.testAnswered || !sheet.canPrint || (sheet.document && sheet.pages < 0))
+        if (sheetItem.manager.testAnswer !== "accept" || sheetItem.testAnswered || !sheetItem.canPrint || (sheetItem.document && sheetItem.pages < 0))
             return;
-        sheet.testAnswered = true;
-        Qt.callLater(sheet.pressPrint);
+        sheetItem.testAnswered = true;
+        Qt.callLater(sheetItem.pressPrint);
     }
 
     onFrameSwapped: {
-        if (sheet.shownAt === 0)
-            sheet.shownAt = Date.now();
-        if (sheet.manager.testAnswer === "cancel" && !sheet.testAnswered) {
-            sheet.testAnswered = true;
-            Qt.callLater(sheet.cancel);
+        if (sheetItem.shownAt === 0)
+            sheetItem.shownAt = Date.now();
+        if (sheetItem.manager.testAnswer === "cancel" && !sheetItem.testAnswered) {
+            sheetItem.testAnswered = true;
+            Qt.callLater(sheetItem.cancel);
         }
     }
 
     onActiveChanged: {
-        if (!sheet.active || sheet.everActive)
+        if (!sheetItem.active || sheetItem.everActive)
             return;
-        sheet.everActive = true;
+        sheetItem.everActive = true;
         // Late (shown a while ago, behind the lock or another window) and no click in it just now: keys wait for a click.
         const now = Date.now();
-        const late = sheet.shownAt > 0 && now - sheet.shownAt > Tokens.filesPanelLateFocusMs;
-        const clicked = sheet.pressedAt > 0 && now - sheet.pressedAt <= Tokens.filesPanelLateFocusMs;
+        const late = sheetItem.shownAt > 0 && now - sheetItem.shownAt > Tokens.filesPanelLateFocusMs;
+        const clicked = sheetItem.pressedAt > 0 && now - sheetItem.pressedAt <= Tokens.filesPanelLateFocusMs;
         if (late && !clicked)
-            sheet.keysHeld = true;
+            sheetItem.keysHeld = true;
         else
             home.forceActiveFocus();
     }
 
     // Closed by the compositor (no answer yet): Cancel.
-    onClosing: sheet.cancel()
+    onClosing: sheetItem.cancel()
 
     Item {
         id: home
         anchors.fill: parent
         focus: true
         Keys.onPressed: event => {
-            if (sheet.keysHeld) {
+            if (sheetItem.keysHeld) {
                 event.accepted = true;
                 return;
             }
             if (event.key === Qt.Key_Escape) {
-                sheet.cancel();
+                sheetItem.cancel();
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                sheet.pressPrint();
+                sheetItem.pressPrint();
                 event.accepted = true;
-            } else if (sheet.document && (event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp)) {
-                sheet.turnPage(event.key === Qt.Key_PageDown ? 1 : -1);
+            } else if (sheetItem.document && (event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp)) {
+                sheetItem.turnPage(event.key === Qt.Key_PageDown ? 1 : -1);
                 event.accepted = true;
             }
         }
@@ -415,10 +415,10 @@ Window {
         // The document's preview, on the left (a document sent first only), with its page arrows under it.
         Item {
             id: preview
-            visible: sheet.document
-            width: sheet.document ? Tokens.filesPrintPreviewWidth : 0
+            visible: sheetItem.document
+            width: sheetItem.document ? Tokens.filesPrintPreviewWidth : 0
             height: parent.height - footer.height
-            implicitHeight: sheet.document ? 2 * Tokens.panelSheetPadding + pageArea.height + Tokens.spacingSm + pageNav.height : 0
+            implicitHeight: sheetItem.document ? 2 * Tokens.panelSheetPadding + pageArea.height + Tokens.spacingSm + pageNav.height : 0
 
             Item {
                 id: pageArea
@@ -432,12 +432,12 @@ Window {
                     id: pageImage
                     anchors.fill: parent
                     fillMode: Image.PreserveAspectFit
-                    source: sheet.pageSource
+                    source: sheetItem.pageSource
                     cache: false
                     smooth: true
-                    visible: sheet.pageSource !== ""
+                    visible: sheetItem.pageSource !== ""
                     Accessible.role: Accessible.Graphic
-                    Accessible.name: qsTr("Page %1 of %2").arg(sheet.page + 1).arg(sheet.pages)
+                    Accessible.name: qsTr("Page %1 of %2").arg(sheetItem.page + 1).arg(sheetItem.pages)
                 }
 
                 // The sheet of paper's edge.
@@ -455,7 +455,7 @@ Window {
                     anchors.centerIn: parent
                     visible: !pageImage.visible
                     textFormat: Text.PlainText
-                    text: sheet.pages < 0 || sheet.pageDrawing ? qsTr("Preparing Preview…") : qsTr("No Preview")
+                    text: sheetItem.pages < 0 || sheetItem.pageDrawing ? qsTr("Preparing Preview…") : qsTr("No Preview")
                     color: Appearance.windowSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
@@ -468,12 +468,12 @@ Window {
                 anchors.topMargin: Tokens.spacingSm
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Tokens.spacingSm
-                visible: sheet.pages > 0
+                visible: sheetItem.pages > 0
 
                 ToolButton {
                     accessibleName: qsTr("Previous Page")
-                    enabled: sheet.page > 0
-                    onClicked: sheet.turnPage(-1)
+                    enabled: sheetItem.page > 0
+                    onClicked: sheetItem.turnPage(-1)
                     Icon {
                         name: "chevron-right"
                         // The forward chevron turned: the back arrow.
@@ -484,15 +484,15 @@ Window {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     textFormat: Text.PlainText
-                    text: qsTr("%1 of %2").arg(sheet.page + 1).arg(sheet.pages)
+                    text: qsTr("%1 of %2").arg(sheetItem.page + 1).arg(sheetItem.pages)
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyBodySize
                 }
                 ToolButton {
                     accessibleName: qsTr("Next Page")
-                    enabled: sheet.page < sheet.pages - 1
-                    onClicked: sheet.turnPage(1)
+                    enabled: sheetItem.page < sheetItem.pages - 1
+                    onClicked: sheetItem.turnPage(1)
                     Icon {
                         name: "chevron-right"
                         size: Tokens.menuIconSize
@@ -514,7 +514,7 @@ Window {
                 columnSpacing: Tokens.spacingSm
                 rowSpacing: Tokens.spacingSm
                 verticalItemAlignment: Grid.AlignVCenter
-                enabled: !sheet.keysHeld
+                enabled: !sheetItem.keysHeld
 
                 readonly property real labelWidth: Math.max(printerLabel.implicitWidth, presetsLabel.implicitWidth, copiesLabel.implicitWidth,
                                                              pagesLabel.implicitWidth, paperLabel.implicitWidth, orientationLabel.implicitWidth,
@@ -530,19 +530,19 @@ Window {
                     id: printerBox
                     width: Tokens.filesPrintFieldWidth
                     accessibleName: qsTr("Printer")
-                    value: sheet.printer
+                    value: sheetItem.printer
                     model: {
                         const items = [];
-                        if (sheet.listing)
+                        if (sheetItem.listing)
                             items.push({id: "", text: qsTr("Looking for printers…")});
-                        else if (sheet.printers.length === 0)
-                            items.push({id: "", text: sheet.listFailed ? qsTr("Printers Not Responding") : qsTr("No Printers Available")});
-                        for (let i = 0; i < sheet.printers.length; i++)
-                            items.push({id: String(sheet.printers[i].name), text: DisplayName.text(String(sheet.printers[i].displayName))});
+                        else if (sheetItem.printers.length === 0)
+                            items.push({id: "", text: sheetItem.listFailed ? qsTr("Printers Not Responding") : qsTr("No Printers Available")});
+                        for (let i = 0; i < sheetItem.printers.length; i++)
+                            items.push({id: String(sheetItem.printers[i].name), text: DisplayName.text(String(sheetItem.printers[i].displayName))});
                         items.push({id: "__add", text: qsTr("Add Printer…")});
                         return items;
                     }
-                    onPicked: id => sheet.choosePrinter(id)
+                    onPicked: id => sheetItem.choosePrinter(id)
                 }
 
                 FormLabel {
@@ -553,14 +553,14 @@ Window {
                 ComboBox {
                     width: Tokens.filesPrintFieldWidth
                     accessibleName: qsTr("Presets")
-                    value: String(sheet.choices.preset || "default")
+                    value: String(sheetItem.choices.preset || "default")
                     model: {
                         const items = [{id: "default", text: qsTr("Default Settings")}];
-                        if (sheet.request.hasLastUsed === true)
+                        if (sheetItem.request.hasLastUsed === true)
                             items.push({id: "last", text: qsTr("Last Used Settings")});
                         return items;
                     }
-                    onPicked: id => sheet.choosePreset(id)
+                    onPicked: id => sheetItem.choosePreset(id)
                 }
 
                 FormLabel {
@@ -572,12 +572,12 @@ Window {
                     id: copiesBox
                     accessibleName: qsTr("Copies")
                     from: 1
-                    to: Math.max(1, Number(sheet.capabilities.maxCopies) || 1)
-                    enabled: sheet.printer !== ""
-                    onValueModified: sheet.setChoice("copies", copiesBox.value)
+                    to: Math.max(1, Number(sheetItem.capabilities.maxCopies) || 1)
+                    enabled: sheetItem.printer !== ""
+                    onValueModified: sheetItem.setChoice("copies", copiesBox.value)
                     // A Binding, not a plain one: a value the user stepped to would break that (the printer's limit comes later).
                     Binding on value {
-                        value: Number(sheet.choices.copies) || 1
+                        value: Number(sheetItem.choices.copies) || 1
                     }
                 }
 
@@ -590,28 +590,28 @@ Window {
                     spacing: Tokens.spacingSm
                     ComboBox {
                         id: pagesBox
-                        width: sheet.choices.pages === "ranges" ? Tokens.filesPrintFieldWidth / 2 : Tokens.filesPrintFieldWidth
+                        width: sheetItem.choices.pages === "ranges" ? Tokens.filesPrintFieldWidth / 2 : Tokens.filesPrintFieldWidth
                         accessibleName: qsTr("Pages")
-                        value: String(sheet.choices.pages)
+                        value: String(sheetItem.choices.pages)
                         model: {
                             const items = [{id: "all", text: qsTr("All Pages")}];
-                            if (sheet.request.hasCurrentPage)
+                            if (sheetItem.request.hasCurrentPage)
                                 items.push({id: "current", text: qsTr("Current Page")});
-                            if (sheet.request.hasSelection)
+                            if (sheetItem.request.hasSelection)
                                 items.push({id: "selection", text: qsTr("Selection")});
                             items.push({id: "ranges", text: qsTr("Range")});
                             return items;
                         }
-                        onPicked: id => sheet.setChoice("pages", id)
+                        onPicked: id => sheetItem.setChoice("pages", id)
                     }
                     TextField {
                         id: rangesField
-                        visible: sheet.choices.pages === "ranges"
+                        visible: sheetItem.choices.pages === "ranges"
                         width: Tokens.filesPrintFieldWidth / 2 - Tokens.spacingSm
                         accessibleName: qsTr("Pages to print, for example 1-3, 5")
                         placeholderText: qsTr("1-3, 5")
-                        text: String(sheet.choices.ranges)
-                        onTextEdited: sheet.setChoice("ranges", rangesField.text)
+                        text: String(sheetItem.choices.ranges)
+                        onTextEdited: sheetItem.setChoice("ranges", rangesField.text)
                     }
                 }
 
@@ -623,17 +623,17 @@ Window {
                 ComboBox {
                     width: Tokens.filesPrintFieldWidth
                     accessibleName: qsTr("Paper Size")
-                    value: String(sheet.choices.media.name)
+                    value: String(sheetItem.choices.media.name)
                     model: {
-                        const media = sheet.capabilities.known && sheet.capabilities.media.length > 0 ? sheet.capabilities.media : [sheet.choices.media];
+                        const media = sheetItem.capabilities.known && sheetItem.capabilities.media.length > 0 ? sheetItem.capabilities.media : [sheetItem.choices.media];
                         return media.map(m => ({id: String(m.name), text: String(m.displayName)}));
                     }
                     onPicked: id => {
-                        const media = sheet.capabilities.media || [];
+                        const media = sheetItem.capabilities.media || [];
                         for (let i = 0; i < media.length; i++) {
                             if (media[i].name === id) {
-                                sheet.paperPicked = true;
-                                sheet.setChoice("media", media[i]);
+                                sheetItem.paperPicked = true;
+                                sheetItem.setChoice("media", media[i]);
                             }
                         }
                     }
@@ -642,34 +642,34 @@ Window {
                 FormLabel {
                     id: orientationLabel
                     width: form.labelWidth
-                    visible: !sheet.document
+                    visible: !sheetItem.document
                     text: qsTr("Orientation:")
                 }
                 SegmentedControl {
-                    visible: !sheet.document
+                    visible: !sheetItem.document
                     accessibleName: qsTr("Orientation")
-                    value: String(sheet.choices.orientation)
+                    value: String(sheetItem.choices.orientation)
                     model: [{id: "portrait", text: qsTr("Portrait")}, {id: "landscape", text: qsTr("Landscape")}]
-                    onPicked: id => sheet.setChoice("orientation", id)
+                    onPicked: id => sheetItem.setChoice("orientation", id)
                 }
 
                 FormLabel {
                     id: scaleLabel
                     width: form.labelWidth
-                    visible: !sheet.document
+                    visible: !sheetItem.document
                     text: qsTr("Scale:")
                 }
                 Row {
-                    visible: !sheet.document
+                    visible: !sheetItem.document
                     spacing: Tokens.spacingXs
                     SpinBox {
                         id: scaleBox
                         accessibleName: qsTr("Scale, in per cent")
                         from: 1
                         to: 1000
-                        onValueModified: sheet.setChoice("scale", scaleBox.value)
+                        onValueModified: sheetItem.setChoice("scale", scaleBox.value)
                         Binding on value {
-                            value: Number(sheet.choices.scale) || 100
+                            value: Number(sheetItem.choices.scale) || 100
                         }
                     }
                     Text {
@@ -685,31 +685,31 @@ Window {
                 FormLabel {
                     id: sidesLabel
                     width: form.labelWidth
-                    visible: sheet.capabilities.twoSided === true
+                    visible: sheetItem.capabilities.twoSided === true
                     text: qsTr("Two-Sided:")
                 }
                 ComboBox {
-                    visible: sheet.capabilities.twoSided === true
+                    visible: sheetItem.capabilities.twoSided === true
                     width: Tokens.filesPrintFieldWidth
                     accessibleName: qsTr("Two-Sided")
-                    value: String(sheet.choices.duplex)
+                    value: String(sheetItem.choices.duplex)
                     model: [{id: "simplex", text: qsTr("Off")}, {id: "horizontal", text: qsTr("Long-Edge Binding")}, {id: "vertical", text: qsTr("Short-Edge Binding")}]
-                    onPicked: id => sheet.setChoice("duplex", id)
+                    onPicked: id => sheetItem.setChoice("duplex", id)
                 }
 
                 FormLabel {
                     id: colorLabel
                     width: form.labelWidth
-                    visible: sheet.capabilities.color === true
+                    visible: sheetItem.capabilities.color === true
                     text: qsTr("Colour:")
                 }
                 ComboBox {
-                    visible: sheet.capabilities.color === true
+                    visible: sheetItem.capabilities.color === true
                     width: Tokens.filesPrintFieldWidth
                     accessibleName: qsTr("Colour")
-                    value: sheet.choices.color ? "color" : "mono"
+                    value: sheetItem.choices.color ? "color" : "mono"
                     model: [{id: "color", text: qsTr("Colour")}, {id: "mono", text: qsTr("Black & White")}]
-                    onPicked: id => sheet.setChoice("color", id === "color")
+                    onPicked: id => sheetItem.setChoice("color", id === "color")
                 }
             }
 
@@ -721,39 +721,39 @@ Window {
                                                         binLabel.implicitWidth, finishingLabel.implicitWidth)
                 FormLabel {
                     id: feedLabel
-                    text: sheet.optionLabel("media-source")
+                    text: sheetItem.optionLabel("media-source")
                 }
                 FormLabel {
                     id: typeLabel
-                    text: sheet.optionLabel("media-type")
+                    text: sheetItem.optionLabel("media-type")
                 }
                 FormLabel {
                     id: qualityLabel
-                    text: sheet.optionLabel("print-quality")
+                    text: sheetItem.optionLabel("print-quality")
                 }
                 FormLabel {
                     id: binLabel
-                    text: sheet.optionLabel("output-bin")
+                    text: sheetItem.optionLabel("output-bin")
                 }
                 FormLabel {
                     id: finishingLabel
-                    text: sheet.optionLabel("finishings")
+                    text: sheetItem.optionLabel("finishings")
                 }
             }
 
             // The printer's own options, in macOS's disclosure sections (closed at first), only the ones it reports.
             Repeater {
-                model: sheet.sectionList
+                model: sheetItem.sectionList
 
                 delegate: Column {
                     id: section
 
                     required property var modelData
-                    readonly property bool open: sheet.openSections[section.modelData.id] === true
+                    readonly property bool open: sheetItem.openSections[section.modelData.id] === true
 
                     width: form.width
                     spacing: Tokens.spacingSm
-                    enabled: !sheet.keysHeld
+                    enabled: !sheetItem.keysHeld
 
                     Item {
                         id: header
@@ -764,11 +764,11 @@ Window {
                         Accessible.name: section.modelData.title
                         Accessible.checkable: true
                         Accessible.checked: section.open
-                        Accessible.onPressAction: sheet.toggleSection(section.modelData.id)
+                        Accessible.onPressAction: sheetItem.toggleSection(section.modelData.id)
                         // Space opens or closes it (Return stays the sheet's default button, as on macOS).
                         Keys.onPressed: event => {
                             if (event.key === Qt.Key_Space) {
-                                sheet.toggleSection(section.modelData.id);
+                                sheetItem.toggleSection(section.modelData.id);
                                 event.accepted = true;
                             }
                         }
@@ -799,12 +799,12 @@ Window {
                         }
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: sheet.toggleSection(section.modelData.id)
+                            onClicked: sheetItem.toggleSection(section.modelData.id)
                         }
                     }
 
                     Repeater {
-                        model: section.open ? sheet.optionList.filter(o => o.section === section.modelData.id) : []
+                        model: section.open ? sheetItem.optionList.filter(o => o.section === section.modelData.id) : []
 
                         delegate: Row {
                             id: optionRow
@@ -816,21 +816,21 @@ Window {
                             FormLabel {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: form.labelWidth
-                                text: sheet.optionLabel(String(optionRow.modelData.name)) // raw-name-ok: a print option keyword, never a file name
+                                text: sheetItem.optionLabel(String(optionRow.modelData.name)) // raw-name-ok: a print option keyword, never a file name
                             }
                             ComboBox {
                                 width: Tokens.filesPrintFieldWidth
-                                accessibleName: sheet.optionTitle(String(optionRow.modelData.name))
+                                accessibleName: sheetItem.optionTitle(String(optionRow.modelData.name))
                                 value: {
-                                    const chosen = (sheet.choices.options || {})[optionRow.modelData.name];
+                                    const chosen = (sheetItem.choices.options || {})[optionRow.modelData.name];
                                     return String(chosen !== undefined ? chosen : optionRow.modelData.defaultValue);
                                 }
                                 model: optionRow.modelData.values.map(v => ({
                                             id: String(v.value),
-                                            text: sheet.valueLabel(String(optionRow.modelData.name), String(v.value), String(v.label), // raw-name-ok: same
+                                            text: sheetItem.valueLabel(String(optionRow.modelData.name), String(v.value), String(v.label), // raw-name-ok: same
                                                                    String(v.keyword || ""))
                                         }))
-                                onPicked: id => sheet.setOption(String(optionRow.modelData.name), id)
+                                onPicked: id => sheetItem.setOption(String(optionRow.modelData.name), id)
                             }
                         }
                     }
@@ -857,17 +857,17 @@ Window {
                 anchors.leftMargin: Tokens.panelSheetPadding
                 anchors.verticalCenter: parent.verticalCenter
                 width: Tokens.filesPrintPdfMenuWidth
-                visible: sheet.request.canSavePdf === true && !sheet.keysHeld
-                enabled: !sheet.answered && sheet.rangesValid && sheet.documentRead
+                visible: sheetItem.request.canSavePdf === true && !sheetItem.keysHeld
+                enabled: !sheetItem.answered && sheetItem.rangesValid && sheetItem.documentRead
                 accessibleName: qsTr("PDF")
                 value: ""
                 displayText: qsTr("PDF")
                 model: [{id: "save", text: qsTr("Save as PDF…")}, {id: "preview", text: qsTr("Open in Preview")}]
                 onPicked: id => {
                     if (id === "save")
-                        sheet.savePdf();
+                        sheetItem.savePdf();
                     else if (id === "preview")
-                        sheet.openInPreview();
+                        sheetItem.openInPreview();
                 }
             }
 
@@ -875,7 +875,7 @@ Window {
                 anchors.left: parent.left
                 anchors.leftMargin: Tokens.panelSheetPadding
                 anchors.verticalCenter: parent.verticalCenter
-                visible: sheet.keysHeld
+                visible: sheetItem.keysHeld
                 textFormat: Text.PlainText
                 text: qsTr("Click the panel to use the keyboard in it.")
                 color: Appearance.windowSecondary
@@ -891,14 +891,14 @@ Window {
 
                 Button {
                     text: qsTr("Cancel")
-                    onClicked: sheet.cancel()
+                    onClicked: sheetItem.cancel()
                 }
 
                 Button {
-                    text: sheet.acceptText
+                    text: sheetItem.acceptText
                     primary: true
-                    enabled: sheet.canPrint
-                    onClicked: sheet.pressPrint()
+                    enabled: sheetItem.canPrint
+                    onClicked: sheetItem.pressPrint()
                 }
             }
         }
@@ -910,9 +910,9 @@ Window {
         anchors.fill: parent
         acceptedButtons: Qt.AllButtons
         onPressed: mouse => {
-            sheet.pressedAt = Date.now();
-            if (sheet.keysHeld) {
-                sheet.keysHeld = false;
+            sheetItem.pressedAt = Date.now();
+            if (sheetItem.keysHeld) {
+                sheetItem.keysHeld = false;
                 home.forceActiveFocus();
             }
             mouse.accepted = false;

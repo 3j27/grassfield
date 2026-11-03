@@ -18,7 +18,9 @@ TestCase {
             width: 40
             height: 40
             source: Qt.resolvedUrl("../../shell/overlay/controlcenter/NavItem.qml")
+            // qmllint disable missing-property
             onLoaded: item.accessibleName = "probe"
+            // qmllint enable missing-property
         }
     }
 

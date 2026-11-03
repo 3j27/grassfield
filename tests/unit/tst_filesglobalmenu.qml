@@ -13,19 +13,19 @@ TestCase {
     when: windowShown
 
     QtObject {
-        id: folder
+        id: folderItem
         property int selectedCount: 0
         property var dirs: ({})
         property var rows: []
         signal selectionChanged
         function selectedRows(): var {
-            return folder.rows;
+            return folderItem.rows;
         }
         function isDirAt(row: int): bool {
-            return folder.dirs[row] === true;
+            return folderItem.dirs[row] === true;
         }
         function selectedUrls(): var {
-            return folder.rows.map(r => "file:///sandbox/item" + r);
+            return folderItem.rows.map(r => "file:///sandbox/item" + r);
         }
         function nameAt(row: int): string {
             return "item" + row;
@@ -98,7 +98,7 @@ TestCase {
         property var manager: fakeManager
         property bool tabBarVisible: false
         property var tab: ({canBack: false, canForward: false, segments: [], sortKey: 2, sortDescending: true, groupBy: 8, selection: () => []})
-        property var folder: folder
+        property var folder: folderItem
         property var tabs: []
         property int currentIndex: 0
         property bool canEject: false
@@ -119,10 +119,10 @@ TestCase {
 
     function select(rows, dirs) {
         // The model changes the rows first, then the count (NOTIFY), like FolderModel.
-        folder.dirs = dirs;
-        folder.rows = rows;
-        folder.selectedCount = rows.length;
-        folder.selectionChanged();
+        folderItem.dirs = dirs;
+        folderItem.rows = rows;
+        folderItem.selectedCount = rows.length;
+        folderItem.selectionChanged();
     }
 
     function test_customizeFollowsTheSelection() {
@@ -132,10 +132,10 @@ TestCase {
         select([0], {0: false});
         compare(bar.customizeEnabled, false, "one file");
         // One file -> one folder: selectedCount stays 1.
-        folder.dirs = {1: true};
-        folder.rows = [1];
-        folder.selectedCount = 0;
-        folder.selectedCount = 1;
+        folderItem.dirs = {1: true};
+        folderItem.rows = [1];
+        folderItem.selectedCount = 0;
+        folderItem.selectedCount = 1;
         compare(bar.customizeEnabled, true, "one folder");
         select([2, 3], {2: true, 3: false});
         compare(bar.customizeEnabled, false, "a folder and a file");
@@ -153,13 +153,13 @@ TestCase {
         select([0], {0: false});
         compare(bar.inApplications, false);
         compare(bar.openWithApps.length, 1, "a file of a folder has Open With");
-        folder.isApplications = true;
+        folderItem.isApplications = true;
         compare(bar.inApplications, true);
         compare(bar.openWithApps.length, 0, "no Open With in Applications");
         const glance = findItem(bar, "Glance");
         verify(glance !== null, "the Glance item is found");
         compare(glance.enabled, false, "no Glance in Applications");
-        folder.isApplications = false;
+        folderItem.isApplications = false;
         compare(glance.enabled, true, "Glance in a folder of files");
     }
 
@@ -187,12 +187,12 @@ TestCase {
         select([0], {0: true});
         compare(bar.openWithFiles, false, "a folder");
         select([0], {0: false});
-        folder.isApplications = true;
+        folderItem.isApplications = true;
         compare(bar.openWithFiles, false, "Applications");
-        folder.isApplications = false;
-        folder.isTrash = true;
+        folderItem.isApplications = false;
+        folderItem.isTrash = true;
         compare(bar.openWithFiles, false, "the Trash");
-        folder.isTrash = false;
+        folderItem.isTrash = false;
         select([], {});
         compare(bar.openWithFiles, false, "nothing selected");
     }
