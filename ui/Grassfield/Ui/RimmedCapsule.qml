@@ -8,15 +8,15 @@ import QtQuick.Window
 // none, measured on ss-004-005: ADR-0024 amendment 2026-11-03):
 //  - a capsule is a white fill lifted by a soft shadow (toolbar.shadow*), the shape cut out of the shadow so it never
 //    shows through the translucent fill;
-//  - a field (fillOpacity at toolbar.fieldFillOpacity) is a flat tinted fill with no shadow.
+//  - a field (`field: true`, the sidebar search) is a flat tinted fill with no shadow.
 // Increase Contrast draws the control outline of every shared control. It is not glass: no blur is requested or faked.
 Rectangle {
     id: root
 
-    // The fill opacity: toolbar.fieldFillOpacity makes a field, anything else (toolbar.capsuleFillOpacity) a lifted capsule.
-    // The dark appearance takes the matching *Dark token.
-    property real fillOpacity: Tokens.toolbarFieldFillOpacity
-    readonly property bool field: root.fillOpacity === Tokens.toolbarFieldFillOpacity
+    // A field is the sidebar's flat tinted search field (no shadow); everything else, toolbar search fields included, is a
+    // lifted white capsule. The fill opacity follows it (the dark appearance takes the matching *Dark token).
+    property bool field: false
+    property real fillOpacity: root.field ? Tokens.toolbarFieldFillOpacity : Tokens.toolbarCapsuleFillOpacity
     readonly property real hairline: 1 / Math.max(1, Screen.devicePixelRatio)
     readonly property real fillAlpha: root.field ? (Appearance.dark ? Tokens.toolbarFieldFillOpacityDark : root.fillOpacity)
         : (Appearance.dark ? Tokens.toolbarCapsuleFillOpacityDark : root.fillOpacity)

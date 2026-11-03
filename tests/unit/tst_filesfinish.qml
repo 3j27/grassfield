@@ -129,7 +129,8 @@ TestCase {
         verify(!ring.visible);
         search.focusField();
         tryVerify(() => search.expanded);
-        compare(search.fillOpacity, Tokens.toolbarFieldFillOpacity, "open: the field's fill");
+        compare(search.fillOpacity, Tokens.toolbarCapsuleFillOpacity, "open: still the lifted toolbar capsule");
+        verify(!search.field, "no flat field in a toolbar");
         verify(ring.visible, "the ring outside the field while it has the focus");
         const clear = find(search, it => it.objectName === "clearButton");
         verify(clear !== null);
@@ -203,7 +204,7 @@ TestCase {
         const win = source("apps/files/qml/BrowserWindow.qml");
         // Tags and Action are bare glyphs with no capsule, as macOS 27 Finder draws Share, Tags and Action on a white window.
         verify(/Item \{[^}]*?\n\s*Row \{[^}]*?ToolButton \{\s*id: tagsButton[\s\S]*?ToolButton \{\s*id: actionButton/.test(win), "Tags and Action in a row");
-        compare(win.indexOf("RimmedCapsule {\n                    width: 2 * Tokens.toolbarCapsule"), -1, "no capsule round Tags and Action");
+        verify(!/RimmedCapsule \{\s*width: 2 \* Tokens\.toolbarCapsule/.test(win), "no capsule round Tags and Action");
         compare(win.indexOf("Appearance.buttonFill"), -1, "no plain capsule left in the toolbar");
         const tabs = source("apps/files/qml/TabBar.qml");
         verify(tabs.indexOf("!Appearance.reduceMotion") > 0 && tabs.indexOf("Easing.OutQuad") < 0, "the tabs do not slide under Reduce Motion, and move on the move curve");
