@@ -153,4 +153,6 @@ Decision: `RimmedCapsule` draws a white fill (`toolbar.capsuleFillOpacity` 0.7) 
 `toolbar.rimOpacity*` and `innerRimOpacity*` tokens are removed. Increase Contrast keeps the control outline. The dark
 appearance values are estimates (no dark capture). Gate A2 holds: the capsule and field fills are still tested as backdrops
 of the `window` role (tests/visual/test_contrast_tokens.py); white at 0.7 only lightens the light window. Blur is
-untouched: a drop shadow is not blur and nothing is faked.
+untouched: a drop shadow is not blur and nothing is faked. A toolbar search field is a lifted white capsule like the
+other toolbar items; only the sidebar's search is the flat field. Side effect: pink's accent ink is no longer needed (ADR-0040
+amendment 2026-11-03).

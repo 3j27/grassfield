@@ -443,7 +443,7 @@ and IQ-B3 here changes the palette only, not which controls read it.
   the white glyphs of the Settings tiles drawn in it are 2.5:1, as macOS draws them. General > About's Grassfield row
   draws its tile in the brand green (`SettingsRow` `tileColor: "grassfield"`, ID-11), and so does Software Update's
   Grassfield release row. Text and glyphs drawn in the accent colour read `colors.accentInk`: in the light appearance a
-  light accent's darker shade (`color.accentInkLight`: yellow, green and pink, 4.5:1 on an app window; macOS draws a light
+  light accent's darker shade (`color.accentInkLight`: yellow and green since the amendment 2026-11-03 below, 4.5:1 on an app window; macOS draws a light
   accent's text darker), the accent itself elsewhere (the integrator's review of 5391761, below).
 - **About This Computer (ID-19, the macOS model; review of b44d17e).** Computer first, as macOS 27 and as Settings >
   About already do: the
@@ -1098,7 +1098,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
   - MINOR 3, text drawn in the accent colour fell to 2.1-2.5:1 with the light Green (yellow already had it). The
     integrator's decision, under the owner's rule of 2026-10-27: as macOS, a light accent's text is drawn darker. A role,
     `colors.accentInk`: `color.accentInkLight` gives yellow `#816500`, green `#467427` and pink `#BD2F6C` (pink was 4.34:1
-    under a rimmed capsule), each the lightest shade of its accent with 4.5:1 on an app window; every other accent and the
+    under a rimmed capsule; pink's entry was removed on 2026-11-03, see the amendment), each the lightest shade of its accent with 4.5:1 on an app window; every other accent and the
     dark appearance draw in the accent itself. Two A2 roles: on an app window (4.5:1, every accent, both appearances) and
     on glass (exempt: no accent holds 4.5:1 over the worst wallpaper, the Grassfield green 2.36:1; every ink keeps 2.2:1,
     tested). Ten texts and glyphs moved to it (the widgets' weekday, a Control Center checkmark, the alert glyph, Files'
@@ -1115,3 +1115,12 @@ this ADR follows it, and any later pull request of either lane that meets one of
 - A new ADR for the login and boot themes (IQ-L1 C) before step 10.
 - ADR-0020 gains rows for the new keys and the wallpaper state when steps 2, 3 and 5 write them.
 - Security: steps 4a, 4b and 5 are security-module changes (R12), each with an opus security review.
+
+## Amendment 2026-11-03 pink needs no accent ink
+
+The pink entry of `color.accentInkLight` (#BD2F6C) is removed. It existed because pink fell to 4.34:1 under the toolbar
+capsule's grey fill. Since the refinement batch (ADR-0024 amendment 2026-11-03) the toolbar capsule is white (it lightens
+the window) and the sidebar search field, a flat grey, is not a ground for accent text; the A2 role "text and glyphs in the
+accent colour on an app window" now uses the `window-pane` backdrop (the window and the sidebar, bare and under the capsule),
+where plain light pink holds 4.5:1 (tests/visual/test_contrast_tokens.py, `test_accent_ink_only_where_needed`). Yellow and
+green keep their inks. Pink accent text is therefore the pink accent itself in both appearances.
