@@ -36,7 +36,7 @@ to what is behind them) follow macOS 26.** Where a macOS 27 trait concerns both 
 | Toolbars | bars, one height, a continuous bar under the controls once content scrolls under them | — |
 | Menus | an icon only on the rows that have one, text otherwise about 16 pt from the edge; highlight 24 pt tall, about 5 pt from the sides, radius 7 (concentric with 12) | icon column in every menu, radius 6 |
 | Accent fills | white text on the accent fill in both appearances; the dark appearance gets a deeper selection fill that holds 4.5:1 with white (A2) | dark text on a bright green in the dark appearance |
-| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16 (rendered as that model, note 2026-11-03); the contact edge, the window border's one device pixel: black 0.125 in the light appearance, black 0.58 in the dark one; a light inner rim in the dark one (Hyprland's inner glow, white 0.125 over one device pixel) | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
+| Window shadow | the measured profile: Hyprland range 68, power 4, colour alpha 0.25, offset 0 16 (rendered as that model, note 2026-11-03); the contact edge, the window border's one device pixel: black 0.125 in the light appearance, black 0.58 in the dark one; the dark appearance's light inner rim deferred to the plugin (note 2026-11-03) | range 38, power 2, alpha 0.35, offset 0 14; white 0.15 border in both |
 | Dark windows | neutral greys: window about #292929, groups about #313131 | #1D1F24 |
 | Search | a neutral light fill on the selected row; result type about 17.7 / 15 pt | accent-filled row (F2c), 13 / 11 |
 | Light window content | white windows, groups #F7F7F7 without a border, radius 12, margins 20 (unchanged from 26) | grey window, 14 % black groups with a border |
@@ -240,25 +240,34 @@ offset are in points at 1.25. So C-3 renders as fitted.
   first pixels). Closer needs a second shadow or a shader of our own, not in this batch.
 - Edge: the same darkness per point as 27's half-point line, drawn in Hyprland's one device pixel (0.8 pt at 1.25).
   Light: black 0.2 × 0.5 / 0.8 = 0.125 (inactive 0.11). Dark: black 0.92 × 0.625 = 0.58 (inactive 0.52).
-- Dark inner rim: Hyprland 0.56's inner glow (`decoration.glow`, range 1, render_power 1). It draws over the window content
-  and lights the first device pixel inside every window at half its colour's alpha (measured at 1.25). White 0.25 gives
-  0.125 over 0.8 pt (inactive 0.2 gives 0.1), the same light per point as 27's 0.10 over 1 pt. Off in the light appearance.
-- The values are tokens: `window.edge*` and `window.rim*`. The config holds the dark appearance's
-  (`config/hypr/grassfield/looknfeel.lua`, the glow in its own guarded call). The shell pushes the current appearance's
-  with the border, as a second `hl.config` call (`Minimized.edgeCall`), so a Hyprland without the glow still takes the
-  border.
+- The values are tokens, `window.edge*`. The config holds the dark appearance's pair
+  (`config/hypr/grassfield/looknfeel.lua`); the shell pushes the current appearance's (`Minimized.edgeCall`).
 
-**After (same run, GF-REF 1.25).**
+**The dark inner rim: tried with Hyprland's inner glow, deferred to the plugin.** Hyprland 0.56's inner glow
+(`decoration.glow`, range 1, render_power 1) draws over the window content and lit the first device pixel inside every
+window at half its colour's alpha (white 0.25 gave 0.125, the same light per point as 27's 0.10 over 1 pt). The nested
+review (2026-11-03) failed it:
+- On every third-party window with the plugin's titlebar, the glow follows the client surface (the bar is a decoration
+  outside it). It lit the client's top row right under the bar's hairline: the separator became two light lines (74, then
+  63, against 40 and 36), the second stopping about 22 px short of each side. The bar's top and sides got no rim, and the
+  side rims started 16 pt below the bar.
+- Hyprland 0.56.2 limits: no window rule scopes the glow (so the config cannot leave those windows out), and the glow is not
+  drawn along the rounded corners (34 or less on the 20-pt arcs against 62 on the straight edges, where macOS 27 keeps the
+  rim continuous).
+- Decision (integrator, closest to macOS 27 with nothing broken): ship the per-point edge without the rim; the glow stays
+  at Hyprland's default (off). The plugin is to draw the rim in a later compositor batch, with its bar: continuous round
+  the corner arcs and over the bar, masking the client's top row under it.
+- The dark edge without the rim, measured (levels, active): over #E6E6E6 the window 38, the contact pixel 72, the shadow
+  174; over #808080, 38, 40 and 97. macOS 27 (Notes): window 41, rim 62, outer pixel 11, shadow 153. Against the backdrop the
+  pixel takes the same darkness per point as 27's; against a dark window it reads as a soft step (lighter than the window
+  over light backdrops, merged with it over mid-tones), not as a hard line, so 0.58 is kept. What the missing rim loses is
+  the window's separation over dark backdrops.
+
+**After (GF-REF 1.25, with and without the plugin).**
 - Light contact edge: 0.138 over the shadow (0.348 in all) on the sides and 0.128 above and below; inactive 0.111.
-- Dark: outer pixel 0.586 over the shadow (inactive 0.520); inner rim white 0.125 (inactive 0.100) on every side.
-- Light appearance: no rim.
-- The shadow as before.
-- The same with the plugin unloaded: the edge, the rim and the shadow are Hyprland's and the shell's, not the plugin's.
+- Dark: outer pixel 0.586 over the shadow (inactive 0.520); no rim in either appearance.
+- The shadow as before. The same with the plugin unloaded: the edge and the shadow are Hyprland's and the shell's.
 
 **Limits.**
-- Third-party windows with the plugin's titlebar: the glow follows the client surface, the bar being a decoration outside
-  it. In the dark appearance it lights a pixel under the bar's hairline, and none along the bar's top. Fixing that is
-  plugin work (a rim drawn with the bar).
-- The glow is one more pass over each window that redraws, in the dark appearance only. P3 has not been re-measured.
 - Other scales: the border is a whole number of device pixels (one at 1 and 1.25), so the edge there is up to 25 % darker
-  per point than at 1.25. The glow's range has been measured only at 1.25.
+  per point than at 1.25.
