@@ -235,6 +235,8 @@ EOF
 stub plymouth-set-default-theme <<'EOF'
 #!/bin/bash
 echo "plymouth-set-default-theme $*" >>"$GF_STUB/calls"
+# the setter refusing one theme (plymouth_refuse_<theme>)
+[[ -n ${1:-} && -f $GF_STUB/plymouth_refuse_$1 ]] && { echo "plymouth-set-default-theme: refused" >&2; exit 1; }
 if (($# == 0)); then cat "$GF_STUB/plymouth"; else echo "$1" >"$GF_STUB/plymouth"; fi
 EOF
 mk_rebuild() {
@@ -581,9 +583,27 @@ hasnt 'both rebuilds fail: no end message of a good install' '== Done ==' "$W/ou
 expect 'both rebuilds fail: the previous theme is set' "$(cat "$S/plymouth")" omarchy
 expect 'both rebuilds fail: the rebuild ran twice, no more' "$(grep -c '^limine-mkinitcpio' "$S/calls")" 2
 has 'both rebuilds fail: Grassfield stays installed' 'grassfield-desktop' "$S/installed"
+has 'both rebuilds fail: says Grassfield is installed and starts at the next login' 'Grassfield is installed and starts at your next login' "$W/out"
 fresh; rm -f "$BIN/limine-mkinitcpio"; touch "$S/rebuild_fail"; run '' --yes
 has 'both rebuilds fail (mkinitcpio -P): the retry command is the right one' 'sudo mkinitcpio -P' "$W/out"
+has 'both rebuilds fail (mkinitcpio -P): names the boot menu generically' 'your boot menu' "$W/out"
+hasnt 'both rebuilds fail (mkinitcpio -P): the stop message does not name Limine' "snapshot entry in Limine's menu" "$W/out"
 mk_rebuild
+# P1: the theme setter refuses grassfield (install): honest message, nothing rebuilt, never "active".
+fresh; touch "$S/plymouth_refuse_grassfield"; run '' --yes
+expect 'the setter refusing the Grassfield theme: exit 1' "$rc" 1
+has 'setter refused: the honest message' 'plymouth-set-default-theme grassfield failed' "$W/out"
+has 'setter refused: the boot theme was not changed' 'the boot theme was not changed' "$W/out"
+hasnt 'setter refused: never says the boot theme is active' 'boot theme active' "$W/out"
+expect 'setter refused: no rebuild was run' "$(grep -c '^limine-mkinitcpio' "$S/calls")" 0
+expect 'setter refused: the theme is still the previous one' "$(cat "$S/plymouth")" omarchy
+has 'setter refused: Grassfield stays installed' 'grassfield-desktop' "$S/installed"
+# The rebuild fails, then the previous theme cannot be set back: stop, saying so.
+fresh; touch "$S/rebuild_fail_once" "$S/plymouth_refuse_omarchy"; run '' --yes
+expect 'rebuild failed and the previous theme refused: exit 1' "$rc" 1
+has 'that case says the previous theme could NOT be set back' 'could NOT be set back' "$W/out"
+hasnt 'that case never says the boot theme is active' 'boot theme active' "$W/out"
+expect 'that case ran one rebuild only' "$(grep -c '^limine-mkinitcpio' "$S/calls")" 1
 
 # ---- 9. snapshot ---------------------------------------------------------------------------------------------------
 fresh; echo 1 >"$S/snap_rc"; run '' --yes
@@ -734,6 +754,18 @@ has 'uninstall: the stop message' 'failed twice' "$W/out"
 has 'uninstall: the packages are still there to retry' 'grassfield-desktop' "$S/installed"
 hasnt 'uninstall: no package removal happened' 'pacman -Rns' "$S/calls"
 rm -f "$S/rebuild_fail"
+# P2: the setter refuses omarchy on uninstall: stop BEFORE any package removal, never claim the theme is back, keep the record.
+fresh; run '' --yes
+touch "$S/plymouth_refuse_omarchy"; run '' --uninstall --yes
+expect 'uninstall with the setter refusing the previous theme: exit 1' "$rc" 1
+has 'P2: the honest message' 'plymouth-set-default-theme omarchy failed' "$W/out"
+has 'P2: nothing was removed' 'Nothing was removed' "$W/out"
+hasnt 'P2: no package removal' 'pacman -Rns' "$S/calls"
+hasnt 'P2: never says the boot theme is back' 'boot theme back' "$W/out"
+[[ -f $LOGDIR/plymouth-previous ]] && pass 'P2: the remembered theme is kept' || fail 'P2: the remembered theme was deleted'
+expect 'P2: the boot theme is still Grassfield'"'"'s' "$(cat "$S/plymouth")" grassfield
+has 'P2: Grassfield stays installed' 'grassfield-desktop' "$S/installed"
+rm -f "$S/plymouth_refuse_omarchy"
 # Packages gone but [grassfield] left (removed by hand): the script's own copy from THIS install puts pacman.conf back.
 fresh; run '' --yes
 : >"$S/installed"

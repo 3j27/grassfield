@@ -664,21 +664,45 @@ rebuild_boot_image() {
 #
 # <new theme> <theme to go back to>. Returns 0 (done); 1 (the rebuild failed, the previous theme was set back and a second,
 # clean rebuild confirmed it: the boot theme was NOT changed); 2 (the second rebuild failed too: boot images may be mixed).
+#
+# The caller runs this as `... || src=$?`, which turns set -e off inside it: EVERY root step is therefore checked by hand.
+# Returns 0 done; 1 rebuild failed, theme set back, second rebuild clean (theme NOT changed); 2 both rebuilds failed (theme
+# set back); 3 the theme setter refused (nothing was changed); 4 the rebuild failed and the previous theme could not be set back.
 switch_boot_theme() {
-  as_root plymouth-set-default-theme "$1"
+  as_root plymouth-set-default-theme "$1" || return 3
   if rebuild_boot_image; then return 0; fi
   note 'the boot image rebuild failed: setting the previous boot theme back and running the rebuild again' \
     'la reconstruction de l image de demarrage a echoue : remise de l ancien theme de demarrage et nouvelle reconstruction'
-  as_root plymouth-set-default-theme "$2" || true
+  as_root plymouth-set-default-theme "$2" || return 4
   if rebuild_boot_image; then return 1; fi
   return 2
 }
 
 boot_retry_command() { if command -v limine-mkinitcpio >/dev/null; then echo 'sudo limine-mkinitcpio'; else echo 'sudo mkinitcpio -P'; fi; }
+boot_menu_name() { if command -v limine-mkinitcpio >/dev/null; then echo "Limine's menu"; else echo 'your boot menu'; fi; }
 
-boot_stop() { # the second rebuild failed too
-  die "the boot image rebuild failed twice (see above): some boot entries may be rebuilt and others not. The computer may start the previous entry, or you can pick a snapshot entry in Limine's menu at start. The boot theme is set back to the previous one. To retry once the error above is fixed: $(boot_retry_command)" \
-    "la reconstruction de l image de demarrage a echoue deux fois (voir plus haut) : certaines entrees de demarrage peuvent etre reconstruites et d autres non. L ordinateur peut demarrer l entree precedente, ou tu peux choisir une entree de snapshot dans le menu de Limine au demarrage. Le theme de demarrage est remis sur le precedent. Pour reessayer une fois l erreur ci-dessus corrigee : $(boot_retry_command)"
+boot_stop() { # <2|4>: the rebuild failed twice, or failed and the previous theme could not be set back
+  local state_en state_fr after_en after_fr theme_en theme_fr
+  if ((UNINSTALL)); then
+    after_en='Nothing was removed: Grassfield is still installed.' after_fr='Rien n a ete retire : Grassfield est toujours installe.'
+  else
+    after_en='Grassfield is installed and starts at your next login.' after_fr='Grassfield est installe et demarre a ta prochaine connexion.'
+  fi
+  if [[ ${1:-2} == 4 ]]; then
+    theme_en='The previous boot theme could NOT be set back (plymouth-set-default-theme failed): the boot theme still names the other one.' \
+      theme_fr='L ancien theme de demarrage n a PAS pu etre remis (plymouth-set-default-theme a echoue) : le theme de demarrage nomme encore l autre.'
+    state_en='the boot image rebuild failed' state_fr='la reconstruction de l image de demarrage a echoue'
+  else
+    theme_en='The boot theme is set back to the previous one.' theme_fr='Le theme de demarrage est remis sur le precedent.'
+    state_en='the boot image rebuild failed twice' state_fr='la reconstruction de l image de demarrage a echoue deux fois'
+  fi
+  die "$state_en (see above): some boot entries may be rebuilt and others not. $after_en The computer may start the previous entry, or you can pick a snapshot entry in $(boot_menu_name) at start. $theme_en To retry once the error above is fixed: $(boot_retry_command)" \
+    "$state_fr (voir plus haut) : certaines entrees de demarrage peuvent etre reconstruites et d autres non. $after_fr L ordinateur peut demarrer l entree precedente, ou tu peux choisir une entree de snapshot dans $(boot_menu_name) au demarrage. $theme_fr Pour reessayer une fois l erreur ci-dessus corrigee : $(boot_retry_command)"
+}
+
+boot_setter_failed() { # <theme>: plymouth-set-default-theme refused; nothing changed
+  die "plymouth-set-default-theme $1 failed (see above): the boot theme was not changed and no boot image was rebuilt. $( ((UNINSTALL)) && echo 'Nothing was removed: Grassfield is still installed; fix the error, then run --uninstall again.' || echo 'Grassfield is installed and starts at your next login; run this script again to retry the boot theme.')" \
+    "plymouth-set-default-theme $1 a echoue (voir plus haut) : le theme de demarrage n a pas ete change et aucune image n a ete reconstruite. $( ((UNINSTALL)) && echo 'Rien n a ete retire : Grassfield est toujours installe ; corrige l erreur puis relance --uninstall.' || echo 'Grassfield est installe et demarre a ta prochaine connexion ; relance ce script pour reessayer le theme de demarrage.')"
 }
 
 plymouth_current() { { plymouth-set-default-theme 2>/dev/null || true; } | awk 'NR == 1 { print $1 }'; }
@@ -721,7 +745,8 @@ do_themes() {
     1) THEMES_FAILED=1
       note 'the boot theme was NOT changed: the rebuild failed, the previous theme was set back and a second rebuild was clean' \
         'le theme de demarrage n a PAS ete change : la reconstruction a echoue, l ancien theme a ete remis et une seconde reconstruction est propre' ;;
-    *) boot_stop ;;
+    3) boot_setter_failed grassfield ;;
+    *) boot_stop "$src" ;;
   esac
 }
 
@@ -782,7 +807,8 @@ revert_themes() {
     1)
       note 'the boot theme was NOT reverted (the rebuild failed; the Grassfield theme is set again and rebuilt cleanly): after the removal, revert it as in docs/owner-setup/login-boot-themes.md section 2' \
         'le theme de demarrage n a PAS ete annule (la reconstruction a echoue ; le theme Grassfield est remis et reconstruit proprement) : apres le retrait, annule-le comme dans docs/owner-setup/login-boot-themes.md section 2' ;;
-    *) boot_stop ;;
+    3) boot_setter_failed "$prev" ;;
+    *) boot_stop "$src" ;;
   esac
 }
 
