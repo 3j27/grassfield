@@ -269,6 +269,8 @@ Window {
                 accessibleName: qsTr("Thumbnails")
                 checkable: true
                 checked: viewerWin.showSidebar
+                // One white disc, as macOS 27: the group's own capsule is the disc; a checked pill inside it would be a second one.
+                checkedColor: "transparent"
                 onClicked: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
 
                 Glyph {
