@@ -74,10 +74,9 @@ namespace gf {
         // pending one ends (TL32).
         bool tilingLayouts     = true;
         bool tilingSuggestions = true;
-        // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise.
-        theme::Appearance appearance = theme::kDefaultAppearance;
-        // The shell has pushed the appearance since this load: the dark rim waits for it (WindowRim.hpp, gate C2).
-        bool appearanceKnown = false;
+        // The appearance the chrome follows (config "appearance", audit UX-06); dark until the shell says otherwise, and
+        // whether the shell has pushed it since this load (the dark rim waits for it, WindowRim.hpp). Reset by teardown().
+        theme::PushedAppearance appearance;
 
         // Live titlebars. Owned by their windows; each removes itself in its destructor.
         std::vector<CGrassfieldTitlebar*> titlebars;

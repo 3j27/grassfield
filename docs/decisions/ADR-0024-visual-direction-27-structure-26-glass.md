@@ -341,8 +341,10 @@ review (2026-11-03) failed it:
   above.
   renderBorder draws only on the ring's band (the damage less the inner box), so there is no offscreen pass.
 - The plugin learns the appearance as the titlebar does (the shell's `config("appearance")`), and the rim waits for the
-  shell's first push after a load: a plugin reloaded in a light session never flashes a dark rim. A change of key window
-  or of appearance damages the rims concerned (their bands); the unload damages every rim's band, then removes it (C2).
+  shell's first push after a load. Hyprland keeps an unloaded plugin's library mapped ("this library stays in memory"),
+  so its statics survive a reload: the unload resets the pushed appearance and the rims' globals (review of 5597c201),
+  and a plugin reloaded in a session turned light meanwhile draws no dark rim before the push. A change of key window or
+  of appearance damages the rims concerned (their bands); the unload damages every rim's band, then removes it (C2).
 - Measured (GF-REF 1.25, Hyprland 0.56.2, `tests/compositor/window_edge.sh`; levels, the mean of the channels; macOS 27's
   Notes: window 41, rim 62, the white 0.10 of 1 pt over its two device pixels):
   - Settings (a Grassfield app, its own chrome): window 39, rim 66 on all four sides, white 0.100 per point (0.125 in

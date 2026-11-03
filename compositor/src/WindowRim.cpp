@@ -40,8 +40,8 @@ namespace {
 
     rim::WindowState stateOf(const PHLWINDOW& w) {
         const auto& fs = Fullscreen::controller();
-        return rim::WindowState{.appearance      = gf::state().appearance,
-                                .appearanceKnown = gf::state().appearanceKnown,
+        return rim::WindowState{.appearance      = gf::state().appearance.current,
+                                .appearanceKnown = gf::state().appearance.known,
                                 .active          = Desktop::focusState() && Desktop::focusState()->window() == w,
                                 .fullscreen      = fs && fs->getFullscreenModes(w).internal == Fullscreen::FSMODE_FULLSCREEN,
                                 .edged           = edged(w)};
@@ -175,12 +175,16 @@ void CGrassfieldRim::onActiveWindowChanged(const PHLWINDOW& window) {
     gf::guarded("rim onActiveWindowChanged", [&] {
         const auto previous = lastActive().lock();
         lastActive()        = window;
-        if (gf::state().appearance != gf::theme::Appearance::Dark)
+        if (!gf::state().appearance.known || gf::state().appearance.current != gf::theme::Appearance::Dark)
             return; // no rim to change
         damageRimOf(previous);
         if (window != previous)
             damageRimOf(window);
     });
+}
+
+void CGrassfieldRim::resetGlobals() {
+    gf::guarded("rim resetGlobals", [] { lastActive() = PHLWINDOWREF{}; });
 }
 
 void CGrassfieldRim::onAppearanceChanged() {

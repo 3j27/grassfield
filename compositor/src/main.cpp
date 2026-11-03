@@ -280,6 +280,11 @@ namespace {
         step("ipc", [] { gf::ipc::unregisterAll(); });
         step("rims", [] { removeAllRims(); }); // before the titlebars: a rim's frame (its damage) still has the bar's band
         step("titlebars", [] { removeAllTitlebars(); });
+        // Hyprland keeps an unloaded plugin's library mapped ("this library stays in memory"): a reload finds these
+        // statics as they were. The appearance (and whether the shell has said it) and the rims' globals start over, so a
+        // reload in a session turned light draws no dark rim before the shell's push (FR57, gate C2).
+        step("appearance", [&s] { s.appearance.reset(); });
+        step("rim globals", [] { CGrassfieldRim::resetGlobals(); });
         step("withdraw", [] { gf::ipc::postWithdrawn(); }); // last: the shell drops every feature and uses its fallbacks
         s.active = false;
     }

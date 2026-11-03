@@ -105,9 +105,11 @@ rendering DBusMenu menus (that is `grassfield-menu-bridge` and the shell, step B
   rounding_power / 2 = 26 pt, times the scale: 32 px at 1.25, at the rounding power) and its inner arc concentric, so the
   rim is continuous round the corners; Hyprland draws a border only on its ring's band, so no offscreen pass. None in the light appearance and none in full screen (macOS); Hyprland's maximized mode and Fill keep
   it, inside the frame (a filled window's margins stay the wallpaper). A change of key window or appearance damages the
-  rims concerned (their bands). The rim waits for the shell's first `appearance` push after a load (a plugin reloaded
-  in a light session never flashes a dark rim; a plugin without the shell draws none). Without the plugin there is no
-  rim (C2); the unload damages every rim's band, then removes it.
+  rims concerned (their bands). The rim waits for the shell's first `appearance` push after a load; the unload resets
+  the pushed appearance and the rims' globals (Hyprland keeps an unloaded plugin's library mapped, its statics would
+  survive a reload), so a plugin reloaded in a session turned light draws no dark rim before the push, and a plugin
+  without the shell draws none. Without the plugin there is no rim (C2); the unload damages every rim's band, then
+  removes it.
 - **FR4** Close, minimize, zoom buttons: 14 px circles, 9 px gaps (23 px pitch), first one 9 px from the left
   edge (centres at x 16, 39, 62), vertically centered (y 16); each is hit inside its circle grown by 1/6 of the
   diameter (2.33 px), and the gaps between the buttons stay drag area; colors from `compositor/src/core/Theme.hpp` (close `#E83A52`, minimize `#E6C619`,

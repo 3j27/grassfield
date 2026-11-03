@@ -67,11 +67,12 @@ namespace gf::rim {
     // there); only on a window whose edges Hyprland draws (not an X11 window that wants no border, not decorate = false).
     // Hyprland's maximized mode and the plugin's Fill keep it: they are ordinary windows with an edge (macOS's zoomed
     // window), and the rim never leaves the frame, so a filled window's margins stay the wallpaper.
-    // The appearance counts only once the shell has said it (config "appearance"): a plugin loaded or reloaded in a light
-    // session never flashes a dark rim before the shell's push (gate C2), and a plugin without the shell draws none.
+    // The appearance counts only once the shell has said it since this load (config "appearance", theme::PushedAppearance,
+    // which the unload resets: Hyprland keeps an unloaded plugin's library mapped). So a plugin loaded or reloaded in a
+    // light session draws no dark rim before the shell's push (gate C2), and a plugin without the shell draws none.
     struct WindowState {
         theme::Appearance appearance      = theme::kDefaultAppearance;
-        bool              appearanceKnown = true;  // the shell has pushed the appearance since the plugin loaded
+        bool              appearanceKnown = false; // the shell has pushed the appearance since the plugin loaded
         bool              active          = false; // the key window: 0.10 per point, else 0.08
         bool              fullscreen      = false; // Hyprland's full screen
         bool              edged           = true;  // Hyprland draws its border and shadow on it

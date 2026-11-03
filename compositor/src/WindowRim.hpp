@@ -39,6 +39,10 @@ class CGrassfieldRim : public IHyprWindowDecoration {
     // The appearance changed (config "appearance"): every rim is drawn again, or goes (light).
     static void onAppearanceChanged();
 
+    // Unload (main.cpp teardown, after every rim is removed): the rims' own globals as on a fresh load. Hyprland keeps an
+    // unloaded plugin's library mapped, so a reload would otherwise find them as they were (the last key window).
+    static void resetGlobals();
+
   private:
     // The frame in global layout coordinates as drawn now: the surface and its shown titlebar, at the window's animated
     // position, moved by its floating offset and its workspace's render offset (as Hyprland moves its border); nothing

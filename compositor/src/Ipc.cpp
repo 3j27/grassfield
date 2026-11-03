@@ -345,9 +345,7 @@ namespace gf::ipc {
                         logRequest(Log::WARN, "config: rejected ({} = dark|light)", gfc::kConfigAppearance);
                         return;
                     }
-                    const bool changed = state().appearance != *appearance || !state().appearanceKnown;
-                    state().appearance      = *appearance;
-                    state().appearanceKnown = true;
+                    const bool changed = state().appearance.push(*appearance);
                     logRequest(Log::INFO, "config: {} = {}", gfc::kConfigAppearance, value.view());
                     if (changed) {
                         CGrassfieldTitlebar::onAppearanceChanged();

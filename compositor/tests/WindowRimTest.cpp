@@ -12,8 +12,12 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <numbers>
+#include <sstream>
+#include <string>
 
 namespace {
     using gf::rim::Box;
@@ -109,17 +113,17 @@ TEST(WindowRim, ItsTokensAreMacOs27sRim) {
 TEST(WindowRim, OnlyTheDarkAppearanceHasARim) {
     using gf::rim::WindowState;
     using gf::theme::Appearance;
-    EXPECT_EQ(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .active = true}), 0.10);
-    EXPECT_EQ(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .active = false}), 0.08);
-    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Light, .active = true})) << "nothing changes in light";
-    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Light, .active = false}));
+    EXPECT_EQ(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .appearanceKnown = true, .active = true}), 0.10);
+    EXPECT_EQ(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .appearanceKnown = true, .active = false}), 0.08);
+    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Light, .appearanceKnown = true, .active = true})) << "nothing changes in light";
+    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Light, .appearanceKnown = true, .active = false}));
 }
 
 TEST(WindowRim, AFullScreenWindowOrOneWithoutEdgesHasNone) {
     using gf::rim::WindowState;
     using gf::theme::Appearance;
-    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .active = true, .fullscreen = true})) << "macOS: no edge in full screen";
-    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .active = true, .edged = false}))
+    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .appearanceKnown = true, .active = true, .fullscreen = true})) << "macOS: no edge in full screen";
+    EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = Appearance::Dark, .appearanceKnown = true, .active = true, .edged = false}))
         << "an X11 window without borders, decorate = false";
 }
 
@@ -129,6 +133,58 @@ TEST(WindowRim, NoneUntilTheShellHasSaidTheAppearance) {
     using gf::rim::WindowState;
     EXPECT_FALSE(gf::rim::opacityPerPt(WindowState{.appearance = gf::theme::Appearance::Dark, .appearanceKnown = false, .active = true}));
     EXPECT_TRUE(gf::rim::opacityPerPt(WindowState{.appearance = gf::theme::Appearance::Dark, .appearanceKnown = true, .active = true}));
+}
+
+TEST(WindowRim, ByDefaultTheAppearanceIsNotKnown) {
+    EXPECT_FALSE(gf::rim::opacityPerPt(gf::rim::WindowState{.active = true})) << "a state built without the shell's word draws nothing";
+}
+
+TEST(WindowRim, TheShellsPushMakesTheAppearanceKnownAndSaysWhetherToRedraw) {
+    gf::theme::PushedAppearance pushed;
+    EXPECT_FALSE(pushed.known);
+    EXPECT_EQ(pushed.current, gf::theme::kDefaultAppearance);
+    EXPECT_TRUE(pushed.push(gf::theme::Appearance::Dark)) << "the first push redraws, even with the default's value";
+    EXPECT_TRUE(pushed.known);
+    EXPECT_FALSE(pushed.push(gf::theme::Appearance::Dark)) << "the same again: nothing to redraw";
+    EXPECT_TRUE(pushed.push(gf::theme::Appearance::Light));
+    EXPECT_EQ(pushed.current, gf::theme::Appearance::Light);
+}
+
+TEST(WindowRim, AReloadStartsAsAFreshLoadSoALightSessionNeverGetsADarkRimBeforeThePush) {
+    // Review of 5597c201: Hyprland keeps an unloaded plugin's library mapped, so its statics survive a reload. Unloaded in
+    // dark, the session turned light, reloaded: without the reset the rim drew dark until the shell's push.
+    gf::theme::PushedAppearance pushed;
+    pushed.push(gf::theme::Appearance::Dark);
+    pushed.reset(); // teardown()
+    EXPECT_FALSE(pushed.known);
+    EXPECT_EQ(pushed.current, gf::theme::kDefaultAppearance);
+    EXPECT_FALSE(gf::rim::opacityPerPt(
+        gf::rim::WindowState{.appearance = pushed.current, .appearanceKnown = pushed.known, .active = true}))
+        << "no rim between the reload and the shell's push";
+    EXPECT_TRUE(pushed.push(gf::theme::Appearance::Light)) << "the push after the reload redraws";
+    EXPECT_FALSE(gf::rim::opacityPerPt(gf::rim::WindowState{.appearance = pushed.current, .appearanceKnown = pushed.known, .active = true}));
+}
+
+TEST(WindowRim, TheUnloadResetsTheAppearanceAndTheRimsGlobals) {
+    // The glue cannot run here: read main.cpp's teardown() and check it resets both, after the rims are removed.
+    std::ifstream in(std::filesystem::path{GF_PLUGIN_SOURCE_DIR} / "main.cpp");
+    ASSERT_TRUE(in.good());
+    std::stringstream text;
+    text << in.rdbuf();
+    const std::string source = text.str();
+    const auto        begin  = source.find("void teardown()");
+    ASSERT_NE(begin, std::string::npos);
+    const auto end = source.find("\n    }\n", begin);
+    ASSERT_NE(end, std::string::npos);
+    const std::string body  = source.substr(begin, end - begin);
+    const auto        rims  = body.find("removeAllRims()");
+    const auto        reset = body.find("appearance.reset()");
+    const auto        glob  = body.find("CGrassfieldRim::resetGlobals()");
+    ASSERT_NE(rims, std::string::npos);
+    EXPECT_NE(reset, std::string::npos) << "teardown() must reset the pushed appearance";
+    EXPECT_NE(glob, std::string::npos) << "teardown() must reset the rims' globals";
+    EXPECT_GT(reset, rims) << "after the rims are gone";
+    EXPECT_GT(glob, rims);
 }
 
 TEST(WindowRim, ItIsOnePointInWholeDevicePixelsAsHyprlandsBorder) {
