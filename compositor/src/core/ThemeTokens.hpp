@@ -87,6 +87,14 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowItemsGap = 8;
     // toolbar trailing inset 8 +-2 to the last item (was 14: 15) [ref: docs/audits/visual-tahoe-2026-10-25.md § Files — partly close, 4/10]
     inline constexpr int kWindowItemsInset = 8;
+    // the floating sidebar panel's distance from the window's left, top and bottom edges, and the gutter between it and the content: macOS 26 System Settings panel at x 16, y 16, bottom 1785 of 1801 px at 2 px/pt = 8 pt (ss-004-005, measured 2026-11-03; Finder 8-9 px at 1.07) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr int kWindowSidebarPanelInset = 8;
+    // the floating sidebar panel's corner, concentric with the 26-pt window corner at the 8-pt inset (26 - 8 = 18); circle fit on the capture's corner edge points 18 to 19 (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md]
+    inline constexpr int kWindowSidebarPanelRadius = 18;
+    // the light rim that lights the floating sidebar panel, one device pixel: pure white (255) on the 249 panel in the light appearance, so the knob colour at full opacity (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr double kWindowSidebarPanelRimOpacity = 1.0;
+    // estimate: the same rim in the dark appearance, the knob colour at the toolbar's inner-rim 0.08 (no dark capture of the panel) [ref: ADR-0024 amendment 2026-11-03]
+    inline constexpr double kWindowSidebarPanelRimOpacityDark = 0.08;
     // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
     inline constexpr uint32_t kWindowEdgeDark = 0xFFFFFF;
     // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
