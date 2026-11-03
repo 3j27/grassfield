@@ -33,3 +33,7 @@ bcb8a5b65f5c48797b47f709444104e14fef314e:docs/audits/store-2026-10-27/probes-4-o
 # Omarchy's public package-signing fingerprint a third time, held as OMARCHY_KEY in the second commit of the rc-channel gate
 # (ADR-0041 step 2c, PR #104); the next commit renamed it FPR, as tests/integration/update_helper.sh names it. Not a secret.
 f4ecdbc680b2069f9dd88b935ddd10cfff2aa1e0:scripts/gates/rc-toolkit.sh:generic-api-key:40
+
+# The stub signing tool of tests/shell/make_signing_key.sh (feat/hosting-and-key, 2026-11-03) prints an armored-key header
+# around the text STUB-SECRET-KEY-MATERIAL; there is no key. The file now builds the header at runtime.
+9706d84da2d8d474aa1d8e7a74c3c79b36ec8844:tests/shell/make_signing_key.sh:private-key:72
