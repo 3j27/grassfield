@@ -386,9 +386,9 @@ Scope {
         return path.substring(path.lastIndexOf("/") + 1);
     }
 
-    // `fit` and `color` are the settings' own unless given. `var`, not `string`: an omitted argument of a typed `string`
-    // parameter arrives as the text "undefined" (Qt 6.11), which no fit accepts, so a file wallpaper never prepared
-    // ("invalid-path" in the journal, the artwork shown for good).
+    // `fit` and `color` are the settings' own unless the caller decides (the online aspect rule).
+    // `var`, not `string`: an omitted argument of a typed `string` parameter arrives as the text "undefined" (Qt 6.11 and
+    // 6.12), which no fit accepts, so every file wallpaper failed with invalid-path ("This path can't be used", rc1-18).
     function startPrepare(path: string, fit: var, color: var): void {
         currentSrc = path;
         status = imageUrl === "" ? "preparing" : status;

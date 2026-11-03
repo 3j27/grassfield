@@ -1369,6 +1369,21 @@ TestCase {
 
     // The window needs Quickshell, so its contract is read from the sources (ADR-0040 ID-3, ID-4, ID-16): it maps only with
     // its first frame, bounded by the token; the compositor adds no fade; the journal lines are logged.
+    // A file wallpaper prepares when its caller gives only the path (WallpaperFeed.qml's file, folder and keep callers): an
+    // omitted argument of a typed `string` parameter arrives as the text "undefined", which no fit accepts (the owner's
+    // rc1-18: every photograph said "This path can't be used").
+    function test_aFileWallpaperPreparesWithOnlyItsPath() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../shell/desktop/WallpaperFeed.qml"), false);
+        xhr.send();
+        const f = xhr.responseText;
+        verify(f.length > 0);
+        verify(/function startPrepare\(path: string, fit: var, color: var\)/.test(f), "startPrepare takes untyped fit and color");
+        verify(/typeof fit === "string" && fit !== "" \? fit : cfg\.fit/.test(f) && /typeof color === "string" && color !== "" \? color : cfg\.color/.test(f),
+               "an omitted fit or colour falls back to the settings' own");
+        verify(/startPrepare\(c\.path\);/.test(f), "the file caller gives only the path");
+    }
+
     function test_theWindowMapsOnceWithItsFirstFrame() {
         function text(rel) {
             const xhr = new XMLHttpRequest();

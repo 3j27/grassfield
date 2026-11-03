@@ -1808,7 +1808,9 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
 - **9-8. The unit.** **Choice:** hardening without namespaces, as 2c-6 (the bridge reads `/proc/<pid>/exe` of its callers
   and needs root's files to show as root's): `NoNewPrivileges`, `RestrictAddressFamilies=AF_UNIX`, `RestrictNamespaces`,
   `RestrictRealtime`, `RestrictSUIDSGID`, `LockPersonality`, `MemoryDenyWriteExecute`, `SystemCallFilter=@system-service`,
-  an empty capability set; `LimitCORE=0`, `MemorySwapMax=0` and a non-dumpable process; `UnsetEnvironment` of
+  no capability (amended 2026-11-02: no `CapabilityBoundingSet=` line, which a user manager cannot apply outside a user
+  namespace: every start failed with status 218 on the owner's rc1-16; `NoNewPrivileges` keeps the process from gaining
+  any, the user manager itself holds only CAP_WAKE_ALARM in its inheritable set, opus security review PASS); `LimitCORE=0`, `MemorySwapMax=0` and a non-dumpable process; `UnsetEnvironment` of
   `G_DBUS_DEBUG`, `G_MESSAGES_DEBUG`, `G_DEBUG`, `QDBUS_DEBUG` and `QT_NO_GLIB`; `Restart=on-failure` with the menu
   bridge's back-off; `RuntimeDirectory=grassfield`, kept, shared with the menu bridge; no `[Install]`: started by
   `autostart.lua` before the shell with `--no-block`. Budget measured in the container (Qt 6.12, gcr 4.4.1): 18.5 MB
@@ -2735,6 +2737,21 @@ none widens a rule of Q12's text, which names "BlueZ pairing").
   the next log-in. In the Omarchy session the bridge never starts (`ConditionEnvironment=GRASSFIELD_SESSION=1`, started only
   by Grassfield's `autostart.lua`), and bt-agent starts with the session and now stops with it. `systemd-analyze --user
   verify` of both units (systemd 262): rc 0. Rule applied: fail closed, never another agent beside the sheet.
+  (Amended 2026-11-03, opus security review of the owner's rc1-17 and rc1-18 logins: the condition did not hold.
+  Omarchy's bt-agent.service is WantedBy graphical-session.target with no ordering, so it started, and its
+  `ConditionEnvironment=!GRASSFIELD_SESSION=1` was read, before autostart.lua's `uwsm finalize` imported the variable. In
+  the Grassfield session it registered and asked to be bluetoothd's default agent at 01:05:47. bt-agent also ignores
+  SIGTERM, so the prompter's synchronous stop waited for the 90 s stop timeout and timed out the prompter's own start: an
+  auto-accepting agent was the default for 90 s at every log-in. Ordering it after the target is not enough, because
+  Hyprland itself reports the session ready, so the target is reached before `uwsm finalize`; Omarchy's crash-watch and
+  migrate-notify, already ordered so, ran in the Grassfield session too.
+  Now `packaging/uwsm/env-grassfield`, which uwsm's preloader sources only for the Grassfield session before the compositor
+  starts, exports `GRASSFIELD_SESSION=1`, so every such condition reads it; uwsm unsets it at the session's end. The
+  drop-in also orders bt-agent `After=graphical-session.target` and sets `KillSignal=SIGKILL`, since bt-agent ignores
+  SIGTERM, holds no state, and bluetoothd drops an agent whose D-Bus connection closes. A leftover from an Omarchy session
+  is gone at once. The prompter's stop stays synchronous, so its pairing agent never asks to be the default while
+  bt-agent still runs. To check at the next real log-in: `journalctl --user -u bt-agent -u grassfield-prompter` shows
+  bt-agent skipped by its condition and the prompter started within seconds.)
 - **10-2. When is the agent registered, with which capability, and is it the default?** **Choice:** registered (`KeyboardDisplay`:
   every method can be drawn, D-11) only while a shell whose hello lists `bluetooth` is connected, then `RequestDefaultAgent`
   (an `AlreadyExists` answer means this connection's agent is still registered, and the default is asked all the same);
@@ -3050,8 +3067,9 @@ one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after th
   processes; its own `/proc/self/fdinfo` stays readable) and the unit sets `LimitCORE=0` and `MemorySwapMax=0`. Without a
   wallet file (`~/.local/share/kwalletd/*.kwl`) nothing is asked of KWallet at all.
 - **Hardening.** Runs as the user; `NoNewPrivileges`, `RestrictAddressFamilies=AF_UNIX`, `RestrictNamespaces`,
-  `SystemCallFilter=@system-service`, `LockPersonality`, `RestrictRealtime`, `RestrictSUIDSGID`, an empty capability set,
-  `MemoryMax=96M`, `TasksMax=16` (`systemd-analyze security`: 3.3 OK); no option that puts a user unit in a user
+  `SystemCallFilter=@system-service`, `LockPersonality`, `RestrictRealtime`, `RestrictSUIDSGID`, no capability gained
+  (amended 2026-11-02: the `CapabilityBoundingSet=` line is gone, as in the prompter's unit, decision 9-8; the score below
+  was measured with it and is not re-measured), `MemoryMax=96M`, `TasksMax=16` (`systemd-analyze security`: 3.3 OK); no option that puts a user unit in a user
   namespace of its own (decision 2c-6). Outside a Grassfield session it refuses (exit 2). The overrides of the executables
   and timeouts that the tests use are honoured only in a dev session (ADR-0019), and a dev run refuses any bus but a
   private test bus (`GF_TEST_BUS=1`, the address under `GF_TEST_BUS_DIR`, the rule of the fakes): never the owner's bus.
@@ -3125,6 +3143,8 @@ one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after th
   run and quit nothing). Options: (a) keep that sandbox and identify peers by name, command line or cgroup, which any of
   the user's processes can claim; (b) give up the identity checks; (c) keep the identity checks and harden without
   namespaces (`NoNewPrivileges`, seccomp filters, `AF_UNIX` only, no capabilities, memory and task limits). **Choice: (c).**
+  (Amended 2026-11-02: "no capabilities" is `NoNewPrivileges`, not a `CapabilityBoundingSet=` line, which a user manager
+  cannot apply without the user namespace this choice rules out; see decision 9-8's amendment.)
   Rule applied: no technical intervention for the user means the passwords must reach the keychain and only ksecretd may
   be stopped, which needs the identity of both peers; the helper writes one file and talks only D-Bus, so a read-only view
   of the file system adds less than that identity. `tests/shell/session_services.sh` keeps every option of systemd's list

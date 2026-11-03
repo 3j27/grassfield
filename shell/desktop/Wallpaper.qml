@@ -268,7 +268,10 @@ Scope {
                     const ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(url, 0, 0, width, height);
-                    const lum = BarTone.pixelsLuminance(ctx.getImageData(0, 0, width, Tokens.menubarToneSampleRows).data);
+                    // The canvas keeps its picture at the window's pixel ratio (1.25 on the owner's panel): the whole strip is read, not the
+                    // top-left width x rows pixels (about a fifth of it too little on a 1.25 output, half of it on a 2x one).
+                    const k = Math.max(1, win.devicePixelRatio);
+                    const lum = BarTone.pixelsLuminance(ctx.getImageData(0, 0, Math.round(width * k), Math.round(Tokens.menubarToneSampleRows * k)).data);
                     unloadImage(url);
                     // Not inside the paint: the bar's bindings must change outside the render sync.
                     Qt.callLater(() => BarTone.report(win.modelData.name, lum));
@@ -311,6 +314,8 @@ Scope {
                     const ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
                     ctx.drawImage(grab.url, 0, 0, width, height);
+                    // width x height as is, not at the window's ratio: the grab is tagged at the window's ratio, and drawImage to
+                    // width x height fills only its top-left 1/ratio of a canvas that has that ratio (tests/unit/tst_wallpapergrab.qml).
                     const grid = GlassTint.gridOf(ctx.getImageData(0, 0, width, height).data, width, height, Tokens.glassGridColumns, Tokens.glassGridRows, win.width, win.height);
                     unloadImage(grab.url);
                     win.gridGrab = null;

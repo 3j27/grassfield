@@ -193,11 +193,10 @@ Item {
                 if (probe.key === "")
                     return;
                 const n = Tokens.iconModeOwnTileProbeSize;
-                const ctx = canvas.getContext("2d");
-                ctx.clearRect(0, 0, n, n);
-                ctx.drawImage(probe.key, 0, 0, n, n);
-                const data = ctx.getImageData(0, 0, n, n);
-                probe.finish(IconTile.measure(data.data, n, Tokens).side);
+                // The image's own pixels (createImageData of the loaded url), never drawn: drawImage scales an image://icon pixmap
+                // by the output's ratio (half the box on a 1.25 output: every icon then looked "empty", not a tile, a pale plate
+                // around a coloured tile on every Dock icon) and a Canvas keeps its picture at the window's ratio.
+                probe.finish(IconTile.sideOfImageData(canvas.getContext("2d").createImageData(probe.key), n, Tokens));
             }
 
             width: Tokens.iconModeOwnTileProbeSize

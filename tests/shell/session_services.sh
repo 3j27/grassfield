@@ -99,8 +99,8 @@ done
 u=$pk/systemd/grassfield-secrets-handover.service
 desc="grassfield-prompter.service, grassfield-secrets-handover.service, grassfield-portal-settings.service and grassfield-security.service (the prompter, the portal backend and the security process not waited for): started before the shell in the same chain, after the menu bridge"
 check bash -c 'grep -qF "start grassfield-menu-bridge.service; systemctl --user start --no-block grassfield-prompter.service; systemctl --user start grassfield-secrets-handover.service; systemctl --user start --no-block grassfield-portal-settings.service; systemctl --user start --no-block grassfield-security.service; systemctl --user start grassfield-shell.service;" "$1"' _ "$auto"
-desc="grassfield-secrets-handover.service: started by the session, skips itself outside it, NoNewPrivileges, seccomp, installed by the PKGBUILD"
-check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -q "for unit in .*secrets-handover" "$2"' _ "$u" "$pk/arch/PKGBUILD"
+desc="grassfield-secrets-handover.service: started by the session, skips itself outside it, NoNewPrivileges, seccomp, no CapabilityBoundingSet= (no user namespace), installed by the PKGBUILD"
+check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && ! grep -q "^CapabilityBoundingSet=" "$1" && grep -q "for unit in .*secrets-handover" "$2"' _ "$u" "$pk/arch/PKGBUILD"
 desc="grassfield-secrets-handover.service: no core file, no swap, no Qt D-Bus message dump (secret values pass through it)"
 check bash -c 'grep -qx "LimitCORE=0" "$1" && grep -qx "MemorySwapMax=0" "$1" && grep -qx "UnsetEnvironment=QDBUS_DEBUG" "$1"' _ "$u"
 # In a user unit these options make systemd add PrivateUsers=self (systemd src/core/exec-invoke.c,
@@ -162,8 +162,8 @@ check bash -c 'grep -qx "Type=oneshot" "$1" && grep -qx "ExecStart=/usr/lib/gras
 # The password-prompt bridge (ADR-0035 D-9): it identifies its callers through /proc/<pid>/exe, so no option may put it in a
 # user namespace of its own (decision 9-8, as 2c-6); passwords pass through it.
 u=$pk/systemd/grassfield-prompter.service
-desc="grassfield-prompter.service: skips itself outside the session, NoNewPrivileges, seccomp, AF_UNIX only, no capability"
-check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && grep -qx "CapabilityBoundingSet=" "$1" && grep -qx "MemoryDenyWriteExecute=yes" "$1"' _ "$u"
+desc="grassfield-prompter.service: skips itself outside the session, NoNewPrivileges, seccomp, AF_UNIX only, and no CapabilityBoundingSet= (without a user namespace a user manager cannot apply it: status 218 on every start)"
+check bash -c 'grep -qx "ConditionEnvironment=GRASSFIELD_SESSION=1" "$1" && grep -qx "NoNewPrivileges=yes" "$1" && grep -qx "SystemCallFilter=@system-service" "$1" && grep -qx "RestrictAddressFamilies=AF_UNIX" "$1" && ! grep -q "^CapabilityBoundingSet=" "$1" && grep -qx "MemoryDenyWriteExecute=yes" "$1"' _ "$u"
 desc="grassfield-prompter.service: no core file, no swap, no GDBus or Qt message dump, Qt keeps GLib's event loop"
 check bash -c 'grep -qx "LimitCORE=0" "$1" && grep -qx "MemorySwapMax=0" "$1" && grep -qx "UnsetEnvironment=G_DBUS_DEBUG G_MESSAGES_DEBUG G_DEBUG QDBUS_DEBUG QT_NO_GLIB" "$1"' _ "$u"
 desc="grassfield-prompter.service: none of the options that would put it in a user namespace of its own"
@@ -178,6 +178,10 @@ check bash -c 'grep -q "RUNTIME DESTINATION lib/grassfield" "$1" && grep -q "pac
 # (Conflicts= would let any start of bt-agent in this session stop the bridge, although bt-agent's condition then skips it).
 desc="the bt-agent drop-in skips it in this session and stops it with the session; grassfield-prompter.service stops a leftover one first, without Conflicts="
 check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "ExecStartPre=-/usr/bin/systemctl --user stop bt-agent.service" "$2" && ! grep -q "^Conflicts=" "$2"' _ "$pk/systemd/bt-agent.service.d/10-grassfield.conf" "$u"
+# 2026-11-03: bt-agent's condition must be read after the session imports GRASSFIELD_SESSION (After= the target), and a stop
+# must not wait 90 s on an agent that ignores SIGTERM (it ran in the Grassfield session and timed the prompter's start out).
+desc="the session environment carries GRASSFIELD_SESSION=1 before the compositor starts; the bt-agent drop-in orders it after graphical-session.target and kills it at once (it ignores SIGTERM)"
+check bash -c 'grep -qx "export GRASSFIELD_SESSION=1" "$1" && grep -qx "After=graphical-session.target" "$2" && grep -qx "\[Service\]" "$2" && grep -qx "KillSignal=SIGKILL" "$2"' _ "$pk/uwsm/env-grassfield" "$pk/systemd/bt-agent.service.d/10-grassfield.conf"
 # udiskie's password command (ADR-0035 D-9, step 9c): grassfield-askpass, built and installed with the bridge, where the
 # automount unit runs it, the disk's name one argument of udiskie's own formatting.
 desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
@@ -211,5 +215,15 @@ else
 fi
 desc="autostart runs the Omarchy post-boot hooks, the power profile and the lid reconcile (what Omarchy's autostart did)"
 check bash -c 'grep -q "omarchy-hook post-boot" "$1" && grep -q "omarchy-powerprofiles-init" "$1" && grep -q "grassfield-lid reconcile" "$1"' _ "$auto"
+
+# A user manager has no CAP_SETPCAP: it can drop a unit's capability bounding set only inside the user namespace that a
+# mount, network or kernel protection makes it add (PrivateUsers=self). CapabilityBoundingSet= in a user unit without one
+# fails every start at step CAPABILITIES (status 218): grassfield-prompter and grassfield-secrets-handover on rc1-16.
+desc="every Grassfield user unit with CapabilityBoundingSet= also has an option that gives it a user namespace"
+# The options are the list the prompter's unit must not have (above); a value of no, false or 0 gives no namespace.
+check bash -c 'for f in "$1"/*.service; do grep -q "^CapabilityBoundingSet=" "$f" || continue
+  grep -E "^(PrivateUsers|PrivateTmp|PrivateDevices|PrivateNetwork|NetworkNamespacePath|PrivateIPC|IPCNamespacePath|PrivateMounts|PrivatePIDs|MountAPIVFS|BindLogSockets|BindPaths|BindReadOnlyPaths|TemporaryFileSystem|RootDirectory|RootImage|ExtensionDirectories|ExtensionImages|ProtectSystem|ProtectHome|ProtectProc|ProcSubset|ProtectKernelTunables|ProtectKernelModules|ProtectKernelLogs|ProtectControlGroups|ProtectClock|ProtectHostname|ReadWritePaths|ReadOnlyPaths|InaccessiblePaths|ExecPaths|NoExecPaths)=" "$f" |
+    grep -qvE "=(no|false|0|)$" || { echo "  $f" >&2; exit 1; }
+done' _ "$pk/systemd"
 
 exit $fail

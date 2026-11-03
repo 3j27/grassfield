@@ -44,12 +44,37 @@ T.ScrollBar {
         }
     }
 
+    // Shown while the view moves, under the pointer or while dragged; it stays a moment after that, then fades out (macOS 27
+    // overlay scroll bars: nothing is drawn over a still view).
+    readonly property bool showing: (root.standalone ? root.flickable.moving : root.active) || root.hovered || root.pressed
+    property bool lingering: false
+    onShowingChanged: {
+        if (root.showing) {
+            hideTimer.stop();
+        } else {
+            root.lingering = true;
+            hideTimer.restart();
+        }
+    }
+
+    Timer {
+        id: hideTimer
+        interval: Tokens.controlScrollbarHideDelayMs
+        onTriggered: root.lingering = false
+    }
+
     contentItem: Rectangle {
         implicitWidth: Tokens.controlScrollbarWidth
         implicitHeight: Tokens.controlScrollbarWidth
         radius: Math.min(width, height) / 2
         color: Appearance.withAlpha(Appearance.colors.text, root.pressed ? Tokens.controlScrollbarPressedOpacity : Tokens.controlScrollbarThumbOpacity)
-        opacity: (root.standalone ? root.flickable.moving : root.active) || root.hovered || root.pressed ? 1 : Tokens.controlScrollbarIdleOpacity
+        opacity: root.showing || root.lingering ? 1 : Tokens.controlScrollbarIdleOpacity
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.duration(Tokens.motionNormal)
+            }
+        }
     }
 
     background: Item {}

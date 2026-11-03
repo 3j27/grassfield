@@ -42,6 +42,34 @@ TestCase {
         globalMenu: false
     }
 
+    // One image (a screenshot opened from Files): no sidebar toggle, so the title is the toolbar's first item after the lights.
+    QtObject {
+        id: soloBackend
+        property var files: [{name: "Screenshot 2026-11-02 at 17.45.34.png", path: "/x/s.png", url: "file:///x/s.png", kind: "image"}]
+        property var errors: []
+        property bool glance: false
+        property bool browsing: false
+        property int startIndex: 0
+        property bool dark: false
+        property bool reduceMotion: true
+        property bool increaseContrast: false
+        property real textScale: 1
+        property string accentColor: "multicolor"
+        property string accentHighlight: "pink"
+        property string shortcutStyle: "pc"
+        property string titlebarDoubleClick: "zoom"
+        property bool canMinimize: true
+        function inspect(i) {
+            return {ok: true, kind: "image", name: files[i].name, url: files[i].url, width: 3840, height: 2160, frames: 1, animated: false, size: "5 MB", type: "PNG image", modified: "today", folder: "/x"};
+        }
+    }
+
+    Viewer {
+        id: soloViewer
+        backend: soloBackend
+        globalMenu: false
+    }
+
     function test_startsAtOpenedFile() {
         compare(viewer.current, 1);
         compare(viewer.title, "b.png");
@@ -115,6 +143,22 @@ TestCase {
                 stack.push(it.children[i]);
         }
         verify(inputs > 0, "the search field at least");
+    }
+
+    // The title starts after the traffic lights (the toolbar's contentStart, the inset every app's leading items use), with and
+    // without the sidebar toggle in front of it; with no toggle it once started at the toolbar's left edge, under the lights.
+    function test_theTitleStartsAfterTheLights() {
+        verify(!soloViewer.hasSidebar, "the solo window has no sidebar toggle");
+        for (const v of [viewer, soloViewer]) {
+            const toolbar = findIn(v.contentItem, it => it.contentStart !== undefined && it.controls !== undefined);
+            verify(toolbar !== null, "the unified toolbar");
+            const title = textOf(v.contentItem, v.title);
+            verify(title !== null, "the title text of " + v.title);
+            verify(toolbar.contentStart > 0, "the lights reserve room");
+            const x = title.mapToItem(toolbar, 0, 0).x;
+            verify(x >= toolbar.contentStart, v.title + ": title x " + x + " is under the lights (contentStart " + toolbar.contentStart + ")");
+            verify(x + title.width <= v.width, "title stays in the window");
+        }
     }
 
     function test_toolbarRightIsLaidOut() {
