@@ -47,8 +47,10 @@ function zoom(win, fullScreen) {
         win.showMaximized();
 }
 
-// A double-click on empty toolbar space does what `windows.titlebarDoubleClick` says: "zoom" (default), "minimize" or
-// "none". Anything else counts as "zoom" (the default), as the plugin does. Returns what it did.
+// A double-click on empty toolbar space does what `windows.titlebarDoubleClick` says: "fill" (the default since ADR-0036
+// D78) and "zoom" are the zoom light's request, "minimize" or "none". Anything else counts as "zoom". With the compositor
+// plugin's window-tiling the zoom request is Grassfield's Zoom, which fills the window with the tiling margins and brings
+// back its box (ADR-0015 Q4 amended); without it, Hyprland's maximized mode. Returns what it did.
 function doubleClick(win, action, canMinimize) {
     const what = action === "minimize" || action === "none" ? action : "zoom";
     if (what === "minimize") {

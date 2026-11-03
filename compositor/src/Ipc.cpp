@@ -585,7 +585,10 @@ namespace gf::ipc {
         // hl.plugin.grassfield.window_size(mode): the Full Screen and Zoom keys (bindings.lua; ADR-0040 step 1b's review: they
         // zoomed About This Computer, whose Window menu greys Zoom and Enter Full Screen). Returns Hyprland's own
         // hl.dsp.window.fullscreen({ mode = mode }), or a no-op when the focused window is of fixed size and not in that mode
-        // (tiler::sizeKeyActs). Untrusted: the mode is copied with a fixed limit and parsed strictly; anything else is a no-op.
+        // (tiler::sizeKeyActs). Zoom is Fill (ADR-0036 D78): for "maximized" the plugin zooms the focused window itself
+        // (tiler::zoomFocused: Fill, its box from before, out of Hyprland's maximized mode into Fill) and returns the no-op;
+        // Hyprland's dispatcher only when the zoom stays Hyprland's (no window-tiling, client chrome's own zoom, full
+        // screen). Untrusted: the mode is copied with a fixed limit and parsed strictly; anything else is a no-op.
         int luaWindowSize(lua_State* L) {
             const auto mode = readString<16>(L, 1);
             bool       act  = false;
@@ -598,6 +601,8 @@ namespace gf::ipc {
                 }
                 zoom = *parsed == tiling::SizeMode::Maximized;
                 act  = tiler::sizeKeyActs(*parsed);
+                if (act && zoom)
+                    act = tiler::zoomFocused() == tiling::ZoomStep::Hyprland;
             });
             return act ? pushFullscreenDispatcher(L, zoom ? "maximized" : "fullscreen") : pushNoOpDispatcher(L);
         }

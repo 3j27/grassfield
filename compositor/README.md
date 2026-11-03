@@ -300,7 +300,7 @@ module's `stop()` leaves its state as its `start()` expects it). What it means:
 | plugin → shell | socket2 event: the seat's keyboard focus entered a mapped window (feature `keyboard-focus`, with appmenu); the menu bar sends a chosen item's action once its window has the keyboard back | `grassfield>>{"v":"gfc/1","type":"keyboard-focus","address":"<hex>"}` |
 | shell → plugin | `Hyprland.dispatch("hl.plugin.grassfield.hello()")` (Quickshell) | re-posts capabilities |
 | shell → plugin | `hl.plugin.grassfield.minimize("0x<hex>", x, y, w, h)` / `restore(...)` | Dock tile in layout px; validated |
-| shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"none")` | allowlisted |
+| shell → plugin | `hl.plugin.grassfield.config("titlebarDoubleClick", "zoom"\|"minimize"\|"fill"\|"none")` | allowlisted |
 | shell → plugin | `hl.plugin.grassfield.appmenu("0x<hex>")` | re-posts that window's `appmenu` event (shell restart) |
 | shell → plugin | `hl.plugin.grassfield.overview("<json>")` | `{"on":bool,"durationMs":int,"curve":[…]?,"windows":[{"address","x","y","w","h"}…]}`; validated |
 | plugin → shell | socket2 event, overview state | `grassfield>>{"v":"gfc/1","type":"overview","state":"opening\|open\|closing\|closed","windows":N}` (+ `"reason"`: invalid, no-windows, no-chrome, unavailable, interrupted, fullscreen) |

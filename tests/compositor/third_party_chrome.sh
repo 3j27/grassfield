@@ -21,8 +21,10 @@
 # the same place:
 #   T  SESSION  its class carries the Hyprland tag grassfield-client-chrome (rule gf-client-chrome-third-party)
 #   S  PLUGIN   no plugin strip above it (the measurement of client_chrome.sh)
-#   Z  SESSION  its own zoom button maximizes it (fullscreen=1, exempt from the maximize suppression), a second press
-#               restores it
+#   Z  SESSION  its own zoom button zooms it, a second press restores it. Zoom is Fill (ADR-0036 D78, ADR-0015 Q4 amended):
+#               with the plugin's zoom-fill the request is the plugin's (fullscreen 0, larger on both axes; a window of fixed
+#               size, Obsidian's starter, is left as it is: its zoom does nothing, as a disabled zoom light on macOS);
+#               without it Hyprland's maximized mode (fullscreen=1, exempt from the maximize suppression)
 #   M  PLUGIN   its own minimize button puts it on special:minimized (xdg set_minimized, the client-chrome bridge P5),
 #               toward the Dock tile the shell computed (the plugin's log line, as for the titlebar's minimize light).
 #               GTK4 greys a minimize button the compositor does not offer: Nautilus's works only with P8 (minimize in
@@ -221,16 +223,27 @@ own_buttons() {
     read -r x y w _ _ < <(geom "$cls")
     if (($1 < 0)); then echo "$((x + w + $1)) $((y + dy))"; else echo "$((x + $1)) $((y + dy))"; fi
   }
+  local zx0 zy0 zw0 zh0 zx1 zy1 zw1 zh1 zx2 zy2 zw2 zh2 zaddr zfixed=0
+  read -r zx0 zy0 zw0 zh0 _ < <(geom "$cls")
+  zaddr=$(client "$cls" .address)
+  if ctl -j grassfield 2>/dev/null | jq -e '.features | index("zoom-fill")' >/dev/null 2>&1; then
+    ctl grassfield-tiling 2>/dev/null | jq -e --arg a "${zaddr#0x}" '(.fixed // []) | index($a) != null' >/dev/null 2>&1 && zfixed=2 || zfixed=1
+  fi
   # shellcheck disable=SC2046 # "x y"
   press $(at "$zdx")
   sleep 1
-  read -r _ _ _ _ fs1 < <(geom "$cls")
+  read -r zx1 zy1 zw1 zh1 fs1 < <(geom "$cls")
   # shellcheck disable=SC2046
   press $(at "$zdx")
   sleep 1
-  read -r _ _ _ _ fs2 < <(geom "$cls")
-  [[ $fs1 == 1 && $fs2 == 0 ]]
-  check "$label: its own zoom button zooms and unzooms (SESSION)" $? "fullscreen $fs1 then $fs2"
+  read -r zx2 zy2 zw2 zh2 fs2 < <(geom "$cls")
+  case $zfixed in
+    0) [[ $fs1 == 1 && $fs2 == 0 ]] ;;                                                       # Hyprland's maximized mode
+    1) [[ $fs1 == 0 && $fs2 == 0 ]] && ((zw1 > zw0 && zh1 > zh0)) && [[ "$zx2 $zy2 $zw2 $zh2" == "$zx0 $zy0 $zw0 $zh0" ]] ;; # Fill and back
+    2) [[ $fs1 == 0 && $fs2 == 0 && "$zx1 $zy1 $zw1 $zh1" == "$zx0 $zy0 $zw0 $zh0" ]] ;;      # fixed size: nothing
+  esac
+  check "$label: its own zoom button zooms and unzooms (SESSION; Fill with zoom-fill)" $? \
+    "mode $zfixed (0 Hyprland, 1 Fill, 2 fixed size): ${zw0}x${zh0} at $zx0,$zy0 -> ${zw1}x${zh1} at $zx1,$zy1 fullscreen $fs1 -> ${zw2}x${zh2} at $zx2,$zy2 fullscreen $fs2"
   read -r x0 y0 w0 h0 _ < <(geom "$cls")
   ws0=$(client "$cls" .workspace.name) addr=$(client "$cls" .address)
   f0=$(follow_lines)

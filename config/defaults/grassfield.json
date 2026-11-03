@@ -37,7 +37,7 @@
     "endTask": false
   },
   "windows": {
-    "titlebarDoubleClick": "zoom",
+    "titlebarDoubleClick": "fill",
     "tilingEdges": true,
     "tilingMenuBar": true,
     "tilingOptionDrag": true,

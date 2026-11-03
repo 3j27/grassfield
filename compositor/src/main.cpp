@@ -377,6 +377,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         }
         if (!gf::ipc::registerAll())
             gf::log(Log::WARN, "some IPC entry points failed to register");
+        // ADR-0036 D78: window-tiling is known now; client-chrome windows' own maximize becomes the plugin's Zoom (Fill).
+        gf::guarded("client chrome maximize", [] { gf::chrome::syncMaximizeAll(); });
 
         for (const auto& w : Desktop::windowState()->windows())
             decorate(w);

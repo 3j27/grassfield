@@ -175,6 +175,22 @@ namespace gf::chrome {
         std::set<uint32_t> m_owed;
     };
 
+    // ---- Zoom is Fill for client chrome (ADR-0036 D78, ADR-0015 Q4 amended) ----
+    // While the plugin's window-tiling is advertised, a client-chrome window's own maximize request (its green light, its
+    // toolbar double-click: xdg_toplevel.set_maximized or unset_maximized, which Hyprland toggles whatever its value) is the
+    // plugin's: Hyprland is told to ignore it (SUPPRESS_MAXIMIZE on that window, set by the plugin only) and the plugin zooms
+    // (Fill and back). Without window-tiling, or for a window that is not client chrome, Hyprland's own maximize, as before
+    // (gate C2: the unload clears what the plugin set).
+    bool ownsMaximize(bool ready, bool windowTiling, bool clientChrome);
+
+    // Hyprland arms itself to swallow the set_maximized a client may echo right after it leaves full screen (it reports
+    // every window as maximized, Window.hpp m_suppressNextMaximize). With the request the plugin's, the plugin does the same:
+    // a maximize request within kMaximizeEchoMs of the window leaving full screen is that echo, not the user's zoom; bounded,
+    // so a later real request is never swallowed when the client sent no echo.
+    inline constexpr uint64_t kMaximizeEchoMs = 1000;
+    // `armedAtMs`: when the window left full screen (0: never). True when a request at `nowMs` is the echo.
+    bool maximizeEcho(uint64_t armedAtMs, uint64_t nowMs);
+
     // The buttons Hyprland holds, as the bus shows them (its own list, CInputManager::m_currentlyHeldButtons, is private;
     // hasHeldButtons() only says whether it is empty). A press it processes adds its button, a release it processes removes
     // it. Unknown until the plugin has seen Hyprland hold nothing (a button held when the plugin loaded would otherwise

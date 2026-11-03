@@ -80,7 +80,7 @@ ShellRoot {
             root.check("icons folder colour", reader.document().icons.folderColor === "#e5484d" && reader.folderColor === "#e5484d");
             root.check("pointer size", reader.document().pointer.size === 48 && reader.pointerSize === 48);
             root.check("defaults kept: profile", reader.document().material.profile === "balanced");
-            root.check("defaults kept: titlebar", reader.document().windows.titlebarDoubleClick === "zoom");
+            root.check("defaults kept: titlebar", reader.document().windows.titlebarDoubleClick === "fill");
             root.check("defaults kept: idle", reader.document().lock.idleMinutes === 5);
             setup.running = true;
         }
@@ -188,7 +188,7 @@ ShellRoot {
             root.check("range dock size", range.dockSize === 32);
             root.check("range dock position", range.dockPosition === "bottom");
             root.check("range pinned", range.dockPinned.join(",") === "a");
-            root.check("range titlebar", range.titlebarDoubleClick === "zoom");
+            root.check("range titlebar", range.titlebarDoubleClick === "fill");
             root.check("range previews", range.notificationsPreviews === "unlocked");
             root.check("range idle", range.lockIdleMinutes === 240);
             root.check("range icon mode", range.iconMode === "default");

@@ -100,7 +100,8 @@ SettingsPage {
             ComboBox {
                 inline: true
                 accessibleName: qsTr("Window title bar double-click action")
-                // Fill (TL32): the window takes the whole usable area of its display, tiled (TL12).
+                // Fill (TL32; the default, ADR-0036 D78): the window takes the whole usable area of its display, tiled with
+                // the margins, and a second double-click brings back its size. Zoom does the same since D78 (TL35).
                 model: [{id: "fill", text: qsTr("Fill")}, {id: "zoom", text: qsTr("Zoom")}, {id: "minimize", text: qsTr("Minimize")}, {id: "none", text: qsTr("No Action")}]
                 value: root.store.value("windows.titlebarDoubleClick")
                 onPicked: id => root.store.set("windows.titlebarDoubleClick", id)

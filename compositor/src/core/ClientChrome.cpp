@@ -124,6 +124,14 @@ namespace gf::chrome {
         return m_known;
     }
 
+    bool ownsMaximize(bool ready, bool windowTiling, bool clientChrome) {
+        return ready && windowTiling && clientChrome;
+    }
+
+    bool maximizeEcho(uint64_t armedAtMs, uint64_t nowMs) {
+        return armedAtMs != 0 && nowMs >= armedAtMs && nowMs - armedAtMs <= kMaximizeEchoMs;
+    }
+
     void CHeldButtons::reset() {
         m_held.clear();
         m_known = false;

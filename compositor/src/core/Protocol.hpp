@@ -93,6 +93,12 @@ namespace gf::gfc {
     // Window tiling (core/Tiling.hpp, FR47-FR50): titlebar drags tile at the free side edges, their corners and the menu
     // bar; hl.plugin.grassfield.tile(address, place) and the config keys tilingEdges / tilingMenuBar / tilingMargins.
     inline constexpr std::string_view kFeatureWindowTiling = "window-tiling";
+    // ADR-0036 D78 (tiling.md TL35): Zoom is Fill. tile(address, "zoom") is Grassfield's zoom toggle (Fill, back to the box
+    // from before; a window in Hyprland's maximized mode leaves it into Fill, client chrome's own zoom honoured), and the
+    // titlebar's zoom light, its double-click and window_size("maximized") (Super+Alt+F) do the same. Always right after
+    // window-tiling: the shell's Window > Zoom sends "zoom" only with it (an older plugin rejects the place), Hyprland's
+    // maximized mode otherwise.
+    inline constexpr std::string_view kFeatureZoomFill = "zoom-fill";
     // No verb: when a layer surface of the shell ("grassfield-*") maps or takes the keyboard, the plugin re-runs Hyprland's
     // pointer focus at the cursor, so a click without motion reaches what is under the pointer (spec FR51-FR52,
     // core/LayerPointer.hpp).
@@ -141,7 +147,7 @@ namespace gf::gfc {
 
     // The advertised list, in a stable order: decorations, then minimize, config, appmenu, overview, desktop-focus and
     // desktop-focus-v2 (together), stages-available, stages (stages only together with stages-available), cursor-refresh,
-    // overview-focus, minimize-effect, window-tiling, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
+    // overview-focus, minimize-effect, window-tiling with zoom-fill, layer-pointer, appearance, client-chrome, frame-times, keyboard-focus,
     // tiling-arrange with tiling-layouts, tile-hover (each only together with window-tiling), tiling-groups,
     // tiling-shared-edge and tiling-split (each only together with tiling-arrange; tiling-split with tiling-split-rows and
     // tiling-split-titles).

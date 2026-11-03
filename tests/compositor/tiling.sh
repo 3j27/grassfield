@@ -289,6 +289,29 @@ fs_clear() { # address
   st=$(nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen')
   [[ $st == 0 || -z $st ]]
 }
+# Grassfield's Zoom of the window ADDRESS (ADR-0036 D78, Zoom is Fill): with the plugin's zoom-fill, filled as a tile
+# (fullscreen 0, its record placed "fill"); without it Hyprland's maximized mode (fullscreen 1).
+zoom_fill_on() { nestctl -j grassfield 2>/dev/null | jq -e '.features | index("zoom-fill")' >/dev/null 2>&1; }
+fill_place() { nestctl grassfield-tiling 2>/dev/null | jq -r --arg a "${1#0x}" '[.outputs[].windows[] | select(.address == $a)][0].place // "none"'; }
+zoomed() { # address
+  local st place
+  st=$(nestctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .fullscreen')
+  if zoom_fill_on; then
+    place=$(fill_place "$1")
+    say "  zoom of $1: fullscreen $st, tile record $place (want 0 and fill: Zoom is Fill)"
+    [[ $st == 0 && $place == fill ]]
+  else
+    say "  zoom of $1: fullscreen $st (want 1)"
+    [[ $st == 1 ]]
+  fi
+}
+# The window ADDRESS out of its zoom, whichever it is (a filled window back to its box from before; out of the maximized
+# mode); true once it is neither.
+unzoom() { # address
+  nestctl dispatch "hl.plugin.grassfield.tile(\"$1\", \"previous\")" >>"$log" 2>&1
+  sleep 0.8
+  fs_clear "$1" && [[ $(fill_place "$1") != fill ]]
+}
 # Another output that touches GF-REF's left (or right) edge over an overlapping span: its name, or "".
 neighbour_on() { # left|right
   nestctl monitors -j | jq -r --arg o "$out" --arg side "$1" --argjson x "$mx" --argjson w "$mw" --argjson y "$my" --argjson h "$mh" \
@@ -1344,15 +1367,14 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     check "fixed bar: a click on its disabled zoom light leaves its box and mode (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
     check "fixed bar: the plugin says why" plugin_logged "titlebar zoom: refused for a window of fixed size"
     close_shell_popup "fixed bar"
-    # The control: a resizable window's zoom light still zooms, and back.
+    # The control: a resizable window's zoom light still zooms (Fill since ADR-0036 D78), and back.
+    unzoom "$addr" >/dev/null # untiled first: a filled window's zoom brings back its box instead
     nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
     sleep 0.5
     read -r czx czy < <(zoom_light_of "$addr")
     pointer abs "$czx" "$czy" sleep 300 click sleep 800
-    check "fixed bar: the control's zoom light zooms it" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
-    nestctl dispatch "hl.dsp.window.fullscreen({ mode = 'maximized' })" >>"$log" 2>&1 # back (the focused control)
-    sleep 0.8
-    check "fixed bar: the control is back from its zoom" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
+    check "fixed bar: the control's zoom light zooms it" zoomed "$addr"
+    check "fixed bar: the control is back from its zoom" unzoom "$addr"
     pointer abs 20 $((mh / 2)) sleep 200
     close_shell_popup "fixed bar"
     # fixed keys (step 1b's review: Super+Alt+F zoomed About to 1918x980, Super+Ctrl+F made it full screen): bindings.lua asks
@@ -1379,14 +1401,16 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | index("tile-hover")' >
     sleep 1
     check "fixed keys: Super+Ctrl+F leaves it too (was $fb0)" test "$(mode_box "$fixed_addr")" = "$fb0"
     check "fixed keys: the plugin refused the full screen" plugin_logged "window_size: fullscreen refused: window ${fixed_addr#0x} is of fixed size"
+    unzoom "$addr" >/dev/null
     nestctl dispatch "hl.dsp.focus({ window = 'address:$addr' })" >>"$log" 2>&1
     sleep 0.5
     chord Super_L Alt_L f
     sleep 1
-    check "fixed keys: Super+Alt+F zooms the control (the bind reaches Hyprland)" test "$(mode_box "$addr" | cut -d' ' -f5)" = 1
+    check "fixed keys: Super+Alt+F zooms the control (the bind reaches the plugin: Fill, ADR-0036 D78)" zoomed "$addr"
     chord Super_L Alt_L f
     sleep 1
-    check "fixed keys: Super+Alt+F again unzooms it" test "$(mode_box "$addr" | cut -d' ' -f5)" = 0
+    unzoomed_now() { [[ $(mode_box "$addr" | cut -d' ' -f5) == 0 && $(fill_place "$addr") != fill ]]; }
+    check "fixed keys: Super+Alt+F again unzooms it" unzoomed_now
     close_shell_popup "fixed keys"
     kill "$fixed_pid" 2>/dev/null
     sleep 0.5
@@ -2783,6 +2807,8 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
       pointer abs 20 $((mh / 2)) sleep 200
       close_shell_popup "full screen 6c"
       fs_clear "$addr" || say "  full screen 6c: the window was still zoomed or in full screen"
+      nestctl dispatch "hl.plugin.grassfield.tile(\"$addr\", \"previous\")" >>"$log" 2>&1 # untiled: its zoom fills (ADR-0036 D78)
+      sleep 0.8
       mark_events
       nestctl dispatch "hl.plugin.grassfield.tile_popover(\"$addr\")" >>"$log" 2>&1
       if event_came ".type == \"tile-hover\" and .address == \"${addr#0x}\" and .state == \"open\""; then
@@ -2791,7 +2817,7 @@ if nestctl -j grassfield 2>/dev/null | jq -e '.features | (index("tiling-layouts
         # re-review of 67800eb, C).
         if wait_popup_open && [[ $(open_kind) == "tiling@$out" ]]; then
           pointer abs $((glx - mx)) $((gly - my)) sleep 100 down sleep 80 up sleep 200 abs 20 $((mh / 2)) sleep 600
-          check "green under popover: a click on the zoom light under its open popover zooms the window (D64)" test "$(fs_of "$addr")" = 1
+          check "green under popover: a click on the zoom light under its open popover zooms the window (D64; Fill with zoom-fill, D78)" zoomed "$addr"
           check "green under popover: the popover closed" test -z "$(open_kind)"
           check "green under popover: no overlay left mapped" overlay_gone
         else
