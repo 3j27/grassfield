@@ -815,7 +815,7 @@ Window {
                                 anchors.verticalCenter: parent.verticalCenter
                                 size: Tokens.filesGroupGlyphWidth
                                 kind: "group"
-                                color: groupButton.foreground
+                                color: groupButton.glyphColor
                             }
 
                             Icon {
@@ -823,7 +823,7 @@ Window {
                                 anchors.verticalCenter: parent.verticalCenter
                                 name: "chevron-down"
                                 size: Tokens.filesGroupChevronSize
-                                color: groupButton.foreground
+                                color: groupButton.glyphColor
                             }
                         }
                     }
@@ -861,7 +861,7 @@ Window {
                                 anchors.centerIn: parent
                                 kind: "tag"
                                 size: Tokens.filesTagGlyphSize
-                                color: tagsButton.foreground
+                                color: tagsButton.glyphColor
                             }
                         }
 
