@@ -274,6 +274,7 @@ namespace gf::chrome {
             const auto top = toplevelOf(w);
             if (!top || std::ranges::any_of(s.watches, [&w](const SWatch& e) { return e.window.lock() == w; }))
                 return;
+            const bool  fullscreen = modeOf(w) == Fullscreen::FSMODE_FULLSCREEN;
             SWatch      e;
             PHLWINDOWREF ref = w;
             WP<CXDGToplevelResource> weakTop = top;
@@ -281,7 +282,7 @@ namespace gf::chrome {
             e.toplevel     = weakTop;
             e.stateChanged = top->m_events.stateChanged.listen([ref, weakTop] { guarded("client chrome stateChanged", [&] { onStateChanged(ref, weakTop); }); });
             e.requestMove  = top->m_events.requestMove.listen([ref](const SXDGToplevelMoveRequest& /*request*/) { guarded("client chrome requestMove", [&] { onRequestMove(ref); }); });
-            e.wasFullscreen = modeOf(w) == Fullscreen::FSMODE_FULLSCREEN;
+            e.wasFullscreen = fullscreen;
             s.watches.push_back(std::move(e));
             tellCapabilities(s.watches.back(), isClientChrome(w), true);
             syncMaximize(s.watches.back(), ownsMaximizeOf(w));

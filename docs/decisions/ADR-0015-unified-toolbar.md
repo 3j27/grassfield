@@ -866,4 +866,8 @@ Unchanged: the session rules S2 (the maximize exemption of the client-chrome lis
 in Hyprland's maximized mode) and P5/P8. A Fill-zoomed window dragged from its toolbar leaves its tile at its size from
 before under the pointer (ADR-0036 TL16). Tests: `tests/compositor/zoom_fill_apps.sh` (Settings and Files: own light,
 double-click with the default and with zoom, Window > Zoom, the light under its popover, and the plugin unloaded),
-`client_chrome.sh`, `third_party_chrome.sh`; units `ClientChromeZoom.*`.
+`client_chrome.sh`, `third_party_chrome.sh`; units `ClientChromeZoom.*`. Measured in nested on Omarchy 4.0.6
+(2026-11-03): Evince and Obsidian's vault window fill from their own zoom button and come back; Chromium fills but sends
+no second request, and Nautilus's own buttons do nothing, in that run with Hyprland's own maximize as well (the run's
+first check, the desktop portal refused on the private bus, failed too): an environment matter of that test, followed
+there, not of this amendment.
