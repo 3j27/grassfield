@@ -14448,6 +14448,10 @@
         <translation>Vignettes</translation>
     </message>
     <message>
+        <source>Make the window wider to show the sidebar</source>
+        <translation>Élargissez la fenêtre pour afficher la barre latérale</translation>
+    </message>
+    <message>
         <source>Previous</source>
         <translation>Précédent</translation>
     </message>

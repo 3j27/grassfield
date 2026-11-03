@@ -31,7 +31,22 @@ Window {
     readonly property var view: content.view
     readonly property bool isPdf: content.info.kind === "pdf" && content.info.ok === true
     readonly property bool hasSidebar: viewerWin.fileCount > 1 || viewerWin.isPdf
-    readonly property bool showSidebar: viewerWin.sidebarOpen && viewerWin.hasSidebar
+    // What the toolbar needs beside the sidebar: its inset, the toggle, the tools and their margins. A window narrower than the
+    // sidebar plus this collapses the sidebar by itself (as macOS) and shows it again when it widens, if it was open; the
+    // toolbar's items never overlap.
+    readonly property real toolbarRest: (sidebarGroup.visible ? sidebarGroup.width + Tokens.spacingMd : 0) + tools.width + Tokens.spacingMd
+    readonly property real toolbarNeed: Tokens.windowItemsInset + viewerWin.toolbarRest
+    // The narrowest window: the toolbar with the lights in it (the sidebar hidden), so its items never overlap.
+    readonly property real toolbarMin: Math.max(toolbar.controls.contentStart, Tokens.windowItemsInset) + viewerWin.toolbarRest
+    readonly property bool roomForSidebar: viewerWin.width >= Tokens.previewSidebarWidth + viewerWin.toolbarNeed
+    readonly property bool showSidebar: viewerWin.sidebarOpen && viewerWin.hasSidebar && viewerWin.roomForSidebar
+    // The sidebar toggle (button and shortcut) is off while the window is too narrow for the sidebar: a client cannot resize its
+    // own window on Wayland, so Preview never writes its width; widening the window brings the sidebar back if it is wanted.
+    readonly property bool canToggleSidebar: viewerWin.hasSidebar && viewerWin.roomForSidebar
+    function toggleSidebar(): void {
+        if (viewerWin.canToggleSidebar)
+            viewerWin.sidebarOpen = !viewerWin.sidebarOpen;
+    }
     readonly property int pages: viewerWin.view ? viewerWin.view.pageCount : 1
     readonly property bool onImage: content.info.kind === "image" && content.info.ok === true
     // Second line of the title: the position among the files, then the page of a document.
@@ -47,7 +62,7 @@ Window {
     title: content.info.name ? DisplayName.text(content.info.name) : qsTr("Preview")
     width: Tokens.previewWindowWidth
     height: Tokens.previewWindowHeight
-    minimumWidth: Tokens.previewWindowMinWidth
+    minimumWidth: Math.max(Tokens.previewWindowMinWidth, Math.ceil(viewerWin.toolbarMin))
     minimumHeight: Tokens.previewWindowMinHeight
     visible: true
     color: Appearance.windowFill
@@ -151,9 +166,9 @@ Window {
     }
     Shortcut {
         sequences: ["Ctrl+Alt+2", "Ctrl+Shift+S"]
-        enabled: viewerWin.hasSidebar
-        onActivated: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
-        onActivatedAmbiguously: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
+        enabled: viewerWin.canToggleSidebar
+        onActivated: viewerWin.toggleSidebar()
+        onActivatedAmbiguously: viewerWin.toggleSidebar()
     }
     Shortcut {
         sequence: "Ctrl+I"
@@ -247,13 +262,31 @@ Window {
 
     // The unified toolbar of grassfield-ui (ADR-0015): the lights, then the sidebar toggle, the two-line title block and the
     // tools; its layer for a layout of its own holds them.
+    // The lights of a shown sidebar sit in the corner of its panel (as Files and Settings; macOS 26): this toolbar over the
+    // sidebar holds them alone, the one over the view starts to its right.
+    UnifiedToolbar {
+        id: sidebarToolbar
+        objectName: "sidebarToolbar"
+        width: sidebar.width
+        height: Tokens.previewToolbarHeight
+        visible: sidebar.visible
+        z: 2
+        window: viewerWin
+        showTitle: false
+        doubleClickAction: viewerWin.backend.titlebarDoubleClick
+        canMinimize: viewerWin.backend.canMinimize
+    }
+
     UnifiedToolbar {
         id: toolbar
-        width: parent.width
+        x: sidebar.width
+        width: parent.width - x
         height: viewerWin.slideshow ? 0 : Tokens.previewToolbarHeight
         visible: !viewerWin.slideshow
         z: 2
         window: viewerWin
+        // The lights move here when the sidebar is hidden (View > Hide Sidebar), as Files.
+        showControls: !sidebar.visible
         showTitle: false
         doubleClickAction: viewerWin.backend.titlebarDoubleClick
         canMinimize: viewerWin.backend.canMinimize
@@ -267,11 +300,13 @@ Window {
             ToolButton {
                 capsule: true
                 accessibleName: qsTr("Thumbnails")
+                enabled: viewerWin.canToggleSidebar
+                tooltip: viewerWin.canToggleSidebar ? qsTr("Thumbnails") : qsTr("Make the window wider to show the sidebar")
                 checkable: true
                 checked: viewerWin.showSidebar
                 // One white disc, as macOS 27: the group's own capsule is the disc; a checked pill inside it would be a second one.
                 checkedColor: "transparent"
-                onClicked: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
+                onClicked: viewerWin.toggleSidebar()
 
                 Glyph {
                     anchors.centerIn: parent
@@ -619,7 +654,8 @@ Window {
         id: toolbarRule
         objectName: "toolbarRule"
         anchors.top: toolbar.bottom
-        width: parent.width
+        x: toolbar.x
+        width: toolbar.width
         height: Tokens.appsBorderWidth
         z: 2
         visible: !viewerWin.slideshow && viewerWin.view !== null && viewerWin.view.scrolled === true
@@ -631,7 +667,7 @@ Window {
     Item {
         id: sidebar
         anchors {
-            top: toolbar.bottom
+            top: parent.top
             bottom: parent.bottom
             left: parent.left
         }
@@ -640,14 +676,16 @@ Window {
         // Above the view: the panel's shadow falls on it (not clipped, so it can).
         z: 1
 
-        // The floating panel as Settings' and Files' (macOS 26; ADR-0024 amendment 2026-11-03): inset from the window's left and
-        // bottom edges, the toolbar's own gap above it, the view straight beside it. The lights stay in the toolbar above
-        // (a split toolbar is the Preview alignment batch).
+        // The floating panel as Settings' and Files' (macOS 26; ADR-0024 amendment 2026-11-03): inset from the window's left, top and
+        // bottom edges, the view straight beside it, the lights (sidebarToolbar) drawn over its corner.
         SidebarPanel {
             id: panel
+            // Where the lists start: under the lights' row, as Files' sidebar rows.
+            readonly property real contentTop: Math.max(sidebarToolbar.height - Tokens.windowSidebarPanelInset, 0) + Tokens.spacingSm
             anchors {
                 fill: parent
                 leftMargin: Tokens.windowSidebarPanelInset
+                topMargin: Tokens.windowSidebarPanelInset
                 bottomMargin: Tokens.windowSidebarPanelInset
             }
 
@@ -663,8 +701,11 @@ Window {
                     left: parent.left
                     right: parent.right
                     margins: Tokens.spacingSm
+                    topMargin: panel.contentTop
+                    // The picture plates leave the right gap to the scroll bar: the list runs to the panel's edge.
+                    rightMargin: fileList.compact ? Tokens.spacingSm : 0
                 }
-                height: viewerWin.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - 2 * Tokens.spacingSm) : 0
+                height: viewerWin.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - panel.contentTop - Tokens.spacingSm) : 0
                 visible: viewerWin.fileCount > 1
                 clip: true
                 spacing: Tokens.spacingXs
@@ -686,20 +727,37 @@ Window {
                     required property int index
                     required property var modelData
                     readonly property bool selected: row.index === viewerWin.current
-                    readonly property real cellHeight: Math.round(Tokens.previewThumbnailWidth * 3 / 4)
+                    // The picture's height over its width (3:4 until a picture is decoded, and for the other kinds): the plate
+                    // hugs the picture with the same padding on all sides. A tall picture is fitted into a square.
+                    readonly property real aspect: pic.visible && pic.implicitWidth > 0 && pic.implicitHeight > 0 ? pic.implicitHeight / pic.implicitWidth : 3 / 4
+                    readonly property real cellHeight: Math.round(Math.min(Tokens.previewThumbnailWidth * row.aspect, Tokens.previewThumbnailWidth))
+                    readonly property real cellWidth: Math.round(row.cellHeight / row.aspect)
+                    // The name's strip under the picture, inside the plate.
+                    readonly property real captionHeight: Math.max(Tokens.previewPlateCaption, labelText.implicitHeight + Tokens.spacingSm)
+                    readonly property color plateColor: viewerWin.keyLook ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)
+                    // The plate: the page thumbnails' (a fixed width, 8 in from the list's left edge, the right gap holding the scroll bar).
+                    readonly property real plateSlot: Tokens.previewThumbnailWidth + 2 * Tokens.previewPlatePad
+                    // The plate hugs the picture: the same padding on all sides, centred in the slot (a portrait one is narrower).
+                    readonly property real plateWidth: row.cellWidth + 2 * Tokens.previewPlatePad
+                    readonly property real plateX: Tokens.spacingSm + (row.plateSlot - row.plateWidth) / 2
 
                     width: fileList.width
-                    height: fileList.compact ? Tokens.previewSidebarItemHeight : row.cellHeight + labelText.implicitHeight + 3 * Tokens.spacingSm
+                    height: fileList.compact ? Tokens.previewSidebarItemHeight : Tokens.previewPlatePad + row.cellHeight + row.captionHeight
                     Accessible.role: Accessible.ListItem
                     Accessible.name: DisplayName.text(row.modelData.name)
                     Accessible.selected: row.selected
 
-                    // Selection (macOS Preview): a ring in the accent colour around the thumbnail, never a solid plate over
-                    // it (compact: around the row); a light plate under the hovered one.
+                    // Selection (macOS Preview, as the page thumbnails): the picture and its name on a rounded plate, the accent
+                    // for the current file (compact: a ring around the row); a light plate under the hovered one.
                     Rectangle {
-                        anchors.fill: parent
-                        radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
-                        color: rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
+                        anchors {
+                            fill: parent
+                            leftMargin: fileList.compact ? 0 : row.plateX
+                            rightMargin: fileList.compact ? 0 : Math.max(0, row.width - row.plateX - row.plateWidth)
+                        }
+                        radius: fileList.compact ? Tokens.radiusControl : Tokens.previewPlateRadius
+                        color: row.selected && !fileList.compact ? row.plateColor
+                            : rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                         border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
                         border.color: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                     }
@@ -707,17 +765,19 @@ Window {
                     Item {
                         id: thumb
                         visible: !fileList.compact
-                        x: (parent.width - width) / 2
-                        y: Tokens.spacingSm
-                        width: Tokens.previewThumbnailWidth
+                        x: row.plateX + Tokens.previewPlatePad
+                        y: Tokens.previewPlatePad
+                        width: row.cellWidth
                         height: row.cellHeight
 
                         Image {
+                            id: pic
                             anchors.fill: parent
                             visible: row.modelData.kind === "image"
                             // Decoded at its size by the provider (image://preview/thumb), twice for a sharp edge.
                             source: row.modelData.kind === "image" && !fileList.compact ? "image://preview/thumb/" + row.index : ""
-                            sourceSize: Qt.size(width * 2, height * 2)
+                            // A fixed box (the size follows the picture's own shape).
+                            sourceSize: Qt.size(Tokens.previewThumbnailWidth * 2, Tokens.previewThumbnailWidth * 2)
                             asynchronous: true
                             cache: true
                             fillMode: Image.PreserveAspectFit
@@ -753,18 +813,6 @@ Window {
                             radius: Tokens.radiusControl
                             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                         }
-                        // The ring of the current file around its thumbnail.
-                        Rectangle {
-                            anchors {
-                                fill: parent
-                                margins: -Tokens.controlFocusOutline
-                            }
-                            visible: row.selected
-                            color: "transparent"
-                            radius: Tokens.radiusControl
-                            border.width: Tokens.controlFocusOutline
-                            border.color: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
-                        }
                     }
 
                     Text {
@@ -772,19 +820,20 @@ Window {
                         anchors {
                             left: parent.left
                             right: parent.right
-                            leftMargin: Tokens.spacingSm
-                            rightMargin: Tokens.spacingSm
+                            leftMargin: fileList.compact ? Tokens.spacingSm * 2 : row.plateX + Tokens.spacingXs
+                            rightMargin: fileList.compact ? Tokens.spacingSm : Math.max(Tokens.spacingXs, row.width - row.plateX - row.plateWidth + Tokens.spacingXs)
                             top: fileList.compact ? undefined : thumb.bottom
-                            topMargin: Tokens.spacingXs
                             verticalCenter: fileList.compact ? parent.verticalCenter : undefined
                         }
+                        height: fileList.compact ? implicitHeight : row.captionHeight
                         horizontalAlignment: fileList.compact ? Text.AlignLeft : Text.AlignHCenter
                         elide: Text.ElideMiddle
                         textFormat: Text.PlainText
                         maximumLineCount: 1
                         // A file name may contain line breaks: keep one line, shown as the return symbol.
                         text: DisplayName.text(row.modelData.name)
-                        color: Appearance.colors.text
+                        verticalAlignment: Text.AlignVCenter
+                        color: row.selected && !fileList.compact && viewerWin.keyLook ? Appearance.colors.selectionText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: fileList.compact ? Tokens.typographyBodySize : Tokens.typographyCaptionSize
                     }
@@ -801,11 +850,12 @@ Window {
                 id: thumbs
                 anchors {
                     top: fileList.bottom
-                    topMargin: Tokens.spacingSm
+                    topMargin: viewerWin.fileCount > 1 ? Tokens.spacingSm : 0
                     bottom: parent.bottom
                     left: parent.left
                     right: parent.right
                     margins: Tokens.spacingSm
+                    rightMargin: 0
                 }
                 active: viewerWin.isPdf && viewerWin.view !== null
                 source: "Thumbnails.qml"

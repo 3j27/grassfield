@@ -2738,8 +2738,14 @@ QtObject {
     readonly property int previewToolbarHeight: 52
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewToolbarButtonSize: 28
-    // gs-092-232: thumbnail about 150 px wide at 1.0585 px/pt (about 140 pt) inside the 204-pt panel [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
-    readonly property int previewThumbnailWidth: 140
+    // gs-092-232 at 1.0585 px/pt: the page 161 px wide on its plate, about 152 pt, in the 196-pt panel (plate 163 pt, 16 pt from the panel edges) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md; docs/audits/refinement-2026-11-02.md § 15-preview-window]
+    readonly property int previewThumbnailWidth: 152
+    // gs-092-232: the accent plate shows 6 px around the page on the left, right and top, about 6 pt (5.5 to 6.5) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md; docs/audits/refinement-2026-11-02.md § 15-preview-window]
+    readonly property int previewPlatePad: 6
+    // gs-092-232: the page number sits in a 19-pt strip under the page, inside the plate (20 px at 1.0585 px/pt from the page's bottom to the plate's) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md; docs/audits/refinement-2026-11-02.md § 15-preview-window]
+    readonly property int previewPlateCaption: 19
+    // gs-092-232: the plate's corner, a circle fit of about 10 px, 9 pt [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md; docs/audits/refinement-2026-11-02.md § 15-preview-window]
+    readonly property int previewPlateRadius: 9
     // estimate: Preview app (docs/specs/preview.md); a PDF's file-name row, which grows with Text size so the selection ring keeps clear of its descenders (ADR-0039 step 4) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSidebarItemHeight: Math.round(28 * Appearance.textScale)
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
