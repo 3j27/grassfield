@@ -424,11 +424,13 @@ TestCase {
         };
         verify(tiles().length > 3, "the sidebar's tiles");
         verify(!tiles().some(r => Qt.colorEqual(r.color, Tokens.settingsSidebarTileInactiveLight)), "key: coloured");
+        verify(tiles().every(r => r.gradient !== null), "key: every tile a vivid gradient");
         const other = createTemporaryObject(otherWindow, null);
         other.requestActivate();
         tryVerify(() => !t.win.active, 2000);
         wait(50);
         verify(tiles().every(r => Qt.colorEqual(r.color, Tokens.settingsSidebarTileInactiveLight)), "not key: every tile the inactive grey: ");
+        verify(tiles().every(r => r.gradient === null), "not key: no gradient, the flat grey");
         other.close();
     }
 

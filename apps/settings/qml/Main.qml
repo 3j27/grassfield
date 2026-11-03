@@ -24,10 +24,10 @@ Window {
     property string gfChromeRole: "settings"
     // False when the shell says the compositor plugin is absent: the minimize light is greyed (ADR-0015 Q4b).
     property bool canMinimize: true
-    // Colour of each section's icon tile: a Grassfield accent colour (color.accentLight), own values, white glyph on it.
+    // Colour of each section's icon tile: a vivid color.tile family name (a soft vertical gradient, TileGradient), white glyph on it.
     readonly property var tileColors: ({
-            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "graphite", wallpaper: "purple",
-            accessibility: "blue", desktop: "graphite", menubar: "graphite", search: "graphite", notifications: "red", focus: "purple", lock: "graphite",
+            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "black", wallpaper: "cyan",
+            accessibility: "blue", desktop: "black", menubar: "graphite", search: "blue", notifications: "red", focus: "purple", lock: "black",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             "software-update": "graphite",
             datetime: "blue", language: "blue", login: "graphite", privacy: "blue",
@@ -479,8 +479,15 @@ Window {
                         height: Tokens.settingsSidebarIconSize
                         radius: Tokens.settingsSidebarTileRadius
                         // A mid grey while the window is not key, as macOS greys its sidebar tiles; the white glyph keeps 3:1.
-                        color: root.keyLook ? Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
-                                            : (Appearance.dark ? Tokens.settingsSidebarTileInactiveDark : Tokens.settingsSidebarTileInactiveLight)
+                        // Key: the vivid gradient (no flat fill); not key: the flat grey.
+                        readonly property bool lit: root.keyLook
+                        color: glyph.lit ? "transparent" : (Appearance.dark ? Tokens.settingsSidebarTileInactiveDark : Tokens.settingsSidebarTileInactiveLight)
+                        gradient: glyph.lit ? tileGradient : null
+
+                        TileGradient {
+                            id: tileGradient
+                            name: root.tileColors[entry.modelData.id] || "graphite"
+                        }
 
                         Icon {
                             anchors.centerIn: parent

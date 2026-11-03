@@ -35,7 +35,9 @@ Item {
         width: Tokens.settingsHeaderRowTileSize
         height: width
         radius: Math.round(Tokens.settingsHeaderRowTileSize * Tokens.settingsNavTileRadius / Tokens.settingsNavTileSize)
-        color: Tokens.colorAccentLight[root.tileColor] || Tokens.colorAccentLight.graphite
+        gradient: TileGradient {
+            name: root.tileColor
+        }
 
         Icon {
             anchors.centerIn: parent
