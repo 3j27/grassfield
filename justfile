@@ -124,7 +124,12 @@ check-secrets:
 
 # Syntax-check shell scripts.
 check-scripts:
-    for f in scripts/dev/*.sh scripts/gates/*.sh tests/*/*.sh tests/visual/scenarios/*.sh; do bash -n "$f"; done
+    for f in scripts/dev/*.sh scripts/gates/*.sh tests/*/*.sh tests/visual/scenarios/*.sh packaging/install/*.sh.in; do bash -n "$f"; done
+
+# Render the public installation script and its checksum into DIR (ADR-0043). Refuses while repository.conf holds the
+# placeholder host or an empty fingerprint (O8, O11): nothing is published by this recipe.
+render-install dir="build/install":
+    python3 -I packaging/install/render.py --conf packaging/pacman/repository.conf --template packaging/install/grassfield-install.sh.in --out {{dir}}
 
 # Run any gate command and keep a dated report (commit, build id, exit code, log path) in .dev/gate-runs/ (GF-036), e.g.
 # `just gate check just check`, `just gate nested-overview tests/compositor/overview.sh`. Exits with the command's code.

@@ -1,0 +1,553 @@
+#!/usr/bin/env bash
+# Grassfield's public installation script (ADR-0043). TEMPLATE: packaging/install/render.py fills the two @...@ values from
+# packaging/pacman/repository.conf and refuses while they are placeholders; the published file is the rendered one.
+#
+# What it does is ADR-0033 b.3a, nothing more: trust the pinned key, write the [grassfield] section, install the packages,
+# hand over to grassfield-channel-set. It runs as the user and uses sudo only for the commands listed by `--dry-run`.
+# It never edits the ORDER of pacman.conf's repositories: when [omarchy] is not before [extra] it prints the remedy.
+#
+# Every statement runs inside a function and `main` is the last line: a download cut short never runs half a script, and
+# `curl ... | bash` reads the whole file before it runs anything (the published command is download, check, run: ADR-0043 c).
+# shellcheck disable=SC2016  # '$arch' is pacman's own variable, written literally to the repository file
+set -euo pipefail
+umask 022
+
+readonly GF_BASE='@GRASSFIELD_REPO_BASE@'
+readonly GF_FPR='@GRASSFIELD_SIGNING_FINGERPRINT@'
+readonly GF_KEYSERVER=keys.openpgp.org
+readonly GF_MIN_OMARCHY=4.0.6
+readonly GF_MIN_FREE_MIB=4096
+readonly GF_PKGS=(grassfield-desktop grassfield-compositor grassfield-store)
+readonly GF_THEME_PKG=grassfield-login-themes
+# Installed by those packages or as their dependencies; `--uninstall` removes whichever of them is present.
+readonly GF_ALL_PKGS=(grassfield-login-themes grassfield-store grassfield-compositor grassfield-desktop grassfield-icons
+  grassfield-wallpapers grassfield-keyring)
+
+# Test hook of tests/shell/public_install.sh only: a prefix for the files this script reads and writes. Never set it.
+GF_ROOT=${GRASSFIELD_INSTALL_ROOT:-}
+PACMAN_CONF=$GF_ROOT/etc/pacman.conf
+GF_CONF=$GF_ROOT/etc/pacman.d/grassfield.conf
+GF_BAK=$PACMAN_CONF.grassfield-install-bak
+GF_INCLUDE_LINE='Include = /etc/pacman.d/grassfield.conf'
+
+CHANNEL=stable SESSION=grassfield
+YES=0 DRY=0 UNINSTALL=0 SNAPSHOT=1 THEMES=0
+LOG=''
+TMP=''
+PROBLEMS=0
+FR=0
+
+# ---- messages: English and French, by locale ------------------------------------------------------------------------
+t() { if ((FR)); then printf '%s' "$2"; else printf '%s' "$1"; fi; }
+say() { printf '%s\n' "$(t "$1" "$2")"; }
+die() { printf '\n%s %s\n' "$(t 'Stopped:' 'Arret :')" "$(t "$1" "$2")" >&2; exit 1; }
+# bad <en> <fr> <fix-en> <fix-fr>: one preflight problem and its exact fix (the script changes nothing for it).
+bad() {
+  PROBLEMS=$((PROBLEMS + 1))
+  printf ' [x] %s\n' "$(t "$1" "$2")"
+  printf '     %s %s\n' "$(t 'Fix:' 'Correctif :')" "$(t "$3" "$4")"
+}
+ok() { printf ' [ok] %s\n' "$(t "$1" "$2")"; }
+note() { printf ' [i] %s\n' "$(t "$1" "$2")"; }
+
+usage() {
+  cat <<'EOF'
+grassfield-install.sh: install Grassfield on Omarchy (as your user; sudo only where listed by --dry-run)
+
+  grassfield-install.sh [--channel stable|beta] [--session grassfield|omarchy] [--with-login-themes]
+                        [--no-snapshot] [--yes] [--dry-run]
+  grassfield-install.sh --uninstall [--no-snapshot] [--yes] [--dry-run]
+  grassfield-install.sh --help
+
+  --channel C           stable (default) or beta
+  --session S           which session the next login starts: grassfield (default) or omarchy (you switch later with
+                        `grassfield-login set grassfield`)
+  --with-login-themes   also install grassfield-login-themes (nothing changes on screen until you enable them)
+  --no-snapshot         go on without an Omarchy snapshot
+  --yes                 no confirmation (also pacman's own questions are answered by pacman's defaults)
+  --dry-run             checks and the plan only: nothing is changed, no root, no download but two HEAD requests
+  --uninstall           back to stock Omarchy: packages, [grassfield] section, key, session choice
+
+Log: ${XDG_STATE_HOME:-~/.local/state}/grassfield/install.log
+EOF
+}
+
+# ---- arguments ------------------------------------------------------------------------------------------------------
+parse_args() {
+  while (($#)); do
+    case $1 in
+      --channel) CHANNEL=${2:-}; shift ;;
+      --channel=*) CHANNEL=${1#*=} ;;
+      --session) SESSION=${2:-}; shift ;;
+      --session=*) SESSION=${1#*=} ;;
+      --with-login-themes) THEMES=1 ;;
+      --no-snapshot) SNAPSHOT=0 ;;
+      --yes | -y) YES=1 ;;
+      --dry-run | -n) DRY=1 ;;
+      --uninstall) UNINSTALL=1 ;;
+      --help | -h) usage; exit 0 ;;
+      *) usage >&2; exit 2 ;;
+    esac
+    shift
+  done
+  [[ $CHANNEL == stable || $CHANNEL == beta ]] || { usage >&2; exit 2; }
+  [[ $SESSION == grassfield || $SESSION == omarchy ]] || { usage >&2; exit 2; }
+}
+
+setup_log() {
+  LOG=${XDG_STATE_HOME:-$HOME/.local/state}/grassfield/install.log
+  mkdir -p -- "${LOG%/*}"
+  : >>"$LOG"
+  chmod 600 "$LOG"
+  exec > >(tee -a "$LOG") 2>&1
+  printf '\n=== %s grassfield-install %s channel=%s session=%s dry=%s yes=%s ===\n' "$(date -Is)" \
+    "$( ((UNINSTALL)) && echo uninstall || echo install)" "$CHANNEL" "$SESSION" "$DRY" "$YES"
+}
+
+cleanup() { [[ -z $TMP ]] || rm -rf -- "$TMP"; }
+
+# ---- small helpers --------------------------------------------------------------------------------------------------
+# The only way root is used: every root command goes through here, so the log names each one.
+as_root() {
+  printf '+ sudo %s\n' "$*"
+  sudo "$@"
+}
+
+pacman_version() { { pacman -Q "$1" 2>/dev/null | awk 'NR == 1 { print $2 }'; } || true; }
+
+# The number of [grassfield] sections of pacman.conf (comments and blanks removed): the helper's own count.
+sections() {
+  [[ -f $PACMAN_CONF ]] || { echo 0; return 0; }
+  awk '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l); if (l == "[grassfield]") n++ } END { print n + 0 }' \
+    "$PACMAN_CONF"
+}
+
+conf_servers_ours() { # does the included file name our host?
+  [[ -f $GF_CONF ]] && grep -Eq "^[[:space:]]*Server[[:space:]]*=[[:space:]]*${GF_BASE//./\\.}/" "$GF_CONF"
+}
+
+repos() { pacman-conf --config "$PACMAN_CONF" --repo-list; }
+repos_has() { local r; while IFS= read -r r; do [[ $r == "$1" ]] && return 0; done < <(repos); return 1; }
+
+key_present() { pacman-key --list-keys "$GF_FPR" >/dev/null 2>&1; }
+
+# The primary fingerprints of an OpenPGP file, read without importing it ("SECRET" when it holds a secret key).
+key_primaries() {
+  local home=$TMP/gnupg
+  mkdir -p -m 700 "$home"
+  gpg --homedir "$home" --batch --no-tty --with-colons --import-options show-only --import "$1" 2>/dev/null |
+    awk -F: '$1 == "pub" || $1 == "sec" { if ($1 == "sec") s = 1; e = 1; next }
+             $1 == "sub" || $1 == "ssb" { e = 0 }
+             $1 == "fpr" && e { print $10; e = 0 }
+             END { if (s) print "SECRET" }'
+}
+
+free_mib() { df --output=avail -BM "$1" 2>/dev/null | awk 'NR == 2 { gsub(/M/, "", $1); print $1 + 0 }'; }
+
+ask() { # <question en> <question fr>: yes by --yes, else the user's answer (stdin is the terminal)
+  ((YES)) && return 0
+  local answer=''
+  printf '%s [y/N] ' "$(t "$1" "$2")"
+  read -r answer || answer=''
+  [[ $answer == [yYoO]* ]]
+}
+
+# ---- preflight (read-only) ------------------------------------------------------------------------------------------
+preflight_common() {
+  local v
+  say '== Checks (nothing is changed) ==' '== Verifications (rien n est modifie) =='
+  if [[ $(id -u) == 0 ]]; then
+    bad 'running as root' 'execute en root' 'run it as your normal user: it asks for sudo itself' \
+      'lance-le avec ton utilisateur normal : il demande sudo lui-meme'
+  else ok 'not root' 'pas root'; fi
+  if command -v sudo >/dev/null; then ok 'sudo is available' 'sudo est disponible'
+  else bad 'sudo is missing' 'sudo est absent' 'install sudo (Omarchy has it by default)' 'installe sudo (present par defaut sur Omarchy)'; fi
+  local tool
+  for tool in pacman pacman-conf pacman-key vercmp curl gpg awk; do
+    command -v "$tool" >/dev/null || bad "'$tool' is missing" "'$tool' est absent" "install it with pacman (base system)" \
+      "installe-le avec pacman (systeme de base)"
+  done
+  if [[ -e $GF_ROOT/var/lib/pacman/db.lck ]]; then
+    bad 'pacman is running (db.lck exists)' 'pacman tourne (db.lck existe)' 'wait for it to finish and run this again' \
+      'attends sa fin puis relance'
+  fi
+  v=${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock
+  if [[ -e $v ]] && ! flock -n "$v" true; then
+    bad 'an Omarchy update is running' 'une mise a jour Omarchy est en cours' 'wait for it to finish' 'attends sa fin'
+  fi
+}
+
+preflight_install() {
+  local v os arch repo_list repo i first_o=-1 first_e=-1 repo_of_qs free tmpfree pending foreign
+  os=$GF_ROOT/etc/os-release
+  arch=$(uname -m)
+  if [[ -r $os ]] && grep -Eq '^(ID|ID_LIKE)=.*\barch\b' "$os" && [[ $arch == x86_64 ]]; then
+    ok "Arch Linux ($arch)" "Arch Linux ($arch)"
+  else
+    bad "this is not Arch Linux on x86_64 ($arch)" "ce n est pas Arch Linux en x86_64 ($arch)" \
+      'Grassfield supports Omarchy on x86_64 only' 'Grassfield ne gere qu Omarchy en x86_64'
+  fi
+
+  v=$(pacman_version omarchy)
+  [[ -n $v ]] || v=$(pacman_version omarchy-dev)
+  if [[ -z $v ]]; then
+    bad 'Omarchy is not installed' 'Omarchy n est pas installe' 'install Omarchy 4.0.6 or newer first' 'installe d abord Omarchy 4.0.6 ou plus recent'
+  elif (($(vercmp "$v" "$GF_MIN_OMARCHY") < 0)); then
+    bad "Omarchy $v is older than $GF_MIN_OMARCHY" "Omarchy $v est plus ancien que $GF_MIN_OMARCHY" \
+      "update Omarchy to $GF_MIN_OMARCHY or newer with its own update, then run this again" \
+      "mets Omarchy a jour (4.0.6 ou plus) avec sa mise a jour, puis relance"
+  else ok "Omarchy $v" "Omarchy $v"; fi
+
+  # [omarchy] before [extra]: otherwise extra's quickshell 0.3.2-1 (its session lock fails open) wins.
+  repo_list=$(repos 2>/dev/null) || repo_list=''
+  i=0
+  while IFS= read -r repo; do
+    [[ $repo == omarchy && $first_o -lt 0 ]] && first_o=$i
+    [[ $repo == extra && $first_e -lt 0 ]] && first_e=$i
+    i=$((i + 1))
+  done <<<"$repo_list"
+  if ((first_o < 0)); then
+    bad 'no [omarchy] repository in /etc/pacman.conf' 'pas de depot [omarchy] dans /etc/pacman.conf' \
+      'restore Omarchy repositories (Omarchy 4.0.6 ships its own pacman.conf)' 'restaure les depots Omarchy (Omarchy 4.0.6 fournit son pacman.conf)'
+  elif ((first_e >= 0 && first_o > first_e)); then
+    bad '[omarchy] comes after [extra] in /etc/pacman.conf' '[omarchy] est apres [extra] dans /etc/pacman.conf' \
+      'copy /etc/pacman.conf to /etc/pacman.conf.bak, then with sudo move the whole [omarchy] block (its header and every line up to the next section) to just after [options]; Omarchy 4.0.6 stable already has this order. This script never reorders it.' \
+      'copie /etc/pacman.conf vers /etc/pacman.conf.bak puis, avec sudo, deplace tout le bloc [omarchy] (son en-tete et ses lignes jusqu a la section suivante) juste apres [options] ; Omarchy 4.0.6 stable a deja cet ordre. Ce script ne reordonne jamais.'
+  else ok '[omarchy] comes before [extra]' '[omarchy] est avant [extra]'; fi
+
+  v=$(pacman_version quickshell)
+  repo_of_qs=$(pacman -Si quickshell 2>/dev/null | awk -F': *' '/^Repository/ && !d { print $2; d = 1 }' || true)
+  if [[ $v =~ ^0\.3\.2-[0-9]+$ ]]; then
+    bad "quickshell $v (Arch's extra build) is installed: its session lock fails open and Grassfield refuses it" \
+      "quickshell $v (build d extra) est installe : son verrou de session echoue ouvert et Grassfield le refuse" \
+      'fix the repository order above, then let Omarchy update quickshell from [omarchy] (0.3.2.r7 or newer)' \
+      'corrige l ordre des depots ci-dessus puis laisse Omarchy mettre quickshell a jour depuis [omarchy] (0.3.2.r7 ou plus)'
+  elif [[ -n $repo_of_qs && $repo_of_qs != omarchy ]]; then
+    bad "quickshell would come from [$repo_of_qs], not [omarchy]" "quickshell viendrait de [$repo_of_qs], pas de [omarchy]" \
+      'fix the repository order above, then update the system' 'corrige l ordre des depots ci-dessus puis mets le systeme a jour'
+  else ok "quickshell ${v:-?} from [${repo_of_qs:-omarchy}]" "quickshell ${v:-?} depuis [${repo_of_qs:-omarchy}]"; fi
+
+  free=$(free_mib "$GF_ROOT/var/cache/pacman/pkg") || free=0
+  tmpfree=$(free_mib "$GF_ROOT/usr") || tmpfree=0
+  [[ -n $free && -n $tmpfree ]] || { free=0; tmpfree=0; }
+  if ((free >= GF_MIN_FREE_MIB && tmpfree >= GF_MIN_FREE_MIB)); then ok "free disk space: $((free < tmpfree ? free : tmpfree)) MiB" \
+    "espace disque libre : $((free < tmpfree ? free : tmpfree)) MiB"
+  else bad "less than $GF_MIN_FREE_MIB MiB free (cache $free MiB, /usr $tmpfree MiB)" \
+    "moins de $GF_MIN_FREE_MIB MiB libres (cache $free MiB, /usr $tmpfree MiB)" \
+    'free space (for example: paccache -rk1, or clear old snapshots) and run this again' \
+    'libere de la place (par exemple : paccache -rk1, ou anciens snapshots) et relance'; fi
+
+  if curl --proto '=https' --tlsv1.2 -fsI --max-time 20 "$GF_BASE/$CHANNEL/$arch/grassfield.db" >/dev/null 2>&1 &&
+    curl --proto '=https' --tlsv1.2 -fsI --max-time 20 "$GF_BASE/grassfield-signing-key.asc" >/dev/null 2>&1; then
+    ok "network: $GF_BASE answers" "reseau : $GF_BASE repond"
+  else
+    bad "cannot reach $GF_BASE ($CHANNEL database or key file)" "impossible de joindre $GF_BASE (base $CHANNEL ou fichier de cle)" \
+      'check your connection (and proxy), then run this again' 'verifie ta connexion (et ton proxy) puis relance'
+  fi
+
+  if command -v checkupdates >/dev/null; then
+    pending=$(checkupdates 2>/dev/null | grep -v '^grassfield-' || true)
+    if [[ -n $pending ]]; then
+      bad 'the system has pending updates; installing now could mix old and new libraries' \
+        'le systeme a des mises a jour en attente ; installer maintenant pourrait melanger anciennes et nouvelles bibliotheques' \
+        'update Omarchy first (its own update command), then run this again' \
+        'mets d abord Omarchy a jour (sa commande de mise a jour) puis relance'
+    else ok 'the system is up to date' 'le systeme est a jour'; fi
+  else
+    note 'checkupdates (pacman-contrib) is missing: the up-to-date check runs after the sync instead' \
+      'checkupdates (pacman-contrib) est absent : la verification a jour se fait apres la synchronisation'
+  fi
+  foreign=$(pacman -Qm 2>/dev/null || true)
+  if grep -q '^grassfield-' <<<"$foreign"; then
+    note 'a Grassfield build from source is installed: the repository version replaces it when it differs' \
+      'un build Grassfield depuis les sources est installe : la version du depot le remplace si elle differe'
+  fi
+  note "hyprland $(pacman_version hyprland), qt6-base $(pacman_version qt6-base): the exact dependency check runs after the sync" \
+    "hyprland $(pacman_version hyprland), qt6-base $(pacman_version qt6-base) : la verification exacte des dependances se fait apres la synchronisation"
+}
+
+finish_preflight() {
+  if ((PROBLEMS > 0)); then
+    printf '\n'
+    die "$PROBLEMS problem(s) above. Nothing was changed." "$PROBLEMS probleme(s) ci-dessus. Rien n a ete modifie."
+  fi
+}
+
+# ---- the plan -------------------------------------------------------------------------------------------------------
+pkg_list() { local p=("${GF_PKGS[@]}"); ((THEMES)) && p+=("$GF_THEME_PKG"); echo "${p[*]}"; }
+
+plan_install() {
+  printf '\n'
+  say '== Plan: what will change ==' '== Plan : ce qui va changer =='
+  say " 1. snapshot       omarchy-snapshot create$( ((SNAPSHOT)) || echo ' (skipped: --no-snapshot)')" \
+    " 1. snapshot       omarchy-snapshot create$( ((SNAPSHOT)) || echo ' (ignore : --no-snapshot)')"
+  say " 2. trust (root)  pacman-key: receive key $GF_FPR from $GF_KEYSERVER (else the key file of $GF_BASE, checked against that fingerprint), then --lsign-key" \
+    " 2. confiance (root) pacman-key : recoit la cle $GF_FPR depuis $GF_KEYSERVER (sinon le fichier de cle de $GF_BASE, verifie contre cette empreinte), puis --lsign-key"
+  say " 3. repository (root) $GF_CONF (SigLevel = Required, Server = $GF_BASE/$CHANNEL/\$arch) and the [grassfield] section at the end of $PACMAN_CONF (copy kept: $GF_BAK)" \
+    " 3. depot (root)   $GF_CONF (SigLevel = Required, Server = $GF_BASE/$CHANNEL/\$arch) et la section [grassfield] a la fin de $PACMAN_CONF (copie gardee : $GF_BAK)"
+  say " 4. install (root) pacman -Sy, then pacman -S --needed $(pkg_list) (signatures required; refused unless the dependency check passes)" \
+    " 4. installation (root) pacman -Sy puis pacman -S --needed $(pkg_list) (signatures obligatoires ; refuse si la verification des dependances echoue)"
+  say " 5. hand over     grassfield-channel-set $CHANNEL (its own polkit prompt: the helper then owns the file and links Omarchy's hook)" \
+    " 5. passage de relais grassfield-channel-set $CHANNEL (sa propre invite polkit : l assistant possede ensuite le fichier et lie le hook d Omarchy)"
+  say " 6. session       grassfield-login set $SESSION (next login starts $SESSION; nothing runs now)" \
+    " 6. session        grassfield-login set $SESSION (la prochaine ouverture de session demarre $SESSION ; rien ne tourne maintenant)"
+  say "Log: $LOG" "Journal : $LOG"
+  say 'Undo: run this script again with --uninstall.' 'Annuler : relance ce script avec --uninstall.'
+}
+
+plan_uninstall() {
+  printf '\n'
+  say '== Plan: back to stock Omarchy ==' '== Plan : retour a Omarchy d origine =='
+  say ' 1. snapshot            omarchy-snapshot create' ' 1. snapshot            omarchy-snapshot create'
+  say ' 2. Turn Off           grassfield-channel-set off (removes [grassfield], its file, the Grassfield keys, Omarchy hook link)' \
+    ' 2. Desactiver          grassfield-channel-set off (retire [grassfield], son fichier, les cles Grassfield, le lien du hook Omarchy)'
+  say ' 3. session            grassfield-login set omarchy, then your choice file is deleted' \
+    ' 3. session             grassfield-login set omarchy, puis ton fichier de choix est supprime'
+  say " 4. remove (root)      pacman -Rns of the installed ones among: ${GF_ALL_PKGS[*]} (their pre_remove removes [grassfield] and the key too)" \
+    " 4. retrait (root)      pacman -Rns de ceux installes parmi : ${GF_ALL_PKGS[*]} (leur pre_remove retire aussi [grassfield] et la cle)"
+  say ' 5. leftovers (root)   the login-theme drop-in zz-grassfield-theme.conf if you created it, a key still in pacman, pacman.conf from its copy if only our two lines remain' \
+    ' 5. restes (root)       le fichier zz-grassfield-theme.conf si tu l as cree, une cle encore dans pacman, pacman.conf depuis sa copie s il ne reste que nos deux lignes'
+  say "Log: $LOG" "Journal : $LOG"
+}
+
+confirm_plan() {
+  if ((DRY)); then
+    printf '\n'
+    say 'Dry run: nothing was changed.' 'Simulation : rien n a ete modifie.'
+    exit 0
+  fi
+  if ! ((YES)) && [[ -z $GF_ROOT && ! -t 0 ]]; then
+    die 'no terminal to ask on: run it from a terminal, or add --yes.' 'pas de terminal pour demander : lance-le depuis un terminal ou ajoute --yes.'
+  fi
+  printf '\n'
+  ask 'Go ahead?' 'Continuer ?' || die 'cancelled. Nothing was changed.' 'annule. Rien n a ete modifie.'
+}
+
+# ---- the steps ------------------------------------------------------------------------------------------------------
+step() { printf '\n--> %s\n' "$(t "$1" "$2")"; }
+
+do_snapshot() {
+  ((SNAPSHOT)) || { note 'snapshot skipped (--no-snapshot)' 'snapshot ignore (--no-snapshot)'; return 0; }
+  command -v omarchy-snapshot >/dev/null || { note 'no omarchy-snapshot: no snapshot' 'pas d omarchy-snapshot : pas de snapshot'; return 0; }
+  step 'Snapshot (Omarchy)' 'Snapshot (Omarchy)'
+  local rc=0
+  omarchy-snapshot create || rc=$?
+  case $rc in
+    0) ok 'snapshot created' 'snapshot cree' ;;
+    127) note 'snapper is not installed: going on without a snapshot (as Omarchy does)' 'snapper n est pas installe : on continue sans snapshot (comme Omarchy)' ;;
+    *) die 'the snapshot failed (see above). Fix snapper, or use --no-snapshot if you accept going on without one.' \
+      'le snapshot a echoue (voir plus haut). Corrige snapper, ou utilise --no-snapshot si tu acceptes de continuer sans.' ;;
+  esac
+}
+
+do_key() {
+  step "Trust the signing key $GF_FPR" "Faire confiance a la cle de signature $GF_FPR"
+  local got
+  if key_present; then
+    note 'the key is already in pacman' 'la cle est deja dans pacman'
+  elif as_root timeout 120 pacman-key --recv-keys "$GF_FPR" --keyserver "$GF_KEYSERVER"; then
+    ok "key received from $GF_KEYSERVER" "cle recue depuis $GF_KEYSERVER"
+  else
+    note 'the keyserver did not answer: using the key file of the host' 'le serveur de cles ne repond pas : fichier de cle de l hote'
+    curl --proto '=https' --tlsv1.2 -fsSL --max-time 60 -o "$TMP/key.asc" "$GF_BASE/grassfield-signing-key.asc" ||
+      die 'cannot download the key file.' 'impossible de telecharger le fichier de cle.'
+    got=$(key_primaries "$TMP/key.asc")
+    [[ $got == "$GF_FPR" ]] || die "the key file holds '${got:-nothing}', not $GF_FPR: refused." "le fichier de cle contient '${got:-rien}', pas $GF_FPR : refuse."
+    as_root pacman-key --add "$TMP/key.asc"
+  fi
+  # Signs only a key with exactly this full fingerprint, and fails when the keyring holds none: a substituted key is refused here.
+  as_root pacman-key --lsign-key "$GF_FPR"
+  key_present || die 'the key is not in the keyring after the steps above.' 'la cle n est pas dans le trousseau apres les etapes ci-dessus.'
+  ok 'key trusted (locally signed)' 'cle de confiance (signee localement)'
+}
+
+write_conf() {
+  printf 'SigLevel = Required\nServer = %s/%s/$arch\n' "$GF_BASE" "$CHANNEL" | as_root tee "$GF_CONF" >/dev/null
+}
+
+do_repository() {
+  step 'The [grassfield] repository' 'Le depot [grassfield]'
+  local n
+  if [[ ! -f $GF_CONF ]]; then
+    write_conf
+    ok "wrote $GF_CONF" "ecrit $GF_CONF"
+  elif conf_servers_ours; then
+    note "$GF_CONF already names this host: kept (grassfield-channel-set owns it)" "$GF_CONF nomme deja cet hote : conserve (grassfield-channel-set le gere)"
+  else
+    as_root cp -p -- "$GF_CONF" "$GF_CONF.grassfield-install-bak"
+    write_conf
+    ok "rewrote $GF_CONF (the old one is $GF_CONF.grassfield-install-bak)" "reecrit $GF_CONF (l ancien : $GF_CONF.grassfield-install-bak)"
+  fi
+  n=$(sections)
+  if ((n == 0)); then
+    [[ -e $GF_BAK ]] || as_root cp -p -- "$PACMAN_CONF" "$GF_BAK"
+    # The file exists before the Include does: pacman never sees an Include whose file is missing.
+    printf '\n[grassfield]\n%s\n' "$GF_INCLUDE_LINE" | as_root tee -a "$PACMAN_CONF" >/dev/null
+    if ! repos_has grassfield; then
+      as_root cp -p -- "$GF_BAK" "$PACMAN_CONF"
+      die "pacman cannot read $PACMAN_CONF with the new section: it was put back as it was." "pacman ne lit pas $PACMAN_CONF avec la nouvelle section : il a ete remis comme avant."
+    fi
+    ok 'added [grassfield] to pacman.conf' 'section [grassfield] ajoutee a pacman.conf'
+  elif ((n == 1)); then
+    note '[grassfield] is already in pacman.conf: not added again' '[grassfield] est deja dans pacman.conf : non ajoutee a nouveau'
+  else
+    note "pacman.conf has $n [grassfield] sections: grassfield-channel-set repair leaves exactly one (run after the install)" \
+      "pacman.conf a $n sections [grassfield] : grassfield-channel-set repair en laisse une seule (apres l installation)"
+  fi
+}
+
+do_install() {
+  step 'Sync and install' 'Synchronisation et installation'
+  local pkgs pending
+  read -r -a pkgs <<<"$(pkg_list)"
+  as_root pacman -Sy
+  pending=$(pacman -Qu 2>/dev/null | grep -v '^grassfield-' || true)
+  if [[ -n $pending ]]; then
+    die 'after the sync, the system has pending updates: installing now would be a partial upgrade. Nothing was installed; update Omarchy, then run this script again (it continues).' \
+      'apres la synchronisation, le systeme a des mises a jour en attente : installer maintenant serait une mise a jour partielle. Rien n a ete installe ; mets Omarchy a jour puis relance ce script (il reprend).'
+  fi
+  # The exact check: pacman resolves dependencies and conflicts (Hyprland, Qt, quickshell...) without installing anything.
+  pacman -S --needed --print "${pkgs[@]}" >/dev/null ||
+    die 'pacman cannot resolve the packages against this system (see above). Nothing was installed; undo the repository with --uninstall if you wish.' \
+      'pacman ne resout pas les paquets sur ce systeme (voir plus haut). Rien n a ete installe ; annule le depot avec --uninstall si tu veux.'
+  if ((YES)); then as_root pacman -S --needed --noconfirm "${pkgs[@]}"; else as_root pacman -S --needed "${pkgs[@]}"; fi
+  ok 'packages installed' 'paquets installes'
+}
+
+do_handover() {
+  step 'Hand over to grassfield-channel-set' 'Passage de relais a grassfield-channel-set'
+  command -v grassfield-channel-set >/dev/null || die 'grassfield-channel-set is missing after the install.' 'grassfield-channel-set est absent apres l installation.'
+  grassfield-channel-set "$CHANNEL" ||
+    die "grassfield-channel-set $CHANNEL failed (see above). Run it yourself, or run this script again." \
+      "grassfield-channel-set $CHANNEL a echoue (voir plus haut). Lance-le toi-meme ou relance ce script."
+  ok "channel $CHANNEL" "canal $CHANNEL"
+}
+
+do_session() {
+  step 'Session' 'Session'
+  grassfield-login set "$SESSION" ||
+    note "could not set the session: run  grassfield-login set $SESSION" "session non reglee : lance  grassfield-login set $SESSION"
+}
+
+end_install() {
+  printf '\n'
+  say '== Done ==' '== Termine =='
+  say "Grassfield $CHANNEL is installed. Next:" "Grassfield $CHANNEL est installe. Ensuite :"
+  if [[ $SESSION == grassfield ]]; then
+    say '  1. Restart the computer once (the login screen reads its configuration at start).' \
+      '  1. Redemarre l ordinateur une fois (l ecran de connexion lit sa configuration au demarrage).'
+    say '  2. At the login screen choose "Grassfield (uwsm)" (it is the default). Omarchy stays one command away: grassfield-login set omarchy' \
+      '  2. A l ecran de connexion choisis "Grassfield (uwsm)" (par defaut). Omarchy reste a une commande : grassfield-login set omarchy'
+  else
+    say '  1. Your next login still starts Omarchy. To try Grassfield: grassfield-login set grassfield, restart, log in.' \
+      '  1. Ta prochaine connexion demarre encore Omarchy. Pour essayer Grassfield : grassfield-login set grassfield, redemarre, connecte-toi.'
+  fi
+  say '  Update later from Settings > Software Update (or Omarchy updates, which now include Grassfield).' \
+    '  Mets a jour plus tard depuis Reglages > Mise a jour (ou la mise a jour d Omarchy, qui inclut maintenant Grassfield).'
+  say '  Undo everything: run this script again with --uninstall.' '  Tout annuler : relance ce script avec --uninstall.'
+  say "  Log: $LOG" "  Journal : $LOG"
+}
+
+# ---- uninstall --------------------------------------------------------------------------------------------------------
+installed_pkgs() { local p; for p in "${GF_ALL_PKGS[@]}"; do pacman -Q "$p" >/dev/null 2>&1 && printf '%s\n' "$p"; done; return 0; }
+
+pacman_conf_is_ours_only() { # our backup plus exactly our two lines is the current file
+  [[ -f $GF_BAK && -f $PACMAN_CONF ]] || return 1
+  { cat -- "$GF_BAK"; printf '\n[grassfield]\n%s\n' "$GF_INCLUDE_LINE"; } | cmp -s - "$PACMAN_CONF"
+}
+
+do_uninstall() {
+  local pkgs=() left=0 session_file=${XDG_CONFIG_HOME:-$HOME/.config}/grassfield/login-session
+  mapfile -t pkgs < <(installed_pkgs)
+  do_snapshot
+  step 'Turn Off Grassfield updates' 'Desactiver les mises a jour Grassfield'
+  if command -v grassfield-channel-set >/dev/null; then
+    grassfield-channel-set off || note 'grassfield-channel-set off failed: the removal below does the same through the package' \
+      'grassfield-channel-set off a echoue : le retrait ci-dessous fait la meme chose via le paquet'
+  else note 'grassfield-channel-set is not installed: skipped' 'grassfield-channel-set n est pas installe : ignore'; fi
+
+  step 'Session: back to Omarchy' 'Session : retour a Omarchy'
+  command -v grassfield-login >/dev/null && { grassfield-login set omarchy || true; }
+  rm -f -- "$session_file"
+  ok 'next login starts Omarchy' 'la prochaine connexion demarre Omarchy'
+
+  if [[ -e $GF_ROOT/etc/sddm.conf.d/zz-grassfield-theme.conf ]]; then
+    step 'Login theme drop-in' 'Fichier du theme de connexion'
+    as_root rm -f -- "$GF_ROOT/etc/sddm.conf.d/zz-grassfield-theme.conf"
+    note 'if you also enabled the Plymouth boot theme, revert it as in docs/owner-setup/login-boot-themes.md section 2' \
+      'si tu as aussi active le theme de demarrage Plymouth, annule-le comme dans docs/owner-setup/login-boot-themes.md section 2'
+  fi
+
+  if ((${#pkgs[@]})); then
+    step "Remove ${pkgs[*]}" "Retrait de ${pkgs[*]}"
+    if ((YES)); then as_root pacman -Rns --noconfirm "${pkgs[@]}"; else as_root pacman -Rns "${pkgs[@]}"; fi
+  else note 'no Grassfield package is installed' 'aucun paquet Grassfield n est installe'; fi
+
+  step 'Leftovers' 'Restes'
+  if (($(sections) > 0)); then
+    if pacman_conf_is_ours_only; then
+      as_root cp -p -- "$GF_BAK" "$PACMAN_CONF"
+      as_root rm -f -- "$GF_CONF"
+      ok 'pacman.conf restored from its copy' 'pacman.conf restaure depuis sa copie'
+    else
+      left=1
+      bad '[grassfield] is still in /etc/pacman.conf and no package removes it' '[grassfield] est encore dans /etc/pacman.conf et aucun paquet ne le retire' \
+        'with sudo, delete the two lines "[grassfield]" and "Include = /etc/pacman.d/grassfield.conf" at its end, then delete /etc/pacman.d/grassfield.conf' \
+        'avec sudo, supprime les deux lignes "[grassfield]" et "Include = /etc/pacman.d/grassfield.conf" a sa fin, puis supprime /etc/pacman.d/grassfield.conf'
+    fi
+  fi
+  if ((!left)) && key_present; then
+    as_root pacman-key --delete "$GF_FPR"
+    ok 'key removed from pacman' 'cle retiree de pacman'
+  elif key_present; then
+    bad 'the Grassfield key is still in pacman' 'la cle Grassfield est encore dans pacman' "after the fix above: sudo pacman-key --delete $GF_FPR" \
+      "apres le correctif ci-dessus : sudo pacman-key --delete $GF_FPR"
+    left=1
+  fi
+  ((! left)) || die 'back to Omarchy, but the leftovers above need your hands.' 'retour a Omarchy, mais les restes ci-dessus demandent ton intervention.'
+  printf '\n'
+  say '== Done: stock Omarchy ==' '== Termine : Omarchy d origine =='
+  say '  Restart the computer once. Omarchy was never modified, so nothing else is needed.' '  Redemarre l ordinateur une fois. Omarchy n a jamais ete modifie : rien d autre a faire.'
+  say "  Log: $LOG" "  Journal : $LOG"
+}
+
+# ---- main -------------------------------------------------------------------------------------------------------------
+main() {
+  case ${LC_ALL:-${LC_MESSAGES:-${LANG:-}}} in fr*) FR=1 ;; esac
+  case $GF_BASE$GF_FPR in *@*) echo 'grassfield-install: unrendered template (packaging/install/render.py fills its values)' >&2; exit 2 ;; esac
+  [[ $GF_FPR =~ ^[0-9A-F]{40}$ && $GF_BASE =~ ^https://[A-Za-z0-9.:/~+-]+$ ]] || { echo 'grassfield-install: bad embedded host or fingerprint' >&2; exit 2; }
+  parse_args "$@"
+  # `curl | bash`: stdin is the script itself, which bash has already read whole; questions and pacman read the terminal.
+  if [[ -z $GF_ROOT && ! -t 0 ]]; then
+    if [[ -r /dev/tty ]] && { : </dev/tty; } 2>/dev/null; then exec </dev/tty; else exec </dev/null; fi
+  fi
+  [[ -z $GF_ROOT ]] || echo "grassfield-install: TEST ROOT $GF_ROOT (GRASSFIELD_INSTALL_ROOT is set)" >&2
+  [[ -n ${HOME:-} ]] || { echo 'grassfield-install: HOME is not set' >&2; exit 1; }
+  TMP=$(mktemp -d)
+  trap cleanup EXIT
+  setup_log
+  say "Grassfield installation: $GF_BASE" "Installation de Grassfield : $GF_BASE"
+  preflight_common
+  if ((UNINSTALL)); then
+    finish_preflight
+    plan_uninstall
+    confirm_plan
+    as_root -v
+    do_uninstall
+  else
+    preflight_install
+    finish_preflight
+    plan_install
+    confirm_plan
+    as_root -v
+    do_snapshot
+    do_key
+    do_repository
+    do_install
+    do_handover
+    do_session
+    end_install
+  fi
+}
+
+main "$@"
