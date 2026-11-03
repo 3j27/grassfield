@@ -79,7 +79,9 @@ Scope {
     property bool advanceRequested: false
     property bool completed: false
 
-    readonly property bool ready: WallpaperState.stateReady && WallpaperState.toolChecked
+    // The settings are read too (Entrance.settingsFinal: read, or the bound ran out): before that `cfg` is the defaults, and
+    // the feed would answer with the default artwork, the first frame, ahead of the configured wallpaper.
+    readonly property bool ready: WallpaperState.stateReady && WallpaperState.toolChecked && Entrance.settingsFinal
 
     onCfgKeyChanged: schedule()
     onReadyChanged: schedule()
@@ -135,7 +137,28 @@ Scope {
     }
 
     // A newer request: the running job is told to stop and its answer will be ignored (the token no longer matches).
+    // This output's turn at the transcode (WallpaperState.transcodeOwner).
+    property bool transcodeWaiting: false
+    property bool transcoding: false
+    function releaseTranscode(): void {
+        if (root.transcoding) {
+            root.transcoding = false;
+            if (WallpaperState.transcodeOwner === root.outputName)
+                WallpaperState.transcodeOwner = "";
+        }
+    }
+    Connections {
+        target: WallpaperState
+        function onTranscodeOwnerChanged(): void {
+            if (root.transcodeWaiting && WallpaperState.transcodeOwner === "")
+                root.startTranscode();
+        }
+    }
+    Component.onDestruction: releaseTranscode()
+
     function supersede(): void {
+        releaseTranscode();
+        transcodeWaiting = false;
         generation++;
         if (activeJob && activeJob.running) {
             cancelled++;
@@ -301,6 +324,14 @@ Scope {
     }
 
     function startTranscode(): void {
+        // Another output is transcoding: this one waits for its turn (the status stays "preparing").
+        if (WallpaperState.transcodeOwner !== "" && WallpaperState.transcodeOwner !== root.outputName) {
+            transcodeWaiting = true;
+            return;
+        }
+        transcodeWaiting = false;
+        WallpaperState.transcodeOwner = root.outputName;
+        transcoding = true;
         progress = 0;
         publish();
         // A video uses Fill or Fit only (WallpaperConfig.settle makes it so).
@@ -385,6 +416,7 @@ Scope {
         activeJob = null;
         // A transcode prints progress lines before its result: the result is the line that has an exit code.
         if (kind === "transcode") {
+            releaseTranscode();
             transcoded(WallpaperConfig.transcodeOutput(out).result, code, timedOut);
             return;
         }

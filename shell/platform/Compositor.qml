@@ -515,8 +515,10 @@ Singleton {
                 sock.judged = true;
                 sock.answerTimeout.stop();
                 const answer = Minimized.blurAnswer(sock.reply);
-                if (sock.what === "ground" && answer === "ok")
+                if (sock.what === "ground" && answer === "ok") {
                     Ground.accepted = sock.value;
+                    WallpaperState.setGround(sock.value);
+                }
                 if (answer === "rejected") {
                     if (sock.what === "edge" && !root.edgeRejected) {
                         root.edgeRejected = true;

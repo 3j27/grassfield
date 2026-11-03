@@ -124,6 +124,34 @@ hl.config({
   },
 })
 
+-- The ground of the owner's wallpaper (ADR-0040 ID-2, P-1, amended): before the shell has drawn, the screen shows the ground the
+-- shell last gave the compositor (wallpaper.json `ground`, written when Hyprland accepted it: the mean colour of the picture,
+-- the colour itself, the artwork's), not the default artwork's green. No file, no `ground` or anything but a plain file: the
+-- static ground above stays. Read through `head` behind `test -f` and `timeout` (a FIFO or a symlink never blocks the
+-- configuration, a directory is no file); Lua has no stat.
+do
+  local home = os.getenv("GRASSFIELD_STATE_HOME")
+  if not home or home == "" then
+    local xdg = os.getenv("XDG_STATE_HOME")
+    local base = (xdg and xdg ~= "") and xdg or ((os.getenv("HOME") or "") .. "/.local/state")
+    home = base .. "/grassfield"
+  end
+  local path = home .. "/wallpaper.json"
+  if type(io.popen) == "function" and not path:find("%c") then
+    local q = "'" .. path:gsub("'", "'\\''") .. "'"
+    local cmd = "[ -f " .. q .. " ] && [ ! -L " .. q .. " ] && timeout 2 head -c 65536 -- " .. q .. " 2>/dev/null"
+    local ok, p = pcall(io.popen, cmd, "r")
+    if ok and p then
+      local text = p:read("a") or ""
+      p:close()
+      local ground = text:match('"ground"%s*:%s*"#(%x%x%x%x%x%x)"')
+      if ground then
+        hl.config({ misc = { background_color = "rgba(" .. ground:lower() .. "ff)" } })
+      end
+    end
+  end
+end
+
 -- Motion curves (tokens "motion.curve.*").
 hl.curve("gfStandard", { type = "bezier", points = { { 0.2, 0.0 }, { 0.0, 1.0 } } })
 hl.curve("gfDecelerate", { type = "bezier", points = { { 0.32, 0.72 }, { 0.0, 1.0 } } })

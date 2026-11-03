@@ -329,6 +329,10 @@ Scope {
                 id: feed
                 screenInfo: win.modelData
                 onDisplayChanged: {
+                    // Not the feed's initial `display` (the placeholder artwork): the change signal fires once when the feed is
+                    // created, before any request (seen in the journal at rc1-16: the default artwork was the first frame).
+                    if (!feed.appliedOnce)
+                        return;
                     win.feedSeen = true;
                     win.show(win.withArt(feed.display), "normal");
                 }
@@ -348,7 +352,10 @@ Scope {
             property bool fallbackArt: false
             readonly property bool artLive: win.feedSeen || win.fallbackArt
             function stillDesc(): var {
-                const st = win.modelData ? WallpaperState.stillOf(win.modelData.name) : null;
+                const st = win.modelData && Entrance.settingsFinal ? WallpaperState.stillOf(win.modelData.name) : null;
+                // Only the still of the wallpaper now chosen (settings read): any other would show first and change after.
+                if (st !== null && !WallpaperConfig.stillMatches(st, WallpaperConfig.sourceKey(feed.cfg)))
+                    return null;
                 return st ? {kind: "picture", color: "", url: "file://" + st.file, strip: st.strip, image: st.image, mean: st.mean, video: ""} : null;
             }
             function begin(): void {
@@ -418,7 +425,20 @@ Scope {
                 if (!win.modelData)
                     return;
                 Ground.report(win.modelData.name, WallpaperConfig.groundOf(desc, slot.artPalette.ground, Tokens.sessionGround));
-                WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant});
+                WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant, src: WallpaperConfig.sourceKey(feed.cfg)});
+            }
+            // The default artwork is a FALLBACK for a source that failed, never a replacement for a wallpaper that is still
+            // loading (macOS: the owner's picture or its poster from the first frame). The desktop picture comes first and the
+            // bar, the Dock and the icons after it, together (ADR-0040 P-3): a slow picture holds the entrance (its own hard
+            // bound ends the hold if the picture never comes); only a failed source shows the artwork, and with it the bars.
+            // No decode is ever cancelled.
+            function artFallback(why: string): void {
+                if (win.firstReady)
+                    return;
+                console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": " + why + "; the artwork shows");
+                win.fallbackArt = true;
+                Entrance.noteWallpaperFailed();
+                win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
             }
             Timer {
                 id: firstTimer
@@ -427,14 +447,31 @@ Scope {
                 onTriggered: {
                     if (win.firstReady)
                         return;
-                    console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": the first frame took longer than " + interval + " ms; the artwork shows");
-                    win.fallbackArt = true;
-                    win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
+                    if (WallpaperConfig.firstFrameStep("bound", feed.status, feed.appliedOnce, win.firstReady) === "fallback") {
+                        win.artFallback("the first frame took longer than " + interval + " ms and the source failed");
+                        return;
+                    }
+                    // Still loading: nothing is painted and nothing is released (the entrance waits, P-3).
+                    console.info("grassfield-shell: wallpaper " + (win.modelData ? win.modelData.name : "") + " still loading after " + interval + " ms");
+                }
+            }
+            Connections {
+                target: feed
+                // The source failed (an error, a missing file, a failed transcode) before anything was shown: the artwork.
+                function onStatusChanged(): void {
+                    if (WallpaperConfig.firstFrameStep("status", feed.status, feed.appliedOnce, win.firstReady) === "fallback")
+                        win.artFallback("the source failed (" + feed.reason + ")");
                 }
             }
             Connections {
                 target: WallpaperState
                 function onStateReadyChanged(): void {
+                    win.begin();
+                }
+            }
+            Connections {
+                target: Entrance
+                function onSettingsFinalChanged(): void {
                     win.begin();
                 }
             }

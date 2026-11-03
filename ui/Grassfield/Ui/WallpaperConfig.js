@@ -1069,7 +1069,19 @@ function stillOf(saved, output, preparedDir) {
         return null;
     const stats = v => isPlainObject(v) && typeof v.mean === "number" && typeof v.p5 === "number" && typeof v.p95 === "number" ? v : null;
     const strip = isPlainObject(s.strip) && stats(s.strip.all) ? s.strip : null;
-    return {file: file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : ""};
+    return {file: file, strip: strip, image: stats(s.image), mean: typeof s.mean === "string" && HEX.test(s.mean) ? s.mean : "", src: typeof s.src === "string" ? s.src : ""};
+}
+
+// What the wallpaper settings of an output choose, as one string ("<source>|<path>"; a colour or the artwork has no path): a
+// stored still belongs to the setting it was shown for.
+function sourceKey(cfg) {
+    return isPlainObject(cfg) ? String(cfg.source) + "|" + (cfg.source === "file" || cfg.source === "folder" || cfg.source === "video" ? String(cfg.path) : "") : "";
+}
+
+// A stored still is the first frame only while the setting that showed it is the current one: a changed wallpaper (a record
+// from before, a video's, another file) never shows first, then the other after it. A record without its setting never matches.
+function stillMatches(still, key) {
+    return isPlainObject(still) && typeof still.src === "string" && still.src !== "" && still.src === key;
 }
 
 // The stored state with `output`'s record set from the description now on screen (`art`: {artwork, variant}, what the output
@@ -1078,6 +1090,9 @@ function withShown(saved, output, desc, art) {
     const base = isPlainObject(saved) ? saved : {};
     const a = isPlainObject(art) ? art : {};
     const r = {kind: "art", artwork: typeof a.artwork === "string" ? a.artwork : "grassfield", variant: typeof a.variant === "string" ? a.variant : "evening.dark"};
+    // The setting this record was shown for (sourceKey): the still of the next start is used only while it still holds.
+    if (typeof a.src === "string" && a.src !== "")
+        r.src = a.src;
     let keep = true;
     if (desc && desc.kind === "picture" && typeof desc.url === "string" && desc.url.indexOf("file://") === 0) {
         r.kind = "picture";
@@ -1189,6 +1204,19 @@ function firstFrameChoice(feedSeen, stateReady, hasStill) {
     return hasStill ? "still" : "wait";
 }
 
+// What an output without its first frame does (ADR-0040 ID-3, amended): the default artwork is a FALLBACK for a source that
+// failed ("fallback": the feed's status is "error", applied once), never a replacement for a wallpaper still loading. On the
+// first-frame bound ("bound") a loading wallpaper ("wait") changes nothing (no artwork, no release of the bars: ADR-0040 P-3), whatever the phase
+// (the feed not started, a list or a prepare running, a transcode, the online entry not loaded, a decode in progress); its
+// decode is never cancelled. `when` is "bound" or "status"; `status` the feed's.
+function firstFrameStep(when, status, applied, firstReady) {
+    if (firstReady)
+        return "none";
+    if (status === "error" && (applied || when === "bound"))
+        return "fallback";
+    return when === "bound" ? "wait" : "none";
+}
+
 // The ground of `output` in `grounds` ({output name: "#RRGGBB"}), else `fallback`.
 function groundFor(grounds, output, fallback) {
     return isPlainObject(grounds) && typeof output === "string" && Object.prototype.hasOwnProperty.call(grounds, output) && HEX.test(grounds[output]) ? grounds[output] : fallback;
@@ -1209,6 +1237,9 @@ function stateText(saved, startingBy, blocked, now) {
     const o = {displays: isPlainObject(s.displays) ? s.displays : {}};
     if (isPlainObject(s.shown) && Object.keys(s.shown).length > 0)
         o.shown = s.shown;
+    // The ground the compositor was last given (Ground.accepted): looknfeel.lua starts the next session on it.
+    if (typeof s.ground === "string" && HEX.test(s.ground))
+        o.ground = s.ground.toUpperCase();
     const starting = [];
     const by = isPlainObject(startingBy) ? startingBy : {};
     for (const owner of Object.keys(by)) {

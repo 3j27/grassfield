@@ -5,7 +5,7 @@
 #   - no surface is shown twice on an output without being hidden in between ("grassfield-shell: shown|hidden <surface>
 #     <output> <ms>", shell/services/Journal.qml);
 #   - the menu bar and the Dock come after the wallpaper of their output, and the entrance happened ("grassfield-shell:
-#     entrance (ready", or "(timeout" on a slow machine, which is reported, not failed; the timeout still waits for every
+#     entrance (ready", or "(timeout" or "(hard bound" on a slow machine, which is reported, not failed; the timeout still waits for every
 #     wallpaper's first frame);
 #   - the menu bar's tone does not change in the first 3 s (`bartone status` sampled every 100 ms from the start).
 # The lock and unlock part of section 7 comes with step 4b. Pictures are generated under .dev, never committed.
@@ -35,6 +35,10 @@ journal_checks() {
   state=$(find "$VS_DEV/state" -name wallpaper.json 2>/dev/null | head -1 || true)
   final=$([[ -n $state ]] && jq -r --arg o "$out" '.shown[$o].kind // ""' "$state" 2>/dev/null || true)
   check "$label: the first wallpaper is the final one (first $first, final $final)" test -n "$first" -a "$first" = "$final"
+  # A picture is configured: the first frame and the final one are that picture, never the default artwork (the artwork is the
+  # fallback of a failed source only; a run that ends on it, with everything else "consistent", was once a pass).
+  check "$label: the configured picture, never the artwork (first $first, final $final)" test "$first" = picture -a "$final" = picture
+  check "$label: no wallpaper first-frame fallback to the artwork" test -z "$(grep -m1 'the artwork shows' "$log" || true)"
   # shown/hidden pairs per surface and output: a second `shown` needs a `hidden` before it.
   local twice
   twice=$(grep -o "grassfield-shell: \(shown\|hidden\) [a-z]* [^ ]* [0-9]*" "$log" | awk '

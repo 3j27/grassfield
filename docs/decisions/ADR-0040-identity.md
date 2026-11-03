@@ -857,6 +857,18 @@ to the text prompt, which this container cannot test); every root step is the ow
   sets the current one at start and on change through the session's own compositor path (mechanism VERIFY on 0.56.2;
   fallback: the static default). The wallpaper window's colour (step 3) and the exit cover (step 7) use it; the lock
   surface's colour is the security module's and comes with step 4a (review of b44d17e).
+- **ID-2a (amendment, 2026-11-02, rc1-16 defects; decided under the delegation "closest to macOS 27, no technical step for
+  the end user")** The default artwork's ground is the static start colour only for an account that has no ground yet. The
+  shell records the ground Hyprland accepted in `wallpaper.json` (`ground`), and `looknfeel.lua` starts the next session on
+  it (read through `test -f` and `timeout`: a FIFO, a directory or a symlink leave the default), so an owner who chose a
+  picture or a colour never sees the default's green first (macOS: the user's own wallpaper from the first frame). ID-3's
+  bound is changed in the same way: the default artwork is the FALLBACK of a failed source (an error, a missing file, a
+  failed transcode), never a replacement for a wallpaper that is still loading. P-3 holds: on the bound
+  (`wallpaper.firstShowTimeoutMs`) a loading wallpaper changes nothing, neither the artwork nor a release of the bars; the
+  bar, the Dock and the icons come after the desktop picture, together, at its first frame, or at the entrance's own hard
+  bound (the reveal bound plus four wallpaper bounds, 7.5 s; a first prepare at a fractional scale takes 4 to 5 s under load) if it never comes (journal `entrance (hard bound)`). Only a failed source shows the artwork, and with it the bars
+  (`entrance (wallpaper error)`). No decode is cancelled (`WallpaperConfig.firstFrameStep`). A stored still is used only for
+  the setting it was shown for (`src`).
 - **ID-3** The wallpaper's first frame is the cached still of the last applied wallpaper, with its tone (section 2).
 - **ID-4** The wallpaper layer gets `no_anim` like the bars; every entrance animation belongs to the shell (one owner of
   motion), so the compositor never fades a layer in under the shell's own fade.

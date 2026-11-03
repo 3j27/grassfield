@@ -122,6 +122,9 @@ Singleton {
     property var videoBlockedPaths: []
     // owner (output name) -> path of the video that output is starting.
     property var videoStartingBy: ({})
+    // The output whose feed is transcoding a video now ("" = none): the outputs take turns, so that two feeds never run the
+    // helper's transcode and its cache pruning at once (one of them failed with "write").
+    property string transcodeOwner: ""
 
     function isVideoBlocked(path: string): bool {
         return WallpaperConfig.videoBlocked(videoBlockedPaths, path);
@@ -228,6 +231,15 @@ Singleton {
         return WallpaperConfig.lockBackdropOf(saved, output, preparedDir, videoDir);
     }
 
+    // The ground the compositor accepted (Ground.accepted): kept so that the next session's config starts on it, not on the default's
+    // green (config/hypr/grassfield/looknfeel.lua reads `ground`).
+    function setGround(hex: string): void {
+        if (!stateReady || !/^#[0-9A-Fa-f]{6}$/.test(hex) || saved.ground === hex.toUpperCase())
+            return;
+        saved = Object.assign({}, saved, {ground: hex.toUpperCase()});
+        writeTimer.restart();
+    }
+
     // The output now shows `desc`; `art` ({artwork, variant}) is what it would draw instead. Written a short while after.
     function setShown(output: string, desc: var, art: var): void {
         const next = WallpaperConfig.withShown(saved, output, desc, art);
@@ -295,7 +307,7 @@ Singleton {
         onLoaded: {
             try {
                 const o = JSON.parse(text());
-                root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}, shown: o && typeof o.shown === "object" && o.shown !== null && !Array.isArray(o.shown) ? o.shown : {}};
+                root.saved = {displays: o && typeof o.displays === "object" && o.displays !== null ? o.displays : {}, shown: o && typeof o.shown === "object" && o.shown !== null && !Array.isArray(o.shown) ? o.shown : {}, ground: o && typeof o.ground === "string" && /^#[0-9A-Fa-f]{6}$/.test(o.ground) ? o.ground : ""};
                 // A marker left by the previous run: that video crashed the shell while it started. It becomes `videoBlocked`
                 // (no retry) and the marker is gone, so the next start does not read it again.
                 const markers = WallpaperConfig.videoMarkersOf(o && o.videoStarting !== undefined ? o.videoStarting : []);

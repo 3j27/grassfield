@@ -1255,7 +1255,9 @@ TestCase {
         xhr.send();
         const w = xhr.responseText;
         compare((w.match(/win\.feedSeen = true;/g) || []).length, 1);
-        verify(/onDisplayChanged: \{\s*win\.feedSeen = true;\s*win\.show\(/.test(w));
+        // ... and not the signal the feed emits when it is created (its placeholder artwork, rc1-16: the default artwork was
+        // the first frame): only after the first request.
+        verify(/onDisplayChanged: \{(\s*\/\/[^\n]*)*\s*if \(!feed\.appliedOnce\)\s*return;\s*win\.feedSeen = true;\s*win\.show\(/.test(w));
         verify(/if \(!win\.firstReady\) \{\s*win\.begin\(\);\s*return;\s*\}/.test(w), "show() before the first frame only asks the choice");
         // After the first frame too: a phase or an appearance acts on the artwork only once the feed has given its first result
         // (counter-review of c5d43be4: a mapped still was cut to the placeholder artwork).
@@ -1288,6 +1290,82 @@ TestCase {
         // The empty parts are left out.
         compare(JSON.parse(WallpaperConfig.stateText({displays: {}}, {}, [], 1)), {displays: {}});
         compare(JSON.parse(WallpaperConfig.stateText(null, null, null, 1)), {displays: {}});
+    }
+
+    // Defect of rc1-16: a flat green screen, then the default artwork, then the configured wallpaper. The feed answered from the
+    // default settings before grassfield.json was read (the default artwork became the first frame), a stored still of another
+    // wallpaper showed first, and the first-frame bound painted the default artwork while a picture was still being prepared.
+    function test_noDefaultOrOtherWallpaperBeforeTheConfiguredOne() {
+        function text(rel) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl(rel), false);
+            xhr.send();
+            verify(xhr.responseText.length > 0, rel);
+            return xhr.responseText;
+        }
+        // The feed waits for the settings (read, or their bound).
+        const f = text("../../shell/desktop/WallpaperFeed.qml");
+        verify(/readonly property bool ready: [^\n]*Entrance\.settingsFinal/.test(f), "the feed waits for the settings");
+        // A still belongs to the setting it was shown for.
+        const name = "0123456789abcdef0123456789abcdef.jpg";
+        const pic = {kind: "picture", color: "", url: "file://" + prep + "/" + name, strip: stripStats, image: null, mean: "#112233", video: ""};
+        const file = {source: "file", path: "/usr/share/grassfield/wallpapers/photos/valley-fog.jpg"};
+        const key = WallpaperConfig.sourceKey(file);
+        const rec = WallpaperConfig.withShown({}, "o", pic, {artwork: "grassfield", variant: "evening.dark", src: key});
+        const still = WallpaperConfig.stillOf(rec, "o", prep);
+        compare(still.src, key);
+        verify(WallpaperConfig.stillMatches(still, key));
+        verify(!WallpaperConfig.stillMatches(still, WallpaperConfig.sourceKey({source: "file", path: "/other.jpg"})), "another file");
+        verify(!WallpaperConfig.stillMatches(still, WallpaperConfig.sourceKey({source: "video", path: file.path})), "another source");
+        verify(!WallpaperConfig.stillMatches(still, WallpaperConfig.sourceKey({source: "builtin", path: file.path})), "the artwork");
+        const old = WallpaperConfig.stillOf(WallpaperConfig.withShown({}, "o", pic, {}), "o", prep);
+        verify(!WallpaperConfig.stillMatches(old, key), "a record without its setting never matches");
+        verify(!WallpaperConfig.stillMatches(null, key));
+        const w = text("../../shell/desktop/Wallpaper.qml");
+        verify(/Entrance\.settingsFinal \? WallpaperState\.stillOf\(/.test(w) && /WallpaperConfig\.stillMatches\(st, WallpaperConfig\.sourceKey\(feed\.cfg\)\)/.test(w), "only the matching still, once the settings are read");
+        verify(/src: WallpaperConfig\.sourceKey\(feed\.cfg\)/.test(w), "the record keeps its setting");
+        // The bound does not paint the default artwork while the chosen picture or video is being prepared.
+        verify(/WallpaperConfig\.firstFrameStep\("bound", feed\.status, feed\.appliedOnce, win\.firstReady\) === "fallback"/.test(w) && /WallpaperConfig\.firstFrameStep\("status", /.test(w), "the window asks the step");
+        // On the bound nothing paints the artwork unless the source failed: the timer neither paints nor releases the bars.
+        const timer = /id: firstTimer[\s\S]*?\n            \}\n/.exec(w)[0];
+        verify(!/showFirst\(/.test(timer) && !/Entrance\./.test(timer) && (timer.match(/artFallback\(/g) || []).length === 1, "the bound neither paints nor releases the bars (P-3); artFallback only on a failed source");
+        verify(/if \(WallpaperConfig\.firstFrameStep\("bound"[^\n]*\) === "fallback"\) \{\s*win\.artFallback\(/.test(timer), "the one artFallback call is behind the failure step");
+        // Two outputs never transcode at once (one failed with "write"): they take turns through WallpaperState.transcodeOwner.
+        verify(/WallpaperState\.transcodeOwner !== "" && WallpaperState\.transcodeOwner !== root\.outputName/.test(f) && /releaseTranscode\(\);\s*transcoded\(/.test(f), "the transcode takes turns");
+        // A file wallpaper prepares: an omitted typed argument arrives as "undefined" (invalid-path, the artwork for good).
+        verify(/function startPrepare\(path: string, fit: var, color: var\)/.test(f), "startPrepare takes untyped fit and color");
+        verify(/typeof fit === "string" && fit !== "" \? fit : cfg\.fit/.test(f) && /typeof color === "string" && color !== "" \? color : cfg\.color/.test(f));
+        // The compositor's ground at the session's start is the last picture's mean, the default's green only without one.
+        const lua = text("../../config/hypr/grassfield/looknfeel.lua");
+        verify(/wallpaper\.json/.test(lua) && /"ground"%s\*:/.test(lua) && !/io\.open\(home/.test(lua), "the ground key, read behind test -f (tests/shell/session_ground.sh runs it)");
+    }
+
+    // The behaviour (pure part of the window's first frame): every phase of a wallpaper that is loading is "wait" on the bound
+    // (the entrance goes on over the ground), never "fallback"; only a failed source gives the artwork. The compositor's ground is
+    // kept in wallpaper.json.
+    function test_firstFrameStepNeverPaintsTheArtworkForALoadingWallpaper() {
+        const step = WallpaperConfig.firstFrameStep;
+        // The phases: the feed not started, a folder list or a prepare running, a transcode, the online entry not loaded
+        // ("builtin"/"waiting" before an answer), a ready feed whose picture is still decoding, a cached video's poster loading.
+        for (const status of ["builtin", "color", "preparing", "ready", "waiting"]) {
+            for (const applied of [false, true]) {
+                compare(step("bound", status, applied, false), "wait", status + " applied " + applied);
+                compare(step("status", status, applied, false), "none", status + " applied " + applied);
+            }
+        }
+        // A failure (an error, a missing file, a failed transcode): the artwork, on the status and on the bound.
+        compare(step("status", "error", true, false), "fallback");
+        compare(step("bound", "error", true, false), "fallback");
+        compare(step("status", "error", false, false), "none", "an error before any request is not a source's");
+        // Once the first frame is there nothing happens.
+        for (const status of ["error", "ready", "preparing"])
+            for (const when of ["bound", "status"])
+                compare(step(when, status, true, true), "none");
+        // The ground the compositor accepted is kept (upper case, valid only), nothing else changes.
+        const saved = {displays: {}, shown: {o: {kind: "art"}}, ground: "#a5937f"};
+        compare(JSON.parse(WallpaperConfig.stateText(saved, {}, [], 1)).ground, "#A5937F");
+        compare(JSON.parse(WallpaperConfig.stateText({displays: {}, ground: "red"}, {}, [], 1)).ground, undefined);
+        compare(JSON.parse(WallpaperConfig.stateText(WallpaperConfig.withShown(saved, "p", {kind: "color", color: "#112233"}, {}), {}, [], 1)).ground, "#A5937F", "withShown keeps it");
     }
 
     // The window needs Quickshell, so its contract is read from the sources (ADR-0040 ID-3, ID-4, ID-16): it maps only with
