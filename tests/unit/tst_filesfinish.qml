@@ -115,7 +115,8 @@ TestCase {
 
     function test_theToolbarCapsulesAreRimmed() {
         compare(nav.fillOpacity, Tokens.toolbarCapsuleFillOpacity);
-        verify(nav.border.width > 0, "the dark rim outside");
+        verify(!nav.field, "a lifted capsule, not a field");
+        compare(nav.border.width, Appearance.increaseContrast ? Tokens.controlBorderWidth : 0, "no outline in the standard appearance");
         tc.forceActiveFocus(); // the window may give the field the first focus
         tryVerify(() => !search.expanded, 1000, "collapsed without the focus or text");
         compare(search.fillOpacity, Tokens.toolbarCapsuleFillOpacity, "collapsed: a button of the toolbar");
@@ -200,8 +201,9 @@ TestCase {
         const tab = source("apps/files/qml/BrowserTab.qml");
         verify(/id: loadingNote[\s\S]*?Tokens\.filesLoadingDelay[\s\S]*?Spinner \{/.test(tab), "a slow listing shows the shared spinner in the view");
         const win = source("apps/files/qml/BrowserWindow.qml");
-        // Tags and Action share one capsule, as macOS 27 Finder groups Share, Tags and Action (Files has no Share).
-        verify(/RimmedCapsule \{[^}]*?\n\s*Row \{[^}]*?ToolButton \{\s*id: tagsButton[\s\S]*?ToolButton \{\s*id: actionButton/.test(win), "Tags and Action in their capsule");
+        // Tags and Action are bare glyphs with no capsule, as macOS 27 Finder draws Share, Tags and Action on a white window.
+        verify(/Item \{[^}]*?\n\s*Row \{[^}]*?ToolButton \{\s*id: tagsButton[\s\S]*?ToolButton \{\s*id: actionButton/.test(win), "Tags and Action in a row");
+        compare(win.indexOf("RimmedCapsule {\n                    width: 2 * Tokens.toolbarCapsule"), -1, "no capsule round Tags and Action");
         compare(win.indexOf("Appearance.buttonFill"), -1, "no plain capsule left in the toolbar");
         const tabs = source("apps/files/qml/TabBar.qml");
         verify(tabs.indexOf("!Appearance.reduceMotion") > 0 && tabs.indexOf("Easing.OutQuad") < 0, "the tabs do not slide under Reduce Motion, and move on the move curve");
