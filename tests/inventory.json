@@ -609,6 +609,7 @@
  {"path": "tests/compositor/zoom_restore.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/zoom_fill.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/compositor/zoom_fill_apps.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/compositor/window_edge.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/global_menus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/electron_menus.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/integration/launcher_entry.sh", "layer": "headless", "runner": "bare"},

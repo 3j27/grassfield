@@ -198,8 +198,10 @@ def main():
         while rule_rows < 8 and close_to(img.at(col, sy - 1 - rule_rows), RULE, 8):
             rule_rows += 1
         out["rule_rows"] = rule_rows
+    # The bar is flat, its token colour exactly; the window border right above it (black 0.58 in the dark appearance since
+    # ADR-0024's note of 2026-11-03) came within 8 levels of the dark bar over a mauve wallpaper and was counted as a 32nd row.
     rows = 0
-    while rows < 200 and close_to(img.at(col, sy - 1 - rule_rows - rows), BAR, 8):
+    while rows < 200 and close_to(img.at(col, sy - 1 - rule_rows - rows), BAR, 2):
         rows += 1
     out["bar_rows"] = rows
 
