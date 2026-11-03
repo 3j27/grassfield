@@ -830,6 +830,37 @@ TestCase {
         test.verifyBrowserKeys(browser, false, true, "Customize Folder closed");
     }
 
+    // Every overlay of the window stacks above the floating sidebar (z 1) and the lights' toolbar (z 2), which are siblings of
+    // theirs: the KIO sheet's wrapper (its sheet and blocker only order inside it), the window's own sheets with their
+    // blockers, Go to Folder and the menu layer. What lives inside the content item (views, banners, rename editors, the
+    // preview pane) is below the sidebar by design: it never reaches the panel. Drags are the system's (no QML ghost).
+    function test_overlaysStackAboveTheFloatingSidebar() {
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        const root = browser.contentItem;
+        let sidebar = null, toolbar = null;
+        const overlays = [];
+        for (let i = 0; i < root.children.length; i++) {
+            const c = root.children[i];
+            if (c instanceof Sidebar)
+                sidebar = c;
+            else if (c.contentStart !== undefined && c.controls !== undefined && c.showControls === true && c.showTitle === false)
+                toolbar = c;
+            else if (c instanceof KioSheets || c instanceof Sheet || c instanceof GoToFolderPanel || c instanceof MenuLayer)
+                overlays.push(c);
+        }
+        verify(sidebar !== null, "the sidebar");
+        verify(toolbar !== null, "the lights' toolbar");
+        verify(overlays.some(o => o instanceof KioSheets), "the KIO sheets' wrapper is a child of the window");
+        verify(overlays.filter(o => o instanceof Sheet).length >= 4, "the window's sheets");
+        verify(toolbar.z > sidebar.z, "the lights over the panel");
+        for (const o of overlays)
+            verify(o.z > toolbar.z, String(o) + " z " + o.z + " must be above the toolbar " + toolbar.z + " and the sidebar " + sidebar.z);
+        // The KIO sheet's own modal blocker is inside its wrapper, so the wrapper's z decides.
+        const kio = overlays.find(o => o instanceof KioSheets);
+        verify(kio.z > sidebar.z && kio.z >= overlays.filter(o => o instanceof Sheet)[0].z, "the KIO sheet stacks with the other sheets");
+    }
+
     // The sheet of `browser`'s KioSheets (KIO's questions).
     function kioSheet(browser: var): var {
         const walk = item => {

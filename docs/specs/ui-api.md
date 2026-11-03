@@ -70,6 +70,7 @@ add SettingsContract
 add MenuShortcut
 add GlassTint
 add RimmedCapsule
+add SidebarPanel
 add TileGlyph
 add SoftwareUpdateLogic
 add DevicePicture

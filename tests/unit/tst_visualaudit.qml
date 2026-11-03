@@ -93,7 +93,7 @@ TestCase {
         verify(toIcons >= 30 && toIcons <= 42, String(toIcons));
     }
 
-    // Priority 10, ADR-0024 lot 1: the Settings sidebar is flush (10 pt inset for the selection, 32-pt rows, 20-pt tiles); Files rows 32.
+    // Priority 10, ADR-0024 lot 1: the Settings sidebar is a floating panel since the 2026-11-03 amendment (10 pt inset for the selection, 32-pt rows, 20-pt tiles); Files rows 32.
     function test_sidebarMetrics() {
         compare(Tokens.settingsSidebarInset, 10);
         compare(Tokens.settingsSidebarItemHeight, 32);

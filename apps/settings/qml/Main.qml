@@ -279,16 +279,23 @@ Window {
 
     Item {
         id: sidebar
+        z: 1 // above the detail pane: the panel's shadow falls on it
         width: Tokens.settingsSidebarWidth
         height: parent.height
 
-        // Edge to edge and a step darker than the detail pane, with no dividing line (macOS 27).
-        Rectangle {
-            anchors.fill: parent
-            color: Appearance.colors.sidebarFill
+        // The floating panel: inset from the window's left, top and bottom edges, the detail pane straight beside it (macOS 26;
+        // ADR-0024 amendment 2026-11-03). Everything below keeps window coordinates, so the lights sit at the macOS position.
+        SidebarPanel {
+            id: panel
+            anchors {
+                fill: parent
+                leftMargin: Tokens.windowSidebarPanelInset
+                topMargin: Tokens.windowSidebarPanelInset
+                bottomMargin: Tokens.windowSidebarPanelInset
+            }
         }
 
-        // The window lights, in the corner of the sidebar (ADR-0015); the toolbar over the detail pane holds the title.
+        // The window lights, in the corner of the sidebar panel (ADR-0015); the toolbar over the detail pane holds the title.
         UnifiedToolbar {
             id: sidebarToolbar
             width: parent.width
@@ -302,9 +309,9 @@ Window {
         // ADR-0039 step 14). Tab, Shift+Tab, Down and Return hand the focus to the list by the keyboard.
         SearchField {
             id: search
-            x: Tokens.settingsSidebarInset
+            x: panel.x + Tokens.settingsSidebarInset
             y: sidebarToolbar.height + Tokens.spacingSm
-            width: parent.width - 2 * Tokens.settingsSidebarInset
+            width: panel.width - 2 * Tokens.settingsSidebarInset
             activeFocusOnTab: true
             accessibleName: qsTr("Search settings")
             onTextChanged: root.query = text
@@ -333,8 +340,8 @@ Window {
                 topMargin: Tokens.spacingMd
                 left: parent.left
                 right: parent.right
-                bottom: parent.bottom
-                leftMargin: Tokens.settingsSidebarInset
+                bottom: panel.bottom
+                leftMargin: panel.x + Tokens.settingsSidebarInset
                 rightMargin: Tokens.settingsSidebarInset
             }
             model: root.filtered
@@ -471,7 +478,9 @@ Window {
                         width: Tokens.settingsSidebarIconSize
                         height: Tokens.settingsSidebarIconSize
                         radius: Tokens.settingsSidebarTileRadius
-                        color: Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
+                        // A mid grey while the window is not key, as macOS greys its sidebar tiles; the white glyph keeps 3:1.
+                        color: root.keyLook ? Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
+                                            : (Appearance.dark ? Tokens.settingsSidebarTileInactiveDark : Tokens.settingsSidebarTileInactiveLight)
 
                         Icon {
                             anchors.centerIn: parent

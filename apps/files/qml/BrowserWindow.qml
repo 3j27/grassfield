@@ -708,6 +708,8 @@ Window {
     Sidebar {
         id: sidebar
         visible: win.app.sidebarShown
+        // Above the content: the panel's shadow falls on it (the lights' toolbar below is above both).
+        z: 1
         width: visible ? Tokens.filesSidebarWidth : 0
         height: parent.height
         app: win.app
@@ -718,6 +720,7 @@ Window {
     // The window lights in the corner of the sidebar (ADR-0015); the toolbar over the content holds the title.
     UnifiedToolbar {
         id: sidebarToolbar
+        z: 2
         visible: sidebar.visible
         width: sidebar.width
         window: win
@@ -1358,6 +1361,9 @@ Window {
     // AppKit queues a window's sheets and holds them while a menu is open: a question waits while Go to Folder, a
     // confirmation or a menu is open, and comes after.
     KioSheets {
+        // The wrapper stacks with the window's other sheets (Sheet's own 900), above the sidebar (1) and the lights' toolbar (2):
+        // inside it the sheet's z only orders it among its own children.
+        z: 900
         prompts: win.app.prompts ?? null
         shown: win.manager.promptWindow === win && !goSheet.shown && !confirmSheet.shown && !saveSheet.shown && !renameSheet.shown && !tagsSheet.shown && !menuLayer.visible
         focusBack: win.tab ? win.tab.view : null

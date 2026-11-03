@@ -9,7 +9,7 @@
   item is 8 from the trailing edge (`window.itemsInset`), and there is no line under the toolbar until the icons or the
   list scroll under it (or a tab bar sits there).
 - Window and sidebar (macOS 27 Finder, ADR-0024 lot 2): a white content area (#292929 in the dark appearance); the sidebar
-  edge to edge in `color.*.sidebarFill` with no dividing line; 32-pt rows under 34-pt section headers; the current place
+  a floating panel in `color.*.sidebarFill` (ADR-0024 amendment 2026-11-03), icons in the text colour; 32-pt rows under 34-pt section headers; the current place
   a neutral fill (`files.sidebarSelectionOpacity`, 10 from both sidebar edges, radius 8) under a bold label, not the
   accent. A focused selection in the views is the selection pair (white on the light accent in both appearances).
 - Icon view shows large icons or thumbnails with names below; a selected item gets a grey rounded backdrop and an

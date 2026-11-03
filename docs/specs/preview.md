@@ -32,8 +32,8 @@ single instance.
    text highlight colour (`Appearance.highlight`, Settings > Appearance), as in Settings and Files. The title, the search
    field and the PDF's file names use the body size, which follows Text size; the document's own text is content and
    keeps its reading size (ADR-0039 step 3). The sidebar lists the files when more than one was given and the page
-   thumbnails of a PDF. The window's structure is every app's (ADR-0039 step 16): the sidebar edge to edge in the sidebar
-   fill, no dividing line (macOS 26's floating panel replaced, as ADR-0024 asks); the toolbar's groups and search circle
+   thumbnails of a PDF. The window's structure is every app's (ADR-0039 step 16): the sidebar a floating panel (ADR-0024 amendment 2026-11-03: inset 8, radius 18) in the sidebar
+   fill with the content beside it; the toolbar's groups and search circle
    on the toolbar's rimmed capsules (`toolbar.capsule` 36) with 34-pt buttons (`toolbar.groupButton`); overlay scroll bars
    on the image, the text and the sidebar's lists; a 1-px rule under the toolbar once the view's content has scrolled
    under it (D3; a PDF past its first page).

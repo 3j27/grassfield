@@ -170,6 +170,33 @@ TestCase {
         tryCompare(sidebar, "ejectRow", 1);
     }
 
+    // The floating panel (ADR-0024 amendment 2026-11-03), also in an Open or Save panel (macOS's panel has a floating sidebar
+    // too; topInset 0 there, no lights): inset from the left, top and bottom, rounded, and the rows inside it.
+    function test_thePanelFloatsAndTheRowsStayInsideIt() {
+        const inset = Tokens.windowSidebarPanelInset;
+        let panel = null;
+        let list = null;
+        const stack = [sidebar];
+        while (stack.length > 0) {
+            const it = stack.shift();
+            if (String(it).indexOf("SidebarPanel") === 0)
+                panel = it;
+            if (it.Accessible && it.Accessible.name === "Sidebar" && it.contentY !== undefined)
+                list = it;
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        verify(panel !== null, "the panel");
+        verify(list !== null, "the list");
+        compare(panel.x, inset);
+        compare(panel.y, inset);
+        compare(panel.height, sidebar.height - 2 * inset);
+        compare(panel.radius, Tokens.windowSidebarPanelRadius);
+        verify(list.y >= panel.y + Tokens.spacingSm, "the first row starts inside the panel, not on its edge: " + list.y);
+        verify(list.x >= panel.x, "inside the panel's left edge");
+        verify(list.y + list.height <= panel.y + panel.height, "inside the panel's bottom edge");
+    }
+
     function test_theVolumeShownIsTheEjectTarget() {
         compare(sidebar.ejectRow, 1);
         verify(sidebar.eject());
