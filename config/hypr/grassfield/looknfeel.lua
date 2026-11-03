@@ -9,11 +9,12 @@ hl.config({
     float_gaps = 0,
     border_size = 1,
     col = {
-      -- Hairline window outline, like the macOS window edge: the dark appearance's (tokens window.edgeDark and
-      -- window.edge*OpacityDark). The shell pushes the current appearance's pair at start, on a change and after a reload
-      -- (dark in the light appearance, ADR-0039 step 6, C-4; shell/platform/Compositor.qml pushEdge).
-      active_border = "rgba(ffffff26)",
-      inactive_border = "rgba(ffffff14)",
+      -- The window's contact edge, macOS 27's dark device pixel outside the window: the dark appearance's (tokens
+      -- window.edgeDark and window.edge*OpacityDark; its light inner rim is the glow below). The shell pushes the current
+      -- appearance's pair at start, on a change and after a reload (fainter in the light appearance; ADR-0039 step 6, C-4;
+      -- ADR-0024 note 2026-11-03; shell/platform/Compositor.qml pushEdge). At 1.25 the border is one device pixel (0.8 pt).
+      active_border = "rgba(00000094)",
+      inactive_border = "rgba(00000085)",
     },
     resize_on_border = true,
     extend_border_grab_area = 8,
@@ -42,6 +43,9 @@ hl.config({
 
     -- Diffused shadow fitted to the macOS 27 window shadow (ADR-0024 C-3, docs/audits/ui-finesse-2026-10-25.md 7.3:
     -- alpha = 0.25 x (1 - d / 68)^4, offset 16 down); inactive windows keep today's ratio to the active shadow (0.2 / 0.35).
+    -- Measured on the GPU at 1.25 (ADR-0024 note 2026-11-03, tests/compositor/window_edge.sh): the render is this model within
+    -- 0.023, and these values stay its least-squares fit to the 27 profile; one offset box cannot draw 27's slope under the
+    -- window (0.34 at 1 pt to 0.21 at 16 pt), it holds 0.25 over those 16 pt.
     shadow = {
       enabled = true,
       range = 68,
@@ -121,6 +125,23 @@ hl.config({
   ecosystem = {
     no_update_news = true,
     no_donation_nag = true,
+  },
+})
+
+-- The window's inner rim, macOS 27's light point inside the dark contact edge (ADR-0024 note 2026-11-03): Hyprland's inner glow
+-- over the first device pixel inside every window, at half the colour's alpha at 1.25 (tests/compositor/window_edge.sh). The
+-- dark appearance's (tokens window.rimDark and window.rim*OpacityDark); the shell turns it off in the light appearance and
+-- sends it back with the edge (shell/platform/Compositor.qml pushEdge). Its own call: a Hyprland without decoration.glow
+-- reports the key and keeps everything above.
+pcall(hl.config, {
+  decoration = {
+    glow = {
+      enabled = true,
+      range = 1,
+      render_power = 1,
+      color = "rgba(ffffff40)",
+      color_inactive = "rgba(ffffff33)",
+    },
   },
 })
 

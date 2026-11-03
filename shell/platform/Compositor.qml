@@ -428,13 +428,16 @@ Singleton {
     property bool blurRejected: false
     property int blurPushes: 0
 
-    // The window edge follows the appearance (ADR-0039 step 6, C-4): macOS 27's contact edge is dark in the light appearance and
-    // the light rim in the dark one. Hyprland holds one border colour pair for every window, so the shell sends the pair of
-    // the current appearance as it sends the blur: at start, on a change of appearance and after a config reload, which
-    // restores the config's own (the dark appearance's, config/hypr/grassfield/looknfeel.lua).
+    // The window edge follows the appearance (ADR-0039 step 6, C-4; ADR-0024 note 2026-11-03): macOS 27's contact edge is a dark
+    // device pixel in both appearances (fainter in the light one), and the dark appearance adds a light inner rim (Hyprland's
+    // inner glow, off in the light appearance). Hyprland holds one border colour pair and one glow for every window, so the
+    // shell sends those of the current appearance as it sends the blur: at start, on a change of appearance and after a config
+    // reload, which restores the config's own (the dark appearance's, config/hypr/grassfield/looknfeel.lua).
     readonly property string edgeCall: Appearance.dark
-        ? Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark)
-        : Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight)
+        ? Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark,
+                             {"colour": Tokens.windowRimDark, "active": Tokens.windowRimActiveOpacityDark, "inactive": Tokens.windowRimInactiveOpacityDark})
+        : Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight,
+                             {"colour": Tokens.windowRimDark, "active": Tokens.windowRimActiveOpacityLight, "inactive": Tokens.windowRimInactiveOpacityLight})
     onEdgeCallChanged: {
         root.edgeRejected = false;
         edgeDebounce.restart();

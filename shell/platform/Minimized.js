@@ -298,12 +298,25 @@ function groundCall(hex) {
 
 // The window edge of an appearance (ADR-0039 step 6, C-4): Hyprland's border colours, the active and an inactive window's,
 // as one Lua call for the request socket. colour "#rrggbb", alphas from 0 to 1; "" when one is not.
-function edgeCall(colour, active, inactive) {
+// rim (optional; ADR-0024 note 2026-11-03), {colour, active, inactive} alike: the inner rim, Hyprland's inner glow
+// (decoration.glow, its range and power set by config/hypr/grassfield/looknfeel.lua), in a second hl.config call after the
+// border's, so a Hyprland without the glow still takes the border (it answers the call with an error, which stops the edge
+// pushes until the next change, the border already set). Both alphas 0: the glow is turned off.
+function edgeCall(colour, active, inactive, rim) {
     const alpha = a => typeof a === "number" && isFinite(a) && a >= 0 && a <= 1;
-    if (typeof colour !== "string" || !/^#[0-9A-Fa-f]{6}$/.test(colour) || !alpha(active) || !alpha(inactive))
+    const valid = (c, a, i) => typeof c === "string" && /^#[0-9A-Fa-f]{6}$/.test(c) && alpha(a) && alpha(i);
+    if (!valid(colour, active, inactive))
         return "";
-    const rgba = a => "rgba(" + colour.slice(1).toLowerCase() + ("0" + Math.round(a * 255).toString(16)).slice(-2) + ")";
-    return "function() hl.config({ general = { col = { active_border = \"" + rgba(active) + "\", inactive_border = \"" + rgba(inactive) + "\" } } }) end";
+    if (rim !== undefined && (rim === null || typeof rim !== "object" || !valid(rim.colour, rim.active, rim.inactive)))
+        return "";
+    const rgba = (c, a) => "rgba(" + c.slice(1).toLowerCase() + ("0" + Math.round(a * 255).toString(16)).slice(-2) + ")";
+    let call = "function() hl.config({ general = { col = { active_border = \"" + rgba(colour, active) + "\", inactive_border = \"" + rgba(colour, inactive) + "\" } } })";
+    if (rim !== undefined) {
+        call += rim.active === 0 && rim.inactive === 0
+            ? "; hl.config({ decoration = { glow = { enabled = false } } })"
+            : "; hl.config({ decoration = { glow = { enabled = true, color = \"" + rgba(rim.colour, rim.active) + "\", color_inactive = \"" + rgba(rim.colour, rim.inactive) + "\" } } })";
+    }
+    return call + " end";
 }
 
 // Settings the plugin accepts through hl.plugin.grassfield.config(key, value): key -> allowed values.
