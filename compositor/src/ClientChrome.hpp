@@ -8,6 +8,8 @@
 //   P4  the app's xdg_toplevel.move on a zoomed window: the window leaves the zoom at its floating size, under the pointer
 //       at the same place in its toolbar row, then follows the pointer (Hyprland's interactive move, restarted there).
 //   P5  the app's xdg_toplevel.set_minimized: the minimize path of the titlebar's own light (minimize-request, FR6).
+//   D78 (ADR-0036; ADR-0015 Q4 amended) its own maximize request (green light, toolbar double-click) is Grassfield's Zoom,
+//       Fill and back, while window-tiling is advertised: Hyprland is told to ignore it (SUPPRESS_MAXIMIZE, cleared at unload).
 //   P8  such a window is told the minimize capability (xdg_toplevel.wm_capabilities, then a configure): GTK4 greys a
 //       minimize button the compositor does not offer, and Hyprland offers only fullscreen and maximize; its unmap and
 //       the unload tell it Hyprland's own capabilities again; a window that cannot be told (older than v5) is not
@@ -35,6 +37,12 @@ namespace gf::chrome {
 
     // start() succeeded and stop() has not run.
     bool ready();
+
+    // ADR-0036 D78, ADR-0015 Q4 amended: who owns each watched client-chrome window's maximize requests, read again once the
+    // IPC registered (window-tiling known, main.cpp) and whenever it may change: while window-tiling is advertised the
+    // plugin (Hyprland told to ignore them with SUPPRESS_MAXIMIZE; the request becomes the plugin's Zoom, Fill and back),
+    // otherwise Hyprland (the unload clears what the plugin set, gate C2).
+    void syncMaximizeAll();
 
     // Global pointer button listener, before Hyprland handles the button (main.cpp): a press on a zoomed client-chrome
     // window is recorded (P4); a release forgets it.

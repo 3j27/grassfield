@@ -656,6 +656,7 @@ namespace gf::tiling {
         UnzoomToFill, // out of Hyprland's maximized mode, then Fill
         Hyprland,     // Hyprland's own maximized mode, toggled as before
         Refused,      // nothing: a window of fixed size that is not zoomed (its zoom light is disabled)
+        Unfill,       // at the Fill frame without a tile record (the plugin was reloaded): the Center place's frame, Free
     };
 
     // What the step reads from the window and the plugin.
@@ -663,17 +664,18 @@ namespace gf::tiling {
         bool tiling       = false; // feature window-tiling advertised (the tile verb registered) and the session not locked
         bool maximized    = false; // in Hyprland's maximized mode (fullscreen 1)
         bool fullscreen   = false; // in Hyprland's full screen (fullscreen 2)
-        bool clientChrome = false; // draws its own chrome (ADR-0015): its own zoom control enters Hyprland's maximized mode
         bool splitMember  = false; // a member of a Split View Desktop (TL33): its Desktop places it (D50)
         bool fixedSize    = false; // minimum = maximum on both axes
         bool filled       = false; // its tile record is Tiled as Fill (a place, not a layout zone or extended sides)
+        bool atFill       = false; // no tile record, and its frame is the Fill frame of its work area now (within 1 px)
     };
 
     // A window of fixed size that is not zoomed is refused (ADR-0040 step 1b). Without window-tiling (no plugin, a degraded
     // one: gate C2), in full screen or for a Split View member: Hyprland's maximized mode, as before. A window in Hyprland's
-    // maximized mode leaves it into Fill, unless it is client chrome (ADR-0015 Q4: its own zoom control is Hyprland's
-    // maximized mode, honoured; the key only takes it out again) or of fixed size. A filled window goes back to its box from
-    // before; any other window fills.
+    // maximized mode leaves it into Fill (client chrome too: while window-tiling is advertised its own maximize request is
+    // this Zoom, ADR-0015 Q4 amended), unless it is of fixed size (it only unzooms). A filled window goes back to its box
+    // from before; one at the Fill frame whose record a plugin reload forgot takes the Center place's frame (no box from
+    // before is known); any other window fills.
     ZoomStep zoomStep(const ZoomFacts& f);
     std::string_view nameOf(ZoomStep step);
 

@@ -1549,17 +1549,17 @@ TEST(TilingZoom, ZoomFillsAndBringsBackThePreviousBox) {
     const ZoomFacts plain{.tiling = true};
     EXPECT_EQ(zoomStep(plain), ZoomStep::Fill) << "a plain window fills (its margins: the work area's, TL2)";
     EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .filled = true}), ZoomStep::Previous) << "a filled window goes back to its box from before";
-    EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .clientChrome = true}), ZoomStep::Fill) << "client chrome fills too (Super+Alt+F, Window > Zoom)";
-    EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .clientChrome = true, .filled = true}), ZoomStep::Previous);
+    EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .atFill = true}), ZoomStep::Unfill)
+        << "at the Fill frame after a plugin reload (no record, no box from before): the Center place's frame";
+    EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .filled = true, .atFill = true}), ZoomStep::Previous) << "a record wins";
 }
 
-TEST(TilingZoom, HyprlandsMaximizedModeLeavesIntoFillButAnAppsOwnZoomIsHonoured) {
+TEST(TilingZoom, HyprlandsMaximizedModeLeavesIntoFill) {
     EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .maximized = true}), ZoomStep::UnzoomToFill)
-        << "a window in Hyprland's maximized mode (a dispatcher, an earlier plugin) leaves it into Fill";
+        << "a window in Hyprland's maximized mode (a dispatcher, an earlier plugin, client chrome zoomed before the plugin "
+           "owned its requests) leaves it into Fill";
     EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .maximized = true, .filled = true}), ZoomStep::UnzoomToFill)
         << "a tile suspended by the maximized mode is filled, not sent back";
-    EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .maximized = true, .clientChrome = true}), ZoomStep::Hyprland)
-        << "ADR-0015 Q4: client chrome's own zoom control is Hyprland's maximized mode; the key only takes it out";
     EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .maximized = true, .fixedSize = true}), ZoomStep::Hyprland) << "a window of fixed size only unzooms";
 }
 
@@ -1567,9 +1567,9 @@ TEST(TilingZoom, WithoutWindowTilingTheZoomIsHyprlandsAsBefore) {
     // Gate C2: no plugin, a degraded one (window-tiling not advertised), or the session locked.
     for (const bool maximized : {false, true}) {
         for (const bool filled : {false, true}) {
-            for (const bool clientChrome : {false, true})
-                EXPECT_EQ(zoomStep(ZoomFacts{.maximized = maximized, .clientChrome = clientChrome, .filled = filled}), ZoomStep::Hyprland)
-                    << "maximized " << maximized << " filled " << filled << " client chrome " << clientChrome;
+            for (const bool atFill : {false, true})
+                EXPECT_EQ(zoomStep(ZoomFacts{.maximized = maximized, .filled = filled, .atFill = atFill}), ZoomStep::Hyprland)
+                    << "maximized " << maximized << " filled " << filled << " at the Fill frame " << atFill;
         }
     }
     EXPECT_EQ(zoomStep(ZoomFacts{.fixedSize = true}), ZoomStep::Refused) << "a window of fixed size is refused with or without the plugin's tiling";
@@ -1581,7 +1581,7 @@ TEST(TilingZoom, FullScreenSplitViewAndFixedSize) {
     EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .splitMember = true, .filled = true}), ZoomStep::Hyprland);
     EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .fixedSize = true}), ZoomStep::Refused) << "ADR-0040 step 1b: its zoom light is disabled";
     EXPECT_EQ(zoomStep(ZoomFacts{.tiling = true, .fullscreen = true, .fixedSize = true}), ZoomStep::Hyprland);
-    for (const auto step : {ZoomStep::Fill, ZoomStep::Previous, ZoomStep::UnzoomToFill, ZoomStep::Hyprland, ZoomStep::Refused})
+    for (const auto step : {ZoomStep::Fill, ZoomStep::Previous, ZoomStep::UnzoomToFill, ZoomStep::Hyprland, ZoomStep::Refused, ZoomStep::Unfill})
         EXPECT_NE(nameOf(step), "?");
 }
 

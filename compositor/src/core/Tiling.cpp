@@ -1360,8 +1360,10 @@ namespace gf::tiling {
         if (!f.tiling || f.fullscreen || f.splitMember)
             return ZoomStep::Hyprland;
         if (f.maximized)
-            return f.clientChrome || f.fixedSize ? ZoomStep::Hyprland : ZoomStep::UnzoomToFill;
-        return f.filled ? ZoomStep::Previous : ZoomStep::Fill;
+            return f.fixedSize ? ZoomStep::Hyprland : ZoomStep::UnzoomToFill;
+        if (f.filled)
+            return ZoomStep::Previous;
+        return f.atFill ? ZoomStep::Unfill : ZoomStep::Fill;
     }
 
     std::string_view nameOf(ZoomStep step) {
@@ -1371,6 +1373,7 @@ namespace gf::tiling {
             case ZoomStep::UnzoomToFill: return "unzoom-to-fill";
             case ZoomStep::Hyprland: return "hyprland";
             case ZoomStep::Refused: return "refused";
+            case ZoomStep::Unfill: return "unfill";
         }
         return "?";
     }

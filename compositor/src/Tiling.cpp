@@ -692,15 +692,55 @@ namespace gf::tiler {
 
         // Return to Previous Size (tile(address, "previous"), a second Zoom of a filled window): `before` put back, the window
         // Free. False when it has no record, cannot be placed now (TL9) or is a Split View member (its Desktop places it).
+        // A window moved to another output since (move_to, a drop there) stays on that output and its Desktop: `before` at
+        // the same relative place of that output's work area, its size kept (core moveToArea, as move_to places a Free
+        // window; review of fix/zoom-is-fill: it went back to the old output while its Desktop stayed the new one's).
         bool returnToPrevious(const PHLWINDOW& w) {
             auto&          s  = st();
             const uint64_t id = idOf(w);
             const auto*    r  = placeable(w) && g_layoutManager && !tiling::splitOfWindow(s.splits, id) ? s.book.find(id) : nullptr;
+            const double   band   = r ? r->band : 0.0;
             const auto     before = r ? s.book.takeBefore(id) : std::nullopt;
             if (!before)
                 return false;
-            g_layoutManager->setTargetGeom(beforeBox(w, *before), w->layoutTarget());
+            CBox       box  = beforeBox(w, *before);
+            const auto now  = monitorOf(w);
+            const auto then = monitorAt(box.middle());
+            if (now && then && now != then) {
+                const auto frame = tiling::moveToArea(tiling::frameOf(*before, band), areaFor(then).box, areaFor(now, w->m_workspace ? std::optional<int64_t>{w->m_workspace->m_id} : std::nullopt).box);
+                box              = toCBox(tiling::surfaceOf(frame, band));
+            }
+            g_layoutManager->setTargetGeom(box, w->layoutTarget());
+            followOutput(w); // its Desktop is the one of the output under its middle (TL21, D9)
             notify(tiling::Reason::Forgotten);
+            return true;
+        }
+
+        // ADR-0036 D78: the window has no tile record and its frame is the Fill frame of its work area now (within 1 px): a
+        // window the plugin filled before a reload, which forgot its record.
+        bool atFillFrame(const PHLWINDOW& w) {
+            if (!placeable(w) || st().book.find(idOf(w)))
+                return false;
+            const auto m = monitorOf(w);
+            if (!m)
+                return false;
+            const int64_t      workspace = w->m_workspace->m_id;
+            const double       band      = gf::chrome::bandOf(w);
+            const tiling::Rect frame     = tiling::frameOf(toRect(w->layoutTarget()->position()), band);
+            const tiling::Rect fill      = placeFrame(w, tiling::Place::Fill, areaFor(m, workspace), m->m_name, workspace);
+            return std::abs(frame.x - fill.x) <= 1 && std::abs(frame.y - fill.y) <= 1 && std::abs(frame.w - fill.w) <= 1 && std::abs(frame.h - fill.h) <= 1;
+        }
+
+        // ADR-0036 D78: the Zoom of a window at the Fill frame without a record (no box from before is known): the Center
+        // place's frame (its size, at most tiling.centerMaxFraction of the work area, in the middle), the window Free, so the
+        // next Zoom fills it again and the one after comes back here.
+        bool unfill(const PHLWINDOW& w) {
+            const auto m = monitorOf(w);
+            if (!m || !g_layoutManager)
+                return false;
+            const int64_t      workspace = w->m_workspace->m_id;
+            const tiling::Rect frame     = placeFrame(w, tiling::Place::Center, areaFor(m, workspace), m->m_name, workspace);
+            g_layoutManager->setTargetGeom(toCBox(tiling::surfaceOf(frame, gf::chrome::bandOf(w))), w->layoutTarget());
             return true;
         }
 
@@ -1895,10 +1935,10 @@ namespace gf::tiler {
             .tiling       = gf::ipc::tilingAvailable() && !gf::deferredFocus::sessionLocked(),
             .maximized    = mode == Fullscreen::FSMODE_MAXIMIZED,
             .fullscreen   = mode == Fullscreen::FSMODE_FULLSCREEN,
-            .clientChrome = gf::chrome::isClientChrome(w),
             .splitMember  = inSplit(w),
             .fixedSize    = fixedSize(w),
             .filled       = r && r->state == tiling::TileState::Tiled && r->where.place == tiling::Place::Fill && r->where.layout.empty() && r->where.sides == 0,
+            .atFill       = !r && mode == Fullscreen::FSMODE_NONE && atFillFrame(w),
         };
         auto step = tiling::zoomStep(facts);
         switch (step) {
@@ -1918,6 +1958,10 @@ namespace gf::tiler {
                 fs->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE, false); // Hyprland restores its box at once
                 if (!tile(w, tiling::Place::Fill))
                     logRequest(Log::DEBUG, "zoom {:x}: out of the maximized mode; Fill refused (TL9), its box kept", idOf(w));
+                break;
+            case tiling::ZoomStep::Unfill:
+                if (!unfill(w))
+                    step = tiling::ZoomStep::Refused;
                 break;
             case tiling::ZoomStep::Hyprland:
             case tiling::ZoomStep::Refused: break;
