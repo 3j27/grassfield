@@ -38,9 +38,9 @@ import sys
 
 BAR = (40, 40, 44)  # ui/tokens/tokens.json titlebar.backgroundDark (titlebarPalette(Dark).background)
 LIGHTS = {
-    "close": (0xFF, 0x5C, 0x60),
-    "minimize": (0xFA, 0xC8, 0x00),
-    "zoom": (0x35, 0xC7, 0x59),
+    "close": (0xE8, 0x3A, 0x52),
+    "minimize": (0xE6, 0xC6, 0x19),
+    "zoom": (0x2D, 0xC4, 0x7A),
 }
 INACTIVE = (0x5A, 0x5A, 0x5E)  # ui/tokens/tokens.json titlebar.inactiveButtonDark (titlebarPalette(Dark).inactiveLight)
 RULE = None  # the hairline under the bar (option rule=; titlebar.rule* composited over the bar)

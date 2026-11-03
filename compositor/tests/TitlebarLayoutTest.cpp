@@ -244,9 +244,9 @@ TEST(GlyphMask, PremultipliedPixels) {
     const auto px = premultipliedBgra(mask, gf::theme::kGlyphColor);
     ASSERT_EQ(px.size(), 12U);
     EXPECT_EQ(px[3], 0);   // transparent where the mask is empty
-    EXPECT_EQ(px[7], 128); // half-opaque black under full coverage (kGlyphColor alpha 0.5)
+    EXPECT_EQ(px[7], 158); // 62 % opaque black under full coverage (kGlyphColor alpha 0.62: 3:1 on each light)
     EXPECT_EQ(px[4], 0);
-    EXPECT_EQ(px[11], 64);
+    EXPECT_EQ(px[11], 79); // half coverage
     const auto red = premultipliedBgra({255}, gf::theme::Rgba{.r = 1.F, .g = 0.F, .b = 0.F, .a = 0.5F});
     EXPECT_EQ(red[0], 0);   // B
     EXPECT_EQ(red[2], 128); // R premultiplied by alpha
@@ -403,11 +403,11 @@ TEST(UnzoomedDragBox, ClampsDegenerateInput) {
 
 TEST(Theme, ColorsAreGrassfieldValues) {
     using namespace gf::theme;
-    EXPECT_FLOAT_EQ(kCloseColor.r, 0xFF / 255.F);
-    EXPECT_FLOAT_EQ(kCloseColor.g, 0x5C / 255.F);
-    EXPECT_FLOAT_EQ(kCloseColor.b, 0x60 / 255.F);
-    EXPECT_FLOAT_EQ(kMinimizeColor.r, 0xFA / 255.F);
-    EXPECT_FLOAT_EQ(kZoomColor.g, 0xC7 / 255.F);
+    EXPECT_FLOAT_EQ(kCloseColor.r, 0xE8 / 255.F);
+    EXPECT_FLOAT_EQ(kCloseColor.g, 0x3A / 255.F);
+    EXPECT_FLOAT_EQ(kCloseColor.b, 0x52 / 255.F);
+    EXPECT_FLOAT_EQ(kMinimizeColor.r, 0xE6 / 255.F);
+    EXPECT_FLOAT_EQ(kZoomColor.g, 0xC4 / 255.F);
     // The window's own colours (ADR-0039 Q8, step 21), warm (ADR-0040): #2B2925 and #FDFCF9 (red above blue), where the bar
     // was a band of its own (#2A2824, #EFECE7).
     EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.r, 43 / 255.F);
