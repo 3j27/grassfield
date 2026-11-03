@@ -52,9 +52,10 @@ Checksum: `SHA256: CHECKSUM.PLACEHOLDER`, also published at SITE.PLACEHOLDER and
    to it); installs `grassfield-desktop`, `grassfield-compositor`, `grassfield-store` and `grassfield-login-themes`; hands the
    repository to `grassfield-channel-set`; makes Grassfield the session of your next login; activates the Grassfield login
    screen and boot screen (the boot image is rebuilt the way Omarchy does it, which takes a minute). The snapshot does **not**
-   cover `/boot`, so the script first copies the current boot images to a root-only folder and puts them back if the rebuild
-   fails; after a successful rebuild the copy is deleted, and a boot problem found later is handled with Esc at the disk
-   prompt, Limine's menu, or `--uninstall`.
+   cover `/boot` (the boot partition is outside it), so it cannot undo a boot image. If the rebuild fails, the script sets the
+   previous boot theme back and runs Omarchy's rebuild again; if that fails too it stops and tells you the exact command to
+   retry. In that case the computer may start the previous entry, and you can pick a snapshot entry in Limine's menu at start.
+   A boot problem found later is handled with Esc at the disk prompt, Limine's menu, or `--uninstall`.
 4. **If anything fails between adding the repository and installing the packages, the script puts everything back** (the
    repository lines, its file, the key, the downloaded package lists) and tells you how to retry.
 5. Everything is logged to `~/.local/state/grassfield/install.log`.
@@ -122,9 +123,11 @@ Somme de contrôle : `SHA256: CHECKSUM.PLACEHOLDER`, aussi publiée sur SITE.PLA
    côté) ; installe `grassfield-desktop`, `grassfield-compositor`, `grassfield-store` et `grassfield-login-themes` ; confie le dépôt à
    `grassfield-channel-set` ; fait de Grassfield la session de ta prochaine connexion ; active l'écran de connexion et l'écran de
    démarrage Grassfield (l'image de démarrage est reconstruite comme le fait Omarchy, ce qui prend une minute). Le snapshot ne
-   couvre **pas** `/boot` : le script copie d'abord les images de démarrage actuelles dans un dossier réservé à root et les
-   remet si la reconstruction échoue ; après une reconstruction réussie la copie est supprimée, et un problème de démarrage
-   découvert plus tard se règle avec Échap à l'invite du disque, le menu de Limine, ou `--uninstall`.
+   couvre **pas** `/boot` (la partition de démarrage est hors de lui), il ne peut donc pas annuler une image de démarrage. Si la
+   reconstruction échoue, le script remet l'ancien thème de démarrage et relance la reconstruction d'Omarchy ; si elle échoue
+   aussi, il s'arrête et donne la commande exacte pour réessayer. Dans ce cas l'ordinateur peut démarrer l'entrée précédente, et
+   tu peux choisir une entrée de snapshot dans le menu de Limine au démarrage. Un problème de démarrage découvert plus tard se
+   règle avec Échap à l'invite du disque, le menu de Limine, ou `--uninstall`.
 4. **Si quelque chose échoue entre l'ajout du dépôt et l'installation des paquets, le script remet tout** (les lignes du
    dépôt, son fichier, la clé, les listes de paquets téléchargées) et t'explique comment réessayer.
 5. Tout est écrit dans `~/.local/state/grassfield/install.log`.

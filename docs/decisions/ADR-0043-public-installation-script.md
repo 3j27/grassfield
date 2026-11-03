@@ -94,15 +94,20 @@ confirmation (`--yes` skips it; `--dry-run` stops there; `--channel stable|beta`
    the guide's one file; `/etc/sddm.conf` with its own `Current=` is reported, not edited); the boot theme as Omarchy does
    (`omarchy-plymouth-set`): `plymouth-set-default-theme grassfield`, then `limine-mkinitcpio` when present, else
    `mkinitcpio -P`. The previous theme name is remembered in the state folder. **The snapshot does not cover boot images**:
-   `/boot` is the vfat ESP, outside the btrfs snapshot. So the current initramfs and UKIs (`initramfs-*.img`, `*/EFI/Linux/*.efi`)
-   are copied to a root-only folder (`/var/lib/grassfield/boot-backup.<date>`) before the rebuild; if it fails, the old theme and
-   the copied images are put back (a copy that cannot be made means the boot theme is not changed). Failure is detected from the
-   exit status **and** the output, because `limine-mkinitcpio` exits 0 when a kernel's image was not rebuilt and only prints
-   `mkinitcpio failed for kernel` (Omarchy's migration 1791621765 greps its log for it); "active" is printed only after a clean
-   rebuild. What can and cannot be undone: a failed rebuild is undone (theme and images); after a successful rebuild no copy is
-   kept (ESP space), so a boot problem found later is met with Esc at the disk prompt (text prompt), Limine's menu, or
-   `--uninstall`, which switches the theme back and rebuilds again. A theme failure ends non-zero with a warning but keeps
-   Grassfield (ADR-0042's text-prompt fallback applies).
+   `/boot` is the vfat ESP, outside the btrfs snapshot, so no snapshot can bring a boot image back. **No boot image is copied or
+   restored** by the script: Limine records each installed image's BLAKE2 checksum in `limine.conf` (UKIs and hash checks are on
+   in Omarchy), and `limine-mkinitcpio` installs each good kernel's image and its checksum but, when another kernel fails,
+   only prints it and exits 0. Putting old images back would leave old bytes under new checksums and the boot would refuse
+   them (and a `cp` into the ESP is not atomic). Failure is detected from the exit status **and** the output
+   (`mkinitcpio failed for kernel`, as Omarchy's migration 1791621765 greps its log). On failure the previous theme is set back
+   and **Omarchy's rebuild is run again**, the same command, which re-records the checksums of what it installs. If that second
+   rebuild is clean, the script says the boot theme was **not changed** and why (exit non-zero, Grassfield stays installed). If
+   it fails too, the script stops with what failed, that the computer may start the previous entry or a snapshot entry from
+   Limine's menu, and the exact command to retry (`sudo limine-mkinitcpio`, else `sudo mkinitcpio -P`); it never says "back to
+   normal" unless the second rebuild was clean, and "active" is printed only after a clean rebuild. The boot-theme step runs
+   last, under the update lock. A boot problem found after a good rebuild is met with Esc at the disk prompt (text prompt),
+   Limine's menu, or `--uninstall`, which switches the theme back and rebuilds again (the same two-rebuild logic). A theme
+   failure ends non-zero with a warning but keeps Grassfield (ADR-0042's text-prompt fallback applies).
 
 **Rollback (review 1, major 2).** Between the first change of step 2 and the end of step 4, **any** failure (a command, `Ctrl-C`,
 the sync, the dependency check, a pending update after the sync, the install transaction) puts back the exact state: the
@@ -153,7 +158,7 @@ and a signed `[grassfield]` repository built with a throwaway key, `render.py` r
 | Id | Question | Options | Recommended | Decision |
 |---|---|---|---|---|
 | IN1 | Grassfield as the next-login session at install? | yes (`--session grassfield`) · no (`--session omarchy`) | yes | **yes, by default**; `--session omarchy` opts out; uninstall restores Omarchy |
-| IN2 | Login and boot themes (`grassfield-login-themes`) | not by default · install and activate | no (recommended) | **install AND activate by default**; `--without-login-themes` opts out; install and uninstall handle the SDDM drop-in and Plymouth, the boot image rebuilt the way Omarchy does; the snapshot does not cover `/boot`, so the boot images are copied first and restored if the rebuild fails |
+| IN2 | Login and boot themes (`grassfield-login-themes`) | not by default · install and activate | no (recommended) | **install AND activate by default**; `--without-login-themes` opts out; install and uninstall handle the SDDM drop-in and Plymouth, the boot image rebuilt the way Omarchy does; the snapshot does not cover `/boot` and no image is copied or restored: a failed rebuild sets the previous theme back and runs Omarchy's rebuild again, and a second failure stops with the retry command and Limine's menu as the way out |
 | IN3 | Command published | download-check-run · `curl \| bash` · both | download-check-run | **both**: the one-liner first, the download-check-run form below it; the docs say what each protects against |
 | IN4 | Minimum free space and Omarchy floor | 4 GiB, 4.0.6 | as built | **as built** |
 | IN5 | The `[omarchy]` order | print the fix · opt-in fix | print | **print the fix** |

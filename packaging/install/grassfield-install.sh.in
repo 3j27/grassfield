@@ -464,8 +464,8 @@ plan_install() {
   say " 6. session       grassfield-login set $SESSION (next login starts $SESSION; nothing runs now)" \
     " 6. session        grassfield-login set $SESSION (la prochaine ouverture de session demarre $SESSION ; rien ne tourne maintenant)"
   if ((THEMES)); then
-    say " 7. themes (root) login screen: $GF_SDDM_DROPIN (Current=grassfield); boot screen: plymouth-set-default-theme grassfield, then Omarchy's own boot-image rebuild (limine-mkinitcpio, else mkinitcpio -P); the previous boot theme is remembered. /boot (the ESP) is NOT in the snapshot: the current boot images are copied to a root-only folder first and put back if the rebuild fails" \
-      " 7. themes (root) ecran de connexion : $GF_SDDM_DROPIN (Current=grassfield) ; ecran de demarrage : plymouth-set-default-theme grassfield puis la reconstruction de l image de demarrage d Omarchy (limine-mkinitcpio, sinon mkinitcpio -P) ; l ancien theme est memorise. /boot (l ESP) n est PAS dans le snapshot : les images de demarrage actuelles sont copiees d abord dans un dossier reserve a root et remises si la reconstruction echoue"
+    say " 7. themes (root) login screen: $GF_SDDM_DROPIN (Current=grassfield); boot screen: plymouth-set-default-theme grassfield, then Omarchy's own boot-image rebuild (limine-mkinitcpio, else mkinitcpio -P); the previous boot theme is remembered. /boot (the ESP) is NOT in the snapshot and no image is copied or restored: if the rebuild fails the previous theme is set back and the rebuild is run again; recovery is Omarchy's rebuild or Limine's menu" \
+      " 7. themes (root) ecran de connexion : $GF_SDDM_DROPIN (Current=grassfield) ; ecran de demarrage : plymouth-set-default-theme grassfield puis la reconstruction de l image de demarrage d Omarchy (limine-mkinitcpio, sinon mkinitcpio -P) ; l ancien theme est memorise. /boot (l ESP) n est PAS dans le snapshot et aucune image n est copiee ni restauree : si la reconstruction echoue l ancien theme est remis et la reconstruction relancee ; la reprise passe par la reconstruction d Omarchy ou le menu de Limine"
   fi
   say "Log: $LOG" "Journal : $LOG"
   say 'Undo: run this script again with --uninstall.' 'Annuler : relance ce script avec --uninstall.'
@@ -657,46 +657,28 @@ rebuild_boot_image() {
   ! grep -q 'mkinitcpio failed for kernel' "$log"
 }
 
-# /boot is the ESP (vfat), outside the btrfs snapshot: the snapshot cannot bring a boot image back. So the current images
-# (initramfs and UKIs) are copied to a root-only folder before the rebuild and put back if it fails. After a successful
-# rebuild no copy is kept; a later problem is met with Esc at the disk prompt, Limine's menu, or `--uninstall` (which
-# rebuilds again).
-BOOT_BAK=''
-rm_boot_bak() { [[ $BOOT_BAK == "$GF_ROOT"/var/lib/grassfield/boot-backup.* ]] && as_root rm -rf -- "$BOOT_BAK"; return 0; }
-boot_backup() {
-  local first
-  BOOT_BAK=$GF_ROOT/var/lib/grassfield/boot-backup.$STAMP
-  as_root install -d -m 700 -- "${BOOT_BAK%/*}" "$BOOT_BAK" || return 1
-  as_root find "$GF_ROOT/boot" -xdev -type f \( -name 'initramfs-*.img' -o -path '*/EFI/Linux/*.efi' \) \
-    -exec cp -p --parents -t "$BOOT_BAK" {} + || return 1
-  first=$(as_root find "$BOOT_BAK" -type f -print -quit)
-  [[ -n $first ]]
+# /boot is the ESP (vfat), outside the btrfs snapshot, and Limine records each installed image's BLAKE2 checksum in
+# limine.conf: copying old images back would leave old bytes under new checksums (boot refused). So no image is ever copied.
+# The way back from a failed rebuild is Omarchy's own rebuild again, with the previous theme set: it installs whatever it
+# can and re-records the checksums of what it installs.
+#
+# <new theme> <theme to go back to>. Returns 0 (done); 1 (the rebuild failed, the previous theme was set back and a second,
+# clean rebuild confirmed it: the boot theme was NOT changed); 2 (the second rebuild failed too: boot images may be mixed).
+switch_boot_theme() {
+  as_root plymouth-set-default-theme "$1"
+  if rebuild_boot_image; then return 0; fi
+  note 'the boot image rebuild failed: setting the previous boot theme back and running the rebuild again' \
+    'la reconstruction de l image de demarrage a echoue : remise de l ancien theme de demarrage et nouvelle reconstruction'
+  as_root plymouth-set-default-theme "$2" || true
+  if rebuild_boot_image; then return 1; fi
+  return 2
 }
 
-# <new theme> <theme to go back to>: set the Plymouth theme and rebuild; on any failure the old theme and the old images.
-switch_boot_theme() {
-  if ! boot_backup; then
-    rm_boot_bak
-    note 'could not copy the current boot images (no space, or none found): the boot theme is left as it is' \
-      'impossible de copier les images de demarrage actuelles (plus de place, ou aucune trouvee) : le theme de demarrage est laisse tel quel'
-    return 1
-  fi
-  as_root plymouth-set-default-theme "$1"
-  if rebuild_boot_image; then
-    rm_boot_bak
-    return 0
-  fi
-  note 'the boot image rebuild failed: putting the previous boot theme and the previous boot images back' \
-    'la reconstruction de l image de demarrage a echoue : remise de l ancien theme et des anciennes images de demarrage'
-  as_root plymouth-set-default-theme "$2" || true
-  if as_root cp -r --no-preserve=all -T "$BOOT_BAK$GF_ROOT/boot" "$GF_ROOT/boot"; then
-    rm_boot_bak
-    note 'the previous boot images are back' 'les anciennes images de demarrage sont remises'
-  else
-    say "COULD NOT put the boot images back by itself. The copies are in $BOOT_BAK (root-only). Restore them to /boot with sudo, or run Omarchy's boot-image rebuild." \
-      "IMPOSSIBLE de remettre seul les images de demarrage. Les copies sont dans $BOOT_BAK (root seulement). Remets-les dans /boot avec sudo, ou lance la reconstruction d Omarchy."
-  fi
-  return 1
+boot_retry_command() { if command -v limine-mkinitcpio >/dev/null; then echo 'sudo limine-mkinitcpio'; else echo 'sudo mkinitcpio -P'; fi; }
+
+boot_stop() { # the second rebuild failed too
+  die "the boot image rebuild failed twice (see above): some boot entries may be rebuilt and others not. The computer may start the previous entry, or you can pick a snapshot entry in Limine's menu at start. The boot theme is set back to the previous one. To retry once the error above is fixed: $(boot_retry_command)" \
+    "la reconstruction de l image de demarrage a echoue deux fois (voir plus haut) : certaines entrees de demarrage peuvent etre reconstruites et d autres non. L ordinateur peut demarrer l entree precedente, ou tu peux choisir une entree de snapshot dans le menu de Limine au demarrage. Le theme de demarrage est remis sur le precedent. Pour reessayer une fois l erreur ci-dessus corrigee : $(boot_retry_command)"
 }
 
 plymouth_current() { { plymouth-set-default-theme 2>/dev/null || true; } | awk 'NR == 1 { print $1 }'; }
@@ -731,12 +713,16 @@ do_themes() {
     return 0
   fi
   [[ -n $cur ]] && printf '%s\n' "$cur" >"$STATE_DIR/plymouth-previous"
-  if switch_boot_theme grassfield "${cur:-omarchy}"; then
-    ok "boot theme active (previous: ${cur:-none}); if the disk-password screen ever shows no field, press Esc for the text prompt" \
-      "theme de demarrage actif (precedent : ${cur:-aucun}) ; si l ecran du mot de passe de disque n affiche aucun champ, appuie sur Echap pour l invite texte"
-  else
-    THEMES_FAILED=1
-  fi
+  local src=0
+  switch_boot_theme grassfield "${cur:-omarchy}" || src=$?
+  case $src in
+    0) ok "boot theme active (previous: ${cur:-none}); if the disk-password screen ever shows no field, press Esc for the text prompt" \
+      "theme de demarrage actif (precedent : ${cur:-aucun}) ; si l ecran du mot de passe de disque n affiche aucun champ, appuie sur Echap pour l invite texte" ;;
+    1) THEMES_FAILED=1
+      note 'the boot theme was NOT changed: the rebuild failed, the previous theme was set back and a second rebuild was clean' \
+        'le theme de demarrage n a PAS ete change : la reconstruction a echoue, l ancien theme a ete remis et une seconde reconstruction est propre' ;;
+    *) boot_stop ;;
+  esac
 }
 
 end_install() {
@@ -787,13 +773,17 @@ revert_themes() {
       'pas d ancien theme de demarrage : theme laisse (annule-le comme dans docs/owner-setup/login-boot-themes.md section 2)'
     return 0
   fi
-  if switch_boot_theme "$prev" grassfield; then
-    rm -f -- "$STATE_DIR/plymouth-previous"
-    ok "boot theme back to $prev" "theme de demarrage remis sur $prev"
-  else
-    note 'the boot theme was NOT reverted (the previous images are back): after the removal, revert it as in docs/owner-setup/login-boot-themes.md section 2' \
-      'le theme de demarrage n a PAS ete annule (les images precedentes sont remises) : apres le retrait, annule-le comme dans docs/owner-setup/login-boot-themes.md section 2'
-  fi
+  local src=0
+  switch_boot_theme "$prev" grassfield || src=$?
+  case $src in
+    0)
+      rm -f -- "$STATE_DIR/plymouth-previous"
+      ok "boot theme back to $prev" "theme de demarrage remis sur $prev" ;;
+    1)
+      note 'the boot theme was NOT reverted (the rebuild failed; the Grassfield theme is set again and rebuilt cleanly): after the removal, revert it as in docs/owner-setup/login-boot-themes.md section 2' \
+        'le theme de demarrage n a PAS ete annule (la reconstruction a echoue ; le theme Grassfield est remis et reconstruit proprement) : apres le retrait, annule-le comme dans docs/owner-setup/login-boot-themes.md section 2' ;;
+    *) boot_stop ;;
+  esac
 }
 
 do_uninstall() {

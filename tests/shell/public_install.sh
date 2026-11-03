@@ -241,11 +241,15 @@ mk_rebuild() {
   stub limine-mkinitcpio <<'EOF'
 #!/bin/bash
 echo "limine-mkinitcpio $*" >>"$GF_STUB/calls"
-# The rebuild rewrites the boot images first (a half-done rebuild leaves new ones), then succeeds or not.
-echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/initramfs-linux.img"; echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/EFI/Linux/omarchy.efi"
+# Two kernels: A (initramfs-linux.img) always rebuilds; B (initramfs-linux-lts.img) rebuilds unless a failure is set.
+echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/initramfs-linux.img"
 [[ -f $GF_STUB/rebuild_fail ]] && exit 1
-# limine-mkinitcpio exits 0 when a kernel's rebuild failed and only says so
-[[ -f $GF_STUB/rebuild_soft_fail ]] && { echo "mkinitcpio failed for kernel linux"; exit 0; }
+# *_once: the first rebuild fails, the next ones are clean
+[[ -f $GF_STUB/rebuild_fail_once ]] && { rm -f "$GF_STUB/rebuild_fail_once"; exit 1; }
+# limine-mkinitcpio exits 0 when kernel B's rebuild failed and only says so
+[[ -f $GF_STUB/rebuild_soft_fail ]] && { echo "mkinitcpio failed for kernel linux-lts"; exit 0; }
+[[ -f $GF_STUB/rebuild_soft_fail_once ]] && { rm -f "$GF_STUB/rebuild_soft_fail_once"; echo "mkinitcpio failed for kernel linux-lts"; exit 0; }
+echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/initramfs-linux-lts.img"
 exit 0
 EOF
 }
@@ -253,7 +257,7 @@ mk_rebuild
 stub mkinitcpio <<'EOF'
 #!/bin/bash
 echo "mkinitcpio $*" >>"$GF_STUB/calls"
-echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/initramfs-linux.img"; echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/EFI/Linux/omarchy.efi"
+echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/initramfs-linux.img"
 [[ -f $GF_STUB/rebuild_fail ]] && exit 1
 exit 0
 EOF
@@ -314,12 +318,7 @@ run() {
   rc=$(<"$W/rc")
 }
 # The root commands, with the temporary key file and the run's timestamp made stable.
-sudo_calls() { grep '^sudo ' "$S/calls" | sed -e 's#[^ ]*/key\.asc#KEY#' -e 's#\.grassfield-install-bak\.[0-9]\{8\}-[0-9]\{6\}#.grassfield-install-bak.STAMP#' -e 's#boot-backup\.[0-9]\{8\}-[0-9]\{6\}#boot-backup.STAMP#g'; }
-BB=$R/var/lib/grassfield/boot-backup.STAMP
-# The boot image copy, rebuild and cleanup, as the root commands show them.
-BOOTCOPY="sudo install -d -m 700 -- $R/var/lib/grassfield $BB
-sudo find $R/boot -xdev -type f ( -name initramfs-*.img -o -path */EFI/Linux/*.efi ) -exec cp -p --parents -t $BB {} +
-sudo find $BB -type f -print -quit"
+sudo_calls() { grep '^sudo ' "$S/calls" | sed -e 's#[^ ]*/key\.asc#KEY#' -e 's#\.grassfield-install-bak\.[0-9]\{8\}-[0-9]\{6\}#.grassfield-install-bak.STAMP#'; }
 conf_unchanged() { cmp -s "$R/etc/pacman.conf" "$W/pacman.conf.orig"; }
 LOGDIR=$W/home/.local/state/grassfield
 PKGS4='grassfield-desktop grassfield-compositor grassfield-store grassfield-login-themes'
@@ -462,13 +461,11 @@ sudo pacman -Sy
 sudo pacman -S --needed --noconfirm $PKGS4
 sudo mkdir -p -- $R/etc/sddm.conf.d
 sudo tee $R/etc/sddm.conf.d/zz-grassfield-theme.conf
-$BOOTCOPY
 sudo plymouth-set-default-theme grassfield
-sudo limine-mkinitcpio
-sudo rm -rf -- $BB"
+sudo limine-mkinitcpio"
 expect 'the root commands, exactly and in order' "$(sudo_calls)" "$want"
-expect 'the boot images were rebuilt (new)' "$(cat "$R/boot/initramfs-linux.img")" NEW
-[[ ! -e $R/var/lib/grassfield/boot-backup.* ]] 2>/dev/null && pass 'the boot image copy is removed after a good rebuild' || fail 'the boot image copy was left'
+expect 'the boot images were rebuilt by Omarchy'"'"'s command (new)' "$(cat "$R/boot/initramfs-linux.img")" NEW
+[[ ! -e $R/var/lib/grassfield ]] && pass 'no boot image copy folder is ever made' || fail 'a boot image copy folder exists'
 has 'the temporary keyring agents are stopped' 'gpgconf --kill all GNUPGHOME=' "$S/calls"
 expect 'the update lock is taken again after the hand-over' \
   "$(awk '/^grassfield-channel-set stable/ { on = 1; next } /^plymouth-set-default-theme grassfield/ { on = 0 } on && /^flock -n 8/ { n++ } END { print n + 0 }' "$S/calls")" 1
@@ -553,26 +550,40 @@ hasnt 'no boot image rebuild' 'mkinitcpio' "$S/calls"
 fresh; rm -f "$BIN/limine-mkinitcpio"; run '' --yes
 expect 'without limine: mkinitcpio -P, Omarchy'"'"'s other way' "$rc" 0
 has 'mkinitcpio -P was run' 'sudo mkinitcpio -P' "$S/calls"
-fresh; touch "$S/rebuild_fail"; run '' --yes
-expect 'a failed boot image rebuild ends non-zero' "$rc" 1
-has 'it warns that a theme was not activated' 'a theme was not activated' "$W/out"
-expect 'the previous boot theme is put back' "$(cat "$S/plymouth")" omarchy
-has 'Grassfield itself stays installed' 'grassfield-desktop' "$S/installed"
-[[ -f $R/etc/pacman.d/grassfield.conf ]] && pass 'a theme failure does not roll the repository back' || fail 'the repository was rolled back for a theme failure'
-expect 'a failed rebuild: the old boot images are put back' "$(cat "$R/boot/initramfs-linux.img") $(cat "$R/boot/EFI/Linux/omarchy.efi")" 'OLD OLD'
-hasnt 'a failed rebuild: never says the boot theme is active' 'boot theme active' "$W/out"
-ls "$R"/var/lib/grassfield/boot-backup.* >/dev/null 2>&1 && fail 'a failed rebuild: the copy is left' || pass 'a failed rebuild: the copy is removed once restored'
-# limine-mkinitcpio exits 0 when one kernel's rebuild failed: the output is checked too.
-fresh; touch "$S/rebuild_soft_fail"; run '' --yes
-expect 'a rebuild that exits 0 but reports a failed kernel ends non-zero' "$rc" 1
+# Two kernels, A rebuilt and B failing (limine-mkinitcpio exits 0 and only prints it): the output is checked, the previous
+# theme is set back, Omarchy's rebuild runs AGAIN (it re-records the checksums), and no image is ever copied to or from /boot.
+fresh; touch "$S/rebuild_soft_fail_once"; run '' --yes
+expect 'a rebuild that exits 0 but reports a failed kernel: ends non-zero' "$rc" 1
 hasnt 'soft failure: never says the boot theme is active' 'boot theme active' "$W/out"
-expect 'soft failure: the old boot images are put back' "$(cat "$R/boot/initramfs-linux.img") $(cat "$R/boot/EFI/Linux/omarchy.efi")" 'OLD OLD'
-expect 'soft failure: the previous boot theme is put back' "$(cat "$S/plymouth")" omarchy
-# No boot image can be copied (none found): the boot theme is not touched at all.
-fresh; rm -rf "$R/boot"; mkdir -p "$R/boot"; run '' --yes
-expect 'no boot image to copy: ends non-zero, boot theme untouched' "$rc" 1
-hasnt 'no boot image to copy: no theme set' 'plymouth-set-default-theme grassfield' "$S/calls"
-hasnt 'no boot image to copy: no rebuild' 'limine-mkinitcpio' "$S/calls"
+has 'soft failure: says the theme was NOT changed' 'boot theme was NOT changed' "$W/out"
+expect 'soft failure: the previous boot theme is set back' "$(cat "$S/plymouth")" omarchy
+expect 'soft failure: the theme is set, then the old one, with a rebuild after each' \
+  "$(grep -E '^(plymouth-set-default-theme .|limine-mkinitcpio)' "$S/calls" | tr '\n' ',')" \
+  'plymouth-set-default-theme grassfield,limine-mkinitcpio ,plymouth-set-default-theme omarchy,limine-mkinitcpio ,'
+hasnt 'soft failure: no file is copied into /boot' "$R/boot" "$S/calls"
+hasnt 'soft failure: no find over /boot' 'sudo find' "$S/calls"
+expect 'soft failure: Omarchy'"'"'s rebuild is what wrote the images (nothing was copied back)' "$(cat "$R/boot/initramfs-linux.img")" NEW
+has 'soft failure: Grassfield itself stays installed' 'grassfield-desktop' "$S/installed"
+[[ -f $R/etc/pacman.d/grassfield.conf ]] && pass 'a theme failure does not roll the repository back' || fail 'the repository was rolled back for a theme failure'
+# The exit status of the first rebuild is checked too.
+fresh; touch "$S/rebuild_fail_once"; run '' --yes
+expect 'a failing rebuild then a clean one: ends non-zero, theme unchanged' "$rc" 1
+expect 'a failing rebuild then a clean one: the previous theme is set back' "$(cat "$S/plymouth")" omarchy
+expect 'a failing rebuild then a clean one: the rebuild ran twice' "$(grep -c '^limine-mkinitcpio' "$S/calls")" 2
+# The second rebuild fails too: stop, say what failed and the exact retry command; never claim it is back to normal.
+fresh; touch "$S/rebuild_fail"; run '' --yes
+expect 'both rebuilds fail: stops with exit 1' "$rc" 1
+has 'both rebuilds fail: the stop message' 'failed twice' "$W/out"
+has 'both rebuilds fail: Limine menu advice' "Limine's menu" "$W/out"
+has 'both rebuilds fail: the exact retry command' 'sudo limine-mkinitcpio' "$W/out"
+hasnt 'both rebuilds fail: never claims it is back to normal' 'boot theme active' "$W/out"
+hasnt 'both rebuilds fail: no end message of a good install' '== Done ==' "$W/out"
+expect 'both rebuilds fail: the previous theme is set' "$(cat "$S/plymouth")" omarchy
+expect 'both rebuilds fail: the rebuild ran twice, no more' "$(grep -c '^limine-mkinitcpio' "$S/calls")" 2
+has 'both rebuilds fail: Grassfield stays installed' 'grassfield-desktop' "$S/installed"
+fresh; rm -f "$BIN/limine-mkinitcpio"; touch "$S/rebuild_fail"; run '' --yes
+has 'both rebuilds fail (mkinitcpio -P): the retry command is the right one' 'sudo mkinitcpio -P' "$W/out"
+mk_rebuild
 
 # ---- 9. snapshot ---------------------------------------------------------------------------------------------------
 fresh; echo 1 >"$S/snap_rc"; run '' --yes
@@ -622,6 +633,9 @@ rolled_back 'keyring holds another primary for F'
 hasnt 'an impostor holding F as a subkey: nothing is signed' 'lsign-key' "$S/calls"
 fresh; touch "$S/keyring_odd"; echo "$FPR" >"$S/keys"; run '' --yes
 expect 'an impostor already in the keyring (matches F by a subkey): the run stops' "$rc" 1
+# "Already present" is primary-only: a subkey match is not "our key was there", so the rollback removes what matched F.
+expect 'a subkey-only match is not treated as a pre-existing key (rollback deletes it)' "$(wc -c <"$S/keys")" 0
+has 'the rollback ran the key deletion' 'pacman-key --delete' "$S/calls"
 hasnt 'an impostor already in the keyring: still nothing is signed' 'lsign-key' "$S/calls"
 has 'an impostor already in the keyring: says nothing was signed' 'nothing was signed' "$W/out"
 fresh; touch "$S/lsign_fail"; run '' --yes
@@ -704,16 +718,22 @@ grassfield-login set omarchy"
 expect 'uninstall: root commands in order (themes before the packages)' "$(sudo_calls)" \
   "sudo -v
 sudo rm -f -- $R/etc/sddm.conf.d/zz-grassfield-theme.conf
-$BOOTCOPY
 sudo plymouth-set-default-theme omarchy
 sudo limine-mkinitcpio
-sudo rm -rf -- $BB
 sudo pacman -Rns --noconfirm grassfield-login-themes grassfield-store grassfield-compositor grassfield-desktop grassfield-icons grassfield-wallpapers grassfield-keyring
 sudo rm -f -- $R/etc/pacman.conf.grassfield-install-bak.STAMP"
 has 'uninstall end message' 'stock Omarchy' "$W/out"
 has 'uninstall let go of the update lock around Turn Off' 'flock -n 8' "$S/calls"
 run '' --uninstall --yes
 expect 'uninstall twice exits 0' "$rc" 0
+# Uninstall when the rebuild fails twice: stops before removing anything, with the retry command.
+fresh; run '' --yes
+touch "$S/rebuild_fail"; run '' --uninstall --yes
+expect 'uninstall with a boot rebuild failing twice stops' "$rc" 1
+has 'uninstall: the stop message' 'failed twice' "$W/out"
+has 'uninstall: the packages are still there to retry' 'grassfield-desktop' "$S/installed"
+hasnt 'uninstall: no package removal happened' 'pacman -Rns' "$S/calls"
+rm -f "$S/rebuild_fail"
 # Packages gone but [grassfield] left (removed by hand): the script's own copy from THIS install puts pacman.conf back.
 fresh; run '' --yes
 : >"$S/installed"
