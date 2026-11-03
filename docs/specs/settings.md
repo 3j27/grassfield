@@ -9,7 +9,7 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
   the right: switch, slider, pop-up menu, segmented choice. Changes apply immediately; there is no Apply button.
 - macOS 27 layout (ADR-0024, measured on release captures, `docs/audits/ui-finesse-2026-10-25.md` section 7): the sidebar
   floats as an inset rounded panel (ADR-0024 amendment 2026-11-03: `window.sidebarPanelInset` 8, `window.sidebarPanelRadius` 18, a white rim), a 223-pt slot, 6 levels under the window (light #F7F6F3 on #FDFCF9; dark tokens
-  `color.dark.sidebarFill` / `windowBackground`), with no dividing line; selection 212 x 32, radius 8, 10 from both
+  `color.dark.sidebarFill` / `windowBackground`), with no dividing line; selection 195 x 32 (the 215-pt panel less 10 each side; measured), radius 8, 10 from both
   sidebar edges, in the selection colour with white text; a 28-pt capsule search field; groups #F7F7F7 without a border,
   radius 12, 468 wide with 20-pt margins, 10 apart, the first 12 below the toolbar; rows 38, labels and separators 10
   inside the group; section headers 13 bold in the text colour.

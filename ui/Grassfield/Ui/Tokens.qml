@@ -72,7 +72,7 @@ QtObject {
         statusOn: "#2E9E48",  // own green of a status dot (Wi-Fi Connected, a service that is up): 3.2:1 on the light group fill (a graphic: 3:1), the text beside it says the same [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusWarn: "#B78300",  // own yellow of a status dot (a service that is up without an address): 3.1:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         statusOff: "#D7372F",  // own red of a status dot (a service that is not connected): 4.4:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
-        sidebarFill: "#F7F6F3",  // the floating sidebar panel, light appearance: 6 levels under the window (#FDFCF9), the owner's calm-sidebar request of 2026-11-02 (was 15 under: #EEECE7); macOS 26 System Settings measures the panel at 249 on a 255 window, a white rim lighting it (system-settings ss-004-005 at 2 px/pt, measured 2026-11-03); the window's own warmth kept (R-G 1, G-B 3) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md § 08-settings-sidebar]
+        sidebarFill: "#F7F6F3",  // the floating sidebar panel, light appearance: 6 levels under the window (#FDFCF9), the owner's calm-sidebar request of 2026-11-02 (was 15 under: #EEECE7); macOS 26 System Settings measures the panel at 249 against a 252 content ground, a white rim lighting it (system-settings ss-004-005 at 2 px/pt, measured 2026-11-03); the window's own warmth kept (R-G 1, G-B 3) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md § 08-settings-sidebar]
         windowTextSecondary: "#716E6A",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #6E6E73 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
         chipFill: "#FDFCF9",  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): the white of #FFFFFF, warmed [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#D7372F",  // own value: the CPU Load graph's System share (AM29), light appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -1296,6 +1296,10 @@ QtObject {
     readonly property int settingsSidebarTileRadius: 5
     // white glyph on the coloured sidebar tile: 5.3:1 or more on every tile colour used (color.accentLight blue, purple, pink, red, green, graphite; computed, 3:1 needed for a graphic) [ref: docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
     readonly property string settingsSidebarTileGlyph: "#FFFFFF"
+    // the sidebar tile of a window that is not key, light appearance: macOS turns the coloured tiles a mid grey (systemGray, about #8E8E93) and keeps the white glyph; warm, and 3.45:1 under the white glyph (the 3:1 icon floor; tests/visual/test_contrast_tokens.py) [ref: docs/audits/refinement-2026-11-02.md § 05-windows-getinfo-titlebar, 06-windows-inactive, 07-windows-under-menubar]
+    readonly property string settingsSidebarTileInactiveLight: "#8C8A86"
+    // the same, dark appearance: the lights' inactive grey (window.inactiveLightDark), 6.88:1 under the white glyph [ref: docs/audits/refinement-2026-11-02.md § 05-windows-getinfo-titlebar, 06-windows-inactive, 07-windows-under-menubar]
+    readonly property string settingsSidebarTileInactiveDark: "#5C5A56"
     // estimate: the white glyph drawn on a sidebar icon tile [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024]
     readonly property int settingsSidebarGlyphSize: 14
     // macOS 26/27 System Settings groups about 10 apart (visual-tahoe-2026-10-25.md Settings) (macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.1 macOS 27 changed the target; ADR-0024)
@@ -3216,10 +3220,20 @@ QtObject {
     readonly property int windowSidebarPanelInset: 8
     // the floating sidebar panel's corner, concentric with the 26-pt window corner at the 8-pt inset (26 - 8 = 18); circle fit on the capture's corner edge points 18 to 19 (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md]
     readonly property int windowSidebarPanelRadius: 18
-    // the light rim that lights the floating sidebar panel, one device pixel: pure white (255) on the 249 panel in the light appearance, so the knob colour at full opacity (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    // the light rim that lights the floating sidebar panel, 1 pt wide (2 px at 2x), snapped to whole device pixels: pure white (255) on the 249 panel in the light appearance, so the knob colour at full opacity (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
     readonly property real windowSidebarPanelRimOpacity: 1.0
     // estimate: the same rim in the dark appearance, the knob colour at the toolbar's inner-rim 0.08 (no dark capture of the panel) [ref: ADR-0024 amendment 2026-11-03]
     readonly property real windowSidebarPanelRimOpacityDark: 0.08
+    // the floating sidebar panel's rim, 1 pt: 2 px at 2x on ss-004-005 (x 16-17 and 444-445), drawn as a whole number of device pixels (1 px at 1.25) so its edge never splits between two pixels [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int windowSidebarPanelRimWidth: 1
+    // the floating sidebar panel's soft shadow reaches about 10 pt: right of the panel 242 at the edge to the 252 ground over 20 px, below 240 to 243 over 14 px (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int windowSidebarPanelShadowBlur: 12
+    // the shadow sits a little lower than it is wide: 240 below the panel against 242 beside it (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property int windowSidebarPanelShadowOffsetY: 1
+    // light appearance: the shadow colour at this opacity (a blurred edge shows half of it): 10 levels under the 252 ground at the edge, about black at 0.04 there (ss-004-005, measured 2026-11-03); an opaque app window, so a drop shadow and not a blur [ref: ADR-0024 amendment 2026-11-03]
+    readonly property real windowSidebarPanelShadowOpacity: 0.08
+    // estimate: the same in the dark appearance, stronger so it still reads on the dark window (no dark capture) [ref: ADR-0024 amendment 2026-11-03]
+    readonly property real windowSidebarPanelShadowOpacityDark: 0.3
     // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
     readonly property string windowEdgeDark: "#FFFFFF"
     // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]

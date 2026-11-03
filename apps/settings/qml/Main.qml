@@ -279,6 +279,7 @@ Window {
 
     Item {
         id: sidebar
+        z: 1 // above the detail pane: the panel's shadow falls on it
         width: Tokens.settingsSidebarWidth
         height: parent.height
 
@@ -477,9 +478,9 @@ Window {
                         width: Tokens.settingsSidebarIconSize
                         height: Tokens.settingsSidebarIconSize
                         radius: Tokens.settingsSidebarTileRadius
-                        // Grey while the window is not key, as macOS greys its sidebar tiles (the lights' inactive grey).
+                        // A mid grey while the window is not key, as macOS greys its sidebar tiles; the white glyph keeps 3:1.
                         color: root.keyLook ? Tokens.colorAccentLight[root.tileColors[entry.modelData.id] || "graphite"]
-                                            : (Appearance.dark ? Tokens.windowInactiveLightDark : Tokens.windowInactiveLightLight)
+                                            : (Appearance.dark ? Tokens.settingsSidebarTileInactiveDark : Tokens.settingsSidebarTileInactiveLight)
 
                         Icon {
                             anchors.centerIn: parent

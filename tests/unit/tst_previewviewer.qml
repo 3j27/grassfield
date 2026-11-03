@@ -211,6 +211,11 @@ TestCase {
         compare(Tokens.windowSidebarPanelInset, 8);
         compare(Tokens.windowSidebarPanelRadius, 18);
         compare(Tokens.windowSidebarPanelRadius, 26 - Tokens.windowSidebarPanelInset, "concentric with the window corner");
+        // The rim is 1 pt and the shadow soft and light, as measured (ss-004-005): 242 at the edge on a 252 ground.
+        compare(Tokens.windowSidebarPanelRimWidth, 1);
+        compare(Tokens.windowSidebarPanelShadowBlur, 12);
+        verify(Tokens.windowSidebarPanelShadowOpacity > 0.05 && Tokens.windowSidebarPanelShadowOpacity < 0.12, "light shadow strength");
+        verify(Tokens.windowSidebarPanelShadowOpacityDark > Tokens.windowSidebarPanelShadowOpacity, "stronger in the dark");
         const light = Tokens.colorLight, dark = Tokens.colorDark;
         function level(hex) { return parseInt(hex.substring(1, 3), 16); }
         compare(level(light.windowBackground) - level(light.sidebarFill), 6, "light panel: 6 levels under the window");

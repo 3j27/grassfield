@@ -372,8 +372,6 @@ TestCase {
         sources.close();
     }
 
-    // The sidebar's list is taller than a short window: the wheel scrolls it and stops at the ends, a click on a row still
-    // selects it (no drag), and a selection made by key, search or deep link brings its row into view.
     // The floating panel moved the list (ADR-0024 amendment 2026-11-03): at the top the first row is fully inside the list's
     // visible area, under the search field with the same gap as before, and inside the panel's left and bottom edges.
     function test_sidebarFirstRowIsFullyVisible() {
@@ -395,6 +393,47 @@ TestCase {
         compare(list.mapToItem(win.contentItem, 0, list.height).y, win.contentItem.height - panelBottom, "the list ends at the panel's bottom");
     }
 
+    // A window that is not key greys its sidebar tiles to a mid grey that keeps the white glyph at 3:1 (macOS; the icon floor of
+    // gate A2), in both appearances; key again, the tiles take their colours back.
+    function test_inactiveTilesKeepTheGlyphReadable() {
+        function lum(c) {
+            const f = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+            return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+        }
+        const glyph = Qt.color(Tokens.settingsSidebarTileGlyph);
+        for (const grey of [Tokens.settingsSidebarTileInactiveLight, Tokens.settingsSidebarTileInactiveDark])
+            verify((lum(glyph) + 0.05) / (lum(Qt.color(grey)) + 0.05) >= 3.0, grey + " under the white glyph is under 3:1");
+        const t = make(touchpad);
+        t.win.select("desktop");
+        // The window sets the appearance from its own source once made: the light one is the one under test here.
+        Appearance.dark = false;
+        t.win.requestActivate();
+        tryVerify(() => t.win.active, 2000);
+        wait(50);
+        const tiles = () => {
+            const out = [];
+            const walk = i => {
+                if (String(i).indexOf("QQuickRectangle") === 0 && i.visible && i.width === Tokens.settingsSidebarIconSize && i.height === i.width
+                        && i.mapToItem(t.win.contentItem, 0, 0).x < Tokens.settingsSidebarWidth)
+                    out.push(i);
+                for (let k = 0; k < (i.children || []).length; k++)
+                    walk(i.children[k]);
+            };
+            walk(t.win.contentItem);
+            return out;
+        };
+        verify(tiles().length > 3, "the sidebar's tiles");
+        verify(!tiles().some(r => Qt.colorEqual(r.color, Tokens.settingsSidebarTileInactiveLight)), "key: coloured");
+        const other = createTemporaryObject(otherWindow, null);
+        other.requestActivate();
+        tryVerify(() => !t.win.active, 2000);
+        wait(50);
+        verify(tiles().every(r => Qt.colorEqual(r.color, Tokens.settingsSidebarTileInactiveLight)), "not key: every tile the inactive grey: ");
+        other.close();
+    }
+
+    // The sidebar's list is taller than a short window: the wheel scrolls it and stops at the ends, a click on a row still
+    // selects it (no drag), and a selection made by key, search or deep link brings its row into view.
     function test_sidebarScrolls() {
         const t = make(testCase.touchpad, {height: 360});
         const win = t.win;

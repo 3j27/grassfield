@@ -145,7 +145,7 @@ FocusScope {
     ListView {
         id: list
         anchors.fill: parent
-        anchors.topMargin: root.topInset + Tokens.spacingSm
+        anchors.topMargin: Math.max(root.topInset, Tokens.windowSidebarPanelInset) + Tokens.spacingSm
         anchors.leftMargin: Tokens.windowSidebarPanelInset + Tokens.filesSidebarInset
         anchors.rightMargin: Tokens.filesSidebarInset
         anchors.bottomMargin: Tokens.windowSidebarPanelInset

@@ -634,7 +634,8 @@ Window {
         }
         width: viewerWin.showSidebar && !viewerWin.slideshow ? Tokens.previewSidebarWidth : 0
         visible: width > 0
-        clip: true
+        // Above the view: the panel's shadow falls on it (not clipped, so it can).
+        z: 1
 
         // The floating panel as Settings' and Files' (macOS 26; ADR-0024 amendment 2026-11-03): inset from the window's left and
         // bottom edges, the toolbar's own gap above it, the view straight beside it. The lights stay in the toolbar above
@@ -646,7 +647,6 @@ Window {
                 leftMargin: Tokens.windowSidebarPanelInset
                 bottomMargin: Tokens.windowSidebarPanelInset
             }
-            clip: true
 
             // Files: thumbnails of the images, names of the other kinds. Beside the page thumbnails of a PDF they are
             // a short list of names.
