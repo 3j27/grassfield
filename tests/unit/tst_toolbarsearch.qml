@@ -83,7 +83,13 @@ TestCase {
         verify(capsule !== null, "the background is the rimmed capsule");
         compare(capsule.radius, search.height / 2, "a capsule");
         compare(capsule.fillOpacity, Tokens.toolbarFieldFillOpacity, "the rimmed glass fill");
-        verify(capsule.hairline > 0, "its rims");
+        verify(capsule.field, "the sidebar's flat field: no shadow");
+        search.toolbar = true;
+        verify(!capsule.field, "a toolbar's search is a lifted white capsule");
+        compare(capsule.fillOpacity, Tokens.toolbarCapsuleFillOpacity);
+        search.toolbar = false;
+        compare(capsule.fillOpacity, Tokens.toolbarFieldFillOpacity);
+        compare(capsule.border.width, Appearance.increaseContrast ? Tokens.controlBorderWidth : 0, "no outline in the standard appearance");
         // The clear button shows with text only, and clears it.
         const clear = find(search, it => it.objectName === "clearButton");
         verify(clear !== null);

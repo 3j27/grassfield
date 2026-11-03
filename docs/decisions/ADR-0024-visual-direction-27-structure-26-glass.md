@@ -137,3 +137,22 @@ Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/a
 
 ## Note (2026-10-29): the menu bar's band
 Integrator decision under the owner's delegation, closest to macOS 26/27. The band the menu bar shows (the setting, the automatic assist of ADR-0016 D1, or a full-screen window) is glass of the "menu" class, and its tone adapts to the wallpaper strip under it (point 3), whatever the appearance: dark glass with light text over a dark strip, light glass with dark text over a light one. The unclassed material gave 0.82 at transparency 0.49. Over the owner's video strip (p5 0.0528, p95 0.35) the band is now dark glass at alpha 0.64 (0.65 at 0.25), judged at rest (7.73:1), under the open title's capsule (4.73:1) and dimmed (3.06:1); the appearance's own light glass would have needed 0.79. The strip is used only while it is what lies behind the bar (no window under it, no full-screen window); otherwise the surface keeps the appearance's material at the worst case. Reduce Transparency stays opaque in the appearance's colours. Detail: docs/specs/menubar.md item 0b.
+
+## Amendment 2026-11-03 toolbar capsules have no dark rim
+
+Section 2 point 5 (rims) governs `Material` glass: surfaces that blur the wallpaper behind them. The capsules of an app
+window's toolbar (`RimmedCapsule`: back / forward, the view group, the search capsule) sit on an opaque window and blur
+nothing. Measured on the macOS 27 Settings capture ss-004-005 (2 px/pt, 2026-11-03), the back / forward capsule is white
+(#FEFEFE) with a white device-pixel edge and no darker outline: across its edge the pixels step from the shadow grey
+(#F1F1F1 below, #F5F5F5 beside, #F7F7F7 above) straight to white, and the grey fades over about 14 px. The sidebar search
+field is a flat #E1E1E1 on the #FAFAFA sidebar, with no rim and no shadow. The earlier reading of a dark rim at #BDBDBD was
+the shadow's first pixel.
+
+Decision: `RimmedCapsule` draws a white fill (`toolbar.capsuleFillOpacity` 0.7) lifted by a soft shadow
+(`toolbar.shadow*`: blur 8, offset 2, opacity 0.10), and the field a flat tinted fill (`toolbar.fieldFillOpacity` 0.10); the
+`toolbar.rimOpacity*` and `innerRimOpacity*` tokens are removed. Increase Contrast keeps the control outline. The dark
+appearance values are estimates (no dark capture). Gate A2 holds: the capsule and field fills are still tested as backdrops
+of the `window` role (tests/visual/test_contrast_tokens.py); white at 0.7 only lightens the light window. Blur is
+untouched: a drop shadow is not blur and nothing is faked. A toolbar search field is a lifted white capsule like the
+other toolbar items; only the sidebar's search is the flat field. Side effect: pink's accent ink is no longer needed (ADR-0040
+amendment 2026-11-03).

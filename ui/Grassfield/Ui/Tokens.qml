@@ -129,7 +129,6 @@ QtObject {
 
     // color roles, accentInkLight appearance
     readonly property var colorAccentInkLight: ({
-        pink: "#BD2F6C",  // the lightest shade of the light pink accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
         yellow: "#816500",  // the lightest shade of the light yellow accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
         green: "#467427"  // the lightest shade of the light green accent (HSL hue and saturation kept) that holds 4.5:1 on an opaque app window, its sidebar and their rimmed capsules (A2 role 'text and glyphs in the accent colour on an app window'); on glass it is no worse than the accents that need no ink (2.24:1 at the worst wallpaper and transparency). Text and glyphs drawn in the accent colour in the light appearance (Appearance.colors.accentInk), as macOS draws a light accent's text darker; the integrator's review of 5391761 (ADR-0040 step 1c) [ref: docs/decisions/ADR-0040-identity.md step 1c; docs/specs/ui.md]
     })
@@ -804,18 +803,22 @@ QtObject {
     // estimate: a permission alert takes no click, key or close this long after it became the active window, so one meant for what was there before never answers it (ADR-0035 5a-5) [ref: docs/specs/system-dialogs.md § 2. Open With and permission alerts]
     readonly property int panelAlertArmMs: 500
 
-    // the sidebar search field: #E9E9E9 in its middle on the #ECECEC sidebar, the text colour at 0.012 (moved from settings.fieldFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarFieldFillOpacity: 0.012
-    // the dark rim of the search field and the toolbar capsule, one device pixel: #BDBDBD on the sides, black at 0.2 (moved from settings.rimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarRimOpacity: 0.2
-    // estimate: the dark rim in the dark appearance (no macOS 27 dark capture) (moved from settings.rimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarRimOpacityDark: 0.5
-    // the light rim inside the dark one, one device pixel: #FFFFFF / #F8F8F8 against the #F1F1F1 fill, white at 0.7 (moved from settings.innerRimOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarInnerRimOpacity: 0.7
-    // estimate: the light inner rim in the dark appearance (no macOS 27 dark capture) (moved from settings.innerRimOpacityDark: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarInnerRimOpacityDark: 0.08
-    // the toolbar's back / forward capsule: #FAFAFA on the white pane, the text colour at 0.02 (moved from settings.toolbarFillOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
-    readonly property real toolbarCapsuleFillOpacity: 0.02
+    // the sidebar search field: a flat #E1E1E1 on the #FAFAFA sidebar at 2 px/pt, no rim and no shadow (macOS 27 ss-004-005, measured 2026-11-03), the text colour at 0.10; was 0.012 inside a dark and a light rim [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarFieldFillOpacity: 0.1
+    // estimate: the search field in the dark appearance, the text colour (light) at 0.05: more lightens the dark window past the 4.5:1 of the accent text, tests/visual/test_contrast_tokens.py (no macOS 27 dark capture) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarFieldFillOpacityDark: 0.05
+    // the toolbar's back / forward capsule: white #FEFEFE with a white device-pixel edge and no dark outline, lifted by a soft shadow (macOS 27 ss-004-005, measured 2026-11-03); white (colors.knob) at 0.7 over the window; was the text colour at 0.02 inside two rims [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarCapsuleFillOpacity: 0.7
+    // estimate: the toolbar capsule in the dark appearance, white at 0.05 over the dark window, with the 0.30 shadow, so it reads without a rim and the accent text keeps 4.5:1 (no macOS 27 dark capture) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarCapsuleFillOpacityDark: 0.05
+    // the soft shadow under a toolbar capsule fades over about 7 pt (ss-004-005: #F1F1F1 at the capsule edge to the page grey in 14 px at 2 px/pt, measured 2026-11-03; the audit proposes blur 8) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property int toolbarShadowBlur: 8
+    // the capsule shadow is deeper below than above (ss-004-005: #F1F1F1 below the capsule, #F7F7F7 above, measured 2026-11-03) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property int toolbarShadowOffsetY: 2
+    // the capsule shadow colour at this opacity, light appearance (the edge darkens the page by 0.05 to 0.07 in ss-004-005; 0.10 at the peak of the blurred shape) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarShadowOpacity: 0.1
+    // estimate: the capsule shadow in the dark appearance (a shadow on a dark window is faint, so deeper than the light one; no macOS 27 dark capture) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md § Amendment 2026-11-03 toolbar capsules have no dark rim]
+    readonly property real toolbarShadowOpacityDark: 0.3
     // the hairline between back and forward: #C7C7C7 on #FAFAFA, black at 0.2 (moved from settings.toolbarDividerOpacity: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]
     readonly property real toolbarDividerOpacity: 0.2
     // the hairline between back and forward is 19.5 tall, centred (moved from settings.toolbarDividerHeight: one toolbar and search capsule for every app window, ADR-0039 step 14) [ref: docs/audits/settings-parity-2026-10-26.md § Window and sidebar]

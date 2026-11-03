@@ -4,8 +4,8 @@ import Grassfield.Ui
 
 // The search field of a Files toolbar: a 36-pt circle that expands to a capsule while it has the focus or text (macOS).
 // The browser window's searches (ADR-0027: BrowserTab.setSearch shows a search location); the Open and Save panels'
-// (FilePanel.qml) filters the shown folder. The toolbar's rimmed capsule (step 14's RimmedCapsule: the group's fill while a
-// button, the field's once open), the shared focus ring outside it, and the shared field's clear button (ADR-0039 step 23).
+// (FilePanel.qml) filters the shown folder. The toolbar's lifted white capsule (step 14's RimmedCapsule) as a button and once open, the
+// shared focus ring outside it, and the shared field's clear button (ADR-0039 step 23).
 RimmedCapsule {
     id: root
 
@@ -23,7 +23,6 @@ RimmedCapsule {
 
     width: expanded ? root.expandedWidth : Tokens.toolbarCapsule
     height: Tokens.toolbarCapsule
-    fillOpacity: expanded ? Tokens.toolbarFieldFillOpacity : Tokens.toolbarCapsuleFillOpacity
 
     // A size that changes in place: the move curve (ADR-0039 step 20).
     Behavior on width {
