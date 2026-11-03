@@ -44,7 +44,7 @@ DIED=0
 PHASE=0
 STAMP=''
 PBAK='' CBAK=''
-SEC_ADDED=0 CONF_STATE=none KEY_PRE=0 KEY_ADDED=0
+SEC_ADDED=0 CONF_STATE=none KEY_PRE=0 KEY_ADDED=0 SYNC_PRE=0 PRE_PKGS=''
 DBPATH=$GF_ROOT/var/lib/pacman
 THEMES_FAILED=0
 
@@ -130,7 +130,7 @@ setup_log() {
 # ---- small helpers --------------------------------------------------------------------------------------------------
 # The only way root is used: every root command goes through here, so the log names each one.
 as_root() {
-  printf '+ sudo %s\n' "$*"
+  printf '+ sudo %s\n' "$*" >&2 # stderr: a caller may capture the command's own output
   sudo "$@"
 }
 
@@ -169,7 +169,10 @@ conf_ok() {
 repos() { pacman-conf --config "$PACMAN_CONF" --repo-list; }
 repos_has() { local r; while IFS= read -r r; do [[ $r == "$1" ]] && return 0; done < <(repos); return 1; }
 
-key_present() { pacman-key --list-keys "$GF_FPR" >/dev/null 2>&1; }
+# pacman's keyring has F as the PRIMARY of exactly one key (a key that only holds F as a subkey does not count).
+key_present() { [[ $(keyring_primaries) == "$GF_FPR" ]]; }
+# Any key of the keyring that contains F, primary or subkey (what `pacman-key --delete F` would act on: uninstall).
+key_any() { pacman-key --list-keys "$GF_FPR" >/dev/null 2>&1; }
 
 # Primary fingerprints from gpg's colon output on stdin; "SECRET" when it shows a secret key.
 colons_primaries() {
@@ -226,9 +229,29 @@ pacman_conf_is_ours_only() { # <backup>: that backup plus exactly our two lines 
   { cat -- "$1"; printf '\n[grassfield]\n%s\n' "$GF_INCLUDE_LINE"; } | cmp -s - "$PACMAN_CONF"
 }
 
+new_pkgs() { # Grassfield packages installed now that were not installed when this run started
+  local p
+  while IFS= read -r p; do
+    [[ -n $p ]] && ! grep -qxF "$p" <<<"$PRE_PKGS" && printf '%s\n' "$p"
+  done < <(installed_pkgs)
+  return 0
+}
+
 rollback() {
-  local manual=0
+  local manual=0 partial
   printf '\n'
+  partial=$(new_pkgs | tr '\n' ' ')
+  if [[ -n ${partial// /} ]]; then
+    # The install transaction failed after some packages went in: removing the repository and the key now would leave
+    # installed packages with no way to update and no Turn Off. Everything stays; the user finishes or removes.
+    say "PARTLY INSTALLED: ${partial}is on the system, the install did not finish. Nothing was rolled back: the [grassfield] repository and its key are kept so you can finish or remove cleanly." \
+      "INSTALLE A MOITIE : ${partial}est sur le systeme, l installation n est pas terminee. Rien n a ete annule : le depot [grassfield] et sa cle sont conserves pour que tu puisses finir ou retirer proprement."
+    say '  To finish: run this script again (it continues).  To remove everything: run it with --uninstall (or grassfield-channel-set off, then pacman -Rns).' \
+      '  Pour finir : relance ce script (il reprend).  Pour tout retirer : relance-le avec --uninstall (ou grassfield-channel-set off puis pacman -Rns).'
+    say "  The log: ${LOG:-}" "  Le journal : ${LOG:-}"
+    PHASE=0
+    return 0
+  fi
   say 'Rolling back what this run added...' 'Annulation de ce que cette execution a ajoute...'
   if ((SEC_ADDED)); then
     # Only when the file is still exactly this run's copy plus our two lines: a later change of yours is never undone.
@@ -241,7 +264,7 @@ rollback() {
     esac
   fi
   if ((!manual)); then
-    remove_synced || true
+    ((SYNC_PRE)) || remove_synced || true # a database that existed before this run (a rerun) is not ours to delete
     ((KEY_ADDED)) && { as_root pacman-key --delete "$GF_FPR" || manual=1; }
   fi
   if ((manual)); then
@@ -252,8 +275,8 @@ rollback() {
     say "  2. delete /etc/pacman.d/grassfield.conf   3. pacman-key --delete $GF_FPR   (this run's copies: ${PBAK:-none} ${CBAK:-none})" \
       "  2. supprime /etc/pacman.d/grassfield.conf   3. pacman-key --delete $GF_FPR   (copies de cette execution : ${PBAK:-aucune} ${CBAK:-aucune})"
   else
-    say 'Back to the exact state before this run (pacman.conf, the repository file, the key, the synced database). Nothing was installed.' \
-      'Retour a l etat exact d avant cette execution (pacman.conf, fichier du depot, cle, base synchronisee). Rien n a ete installe.'
+    say 'Back to the exact state before this run (pacman.conf, the repository file, the key, the synced database). Nothing new was installed.' \
+      'Retour a l etat exact d avant cette execution (pacman.conf, fichier du depot, cle, base synchronisee). Rien de nouveau n a ete installe.'
     say "Retry: run this script again. The log: ${LOG:-}" "Reessayer : relance ce script. Le journal : ${LOG:-}"
   fi
   PHASE=0
@@ -262,12 +285,22 @@ rollback() {
 on_exit() {
   local rc=$?
   trap - EXIT
+  # A second Ctrl-C (or TERM) must not interrupt the rollback; the ignored disposition is inherited by sudo and what it runs,
+  # so a key deletion started here finishes.
+  trap '' INT TERM HUP
   set +e
   if ((rc != 0 && PHASE == 1)); then
     ((DIED)) || printf '\n%s\n' "$(t 'Stopped: a command failed (see above).' 'Arret : une commande a echoue (voir plus haut).')" >&2
     rollback
   fi
-  [[ -z $TMP ]] || rm -rf -- "$TMP"
+  if [[ -n $TMP ]]; then
+    # The throwaway keyrings started a gpg-agent each: stop them before their folders go.
+    if command -v gpgconf >/dev/null; then
+      GNUPGHOME=$TMP/ks gpgconf --kill all 2>/dev/null
+      GNUPGHOME=$TMP/gnupg gpgconf --kill all 2>/dev/null
+    fi
+    rm -rf -- "$TMP"
+  fi
   exit "$rc"
 }
 
@@ -431,8 +464,8 @@ plan_install() {
   say " 6. session       grassfield-login set $SESSION (next login starts $SESSION; nothing runs now)" \
     " 6. session        grassfield-login set $SESSION (la prochaine ouverture de session demarre $SESSION ; rien ne tourne maintenant)"
   if ((THEMES)); then
-    say " 7. themes (root) login screen: $GF_SDDM_DROPIN (Current=grassfield); boot screen: plymouth-set-default-theme grassfield, then Omarchy's own boot-image rebuild (limine-mkinitcpio, else mkinitcpio -P); the previous boot theme is remembered; inside the snapshot of step 1" \
-      " 7. themes (root) ecran de connexion : $GF_SDDM_DROPIN (Current=grassfield) ; ecran de demarrage : plymouth-set-default-theme grassfield puis la reconstruction de l image de demarrage d Omarchy (limine-mkinitcpio, sinon mkinitcpio -P) ; l ancien theme est memorise ; dans le snapshot de l etape 1"
+    say " 7. themes (root) login screen: $GF_SDDM_DROPIN (Current=grassfield); boot screen: plymouth-set-default-theme grassfield, then Omarchy's own boot-image rebuild (limine-mkinitcpio, else mkinitcpio -P); the previous boot theme is remembered. /boot (the ESP) is NOT in the snapshot: the current boot images are copied to a root-only folder first and put back if the rebuild fails" \
+      " 7. themes (root) ecran de connexion : $GF_SDDM_DROPIN (Current=grassfield) ; ecran de demarrage : plymouth-set-default-theme grassfield puis la reconstruction de l image de demarrage d Omarchy (limine-mkinitcpio, sinon mkinitcpio -P) ; l ancien theme est memorise. /boot (l ESP) n est PAS dans le snapshot : les images de demarrage actuelles sont copiees d abord dans un dossier reserve a root et remises si la reconstruction echoue"
   fi
   say "Log: $LOG" "Journal : $LOG"
   say 'Undo: run this script again with --uninstall.' 'Annuler : relance ce script avec --uninstall.'
@@ -518,16 +551,20 @@ do_key() {
   step "Trust the signing key $GF_FPR" "Faire confiance a la cle de signature $GF_FPR"
   local got
   fetch_key
+  PRE_PKGS=$(installed_pkgs)
+  [[ ! -e $DBPATH/sync/grassfield.db ]] || SYNC_PRE=1
   key_present && KEY_PRE=1
   PHASE=1
   as_root pacman-key --add "$TMP/key.asc"
   ((KEY_PRE)) || KEY_ADDED=1
-  # Signs only a key with exactly this full fingerprint, and fails when the keyring holds none.
-  as_root pacman-key --lsign-key "$GF_FPR"
+  # Checked BEFORE anything is signed: pacman's keyring must hold F as the primary of exactly one key. A key that merely
+  # carries F as a subkey (one that was already there, or one the add found) makes `--lsign-key F` ambiguous.
   got=$(keyring_primaries)
   [[ $got == "$GF_FPR" ]] ||
-    die "pacman's keyring holds '${got:-nothing}' for $GF_FPR, not exactly that primary key." \
-      "le trousseau de pacman contient '${got:-rien}' pour $GF_FPR, pas exactement cette cle primaire."
+    die "pacman's keyring holds '${got:-nothing}' for $GF_FPR, not exactly one key with that primary: nothing was signed." \
+      "le trousseau de pacman contient '${got:-rien}' pour $GF_FPR, pas exactement une cle avec cette primaire : rien n a ete signe."
+  # Signs only a key with exactly this full fingerprint, and fails when the keyring holds none.
+  as_root pacman-key --lsign-key "$GF_FPR"
   ok 'key trusted (locally signed)' 'cle de confiance (signee localement)'
 }
 
@@ -607,10 +644,59 @@ do_session() {
 
 # Omarchy's own way to rebuild the boot image after a Plymouth theme change (omarchy-plymouth-set): limine-mkinitcpio when
 # present, else mkinitcpio -P.
+#
+# limine-mkinitcpio exits 0 even when a kernel's image could not be rebuilt and only says so in its output (Omarchy's
+# migration 1791621765 greps its log for it), so the output is checked as well as the exit status.
 rebuild_boot_image() {
-  if command -v limine-mkinitcpio >/dev/null; then as_root limine-mkinitcpio
-  elif command -v mkinitcpio >/dev/null; then as_root mkinitcpio -P
+  local rc=0 log=$TMP/rebuild.log
+  : >"$log"
+  if command -v limine-mkinitcpio >/dev/null; then as_root limine-mkinitcpio 2>&1 | tee "$log" || rc=$?
+  elif command -v mkinitcpio >/dev/null; then as_root mkinitcpio -P 2>&1 | tee "$log" || rc=$?
   else return 2; fi
+  ((rc == 0)) || return 1
+  ! grep -q 'mkinitcpio failed for kernel' "$log"
+}
+
+# /boot is the ESP (vfat), outside the btrfs snapshot: the snapshot cannot bring a boot image back. So the current images
+# (initramfs and UKIs) are copied to a root-only folder before the rebuild and put back if it fails. After a successful
+# rebuild no copy is kept; a later problem is met with Esc at the disk prompt, Limine's menu, or `--uninstall` (which
+# rebuilds again).
+BOOT_BAK=''
+rm_boot_bak() { [[ $BOOT_BAK == "$GF_ROOT"/var/lib/grassfield/boot-backup.* ]] && as_root rm -rf -- "$BOOT_BAK"; return 0; }
+boot_backup() {
+  local first
+  BOOT_BAK=$GF_ROOT/var/lib/grassfield/boot-backup.$STAMP
+  as_root install -d -m 700 -- "${BOOT_BAK%/*}" "$BOOT_BAK" || return 1
+  as_root find "$GF_ROOT/boot" -xdev -type f \( -name 'initramfs-*.img' -o -path '*/EFI/Linux/*.efi' \) \
+    -exec cp -p --parents -t "$BOOT_BAK" {} + || return 1
+  first=$(as_root find "$BOOT_BAK" -type f -print -quit)
+  [[ -n $first ]]
+}
+
+# <new theme> <theme to go back to>: set the Plymouth theme and rebuild; on any failure the old theme and the old images.
+switch_boot_theme() {
+  if ! boot_backup; then
+    rm_boot_bak
+    note 'could not copy the current boot images (no space, or none found): the boot theme is left as it is' \
+      'impossible de copier les images de demarrage actuelles (plus de place, ou aucune trouvee) : le theme de demarrage est laisse tel quel'
+    return 1
+  fi
+  as_root plymouth-set-default-theme "$1"
+  if rebuild_boot_image; then
+    rm_boot_bak
+    return 0
+  fi
+  note 'the boot image rebuild failed: putting the previous boot theme and the previous boot images back' \
+    'la reconstruction de l image de demarrage a echoue : remise de l ancien theme et des anciennes images de demarrage'
+  as_root plymouth-set-default-theme "$2" || true
+  if as_root cp -r --no-preserve=all -T "$BOOT_BAK$GF_ROOT/boot" "$GF_ROOT/boot"; then
+    rm_boot_bak
+    note 'the previous boot images are back' 'les anciennes images de demarrage sont remises'
+  else
+    say "COULD NOT put the boot images back by itself. The copies are in $BOOT_BAK (root-only). Restore them to /boot with sudo, or run Omarchy's boot-image rebuild." \
+      "IMPOSSIBLE de remettre seul les images de demarrage. Les copies sont dans $BOOT_BAK (root seulement). Remets-les dans /boot avec sudo, ou lance la reconstruction d Omarchy."
+  fi
+  return 1
 }
 
 plymouth_current() { { plymouth-set-default-theme 2>/dev/null || true; } | awk 'NR == 1 { print $1 }'; }
@@ -645,15 +731,11 @@ do_themes() {
     return 0
   fi
   [[ -n $cur ]] && printf '%s\n' "$cur" >"$STATE_DIR/plymouth-previous"
-  as_root plymouth-set-default-theme grassfield
-  if rebuild_boot_image; then
+  if switch_boot_theme grassfield "${cur:-omarchy}"; then
     ok "boot theme active (previous: ${cur:-none}); if the disk-password screen ever shows no field, press Esc for the text prompt" \
       "theme de demarrage actif (precedent : ${cur:-aucun}) ; si l ecran du mot de passe de disque n affiche aucun champ, appuie sur Echap pour l invite texte"
   else
     THEMES_FAILED=1
-    note 'the boot image rebuild failed: putting the previous boot theme back' 'la reconstruction de l image de demarrage a echoue : remise de l ancien theme de demarrage'
-    as_root plymouth-set-default-theme "${cur:-omarchy}" || true
-    rebuild_boot_image || note 'could not rebuild again: run Omarchy'"'"'s boot-image rebuild yourself' 'impossible de reconstruire a nouveau : lance toi-meme la reconstruction d Omarchy'
   fi
 }
 
@@ -705,11 +787,13 @@ revert_themes() {
       'pas d ancien theme de demarrage : theme laisse (annule-le comme dans docs/owner-setup/login-boot-themes.md section 2)'
     return 0
   fi
-  as_root plymouth-set-default-theme "$prev"
-  rebuild_boot_image || note 'the boot image rebuild failed: run Omarchy'"'"'s boot-image rebuild yourself' \
-    'la reconstruction de l image de demarrage a echoue : lance toi-meme la reconstruction d Omarchy'
-  rm -f -- "$STATE_DIR/plymouth-previous"
-  ok "boot theme back to $prev" "theme de demarrage remis sur $prev"
+  if switch_boot_theme "$prev" grassfield; then
+    rm -f -- "$STATE_DIR/plymouth-previous"
+    ok "boot theme back to $prev" "theme de demarrage remis sur $prev"
+  else
+    note 'the boot theme was NOT reverted (the previous images are back): after the removal, revert it as in docs/owner-setup/login-boot-themes.md section 2' \
+      'le theme de demarrage n a PAS ete annule (les images precedentes sont remises) : apres le retrait, annule-le comme dans docs/owner-setup/login-boot-themes.md section 2'
+  fi
 }
 
 do_uninstall() {
@@ -753,10 +837,10 @@ do_uninstall() {
         'avec sudo, supprime les deux lignes "[grassfield]" et "Include = /etc/pacman.d/grassfield.conf" a sa fin, puis supprime /etc/pacman.d/grassfield.conf'
     fi
   fi
-  if ((!left)) && key_present; then
+  if ((!left)) && key_any; then
     as_root pacman-key --delete "$GF_FPR"
     ok 'key removed from pacman' 'cle retiree de pacman'
-  elif key_present; then
+  elif key_any; then
     bad 'the Grassfield key is still in pacman' 'la cle Grassfield est encore dans pacman' "after the fix above: sudo pacman-key --delete $GF_FPR" \
       "apres le correctif ci-dessus : sudo pacman-key --delete $GF_FPR"
     left=1
@@ -818,6 +902,7 @@ main() {
     do_install
     unlock_update
     do_handover
+    lock_update # back on, to the end: the session and theme steps (the boot image rebuild) run under it
     do_session
     do_themes
     end_install

@@ -17,8 +17,8 @@ b.3a automated, with its preconditions checked first, an exact way back, and the
 
 ### a. Where it lives, and who publishes it
 `packaging/install/` in this repository:
-- `grassfield-install.sh.in`, the template (bash, `set -euo pipefail`, every statement in a function, `main` last: a download
-  cut short never runs half a script);
+- `grassfield-install.sh.in`, the template (bash, `set -euo pipefail`, every statement in a function, `main` called on the
+  last line: that last line is what protects against a partial download, since a truncated file never reaches the call);
 - `render.py`, which reads `packaging/pacman/repository.conf` with `packaging/pacman/generate.py`'s own parser (one source of
   truth) and writes `grassfield-install.sh` and `grassfield-install.sh.sha256` (`just render-install`).
 
@@ -93,17 +93,32 @@ confirmation (`--yes` skips it; `--dry-run` stops there; `--channel stable|beta`
 7. **Themes** (root, unless `--without-login-themes`): `/etc/sddm.conf.d/zz-grassfield-theme.conf` (`[Theme] Current=grassfield`,
    the guide's one file; `/etc/sddm.conf` with its own `Current=` is reported, not edited); the boot theme as Omarchy does
    (`omarchy-plymouth-set`): `plymouth-set-default-theme grassfield`, then `limine-mkinitcpio` when present, else
-   `mkinitcpio -P`. The previous theme name is remembered in the state folder; a failed rebuild puts it back. Inside the
-   snapshot of step 1. A theme failure ends non-zero with a warning but keeps Grassfield (ADR-0042's text-prompt fallback
-   applies: Esc at the disk prompt).
+   `mkinitcpio -P`. The previous theme name is remembered in the state folder. **The snapshot does not cover boot images**:
+   `/boot` is the vfat ESP, outside the btrfs snapshot. So the current initramfs and UKIs (`initramfs-*.img`, `*/EFI/Linux/*.efi`)
+   are copied to a root-only folder (`/var/lib/grassfield/boot-backup.<date>`) before the rebuild; if it fails, the old theme and
+   the copied images are put back (a copy that cannot be made means the boot theme is not changed). Failure is detected from the
+   exit status **and** the output, because `limine-mkinitcpio` exits 0 when a kernel's image was not rebuilt and only prints
+   `mkinitcpio failed for kernel` (Omarchy's migration 1791621765 greps its log for it); "active" is printed only after a clean
+   rebuild. What can and cannot be undone: a failed rebuild is undone (theme and images); after a successful rebuild no copy is
+   kept (ESP space), so a boot problem found later is met with Esc at the disk prompt (text prompt), Limine's menu, or
+   `--uninstall`, which switches the theme back and rebuilds again. A theme failure ends non-zero with a warning but keeps
+   Grassfield (ADR-0042's text-prompt fallback applies).
 
 **Rollback (review 1, major 2).** Between the first change of step 2 and the end of step 4, **any** failure (a command, `Ctrl-C`,
 the sync, the dependency check, a pending update after the sync, the install transaction) puts back the exact state: the
 `[grassfield]` lines and `grassfield.conf` from **this run's** copies, the key if this run added it, the synced database files;
 it says what happened and how to retry, and exits non-zero. pacman.conf is restored only when it is still exactly this run's
 copy plus the two lines; a change made meanwhile (SigLevel hardening, `[multilib]`) is never undone, and the script then prints
-the manual steps. After the packages are installed nothing is rolled back (Turn Off is then available). A refused install
-after a sync leaves pacman's package lists synced, which the message says (run Omarchy's update before any `pacman -S`).
+the manual steps. After the packages are installed nothing is rolled back (Turn Off is then available); likewise, if the install
+transaction fails after **some** packages went in (checked with `pacman -Q` against what was installed when the run started), the
+repository and the key are kept and the message says exactly that and how to finish or remove. A refused install after a sync
+leaves pacman's package lists synced, which the message says (run Omarchy's update before any `pacman -S`); a database that
+existed before the run (a rerun) is never deleted by a rollback. A second `Ctrl-C` during the rollback is ignored (the ignored
+disposition is inherited by sudo and what it runs), so the key is never left trusted by an interrupted rollback. `INT`, `TERM`
+and `HUP` run the same rollback (status 130). The temporary gpg-agents are stopped on exit. The key is signed only **after**
+pacman's keyring is checked to hold F as the primary of exactly one key (a key already there that merely carries F as a
+subkey makes the run stop, nothing signed), and the "already present" test is primary-only. Omarchy's update lock is held from
+the confirmation to the end, released only around `grassfield-channel-set` (which refuses while it is held).
 
 Root is used only by the commands above, each through one `as_root` function that logs it. Idempotent: a rerun checks the key
 again, skips what is done, repairs a missing file, never duplicates a line, and updates. Log: `${XDG_STATE_HOME:-~/.local/state}/
@@ -138,7 +153,7 @@ and a signed `[grassfield]` repository built with a throwaway key, `render.py` r
 | Id | Question | Options | Recommended | Decision |
 |---|---|---|---|---|
 | IN1 | Grassfield as the next-login session at install? | yes (`--session grassfield`) · no (`--session omarchy`) | yes | **yes, by default**; `--session omarchy` opts out; uninstall restores Omarchy |
-| IN2 | Login and boot themes (`grassfield-login-themes`) | not by default · install and activate | no (recommended) | **install AND activate by default**; `--without-login-themes` opts out; install and uninstall handle the SDDM drop-in and Plymouth, the boot image rebuilt the way Omarchy does, inside the snapshot |
+| IN2 | Login and boot themes (`grassfield-login-themes`) | not by default · install and activate | no (recommended) | **install AND activate by default**; `--without-login-themes` opts out; install and uninstall handle the SDDM drop-in and Plymouth, the boot image rebuilt the way Omarchy does; the snapshot does not cover `/boot`, so the boot images are copied first and restored if the rebuild fails |
 | IN3 | Command published | download-check-run · `curl \| bash` · both | download-check-run | **both**: the one-liner first, the download-check-run form below it; the docs say what each protects against |
 | IN4 | Minimum free space and Omarchy floor | 4 GiB, 4.0.6 | as built | **as built** |
 | IN5 | The `[omarchy]` order | print the fix · opt-in fix | print | **print the fix** |

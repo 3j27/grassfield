@@ -63,7 +63,7 @@ expect 'the test form differs from the published one by the two hook lines only'
 
 # ---- stubs ----------------------------------------------------------------------------------------------------------
 for c in awk grep sed cat tee cp rm mkdir mktemp date cmp sort head tail tr dirname basename env bash timeout vercmp chmod cut wc \
-  touch printf true false; do
+  touch printf true false find install; do
   p=$(command -v "$c") && [[ $p == /* ]] && ln -sf "$p" "$BIN/$c"
 done
 stub() { cat >"$BIN/$1"; chmod +x "$BIN/$1"; }
@@ -132,6 +132,8 @@ case $1 in
   -Sy)
     mkdir -p "$rootd/var/lib/pacman/sync"; : >"$rootd/var/lib/pacman/sync/grassfield.db"
     [[ -f $GF_STUB/sync_edit ]] && printf '# later edit\n' >>"$rootd/etc/pacman.conf"
+    # A real signal sent to the script (this process's parent) in the middle of the sync.
+    [[ -f $GF_STUB/sync_signal ]] && { kill -s "$(cat "$GF_STUB/sync_signal")" "$PPID"; exit 0; }
     [[ -f $GF_STUB/sync_fail ]] && exit 1
     exit 0 ;;
   -S)
@@ -140,6 +142,7 @@ case $1 in
     for a in "$@"; do case $a in --print) print=1 ;; -*) ;; *) pk+=("$a") ;; esac; done
     if ((print)); then [[ -f $GF_STUB/resolve_fail ]] && { echo "error: could not satisfy dependencies" >&2; exit 1; }; exit 0; fi
     [[ -f $GF_STUB/install_fail ]] && { echo "error: failed to commit transaction" >&2; exit 1; }
+    [[ -f $GF_STUB/install_partial ]] && { echo "grassfield-desktop" >>"$inst"; echo "error: failed to commit transaction (later package)" >&2; exit 1; }
     printf '%s\n' "${pk[@]}" >>"$inst"
     printf '%s\n' grassfield-icons grassfield-wallpapers grassfield-keyring >>"$inst"
     for a in "${pk[@]}"; do
@@ -173,7 +176,10 @@ case $1 in
   --list-keys) grep -q "$2" "$GF_STUB/keys" 2>/dev/null ;;
   --add) grep -o '[0-9A-F]\{40\}' "$2" | head -n 1 >>"$GF_STUB/keys" ;;
   --lsign-key) [[ -f $GF_STUB/lsign_fail ]] && exit 1; grep -q "$2" "$GF_STUB/keys" 2>/dev/null ;;
-  --delete) sed -i "/$2/d" "$GF_STUB/keys" ;;
+  --delete)
+    # A second Ctrl-C while the rollback deletes the key: the script must ignore it and finish.
+    [[ -f $GF_STUB/delete_signal ]] && kill -s INT "$PPID"
+    sed -i "/$2/d" "$GF_STUB/keys" ;;
 esac
 EOF
 stub curl <<'EOF'
@@ -235,7 +241,11 @@ mk_rebuild() {
   stub limine-mkinitcpio <<'EOF'
 #!/bin/bash
 echo "limine-mkinitcpio $*" >>"$GF_STUB/calls"
+# The rebuild rewrites the boot images first (a half-done rebuild leaves new ones), then succeeds or not.
+echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/initramfs-linux.img"; echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/EFI/Linux/omarchy.efi"
 [[ -f $GF_STUB/rebuild_fail ]] && exit 1
+# limine-mkinitcpio exits 0 when a kernel's rebuild failed and only says so
+[[ -f $GF_STUB/rebuild_soft_fail ]] && { echo "mkinitcpio failed for kernel linux"; exit 0; }
 exit 0
 EOF
 }
@@ -243,8 +253,13 @@ mk_rebuild
 stub mkinitcpio <<'EOF'
 #!/bin/bash
 echo "mkinitcpio $*" >>"$GF_STUB/calls"
+echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/initramfs-linux.img"; echo NEW >"$GRASSFIELD_INSTALL_ROOT/boot/EFI/Linux/omarchy.efi"
 [[ -f $GF_STUB/rebuild_fail ]] && exit 1
 exit 0
+EOF
+stub gpgconf <<'EOF'
+#!/bin/bash
+echo "gpgconf $* GNUPGHOME=${GNUPGHOME:-}" >>"$GF_STUB/calls"
 EOF
 stub systemctl <<'EOF'
 #!/bin/bash
@@ -254,7 +269,8 @@ EOF
 # A stock machine: Omarchy 4.0.6, [omarchy] first, quickshell from [omarchy], Omarchy's boot theme.
 fresh() {
   rm -rf "$S" "$R" "$W/home"
-  mkdir -p "$S" "$R/etc/pacman.d" "$R/var/lib/pacman/sync" "$R/usr/share/plymouth/themes/omarchy" "$W/home"
+  mkdir -p "$S" "$R/etc/pacman.d" "$R/var/lib/pacman/sync" "$R/usr/share/plymouth/themes/omarchy" "$W/home" "$R/boot/EFI/Linux"
+  echo OLD >"$R/boot/initramfs-linux.img"; echo OLD >"$R/boot/EFI/Linux/omarchy.efi"
   cp "$W/offlogic" "$S/offlogic"
   cat >"$R/etc/pacman.conf" <<'EOF'
 [options]
@@ -298,14 +314,19 @@ run() {
   rc=$(<"$W/rc")
 }
 # The root commands, with the temporary key file and the run's timestamp made stable.
-sudo_calls() { grep '^sudo ' "$S/calls" | sed -e 's#[^ ]*/key\.asc#KEY#' -e 's#\.grassfield-install-bak\.[0-9]\{8\}-[0-9]\{6\}#.grassfield-install-bak.STAMP#'; }
+sudo_calls() { grep '^sudo ' "$S/calls" | sed -e 's#[^ ]*/key\.asc#KEY#' -e 's#\.grassfield-install-bak\.[0-9]\{8\}-[0-9]\{6\}#.grassfield-install-bak.STAMP#' -e 's#boot-backup\.[0-9]\{8\}-[0-9]\{6\}#boot-backup.STAMP#g'; }
+BB=$R/var/lib/grassfield/boot-backup.STAMP
+# The boot image copy, rebuild and cleanup, as the root commands show them.
+BOOTCOPY="sudo install -d -m 700 -- $R/var/lib/grassfield $BB
+sudo find $R/boot -xdev -type f ( -name initramfs-*.img -o -path */EFI/Linux/*.efi ) -exec cp -p --parents -t $BB {} +
+sudo find $BB -type f -print -quit"
 conf_unchanged() { cmp -s "$R/etc/pacman.conf" "$W/pacman.conf.orig"; }
 LOGDIR=$W/home/.local/state/grassfield
 PKGS4='grassfield-desktop grassfield-compositor grassfield-store grassfield-login-themes'
 
 # After a failure inside the repository phase: exactly the state before the run.
-rolled_back() { # <name>
-  expect "$1: exit 1" "$rc" 1
+rolled_back() { # <name> [expected exit status, default 1]
+  expect "$1: exit $((${2:-1}))" "$rc" "${2:-1}"
   has "$1: says it rolled back" 'Rolling back' "$W/out"
   conf_unchanged && pass "$1: pacman.conf is the original" || fail "$1: pacman.conf differs"
   [[ ! -e $R/etc/pacman.d/grassfield.conf ]] && pass "$1: no grassfield.conf" || fail "$1: grassfield.conf left"
@@ -405,7 +426,7 @@ conf_unchanged && pass 'dry-run: pacman.conf untouched' || fail 'dry-run changed
 [[ ! -e $R/etc/pacman.d/grassfield.conf ]] && pass 'dry-run: no grassfield.conf' || fail 'dry-run wrote grassfield.conf'
 hasnt 'dry-run: no sync' 'pacman -Sy' "$S/calls"
 hasnt 'dry-run: no install' 'pacman -S --needed' "$S/calls"
-hasnt 'dry-run: no download of the key' ' -o ' "$S/calls"
+hasnt 'dry-run: no download of the key' ' -o /' "$S/calls"
 hasnt 'dry-run: no keyserver contact' '--recv-keys' "$S/calls"
 has 'the plan names the fingerprint' "$FPR" "$W/out"
 fresh; TLANG=fr_FR.UTF-8 run '' --dry-run
@@ -441,15 +462,23 @@ sudo pacman -Sy
 sudo pacman -S --needed --noconfirm $PKGS4
 sudo mkdir -p -- $R/etc/sddm.conf.d
 sudo tee $R/etc/sddm.conf.d/zz-grassfield-theme.conf
+$BOOTCOPY
 sudo plymouth-set-default-theme grassfield
-sudo limine-mkinitcpio"
+sudo limine-mkinitcpio
+sudo rm -rf -- $BB"
 expect 'the root commands, exactly and in order' "$(sudo_calls)" "$want"
+expect 'the boot images were rebuilt (new)' "$(cat "$R/boot/initramfs-linux.img")" NEW
+[[ ! -e $R/var/lib/grassfield/boot-backup.* ]] 2>/dev/null && pass 'the boot image copy is removed after a good rebuild' || fail 'the boot image copy was left'
+has 'the temporary keyring agents are stopped' 'gpgconf --kill all GNUPGHOME=' "$S/calls"
+expect 'the update lock is taken again after the hand-over' \
+  "$(awk '/^grassfield-channel-set stable/ { on = 1; next } /^plymouth-set-default-theme grassfield/ { on = 0 } on && /^flock -n 8/ { n++ } END { print n + 0 }' "$S/calls")" 1
+expect 'the update lock is taken twice in all' "$(grep -c '^flock -n 8' "$S/calls")" 2
 expect 'the user commands, in order' "$(grep -E '^(omarchy-snapshot|grassfield-)' "$S/calls")" \
   "omarchy-snapshot create
 grassfield-channel-set stable
 grassfield-login set grassfield"
 has 'the key came from the keyserver over hkps into a temporary keyring' '--keyserver hkps://keys.openpgp.org --recv-keys' "$S/calls"
-hasnt 'no key file was downloaded' ' -o ' "$S/calls"
+hasnt 'no key file was downloaded' ' -o /' "$S/calls"
 expect 'grassfield.conf is the b.3a file' "$(cat "$R/etc/pacman.d/grassfield.conf")" \
   "SigLevel = Required
 Server = $BASE/stable/\$arch"
@@ -517,7 +546,7 @@ hasnt 'no snapshot with --no-snapshot' 'omarchy-snapshot' "$S/calls"
 has 'end message for the omarchy session' 'still starts Omarchy' "$W/out"
 fresh; run '' --yes --without-login-themes
 expect '--without-login-themes exits 0' "$rc" 0
-hasnt 'no theme package' 'grassfield-login-themes' "$S/calls"
+hasnt 'no theme package' 'store grassfield-login-themes' "$S/calls"
 hasnt 'no drop-in' 'zz-grassfield-theme' "$S/calls"
 hasnt 'no plymouth call' 'plymouth-set-default-theme' "$S/calls"
 hasnt 'no boot image rebuild' 'mkinitcpio' "$S/calls"
@@ -530,6 +559,20 @@ has 'it warns that a theme was not activated' 'a theme was not activated' "$W/ou
 expect 'the previous boot theme is put back' "$(cat "$S/plymouth")" omarchy
 has 'Grassfield itself stays installed' 'grassfield-desktop' "$S/installed"
 [[ -f $R/etc/pacman.d/grassfield.conf ]] && pass 'a theme failure does not roll the repository back' || fail 'the repository was rolled back for a theme failure'
+expect 'a failed rebuild: the old boot images are put back' "$(cat "$R/boot/initramfs-linux.img") $(cat "$R/boot/EFI/Linux/omarchy.efi")" 'OLD OLD'
+hasnt 'a failed rebuild: never says the boot theme is active' 'boot theme active' "$W/out"
+ls "$R"/var/lib/grassfield/boot-backup.* >/dev/null 2>&1 && fail 'a failed rebuild: the copy is left' || pass 'a failed rebuild: the copy is removed once restored'
+# limine-mkinitcpio exits 0 when one kernel's rebuild failed: the output is checked too.
+fresh; touch "$S/rebuild_soft_fail"; run '' --yes
+expect 'a rebuild that exits 0 but reports a failed kernel ends non-zero' "$rc" 1
+hasnt 'soft failure: never says the boot theme is active' 'boot theme active' "$W/out"
+expect 'soft failure: the old boot images are put back' "$(cat "$R/boot/initramfs-linux.img") $(cat "$R/boot/EFI/Linux/omarchy.efi")" 'OLD OLD'
+expect 'soft failure: the previous boot theme is put back' "$(cat "$S/plymouth")" omarchy
+# No boot image can be copied (none found): the boot theme is not touched at all.
+fresh; rm -rf "$R/boot"; mkdir -p "$R/boot"; run '' --yes
+expect 'no boot image to copy: ends non-zero, boot theme untouched' "$rc" 1
+hasnt 'no boot image to copy: no theme set' 'plymouth-set-default-theme grassfield' "$S/calls"
+hasnt 'no boot image to copy: no rebuild' 'limine-mkinitcpio' "$S/calls"
 
 # ---- 9. snapshot ---------------------------------------------------------------------------------------------------
 fresh; echo 1 >"$S/snap_rc"; run '' --yes
@@ -576,6 +619,11 @@ expect 'a secret key from the keyserver falls back to the good host file' "$rc" 
 # After the add, pacman's keyring must show exactly that primary key.
 fresh; touch "$S/keyring_odd"; run '' --yes
 rolled_back 'keyring holds another primary for F'
+hasnt 'an impostor holding F as a subkey: nothing is signed' 'lsign-key' "$S/calls"
+fresh; touch "$S/keyring_odd"; echo "$FPR" >"$S/keys"; run '' --yes
+expect 'an impostor already in the keyring (matches F by a subkey): the run stops' "$rc" 1
+hasnt 'an impostor already in the keyring: still nothing is signed' 'lsign-key' "$S/calls"
+has 'an impostor already in the keyring: says nothing was signed' 'nothing was signed' "$W/out"
 fresh; touch "$S/lsign_fail"; run '' --yes
 rolled_back 'lsign fails'
 
@@ -594,6 +642,29 @@ has 'partial upgrade: says why' 'partial upgrade' "$W/out"
 has 'partial upgrade: warns that the lists were synced' 'BEFORE any pacman -S' "$W/out"
 fresh; touch "$S/conf_broken"; run '' --yes
 rolled_back 'pacman cannot read the new section'
+# The install transaction fails after some packages went in: nothing is rolled back, and the message says so.
+fresh; touch "$S/install_partial"; run '' --yes
+expect 'a partial install: exit 1' "$rc" 1
+has 'a partial install: says so' 'PARTLY INSTALLED' "$W/out"
+hasnt 'a partial install: does not claim a rollback' 'Rolling back' "$W/out"
+hasnt 'a partial install: does not claim nothing was installed' 'Nothing new was installed' "$W/out"
+grep -q grassfield-desktop "$S/installed" && pass 'a partial install: the package stays' || fail 'a partial install: package missing'
+[[ -f $R/etc/pacman.d/grassfield.conf ]] && grep -q '^\[grassfield\]' "$R/etc/pacman.conf" && pass 'a partial install: the repository stays' || fail 'a partial install: the repository was removed'
+grep -q "$FPR" "$S/keys" && pass 'a partial install: the key stays' || fail 'a partial install: the key was removed'
+# A rerun that fails at the sync never deletes the database that was there before it.
+fresh; run '' --yes
+touch "$S/sync_fail"; run '' --yes
+expect 'rerun with a failing sync: exit 1' "$rc" 1
+[[ -e $R/var/lib/pacman/sync/grassfield.db ]] && pass 'a rollback on a rerun keeps the sync database from before' || fail 'a rollback on a rerun deleted the earlier sync database'
+grep -q grassfield-desktop "$S/installed" && pass 'a failed rerun leaves the earlier install alone' || fail 'a failed rerun removed the install'
+# A real SIGINT / SIGTERM / SIGHUP in the middle of the sync: the same full rollback, status 130.
+for sig in INT TERM HUP; do
+  fresh; echo "$sig" >"$S/sync_signal"; run '' --yes
+  rolled_back "SIG$sig during the sync" 130
+done
+# A second Ctrl-C while the rollback deletes the key does not stop the rollback (the key never stays trusted).
+fresh; echo INT >"$S/sync_signal"; touch "$S/delete_signal"; run '' --yes
+rolled_back 'a second SIGINT during the rollback' 130
 # The key was already in pacman before the run: a rollback does not delete it.
 fresh; echo "$FPR" >"$S/keys"; touch "$S/sync_fail"; run '' --yes
 grep -q "$FPR" "$S/keys" && pass 'a key that was there before is kept by a rollback' || fail 'a pre-existing key was deleted by the rollback'
@@ -633,8 +704,10 @@ grassfield-login set omarchy"
 expect 'uninstall: root commands in order (themes before the packages)' "$(sudo_calls)" \
   "sudo -v
 sudo rm -f -- $R/etc/sddm.conf.d/zz-grassfield-theme.conf
+$BOOTCOPY
 sudo plymouth-set-default-theme omarchy
 sudo limine-mkinitcpio
+sudo rm -rf -- $BB
 sudo pacman -Rns --noconfirm grassfield-login-themes grassfield-store grassfield-compositor grassfield-desktop grassfield-icons grassfield-wallpapers grassfield-keyring
 sudo rm -f -- $R/etc/pacman.conf.grassfield-install-bak.STAMP"
 has 'uninstall end message' 'stock Omarchy' "$W/out"
