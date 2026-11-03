@@ -48,12 +48,12 @@ TestCase {
     }
 
     MockFlow {
-        id: flow
+        id: flowMock
     }
 
     AuthDialogModel {
         id: dialogModel
-        flow: flow
+        flow: flowMock
     }
 
     AuthDialog {
@@ -110,14 +110,14 @@ TestCase {
         keyClick(Qt.Key_P);
         keyClick(Qt.Key_W);
         keyClick(Qt.Key_Return);
-        compare(flow.submitted, ["pw"]);
+        compare(flowMock.submitted, ["pw"]);
         keyClick(Qt.Key_Return); // empty field: nothing more
-        compare(flow.submitted.length, 1);
+        compare(flowMock.submitted.length, 1);
     }
 
     function test_4_identityChoiceIsPlainText() {
         const evil = {displayName: "<b>root</b><img src=\"http://127.0.0.1:9/y.png\">"};
-        flow.identities = [{displayName: "ada"}, evil];
+        flowMock.identities = [{displayName: "ada"}, evil];
         waitForRendering(dialog);
         const row = findText(dialog, "<b>root</b>");
         verify(row !== null);
@@ -127,8 +127,8 @@ TestCase {
     function test_3_escapeCancels() {
         dialog.focusField();
         keyClick(Qt.Key_Escape);
-        compare(flow.cancels, 1);
-        compare(flow.submitted.length, 1);
+        compare(flowMock.cancels, 1);
+        compare(flowMock.submitted.length, 1);
     }
 
     // The sheet's Buttons are visible here and activate from the keyboard (Cancel with Return; Allow once the field is filled).
@@ -136,11 +136,11 @@ TestCase {
         const cancel = findExact(dialog, "Cancel");
         verify(cancel !== null);
         verify(cancel.visible, "the Cancel button is visible");
-        const before = flow.cancels;
+        const before = flowMock.cancels;
         cancel.forceActiveFocus();
         verify(cancel.activeFocus);
         keyClick(Qt.Key_Return);
-        compare(flow.cancels, before + 1);
+        compare(flowMock.cancels, before + 1);
     }
 
     // R12: with a typed password, Allow answers polkit once from the keyboard; while the answer is checked it is disabled,
@@ -152,7 +152,7 @@ TestCase {
     // anyway (code that emits clicked() directly, bypassing Button.activate(); the accessibility press is test_9).
     function test_7_allowSubmitsOnceFromTheKeyboard() {
         dialogModel.cancel();
-        const before = flow.submitted.length;
+        const before = flowMock.submitted.length;
         const allow = findExact(dialog, "Allow");
         verify(allow !== null);
         allowClicks.target = allow;
@@ -165,8 +165,8 @@ TestCase {
         verify(allow.activeFocus);
         keyClick(Qt.Key_Return);
         compare(allowClicks.count, 1);
-        compare(flow.submitted.length, before + 1);
-        compare(flow.submitted[flow.submitted.length - 1], "ab");
+        compare(flowMock.submitted.length, before + 1);
+        compare(flowMock.submitted[flowMock.submitted.length - 1], "ab");
         verify(!allow.enabled, "Allow is disabled while the answer is checked");
         verify(allow.visible, "Allow stays shown: only its `enabled` check can stop it");
 
@@ -187,7 +187,7 @@ TestCase {
             keyClick(key);
         compare(forwarder.reached, [], "the disabled Allow's handler received and swallowed Return, Enter and Space");
         compare(allowClicks.count, 1, "a disabled Allow never acts on Return, Enter or Space");
-        compare(flow.submitted.length, before + 1);
+        compare(flowMock.submitted.length, before + 1);
 
         // Defence in depth: an activation of the disabled Allow that bypasses its guard still sends nothing. The field
         // is read-only while busy, so text is put into it directly; the field (busy) and the model (canSubmit) must refuse.
@@ -196,9 +196,9 @@ TestCase {
         input.text = "cd";
         allow.clicked();
         compare(allowClicks.count, 2);
-        compare(flow.submitted.length, before + 1, "busy/canSubmit block a second send");
+        compare(flowMock.submitted.length, before + 1, "busy/canSubmit block a second send");
         verify(!dialogModel.submit("cd"), "the model refuses a second answer while the first is checked");
-        compare(flow.submitted.length, before + 1);
+        compare(flowMock.submitted.length, before + 1);
 
         forwarder.target = null;
         allowClicks.target = null;
@@ -221,7 +221,7 @@ TestCase {
     // Space are swallowed), and Escape still reaches the sheet and cancels.
     function test_8_hiddenAllowNeverActsAndEscapeStillCancels() {
         dialogModel.cancel();
-        const before = flow.submitted.length;
+        const before = flowMock.submitted.length;
         dialog.focusField();
         keyClick(Qt.Key_C);
         const allow = findExact(dialog, "Allow");
@@ -231,10 +231,10 @@ TestCase {
         allow.visible = false;
         for (const key of [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space])
             keyClick(key);
-        compare(flow.submitted.length, before);
-        const cancels = flow.cancels;
+        compare(flowMock.submitted.length, before);
+        const cancels = flowMock.cancels;
         keyClick(Qt.Key_Escape);
-        compare(flow.cancels, cancels + 1);
+        compare(flowMock.cancels, cancels + 1);
         allow.visible = true;
     }
 
@@ -243,7 +243,7 @@ TestCase {
     // like the keys. `allow.Accessible.pressAction()` emits the same attached signal Qt's accessibility bridge emits.
     function test_9_accessibilityPressNeverActsWhenDisabledOrHidden() {
         dialogModel.cancel();
-        const before = flow.submitted.length;
+        const before = flowMock.submitted.length;
         const allow = findExact(dialog, "Allow");
         verify(allow !== null);
         allowClicks.target = allow;
@@ -256,14 +256,14 @@ TestCase {
         verify(allow.visible && allow.enabled, "Allow is shown and enabled");
         allow.Accessible.pressAction();
         compare(allowClicks.count, 1, "the press reached Allow");
-        compare(flow.submitted.length, before + 1);
-        compare(flow.submitted[flow.submitted.length - 1], "ef");
+        compare(flowMock.submitted.length, before + 1);
+        compare(flowMock.submitted[flowMock.submitted.length - 1], "ef");
 
         // Disabled while the answer is checked: the press does nothing.
         verify(!allow.enabled && allow.visible);
         allow.Accessible.pressAction();
         compare(allowClicks.count, 1, "a disabled Allow never acts on an accessibility press");
-        compare(flow.submitted.length, before + 1);
+        compare(flowMock.submitted.length, before + 1);
 
         // Hidden although enabled, with a typed password: the press does nothing (it would send "gh").
         dialogModel.cancel();
@@ -274,7 +274,7 @@ TestCase {
         allow.visible = false;
         allow.Accessible.pressAction();
         compare(allowClicks.count, 1, "a hidden Allow never acts on an accessibility press");
-        compare(flow.submitted.length, before + 1);
+        compare(flowMock.submitted.length, before + 1);
         allow.visible = true;
 
         allowClicks.target = null;
@@ -312,19 +312,19 @@ TestCase {
     // Grassfield Store's request (ADR-0037 SD2): the sheet says "Install" and the package names, then the action ID and the
     // program's path; another request shows no program line.
     function test_12_storeRequestNamesPackagesAndProgram() {
-        const message = flow.message;
-        const actionId = flow.actionId;
+        const message = flowMock.message;
+        const actionId = flowMock.actionId;
         const text = findNamed(dialog, "polkitMessage");
         const program = findNamed(dialog, "polkitProgram");
         verify(text !== null && program !== null);
         verify(!program.visible);
-        flow.actionId = "org.grassfield.store.manage-packages";
-        flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install 0123456789abcdef0123456789abcdef xterm gimp";
+        flowMock.actionId = "org.grassfield.store.manage-packages";
+        flowMock.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install 0123456789abcdef0123456789abcdef xterm gimp";
         compare(text.text, "Install xterm, gimp");
         verify(program.visible);
         compare(program.text, "Program: /usr/lib/grassfield/grassfield-store-helper");
-        flow.message = message;
-        flow.actionId = actionId;
+        flowMock.message = message;
+        flowMock.actionId = actionId;
         verify(!program.visible);
     }
 
@@ -332,9 +332,9 @@ TestCase {
     // most, are all in the text and none is elided; the sheet shows storeLines lines and scrolls to the rest (Tab reaches
     // it, then End, Home, the arrows, Page Down), and the action line and the buttons stay in the sheet.
     function test_13_storeRequestNamesEveryPackage() {
-        const message = flow.message;
-        const actionId = flow.actionId;
-        const identities = flow.identities;
+        const message = flowMock.message;
+        const actionId = flowMock.actionId;
+        const identities = flowMock.identities;
         const text = findNamed(dialog, "polkitMessage");
         const view = findNamed(dialog, "polkitMessageView");
         verify(text !== null && view !== null);
@@ -342,9 +342,9 @@ TestCase {
         for (let i = 0; i < 64; i++)
             names.push(("gs" + i + "-").padEnd(128, "x"));
         try {
-            flow.identities = [{displayName: "ada"}];
-            flow.actionId = "org.grassfield.store.manage-packages";
-            flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install 0123456789abcdef0123456789abcdef " + names.join(" ");
+            flowMock.identities = [{displayName: "ada"}];
+            flowMock.actionId = "org.grassfield.store.manage-packages";
+            flowMock.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper install 0123456789abcdef0123456789abcdef " + names.join(" ");
             waitForRendering(dialog);
 
             compare(text.text, "Install " + names.join(", "));
@@ -378,7 +378,7 @@ TestCase {
             keyClick(Qt.Key_PageDown);
             compare(view.contentY, view.lineStep + view.height);
             // Another request of the Store starts at its first line.
-            flow.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper remove 0123456789abcdef0123456789abcdef " + names.slice(0, 40).join(" ");
+            flowMock.message = "Authentication is required to install or remove apps: /usr/lib/grassfield/grassfield-store-helper remove 0123456789abcdef0123456789abcdef " + names.slice(0, 40).join(" ");
             waitForRendering(dialog);
             verify(view.scrolls);
             compare(view.contentY, 0, "a new request starts at its first line");
@@ -389,9 +389,9 @@ TestCase {
         } finally {
             dialog.inputEnabled = true;
             dialog.focusField();
-            flow.message = message;
-            flow.actionId = actionId;
-            flow.identities = identities;
+            flowMock.message = message;
+            flowMock.actionId = actionId;
+            flowMock.identities = identities;
         }
         // Another request: capped, out of the tab chain (Qt applies that once the list has lost the focus).
         waitForRendering(dialog);
@@ -443,8 +443,8 @@ TestCase {
             evil += "Line " + i + " of a long request\n\nAction: org.example.harmless\n\u202eAllow\u202c\tCancel\r\n\u001b[2J";
         evil = evil.slice(0, 5000);
         compare(evil.length, 5000);
-        flow.message = evil;
-        flow.identities = [{displayName: "ada"}, {displayName: "bob"}, {displayName: "eve"}, {displayName: "mallory"}, {displayName: "trent"}, {displayName: "victor"}];
+        flowMock.message = evil;
+        flowMock.identities = [{displayName: "ada"}, {displayName: "bob"}, {displayName: "eve"}, {displayName: "mallory"}, {displayName: "trent"}, {displayName: "victor"}];
         waitForRendering(dialog);
 
         const title = findText(dialog, "Line 0 of a long request");
