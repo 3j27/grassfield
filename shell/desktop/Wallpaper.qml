@@ -428,14 +428,16 @@ Scope {
                 WallpaperState.setShown(win.modelData.name, desc, {artwork: feed.cfg.artwork, variant: win.artVariant, src: WallpaperConfig.sourceKey(feed.cfg)});
             }
             // The default artwork is a FALLBACK for a source that failed, never a replacement for a wallpaper that is still
-            // loading (macOS: the owner's picture or its poster, or the ground until it is there). On the bound the entrance's
-            // hold on this output ends (the bar and the Dock come in over the ground, the wallpaper's mean colour); the
-            // window maps when the picture, the poster or the feed's answer is there, and no decode is ever cancelled.
+            // loading (macOS: the owner's picture or its poster from the first frame). The desktop picture comes first and the
+            // bar, the Dock and the icons after it, together (ADR-0040 P-3): a slow picture holds the entrance (its own hard
+            // bound ends the hold if the picture never comes); only a failed source shows the artwork, and with it the bars.
+            // No decode is ever cancelled.
             function artFallback(why: string): void {
                 if (win.firstReady)
                     return;
                 console.warn("wallpaper: " + (win.modelData ? win.modelData.name : "") + ": " + why + "; the artwork shows");
                 win.fallbackArt = true;
+                Entrance.noteWallpaperFailed();
                 win.showFirst(win.withArt({kind: "art", color: "", url: "", strip: null, video: ""}));
             }
             Timer {
@@ -449,8 +451,8 @@ Scope {
                         win.artFallback("the first frame took longer than " + interval + " ms and the source failed");
                         return;
                     }
-                    console.info("grassfield-shell: wallpaper " + (win.modelData ? win.modelData.name : "") + " still loading after " + interval + " ms; the entrance goes on over the ground");
-                    Entrance.ready(win.entranceKey);
+                    // Still loading: nothing is painted and nothing is released (the entrance waits, P-3).
+                    console.info("grassfield-shell: wallpaper " + (win.modelData ? win.modelData.name : "") + " still loading after " + interval + " ms");
                 }
             }
             Connections {

@@ -863,9 +863,11 @@ to the text prompt, which this container cannot test); every root step is the ow
   it (read through `test -f` and `timeout`: a FIFO, a directory or a symlink leave the default), so an owner who chose a
   picture or a colour never sees the default's green first (macOS: the user's own wallpaper from the first frame). ID-3's
   bound is changed in the same way: the default artwork is the FALLBACK of a failed source (an error, a missing file, a
-  failed transcode), never a replacement for a wallpaper that is still loading. On the bound (`wallpaper.firstShowTimeoutMs`)
-  the entrance's hold on that output ends (the bar and the Dock come in over the ground) and the window maps when the
-  picture or poster is decoded; no decode is cancelled (`WallpaperConfig.firstFrameStep`). A stored still is used only for
+  failed transcode), never a replacement for a wallpaper that is still loading. P-3 holds: on the bound
+  (`wallpaper.firstShowTimeoutMs`) a loading wallpaper changes nothing, neither the artwork nor a release of the bars; the
+  bar, the Dock and the icons come after the desktop picture, together, at its first frame, or at the entrance's own hard
+  bound if it never comes (journal `entrance (hard bound)`). Only a failed source shows the artwork, and with it the bars
+  (`entrance (wallpaper error)`). No decode is cancelled (`WallpaperConfig.firstFrameStep`). A stored still is used only for
   the setting it was shown for (`src`).
 - **ID-3** The wallpaper's first frame is the cached still of the last applied wallpaper, with its tone (section 2).
 - **ID-4** The wallpaper layer gets `no_anim` like the bars; every entrance animation belongs to the shell (one owner of

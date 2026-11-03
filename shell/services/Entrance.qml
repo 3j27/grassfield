@@ -21,6 +21,11 @@ Singleton {
     // The bound ran out while a wallpaper still drew its first frame: the entrance follows that frame (review of 3a5e1b80).
     property bool timedOut: false
     property bool settingsWaited: false
+    // A wallpaper's source failed and the artwork shows instead (Wallpaper.qml): the journal says so when the entrance ends.
+    property bool wallpaperFailed: false
+    function noteWallpaperFailed(): void {
+        root.wallpaperFailed = true;
+    }
     readonly property bool settingsFinal: Settings.loaded || root.settingsWaited
 
     function begin(): void {
@@ -63,9 +68,10 @@ Singleton {
             root.reveal("timeout");
     }
 
-    function reveal(why: string): void {
+    function reveal(reason: string): void {
         if (root.revealed)
             return;
+        const why = reason === "ready" && root.wallpaperFailed ? "wallpaper error" : reason;
         const waited = Logic.pending(root.expected);
         root.revealed = true;
         revealTimer.stop();
@@ -87,7 +93,7 @@ Singleton {
     Timer {
         id: hardTimer
         interval: Tokens.sessionRevealTimeoutMs + Tokens.wallpaperFirstShowTimeoutMs
-        onTriggered: root.reveal("timeout")
+        onTriggered: root.reveal("hard bound")
     }
 
     Timer {

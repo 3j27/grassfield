@@ -1326,9 +1326,10 @@ TestCase {
         verify(/src: WallpaperConfig\.sourceKey\(feed\.cfg\)/.test(w), "the record keeps its setting");
         // The bound does not paint the default artwork while the chosen picture or video is being prepared.
         verify(/WallpaperConfig\.firstFrameStep\("bound", feed\.status, feed\.appliedOnce, win\.firstReady\) === "fallback"/.test(w) && /WallpaperConfig\.firstFrameStep\("status", /.test(w), "the window asks the step");
-        // On the bound nothing paints the artwork unless the source failed: the timer only ends the entrance's hold.
+        // On the bound nothing paints the artwork unless the source failed: the timer neither paints nor releases the bars.
         const timer = /id: firstTimer[\s\S]*?\n            \}\n/.exec(w)[0];
-        verify(!/showFirst\(/.test(timer) && /Entrance\.ready\(win\.entranceKey\)/.test(timer), "the bound never paints");
+        verify(!/showFirst\(/.test(timer) && !/Entrance\./.test(timer) && (timer.match(/artFallback\(/g) || []).length === 1, "the bound neither paints nor releases the bars (P-3); artFallback only on a failed source");
+        verify(/if \(WallpaperConfig\.firstFrameStep\("bound"[^\n]*\) === "fallback"\) \{\s*win\.artFallback\(/.test(timer), "the one artFallback call is behind the failure step");
         // Two outputs never transcode at once (one failed with "write"): they take turns through WallpaperState.transcodeOwner.
         verify(/WallpaperState\.transcodeOwner !== "" && WallpaperState\.transcodeOwner !== root\.outputName/.test(f) && /releaseTranscode\(\);\s*transcoded\(/.test(f), "the transcode takes turns");
         // A file wallpaper prepares: an omitted typed argument arrives as "undefined" (invalid-path, the artwork for good).
@@ -1339,7 +1340,7 @@ TestCase {
         verify(/wallpaper\.json/.test(lua) && /"ground"%s\*:/.test(lua) && !/io\.open\(home/.test(lua), "the ground key, read behind test -f (tests/shell/session_ground.sh runs it)");
     }
 
-    // The behaviour (pure part of the window's first frame): every phase of a wallpaper that is loading is "release" on the bound
+    // The behaviour (pure part of the window's first frame): every phase of a wallpaper that is loading is "wait" on the bound
     // (the entrance goes on over the ground), never "fallback"; only a failed source gives the artwork. The compositor's ground is
     // kept in wallpaper.json.
     function test_firstFrameStepNeverPaintsTheArtworkForALoadingWallpaper() {
@@ -1348,7 +1349,7 @@ TestCase {
         // ("builtin"/"waiting" before an answer), a ready feed whose picture is still decoding, a cached video's poster loading.
         for (const status of ["builtin", "color", "preparing", "ready", "waiting"]) {
             for (const applied of [false, true]) {
-                compare(step("bound", status, applied, false), "release", status + " applied " + applied);
+                compare(step("bound", status, applied, false), "wait", status + " applied " + applied);
                 compare(step("status", status, applied, false), "none", status + " applied " + applied);
             }
         }

@@ -1206,7 +1206,7 @@ function firstFrameChoice(feedSeen, stateReady, hasStill) {
 
 // What an output without its first frame does (ADR-0040 ID-3, amended): the default artwork is a FALLBACK for a source that
 // failed ("fallback": the feed's status is "error", applied once), never a replacement for a wallpaper still loading. On the
-// first-frame bound ("bound") a loading wallpaper ("release") only ends the entrance's hold on that output, whatever the phase
+// first-frame bound ("bound") a loading wallpaper ("wait") changes nothing (no artwork, no release of the bars: ADR-0040 P-3), whatever the phase
 // (the feed not started, a list or a prepare running, a transcode, the online entry not loaded, a decode in progress); its
 // decode is never cancelled. `when` is "bound" or "status"; `status` the feed's.
 function firstFrameStep(when, status, applied, firstReady) {
@@ -1214,7 +1214,7 @@ function firstFrameStep(when, status, applied, firstReady) {
         return "none";
     if (status === "error" && (applied || when === "bound"))
         return "fallback";
-    return when === "bound" ? "release" : "none";
+    return when === "bound" ? "wait" : "none";
 }
 
 // The ground of `output` in `grounds` ({output name: "#RRGGBB"}), else `fallback`.

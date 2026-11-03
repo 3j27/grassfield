@@ -5,7 +5,7 @@
 #   - no surface is shown twice on an output without being hidden in between ("grassfield-shell: shown|hidden <surface>
 #     <output> <ms>", shell/services/Journal.qml);
 #   - the menu bar and the Dock come after the wallpaper of their output, and the entrance happened ("grassfield-shell:
-#     entrance (ready", or "(timeout" on a slow machine, which is reported, not failed; the timeout still waits for every
+#     entrance (ready", or "(timeout" or "(hard bound" on a slow machine, which is reported, not failed; the timeout still waits for every
 #     wallpaper's first frame);
 #   - the menu bar's tone does not change in the first 3 s (`bartone status` sampled every 100 ms from the start).
 # The lock and unlock part of section 7 comes with step 4b. Pictures are generated under .dev, never committed.
