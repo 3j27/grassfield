@@ -125,7 +125,7 @@ TestCase {
     }
 
     // Text and glyphs drawn in the accent colour read `accentInk` (the integrator's review of 5391761): the accent itself, or
-    // in the light appearance the darker shade of a light accent (color.accentInkLight: yellow, green, pink).
+    // in the light appearance the darker shade of a light accent (color.accentInkLight: yellow and green).
     function test_accentInkIsTheAccentOrItsDarkerShade() {
         // The palettes are JS objects: their colours are strings, compared as colours.
         function same(a, b, what) {
@@ -136,7 +136,10 @@ TestCase {
         same(Appearance.colors.accentInk, Appearance.colors.accent, "the default: its own accent");
         Appearance.accentSetting = "blue";
         same(Appearance.colors.accentInk, Tokens.colorAccentLight.blue, "light blue: the accent");
-        for (const n of ["yellow", "green", "pink"]) {
+        // Pink needs no ink since the search field is a flat grey outside the accent role (ADR-0024 amendment 2026-11-03).
+        Appearance.accentSetting = "pink";
+        same(Appearance.colors.accentInk, Tokens.colorAccentLight.pink, "light pink: the accent");
+        for (const n of ["yellow", "green"]) {
             Appearance.accentSetting = n;
             same(Appearance.colors.accentInk, Tokens.colorAccentInkLight[n], "light " + n + ": its ink");
             verify(!Qt.colorEqual(Appearance.colors.accentInk, Appearance.colors.accent), n);
