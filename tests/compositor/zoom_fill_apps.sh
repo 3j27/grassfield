@@ -190,7 +190,19 @@ launch() { # settings|files
   sleep 1.5
 }
 
-say "zoom_fill_apps: nested pid $hypr_pid, instance $sig, output $out: $(output_facts)"
+# A settled session first (a run right after nested-up zoomed Settings before the Dock reserved its zone:
+# Fill takes the work area of that moment, TL1): the menu bar mapped and the reserved area unchanged for 1 s (at most 15 s).
+settle_state() { nestctl monitors -j | jq -r --arg o "$out" '.[] | select(.name == $o) | "reserved \(.reserved) desktop \(.activeWorkspace.id)"'; }
+menubar_on() { nestctl layers -j 2>/dev/null | jq -e --arg o "$out" '[.[$o] | .. | objects | select(.namespace? == "grassfield-menubar")] | length > 0' >/dev/null 2>&1; }
+for _ in $(seq 1 40); do menubar_on && break; sleep 0.25; done
+prev="" same=0
+for _ in $(seq 1 60); do
+  cur=$(settle_state)
+  if [[ -n $cur && $cur == "$prev" ]]; then same=$((same + 1)); else same=0; prev=$cur; fi
+  ((same >= 4)) && break
+  sleep 0.25
+done
+say "zoom_fill_apps: nested pid $hypr_pid, instance $sig, output $out: $(output_facts) (${prev:-not settled})"
 for app in settings files; do
   class=org.grassfield.${app^}
   say "$app"
