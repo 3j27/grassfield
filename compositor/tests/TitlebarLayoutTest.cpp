@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <limits>
 #include <utility>
 
 using namespace gf::titlebar;
@@ -314,6 +315,32 @@ TEST(ContentCornerPatch, InvalidWhenTheMappingWouldBeAGuess) {
     EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 700, 10}).valid);   // shorter than the square
     EXPECT_FALSE(contentCornerPatch(bar, 26, Rect{100, 82, 0, 0}).valid);
     EXPECT_TRUE(contentCornerPatch(bar, 26, Rect{100.4, 82.4, 699.6, 500}).valid); // sub-pixel rounding tolerated
+}
+
+// ---- the window's corner in device pixels ----
+
+TEST(WindowCornerPx, TheBarsCornerIsCutAsHyprlandCutsTheSurfaces) {
+    // rounding 17 at power 2.6: CWindow::rounding() 22.1 pt (ADR-0024 C-1). Hyprland 0.56.2 draws 27 px at 1.25 (27.6 cut),
+    // measured on GF-REF: the bar's top corners and the rim take the same 27, not 28.
+    const float corner = 17.F * 2.6F / 2.F;
+    EXPECT_EQ(windowCornerPx(corner, 1.25F), 27);
+    EXPECT_EQ(windowCornerPx(corner, 1.F), 22);
+    EXPECT_EQ(windowCornerPx(corner, 1.5F), 33);
+    EXPECT_EQ(windowCornerPx(corner, 2.F), 44);
+    // The former rounding 20 (26 pt): 32 px at 1.25 (32.5 cut), where the bar drew 33.
+    EXPECT_EQ(windowCornerPx(20.F * 2.6F / 2.F, 1.25F), 32);
+    // rounding 16 and 18 at 1.25, as measured: 26 and 29 px.
+    EXPECT_EQ(windowCornerPx(16.F * 2.6F / 2.F, 1.25F), 26);
+    EXPECT_EQ(windowCornerPx(18.F * 2.6F / 2.F, 1.25F), 29);
+}
+
+TEST(WindowCornerPx, NoRoundingIsASquareCorner) {
+    EXPECT_EQ(windowCornerPx(0.F, 1.25F), 0);
+    EXPECT_EQ(windowCornerPx(-4.F, 1.25F), 0);
+    EXPECT_EQ(windowCornerPx(22.1F, 0.F), 0);
+    EXPECT_EQ(windowCornerPx(std::numeric_limits<float>::quiet_NaN(), 1.F), 0);
+    EXPECT_EQ(windowCornerPx(0.9F, 1.F), 0) << "under one device pixel: square, as Hyprland's int";
+    EXPECT_GT(windowCornerPx(std::numeric_limits<float>::infinity(), 1.F), 0) << "bounded, never undefined";
 }
 
 TEST(ClickTracker, TwoQuickPressesAreADoubleClick) {

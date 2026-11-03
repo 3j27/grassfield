@@ -914,7 +914,7 @@ void CGrassfieldTitlebar::drawPreview(const PHLMONITOR& monitor, float alpha) {
     const double rounding = std::max(0.0, static_cast<double>(w->rounding()));
     const float  power    = w->roundingPower();
     const auto   palette  = theme::titlebarPalette(gf::state().appearance.current);
-    const int    roundPx  = static_cast<int>(std::round(rounding * scale));
+    const int    roundPx  = tb::windowCornerPx(static_cast<float>(rounding), scale); // the window's own corner, as Hyprland cuts it
     CBox preview = snap->frame;
     preview.translate(-monitor->m_position);
     addRect(preview.scale(scale).round(), toColor(palette.previewRim, alpha), roundPx, power);
@@ -970,7 +970,9 @@ void CGrassfieldTitlebar::drawBar(const PHLWINDOW& w, const CBox& bar, float sca
     const auto appearance = gf::state().appearance.current;
     const auto palette    = theme::titlebarPalette(appearance);
     const auto bgColor    = toColor(palette.background, alpha);
-    const int  roundPx    = static_cast<int>(std::round(rounding * scale));
+    // The window's own corner radius in device pixels, cut as Hyprland cuts the surface's and the border's (not rounded:
+    // 32.5 px at 1.25 was a 33-px bar corner on a 32-px edge).
+    const int  roundPx    = tb::windowCornerPx(static_cast<float>(rounding), scale);
 
     // Background with rounded top corners: a rounded rect taller than the bar, clipped to the bar.
     CBox bgBox   = bar;

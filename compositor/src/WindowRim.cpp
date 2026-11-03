@@ -132,7 +132,7 @@ void CGrassfieldRim::draw(PHLMONITOR monitor, float const& alpha) {
         frame->translate(-monitor->m_position);
         const float scale = monitor->m_scale;
         const auto  ring  = rim::ring(rim::snap(rim::Box{.x = frame->x, .y = frame->y, .w = frame->w, .h = frame->h}, scale),
-                                      static_cast<int>(std::max(0.F, w->rounding()) * scale), kWidthPt, scale);
+                                      gf::titlebar::windowCornerPx(w->rounding(), scale), kWidthPt, scale);
         if (!ring.valid)
             return; // also keeps Hyprland's renderBorder from an empty box, which it asserts against
 
