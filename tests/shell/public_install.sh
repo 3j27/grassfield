@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Offline test of Grassfield's public installation script (ADR-0043): packaging/install/render.py and the rendered
-# grassfield-install.sh, run against STUB commands in a throwaway fake root. It never runs the real pacman, pacman-key,
-# sudo, curl or gpg: the script's PATH holds only the stubs and symlinks to harmless coreutils, so a command the script
-# calls that has no stub fails the test instead of reaching the machine. Layer: logic (no session, no root, no network).
+# grassfield-install.sh, run against STUB commands in a throwaway fake root. It never runs the real pacman, pacman-key, gpg,
+# sudo, curl, plymouth or mkinitcpio: the script's PATH holds only the stubs and symlinks to harmless coreutils, so a command
+# the script calls that has no stub fails the test instead of reaching the machine. Layer: logic (no session, no root, no
+# network). The tested script is the template rendered with --test-hook (a file prefix); the published one differs by exactly
+# those marked lines, which section 1 checks.
 #
 # The same script can run for real inside an Arch container (as tests/integration/update_helper.sh does for the update
-# helper): a container with a local file:// repository and the real pacman is the follow-up the grassfield-packages
-# repository owns (ADR-0043 g); this test covers the script's logic, order and idempotence.
+# helper): a container with a local repository and the real pacman is the follow-up the grassfield-packages repository owns
+# (ADR-0043 g); this test covers the script's logic, order, rollback and idempotence.
 # shellcheck disable=SC2015  # `test && pass || fail`: pass never fails
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -22,34 +24,42 @@ hasnt() { if grep -Fq -- "$2" "$3"; then fail "$1: '$2' found in $3"; else pass 
 FPR=0123456789ABCDEF0123456789ABCDEF01234567
 BASE=https://packages.example.test
 BIN=$W/bin S=$W/state R=$W/root
+TPL=$root/packaging/install/grassfield-install.sh.in
 mkdir -p "$BIN" "$S" "$W/home" "$W/run" "$W/tmp" "$W/render"
 
 # ---- 1. render.py ---------------------------------------------------------------------------------------------------
 printf 'GRASSFIELD_REPO_BASE=%s\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_REPO_BASE_PREVIOUS=\nGRASSFIELD_SIGNING_FINGERPRINT=%s\n' \
   "$BASE" "$FPR" >"$W/good.conf"
-python3 -I "$root/packaging/install/render.py" --conf "$root/packaging/pacman/repository.conf" \
-  --template "$root/packaging/install/grassfield-install.sh.in" --out "$W/render/placeholder" >"$W/o" 2>&1
+python3 -I "$root/packaging/install/render.py" --conf "$root/packaging/pacman/repository.conf" --template "$TPL" \
+  --out "$W/render/placeholder" >"$W/o" 2>&1
 expect 'render refuses the placeholder repository.conf' "$?" 1
 has 'render names the placeholder' 'placeholder' "$W/o"
 [[ ! -e $W/render/placeholder ]] && pass 'nothing written for a placeholder' || fail 'files written for a placeholder'
 sed 's/^GRASSFIELD_SIGNING_FINGERPRINT=.*/GRASSFIELD_SIGNING_FINGERPRINT=/' "$W/good.conf" >"$W/nofpr.conf"
-python3 -I "$root/packaging/install/render.py" --conf "$W/nofpr.conf" \
-  --template "$root/packaging/install/grassfield-install.sh.in" --out "$W/render/nofpr" >"$W/o" 2>&1
+python3 -I "$root/packaging/install/render.py" --conf "$W/nofpr.conf" --template "$TPL" --out "$W/render/nofpr" >"$W/o" 2>&1
 expect 'render refuses an empty fingerprint' "$?" 1
 sed 's#^GRASSFIELD_REPO_BASE=.*#GRASSFIELD_REPO_BASE=file:///srv/repo#' "$W/good.conf" >"$W/file.conf"
-python3 -I "$root/packaging/install/render.py" --conf "$W/file.conf" \
-  --template "$root/packaging/install/grassfield-install.sh.in" --out "$W/render/file" >"$W/o" 2>&1
+python3 -I "$root/packaging/install/render.py" --conf "$W/file.conf" --template "$TPL" --out "$W/render/file" >"$W/o" 2>&1
 expect 'render refuses a non-https base' "$?" 1
-python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" \
-  --template "$root/packaging/install/grassfield-install.sh.in" --out "$W/render/ok" >"$W/o" 2>&1
-expect 'render with a real host and key' "$?" 0
+python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/pub" >"$W/o" 2>&1
+expect 'render (published form) with a real host and key' "$?" 0
+PUB=$W/render/pub/grassfield-install.sh
+python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/ok" --test-hook >"$W/o" 2>&1
+expect 'render (test form)' "$?" 0
 SCRIPT=$W/render/ok/grassfield-install.sh
-(cd "$W/render/ok" && sha256sum -c grassfield-install.sh.sha256 >/dev/null 2>&1)
+(cd "$W/render/pub" && sha256sum -c grassfield-install.sh.sha256 >/dev/null 2>&1)
 expect 'the published checksum matches the script' "$?" 0
+bash -n "$PUB"
+expect 'published script parses' "$?" 0
 bash -n "$SCRIPT"
-expect 'rendered script parses' "$?" 0
-grep -q '@GRASSFIELD' "$SCRIPT" && fail 'a marker is left in the rendered script' || pass 'no marker left'
-has 'the fingerprint is pinned in the script' "readonly GF_FPR='$FPR'" "$SCRIPT"
+expect 'test script parses' "$?" 0
+grep -q '@GRASSFIELD' "$PUB" && fail 'a marker is left in the rendered script' || pass 'no marker left'
+has 'the fingerprint is pinned in the script' "readonly GF_FPR='$FPR'" "$PUB"
+has 'the keyserver is hkps' "readonly GF_KEYSERVER=hkps://keys.openpgp.org" "$PUB"
+hasnt 'the published script has no test hook' 'GRASSFIELD_INSTALL_ROOT' "$PUB"
+hasnt 'the published script has no hook marker' 'TEST-HOOK' "$PUB"
+expect 'the test form differs from the published one by the two hook lines only' \
+  "$(diff "$SCRIPT" "$PUB" | grep -c '^<')/$(diff "$SCRIPT" "$PUB" | grep -c '^>')" '2/0'
 
 # ---- stubs ----------------------------------------------------------------------------------------------------------
 for c in awk grep sed cat tee cp rm mkdir mktemp date cmp sort head tail tr dirname basename env bash timeout vercmp chmod cut wc \
@@ -57,14 +67,16 @@ for c in awk grep sed cat tee cp rm mkdir mktemp date cmp sort head tail tr dirn
   p=$(command -v "$c") && [[ $p == /* ]] && ln -sf "$p" "$BIN/$c"
 done
 stub() { cat >"$BIN/$1"; chmod +x "$BIN/$1"; }
-LOGF=$S/calls
 
-stub sudo <<'EOF'
+mk_sudo() {
+  stub sudo <<'EOF'
 #!/bin/bash
 echo "sudo $*" >>"$GF_STUB/calls"
 [[ ${1:-} == -v ]] && exit 0
 exec "$@"
 EOF
+}
+mk_sudo
 stub id <<'EOF'
 #!/bin/bash
 cat "$GF_STUB/uid" 2>/dev/null || echo 1000
@@ -79,17 +91,21 @@ printf 'Avail\n%sM\n' "$(cat "$GF_STUB/free" 2>/dev/null || echo 20000)"
 EOF
 stub flock <<'EOF'
 #!/bin/bash
+echo "flock $*" >>"$GF_STUB/calls"
 exit 0
 EOF
 stub checkupdates <<'EOF'
 #!/bin/bash
-cat "$GF_STUB/checkupdates" 2>/dev/null
-exit 0
+if [[ -s $GF_STUB/checkupdates ]]; then cat "$GF_STUB/checkupdates"; exit 0; fi
+exit "$(cat "$GF_STUB/cu_rc" 2>/dev/null || echo 2)"
 EOF
 stub pacman-conf <<'EOF'
 #!/bin/bash
-# pacman-conf --config FILE --repo-list
 file=$2
+case $3 in
+  DBPath) echo "$GRASSFIELD_INSTALL_ROOT/var/lib/pacman/"; exit 0 ;;
+  GPGDir) echo "$GRASSFIELD_INSTALL_ROOT/etc/pacman.d/gnupg/"; exit 0 ;;
+esac
 [[ -f $GF_STUB/conf_broken ]] && { awk '/^\[/ { gsub(/[][]/, ""); if ($0 != "options" && $0 != "grassfield") print }' "$file"; exit 0; }
 awk '/^\[/ { gsub(/[][]/, ""); if ($0 != "options") print }' "$file"
 EOF
@@ -97,6 +113,7 @@ stub pacman <<'EOF'
 #!/bin/bash
 echo "pacman $*" >>"$GF_STUB/calls"
 inst=$GF_STUB/installed
+rootd=$GRASSFIELD_INSTALL_ROOT
 case $1 in
   -Q)
     case $2 in
@@ -108,20 +125,31 @@ case $1 in
     esac ;;
   -Qm) cat "$GF_STUB/foreign" 2>/dev/null; exit 0 ;;
   -Qu) cat "$GF_STUB/qu" 2>/dev/null; exit 0 ;;
-  -Si) echo "Repository      : $(cat "$GF_STUB/qs_repo")"; echo "Name            : $2" ;;
-  -Sy) [[ -f $GF_STUB/sync_fail ]] && exit 1; exit 0 ;;
+  -Si)
+    # French pacman prints "Depot"; only LC_ALL=C gives the English field the script parses.
+    if [[ ${LC_ALL:-} == C ]]; then label=Repository; else label="Dépôt"; fi
+    echo "$label      : $(cat "$GF_STUB/qs_repo")"; echo "Name            : $2" ;;
+  -Sy)
+    mkdir -p "$rootd/var/lib/pacman/sync"; : >"$rootd/var/lib/pacman/sync/grassfield.db"
+    [[ -f $GF_STUB/sync_edit ]] && printf '# later edit\n' >>"$rootd/etc/pacman.conf"
+    [[ -f $GF_STUB/sync_fail ]] && exit 1
+    exit 0 ;;
   -S)
     shift
     print=0; pk=()
     for a in "$@"; do case $a in --print) print=1 ;; -*) ;; *) pk+=("$a") ;; esac; done
     if ((print)); then [[ -f $GF_STUB/resolve_fail ]] && { echo "error: could not satisfy dependencies" >&2; exit 1; }; exit 0; fi
+    [[ -f $GF_STUB/install_fail ]] && { echo "error: failed to commit transaction" >&2; exit 1; }
     printf '%s\n' "${pk[@]}" >>"$inst"
     printf '%s\n' grassfield-icons grassfield-wallpapers grassfield-keyring >>"$inst"
-    : >"$GF_STUB/pkgs-installed-$$" ;;
+    for a in "${pk[@]}"; do
+      if [[ $a == grassfield-login-themes ]]; then
+        mkdir -p "$rootd/usr/share/sddm/themes/grassfield" "$rootd/usr/share/plymouth/themes/grassfield"
+      fi
+    done ;;
   -Rns)
     shift
     for a in "$@"; do [[ $a == -* ]] || sed -i "/^$a\$/d" "$inst"; done
-    # the packages' pre_remove (grassfield-channel-scriptlet remove)
     "$GF_STUB/offlogic" ;;
 esac
 EOF
@@ -143,9 +171,8 @@ stub pacman-key <<'EOF'
 echo "pacman-key $*" >>"$GF_STUB/calls"
 case $1 in
   --list-keys) grep -q "$2" "$GF_STUB/keys" 2>/dev/null ;;
-  --recv-keys) [[ -f $GF_STUB/keyserver_down ]] && exit 2; echo "$2" >>"$GF_STUB/keys" ;;
   --add) grep -o '[0-9A-F]\{40\}' "$2" | head -n 1 >>"$GF_STUB/keys" ;;
-  --lsign-key) grep -q "$2" "$GF_STUB/keys" 2>/dev/null ;;
+  --lsign-key) [[ -f $GF_STUB/lsign_fail ]] && exit 1; grep -q "$2" "$GF_STUB/keys" 2>/dev/null ;;
   --delete) sed -i "/$2/d" "$GF_STUB/keys" ;;
 esac
 EOF
@@ -160,10 +187,25 @@ exit 0
 EOF
 stub gpg <<'EOF'
 #!/bin/bash
-f=${*: -1}
-c=$(cat "$f")
-if [[ $c == SECRETKEY ]]; then printf 'sec:u:255:22:AAAA:1::::::::\nfpr:::::::::%s:\n' "$GF_STUB_FPR"; exit 0; fi
-printf 'pub:u:255:22:AAAA:1::::::::\nfpr:::::::::%s:\n' "$c"
+echo "gpg $*" >>"$GF_STUB/calls"
+home='' prev=''
+for a in "$@"; do [[ $prev == --homedir ]] && home=$a; prev=$a; done
+render() {
+  case $1 in
+    SECRETKEY) printf 'sec:u:255:22:AAAA:1::::::::\nfpr:::::::::%s:\n' "$GF_STUB_FPR" ;;
+    # an impostor's key: its own primary, the pinned fingerprint only on a SUBKEY
+    SUBKEYMATCH) printf 'pub:u:255:22:AAAA:1::::::::\nfpr:::::::::EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE:\nsub:u:255:22:BBBB:1::::::::\nfpr:::::::::%s:\n' "$GF_STUB_FPR" ;;
+    *) printf 'pub:u:255:22:AAAA:1::::::::\nfpr:::::::::%s:\n' "$1" ;;
+  esac
+}
+case " $* " in
+  *" --recv-keys "*) [[ -f $GF_STUB/keyserver_down ]] && exit 2; cat "$GF_STUB/ksfile" >"$home/ks"; exit 0 ;;
+  *" --export "*) cat "$home/ks" ;;
+  *" --list-keys "*)
+    grep -q "$GF_STUB_FPR" "$GF_STUB/keys" 2>/dev/null || exit 2
+    if [[ -f $GF_STUB/keyring_odd ]]; then render SUBKEYMATCH; else render "$GF_STUB_FPR"; fi ;;
+  *" --import "*) render "$(cat "${*: -1}")" ;;
+esac
 EOF
 stub omarchy-snapshot <<'EOF'
 #!/bin/bash
@@ -184,15 +226,35 @@ stub grassfield-login <<'EOF'
 echo "grassfield-login $*" >>"$GF_STUB/calls"
 mkdir -p "$HOME/.config/grassfield" && echo "$2" >"$HOME/.config/grassfield/login-session"
 EOF
+stub plymouth-set-default-theme <<'EOF'
+#!/bin/bash
+echo "plymouth-set-default-theme $*" >>"$GF_STUB/calls"
+if (($# == 0)); then cat "$GF_STUB/plymouth"; else echo "$1" >"$GF_STUB/plymouth"; fi
+EOF
+mk_rebuild() {
+  stub limine-mkinitcpio <<'EOF'
+#!/bin/bash
+echo "limine-mkinitcpio $*" >>"$GF_STUB/calls"
+[[ -f $GF_STUB/rebuild_fail ]] && exit 1
+exit 0
+EOF
+}
+mk_rebuild
+stub mkinitcpio <<'EOF'
+#!/bin/bash
+echo "mkinitcpio $*" >>"$GF_STUB/calls"
+[[ -f $GF_STUB/rebuild_fail ]] && exit 1
+exit 0
+EOF
 stub systemctl <<'EOF'
 #!/bin/bash
 echo "systemctl $*" >>"$GF_STUB/calls"
 EOF
 
-# A stock machine: Omarchy 4.0.6, [omarchy] first, quickshell from [omarchy].
+# A stock machine: Omarchy 4.0.6, [omarchy] first, quickshell from [omarchy], Omarchy's boot theme.
 fresh() {
-  rm -rf "$S" "$R" "$W/home" "$W/state-bak"
-  mkdir -p "$S" "$R/etc/pacman.d" "$R/var/lib/pacman" "$W/home"
+  rm -rf "$S" "$R" "$W/home"
+  mkdir -p "$S" "$R/etc/pacman.d" "$R/var/lib/pacman/sync" "$R/usr/share/plymouth/themes/omarchy" "$W/home"
   cp "$W/offlogic" "$S/offlogic"
   cat >"$R/etc/pacman.conf" <<'EOF'
 [options]
@@ -212,13 +274,18 @@ EOF
   echo 4.0.6-1 >"$S/omarchy"
   echo 0.3.2.r7-1 >"$S/quickshell"
   echo omarchy >"$S/qs_repo"
+  echo omarchy >"$S/plymouth"
   : >"$S/keys"
   : >"$S/installed"
   echo "$FPR" >"$S/keyfile"
+  echo "$FPR" >"$S/ksfile"
   cp "$R/etc/pacman.conf" "$W/pacman.conf.orig"
+  mk_sudo
+  mk_channel_set
+  mk_rebuild
 }
 
-# run <stdin> args...: the rendered script on stubs only; output in $W/out, status in $rc.
+# run <stdin> args...: the script on stubs only; output in $W/out, status in $rc.
 run() {
   local input=$1
   shift
@@ -230,21 +297,39 @@ run() {
   } 2>&1 | cat >"$W/out"
   rc=$(<"$W/rc")
 }
-sudo_calls() { grep '^sudo ' "$S/calls"; }
+# The root commands, with the temporary key file and the run's timestamp made stable.
+sudo_calls() { grep '^sudo ' "$S/calls" | sed -e 's#[^ ]*/key\.asc#KEY#' -e 's#\.grassfield-install-bak\.[0-9]\{8\}-[0-9]\{6\}#.grassfield-install-bak.STAMP#'; }
 conf_unchanged() { cmp -s "$R/etc/pacman.conf" "$W/pacman.conf.orig"; }
+LOGDIR=$W/home/.local/state/grassfield
+PKGS4='grassfield-desktop grassfield-compositor grassfield-store grassfield-login-themes'
+
+# After a failure inside the repository phase: exactly the state before the run.
+rolled_back() { # <name>
+  expect "$1: exit 1" "$rc" 1
+  has "$1: says it rolled back" 'Rolling back' "$W/out"
+  conf_unchanged && pass "$1: pacman.conf is the original" || fail "$1: pacman.conf differs"
+  [[ ! -e $R/etc/pacman.d/grassfield.conf ]] && pass "$1: no grassfield.conf" || fail "$1: grassfield.conf left"
+  expect "$1: no key left" "$(wc -c <"$S/keys")" 0
+  expect "$1: no package" "$(wc -c <"$S/installed")" 0
+  [[ ! -e $R/var/lib/pacman/sync/grassfield.db ]] && pass "$1: synced database dropped" || fail "$1: synced database left"
+  has "$1: says how to retry" 'Retry' "$W/out"
+}
 
 # ---- 2. usage and refusals before anything runs ---------------------------------------------------------------------
 fresh
 run '' --help
 expect '--help exits 0' "$rc" 0
 has '--help documents --uninstall' '--uninstall' "$W/out"
+has '--help documents --without-login-themes' '--without-login-themes' "$W/out"
 run '' --bogus
 expect 'an unknown option exits 2' "$rc" 2
+run '' --with-login-themes
+expect 'the old opt-in flag is gone' "$rc" 2
 run '' --channel nightly
 expect 'an unknown channel exits 2' "$rc" 2
 run '' --session kde
 expect 'an unknown session exits 2' "$rc" 2
-cp "$root/packaging/install/grassfield-install.sh.in" "$W/template.sh"
+cp "$TPL" "$W/template.sh"
 env -i PATH="$BIN" HOME="$W/home" bash "$W/template.sh" --help >"$W/o" 2>&1 </dev/null
 expect 'the unrendered template refuses to run' "$?" 2
 
@@ -259,6 +344,7 @@ preflight_case() { # <name> <expected text> (state already arranged)
   hasnt "$1: no plan shown" '== Plan' "$W/out"
 }
 fresh; echo 0 >"$S/uid"; preflight_case 'root' 'running as root'
+[[ ! -e $W/home/.local ]] && pass 'root: no log was opened' || fail 'root: the log folder was created'
 fresh; echo 4.0.5-1 >"$S/omarchy"; preflight_case 'old Omarchy' 'older than 4.0.6'
 fresh; rm "$S/omarchy"; preflight_case 'no Omarchy' 'Omarchy is not installed'
 fresh
@@ -281,17 +367,27 @@ preflight_case '[omarchy] after [extra]' '[omarchy] comes after [extra]'
 has 'the order fix says it never reorders itself' 'never reorders' "$W/out"
 fresh; echo 0.3.2-1 >"$S/quickshell"; echo extra >"$S/qs_repo"; preflight_case 'quickshell from extra' "extra build"
 fresh; echo extra >"$S/qs_repo"; preflight_case 'quickshell offered by extra' 'would come from [extra]'
+# The repository field is read with LC_ALL=C: a French pacman ("Depot") must not hide that quickshell comes from [extra].
+fresh; echo extra >"$S/qs_repo"; TLANG=fr_FR.UTF-8 run '' --yes
+expect 'French locale: quickshell from [extra] is still caught' "$rc" 1
+has 'French locale: the French problem text names [extra]' 'viendrait de [extra]' "$W/out"
 fresh; touch "$S/netdown"; preflight_case 'no network' 'cannot reach'
 fresh; echo 100 >"$S/free"; preflight_case 'low disk' 'MiB free'
 fresh; echo 'firefox 1-1 -> 2-1' >"$S/checkupdates"; preflight_case 'pending updates' 'pending updates'
+fresh; echo 1 >"$S/cu_rc"; preflight_case 'checkupdates fails' 'checkupdates failed'
+hasnt 'checkupdates fails: never says [ok] up to date' '[ok] the system is up to date' "$W/out"
+fresh; rm -f "$BIN/checkupdates"; preflight_case 'checkupdates missing' 'checkupdates (package pacman-contrib) is missing'
+stub checkupdates <<'EOF'
+#!/bin/bash
+if [[ -s $GF_STUB/checkupdates ]]; then cat "$GF_STUB/checkupdates"; exit 0; fi
+exit "$(cat "$GF_STUB/cu_rc" 2>/dev/null || echo 2)"
+EOF
 fresh; touch "$R/var/lib/pacman/db.lck"; preflight_case 'pacman running' 'db.lck'
 fresh; rm -f "$BIN/sudo"; preflight_case 'sudo missing' 'sudo is missing'
-stub sudo <<'EOF'
-#!/bin/bash
-echo "sudo $*" >>"$GF_STUB/calls"
-[[ ${1:-} == -v ]] && exit 0
-exec "$@"
-EOF
+fresh
+printf '\n[grassfield]\nSigLevel = Never\nInclude = /etc/pacman.d/grassfield.conf\n' >>"$R/etc/pacman.conf"
+cp "$R/etc/pacman.conf" "$W/pacman.conf.orig"
+preflight_case 'a [grassfield] section with its own SigLevel' 'holds more than its Include'
 # Several problems are all reported at once.
 fresh; echo 4.0.5-1 >"$S/omarchy"; touch "$S/netdown"; run '' --yes
 has 'two problems: the first is reported' 'older than 4.0.6' "$W/out"
@@ -303,12 +399,14 @@ fresh; run '' --dry-run
 expect '--dry-run exits 0' "$rc" 0
 has 'dry-run shows the plan' '== Plan' "$W/out"
 has 'dry-run says nothing changed' 'Dry run: nothing was changed' "$W/out"
+has 'the plan lists the themes' 'themes (root)' "$W/out"
 [[ -z $(sudo_calls) ]] && pass 'dry-run: no sudo' || fail 'dry-run ran sudo'
 conf_unchanged && pass 'dry-run: pacman.conf untouched' || fail 'dry-run changed pacman.conf'
 [[ ! -e $R/etc/pacman.d/grassfield.conf ]] && pass 'dry-run: no grassfield.conf' || fail 'dry-run wrote grassfield.conf'
 hasnt 'dry-run: no sync' 'pacman -Sy' "$S/calls"
 hasnt 'dry-run: no install' 'pacman -S --needed' "$S/calls"
 hasnt 'dry-run: no download of the key' ' -o ' "$S/calls"
+hasnt 'dry-run: no keyserver contact' '--recv-keys' "$S/calls"
 has 'the plan names the fingerprint' "$FPR" "$W/out"
 fresh; TLANG=fr_FR.UTF-8 run '' --dry-run
 has 'French locale: French plan' 'Plan : ce qui va changer' "$W/out"
@@ -334,18 +432,24 @@ has 'end message: how to undo' '--uninstall' "$W/out"
 fresh; run '' --yes
 expect 'happy path --yes exits 0' "$rc" 0
 want="sudo -v
-sudo timeout 120 pacman-key --recv-keys $FPR --keyserver keys.openpgp.org
+sudo pacman-key --add KEY
 sudo pacman-key --lsign-key $FPR
 sudo tee $R/etc/pacman.d/grassfield.conf
-sudo cp -p -- $R/etc/pacman.conf $R/etc/pacman.conf.grassfield-install-bak
+sudo cp -p -- $R/etc/pacman.conf $R/etc/pacman.conf.grassfield-install-bak.STAMP
 sudo tee -a $R/etc/pacman.conf
 sudo pacman -Sy
-sudo pacman -S --needed --noconfirm grassfield-desktop grassfield-compositor grassfield-store"
+sudo pacman -S --needed --noconfirm $PKGS4
+sudo mkdir -p -- $R/etc/sddm.conf.d
+sudo tee $R/etc/sddm.conf.d/zz-grassfield-theme.conf
+sudo plymouth-set-default-theme grassfield
+sudo limine-mkinitcpio"
 expect 'the root commands, exactly and in order' "$(sudo_calls)" "$want"
 expect 'the user commands, in order' "$(grep -E '^(omarchy-snapshot|grassfield-)' "$S/calls")" \
   "omarchy-snapshot create
 grassfield-channel-set stable
 grassfield-login set grassfield"
+has 'the key came from the keyserver over hkps into a temporary keyring' '--keyserver hkps://keys.openpgp.org --recv-keys' "$S/calls"
+hasnt 'no key file was downloaded' ' -o ' "$S/calls"
 expect 'grassfield.conf is the b.3a file' "$(cat "$R/etc/pacman.d/grassfield.conf")" \
   "SigLevel = Required
 Server = $BASE/stable/\$arch"
@@ -354,11 +458,16 @@ expect 'pacman.conf: the original, then the two lines' "$(cat "$R/etc/pacman.con
 
 [grassfield]
 Include = /etc/pacman.d/grassfield.conf"
+expect 'the login theme drop-in' "$(cat "$R/etc/sddm.conf.d/zz-grassfield-theme.conf")" "[Theme]
+Current=grassfield"
+expect 'the boot theme is Grassfield' "$(cat "$S/plymouth")" grassfield
+expect 'the previous boot theme is remembered' "$(cat "$LOGDIR/plymouth-previous")" omarchy
 hasnt 'no service is touched' 'systemctl' "$S/calls"
 expect 'no repository order edit: [omarchy] stays second, [grassfield] last' \
   "$(grep '^\[' "$R/etc/pacman.conf" | tr -d '[]\n' | tr -s ' ')" 'optionsomarchycoreextragrassfield'
-expect 'the log exists (mode 600)' "$(stat -c %a "$W/home/.local/state/grassfield/install.log")" 600
-has 'the log holds the root commands' 'sudo pacman -Sy' "$W/home/.local/state/grassfield/install.log"
+expect 'the log exists (mode 600)' "$(stat -c %a "$LOGDIR/install.log")" 600
+has 'the log holds the root commands' 'sudo pacman -Sy' "$LOGDIR/install.log"
+has 'the Omarchy update lock is taken' 'flock -n 8' "$S/calls"
 cp "$R/etc/pacman.conf" "$W/after1.conf"
 cp "$R/etc/pacman.d/grassfield.conf" "$W/after1.grassfield"
 
@@ -368,31 +477,59 @@ expect 'rerun exits 0' "$rc" 0
 cmp -s "$R/etc/pacman.conf" "$W/after1.conf" && pass 'rerun: pacman.conf identical (no duplicated line)' || fail 'rerun changed pacman.conf'
 cmp -s "$R/etc/pacman.d/grassfield.conf" "$W/after1.grassfield" && pass 'rerun: grassfield.conf identical' || fail 'rerun changed grassfield.conf'
 expect 'rerun: sections' "$(grep -c '^\[grassfield\]' "$R/etc/pacman.conf")" 1
-expect 'rerun: no key download, no file write, still syncs and installs' "$(sudo_calls)" \
+expect 'rerun: the key is checked again, no file write, themes already active' "$(sudo_calls)" \
   "sudo -v
+sudo pacman-key --add KEY
 sudo pacman-key --lsign-key $FPR
 sudo pacman -Sy
-sudo pacman -S --needed --noconfirm grassfield-desktop grassfield-compositor grassfield-store"
+sudo pacman -S --needed --noconfirm $PKGS4"
+expect 'rerun: still one copy of pacman.conf from the first run' "$(ls "$R"/etc/pacman.conf.grassfield-install-bak.* | wc -l)" 1
+expect 'rerun: the remembered boot theme is still the original' "$(cat "$LOGDIR/plymouth-previous")" omarchy
 # A rerun after a half-done install: section there, file missing.
 rm -f "$R/etc/pacman.d/grassfield.conf"; run '' --yes
 expect 'repair: rewrites the missing file' "$(cat "$R/etc/pacman.d/grassfield.conf")" "SigLevel = Required
 Server = $BASE/stable/\$arch"
 cmp -s "$R/etc/pacman.conf" "$W/after1.conf" && pass 'repair: pacman.conf still identical' || fail 'repair changed pacman.conf'
-# A file naming another host is replaced, the old one kept.
+# A file naming another host is replaced, the old one kept (timestamped).
 printf 'SigLevel = Required\nServer = https://old.example.test/stable/$arch\n' >"$R/etc/pacman.d/grassfield.conf"
 run '' --yes
-has 'foreign file: copy kept' 'old.example.test' "$R/etc/pacman.d/grassfield.conf.grassfield-install-bak"
 has 'foreign file: ours written' "$BASE/stable" "$R/etc/pacman.d/grassfield.conf"
+has 'foreign file: copy kept' 'old.example.test' "$(ls "$R"/etc/pacman.d/grassfield.conf.grassfield-install-bak.* | head -n 1)"
+# Our host with SigLevel = Never is NOT kept: the plan says signatures are required.
+printf 'SigLevel = Never\nServer = %s/stable/$arch\n' "$BASE" >"$R/etc/pacman.d/grassfield.conf"
+run '' --yes
+expect 'SigLevel = Never is rewritten' "$(cat "$R/etc/pacman.d/grassfield.conf")" "SigLevel = Required
+Server = $BASE/stable/\$arch"
+# The channel's own file (mirrors, comments) is kept.
+printf '# written by grassfield-channel-set\nSigLevel = Required\nServer = %s/stable/$arch\nServer = https://mirror.example.test/stable/$arch\n' "$BASE" >"$R/etc/pacman.d/grassfield.conf"
+cp "$R/etc/pacman.d/grassfield.conf" "$W/channel.conf"
+run '' --yes
+cmp -s "$R/etc/pacman.d/grassfield.conf" "$W/channel.conf" && pass 'the channel helper file with mirrors is kept' || fail 'the channel helper file was rewritten'
 
 # ---- 8. options -----------------------------------------------------------------------------------------------------
-fresh; run '' --yes --channel beta --with-login-themes --session omarchy --no-snapshot
-expect 'beta + themes + omarchy session exits 0' "$rc" 0
+fresh; run '' --yes --channel beta --session omarchy --no-snapshot
+expect 'beta + omarchy session exits 0' "$rc" 0
 has 'beta file' "$BASE/beta/\$arch" "$R/etc/pacman.d/grassfield.conf"
-has 'themes package installed' 'grassfield-store grassfield-login-themes' "$S/calls"
+has 'themes package installed by default' 'grassfield-store grassfield-login-themes' "$S/calls"
 has 'channel hand-over is beta' 'grassfield-channel-set beta' "$S/calls"
 has 'session omarchy' 'grassfield-login set omarchy' "$S/calls"
 hasnt 'no snapshot with --no-snapshot' 'omarchy-snapshot' "$S/calls"
 has 'end message for the omarchy session' 'still starts Omarchy' "$W/out"
+fresh; run '' --yes --without-login-themes
+expect '--without-login-themes exits 0' "$rc" 0
+hasnt 'no theme package' 'grassfield-login-themes' "$S/calls"
+hasnt 'no drop-in' 'zz-grassfield-theme' "$S/calls"
+hasnt 'no plymouth call' 'plymouth-set-default-theme' "$S/calls"
+hasnt 'no boot image rebuild' 'mkinitcpio' "$S/calls"
+fresh; rm -f "$BIN/limine-mkinitcpio"; run '' --yes
+expect 'without limine: mkinitcpio -P, Omarchy'"'"'s other way' "$rc" 0
+has 'mkinitcpio -P was run' 'sudo mkinitcpio -P' "$S/calls"
+fresh; touch "$S/rebuild_fail"; run '' --yes
+expect 'a failed boot image rebuild ends non-zero' "$rc" 1
+has 'it warns that a theme was not activated' 'a theme was not activated' "$W/out"
+expect 'the previous boot theme is put back' "$(cat "$S/plymouth")" omarchy
+has 'Grassfield itself stays installed' 'grassfield-desktop' "$S/installed"
+[[ -f $R/etc/pacman.d/grassfield.conf ]] && pass 'a theme failure does not roll the repository back' || fail 'the repository was rolled back for a theme failure'
 
 # ---- 9. snapshot ---------------------------------------------------------------------------------------------------
 fresh; echo 1 >"$S/snap_rc"; run '' --yes
@@ -405,30 +542,75 @@ expect 'no snapper: goes on' "$rc" 0
 fresh; echo 1 >"$S/snap_rc"; run '' --yes --no-snapshot
 expect '--no-snapshot goes on after a snapshot problem' "$rc" 0
 
-# ---- 10. the key ---------------------------------------------------------------------------------------------------
+# ---- 10. the key: primary fingerprint, never a subkey, on both paths --------------------------------------------------
 fresh; touch "$S/keyserver_down"; run '' --yes
 expect 'keyserver down: falls back to the host file' "$rc" 0
 has 'fallback downloads the key file' "$BASE/grassfield-signing-key.asc" "$S/calls"
 has 'fallback adds the verified file' 'pacman-key --add' "$S/calls"
+fresh; echo SUBKEYMATCH >"$S/ksfile"; run '' --yes
+expect 'a keyserver key that only holds F as a SUBKEY is ignored, the host file is used' "$rc" 0
+has 'it says so' 'ignored' "$W/out"
+has 'it fell back to the host file' "$BASE/grassfield-signing-key.asc" "$S/calls"
+fresh; echo SUBKEYMATCH >"$S/ksfile"; echo SUBKEYMATCH >"$S/keyfile"; run '' --yes
+expect 'subkey on the keyserver path and on the host path: refused' "$rc" 1
+hasnt 'subkey: the key is never added to pacman' 'pacman-key --add' "$S/calls"
+hasnt 'subkey: nothing is signed' 'lsign-key' "$S/calls"
+conf_unchanged && pass 'subkey: pacman.conf untouched' || fail 'subkey: pacman.conf changed'
+fresh; touch "$S/keyserver_down"; echo SUBKEYMATCH >"$S/keyfile"; run '' --yes
+expect 'subkey on the host file path (keyserver down): refused' "$rc" 1
+has 'the refusal names the primary key rule' 'not exactly the primary key' "$W/out"
+hasnt 'host subkey: the key is never added' 'pacman-key --add' "$S/calls"
 fresh; touch "$S/keyserver_down"; echo 'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF' >"$S/keyfile"; run '' --yes
 expect 'a substituted key file is refused' "$rc" 1
-has 'the refusal names it' 'not 0123456789ABCDEF' "$W/out"
-hasnt 'nothing is signed' 'lsign-key' "$S/calls"
-conf_unchanged && pass 'substituted key: pacman.conf untouched' || fail 'substituted key changed pacman.conf'
+hasnt 'substituted: the key is never added' 'pacman-key --add' "$S/calls"
 fresh; touch "$S/keyserver_down"; echo SECRETKEY >"$S/keyfile"; run '' --yes
-expect 'a key file with a secret key is refused' "$rc" 1
+expect 'a host key file with a secret key is refused' "$rc" 1
+hasnt 'secret (host): refused BEFORE pacman sees it' 'pacman-key --add' "$S/calls"
+has 'secret (host): refused for this reason' 'not exactly the primary key' "$W/out"
+fresh; echo SECRETKEY >"$S/ksfile"; echo SECRETKEY >"$S/keyfile"; run '' --yes
+expect 'a secret key on the keyserver path and the host path is refused' "$rc" 1
+hasnt 'secret (keyserver): refused BEFORE pacman sees it' 'pacman-key --add' "$S/calls"
+conf_unchanged && pass 'secret: pacman.conf untouched' || fail 'secret: pacman.conf changed'
+fresh; echo SECRETKEY >"$S/ksfile"; run '' --yes
+expect 'a secret key from the keyserver falls back to the good host file' "$rc" 0
+# After the add, pacman's keyring must show exactly that primary key.
+fresh; touch "$S/keyring_odd"; run '' --yes
+rolled_back 'keyring holds another primary for F'
+fresh; touch "$S/lsign_fail"; run '' --yes
+rolled_back 'lsign fails'
 
-# ---- 11. after the sync ---------------------------------------------------------------------------------------------
+# ---- 11. after the repository is added: every failure puts everything back ---------------------------------------------
+fresh; touch "$S/sync_fail"; run '' --yes
+rolled_back 'pacman -Sy fails'
+has 'pacman -Sy fails: a Stopped line is printed' 'Stopped:' "$W/out"
 fresh; touch "$S/resolve_fail"; run '' --yes
-expect 'unresolvable packages stop' "$rc" 1
-has 'resolution failure says nothing installed' 'Nothing was installed' "$W/out"
-hasnt 'resolution failure: no install' '--noconfirm' "$S/calls"
+rolled_back 'unresolvable packages'
+has 'unresolvable: says nothing was installed' 'nothing was installed' "$W/out"
+fresh; touch "$S/install_fail"; run '' --yes
+rolled_back 'the install transaction fails'
 fresh; echo 'qt6-base 6.12.0-1 -> 6.12.1-1' >"$S/qu"; run '' --yes
-expect 'pending updates after the sync stop (partial upgrade)' "$rc" 1
-has 'partial upgrade message' 'partial upgrade' "$W/out"
+rolled_back 'pending updates after the sync'
+has 'partial upgrade: says why' 'partial upgrade' "$W/out"
+has 'partial upgrade: warns that the lists were synced' 'BEFORE any pacman -S' "$W/out"
 fresh; touch "$S/conf_broken"; run '' --yes
-expect 'a pacman.conf pacman cannot read with the section is put back' "$rc" 1
-conf_unchanged && pass 'conf_broken: pacman.conf restored' || fail 'conf_broken: pacman.conf not restored'
+rolled_back 'pacman cannot read the new section'
+# The key was already in pacman before the run: a rollback does not delete it.
+fresh; echo "$FPR" >"$S/keys"; touch "$S/sync_fail"; run '' --yes
+grep -q "$FPR" "$S/keys" && pass 'a key that was there before is kept by a rollback' || fail 'a pre-existing key was deleted by the rollback'
+conf_unchanged && pass 'pre-existing key: pacman.conf restored' || fail 'pre-existing key: pacman.conf not restored'
+# A grassfield.conf that was there before comes back as it was.
+fresh; printf 'SigLevel = Required\nServer = https://old.example.test/stable/$arch\n' >"$R/etc/pacman.d/grassfield.conf"
+cp "$R/etc/pacman.d/grassfield.conf" "$W/old.grassfield"; touch "$S/sync_fail"; run '' --yes
+cmp -s "$R/etc/pacman.d/grassfield.conf" "$W/old.grassfield" && pass 'a replaced grassfield.conf is restored by the rollback' || fail 'the old grassfield.conf was not restored'
+# The user changes pacman.conf during the run: the rollback never undoes that; it says what to do.
+fresh; touch "$S/sync_fail" "$S/sync_edit"; run '' --yes
+expect 'a concurrent edit: exit 1' "$rc" 1
+has 'a concurrent edit is kept' '# later edit' "$R/etc/pacman.conf"
+has 'a concurrent edit: manual fix is printed' 'COULD NOT roll back' "$W/out"
+[[ -f $R/etc/pacman.d/grassfield.conf ]] && pass 'a concurrent edit: the file the Include names is not removed' || fail 'the Include file was removed under a live Include'
+# Ctrl-C style exit during the phase is handled by the same trap (the status is kept).
+fresh; touch "$S/sync_fail"; run '' --yes
+expect 'the exit status of the failure is kept (1)' "$rc" 1
 
 # ---- 12. uninstall --------------------------------------------------------------------------------------------------
 fresh; run '' --yes
@@ -439,38 +621,68 @@ conf_unchanged && pass 'uninstall: pacman.conf is the original' || fail 'uninsta
 expect 'uninstall: no key left' "$(wc -c <"$S/keys")" 0
 expect 'uninstall: no package left' "$(wc -c <"$S/installed")" 0
 [[ ! -e $W/home/.config/grassfield/login-session ]] && pass 'uninstall: no session choice left' || fail 'uninstall: session file left'
-expect 'uninstall: the existing Turn Off, then the session, then the removal' \
-  "$(grep -E '^(omarchy-snapshot|grassfield-|pacman -Rns|sudo pacman -Rns)' "$S/calls" | grep -v '^pacman ')" \
+[[ ! -e $R/etc/sddm.conf.d/zz-grassfield-theme.conf ]] && pass 'uninstall: login theme drop-in removed' || fail 'uninstall: drop-in left'
+expect 'uninstall: boot theme back to the remembered one' "$(cat "$S/plymouth")" omarchy
+ls "$R"/etc/pacman.conf.grassfield-install-bak.* >/dev/null 2>&1 && fail 'uninstall: a pacman.conf copy is left' || pass 'uninstall: the script copies are removed'
+[[ ! -e $LOGDIR/plymouth-previous ]] && pass 'uninstall: the remembered theme record is gone' || fail 'uninstall: the record is left'
+expect 'uninstall: the existing Turn Off, then the session' \
+  "$(grep -E '^(omarchy-snapshot|grassfield-)' "$S/calls")" \
   "omarchy-snapshot create
 grassfield-channel-set off
-grassfield-login set omarchy
-sudo pacman -Rns --noconfirm grassfield-store grassfield-compositor grassfield-desktop grassfield-icons grassfield-wallpapers grassfield-keyring"
+grassfield-login set omarchy"
+expect 'uninstall: root commands in order (themes before the packages)' "$(sudo_calls)" \
+  "sudo -v
+sudo rm -f -- $R/etc/sddm.conf.d/zz-grassfield-theme.conf
+sudo plymouth-set-default-theme omarchy
+sudo limine-mkinitcpio
+sudo pacman -Rns --noconfirm grassfield-login-themes grassfield-store grassfield-compositor grassfield-desktop grassfield-icons grassfield-wallpapers grassfield-keyring
+sudo rm -f -- $R/etc/pacman.conf.grassfield-install-bak.STAMP"
 has 'uninstall end message' 'stock Omarchy' "$W/out"
+has 'uninstall let go of the update lock around Turn Off' 'flock -n 8' "$S/calls"
 run '' --uninstall --yes
 expect 'uninstall twice exits 0' "$rc" 0
-# A failed install leaves [grassfield] and the key but no package: the script's own copy puts pacman.conf back.
-fresh; touch "$S/resolve_fail"; run '' --yes
-rm -f "$BIN/grassfield-channel-set" # the package is not installed: its helper is not there
+# Packages gone but [grassfield] left (removed by hand): the script's own copy from THIS install puts pacman.conf back.
+fresh; run '' --yes
+: >"$S/installed"
+rm -f "$BIN/grassfield-channel-set"
 run '' --uninstall --yes
-expect 'uninstall after a failed install exits 0' "$rc" 0
-conf_unchanged && pass 'failed install then uninstall: pacman.conf is the original' || fail 'failed install then uninstall: differs'
-expect 'failed install then uninstall: no key' "$(wc -c <"$S/keys")" 0
+expect 'uninstall with leftovers exits 0' "$rc" 0
+conf_unchanged && pass 'leftovers then uninstall: pacman.conf is the original' || fail 'leftovers then uninstall: differs'
+expect 'leftovers then uninstall: no key' "$(wc -c <"$S/keys")" 0
 # pacman.conf edited since: the script does not guess.
-fresh; touch "$S/resolve_fail"; run '' --yes
+fresh; run '' --yes
+: >"$S/installed"
 printf '\n# my edit\n' >>"$R/etc/pacman.conf"
 rm -f "$BIN/grassfield-channel-set"
 run '' --uninstall --yes
-mk_channel_set
 expect 'uninstall with an edited pacman.conf stops' "$rc" 1
 has 'it prints the manual fix' 'delete the two lines' "$W/out"
 has 'the manual fix leaves the key for after' 'pacman-key --delete' "$W/out"
+has 'the user edit is untouched' '# my edit' "$R/etc/pacman.conf"
+mk_channel_set
+# Without themes installed: uninstall touches no theme.
+fresh; run '' --yes --without-login-themes
+run '' --uninstall --yes
+expect 'uninstall after --without-login-themes exits 0' "$rc" 0
+hasnt 'no boot image rebuild when no theme was active' 'limine-mkinitcpio' "$S/calls"
 
-# ---- 13. shellcheck (when installed) ----------------------------------------------------------------------------------
+# ---- 13. the log ---------------------------------------------------------------------------------------------------
+fresh; mkdir -p "$LOGDIR"; : >"$W/elsewhere"; ln -s "$W/elsewhere" "$LOGDIR/install.log"
+run '' --yes
+expect 'a symlinked log is refused' "$rc" 1
+has 'the refusal says so' 'not your own plain file' "$W/out"
+expect 'the symlink target was not written' "$(wc -c <"$W/elsewhere")" 0
+conf_unchanged && pass 'symlinked log: nothing changed' || fail 'symlinked log: pacman.conf changed'
+fresh; mkdir -p "$LOGDIR"; echo old >"$LOGDIR/install.log"; chmod 644 "$LOGDIR/install.log"; run '' --dry-run
+expect 'an existing log is appended to and its mode is left alone' "$(stat -c %a "$LOGDIR/install.log")" 644
+has 'old log lines kept' old "$LOGDIR/install.log"
+
+# ---- 14. shellcheck (when installed) ----------------------------------------------------------------------------------
 if command -v shellcheck >/dev/null; then
-  shellcheck -s bash "$SCRIPT" "$0"
-  expect 'shellcheck: the rendered script and this test' "$?" 0
+  shellcheck -s bash "$PUB" "$SCRIPT" "$0"
+  expect 'shellcheck: the rendered scripts and this test' "$?" 0
 else
-  echo "  note shellcheck is not installed here: run it in CI (the Arch container installs it)"
+  echo "  note shellcheck NOT VERIFIED: it is not installed here; run it in CI (the Arch container installs it)"
 fi
 
 ((fails == 0)) && echo "PASS: public install script" || echo "FAIL: public install script ($fails)"

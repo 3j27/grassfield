@@ -1,16 +1,17 @@
 # ADR-0043 — Public installation script (amends ADR-0033 b.3a)
 
-Status: Proposed (2026-11-03). The owner asked for it on 2026-11-03 (« il faut déjà préparer le script d'installation publique
-du DE »). It is **prepared, not published**: hosting (O8) and the signing key (O11) are not chosen, and the legal review comes
-before any public release. Cross-module (packaging, pacman helper contract, session login, docs), hence its own ADR rather than
-an amendment. The script runs as the user and uses `sudo` for root steps, so it needs the opus security review before it ships.
+Status: Proposed (2026-11-03); the owner answered the open questions the same day (section "Owner decisions"). The script is
+**prepared, not published**: hosting (O8) and the signing key (O11) are not chosen, and the legal review comes before any
+public release. Cross-module (packaging, pacman helper contract, session login, boot and login themes, docs), hence its own ADR.
+The script runs as the user and uses `sudo` for root steps, so it needs the opus security review before it ships; review 1
+(2026-11-03) failed it on the keyserver trust and on a failed sync leaving the system blocked, both fixed below.
 
 ## Context
 ADR-0033 b.3a documents a first installation of five manual steps (key by pinned fingerprint, `lsign`, the section and its
 file, sync and install, `grassfield-channel-set`). The final-1.0 audit (11-installation-and-updates.md: INST-01, INST-06,
 ARCH-08) found the path never run from a clean Omarchy, and Omarchy 4.0.4 ordered `[omarchy]` after `[extra]`, where extra's
 quickshell 0.3.2-1 (its session lock fails open) wins and `grassfield-desktop` conflicts with it on purpose. This script is
-b.3a automated, with its preconditions checked first and an exact way back.
+b.3a automated, with its preconditions checked first, an exact way back, and the login and boot themes of ADR-0042 activated.
 
 ## Decision
 
@@ -24,93 +25,133 @@ b.3a automated, with its preconditions checked first and an exact way back.
 `grassfieldhq/grassfield-packages` already reads `repository.conf` from this repository's checkout (g); its publishing job runs
 `render.py` and uploads the two files next to the repository (`<base>/install/`), with the key file. Nothing here uploads.
 
-### b. Host and fingerprint
-Both are substituted at render time from `repository.conf`; the published script pins them as `readonly` constants.
-`render.py` **refuses** (exit 1, nothing written) while the host ends in `.invalid`, the fingerprint is empty, or the base is not
-`https://`; the unrendered template refuses to run (exit 2). So no placeholder can ever reach a user.
+### b. Host, fingerprint, and the test hook
+Both are substituted at render time; the published script pins them as `readonly` constants. `render.py` **refuses** (exit 1,
+nothing written) while the host ends in `.invalid`, the fingerprint is empty, or the base is not `https://`; the unrendered
+template refuses to run (exit 2). The template carries one test hook (a file prefix read from the environment, used by
+`tests/shell/public_install.sh`); `render.py` deletes its two marked lines unless `--test-hook` is given, refuses to write a
+published script that still names it, and the test checks that the two renderings differ by exactly those lines.
 
-### c. Trust model and the command
-Trust is b.3a with the fingerprint pinned **in the script** instead of typed by the user: the key is received by that full
-fingerprint from `keys.openpgp.org` (gpg refuses another key), or, when the keyserver does not answer, from the host's `.asc`,
-whose only primary key must equal the pinned fingerprint and which must hold no secret key, then `pacman-key --lsign-key`
-(which signs only exactly that fingerprint). Every package is `SigLevel = Required` against that key. The script's own
-integrity rests on TLS to the host plus a **published SHA-256** (also at the project site and the public repository's README,
-the two out-of-band places b.3a requires), so the user checks the one file that pins the key.
+### c. Trust model and the commands
+**The key.** The pinned value is a full fingerprint F of a *primary* key. gpg accepts a downloaded key when F matches its
+primary key **or any subkey**, and `pacman-key --lsign-key F` acts on whichever key holds F: a party on the path could serve its
+own key K' carrying a copy of F's public subkey and have K' trusted for every repository (b.6). So pacman never sees an
+unchecked key: the key is fetched from `hkps://keys.openpgp.org` (TLS) into a **temporary** gpg keyring and exported, or, when
+the keyserver does not answer or returns something else, downloaded from the host's `.asc`; on **both** paths the file must
+have exactly one primary key, equal to F, and no secret key. Only then `pacman-key --add` of that exported file and `--lsign-key
+F`, and pacman's keyring must then show F as the primary of the key it holds, or the run is rolled back (section d).
 
-The command (placeholders until O8/O11):
+**What the keys and checksum prove, and what they do not.**
+- Packages are accepted only if their signature verifies against a key pacman trusts (`SigLevel = Required`); that key is the
+  Grassfield key, **and a locally signed key is trusted for every repository** (b.6): anyone holding it can sign a package
+  for `[core]` or `[extra]` too. That is the cost of installing Grassfield; it is removed by `--uninstall`.
+- The script is checked with a SHA-256. A checksum fetched from the **same host** proves nothing against a compromised host or
+  CDN, which can serve both. It protects against a truncated or corrupted download and against a mismatch with the copy
+  published elsewhere (the README and the project site, b.3a's two out-of-band places): the user compares them.
+- `curl … | bash` runs what the host serves at that moment, with no chance to read it or compare anything; it relies on TLS and the
+  host alone. The download-check-run form lets the user read the file and compare the checksum with the other places.
+
+**The commands** (placeholders until O8/O11), both published, the one-liner first:
+```
+curl -fsSL https://<host>/install/grassfield-install.sh | bash
+```
 ```
 curl -fsSLO https://<host>/install/grassfield-install.sh
 curl -fsSLO https://<host>/install/grassfield-install.sh.sha256
 sha256sum -c grassfield-install.sh.sha256 && bash grassfield-install.sh
 ```
-Download, check, run, rather than `curl … | bash`: the user can read the file and compare the checksum; the plan and the
-confirmation run at a terminal; a truncated or tampered download is caught before any line runs. `curl | bash` still works (the
-script reads the whole file first and reads answers from `/dev/tty`) but is not documented: it gives the user nothing to
-verify, for the same TLS trust.
+The script reads the whole file before it runs a line, takes its answers from `/dev/tty` when piped, and asks for confirmation
+after a plan, so even the one-liner stops at a screen listing every change.
 
 ### d. What it does, in order, and what it changes
-Read-only **preflight** (all problems listed at once, each with its exact fix, exit 1, nothing changed): not root; `sudo`;
-Arch x86_64; Omarchy ≥ 4.0.6 (`pacman -Q omarchy`); `[omarchy]` before `[extra]` and quickshell offered by `[omarchy]`, never the
-installed 0.3.2-N build; no `db.lck`, no running Omarchy update; ≥ 4 GiB free; two HEAD requests to the host (database, key);
-no pending system update (checkupdates). It **never edits the repository order**: it prints the remedy (move the whole
-`[omarchy]` block just after `[options]`, the change `.claude/integrator/owner/omarchy-first.py` made on the owner's machine).
-Then a **plan screen** and a confirmation (`--yes` skips it; `--dry-run` stops there; `--channel stable|beta`, `--help`; English
-or French from `LC_ALL`/`LC_MESSAGES`/`LANG`). Then:
+Root is refused **before** the log is opened. Read-only **preflight** (all problems listed at once, each with its exact fix,
+exit 1, nothing changed): sudo; Arch x86_64; Omarchy ≥ 4.0.6 (`pacman -Q omarchy`); `[omarchy]` before `[extra]` and
+quickshell offered by `[omarchy]` (the repository field is parsed with `LC_ALL=C`: a French pacman prints "Dépôt"), never the
+installed 0.3.2-N build; an existing `[grassfield]` section holding anything but the Include is refused; no `db.lck`, no
+running Omarchy update; ≥ 4 GiB free; two HEAD requests to the host; `checkupdates` (required: it reads a copy of the
+databases, so pacman's own are not touched) must succeed and show no pending update, and its failure is reported, never read
+as "up to date". It **never edits the repository order**: it prints the remedy (move the whole `[omarchy]` block just after
+`[options]`, the change `.claude/integrator/owner/omarchy-first.py` made on the owner's machine). Then a **plan screen** and a
+confirmation (`--yes` skips it; `--dry-run` stops there; `--channel stable|beta`, `--session`, `--without-login-themes`,
+`--no-snapshot`, `--help`; English or French from the locale). Omarchy's update lock is then held (released for
+`grassfield-channel-set`, which refuses while it is held). Then:
 1. **Snapshot**: `omarchy-snapshot create` (SU-M1's tool). Exit 127 (no snapper): continue, as Omarchy does; another failure
    stops, unless `--no-snapshot`.
-2. **Key** (root): recv, else verified file; `pacman-key --lsign-key`.
+2. **Key** (root), checked as in c.
 3. **Repository** (root): `/etc/pacman.d/grassfield.conf` (`SigLevel = Required`, `Server = <base>/<channel>/$arch`) written
-   only when absent or naming another host (old copy kept as `.grassfield-install-bak`); then `[grassfield]` + `Include`
-   appended to `/etc/pacman.conf` only when there is no such section, after a copy `/etc/pacman.conf.grassfield-install-bak`;
-   `pacman-conf` must still list `grassfield` or the copy is put back. File first, Include second (P2).
-4. **Install** (root): `pacman -Sy`; refused when other updates are pending (no partial upgrade); `pacman -S --print` resolves
-   dependencies and conflicts (Hyprland, Qt, quickshell) with nothing installed; then `pacman -S --needed grassfield-desktop
-   grassfield-compositor grassfield-store`. Dependencies (`grassfield-icons`, `-wallpapers`, `-keyring`) come with
-   `grassfield-desktop`; `grassfield-login-themes` only with `--with-login-themes`.
+   when absent, or when the existing one is not exactly one `SigLevel = Required` plus https `Server` lines naming this host (the
+   channel helper's own file, with mirrors, passes; `SigLevel = Never` does not, and the old file is kept as
+   `grassfield.conf.grassfield-install-bak.<date>`); then `[grassfield]` + `Include` appended to `/etc/pacman.conf` when there
+   is no such section, after a copy `pacman.conf.grassfield-install-bak.<date>` taken **by this run** (never an older one);
+   `pacman-conf` must still list `grassfield`. File first, Include second (P2).
+4. **Install** (root): `pacman -Sy`; `pacman -S --print` resolves dependencies and conflicts (Hyprland, Qt, quickshell) with
+   nothing installed; then `pacman -S --needed grassfield-desktop grassfield-compositor grassfield-store grassfield-login-themes`.
+   Dependencies (`grassfield-icons`, `-wallpapers`, `-keyring`) come with `grassfield-desktop`.
 5. **Hand over**: `grassfield-channel-set <channel>` (its polkit prompt; the helper then owns the file and links Omarchy's hook).
 6. **Session**: `grassfield-login set grassfield` (the package's `/etc/sddm.conf.d/grassfield.conf` already makes the "Grassfield
-   (uwsm)" entry the one Omarchy's greeter picks; ADR-0042; INST-01), so the next login after one restart starts Grassfield.
+   (uwsm)" entry the one Omarchy's greeter picks; ADR-0042; INST-01).
+7. **Themes** (root, unless `--without-login-themes`): `/etc/sddm.conf.d/zz-grassfield-theme.conf` (`[Theme] Current=grassfield`,
+   the guide's one file; `/etc/sddm.conf` with its own `Current=` is reported, not edited); the boot theme as Omarchy does
+   (`omarchy-plymouth-set`): `plymouth-set-default-theme grassfield`, then `limine-mkinitcpio` when present, else
+   `mkinitcpio -P`. The previous theme name is remembered in the state folder; a failed rebuild puts it back. Inside the
+   snapshot of step 1. A theme failure ends non-zero with a warning but keeps Grassfield (ADR-0042's text-prompt fallback
+   applies: Esc at the disk prompt).
 
-Root is used only by the commands above, each through one `as_root` function that logs it. Idempotent: a rerun skips what is
-done, repairs a missing file, never duplicates a line, and updates. Log: `${XDG_STATE_HOME:-~/.local/state}/grassfield/install.log`
-(mode 600). Nothing is written in the user's home besides the log and `~/.config/grassfield/login-session`.
+**Rollback (review 1, major 2).** Between the first change of step 2 and the end of step 4, **any** failure (a command, `Ctrl-C`,
+the sync, the dependency check, a pending update after the sync, the install transaction) puts back the exact state: the
+`[grassfield]` lines and `grassfield.conf` from **this run's** copies, the key if this run added it, the synced database files;
+it says what happened and how to retry, and exits non-zero. pacman.conf is restored only when it is still exactly this run's
+copy plus the two lines; a change made meanwhile (SigLevel hardening, `[multilib]`) is never undone, and the script then prints
+the manual steps. After the packages are installed nothing is rolled back (Turn Off is then available). A refused install
+after a sync leaves pacman's package lists synced, which the message says (run Omarchy's update before any `pacman -S`).
+
+Root is used only by the commands above, each through one `as_root` function that logs it. Idempotent: a rerun checks the key
+again, skips what is done, repairs a missing file, never duplicates a line, and updates. Log: `${XDG_STATE_HOME:-~/.local/state}/
+grassfield/install.log` (never through a symlink, created exclusively, mode 600 only when created).
 
 ### e. Undo: `--uninstall`
 Reuses, never duplicates: snapshot; `grassfield-channel-set off` (Turn Off: section, file, keys, hook link); `grassfield-login set
-omarchy` and the choice file deleted; the `zz-grassfield-theme.conf` drop-in of the login-themes guide if present; `pacman -Rns` of
-the installed Grassfield packages (their `pre_remove` runs `off` again, b.8). Leftovers only if the packages were never installed
-(an install that failed after step 3): `pacman.conf` goes back from the script's copy **only when it is exactly that copy plus
-the two lines**, else the script prints the manual fix and exits 1; the key is deleted when still present. Omarchy is never
-modified, so stock Omarchy is back after one restart.
+omarchy` and the choice file deleted; the login theme drop-in removed and, when the boot theme is Grassfield's, the remembered
+one (else `omarchy`) set again with the same rebuild, **before** the packages go; `pacman -Rns` of the installed Grassfield
+packages (their `pre_remove` runs `off` again, b.8). Leftovers only if the packages were never installed or were removed by
+hand: `pacman.conf` goes back from one of **this script's** copies **only when it is exactly that copy plus the two lines**, else
+the script prints the manual fix and exits 1; the key is deleted when still present. The script's own copies are then removed.
+Omarchy is never modified, so stock Omarchy is back after one restart.
 
 ### f. Tests
-`tests/shell/public_install.sh` (logic layer): render refusals, then the rendered script on **stub** commands in a fake root
-(the script's `PATH` holds only stubs and harmless coreutils, so nothing real can run): each preflight failure, dry-run, the
-exact root commands in order, idempotent rerun, repair, fallback key, substituted/secret key refused, snapshot cases, partial
-upgrade, unreadable conf rollback, uninstall (also after a failed install and with an edited pacman.conf), French, the log.
-`GRASSFIELD_INSTALL_ROOT` (a file prefix, announced loudly when set) is the only test hook. shellcheck runs when installed.
+`tests/shell/public_install.sh` (logic layer): render refusals and the hook-stripping check, then the rendered script on **stub**
+commands in a fake root (the script's `PATH` holds only stubs and harmless coreutils, so nothing real can run): each preflight
+failure, dry-run, the exact root commands in order, idempotent rerun and repair, the key on both paths (a stub keyring whose
+SUBKEY, not its primary, matches F; a secret key; a substituted key), the post-add keyring check, a rollback test for each
+failure point (sync, resolution, install, pending update, unreadable conf, lsign, keyring), rollback keeping a pre-existing
+key, an old `grassfield.conf`, and a concurrent edit, themes and `--without-login-themes`, the rebuild fallback, uninstall
+(also with leftovers and with an edited pacman.conf), French, the log. Mutation check: removing the secret-key test makes four
+cases fail. shellcheck runs when installed (**NOT VERIFIED** where it is not).
 
 ### g. Container test in grassfield-packages (described, not done here)
-As `tests/integration/update_helper.sh` does: an `archlinux:base@sha256:…` container, a local `file://` `[omarchy]`/`[extra]`
-stand-in and a signed `[grassfield]` repository built with a throwaway key, `render.py` run with a conf whose base is served by a
-local `https` server (or a build variant that allows `file://`), the real script run as an unprivileged user with passwordless
-sudo, asserting the same cases against real pacman. That repository owns it; this one's test covers the logic.
+As `tests/integration/update_helper.sh` does: an `archlinux:base@sha256:…` container, a local `[omarchy]`/`[extra]` stand-in
+and a signed `[grassfield]` repository built with a throwaway key, `render.py` run with a conf whose base is served by a local
+`https` server, the real script run as an unprivileged user with passwordless sudo, asserting the same cases against real pacman
+(and a real gpg keyring with a subkey-carrying impostor). That repository owns it; this one's test covers the logic.
 
-## Open owner questions (recommendations, none decided)
-| Id | Question | Options | Recommended |
-|---|---|---|---|
-| IN1 | Make Grassfield the next-login session at install? | yes (`--session grassfield`, default) · no (`--session omarchy`, the user switches later) | **yes**: it is why they installed it; Omarchy is one command away |
-| IN2 | Install `grassfield-login-themes` by default? Its activation is root and owner-run (ADR-0042) | no, `--with-login-themes` · yes | **no**: it changes login and boot screens, which the guide keeps to a deliberate step |
-| IN3 | Command published: download-check-run, or `curl \| bash` | as in c · both | **as in c only** |
-| IN4 | Minimum free space (4 GiB) and Omarchy floor (4.0.6) | as built · other | **as built** (Qt WebEngine is large; 4.0.6 carries `[omarchy]` first and Qt 6.12) |
-| IN5 | The `[omarchy]` order: print the remedy (built) or a separate `--fix-omarchy-order` step run on the user's yes | print only · opt-in fix | **print only**, as the task and the owner's rule: the order is Omarchy's configuration |
-| IN6 | Snapshot failure other than "no snapper": stop (built) or warn | stop, `--no-snapshot` to override · warn | **stop**: a snapshot is the only undo of a failed transaction |
-| IN7 | Languages of the script | EN + FR (built) · EN only | **EN + FR** |
-| IN8 | Where the checksum is published | the host and the README and the site (b.3a's two places) | **all three**, plus the key fingerprint beside it |
+## Owner decisions (2026-11-03, asked by the integrator)
+| Id | Question | Options | Recommended | Decision |
+|---|---|---|---|---|
+| IN1 | Grassfield as the next-login session at install? | yes (`--session grassfield`) · no (`--session omarchy`) | yes | **yes, by default**; `--session omarchy` opts out; uninstall restores Omarchy |
+| IN2 | Login and boot themes (`grassfield-login-themes`) | not by default · install and activate | no (recommended) | **install AND activate by default**; `--without-login-themes` opts out; install and uninstall handle the SDDM drop-in and Plymouth, the boot image rebuilt the way Omarchy does, inside the snapshot |
+| IN3 | Command published | download-check-run · `curl \| bash` · both | download-check-run | **both**: the one-liner first, the download-check-run form below it; the docs say what each protects against |
+| IN4 | Minimum free space and Omarchy floor | 4 GiB, 4.0.6 | as built | **as built** |
+| IN5 | The `[omarchy]` order | print the fix · opt-in fix | print | **print the fix** |
+| IN6 | Snapshot failure other than "no snapper" | stop · warn | stop | **stop**, `--no-snapshot` overrides |
+| IN7 | Languages | EN + FR · EN | EN + FR | **EN + FR** |
+| IN8 | Where the checksum is published | host, README, site | all three | **host, README and site** |
 
 ## Consequences
 - `just render-install` fails today by design (placeholder host, empty fingerprint): the first release needs O8 and O11.
 - A source build (`makepkg -si`, the owner's flow) is unaffected; the script targets users of the repository.
+- The default install changes the boot screen and rebuilds the boot image (root, minutes): ADR-0042's owner-run guide
+  (`docs/owner-setup/login-boot-themes.md`) remains the reference for the fallback and for the manual revert; the owner's
+  first-boot test (Esc at the disk prompt) is still the check that cannot be made offline (NOT VERIFIED here).
 - Hyprland is never pinned (packaging rule): a Hyprland newer than the plugin's ABI degrades the session (C2) rather than failing
   the install; the exact dependency check is pacman's own dry run after the sync.
-- Review: security (root steps, trust bootstrap) with opus before any publication; the legal review precedes publication.
+- Review: security (root steps, trust bootstrap, boot image) with opus before any publication; the legal review precedes it.

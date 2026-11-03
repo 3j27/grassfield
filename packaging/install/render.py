@@ -22,7 +22,7 @@ import generate  # noqa: E402  (packaging/pacman/generate.py: the repository.con
 NAME = "grassfield-install.sh"
 
 
-def render(conf_text, template):
+def render(conf_text, template, keep_test_hook=False):
     base, _mirrors, _previous, fpr = generate.parse(conf_text)
     host = re.sub(r"^https://", "", base).split("/")[0].split(":")[0]
     if not base.startswith("https://"):
@@ -31,7 +31,12 @@ def render(conf_text, template):
         raise generate.Invalid(f"GRASSFIELD_REPO_BASE is the placeholder {base} (owner decision O8): not publishable")
     if not fpr:
         raise generate.Invalid("GRASSFIELD_SIGNING_FINGERPRINT is empty (owner decision O11): not publishable")
+    if not keep_test_hook:
+        # The test hook (a file prefix read from the environment) must not exist in the published script.
+        template = "".join(l for l in template.splitlines(True) if "@TEST-HOOK@" not in l)
     text = template.replace("@GRASSFIELD_REPO_BASE@", base).replace("@GRASSFIELD_SIGNING_FINGERPRINT@", fpr)
+    if not keep_test_hook and "GRASSFIELD_INSTALL_ROOT" in text:
+        raise generate.Invalid("the test hook is still in the rendered script")
     if re.search(r"@GRASSFIELD_[A-Z_]+@", text):
         raise generate.Invalid("the template keeps an unreplaced marker")
     return text
@@ -42,13 +47,14 @@ def main(argv):
     ap.add_argument("--conf", required=True)
     ap.add_argument("--template", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--test-hook", action="store_true", help="keep the test hook (tests/shell/public_install.sh only)")
     args = ap.parse_args(argv)
     try:
         with open(args.conf, encoding="utf-8") as f:
             conf = f.read()
         with open(args.template, encoding="utf-8") as f:
             template = f.read()
-        text = render(conf, template)
+        text = render(conf, template, args.test_hook)
     except (OSError, UnicodeDecodeError, generate.Invalid) as e:
         print(f"render.py: {e}", file=sys.stderr)
         return 1
