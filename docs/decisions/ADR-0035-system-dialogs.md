@@ -2737,6 +2737,17 @@ none widens a rule of Q12's text, which names "BlueZ pairing").
   the next log-in. In the Omarchy session the bridge never starts (`ConditionEnvironment=GRASSFIELD_SESSION=1`, started only
   by Grassfield's `autostart.lua`), and bt-agent starts with the session and now stops with it. `systemd-analyze --user
   verify` of both units (systemd 262): rc 0. Rule applied: fail closed, never another agent beside the sheet.
+  (Amended 2026-11-03, opus security review of the owner's rc1-17 and rc1-18 logins: the condition did not hold.
+  Omarchy's bt-agent.service is WantedBy graphical-session.target with no ordering, so it started, and its
+  `ConditionEnvironment=!GRASSFIELD_SESSION=1` was read, before autostart.lua's `uwsm finalize` imported the variable. In
+  the Grassfield session it registered and asked to be bluetoothd's default agent at 01:05:47. bt-agent also ignores
+  SIGTERM, so the prompter's synchronous stop waited for the 90 s stop timeout and timed out the prompter's own start: an
+  auto-accepting agent was the default for 90 s at every log-in. The drop-in now orders bt-agent
+  `After=graphical-session.target`, as Omarchy's crash-watch and migrate-notify units are, so its condition sees the
+  session's variable and skips it; `TimeoutStopSec=2s` makes a stop of a leftover one end within 2 s, then SIGKILL. The
+  prompter's stop stays synchronous, so its pairing agent never asks to be the default while bt-agent still runs. Check at
+  the next real log-in: `journalctl --user -u bt-agent -u grassfield-prompter` shows bt-agent skipped by its condition and
+  the prompter started within seconds.)
 - **10-2. When is the agent registered, with which capability, and is it the default?** **Choice:** registered (`KeyboardDisplay`:
   every method can be drawn, D-11) only while a shell whose hello lists `bluetooth` is connected, then `RequestDefaultAgent`
   (an `AlreadyExists` answer means this connection's agent is still registered, and the default is asked all the same);
