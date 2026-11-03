@@ -29,6 +29,9 @@
 #     and zoom lights
 # Without grassfield-compositor (C2: nested-up.sh --no-plugin, or scripts/nestctl plugin unload): no titlebar; only the
 # radii are measured, at the surface's own corners (the Lua config alone sets them).
+# With the plugin in the dark appearance, the inner rim (FR57, ADR-0024 note 2026-11-03) is the frame's first device pixel:
+# the bar's top row and the window's side column are the rim's (counted and expected), the bar is measured inside it, and
+# a corner's first fill pixel on the diagonal may come one pixel further in.
 # Captures, 2x crops of the lights and the corners, measurements: .dev/chrome/run-<timestamp>/.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
 set -uo pipefail
@@ -75,8 +78,13 @@ settings_file=$dev/config/grassfield.json
 settings_backup=$run/settings.backup
 had_settings=0
 [[ -f $settings_file ]] && { cp "$settings_file" "$settings_backup"; had_settings=1; }
+# The appearance shown (the dev settings' default is dark): with the plugin, the dark one has the inner rim (FR57), one device
+# pixel just inside the frame at scale 1 (the bar's first row, the window's side columns).
+look=dark
+rim_px() { if ((plugin)) && [[ $look == dark ]]; then echo 1; else echo 0; fi; }
 set_appearance() { # <dark|light>: rewrite the dev settings file, wait for the shell's push to the plugin
   local base=$root/config/defaults/grassfield.json n
+  look=$1
   ((had_settings)) && base=$settings_backup
   mkdir -p "$dev/config"
   n=$(grep -c "compositor setting appearance = $1" "$dev/shell.log" 2>/dev/null)
@@ -138,7 +146,7 @@ palette_for() { # <dark|light>
 }
 palette_for Dark
 measure() { # <name> <x> <y> <w> [radius] -> key=value lines in $run/<name>.txt, loaded into m[...]
-  local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID opts=("${palette_opts[@]}")
+  local name=$1 x=$2 y=$3 w=$4 bar=$GF_TB_HEIGHT mid=$GF_TB_MID opts=("${palette_opts[@]}" "rim=$(rim_px)")
   [[ -n ${5:-} ]] && opts+=("radius=$5")
   # Without the plugin there is no titlebar: the corners are where the window's own content colour starts, sampled 16 px in
   # and 2 px down (inside the corner curve for radius 12 to 26, above the inset sidebar of Grassfield's apps).
@@ -177,7 +185,7 @@ measure_app() { # <name> <x> <y> <w> -> m[...] as measure
   local name=$1 x=$2 y=$3 w=$4 bg
   bg=$(magick "$run/$name.ppm" -format "%[hex:p{$((x + 110)),$((y + 8))}]" info: | cut -c1-6)
   python3 -I "$root/tests/compositor/chrome_measure.py" "$run/$name.ppm" "$x" "$y" "$w" 0 26 49 72 -26 "bar=$bg" "fill=$bg" \
-    "inactive=$(token_hex inactiveButtonDark)" >"$run/$name-app.txt" 2>>"$log"
+    "inactive=$(token_hex inactiveButtonDark)" "rim=$(rim_px)" >"$run/$name-app.txt" 2>>"$log"
   unset m
   declare -gA m=()
   local k v
@@ -204,10 +212,13 @@ check_glyphs() { # <label> <0 = expect glyphs on all three | 1 = expect none>
   check "$label" "$ok" "dark glyph pixels: close ${m[close_glyph]}, minimize ${m[minimize_glyph]}, zoom ${m[zoom_glyph]}"
 }
 
-check_bar() { # <label>: the bar's colour, then its one-point hairline in the last row, the rule's colour (ADR-0039 step 21)
-  local ok=0
-  ((m[rule_rows] == 1 && m[bar_rows] + m[rule_rows] == GF_TB_HEIGHT && m[bar_bottom_gap] == 0 && m[bar_left_gap] == 0)) || ok=1
-  check "$1: titlebar" "$ok" "${m[bar_rows]} rows of bar colour and ${m[rule_rows]} of the rule (${m[rule_colour]}; expected $((GF_TB_HEIGHT - 1)) and 1), gaps: bottom row ${m[bar_bottom_gap]} px off the rule, left column ${m[bar_left_gap]} px"
+check_bar() { # <label>: the bar's colour, then its one-point hairline in the last row, the rule's colour (ADR-0039 step 21);
+  # in the dark appearance the rim's row along its top and its column along its side (FR57)
+  local ok=0 rim
+  rim=$(rim_px)
+  ((m[rule_rows] == 1 && m[rim_rows] == rim && m[bar_rows] + m[rule_rows] + m[rim_rows] == GF_TB_HEIGHT && m[bar_bottom_gap] == 0 && m[bar_left_gap] == 0)) || ok=1
+  ((rim == 0)) || ((${m[rim_left_rows]:-0} == ${m[rim_left_expected]:--1})) || ok=1
+  check "$1: titlebar" "$ok" "${m[rim_rows]} rows of rim, ${m[bar_rows]} of bar colour and ${m[rule_rows]} of the rule (${m[rule_colour]}; expected $rim, $((GF_TB_HEIGHT - 1 - rim)) and 1), gaps: bottom row ${m[bar_bottom_gap]} px off the rule, left column inside the rim ${m[bar_left_gap]} px; rim on the left side ${m[rim_left_rows]:--} of ${m[rim_left_expected]:--} px"
 }
 
 check_junction() { # <label>: no curve where the content meets the bar (the content's own pixels fill the cut corners)
@@ -238,8 +249,10 @@ check_corner() { # <label> <lo> <hi> <radius>
     return
   fi
   local ok=0
-  between "${m[corner_diag]}" "$2" "$3" && between "${m[corner_diag_right]}" "$2" "$3" || ok=1
-  check "$1: corner radius $4" "$ok" "diagonal inset left ${m[corner_diag]} px, right ${m[corner_diag_right]} px (expected $2-$3), radius about ${m[radius_estimate]}"
+  # The dark appearance's rim (FR57) lies on the curve, one device pixel: it moves the first fill pixels in by up to one.
+  local hi=$(($3 + $(rim_px)))
+  between "${m[corner_diag]}" "$2" "$hi" && between "${m[corner_diag_right]}" "$2" "$hi" || ok=1
+  check "$1: corner radius $4" "$ok" "diagonal inset left ${m[corner_diag]} px, right ${m[corner_diag_right]} px (expected $2-$hi), radius about ${m[radius_estimate]}"
 }
 
 start_foot() { # <title>: pid in $started; the text cursor is hidden (DECTCEM): it sits in the corner the C2 check measures

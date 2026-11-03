@@ -2,14 +2,15 @@
 """Measures the plugin titlebar of one window on a GF-REF capture (tests/compositor/chrome.sh). No third-party modules.
 
 Usage: chrome_measure.py <capture.ppm> <surface x> <surface y> <surface w> <bar height> <close x> <minimize x> <zoom x>
-       <bar middle> [fill=<rrggbb>] [radius=<px>] [bar=<rrggbb>] [inactive=<rrggbb>] [rule=<rrggbb>]
+       <bar middle> [fill=<rrggbb>] [radius=<px>] [bar=<rrggbb>] [inactive=<rrggbb>] [rule=<rrggbb>] [rim=<px>]
 Positions in output pixels (scale 1): the surface box from `hyprctl clients`, the titlebar geometry from
 tests/compositor/titlebar_geometry.sh (button centres right of the surface's left edge, bar middle above its top edge).
 The corners are found where the fill colour starts: the titlebar's colour by default; without the plugin (bar height 0)
 the window's own content colour (fill=). radius= is the window's rounding, for the junction check. bar= and inactive=:
 the palette of the appearance measured (ui/tokens/tokens.json "titlebar"; the dark values below by default). rule=: the
 colour of the hairline the plugin draws in the bar's last row (titlebar.rule* over the bar, ADR-0039 step 21); without it
-the bar is measured to the surface.
+the bar is measured to the surface. rim=: the device pixels of the dark appearance's inner rim the plugin draws just inside
+the frame (FR57): the bar's first rows and the window's side columns; the bar is measured inside it.
 Prints key=value lines:
   <light>_cx <light>_cy   centre of the light (close, minimize, zoom), coverage-weighted, output px (pixel edges)
   <light>_d               diameter from the light's covered area
@@ -28,7 +29,11 @@ Prints key=value lines:
   bar_rows                rows of bar colour above them (right above the surface without rule=)
   bar_bottom_gap          pixels of the bar's last row (30 px from either end) that are not its colour: the rule's with
                           rule=, the bar's without
-  bar_left_gap            pixels of the bar's first column (below the corner, above the rule) that are not bar colour
+  rim_rows                rows lighter than the bar above its rows (the rim along the bar's top; up to rim + 2)
+  bar_left_gap            pixels of the bar's first column inside the rim (below the corner, above the rule) that are not
+                          bar colour
+  rim_left_rows           (with rim=) pixels of the frame's first column there that are lighter than the bar: the rim;
+                          rim_left_expected, how many there are
   corner_diag             first pixel of bar colour on the diagonal from the bar's top-left corner (-1: none)
   corner_diag_right       the same from the top-right corner
   radius_estimate         corner radius estimated from corner_diag (rounding_power 2.6; about +-2)
@@ -44,6 +49,7 @@ LIGHTS = {
 }
 INACTIVE = (0x5A, 0x5A, 0x5E)  # ui/tokens/tokens.json titlebar.inactiveButtonDark (titlebarPalette(Dark).inactiveLight)
 RULE = None  # the hairline under the bar (option rule=; titlebar.rule* composited over the bar)
+RIM = 0  # device pixels of the dark appearance's inner rim along the frame (option rim=; the plugin's FR57), 0 without it
 ROUNDING_POWER = 2.6  # config/hypr/grassfield/looknfeel.lua decoration.rounding_power
 
 
@@ -95,6 +101,11 @@ def luminance(c):
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
 
 
+def lighter(c, ref):
+    """The pixel is the rim over `ref`: at least 4 levels lighter (white 0.10 over the dark bar adds about 21)."""
+    return c is not None and luminance(c) - luminance(ref) >= 4
+
+
 def measure_light(img, name, cx, cy):
     light = LIGHTS[name]
     grey = sum(1 for y in range(int(cy) - 7, int(cy) + 7) for x in range(int(cx) - 7, int(cx) + 7)
@@ -136,11 +147,12 @@ def measure_light(img, name, cx, cy):
 
 def junction(img, x0, y0, step_x, radius, reference):
     """Pixels of the radius x radius square at a top corner of the content (corner pixel at x0, y0; step_x +1 for the
-    left corner, -1 for the right one) that lie outside the window's corner curve and differ from `reference`."""
+    left corner, -1 for the right one) that lie outside the window's corner curve and differ from `reference`. The
+    window's side columns where the dark rim runs (rim=) are left out: the rim is drawn there on purpose."""
     count = 0
     limit = radius ** ROUNDING_POWER
     for j in range(radius):
-        for i in range(radius):
+        for i in range(RIM, radius):
             dx, dy = radius - (i + 0.5), radius - (j + 0.5)
             if dx ** ROUNDING_POWER + dy ** ROUNDING_POWER <= limit:
                 continue  # inside the curve: the surface itself is drawn there
@@ -165,7 +177,7 @@ def main():
         raise SystemExit(__doc__)
     img = Image(sys.argv[1])
     sx, sy, sw, bar_h, close_x, min_x, zoom_x, mid = (int(v) for v in sys.argv[2:10])
-    global BAR, INACTIVE, RULE  # the palette of the appearance measured (options bar=, inactive= and rule=, from the tokens)
+    global BAR, INACTIVE, RULE, RIM  # the palette of the appearance measured (options bar=, inactive= and rule=, from the tokens)
     fill, radius = None, 0
     for option in sys.argv[10:]:
         key, _, value = option.partition("=")
@@ -181,6 +193,8 @@ def main():
                 INACTIVE = colour
         elif key == "radius":
             radius = int(value)
+        elif key == "rim":
+            RIM = int(value)
         else:
             raise SystemExit(__doc__)
     if fill is None:
@@ -204,11 +218,19 @@ def main():
     while rows < 200 and close_to(img.at(col, sy - 1 - rule_rows - rows), BAR, 2):
         rows += 1
     out["bar_rows"] = rows
+    # The dark appearance's inner rim (rim=, the plugin's FR57): rows lighter than the bar above them, along the bar's top.
+    rim_rows = 0
+    while rim_rows < RIM + 2 and lighter(img.at(col, sy - 1 - rule_rows - rows - rim_rows), BAR):
+        rim_rows += 1
+    out["rim_rows"] = rim_rows
 
     top = sy - bar_h
     bottom = RULE if RULE is not None else BAR
     out["bar_bottom_gap"] = sum(1 for x in range(sx + 30, sx + sw - 30) if not close_to(img.at(x, sy - 1), bottom, 8))
-    out["bar_left_gap"] = sum(1 for y in range(top + 30, sy - rule_rows) if not close_to(img.at(sx, y), BAR, 8))
+    out["bar_left_gap"] = sum(1 for y in range(top + 30, sy - rule_rows) if not close_to(img.at(sx + RIM, y), BAR, 8))
+    if RIM:
+        out["rim_left_rows"] = sum(1 for y in range(top + 30, sy - rule_rows) if lighter(img.at(sx, y), BAR))
+        out["rim_left_expected"] = max(0, sy - rule_rows - top - 30)
 
     k = first_fill_on_diagonal(img, sx, top, 1, fill)
     out["corner_diag"] = k

@@ -12,6 +12,20 @@
       Compares each profile with Hyprland 0.56.2's shadow model at the given values (shadow.glsl: alpha * (1 - d / range)
       ^ power outside the window box moved down by the offset, alpha inside it) and with the macOS 27 target below. Writes
       key=value lines (out.txt) and a plot (out.svg).
+  edge_measure.py corners <capture.ppm> <scale> <x> <y> <w> <h> <rounding> <power>
+      The inner rim on the four corner arcs (the plugin's dark rim, ADR-0024 note 2026-11-03). x y w h: the window's frame
+      (logical; with the plugin's titlebar on a third-party window), placed on device pixels as Hyprland places it
+      (hyprutils' CBox::round); the corner radius int(rounding * power / 2 * scale) (Hyprland's own window rounding,
+      CWindow::rounding()) and the rim's width roundf(scale) device pixels, as the plugin draws them (rounding and power:
+      decoration.rounding and rounding_power). Per corner and per 15-degree sector of its arc (0 degrees: where the arc
+      meets the left or right side; 90: the top or the bottom), at the rounding power's distance from the corner's centre:
+      "rim", the brightest pixel of the rim's band (pixel centres from width - 0.15 to 0.45 device pixels inside the arc:
+      the rim's middle, where the window's own surface is opaque, clear of the contact pixel's anti-aliasing) and "base",
+      the median of the window 2.5 to 4.5 device pixels further in (levels, the mean of the three channels). Prints one
+      JSON object.
+  edge_measure.py column <capture.ppm> <x> <y> <n>
+      The levels (mean of the three channels) of n device pixels from (x, y) down, as a JSON list: the rows round the
+      titlebar's hairline and the client's top row.
 
 The macOS 27 target: the darkening outside the active window, measured on the 512 Pixels Golden Gate release captures
 (Settings General, Finder Home, Force Quit: window crops with the shadow in their alpha channel, 2 px per pt), the mean of
@@ -20,6 +34,7 @@ the contact edge (one device pixel, 0.5 pt: about black 0.2 over the shadow on e
 repository, only these numbers (docs/audits/ui-finesse-2026-10-25/tools/webref-urls.txt).
 """
 import json
+import math
 import sys
 
 MAC27_D = [0.25, 0.75, 1.25, 2.25, 3.25, 4.25, 6.25, 8.25, 10.25, 12.25, 16.25, 20.25, 24.25, 28.25, 32.25, 40.25, 48.25, 56.25]
@@ -92,8 +107,8 @@ def profile(args):
         i = (iy * width + ix) * 3
         return list(px[i:i + 3])
 
-    left, top = round(x * scale), round(y * scale)
-    right, bottom = round((x + w) * scale), round((y + h) * scale)  # first device pixel past the box
+    left, top = c_round(x * scale), c_round(y * scale)  # as Hyprland places the window (C rounding)
+    right, bottom = c_round((x + w) * scale), c_round((y + h) * scale)  # first device pixel past the box
     mx, my = (left + right) // 2, (top + bottom) // 2
     sides = {  # (first outside pixel, step) along the middle line
         "left": ((left - 1, my), (-1, 0)), "right": ((right, my), (1, 0)),
@@ -107,6 +122,70 @@ def profile(args):
             alpha.append(None if p is None else round(sum(1 - p[c] / bg[c] for c in range(3)) / 3, 4))
         out["sides"][name] = {"rgb": pixels, "edge": INSIDE, "alpha": alpha}
     json.dump(out, sys.stdout)
+    print()
+
+
+def c_round(v):
+    """C's round(): half away from zero (Python's round() is to even)."""
+    return math.floor(v + 0.5) if v >= 0 else -math.floor(-v + 0.5)
+
+
+def corners(args):
+    path, scale = args[0], float(args[1])
+    x, y, w, h = (float(v) for v in args[2:6])
+    rounding, power = float(args[6]), float(args[7])
+    width, height, px = read_ppm(path)
+
+    def level(ix, iy):
+        if not (0 <= ix < width and 0 <= iy < height):
+            return None
+        i = (iy * width + ix) * 3
+        return sum(px[i:i + 3]) / 3
+
+    # hyprutils CBox::scale(s).round(): x, y rounded; then the width and height to the rounded right and bottom edges.
+    fx, fy = c_round(x * scale), c_round(y * scale)
+    fw, fh = c_round(x * scale + w * scale - fx), c_round(y * scale + h * scale - fy)
+    # Hyprland 0.56.2 CWindow::rounding() is decoration.rounding x rounding_power / 2 ("perceived roundness", read from
+    # the binary): 26 pt for 20 at 2.6; the shaders take it times the scale as an int (32 px at 1.25).
+    radius = int(rounding * power / 2 * scale)
+    t = c_round(scale)  # roundf(1 pt * scale)
+    out = {"scale": scale, "frame_px": [fx, fy, fw, fh], "radius_px": radius, "width_px": t, "corners": {}}
+    centres = {"top-left": (fx + radius, fy + radius, -1, -1), "top-right": (fx + fw - radius, fy + radius, 1, -1),
+               "bottom-left": (fx + radius, fy + fh - radius, -1, 1), "bottom-right": (fx + fw - radius, fy + fh - radius, 1, 1)}
+    for name, (cx, cy, sx, sy) in centres.items():
+        rim, base = [None] * 6, [[] for _ in range(6)]
+        for oy in range(radius + 1):
+            for ox in range(radius + 1):
+                ix = cx + ox if sx > 0 else cx - 1 - ox
+                iy = cy + oy if sy > 0 else cy - 1 - oy
+                dx, dy = abs(ix + 0.5 - cx), abs(iy + 0.5 - cy)
+                d = (dx ** power + dy ** power) ** (1 / power)
+                k = min(5, int(math.degrees(math.atan2(dy, dx)) // 15))
+                v = level(ix, iy)
+                if v is None:
+                    continue
+                if radius - t + 0.15 <= d <= radius - 0.45:  # the rim's middle, where the surface is opaque
+                    rim[k] = v if rim[k] is None else max(rim[k], v)
+                elif radius - t - 3.5 <= d <= radius - t - 1.5:
+                    base[k].append(v)
+        sectors = []
+        for k in range(6):
+            b = sorted(base[k])
+            sectors.append({"deg": [15 * k, 15 * k + 15], "rim": None if rim[k] is None else round(rim[k], 1),
+                            "base": round(b[len(b) // 2], 1) if b else None})
+        out["corners"][name] = sectors
+    json.dump(out, sys.stdout)
+    print()
+
+
+def column(args):
+    width, height, px = read_ppm(args[0])
+    x, y, n = int(args[1]), int(args[2]), int(args[3])
+    levels = []
+    for iy in range(y, y + n):
+        i = (iy * width + x) * 3
+        levels.append(round(sum(px[i:i + 3]) / 3, 1) if 0 <= x < width and 0 <= iy < height else None)
+    json.dump(levels, sys.stdout)
     print()
 
 
@@ -210,5 +289,9 @@ if __name__ == "__main__":
         background(sys.argv[2:])
     elif len(sys.argv) >= 9 and sys.argv[1] == "report":
         report(sys.argv[2:])
+    elif len(sys.argv) == 10 and sys.argv[1] == "corners":
+        corners(sys.argv[2:])
+    elif len(sys.argv) == 6 and sys.argv[1] == "column":
+        column(sys.argv[2:])
     else:
         raise SystemExit(__doc__)
