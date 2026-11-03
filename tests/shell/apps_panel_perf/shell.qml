@@ -129,7 +129,9 @@ ShellRoot {
         }
         Qt.callLater(() => {
             t0 = Date.now();
+            // qmllint disable missing-property
             grid.items = itemsFor(queries[step]);
+            // qmllint enable missing-property
             changeMs = Date.now() - t0;
             guard.restart();
         });
@@ -139,7 +141,9 @@ ShellRoot {
         build();
         Qt.callLater(() => {
             // Idle time after the list is built (before the window is ever shown): fill the cell pool, as AppsWindow does.
+            // qmllint disable missing-property
             grid.items = root.allItems;
+            // qmllint enable missing-property
             grid.warmPool();
             root.t0 = Date.now();
             win.visible = true;
