@@ -434,6 +434,54 @@ TestCase {
         other.close();
     }
 
+    // The sidebar tiles sit on whole device pixels in window coordinates (the 1-pixel dark rim and the edge stay crisp), also
+    // after the list scrolls by a fractional offset. Run with QT_SCALE_FACTOR=1.25 to see it at the owner's ratio.
+    function test_sidebarTilesSitOnWholeDevicePixels() {
+        const t = make(testCase.touchpad, {height: 360});
+        const dpr = t.win.devicePixelRatio;
+        const tiles = () => {
+            const out = [];
+            const walk = i => {
+                if (String(i).indexOf("QQuickRectangle") === 0 && i.visible && i.width === Tokens.settingsSidebarIconSize && i.height === i.width
+                        && i.mapToItem(t.win.contentItem, 0, 0).x < Tokens.settingsSidebarWidth)
+                    out.push(i);
+                for (let k = 0; k < (i.children || []).length; k++)
+                    walk(i.children[k]);
+            };
+            walk(t.win.contentItem);
+            return out;
+        };
+        const whole = v => Math.abs(v * dpr - Math.round(v * dpr)) < 1e-6;
+        wait(50);
+        let rows = tiles();
+        verify(rows.length >= 2, "at least two tiles: " + rows.length);
+        for (const r of rows) {
+            const p = r.mapToItem(null, 0, 0);
+            verify(whole(p.x) && whole(p.y), "tile at " + p.x + ", " + p.y + " is not on whole device pixels at " + dpr);
+        }
+        // A fractional scroll offset: the tiles follow it onto whole device pixels.
+        const flick = (function find(i) {
+            if (i.contentY !== undefined && i.model !== undefined && i.flick !== undefined)
+                return i;
+            for (let k = 0; k < (i.children || []).length; k++) {
+                const f = find(i.children[k]);
+                if (f)
+                    return f;
+            }
+            return null;
+        })(t.win.contentItem);
+        if (flick) {
+            flick.contentY = flick.contentY + 3.37;
+            wait(50);
+            rows = tiles();
+            verify(rows.length >= 2, "tiles after scrolling");
+            for (const r of rows) {
+                const p = r.mapToItem(null, 0, 0);
+                verify(whole(p.x) && whole(p.y), "after a fractional scroll: tile at " + p.x + ", " + p.y + " at " + dpr);
+            }
+        }
+    }
+
     // The sidebar's list is taller than a short window: the wheel scrolls it and stops at the ends, a click on a row still
     // selects it (no drag), and a selection made by key, search or deep link brings its row into view.
     function test_sidebarScrolls() {

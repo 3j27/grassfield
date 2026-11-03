@@ -473,10 +473,21 @@ Window {
                     // The section's coloured tile with a white glyph (macOS 27); it keeps its colour when the row is selected.
                     Rectangle {
                         id: glyph
-                        // The tile sits on whole device pixels, so its 1-pixel rim and its edge are crisp.
+                        // The tile sits on whole device pixels in WINDOW coordinates (the row itself does not: the panel, the list and
+                        // the row heights are fractional at 1.25), so its 1-pixel rim and its edge are crisp. `origin` is the row's
+                        // place in the window; it is read again when the row moves (scrolling, a group gap).
                         readonly property real pixelRatio: Math.max(1, glyph.Window.window ? glyph.Window.window.devicePixelRatio : Screen.devicePixelRatio)
-                        x: Math.round(Tokens.spacingSm * glyph.pixelRatio) / glyph.pixelRatio
-                        y: Math.round((parent.height - height) / 2 * glyph.pixelRatio) / glyph.pixelRatio
+                        readonly property point origin: {
+                            entry.y;
+                            entry.gap;
+                            list.contentY;
+                            list.y;
+                            list.x;
+                            search.height;
+                            return glyph.parent.mapToItem(null, 0, 0);
+                        }
+                        x: Math.round((glyph.origin.x + Tokens.spacingSm) * glyph.pixelRatio) / glyph.pixelRatio - glyph.origin.x
+                        y: Math.round((glyph.origin.y + (glyph.parent.height - height) / 2) * glyph.pixelRatio) / glyph.pixelRatio - glyph.origin.y
                         width: Tokens.settingsSidebarIconSize
                         height: Tokens.settingsSidebarIconSize
                         radius: Tokens.settingsSidebarTileRadius
