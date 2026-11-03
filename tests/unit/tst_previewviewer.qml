@@ -200,9 +200,51 @@ TestCase {
         verify(fill !== null, "the sidebar panel, the sidebar's slot less its left gutter");
         const at = fill.mapToItem(viewer.contentItem, 0, 0);
         compare(at.x, inset, "inset from the window's left edge");
+        compare(at.y, inset, "inset from the window's top edge: the panel runs the window's full height");
         compare(at.y + fill.height, viewer.contentItem.height - inset, "inset from the window's bottom edge");
         compare(fill.radius, Tokens.windowSidebarPanelRadius, "rounded as the panel token says");
         viewer.sidebarOpen = false;
+    }
+
+    // The lights sit in the corner of a shown sidebar's panel and the toolbar starts to its right; hidden, the lights move into the
+    // toolbar (as Files).
+    function test_lightsFollowTheSidebar() {
+        const bars = [];
+        const stack = [viewer.contentItem];
+        while (stack.length > 0) {
+            const it = stack.pop();
+            if (it.contentStart !== undefined && it.controls !== undefined)
+                bars.push(it);
+            for (let i = 0; i < it.children.length; i++)
+                stack.push(it.children[i]);
+        }
+        compare(bars.length, 2, "the lights' toolbar over the sidebar and the one over the view");
+        const sideBar = bars.find(b => b.objectName === "sidebarToolbar");
+        const mainBar = bars.find(b => b !== sideBar);
+        viewer.sidebarOpen = true;
+        wait(50);
+        verify(sideBar.visible && sideBar.showControls, "the lights are over the sidebar");
+        verify(!mainBar.showControls, "none in the toolbar over the view");
+        compare(sideBar.width, Tokens.previewSidebarWidth);
+        compare(mainBar.x, Tokens.previewSidebarWidth, "the toolbar starts at the sidebar's right edge");
+        compare(mainBar.x + mainBar.width, viewer.contentItem.width, "and runs to the window's right edge");
+        viewer.sidebarOpen = false;
+        wait(50);
+        verify(!sideBar.visible, "no sidebar toolbar once the sidebar is hidden");
+        verify(mainBar.showControls, "the lights moved into the toolbar");
+        compare(mainBar.x, 0);
+        compare(mainBar.width, viewer.contentItem.width);
+    }
+
+    // The page plate (macOS Preview, gs-092-232 at 1.0585 px/pt): a 164-pt plate in the 196-pt panel (16 pt from its edges), the page
+    // 152 wide with 6 pt around it, the number in an 18-pt strip.
+    function test_thePagePlateTokens() {
+        const panel = Tokens.previewSidebarWidth - Tokens.windowSidebarPanelInset;
+        const plate = panel - 4 * Tokens.spacingSm;
+        compare(plate, 164);
+        compare(Tokens.previewThumbnailWidth, plate - 2 * Tokens.previewPlatePad, "the page fills the plate less its padding");
+        compare(Tokens.previewPlateCaption, 18);
+        compare(Tokens.previewPlateRadius, 9);
     }
 
     // The tokens behind every app's floating sidebar panel, measured on the macOS 26 System Settings capture (2 px/pt): an

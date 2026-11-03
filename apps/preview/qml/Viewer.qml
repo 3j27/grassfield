@@ -247,13 +247,31 @@ Window {
 
     // The unified toolbar of grassfield-ui (ADR-0015): the lights, then the sidebar toggle, the two-line title block and the
     // tools; its layer for a layout of its own holds them.
+    // The lights of a shown sidebar sit in the corner of its panel (as Files and Settings; macOS 26): this toolbar over the
+    // sidebar holds them alone, the one over the view starts to its right.
+    UnifiedToolbar {
+        id: sidebarToolbar
+        objectName: "sidebarToolbar"
+        width: sidebar.width
+        height: Tokens.previewToolbarHeight
+        visible: sidebar.visible
+        z: 2
+        window: viewerWin
+        showTitle: false
+        doubleClickAction: viewerWin.backend.titlebarDoubleClick
+        canMinimize: viewerWin.backend.canMinimize
+    }
+
     UnifiedToolbar {
         id: toolbar
-        width: parent.width
+        x: sidebar.width
+        width: parent.width - x
         height: viewerWin.slideshow ? 0 : Tokens.previewToolbarHeight
         visible: !viewerWin.slideshow
         z: 2
         window: viewerWin
+        // The lights move here when the sidebar is hidden (View > Hide Sidebar), as Files.
+        showControls: !sidebar.visible
         showTitle: false
         doubleClickAction: viewerWin.backend.titlebarDoubleClick
         canMinimize: viewerWin.backend.canMinimize
@@ -618,7 +636,8 @@ Window {
         id: toolbarRule
         objectName: "toolbarRule"
         anchors.top: toolbar.bottom
-        width: parent.width
+        x: toolbar.x
+        width: toolbar.width
         height: Tokens.appsBorderWidth
         z: 2
         visible: !viewerWin.slideshow && viewerWin.view !== null && viewerWin.view.scrolled === true
@@ -630,7 +649,7 @@ Window {
     Item {
         id: sidebar
         anchors {
-            top: toolbar.bottom
+            top: parent.top
             bottom: parent.bottom
             left: parent.left
         }
@@ -639,14 +658,16 @@ Window {
         // Above the view: the panel's shadow falls on it (not clipped, so it can).
         z: 1
 
-        // The floating panel as Settings' and Files' (macOS 26; ADR-0024 amendment 2026-11-03): inset from the window's left and
-        // bottom edges, the toolbar's own gap above it, the view straight beside it. The lights stay in the toolbar above
-        // (a split toolbar is the Preview alignment batch).
+        // The floating panel as Settings' and Files' (macOS 26; ADR-0024 amendment 2026-11-03): inset from the window's left, top and
+        // bottom edges, the view straight beside it, the lights (sidebarToolbar) drawn over its corner.
         SidebarPanel {
             id: panel
+            // Where the lists start: under the lights' row, as Files' sidebar rows.
+            readonly property real contentTop: Math.max(sidebarToolbar.height - Tokens.windowSidebarPanelInset, 0) + Tokens.spacingSm
             anchors {
                 fill: parent
                 leftMargin: Tokens.windowSidebarPanelInset
+                topMargin: Tokens.windowSidebarPanelInset
                 bottomMargin: Tokens.windowSidebarPanelInset
             }
 
@@ -662,8 +683,9 @@ Window {
                     left: parent.left
                     right: parent.right
                     margins: Tokens.spacingSm
+                    topMargin: panel.contentTop
                 }
-                height: viewerWin.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - 2 * Tokens.spacingSm) : 0
+                height: viewerWin.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - panel.contentTop - Tokens.spacingSm) : 0
                 visible: viewerWin.fileCount > 1
                 clip: true
                 spacing: Tokens.spacingXs
@@ -686,19 +708,28 @@ Window {
                     required property var modelData
                     readonly property bool selected: row.index === viewerWin.current
                     readonly property real cellHeight: Math.round(Tokens.previewThumbnailWidth * 3 / 4)
+                    // The name's strip under the picture, inside the plate.
+                    readonly property real captionHeight: Math.max(Tokens.previewPlateCaption, labelText.implicitHeight + Tokens.spacingSm)
+                    readonly property color plateColor: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.filesSidebarSelectionOpacity)
 
                     width: fileList.width
-                    height: fileList.compact ? Tokens.previewSidebarItemHeight : row.cellHeight + labelText.implicitHeight + 3 * Tokens.spacingSm
+                    height: fileList.compact ? Tokens.previewSidebarItemHeight : Tokens.previewPlatePad + row.cellHeight + row.captionHeight
                     Accessible.role: Accessible.ListItem
                     Accessible.name: DisplayName.text(row.modelData.name)
                     Accessible.selected: row.selected
 
-                    // Selection (macOS Preview): a ring in the accent colour around the thumbnail, never a solid plate over
-                    // it (compact: around the row); a light plate under the hovered one.
+                    // Selection (macOS Preview, as the page thumbnails): the picture and its name on a rounded plate, the accent
+                    // for the current file (compact: a ring around the row); a light plate under the hovered one.
                     Rectangle {
-                        anchors.fill: parent
-                        radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
-                        color: rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
+                        anchors {
+                            fill: parent
+                            // The plate as the page thumbnails': 8 in from the list's edges.
+                            leftMargin: fileList.compact ? 0 : Tokens.spacingSm
+                            rightMargin: fileList.compact ? 0 : Tokens.spacingSm
+                        }
+                        radius: fileList.compact ? Tokens.radiusControl : Tokens.previewPlateRadius
+                        color: row.selected && !fileList.compact ? row.plateColor
+                            : rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                         border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
                         border.color: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                     }
@@ -707,8 +738,8 @@ Window {
                         id: thumb
                         visible: !fileList.compact
                         x: (parent.width - width) / 2
-                        y: Tokens.spacingSm
-                        width: Tokens.previewThumbnailWidth
+                        y: Tokens.previewPlatePad
+                        width: Math.min(Tokens.previewThumbnailWidth, fileList.width - 2 * Tokens.previewPlatePad)
                         height: row.cellHeight
 
                         Image {
@@ -752,18 +783,6 @@ Window {
                             radius: Tokens.radiusControl
                             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                         }
-                        // The ring of the current file around its thumbnail.
-                        Rectangle {
-                            anchors {
-                                fill: parent
-                                margins: -Tokens.controlFocusOutline
-                            }
-                            visible: row.selected
-                            color: "transparent"
-                            radius: Tokens.radiusControl
-                            border.width: Tokens.controlFocusOutline
-                            border.color: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
-                        }
                     }
 
                     Text {
@@ -774,16 +793,17 @@ Window {
                             leftMargin: Tokens.spacingSm
                             rightMargin: Tokens.spacingSm
                             top: fileList.compact ? undefined : thumb.bottom
-                            topMargin: Tokens.spacingXs
                             verticalCenter: fileList.compact ? parent.verticalCenter : undefined
                         }
+                        height: fileList.compact ? implicitHeight : row.captionHeight
                         horizontalAlignment: fileList.compact ? Text.AlignLeft : Text.AlignHCenter
                         elide: Text.ElideMiddle
                         textFormat: Text.PlainText
                         maximumLineCount: 1
                         // A file name may contain line breaks: keep one line, shown as the return symbol.
                         text: DisplayName.text(row.modelData.name)
-                        color: Appearance.colors.text
+                        verticalAlignment: Text.AlignVCenter
+                        color: row.selected && !fileList.compact && viewerWin.keyLook ? Appearance.colors.accentText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: fileList.compact ? Tokens.typographyBodySize : Tokens.typographyCaptionSize
                     }
@@ -800,7 +820,7 @@ Window {
                 id: thumbs
                 anchors {
                     top: fileList.bottom
-                    topMargin: Tokens.spacingSm
+                    topMargin: viewerWin.fileCount > 1 ? Tokens.spacingSm : 0
                     bottom: parent.bottom
                     left: parent.left
                     right: parent.right
