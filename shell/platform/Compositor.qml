@@ -428,10 +428,11 @@ Singleton {
     property bool blurRejected: false
     property int blurPushes: 0
 
-    // The window edge follows the appearance (ADR-0039 step 6, C-4): macOS 27's contact edge is dark in the light appearance and
-    // the light rim in the dark one. Hyprland holds one border colour pair for every window, so the shell sends the pair of
-    // the current appearance as it sends the blur: at start, on a change of appearance and after a config reload, which
-    // restores the config's own (the dark appearance's, config/hypr/grassfield/looknfeel.lua).
+    // The window edge follows the appearance (ADR-0039 step 6, C-4; ADR-0024 note 2026-11-03): macOS 27's contact edge is a dark
+    // device pixel in both appearances, fainter in the light one (the dark appearance's light inner rim is left to the plugin).
+    // Hyprland holds one border colour pair for every window, so the shell sends the pair of the current appearance as it
+    // sends the blur: at start, on a change of appearance and after a config reload, which restores the config's own (the
+    // dark appearance's, config/hypr/grassfield/looknfeel.lua).
     readonly property string edgeCall: Appearance.dark
         ? Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark)
         : Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight)

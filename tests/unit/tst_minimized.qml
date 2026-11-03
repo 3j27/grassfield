@@ -41,13 +41,13 @@ TestCase {
             compare(Minimized.groundCall(bad), "", String(bad));
     }
 
-    // The window edge per appearance (ADR-0039 step 6, C-4): the light appearance's is dark, the dark appearance's the config's
-    // own white hairline; a value that is not a colour or an alpha sends nothing.
+    // The window edge per appearance (ADR-0039 step 6, C-4; ADR-0024 note 2026-11-03): a dark device pixel in both appearances,
+    // fainter in the light one; a value that is not a colour or an alpha sends nothing.
     function test_edgeCallIsBuiltPerAppearance() {
         compare(Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight),
-                "function() hl.config({ general = { col = { active_border = \"rgba(00000040)\", inactive_border = \"rgba(00000021)\" } } }) end");
+                "function() hl.config({ general = { col = { active_border = \"rgba(00000020)\", inactive_border = \"rgba(0000001c)\" } } }) end");
         compare(Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark),
-                "function() hl.config({ general = { col = { active_border = \"rgba(ffffff26)\", inactive_border = \"rgba(ffffff14)\" } } }) end");
+                "function() hl.config({ general = { col = { active_border = \"rgba(00000094)\", inactive_border = \"rgba(00000085)\" } } }) end");
         compare(Minimized.edgeCall("#000", 0.25, 0.13), "");
         compare(Minimized.edgeCall("black", 0.25, 0.13), "");
         compare(Minimized.edgeCall("#000000", 1.5, 0.13), "");
@@ -64,7 +64,8 @@ TestCase {
     }
 
     // A config reload restores the config's border: it must be the dark appearance's pair, which the shell then replaces in
-    // the light appearance.
+    // the light appearance. Hyprland's inner glow stays at its default (off): with no window rule and no rim along the rounded
+    // corners, it lit the client's top row under a third-party window's titlebar (ADR-0024 note 2026-11-03).
     function test_theConfigHoldsTheDarkEdge() {
         const config = source("config/hypr/grassfield/looknfeel.lua");
         const dark = Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark);
@@ -72,6 +73,7 @@ TestCase {
         const inactive = /inactive_border = "(rgba\([0-9a-f]{8}\))"/.exec(dark)[1];
         verify(config.indexOf('active_border = "' + active + '"') >= 0, "config active_border " + active);
         verify(config.indexOf('inactive_border = "' + inactive + '"') >= 0, "config inactive_border " + inactive);
+        verify(!/glow\s*=\s*\{/.test(config.replace(/--.*$/gm, "")), "the config sets no inner glow");
     }
 
     // The shell sends the edge of the appearance it shows, at start, on a change (debounced) and after a reload, as the blur

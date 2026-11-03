@@ -3238,18 +3238,18 @@ QtObject {
     readonly property real windowSidebarPanelShadowOpacity: 0.08
     // estimate: the same in the dark appearance, stronger so it still reads on the dark window (no dark capture) [ref: ADR-0024 amendment 2026-11-03]
     readonly property real windowSidebarPanelShadowOpacityDark: 0.3
-    // the window's contact edge in the dark appearance: the light rim, Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
-    readonly property string windowEdgeDark: "#FFFFFF"
+    // the window's contact edge in the dark appearance: macOS 27 draws one device pixel of near black outside the window (its light inner rim inside it is deferred to the plugin, ADR-0024 note 2026-11-03); Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua); was the white rim at 0.15 (ADR-0024 note 2026-11-03) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/decisions/ADR-0039-design-polish.md step 6; tests/compositor/window_edge.sh]
+    readonly property string windowEdgeDark: "#000000"
     // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
     readonly property string windowEdgeLight: "#000000"
-    // the active window's edge, dark appearance: unchanged from the config (rgba(ffffff26)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
-    readonly property real windowEdgeActiveOpacityDark: 0.15
-    // an inactive window's edge, dark appearance: unchanged from the config (rgba(ffffff14)) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
-    readonly property real windowEdgeInactiveOpacityDark: 0.08
-    // the active window's edge, light appearance: macOS 27's contact edge, about black at 0.25 (measured 0.27 to 0.47 over its shadow in the release captures) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
-    readonly property real windowEdgeActiveOpacityLight: 0.25
-    // estimate: an inactive window's edge in the light appearance, at the dark appearance's inactive-to-active ratio (0.08 / 0.15) of 0.25, not measured [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
-    readonly property real windowEdgeInactiveOpacityLight: 0.13
+    // the active window's edge, dark appearance: macOS 27 darkens the shadow under its outer pixel by 0.92 (Notes in the Appearance Dark release captures, 2 px per pt), half a point; the same darkness per point in Hyprland's one-point border, one device pixel (0.8 pt) at 1.25: 0.92 x 0.5 / 0.8 [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
+    readonly property real windowEdgeActiveOpacityDark: 0.58
+    // an inactive window's edge, dark appearance: 0.83 over its shadow in the same captures (the inactive Settings window), 0.83 x 0.5 / 0.8 [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
+    readonly property real windowEdgeInactiveOpacityDark: 0.52
+    // the active window's edge, light appearance: macOS 27 darkens the shadow under its contact pixel by 0.20 on every side (Settings General, Finder Home and Force Quit window crops, 2 px per pt), half a point; the same darkness per point in Hyprland's one-point border, one device pixel (0.8 pt) at 1.25: 0.2 x 0.5 / 0.8; was 0.25, twice that (ADR-0024 note 2026-11-03) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
+    readonly property real windowEdgeActiveOpacityLight: 0.125
+    // an inactive window's edge in the light appearance: 0.18 over its shadow (the inactive Settings window of the Finder App Switcher release capture), 0.18 x 0.5 / 0.8 [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
+    readonly property real windowEdgeInactiveOpacityLight: 0.11
     // a window that is not key, light appearance: its toolbar title and glyphs in the text colour at this opacity (macOS 27's inactive Finder and Settings: the title #B8B8B8 on white, the glyphs #B0B0B0 on #F0F0F0, black at 0.27-0.28; 512 Pixels release capture Finder-App-Switcher); an inactive control, exempt from WCAG 1.4.3 (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
     readonly property real windowInactiveTextOpacityLight: 0.28
     // the same, dark appearance: macOS 27's inactive Settings title #747373 on #333131, white at 0.32 (512 Pixels release capture Apperance-Dark-Green) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
