@@ -11,13 +11,15 @@ Gradient {
     property string name: "graphite"
     readonly property var tiles: Tokens.colorTile
     readonly property bool known: root.tiles[root.name] !== undefined
+    // The dark appearance may have its own pair (black: blackTopDark, blackDark), so the tile reads off the dark panel.
+    readonly property string suffix: Appearance.dark && root.tiles[root.name + "Dark"] !== undefined ? "Dark" : ""
 
     GradientStop {
         position: 0.0
-        color: root.known ? root.tiles[root.name + "Top"] : root.tiles.graphiteTop
+        color: root.known ? root.tiles[root.name + "Top" + root.suffix] : root.tiles.graphiteTop
     }
     GradientStop {
         position: 1.0
-        color: root.known ? root.tiles[root.name] : root.tiles.graphite
+        color: root.known ? root.tiles[root.name + root.suffix] : root.tiles.graphite
     }
 }

@@ -489,6 +489,17 @@ Window {
                             name: root.tileColors[entry.modelData.id] || "graphite"
                         }
 
+                        // A lit tile in the dark appearance has a 1-device-pixel inner rim, so it reads off the dark panel.
+                        Rectangle {
+                            readonly property real pixelRatio: Math.max(1, glyph.Window.window ? glyph.Window.window.devicePixelRatio : Screen.devicePixelRatio)
+                            anchors.fill: parent
+                            radius: parent.radius
+                            color: "transparent"
+                            border.width: 1 / pixelRatio
+                            border.color: Appearance.withAlpha(Tokens.settingsSidebarTileGlyph, Tokens.settingsSidebarTileRimOpacityDark)
+                            visible: glyph.lit && Appearance.dark
+                        }
+
                         Icon {
                             anchors.centerIn: parent
                             name: entry.modelData.icon

@@ -59,8 +59,8 @@ SettingsPage {
                 music: "now-playing", videos: "media-play", trash: "trash"})[id] || "drive";
     }
 
-    // The category's colour, the same in the bar, the legend and the row's tile (the tiles' colours, which carry a white glyph:
-    // no yellow; green's white glyph is 2.5:1 since ADR-0040 step 1c, the owner's light Green, as macOS draws it).
+    // The category's colour, the same in the bar, the legend and the row's tile (the vivid color.tile
+    // colours, the bottom of each gradient; no yellow: a white glyph sits on them).
     function tile(id: string): string {
         return ({applications: "orange", documents: "blue", downloads: "green", desktop: "blue", pictures: "pink", music: "red",
                 videos: "purple"})[id] || "graphite";
@@ -68,7 +68,7 @@ SettingsPage {
 
     // "used": what is used while the counts run.
     function tileColor(id: string): color {
-        return id === "used" ? Appearance.withAlpha(Appearance.colors.text, 2 * Tokens.settingsStorageFreeOpacity) : Tokens.colorAccentLight[root.tile(id)];
+        return id === "used" ? Appearance.withAlpha(Appearance.colors.text, 2 * Tokens.settingsStorageFreeOpacity) : Tokens.colorTile[root.tile(id)];
     }
 
     // Shared: the page shown again while the counts run gets their answers instead of starting them again (Backend.query).

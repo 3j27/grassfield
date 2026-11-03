@@ -85,7 +85,8 @@ FocusScope {
                 radius: width / 2
                 color: "transparent"
                 border.width: Tokens.settingsChoiceRingWidth
-                border.color: Appearance.colors.accent
+                // The swatch's own vivid colour where it holds the focus ring's contrast on the window, else the accent.
+                border.color: Accent.focusRing(swatch.modelData.color, Appearance.windowFill, Appearance.colors.accent, Tokens.controlFocusRingMinContrast)
                 visible: swatch.selected
             }
 
