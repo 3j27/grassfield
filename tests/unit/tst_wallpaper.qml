@@ -1385,6 +1385,18 @@ TestCase {
         verify(/startPrepare\(c\.path\);/.test(f), "the file caller gives only the path");
     }
 
+    function test_aFailureSetsItsReasonBeforeItsStatus() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../shell/desktop/WallpaperFeed.qml"), false);
+        xhr.send();
+        const f = xhr.responseText;
+        const body = f.slice(f.indexOf("function fail(why: string)"));
+        verify(body.length > 0, "fail() exists");
+        const r = body.indexOf("reason = why;");
+        const st = body.indexOf('status = "error";');
+        verify(r > 0 && st > 0 && r < st, "the desktop reads the reason when the status turns to error");
+    }
+
     function test_theWindowMapsOnceWithItsFirstFrame() {
         function text(rel) {
             const xhr = new XMLHttpRequest();

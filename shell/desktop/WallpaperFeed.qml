@@ -213,8 +213,9 @@ Scope {
     function fail(why: string): void {
         // The journal keeps every failure (the owner reads it in a live session), the Settings pane shows the reason.
         console.warn("wallpaper: " + outputName + ": " + why + (currentSrc !== "" ? " (" + currentSrc + ")" : ""));
-        status = "error";
+        // The reason first: whoever reacts to the status reads it (the desktop's "the source failed (…)" line).
         reason = why;
+        status = "error";
         progress = -1;
         publish();
     }
