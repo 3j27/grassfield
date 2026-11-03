@@ -62,6 +62,23 @@ QString buildBase(const QByteArray &repositoryConf)
     return base;
 }
 
+bool buildHasKey(const QByteArray &repositoryConf)
+{
+    // Same reading as buildBase: one KEY=value per line, the last assignment wins.
+    QByteArray fingerprint;
+    for (const QByteArray &raw : repositoryConf.split('\n')) {
+        const QByteArray line = raw.trimmed();
+        if (line.startsWith("GRASSFIELD_SIGNING_FINGERPRINT="))
+            fingerprint = line.mid(int(qstrlen("GRASSFIELD_SIGNING_FINGERPRINT="))).trimmed();
+    }
+    return !fingerprint.isEmpty();
+}
+
+Channel buildChannel(const QByteArray &repositoryConf)
+{
+    return defaultChannel(buildHasKey(repositoryConf) ? buildBase(repositoryConf) : QString());
+}
+
 Channel defaultChannel(const QString &buildBase)
 {
     return Channel{QStringLiteral("stable"), cleanBase(buildBase)};

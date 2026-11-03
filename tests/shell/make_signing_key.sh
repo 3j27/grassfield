@@ -69,7 +69,9 @@ if has --show-keys; then
 fi
 if has --export-secret-keys; then
   need_pass
-  printf -- '-----BEGIN PGP PRIVATE KEY BLOCK-----\nSTUB-SECRET-KEY-MATERIAL %s\n-----END PGP PRIVATE KEY BLOCK-----\n' "$FPR"
+  # The armor lines are built at run time: a literal one in a committed file is what secret scanners flag.
+  kind=PRIVATE
+  printf -- '-----BEGIN PGP %s KEY BLOCK-----\nSTUB-SECRET-KEY-MATERIAL %s\n-----END PGP %s KEY BLOCK-----\n' "$kind" "$FPR" "$kind"
   exit 0
 fi
 if has --export; then

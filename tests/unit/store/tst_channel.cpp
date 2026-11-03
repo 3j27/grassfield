@@ -64,3 +64,19 @@ TEST(Channel, TheBuildsBase)
     EXPECT_EQ(buildBase(""), QString());
     EXPECT_FALSE(fetchable(defaultChannel(buildBase("GRASSFIELD_REPO_BASE=https://packages.grassfield.invalid\n"))));
 }
+
+// A build with a base but no signing key asks nothing of its host (ADR-0033 O11): there is no catalog it could verify.
+TEST(Channel, TheBuildsKeyGatesTheFetch)
+{
+    const QByteArray shipped("GRASSFIELD_REPO_BASE=https://packages.grassfield.site\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_SIGNING_FINGERPRINT=\n");
+    const QByteArray keyed("GRASSFIELD_REPO_BASE=https://packages.grassfield.site\nGRASSFIELD_SIGNING_FINGERPRINT=0123456789ABCDEF0123456789ABCDEF01234567\n");
+    EXPECT_FALSE(buildHasKey(shipped));
+    EXPECT_FALSE(buildHasKey("GRASSFIELD_SIGNING_FINGERPRINT=   \n"));
+    EXPECT_FALSE(buildHasKey(QByteArray()));
+    EXPECT_FALSE(buildHasKey("# GRASSFIELD_SIGNING_FINGERPRINT=0123\n"));
+    EXPECT_TRUE(buildHasKey(keyed));
+    EXPECT_FALSE(fetchable(buildChannel(shipped)));      // base, no key: nothing is requested, the Store has nothing to show
+    EXPECT_FALSE(fetchable(buildChannel(QByteArray())));
+    EXPECT_TRUE(fetchable(buildChannel(keyed)));
+    EXPECT_EQ(buildChannel(keyed).base, QUrl(QStringLiteral("https://packages.grassfield.site")));
+}

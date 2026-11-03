@@ -523,14 +523,29 @@ Rejected:
      `<package>.pkg.tar.zst` and `.sig` (immutable), `snap/<id>/...` (immutable snapshots), `pointer` (`{"snapshot": "<id>"}`)
      and `catalog/<sha256>.png`. `releases/<channel>/` and `withdrawn/<channel>/` are the publisher's inputs in the same
      bucket; they hold no secret (packages and signatures already public), but nothing links to them.
-   - **The edge rule of h.2** is a Cloudflare Worker, because a Redirect Rule cannot read the pointer's content. It
-     reproduces grassfield-packages' `scripts/serve.py`: for the fixed names of a channel (`grassfield.db`, `grassfield.files`,
-     `grassfield-notes.json`, `grassfield-catalog.v1.json`, each with `.sig`) it reads `<channel>/x86_64/pointer` from the
-     bucket (an R2 binding, no key) and answers `302` to `snap/<id>/<name>` with `Cache-Control: no-store`; a pointer that
-     is missing or malformed gives `404`, never a guess; every other path goes through to the bucket. The Worker is a new
-     component (JavaScript, about 40 lines, tested against `serve.py`'s cases): it needs the owner's approval and a place
-     in grassfield-packages when publication is activated; NOT VERIFIED that a Worker route in front of an R2 custom domain
-     passes other requests to the bucket as assumed (to test on a scratch bucket before the first publish).
+   - **OPEN DESIGN ITEM: how the fixed names resolve the pointer (h.2's edge rule).** Cloudflare's Redirect Rules cannot read
+     the pointer's content, so h.2's "edge rule" needs one of these. Nothing is built now: it is not needed before the first
+     publish, which waits for the legal review. Options:
+     (a) **A Cloudflare Worker on the custom domain** (free tier: 100,000 requests a day, enough to start) reproducing
+         grassfield-packages' `scripts/serve.py`: for the fixed names (`grassfield.db`, `grassfield.files`,
+         `grassfield-notes.json`, `grassfield-catalog.v1.json`, each with `.sig`) it reads `<channel>/x86_64/pointer` through an
+         R2 binding (no key) and answers `302` to `snap/<id>/<name>`, `Cache-Control: no-store`; a missing or malformed
+         pointer gives `404`; every other path goes to the bucket. Keeps h.2 as tested (Q2, R4: one pointer write switches
+         the database and its signature together). Costs one new component (JavaScript, about 40 lines), the owner's approval
+         and, above the free tier, a paid plan.
+     (b) **The publisher copies the snapshot's database and signature to the fixed names** (real objects), in the least
+         harmful order (the `.db` first, then its `.sig`). No order is safe for a client that reads the two files separately:
+         whichever is written first leaves a window in which a client gets a new file next to an old one ("signature ... is invalid", the
+         once-failed run of h.2's residual). Consistency window: the time between the two writes (about a second) plus any
+         cache lifetime; it can be shortened, never removed. No new component.
+     (c) **A pacman-side fix**: none exists. pacman fetches `<name>.db` and `<name>.db.sig` as two independent requests, and
+         `Server` has no indirection; a client-side workaround (a `CacheServer`, a hook) would add code as root's neighbour on
+         every machine.
+     **Recommendation: (a)**, because it is the only option that keeps h.2's atomic switch, and (b) only as a fallback if the
+     owner refuses a Worker, with its window stated in the pane's "failed once, then fine" behaviour. NOT VERIFIED: that a
+     Worker route in front of an R2 custom domain passes other requests to the bucket as assumed (to test on a scratch bucket
+     before the first publish), and R2's conditional `PutObject` (`If-Match` / `If-None-Match`) for the pointer's
+     compare-and-swap (below; without it, serialization alone holds).
    - **Cache rules** (Cloudflare Cache Rules on `packages.grassfield.site`), consistent with h.2's pointer and
      serialization: (1) the fixed names and `pointer` (path ends in `/pointer`, or in one of the names above): **Bypass
      cache**, so a pointer write is seen at once by both the database and its signature (a stale `.db` next to a fresh
@@ -559,8 +574,9 @@ Rejected:
    - **What gates publication now.** The base is no longer the `.invalid` placeholder (h.1's first condition), so the gate is
      what grassfield-packages already has: `publish.yml` and the release job stay `if: false` until the owner, after the
      legal review, creates the two environments, sets the secrets and removes it. The shipped client with this base and no
-     key: Set Up refused, the checker never fetches (`not-set-up`), and Grassfield Store tries its catalog on this host,
-     which verifies nothing without a key (`apps/store/src/channel.cpp` `fetchable` only tests the host; an open item for the integrator).
+     key: Set Up refused, the checker never fetches (`not-set-up`), and Grassfield Store requests nothing either: its
+     `buildChannel` (`apps/store/src/channel.cpp`) takes the build's base only when `GRASSFIELD_SIGNING_FINGERPRINT` is
+     non-empty, the same condition as the others, so no installed Store contacts the host for a catalog it cannot verify.
 
 ### i. After an update
 - Logging out is needed and enough for a Grassfield update: Hyprland keeps the loaded plugin, and the shell and the plugin
