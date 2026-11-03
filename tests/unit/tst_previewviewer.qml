@@ -70,6 +70,34 @@ TestCase {
         globalMenu: false
     }
 
+    // A PDF in a window of its own: the page tools.
+    QtObject {
+        id: pdfBackend
+        property var files: [{name: "two-pages.pdf", path: "/x/two-pages.pdf", url: Qt.resolvedUrl("../fixtures/print/two-pages.pdf"), kind: "pdf"}]
+        property var errors: []
+        property bool glance: false
+        property bool browsing: true
+        property int startIndex: 0
+        property bool dark: false
+        property bool reduceMotion: true
+        property bool increaseContrast: false
+        property real textScale: 1
+        property string accentColor: "multicolor"
+        property string accentHighlight: "pink"
+        property string shortcutStyle: "pc"
+        property string titlebarDoubleClick: "zoom"
+        property bool canMinimize: true
+        function inspect(i) {
+            return {ok: true, kind: "pdf", name: files[i].name, url: files[i].url, size: "1 KB", type: "PDF document", modified: "today", folder: "/x"};
+        }
+    }
+
+    Viewer {
+        id: pdfViewer
+        backend: pdfBackend
+        globalMenu: false
+    }
+
     function test_startsAtOpenedFile() {
         compare(viewer.current, 1);
         compare(viewer.title, "b.png");
@@ -243,8 +271,72 @@ TestCase {
         const plate = panel - 4 * Tokens.spacingSm;
         compare(plate, 164);
         compare(Tokens.previewThumbnailWidth, plate - 2 * Tokens.previewPlatePad, "the page fills the plate less its padding");
-        compare(Tokens.previewPlateCaption, 18);
+        compare(Tokens.previewPlateCaption, 19);
+        compare(Tokens.previewPageRadius, 4);
         compare(Tokens.previewPlateRadius, 9);
+    }
+
+    // The toolbar's items never overlap at the minimum width, with the sidebar open or not, for both tool sets (a folder of images
+    // and a PDF): a window too narrow for the sidebar plus the toolbar collapses the sidebar by itself, and shows it again when
+    // it widens, if the user had it open.
+    function test_narrowWindowCollapsesTheSidebar() {
+        for (const v of [viewer, pdfViewer]) {
+            v.sidebarOpen = true;
+            v.width = v.minimumWidth;
+            wait(300);
+            verify(v.hasSidebar, v.title + ": has a sidebar");
+            verify(v.sidebarOpen, v.title + ": the user's choice stays");
+            verify(!v.showSidebar, v.title + ": collapsed at the minimum width (need " + v.toolbarNeed + ")");
+            const toolbar = findIn(v.contentItem, it => it.contentStart !== undefined && it.controls !== undefined && it.objectName === "");
+            const tools = findChild(v.contentItem, "toolsRow");
+            const toggle = findIn(toolbar, it => it.accessibleName === "Thumbnails");
+            verify(toggle !== null);
+            const toggleRight = toggle.mapToItem(toolbar, toggle.width, 0).x;
+            verify(tools.x >= toggleRight, v.title + ": the tools (x " + tools.x + ") clear the toggle (right " + toggleRight + ")");
+            verify(tools.x + tools.width <= toolbar.width, v.title + ": the tools stay in the toolbar");
+            v.width = 900;
+            wait(300);
+            verify(v.showSidebar, v.title + ": the sidebar comes back when the window widens");
+            const sideBar = findIn(v.contentItem, it => it.objectName === "sidebarToolbar");
+            const toolbar2 = findIn(v.contentItem, it => it.contentStart !== undefined && it.controls !== undefined && it.objectName === "");
+            const toggle2 = findIn(toolbar2, it => it.accessibleName === "Thumbnails");
+            const tools2 = findChild(v.contentItem, "toolsRow");
+            verify(tools2.x >= toggle2.mapToItem(toolbar2, toggle2.width, 0).x, v.title + ": clear with the sidebar shown");
+            verify(toolbar2.x >= sideBar.width, v.title + ": the toolbar starts after the sidebar");
+            v.sidebarOpen = false;
+        }
+    }
+
+    // The selection of a page or a file plate: the selection colour with its text (white on the deeper fill, ADR-0024), as the Settings
+    // sidebar pill and the Files icon selection; never the accent with the accent's dark ink.
+    function test_thePlateUsesTheSelectionPair() {
+        for (const file of ["../../apps/preview/qml/Thumbnails.qml", "../../apps/preview/qml/Viewer.qml"]) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl(file), false);
+            xhr.send();
+            const text = xhr.responseText;
+            verify(text.indexOf("Appearance.colors.selectionText") > 0, file + ": the selection text");
+            verify(text.indexOf("Appearance.colors.accentText") < 0, file + ": no accent text");
+        }
+        const thumbs = Qt.resolvedUrl("../../apps/preview/qml/Thumbnails.qml");
+        const x = new XMLHttpRequest();
+        x.open("GET", thumbs, false);
+        x.send();
+        verify(x.responseText.indexOf("Appearance.colors.selection :") > 0, "the plate fill is the selection colour");
+        verify(x.responseText.indexOf("Appearance.colors.hover, Appearance.inactiveSelectionOpacity") > 0, "neutral when not key");
+        for (const dark of [false, true]) {
+            const c = dark ? Appearance.accentedDark : Appearance.accentedLight;
+            function lum(hex) {
+                const ch = [1, 3, 5].map(i => {
+                    const v = parseInt(hex.substr(i, 2), 16) / 255;
+                    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+                });
+                return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+            }
+            const l1 = lum(c.selection), l2 = lum(c.selectionText);
+            const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+            verify(ratio >= 4.5, (dark ? "dark" : "light") + " selection pair " + c.selection + " / " + c.selectionText + ": " + ratio);
+        }
     }
 
     // The tokens behind every app's floating sidebar panel, measured on the macOS 26 System Settings capture (2 px/pt): an

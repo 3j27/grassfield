@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Grassfield.Ui
 
 // Grassfield Preview: floating toolbar (sidebar, title and "n of N", previous/next, zoom, rotate, info, search), thumbnail
@@ -31,7 +32,15 @@ Window {
     readonly property var view: content.view
     readonly property bool isPdf: content.info.kind === "pdf" && content.info.ok === true
     readonly property bool hasSidebar: viewerWin.fileCount > 1 || viewerWin.isPdf
-    readonly property bool showSidebar: viewerWin.sidebarOpen && viewerWin.hasSidebar
+    // What the toolbar needs beside the sidebar: its inset, the toggle, the tools and their margins. A window narrower than the
+    // sidebar plus this collapses the sidebar by itself (as macOS) and shows it again when it widens, if it was open; the
+    // toolbar's items never overlap.
+    readonly property real toolbarRest: (sidebarGroup.visible ? sidebarGroup.width + Tokens.spacingMd : 0) + tools.width + Tokens.spacingMd
+    readonly property real toolbarNeed: Tokens.windowItemsInset + viewerWin.toolbarRest
+    // The narrowest window: the toolbar with the lights in it (the sidebar hidden), so its items never overlap.
+    readonly property real toolbarMin: Math.max(toolbar.controls.contentStart, Tokens.windowItemsInset) + viewerWin.toolbarRest
+    readonly property bool roomForSidebar: viewerWin.width >= Tokens.previewSidebarWidth + viewerWin.toolbarNeed
+    readonly property bool showSidebar: viewerWin.sidebarOpen && viewerWin.hasSidebar && viewerWin.roomForSidebar
     readonly property int pages: viewerWin.view ? viewerWin.view.pageCount : 1
     readonly property bool onImage: content.info.kind === "image" && content.info.ok === true
     // Second line of the title: the position among the files, then the page of a document.
@@ -47,7 +56,7 @@ Window {
     title: content.info.name ? DisplayName.text(content.info.name) : qsTr("Preview")
     width: Tokens.previewWindowWidth
     height: Tokens.previewWindowHeight
-    minimumWidth: Tokens.previewWindowMinWidth
+    minimumWidth: Math.max(Tokens.previewWindowMinWidth, Math.ceil(viewerWin.toolbarMin))
     minimumHeight: Tokens.previewWindowMinHeight
     visible: true
     color: Appearance.windowFill
@@ -685,6 +694,8 @@ Window {
                     right: parent.right
                     margins: Tokens.spacingSm
                     topMargin: panel.contentTop
+                    // The picture plates leave the right gap to the scroll bar: the list runs to the panel's edge.
+                    rightMargin: fileList.compact ? Tokens.spacingSm : 0
                 }
                 height: viewerWin.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - panel.contentTop - Tokens.spacingSm) : 0
                 visible: viewerWin.fileCount > 1
@@ -708,10 +719,16 @@ Window {
                     required property int index
                     required property var modelData
                     readonly property bool selected: row.index === viewerWin.current
-                    readonly property real cellHeight: Math.round(Tokens.previewThumbnailWidth * 3 / 4)
+                    // The picture's height over its width (3:4 until a picture is decoded, and for the other kinds): the plate
+                    // hugs the picture with the same padding on all sides. A tall picture is fitted into a square.
+                    readonly property real aspect: pic.visible && pic.implicitWidth > 0 && pic.implicitHeight > 0 ? pic.implicitHeight / pic.implicitWidth : 3 / 4
+                    readonly property real cellHeight: Math.round(Math.min(Tokens.previewThumbnailWidth * row.aspect, Tokens.previewThumbnailWidth))
+                    readonly property real cellWidth: Math.round(row.cellHeight / row.aspect)
                     // The name's strip under the picture, inside the plate.
                     readonly property real captionHeight: Math.max(Tokens.previewPlateCaption, labelText.implicitHeight + Tokens.spacingSm)
-                    readonly property color plateColor: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.fill, Tokens.filesSidebarSelectionOpacity)
+                    readonly property color plateColor: viewerWin.keyLook ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)
+                    // The plate: the page thumbnails' (a fixed width, 8 in from the list's left edge, the right gap holding the scroll bar).
+                    readonly property real plateWidth: Tokens.previewThumbnailWidth + 2 * Tokens.previewPlatePad
 
                     width: fileList.width
                     height: fileList.compact ? Tokens.previewSidebarItemHeight : Tokens.previewPlatePad + row.cellHeight + row.captionHeight
@@ -724,9 +741,8 @@ Window {
                     Rectangle {
                         anchors {
                             fill: parent
-                            // The plate as the page thumbnails': 8 in from the list's edges.
                             leftMargin: fileList.compact ? 0 : Tokens.spacingSm
-                            rightMargin: fileList.compact ? 0 : Tokens.spacingSm
+                            rightMargin: fileList.compact ? 0 : Math.max(0, row.width - Tokens.spacingSm - row.plateWidth)
                         }
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.previewPlateRadius
                         color: row.selected && !fileList.compact ? row.plateColor
@@ -738,17 +754,33 @@ Window {
                     Item {
                         id: thumb
                         visible: !fileList.compact
-                        x: (parent.width - width) / 2
+                        x: Tokens.spacingSm + (row.plateWidth - width) / 2
                         y: Tokens.previewPlatePad
-                        width: Math.min(Tokens.previewThumbnailWidth, fileList.width - 2 * Tokens.previewPlatePad)
+                        width: row.cellWidth
                         height: row.cellHeight
+                        // The picture's corners rounded as the page thumbnails'.
+                        layer.enabled: row.modelData.kind === "image"
+                        layer.effect: MultiEffect {
+                            maskEnabled: true
+                            maskSource: picMask
+                        }
+
+                        Rectangle {
+                            id: picMask
+                            anchors.fill: parent
+                            radius: Tokens.previewPageRadius
+                            visible: false
+                            layer.enabled: true
+                        }
 
                         Image {
+                            id: pic
                             anchors.fill: parent
                             visible: row.modelData.kind === "image"
                             // Decoded at its size by the provider (image://preview/thumb), twice for a sharp edge.
                             source: row.modelData.kind === "image" && !fileList.compact ? "image://preview/thumb/" + row.index : ""
-                            sourceSize: Qt.size(width * 2, height * 2)
+                            // A fixed box (the size follows the picture's own shape).
+                            sourceSize: Qt.size(Tokens.previewThumbnailWidth * 2, Tokens.previewThumbnailWidth * 2)
                             asynchronous: true
                             cache: true
                             fillMode: Image.PreserveAspectFit
@@ -791,8 +823,8 @@ Window {
                         anchors {
                             left: parent.left
                             right: parent.right
-                            leftMargin: Tokens.spacingSm
-                            rightMargin: Tokens.spacingSm
+                            leftMargin: Tokens.spacingSm * 2
+                            rightMargin: fileList.compact ? Tokens.spacingSm : Math.max(Tokens.spacingSm, row.width - Tokens.spacingSm - row.plateWidth + Tokens.spacingSm)
                             top: fileList.compact ? undefined : thumb.bottom
                             verticalCenter: fileList.compact ? parent.verticalCenter : undefined
                         }
@@ -804,7 +836,7 @@ Window {
                         // A file name may contain line breaks: keep one line, shown as the return symbol.
                         text: DisplayName.text(row.modelData.name)
                         verticalAlignment: Text.AlignVCenter
-                        color: row.selected && !fileList.compact && viewerWin.keyLook ? Appearance.colors.accentText : Appearance.colors.text
+                        color: row.selected && !fileList.compact && viewerWin.keyLook ? Appearance.colors.selectionText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: fileList.compact ? Tokens.typographyBodySize : Tokens.typographyCaptionSize
                     }
@@ -826,6 +858,7 @@ Window {
                     left: parent.left
                     right: parent.right
                     margins: Tokens.spacingSm
+                    rightMargin: 0
                 }
                 active: viewerWin.isPdf && viewerWin.view !== null
                 source: "Thumbnails.qml"
