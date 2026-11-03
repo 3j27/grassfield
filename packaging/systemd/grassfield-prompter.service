@@ -22,7 +22,10 @@ Slice=session.slice
 # in the same user manager is stopped first ("-": nothing to stop on a system without it). Not Conflicts=, which works both
 # ways: a `systemctl --user start bt-agent.service` in this session would stop this unit even though bt-agent's own
 # drop-in condition then skips it (checked under a systemd 262 user manager, ADR-0035 decision 10-1).
-ExecStartPre=-/usr/bin/systemctl --user stop bt-agent.service
+# --no-block: a synchronous stop from a unit starting with the session waited for the session's start transaction and
+# hit the 90 s start timeout on the owner's first rc1-18 login (no secret sheet for a minute and a half). The stop is
+# queued instead; bt-agent's own drop-in condition already skips it in a Grassfield session.
+ExecStartPre=-/usr/bin/systemctl --user --no-block stop bt-agent.service
 ExecStart=/usr/lib/grassfield/grassfield-prompter --peer-unit grassfield-shell.service
 Restart=on-failure
 # Back-off between restarts (systemd >= 254): 1 s, growing to 30 s.

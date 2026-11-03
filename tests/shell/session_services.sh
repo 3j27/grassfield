@@ -177,7 +177,7 @@ check bash -c 'grep -q "RUNTIME DESTINATION lib/grassfield" "$1" && grep -q "pac
 # the user manager can outlive a logout); the bridge's unit stops one still running before it starts, one way only
 # (Conflicts= would let any start of bt-agent in this session stop the bridge, although bt-agent's condition then skips it).
 desc="the bt-agent drop-in skips it in this session and stops it with the session; grassfield-prompter.service stops a leftover one first, without Conflicts="
-check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "ExecStartPre=-/usr/bin/systemctl --user stop bt-agent.service" "$2" && ! grep -q "^Conflicts=" "$2"' _ "$pk/systemd/bt-agent.service.d/10-grassfield.conf" "$u"
+check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -qx "PartOf=graphical-session.target" "$1" && grep -qx "ExecStartPre=-/usr/bin/systemctl --user --no-block stop bt-agent.service" "$2" && ! grep -q "^Conflicts=" "$2"' _ "$pk/systemd/bt-agent.service.d/10-grassfield.conf" "$u"
 # udiskie's password command (ADR-0035 D-9, step 9c): grassfield-askpass, built and installed with the bridge, where the
 # automount unit runs it, the disk's name one argument of udiskie's own formatting.
 desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
