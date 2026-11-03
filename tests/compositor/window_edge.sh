@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Window edge, inner rim and shadow (ADR-0024 C-3 and C-4, note 2026-11-03): a Grassfield Settings window on flat
-# wallpapers, captured on GF-REF; the darkening along the middle of each side (tests/compositor/edge_measure.py), compared
-# with Hyprland's shadow model at the values of config/hypr/grassfield/looknfeel.lua, with the macOS 27 target and with the
-# edge and rim tokens the shell pushes. None of it is the plugin's: run it with and without (nested-up.sh --no-plugin).
+# Window edge and shadow (ADR-0024 C-3 and C-4, note 2026-11-03): a Grassfield Settings window on flat wallpapers,
+# captured on GF-REF; the darkening along the middle of each side (tests/compositor/edge_measure.py), compared with
+# Hyprland's shadow model at the values of config/hypr/grassfield/looknfeel.lua, with the macOS 27 target and with the edge
+# tokens the shell pushes. None of it is the plugin's: run it with and without (nested-up.sh --no-plugin).
 #
 # Usage: tests/compositor/window_edge.sh
 # NESTED only: needs scripts/dev/nested-up.sh (GF-REF at any scale; the target is measured in points). Clients go through
@@ -19,9 +19,9 @@
 #     2026-11-03)
 #   3 the contact edge, the border's one device pixel: its darkening over the shadow next to it (1 - (1 - contact) /
 #     (1 - next)) within 0.03 of the tokens window.edge{Active,Inactive}Opacity{Light,Dark} (black), on every side
-#   4 the inner rim: dark appearance, the first device pixel inside the window lit by white at half
-#     window.rim{Active,Inactive}OpacityDark (within 0.03; Hyprland's inner glow at range 1, power 1); light appearance,
-#     no rim (that pixel within 2 levels of the window 4 px further in)
+#   4 no inner rim in either appearance: the first device pixel inside the window within 2 levels of the pixel next to it
+#     (a rim is a step; Hyprland's inner glow stays off, the dark appearance's rim is deferred to the plugin)
+# The dark appearance's edge is also logged in levels (window, contact pixel, the shadow next to it) for the record.
 # Captures, 3x crops of the left edge and the bottom-left corner, profiles, report and plot: .dev/window-edge/run-<time>/.
 # Exit: 0 PASS, 1 FAIL, 2 usage or environment error.
 set -uo pipefail
@@ -222,23 +222,25 @@ for look in light dark; do
   done
 done
 
-# 4 the inner rim
-rim_white() { # <json> <side>: white alpha of the first pixel inside over the window 4 px further in (mean of the channels)
-  jq -r --arg s "$2" '.sides[$s].rgb | [.[7], .[3]] | [range(3) as $c | (.[0][$c] - .[1][$c]) / (255 - .[1][$c])] | add / 3' "$1" \
-    | awk '{ printf "%.3f", $1 }'
+# 4 no inner rim
+rim_levels() { # <json> <side>: the first pixel inside minus the next one in, in levels (mean of the channels; a rim is a step)
+  jq -r --arg s "$2" '.sides[$s].rgb | ((.[7] | add) - (.[6] | add)) / 3' "$1" | awk '{ printf "%.1f", $1 }'
 }
-rim_levels() { # <json> <side>: the same in levels (mean of the channels)
-  jq -r --arg s "$2" '.sides[$s].rgb | ((.[7] | add) - (.[3] | add)) / 3' "$1" | awk '{ printf "%.1f", $1 }'
+levels() { # <json> <side>: window, contact pixel and the next one outside, in levels (mean of the channels)
+  jq -r --arg s "$2" '.sides[$s].rgb | [.[3], .[8], .[9]] | map(add / 3 | floor) | "window \(.[0]), contact \(.[1]), shadow \(.[2])"' "$1"
 }
-for state in active inactive; do
-  want=$(awk -v a="$(token "rim${state^}OpacityDark")" 'BEGIN { printf "%.3f", a / 2 }')
-  for side in left right top bottom; do
-    v=$(rim_white "$run/dark-E6E6E6-$state.json" "$side")
-    awk -v v="$v" -v w="$want" 'BEGIN { d = v - w; if (d < 0) d = -d; exit !(d <= 0.03) }'
-    check "4 dark, $state, $side: inner rim" $? "white $v over the window (half the token: $want +-0.03)"
-    v=$(rim_levels "$run/light-E6E6E6-$state.json" "$side")
-    awk -v v="$v" 'BEGIN { if (v < 0) v = -v; exit !(v <= 2) }'
-    check "4 light, $state, $side: no inner rim" $? "$v levels over the window (at most 2)"
+for look in light dark; do
+  for state in active inactive; do
+    for side in left right top bottom; do
+      v=$(rim_levels "$run/$look-E6E6E6-$state.json" "$side")
+      awk -v v="$v" 'BEGIN { if (v < 0) v = -v; exit !(v <= 2) }'
+      check "4 $look, $state, $side: no inner rim" $? "$v levels over the window (at most 2)"
+    done
+  done
+done
+for wall in E6E6E6 808080; do
+  for state in active inactive; do
+    say "  dark edge over #$wall, $state: left $(levels "$run/dark-$wall-$state.json" left); bottom $(levels "$run/dark-$wall-$state.json" bottom)"
   done
 done
 

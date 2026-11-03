@@ -105,7 +105,7 @@ namespace gf::theme::tokens {
     inline constexpr double kWindowSidebarPanelShadowOpacity = 0.08;
     // estimate: the same in the dark appearance, stronger so it still reads on the dark window (no dark capture) [ref: ADR-0024 amendment 2026-11-03]
     inline constexpr double kWindowSidebarPanelShadowOpacityDark = 0.3;
-    // the window's contact edge in the dark appearance: macOS 27 draws one device pixel of near black outside the window, then the light inner rim (window.rim*); Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua); was the white rim at 0.15 (ADR-0024 note 2026-11-03) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/decisions/ADR-0039-design-polish.md step 6; tests/compositor/window_edge.sh]
+    // the window's contact edge in the dark appearance: macOS 27 draws one device pixel of near black outside the window (its light inner rim inside it is deferred to the plugin, ADR-0024 note 2026-11-03); Hyprland's border colour, pushed by the shell with the appearance (C-4); the config's own (config/hypr/grassfield/looknfeel.lua); was the white rim at 0.15 (ADR-0024 note 2026-11-03) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; docs/decisions/ADR-0039-design-polish.md step 6; tests/compositor/window_edge.sh]
     inline constexpr uint32_t kWindowEdgeDark = 0x000000;
     // the window's contact edge in the light appearance: macOS 27 draws it dark (C-4) [ref: docs/decisions/ADR-0039-design-polish.md step 6; docs/audits/ui-finesse-2026-10-25.md 7.3]
     inline constexpr uint32_t kWindowEdgeLight = 0x000000;
@@ -117,16 +117,6 @@ namespace gf::theme::tokens {
     inline constexpr double kWindowEdgeActiveOpacityLight = 0.125;
     // an inactive window's edge in the light appearance: 0.18 over its shadow (the inactive Settings window of the Finder App Switcher release capture), 0.18 x 0.5 / 0.8 [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
     inline constexpr double kWindowEdgeInactiveOpacityLight = 0.11;
-    // the window's inner rim in the dark appearance: macOS 27 lights the two device pixels (1 pt) inside the window's edge, inside the dark outer pixel (window.edgeDark); Hyprland's inner glow (decoration.glow, range 1, render_power 1), pushed by the shell with the edge; the config's own (config/hypr/grassfield/looknfeel.lua) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
-    inline constexpr uint32_t kWindowRimDark = 0xFFFFFF;
-    // the active window's inner rim, dark appearance: macOS 27 white about 0.10 over 1 pt (Notes, the Appearance Dark release captures); the glow lights the first device pixel at half its colour's alpha at 1.25 (measured): 0.125 over 0.8 pt, the same light per point [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
-    inline constexpr double kWindowRimActiveOpacityDark = 0.25;
-    // an inactive window's inner rim, dark appearance: macOS 27 white about 0.08 over 1 pt (the inactive Settings window, same captures): 0.1 over 0.8 pt [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
-    inline constexpr double kWindowRimInactiveOpacityDark = 0.2;
-    // no inner rim in the light appearance: macOS 27 light windows show at most white 0.07 over one device pixel (the Settings sidebar), invisible on their white; 0 for both turns Hyprland's glow off [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md; tests/compositor/window_edge.sh]
-    inline constexpr double kWindowRimActiveOpacityLight = 0.0;
-    // no inner rim in the light appearance (window.rimActiveOpacityLight) [ref: docs/decisions/ADR-0024-visual-direction-27-structure-26-glass.md]
-    inline constexpr double kWindowRimInactiveOpacityLight = 0.0;
     // a window that is not key, light appearance: its toolbar title and glyphs in the text colour at this opacity (macOS 27's inactive Finder and Settings: the title #B8B8B8 on white, the glyphs #B0B0B0 on #F0F0F0, black at 0.27-0.28; 512 Pixels release capture Finder-App-Switcher); an inactive control, exempt from WCAG 1.4.3 (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
     inline constexpr double kWindowInactiveTextOpacityLight = 0.28;
     // the same, dark appearance: macOS 27's inactive Settings title #747373 on #333131, white at 0.32 (512 Pixels release capture Apperance-Dark-Green) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]

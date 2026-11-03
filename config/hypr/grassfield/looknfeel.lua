@@ -10,9 +10,11 @@ hl.config({
     border_size = 1,
     col = {
       -- The window's contact edge, macOS 27's dark device pixel outside the window: the dark appearance's (tokens
-      -- window.edgeDark and window.edge*OpacityDark; its light inner rim is the glow below). The shell pushes the current
-      -- appearance's pair at start, on a change and after a reload (fainter in the light appearance; ADR-0039 step 6, C-4;
-      -- ADR-0024 note 2026-11-03; shell/platform/Compositor.qml pushEdge). At 1.25 the border is one device pixel (0.8 pt).
+      -- window.edgeDark and window.edge*OpacityDark). The shell pushes the current appearance's pair at start, on a change
+      -- and after a reload (fainter in the light appearance; ADR-0039 step 6, C-4; ADR-0024 note 2026-11-03;
+      -- shell/platform/Compositor.qml pushEdge). At 1.25 the border is one device pixel (0.8 pt). The dark appearance's light
+      -- inner rim is left to the plugin: Hyprland 0.56.2's inner glow (decoration.glow) has no window rule and skips the
+      -- rounded corners, and it lit the client's top row under a third-party window's titlebar (ADR-0024 note 2026-11-03).
       active_border = "rgba(00000094)",
       inactive_border = "rgba(00000085)",
     },
@@ -125,23 +127,6 @@ hl.config({
   ecosystem = {
     no_update_news = true,
     no_donation_nag = true,
-  },
-})
-
--- The window's inner rim, macOS 27's light point inside the dark contact edge (ADR-0024 note 2026-11-03): Hyprland's inner glow
--- over the first device pixel inside every window, at half the colour's alpha at 1.25 (tests/compositor/window_edge.sh). The
--- dark appearance's (tokens window.rimDark and window.rim*OpacityDark); the shell turns it off in the light appearance and
--- sends it back with the edge (shell/platform/Compositor.qml pushEdge). Its own call: a Hyprland without decoration.glow
--- reports the key and keeps everything above.
-pcall(hl.config, {
-  decoration = {
-    glow = {
-      enabled = true,
-      range = 1,
-      render_power = 1,
-      color = "rgba(ffffff40)",
-      color_inactive = "rgba(ffffff33)",
-    },
   },
 })
 

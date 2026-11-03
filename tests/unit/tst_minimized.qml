@@ -42,32 +42,17 @@ TestCase {
     }
 
     // The window edge per appearance (ADR-0039 step 6, C-4; ADR-0024 note 2026-11-03): a dark device pixel in both appearances,
-    // fainter in the light one; the dark appearance's light inner rim (Hyprland's glow), turned off in the light appearance; a
-    // value that is not a colour or an alpha sends nothing.
-    function rim(dark) {
-        return dark ? {"colour": Tokens.windowRimDark, "active": Tokens.windowRimActiveOpacityDark, "inactive": Tokens.windowRimInactiveOpacityDark}
-                    : {"colour": Tokens.windowRimDark, "active": Tokens.windowRimActiveOpacityLight, "inactive": Tokens.windowRimInactiveOpacityLight};
-    }
-
+    // fainter in the light one; a value that is not a colour or an alpha sends nothing.
     function test_edgeCallIsBuiltPerAppearance() {
-        compare(Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight, rim(false)),
-                "function() hl.config({ general = { col = { active_border = \"rgba(00000020)\", inactive_border = \"rgba(0000001c)\" } } })"
-                + "; hl.config({ decoration = { glow = { enabled = false } } }) end");
-        compare(Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark, rim(true)),
-                "function() hl.config({ general = { col = { active_border = \"rgba(00000094)\", inactive_border = \"rgba(00000085)\" } } })"
-                + "; hl.config({ decoration = { glow = { enabled = true, color = \"rgba(ffffff40)\", color_inactive = \"rgba(ffffff33)\" } } }) end");
-        // Without a rim: the border alone (the call before the glow).
-        compare(Minimized.edgeCall("#000000", 0.25, 0.13),
-                "function() hl.config({ general = { col = { active_border = \"rgba(00000040)\", inactive_border = \"rgba(00000021)\" } } }) end");
+        compare(Minimized.edgeCall(Tokens.windowEdgeLight, Tokens.windowEdgeActiveOpacityLight, Tokens.windowEdgeInactiveOpacityLight),
+                "function() hl.config({ general = { col = { active_border = \"rgba(00000020)\", inactive_border = \"rgba(0000001c)\" } } }) end");
+        compare(Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark),
+                "function() hl.config({ general = { col = { active_border = \"rgba(00000094)\", inactive_border = \"rgba(00000085)\" } } }) end");
         compare(Minimized.edgeCall("#000", 0.25, 0.13), "");
         compare(Minimized.edgeCall("black", 0.25, 0.13), "");
         compare(Minimized.edgeCall("#000000", 1.5, 0.13), "");
         compare(Minimized.edgeCall("#000000", 0.25, NaN), "");
         compare(Minimized.edgeCall("#000000\"; os.exit() --", 0.25, 0.13), "", "nothing but a colour reaches the Lua string");
-        compare(Minimized.edgeCall("#000000", 0.25, 0.13, null), "");
-        compare(Minimized.edgeCall("#000000", 0.25, 0.13, {"colour": "#FFFFFF", "active": 0.25}), "");
-        compare(Minimized.edgeCall("#000000", 0.25, 0.13, {"colour": "#FFFFFF\") end os.exit() --", "active": 0.25, "inactive": 0.2}), "",
-                "nothing but a colour reaches the Lua string");
     }
 
     function source(path) {
@@ -78,27 +63,25 @@ TestCase {
         return xhr.responseText;
     }
 
-    // A config reload restores the config's border and glow: they must be the dark appearance's, which the shell then replaces
-    // in the light appearance.
+    // A config reload restores the config's border: it must be the dark appearance's pair, which the shell then replaces in
+    // the light appearance. Hyprland's inner glow stays at its default (off): with no window rule and no rim along the rounded
+    // corners, it lit the client's top row under a third-party window's titlebar (ADR-0024 note 2026-11-03).
     function test_theConfigHoldsTheDarkEdge() {
         const config = source("config/hypr/grassfield/looknfeel.lua");
-        const dark = Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark, rim(true));
+        const dark = Minimized.edgeCall(Tokens.windowEdgeDark, Tokens.windowEdgeActiveOpacityDark, Tokens.windowEdgeInactiveOpacityDark);
         const active = /active_border = "(rgba\([0-9a-f]{8}\))"/.exec(dark)[1];
         const inactive = /inactive_border = "(rgba\([0-9a-f]{8}\))"/.exec(dark)[1];
         verify(config.indexOf('active_border = "' + active + '"') >= 0, "config active_border " + active);
         verify(config.indexOf('inactive_border = "' + inactive + '"') >= 0, "config inactive_border " + inactive);
-        const glow = config.slice(config.indexOf("glow = {"));
-        verify(/^glow = \{\s*enabled = true,/.test(glow), "config glow enabled");
-        verify(glow.indexOf('color = "' + /[^_]color = "(rgba\([0-9a-f]{8}\))"/.exec(dark)[1] + '"') >= 0, "config glow color");
-        verify(glow.indexOf('color_inactive = "' + /color_inactive = "(rgba\([0-9a-f]{8}\))"/.exec(dark)[1] + '"') >= 0, "config glow color_inactive");
+        verify(!/glow\s*=\s*\{/.test(config.replace(/--.*$/gm, "")), "the config sets no inner glow");
     }
 
     // The shell sends the edge of the appearance it shows, at start, on a change (debounced) and after a reload, as the blur
     // (shell/platform/Compositor.qml needs Quickshell: read from its source).
     function test_theShellPushesTheEdgeWithTheAppearance() {
         const compositor = source("shell/platform/Compositor.qml").replace(/\/\/.*$/gm, "");
-        verify(/readonly property string edgeCall: Appearance\.dark\s*\?\s*Minimized\.edgeCall\(Tokens\.windowEdgeDark,[^?]*Tokens\.windowRimActiveOpacityDark[^?]*:\s*Minimized\.edgeCall\(Tokens\.windowEdgeLight,[^?]*Tokens\.windowRimActiveOpacityLight/.test(compositor),
-               "the call follows Appearance.dark, the rim with it");
+        verify(/readonly property string edgeCall: Appearance\.dark\s*\?\s*Minimized\.edgeCall\(Tokens\.windowEdgeDark,[^:]*:\s*Minimized\.edgeCall\(Tokens\.windowEdgeLight,/.test(compositor),
+               "the call follows Appearance.dark");
         verify(/onEdgeCallChanged: \{[^}]*edgeDebounce\.restart\(\)/.test(compositor), "a change is pushed (debounced)");
         // The singleton's own start (the one that pushes the blur), not a socket's.
         const starts = compositor.split("Component.onCompleted: {").slice(1).map(t => t.slice(0, t.indexOf("}")));
