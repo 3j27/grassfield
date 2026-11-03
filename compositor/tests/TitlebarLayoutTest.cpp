@@ -403,11 +403,11 @@ TEST(UnzoomedDragBox, ClampsDegenerateInput) {
 
 TEST(Theme, ColorsAreGrassfieldValues) {
     using namespace gf::theme;
-    EXPECT_FLOAT_EQ(kCloseColor.r, 0xE5 / 255.F);
-    EXPECT_FLOAT_EQ(kCloseColor.g, 0x53 / 255.F);
-    EXPECT_FLOAT_EQ(kCloseColor.b, 0x4B / 255.F);
-    EXPECT_FLOAT_EQ(kMinimizeColor.r, 0xD9 / 255.F);
-    EXPECT_FLOAT_EQ(kZoomColor.g, 0xA6 / 255.F);
+    EXPECT_FLOAT_EQ(kCloseColor.r, 0xFF / 255.F);
+    EXPECT_FLOAT_EQ(kCloseColor.g, 0x5C / 255.F);
+    EXPECT_FLOAT_EQ(kCloseColor.b, 0x60 / 255.F);
+    EXPECT_FLOAT_EQ(kMinimizeColor.r, 0xFA / 255.F);
+    EXPECT_FLOAT_EQ(kZoomColor.g, 0xC7 / 255.F);
     // The window's own colours (ADR-0039 Q8, step 21), warm (ADR-0040): #2B2925 and #FDFCF9 (red above blue), where the bar
     // was a band of its own (#2A2824, #EFECE7).
     EXPECT_FLOAT_EQ(titlebarPalette(Appearance::Dark).background.r, 43 / 255.F);
