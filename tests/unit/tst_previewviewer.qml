@@ -189,19 +189,32 @@ TestCase {
         return null;
     }
 
-    // The window's structure as every app's (ADR-0039 step 16): an edge-to-edge sidebar in the sidebar fill, toolbar groups on
-    // the toolbar's rimmed capsules with 34-pt buttons, and the toolbar's rule once the view's content has scrolled under it.
-    function test_theSidebarIsEdgeToEdge() {
+    // The window's structure as every app's (ADR-0024 amendment 2026-11-03): a floating sidebar panel in the sidebar fill, inset
+    // from the window's left and bottom edges and rounded with the panel radius; the view runs straight on from its right edge.
+    function test_theSidebarFloats() {
         viewer.sidebarOpen = true;
         wait(50);
-        const fill = findIn(viewer.contentItem, it => String(it).indexOf("QQuickRectangle") === 0 && it.visible
-                            && Qt.colorEqual(it.color, Appearance.colors.sidebarFill) && it.width === Tokens.previewSidebarWidth);
-        verify(fill !== null, "the sidebar fill, as wide as the sidebar");
+        const inset = Tokens.windowSidebarPanelInset;
+        const fill = findIn(viewer.contentItem, it => String(it).indexOf("SidebarPanel") === 0 && it.visible
+                            && Qt.colorEqual(it.color, Appearance.colors.sidebarFill) && it.width === Tokens.previewSidebarWidth - inset);
+        verify(fill !== null, "the sidebar panel, the sidebar's slot less its left gutter");
         const at = fill.mapToItem(viewer.contentItem, 0, 0);
-        compare(at.x, 0, "flush with the window's left edge");
-        compare(at.y + fill.height, viewer.contentItem.height, "down to the window's bottom edge");
-        compare(fill.radius, 0, "no floating panel");
+        compare(at.x, inset, "inset from the window's left edge");
+        compare(at.y + fill.height, viewer.contentItem.height - inset, "inset from the window's bottom edge");
+        compare(fill.radius, Tokens.windowSidebarPanelRadius, "rounded as the panel token says");
         viewer.sidebarOpen = false;
+    }
+
+    // The tokens behind every app's floating sidebar panel, measured on the macOS 26 System Settings capture (2 px/pt): an
+    // 8-pt inset, an 18-pt corner concentric with the 26-pt window corner, and a calm fill 6 levels under the window.
+    function test_theSidebarPanelTokens() {
+        compare(Tokens.windowSidebarPanelInset, 8);
+        compare(Tokens.windowSidebarPanelRadius, 18);
+        compare(Tokens.windowSidebarPanelRadius, 26 - Tokens.windowSidebarPanelInset, "concentric with the window corner");
+        const light = Tokens.colorLight, dark = Tokens.colorDark;
+        function level(hex) { return parseInt(hex.substring(1, 3), 16); }
+        compare(level(light.windowBackground) - level(light.sidebarFill), 6, "light panel: 6 levels under the window");
+        compare(level(dark.windowBackground) - level(dark.sidebarFill), 6, "dark panel: 6 levels under the window");
     }
 
     function test_theToolbarGroupsAreTheSharedCapsules() {

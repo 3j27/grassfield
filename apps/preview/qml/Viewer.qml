@@ -636,12 +636,16 @@ Window {
         visible: width > 0
         clip: true
 
-        // Edge to edge and a step darker than the content, with no dividing line, as Settings' and Files' (macOS 27; ADR-0024
-        // replaced macOS 26's floating panel; ADR-0039 step 16).
-        Rectangle {
+        // The floating panel as Settings' and Files' (macOS 26; ADR-0024 amendment 2026-11-03): inset from the window's left and
+        // bottom edges, the toolbar's own gap above it, the view straight beside it. The lights stay in the toolbar above
+        // (a split toolbar is the Preview alignment batch).
+        SidebarPanel {
             id: panel
-            anchors.fill: parent
-            color: Appearance.colors.sidebarFill
+            anchors {
+                fill: parent
+                leftMargin: Tokens.windowSidebarPanelInset
+                bottomMargin: Tokens.windowSidebarPanelInset
+            }
             clip: true
 
             // Files: thumbnails of the images, names of the other kinds. Beside the page thumbnails of a PDF they are
