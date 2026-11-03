@@ -683,8 +683,8 @@ on, four "open refused" and nothing reaching the launch path; pass 2 without it,
 never appears).
 
 ## Upstream base (GF-031)
-Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0` (installed
-4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`, byte-identical to `/usr/share/omarchy/shell/plugins/lock/Service.qml`):
+Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0`, the installed
+package since 2026-11-03 (4.0.6-1; previously 4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`):
 - v4.0.6 `currentlyLocked()` ("A property binding that missed a change notification once reported locked after an
   unlock, and a lock request before suspend then took that for done and never locked the session"): **ported** as
   `Lock.currentlyLocked()` / `Lock.currentlySecure()` (state machine storage via `LockController.currentState()`,
@@ -696,13 +696,33 @@ Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff229
   the session locked, the ownership check re-locks after the foreign release (`foreign-restart`, ≤ 150 ms), and an exit
   is followed by a restart that restores from the marker. The process test would also block the recovery of a dead
   client's lock whenever another Quickshell instance of the user runs (the nested dev session always has one).
-- Idle and polkit: v4.0.5/4.0.6 changes are `Commons.Color` renames (Qt 6.12) and screensaver handling Grassfield does
-  not use; nothing to port.
+- Polkit: v4.0.5/4.0.6 changes are `Commons.Color` renames (Qt 6.12) only; identity selection, cancellation and the
+  agent registration are unchanged; nothing to port.
+- Idle (corrected by the re-pin below): v4.0.6 makes a timeout of 0 mean "action disabled" (`IdleModel.firstIdleTimeout`,
+  the monitor's timeout at least 1 s), ends a running cycle when both timeouts become 0, and sets the lock timer's
+  interval once per cycle instead of binding it ("a bound interval would restart a pending timer from the moment
+  shell.json changes, locking early or late"). **Not applicable**: Grassfield has one timeout (`lock.idleMinutes`, 0 =
+  never: `timings().enabled` false disarms the monitor, whose `onEnabledChanged` runs `update()` and stops the lock
+  timer), the monitor's timeout is at least 1 s, and the bound `lockTimer.interval` is `DIM_LEAD_SECONDS` for every
+  enabled setting, so a settings change never changes a pending lock timer (pinned by `tst_idlemodel.qml`
+  `test_lockDelaySameForEverySetting`). A timeout change re-arms the monitor (see `rearming` in `Idle.qml`), which
+  restarts the idle count: the lock comes the new timeout after the change rather than after the last input (later by the
+  time already idle), and only when the setting changes without input (changing it in Settings is input).
+- **4.0.4 → 4.0.6 re-pin (2026-11-03, the owner's machine on omarchy 4.0.6-1)**: the five drifted files are
+  byte-identical to `237f1b40` (sha256 of the installed file = the upstream file at that revision; the 4.0.4 pins =
+  `c668141e`). `plugins/lock/Service.qml`: the `currentlyLocked()` port and the stranded-lock decision above stand; its
+  other changes are the `Commons.Color` qualifier and `isLocked()`/`status()` IPC reading `currentlyLocked()` (Grassfield
+  has no `isLocked` IPC; `status` is a dev hook); PAM service, fingerprint and the auth flow unchanged.
+  `plugins/services/idle/Service.qml`, `plugins/polkit/PolkitAgent.qml`: as above. `default/pacman/pacman-stable.conf`:
+  `[omarchy]` moved first; `grassfield-channel.sh` already appends `[grassfield]` after the last repository (ADR-0033
+  a.1). `bin/omarchy-update-keyring`: `pacman -Sy --needed archlinux-keyring` instead of a forced reinstall; the trusted
+  Omarchy fingerprint `40DFB630FF42BCFFB047046CF0134EE680CAC571` and the keyserver trust step are unchanged;
+  `grassfield-update-helper` already uses `--needed` and the same `GU_OMARCHY_FPR`. No security module change.
 - Pinned (GF-031 drift check): `docs/upstream/omarchy.lock` holds the sha256 of every upstream file a fork derives from
   (`plugins/lock/Service.qml` → `Lock.qml`, `plugins/services/idle/Service.qml` → `Idle.qml`,
   `plugins/polkit/PolkitAgent.qml` → `AuthAgent.qml`, `bin/omarchy-system-sleep-lock` → `IdleModel.js` budget and the
   `omarchy-shell` stand-in, `bin/omarchy-hyprland-session-locked` → the stranded-lock signal), the installed package
-  (4.0.4-1) and the reviewed upstream revisions. `scripts/dev/upstream-drift.sh` (`just check-upstream`, part of
+  (4.0.6-1) and the reviewed upstream revisions. `scripts/dev/upstream-drift.sh` (`just check-upstream`, part of
   `just check`) fails when the installed Omarchy changed or removed one of them, naming the forks to review; without
   Omarchy it says SKIP. It also fails, Omarchy or not, when a pinned fork is gone or no longer names its upstream file, and
   when a source file says "adapted from Omarchy" without being pinned, and on any read error (an unreadable fork or file of

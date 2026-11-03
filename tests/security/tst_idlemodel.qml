@@ -30,6 +30,19 @@ TestCase {
         verify(!IdleModel.timings(0).enabled);
     }
 
+    // Omarchy 4.0.6 drift review (docs/specs/security.md "Upstream base"): upstream stopped binding its lock timer's
+    // interval to the settings, because a settings change restarted a pending timer and locked early or late. Idle.qml
+    // still binds lockTimer.interval, which is safe only while that interval is the same for every enabled setting (a
+    // change of lock.idleMinutes then never changes it) and the idle monitor's timeout is never 0 (idle at once).
+    function test_lockDelaySameForEverySetting() {
+        for (let m = 0; m <= IdleModel.MAX_MINUTES; m++) {
+            const t = IdleModel.timings(m);
+            verify(t.dimSeconds >= 1, "dimSeconds at " + m + " min: " + t.dimSeconds);
+            if (m > 0)
+                compare(t.lockDelayMs, IdleModel.DIM_LEAD_SECONDS * 1000, "lockDelayMs at " + m + " min");
+        }
+    }
+
     function test_invalidFallsBackToDefault() {
         // false, "0", "", null and [0] are 0 to Number(): they must never switch the lock off.
         const values = [-1, 241, 2.5, NaN, undefined, "x", false, true, "0", "5", "", null, [0], {}, 0.4, 0.49, -0.5, 1e-9, -2147483648, -1e308, Infinity, -Infinity];
