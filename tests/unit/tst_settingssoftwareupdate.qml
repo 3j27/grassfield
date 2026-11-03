@@ -22,7 +22,7 @@ TestCase {
     readonly property string runFile: "/run/user/1000/grassfield/software-update-run.json"
     readonly property string runOp: "0123456789abcdef0123456789abcdef"
     readonly property string repositoryReady: "GRASSFIELD_REPO_BASE=https://packages.example.org\nGRASSFIELD_SIGNING_FINGERPRINT=0123456789ABCDEF0123456789ABCDEF01234567\n"
-    readonly property string repositoryPlaceholder: "GRASSFIELD_REPO_BASE=https://packages.grassfield.invalid\nGRASSFIELD_SIGNING_FINGERPRINT=\n"
+    readonly property string repositoryPlaceholder: "GRASSFIELD_REPO_BASE=https://packages.grassfield.site\nGRASSFIELD_SIGNING_FINGERPRINT=\n"
 
     function iso(ms) {
         return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");

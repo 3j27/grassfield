@@ -57,8 +57,9 @@ TEST(Channel, RequestsAreHttpsOnly)
 // The base this build was made with, read from the installed repository.conf (one KEY=value per line).
 TEST(Channel, TheBuildsBase)
 {
-    EXPECT_EQ(buildBase("# a comment\nGRASSFIELD_REPO_BASE=https://packages.grassfield.invalid\nGRASSFIELD_REPO_MIRRORS=\n"),
-              QStringLiteral("https://packages.grassfield.invalid"));
+    EXPECT_EQ(buildBase("# a comment\nGRASSFIELD_REPO_BASE=https://packages.grassfield.site\nGRASSFIELD_REPO_MIRRORS=\n"),
+              QStringLiteral("https://packages.grassfield.site"));
+    EXPECT_TRUE(fetchable(defaultChannel(buildBase("GRASSFIELD_REPO_BASE=https://packages.grassfield.site\n"))));
     EXPECT_EQ(buildBase("GRASSFIELD_REPO_BASE_PREVIOUS=https://old.example\n"), QString());
     EXPECT_EQ(buildBase(""), QString());
     EXPECT_FALSE(fetchable(defaultChannel(buildBase("GRASSFIELD_REPO_BASE=https://packages.grassfield.invalid\n"))));
