@@ -599,7 +599,7 @@ Window {
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.windowTitleSize
-                    font.weight: Tokens.typographyMenuBoldWeight
+                    font.weight: Tokens.typographyTitleWeight
                 }
 
                 Icon {

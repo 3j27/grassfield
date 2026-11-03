@@ -125,7 +125,7 @@ Item {
         color: Appearance.looksKey(root.Window.window, root.Window.active) ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
         font.family: Appearance.fontFamily
         font.pixelSize: root.titlebarStyle ? Tokens.typographyBodySize : Tokens.windowTitleSize
-        font.weight: Tokens.typographyMenuBoldWeight
+        font.weight: Tokens.typographyTitleWeight
         Accessible.role: Accessible.Heading
         Accessible.name: text
     }
