@@ -87,7 +87,7 @@ TestCase {
 
     // The BrowserTab API the gallery uses. handleViewKey keeps BrowserTab's mapping for the keys tested here.
     QtObject {
-        id: tab
+        id: tabItem
 
         property string searchText: ""
         property int activated: -1
@@ -126,10 +126,10 @@ TestCase {
         // BrowserTab's drag bracket: dragStarted before the system drag, dragFinished from its end.
         property var dragEvents: []
         function dragStarted(): void {
-            tab.dragEvents = tab.dragEvents.concat(["started"]);
+            tabItem.dragEvents = tabItem.dragEvents.concat(["started"]);
         }
         function dragFinished(dropAction: int): void {
-            tab.dragEvents = tab.dragEvents.concat(["finished"]);
+            tabItem.dragEvents = tabItem.dragEvents.concat(["finished"]);
         }
 
         function focusView(): void {
@@ -141,7 +141,7 @@ TestCase {
         function startRename(model: var, row: int): void {
         }
         function activate(row: int, model: var): void {
-            tab.activated = row;
+            tabItem.activated = row;
         }
         function contextMenu(model: var, row: int, x: real, y: real, keyboard: bool): void {
         }
@@ -162,11 +162,11 @@ TestCase {
                     model.select(next, 0);
                 event.accepted = true;
             } else if (event.key === Qt.Key_Space) {
-                tab.glances++;
+                tabItem.glances++;
                 event.accepted = true;
             } else if (event.key === Qt.Key_Return) {
                 // BrowserTab: Return renames the selected item (macOS, docs/specs/files.md F-4).
-                tab.renamed = model.currentRow;
+                tabItem.renamed = model.currentRow;
                 event.accepted = true;
             }
         }
@@ -175,7 +175,7 @@ TestCase {
     GalleryView {
         id: gallery
         anchors.fill: parent
-        tab: tab
+        tab: tabItem
         model: listing
     }
 
@@ -192,7 +192,7 @@ TestCase {
     }
 
     function init(): void {
-        tab.app.galleryInfo = true;
+        tabItem.app.galleryInfo = true;
         listing.select(0, 0);
         gallery.focusView();
         waitForRendering(gallery);
@@ -228,12 +228,12 @@ TestCase {
     }
 
     function test_spaceAndReturnReachTheTab() {
-        const before = tab.glances;
+        const before = tabItem.glances;
         keyClick(Qt.Key_Right);
         keyClick(Qt.Key_Space);
-        compare(tab.glances, before + 1);
+        compare(tabItem.glances, before + 1);
         keyClick(Qt.Key_Return);
-        compare(tab.renamed, 1, "Return renames the shown item");
+        compare(tabItem.renamed, 1, "Return renames the shown item");
     }
 
     function test_largePreviewFollowsTheCurrentItem() {
@@ -260,10 +260,10 @@ TestCase {
         input.forceActiveFocus();
         input.text = "  Work ";
         keyClick(Qt.Key_Return);
-        compare(tab.app.typedTags, ["  Work "], "the typed text goes to FilesApp, which resolves colour names");
+        compare(tabItem.app.typedTags, ["  Work "], "the typed text goes to FilesApp, which resolves colour names");
         compare(input.text, "", "the field empties once the tag is added");
         keyClick(Qt.Key_Return);
-        compare(tab.app.typedTags.length, 1, "an empty field adds nothing");
+        compare(tabItem.app.typedTags.length, 1, "an empty field adds nothing");
         keyClick(Qt.Key_Escape);
         verify(!input.activeFocus, "Escape returns to the view");
     }
@@ -294,25 +294,25 @@ TestCase {
     // A drag from the strip brackets the system drag with the tab's dragStarted and dragFinished (BrowserTab keeps the
     // view that started it alive until then: Nav.shownView).
     function test_aDragFromTheStripIsBracketed() {
-        tab.dragEvents = [];
+        tabItem.dragEvents = [];
         const cell = gallery.rowPosition(listing, 1);
         const local = test.mapFromItem(null, cell.x, cell.y);
         mousePress(test, local.x, local.y);
         for (let i = 1; i <= 6; i++)
             mouseMove(test, local.x + i * 8, local.y);
         mouseRelease(test, local.x + 48, local.y);
-        tryVerify(() => tab.dragEvents.length >= 1, 2000, "the drag started");
-        compare(tab.dragEvents[0], "started");
+        tryVerify(() => tabItem.dragEvents.length >= 1, 2000, "the drag started");
+        compare(tabItem.dragEvents[0], "started");
         // Offscreen, the platform drag ends at once (no drop).
-        tryVerify(() => tab.dragEvents.indexOf("finished") > 0, 2000, "and ended after it started");
+        tryVerify(() => tabItem.dragEvents.indexOf("finished") > 0, 2000, "and ended after it started");
     }
 
     function test_infoPanelFollowsItsPreference() {
         compare(gallery.info.name, "alpha.png");
         verify(gallery.showInfo);
-        tab.app.galleryInfo = false;
+        tabItem.app.galleryInfo = false;
         verify(!gallery.showInfo);
-        tab.app.galleryInfo = true;
+        tabItem.app.galleryInfo = true;
         verify(gallery.showInfo);
     }
 

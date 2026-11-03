@@ -18,7 +18,7 @@ Item {
 
     signal edited(string color)
 
-    readonly property bool open: layer.visible
+    readonly property bool open: layerItem.visible
     // The colour the user is editing, held until the host sets `color` again (an unbound well still follows the user).
     property string local: ""
     readonly property string shown: root.local !== "" ? root.local : PointerColors.normalize(root.color, Tokens.settingsColorSquareBlack)
@@ -92,7 +92,7 @@ Item {
     }
 
     function show(): void {
-        layer.visible = true;
+        layerItem.visible = true;
         root.place();
         square.forceActiveFocus();
     }
@@ -101,17 +101,17 @@ Item {
         // The last colour of a drag in progress is never lost.
         if (root.pending !== "")
             root.pick(root.pending, true);
-        layer.visible = false;
+        layerItem.visible = false;
         root.forceActiveFocus();
     }
 
     // Below the well, flipped above it when that would run past the window bottom, always inside the window.
     function place(): void {
-        const below = root.mapToItem(layer, 0, root.height + Tokens.spacingXs);
-        const above = root.mapToItem(layer, 0, -Tokens.spacingXs - card.height);
-        const maxY = layer.height - card.height - Tokens.spacingSm;
+        const below = root.mapToItem(layerItem, 0, root.height + Tokens.spacingXs);
+        const above = root.mapToItem(layerItem, 0, -Tokens.spacingXs - card.height);
+        const maxY = layerItem.height - card.height - Tokens.spacingSm;
         const y = below.y > maxY && above.y >= Tokens.spacingSm ? above.y : below.y;
-        card.x = Math.max(Tokens.spacingSm, Math.min(layer.width - card.width - Tokens.spacingSm, below.x + root.width - card.width));
+        card.x = Math.max(Tokens.spacingSm, Math.min(layerItem.width - card.width - Tokens.spacingSm, below.x + root.width - card.width));
         card.y = Math.max(Tokens.spacingSm, Math.min(maxY, y));
     }
 
@@ -175,7 +175,7 @@ Item {
 
     // Window-sized layer above the page: catches outside clicks and hosts the popover.
     Item {
-        id: layer
+        id: layerItem
         parent: root.Window.contentItem
         anchors.fill: parent
         visible: false
@@ -199,7 +199,7 @@ Item {
             readonly property real contentWidth: Math.max(Tokens.settingsColorSquareWidth, swatches.implicitWidth - 2 * Tokens.menuItemPadding)
             width: card.contentWidth + 2 * Tokens.spacingMd
             height: column.height + 2 * Tokens.spacingMd
-            onHeightChanged: if (layer.visible) root.place()
+            onHeightChanged: if (layerItem.visible) root.place()
             Accessible.role: Accessible.Dialog
             Accessible.name: root.accessibleName
 

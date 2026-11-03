@@ -16,7 +16,7 @@ Window {
     readonly property var performance: root.app.performance
     readonly property var detail: root.performance.detail
     // The tests read them.
-    readonly property alias sidebar: sidebar
+    readonly property alias sidebar: sidebarItem
     readonly property alias cpuModePicker: cpuModePicker
     readonly property alias figures: figures
 
@@ -56,7 +56,7 @@ Window {
 
     // The sidebar: the resources, the selected one highlighted; Up and Down move.
     ListView {
-        id: sidebar
+        id: sidebarItem
         objectName: "performanceSidebar"
         anchors.top: chrome.bottom
         anchors.left: parent.left
@@ -81,7 +81,7 @@ Window {
             readonly property var modelData: root.performance.resources[resource.index] ?? ({key: "", title: "", subtitle: "", value: "", graph: ({})})
             readonly property var lines: [resource.modelData.title, resource.modelData.subtitle, resource.modelData.value]
             readonly property bool chosen: root.performance.selected === resource.modelData.key
-            width: sidebar.width
+            width: sidebarItem.width
             height: Tokens.activityPerformanceSidebarRowHeight
             Accessible.role: Accessible.ListItem
             Accessible.name: resource.modelData.title + ", " + resource.modelData.value
@@ -90,7 +90,7 @@ Window {
             Rectangle {
                 anchors.fill: parent
                 radius: Tokens.radiusControl
-                color: resource.chosen ? (sidebar.activeFocus ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2))
+                color: resource.chosen ? (sidebarItem.activeFocus ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2))
                      : mouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
             }
 
@@ -131,7 +131,7 @@ Window {
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
                         text: modelData
-                        color: resource.chosen && sidebar.activeFocus ? Appearance.colors.selectionText
+                        color: resource.chosen && sidebarItem.activeFocus ? Appearance.colors.selectionText
                              : index === 0 ? Appearance.colors.text : Appearance.windowSecondary
                         font.family: Appearance.fontFamily
                         font.pixelSize: index === 0 ? Tokens.typographyBodySize : Tokens.typographyCaptionSize
@@ -145,7 +145,7 @@ Window {
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: {
-                    sidebar.forceActiveFocus();
+                    sidebarItem.forceActiveFocus();
                     root.performance.selected = resource.modelData.key;
                 }
             }
@@ -158,14 +158,14 @@ Window {
         const next = Math.max(0, Math.min(list.length - 1, at + delta));
         if (next >= 0 && next < list.length)
             root.performance.selected = list[next].key;
-        sidebar.positionViewAtIndex(next, ListView.Contain);
+        sidebarItem.positionViewAtIndex(next, ListView.Contain);
     }
 
     Rectangle {
         id: divider
         anchors.top: chrome.bottom
         anchors.bottom: parent.bottom
-        anchors.left: sidebar.right
+        anchors.left: sidebarItem.right
         anchors.leftMargin: Tokens.spacingSm
         width: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)

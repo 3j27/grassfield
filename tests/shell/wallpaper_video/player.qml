@@ -20,7 +20,7 @@ ShellRoot {
     // The slot of the desktop wallpaper with its video layer, as Wallpaper.qml builds it: the poster is the picture, the video is
     // played once the slot is on screen and as the policy says.
     WallpaperSlot {
-        id: video
+        id: videoItem
         width: 320
         height: 180
         opacity: 1
@@ -31,7 +31,7 @@ ShellRoot {
         markerOwner: "T"
         onScreen: true
         playPolicy: root.policy
-        readonly property bool playing: video.videoPlaying
+        readonly property bool playing: videoItem.videoPlaying
     }
 
     // The marker window of a bare WallpaperVideo: the marker is live from the first play() but its 10 s window opens only when the
@@ -110,7 +110,7 @@ ShellRoot {
             if (root.step < 0 || root.step >= root.steps.length)
                 return;
             const want = root.steps[root.step].playing;
-            if (video.playing === want) {
+            if (videoItem.playing === want) {
                 stable++;
                 if (stable >= 3) {
                     stable = 0;
@@ -120,7 +120,7 @@ ShellRoot {
                 stable = 0;
                 root.waited += 500;
                 if (root.waited > 12000) {
-                    root.check(false, "step " + root.step + " (" + root.steps[root.step].what + "): playing=" + video.playing + ", wanted " + want);
+                    root.check(false, "step " + root.step + " (" + root.steps[root.step].what + "): playing=" + videoItem.playing + ", wanted " + want);
                     root.advance();
                 }
             }
