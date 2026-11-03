@@ -495,7 +495,7 @@ Window {
                         color: entry.selected && root.keyLook ? Appearance.colors.selectionText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: Tokens.typographyBodySize
-                        font.weight: entry.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
+                        font.weight: Tokens.typographyMenuWeight
                     }
 
                     // Available updates (U19): a red count on General, and on Software Update among search results.
@@ -599,7 +599,7 @@ Window {
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.windowTitleSize
-                    font.weight: Tokens.typographyMenuBoldWeight
+                    font.weight: Tokens.typographyTitleWeight
                 }
 
                 Icon {

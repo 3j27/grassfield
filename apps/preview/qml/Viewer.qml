@@ -301,7 +301,7 @@ Window {
                 color: viewerWin.keyLook ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
-                font.weight: Tokens.typographyMenuBoldWeight
+                font.weight: Tokens.typographyTitleWeight
                 Accessible.role: Accessible.Heading
                 Accessible.name: text
             }

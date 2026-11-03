@@ -294,7 +294,7 @@ FocusScope {
             color: entry.mounted ? Appearance.colors.text : Appearance.windowSecondary
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
-            font.weight: entry.current ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
+            font.weight: Tokens.typographyMenuWeight
         }
 
         ToolButton {
