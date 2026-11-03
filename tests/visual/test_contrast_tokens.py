@@ -12,7 +12,7 @@ green noise palette, the black/white checker). Blur makes the backdrop a local a
 sRGB, as Qt does. Backdrops:
   material       tint at alpha 1 - t * (1 - material.tintAlphaMin), then (worst case) with the fill overlay (a tile or field fill)
   window         an opaque app window: color.windowBackground and color.sidebarFill, bare and under a rimmed capsule's fill (the text
-                 colour at toolbar.fieldFillOpacity or toolbar.capsuleFillOpacity); the same at every transparency and wallpaper
+                 colour at toolbar.fieldFillOpacity, or white at toolbar.capsuleFillOpacity); the same at every transparency and wallpaper
   accent         the solid accent colour
   selection      the solid selection colour: the light appearance's accent in the light appearance, color.selectionDark in the dark one (Appearance.accentedDark/Light,
                  Accent.withSelection), the fill of a selected row, a default button or a checked box
@@ -222,17 +222,23 @@ def backdrops(tok, role, appearance, t, wallpaper):
                     over(fill, tok.path("material.fillOpacityLight"), base),
                     over(chip, tok.path("material.wellFillOpacityLight"), base)]
         return out
-    if kind == "window":
+    if kind in ("window", "window-pane"):
+        # window-pane: the same without the search field's grey fill (accent text never sits in a field: a field's own text
+        # is the text roles', its selection the selection's); the field is a flat grey since ADR-0024's 2026-11-03 amendment.
         # An opaque app window (Settings, the Store, Search's clipboard page): the window and the flush sidebar, each bare and
         # under a rimmed capsule's fill (RimmedCapsule: the text colour at the field or the toolbar opacity); the transparency
         # and the wallpaper do not reach it.
+        # A field tints with the text colour, a capsule is white (colors.knob); the dark appearance has its own opacities.
         text = tok.color(pal, appearance, "text")
+        white = tok.color(pal, appearance, "knob")
+        sfx = "Dark" if appearance == "dark" else ""
         out = []
         for base_name in ("windowBackground", "sidebarFill"):
             base = tok.color(pal, appearance, base_name)
             out.append(base)
-            for opacity in ("toolbar.fieldFillOpacity", "toolbar.capsuleFillOpacity"):
-                out.append(over(text, tok.path(opacity), base))
+            if kind == "window":
+                out.append(over(text, tok.path("toolbar.fieldFillOpacity" + sfx), base))
+            out.append(over(white, tok.path("toolbar.capsuleFillOpacity" + sfx), base))
         return out
     if kind == "accent":
         return [tok.color(pal, appearance, "accent")]
@@ -590,7 +596,7 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "window", "accent", "selection", "rename-field", "desktop-label") + BAR_TONES
+            self.assertIn(r["backdrop"], ("material", "window", "window-pane", "accent", "selection", "rename-field", "desktop-label") + BAR_TONES
                           + LOCK_BACKDROPS)
             for site in r["sites"]:
                 self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic", "primary",

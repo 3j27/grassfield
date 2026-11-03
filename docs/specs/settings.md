@@ -21,8 +21,9 @@ UI naming (renamed 2026-10-18, owner decision): the Desktop & Dock page section 
   48-pt tile, the name in bold, what it holds), then navigation rows (a 24-pt tile, the name, a chevron; 48 tall, 49
   apart) that open its sub-panes; the sidebar keeps General selected while one is open, the toolbar shows the sub-pane's
   title (none on the hub itself) and its back button returns to the hub. The search also finds the sub-panes. The search
-  field and the toolbar's back / forward capsule are glass, as in macOS 27: an almost clear fill with a dark rim outside
-  and a light rim inside, one device pixel each, and a hairline between back and forward (`RimmedCapsule.qml`). A
+  field and the toolbar's back / forward capsule have no outline, as in macOS 27 (ADR-0024 amendment 2026-11-03): the
+  sidebar's search is a flat grey field, the back / forward capsule a white fill lifted by a soft shadow with a hairline
+  between back and forward (`RimmedCapsule.qml`; Increase Contrast draws the control outline). A
   pop-up in a row is the macOS 27 one: the value as plain text, then a 20-pt disc with two chevrons (`ComboBox.inline`).
 
 ## macOS 27 parity inventory (owner brief 2026-10-26)

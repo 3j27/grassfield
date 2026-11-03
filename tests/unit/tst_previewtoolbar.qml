@@ -54,7 +54,8 @@ TestCase {
         compare(group.width, 2 * Tokens.toolbarGroupButton + 2 * Tokens.spacingXs);
         compare(group.height, Tokens.toolbarCapsule);
         compare(group.fillOpacity, Tokens.toolbarCapsuleFillOpacity, "the rimmed glass capsule");
-        verify(group.hairline > 0, "its rims");
+        verify(!group.field, "lifted by its shadow, no rim");
+        compare(group.border.width, Appearance.increaseContrast ? Tokens.controlBorderWidth : 0, "no outline in the standard appearance");
         verify(row.width > group.width);
     }
 

@@ -3,7 +3,7 @@
   "Text roles of the shell for the exact token calculation of gate A2 (tests/visual/test_contrast_tokens.py).",
   "fg: <palette>.<colour token> (palette colors = the current appearance, darkColors = always dark). opacity: factors applied to the",
   "text alpha (numbers or token paths such as lock.focusRingOpacity). backdrop: material (tint at 1 - t*(1-tintAlphaMin) over a",
-  "flat wallpaper colour, with and without a fill overlay), window (an opaque app window: windowBackground and sidebarFill, bare and under a rimmed capsule's fill), accent (solid accent), selection (solid selection: the light accent in both appearances), rename-field",
+  "flat wallpaper colour, with and without a fill overlay), window (an opaque app window: windowBackground and sidebarFill, bare and under a rimmed capsule's fill and the search field's; window-pane: the same without the field), accent (solid accent), selection (solid selection: the light accent in both appearances), rename-field",
   "(colors.fieldFill at desktopIcon.renameFillOpacity over the wallpaper), bar-light-tone and bar-dark-tone (the adaptive menu bar: the wallpaper itself, for the wallpaper colours the tone can be chosen for, see test_contrast_tokens.py), desktop-label (shadow colour at desktopIcon.labelShadowOpacity over the wallpaper: conservative core of",
   "the drop shadow), lock (lock screen: dark shadow-colour scrim at lock.dimOpacity over the blurred wallpaper, the same in both appearances and at",
   "every transparency), lock-field (lock + the dark password field fill at lock.fieldFillOpacity), lock-avatar (lock + the light avatar disc at",
@@ -186,7 +186,7 @@
     {"file": "ui/Grassfield/Ui/RimmedCapsule.qml", "class": "alpha", "count": 1},
     {"file": "shell/search/SearchPanel.qml", "class": "secondary", "count": 1}
   ]},
-  {"id": "text and glyphs in the accent colour on an app window", "fg": "colors.accentInk", "backdrop": "window", "kind": "text", "sites": []},
+  {"id": "text and glyphs in the accent colour on an app window", "fg": "colors.accentInk", "backdrop": "window-pane", "kind": "text", "sites": []},
   {"id": "text and glyphs in the accent colour on material", "fg": "colors.accentInk", "backdrop": "material", "kind": "text", "exempt": "accent-coloured text on glass over any wallpaper: no accent holds 4.5:1 at the worst wallpaper and transparency, the Grassfield green itself 2.36:1 (macOS draws such text on vibrancy too); every accent's ink keeps at least 2.2:1 there, no accent worse than the others (test_accent_ink_on_glass_is_no_worse_than_the_other_accents)", "sites": []}
  ]
 }

@@ -74,10 +74,12 @@ T.ToolButton {
 
     background: Rectangle {
         radius: root.capsule ? height / 2 : Tokens.radiusControl
-        color: root.checked ? root.checkedColor
+        // A checked button with no pill of its own (checkedColor transparent: the sidebar toggle in its capsule) keeps its hover
+        // and pressed fill and draws no second outline under Increase Contrast.
+        color: root.checked && root.checkedColor.a > 0 ? root.checkedColor
              : (root.enabled && root.down ? Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
              : (root.enabled && root.hovered ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"))
-        border.width: Appearance.increaseContrast && root.checked ? Tokens.controlBorderWidth : 0
+        border.width: Appearance.increaseContrast && root.checked && root.checkedColor.a > 0 ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
     }
 

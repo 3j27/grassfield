@@ -86,6 +86,7 @@ ALLOWED = {
     "shell/saver/SaverSlides.qml": (1, "black as the fill of a prepared slide's empty border (a picture, not UI)"),
     "ui/Grassfield/Ui/WindowGlyph.qml": (1, "black as an ink whose alpha is a token (window.glyphOpacity)"),
     "ui/Grassfield/Ui/WindowLight.qml": (2, "black as an ink whose alpha is a token (window.pressedOpacity, window.lightBorderOpacity)"),
+    "ui/Grassfield/Ui/RimmedCapsule.qml": (1, "black as the capsule shadow cut-out mask (a mask, never drawn)"),
     "ui/Grassfield/Ui/Material.qml": (1, "black as the shadow cut-out mask (a mask, never drawn)"),
 }
 

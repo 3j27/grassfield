@@ -1,14 +1,17 @@
 import QtQuick
 import QtQuick.Templates as T
 
-// Search field (macOS 27, an app window's sidebar and toolbar): the rimmed glass capsule (RimmedCapsule: an almost clear fill,
-// a dark rim outside and a light one inside), toolbar.searchHeight tall, the search glyph on its left and a clear button on its
+// Search field (macOS 27, an app window's sidebar and toolbar): a RimmedCapsule without an outline: the sidebar's is a flat
+// grey field, a toolbar's (`toolbar: true`) a white capsule lifted by a soft shadow like the other toolbar items; toolbar.searchHeight tall, the search glyph on its left and a clear button on its
 // right while there is text (ADR-0039 step 14: the one search field of Settings, Activity Monitor and the shared controls).
 // Escape clears the text first (a second Escape propagates, so a window can close on it); `cleared()` reports it.
 TextField {
     id: root
 
     signal cleared
+
+    // In a window's toolbar: a lifted white capsule instead of the sidebar's flat field.
+    property bool toolbar: false
 
     implicitHeight: Tokens.toolbarSearchHeight
     fieldRadius: height / 2
@@ -36,7 +39,7 @@ TextField {
     }
 
     background: RimmedCapsule {
-        fillOpacity: Tokens.toolbarFieldFillOpacity
+        field: !root.toolbar
 
         FocusRing {
             shapeRadius: root.fieldRadius

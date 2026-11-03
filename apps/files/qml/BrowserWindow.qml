@@ -832,13 +832,12 @@ Window {
                     }
                 }
 
-                // Tags and Action in the toolbar's rimmed capsule, as macOS 27 Finder groups Share, Tags and Action (Finder-Home;
-                // Files has no Share; ADR-0039 step 23). Tags: the colour tags of the selection, and Tags… for named ones
-                // (FP-21, FP-63).
-                RimmedCapsule {
+                // Tags and Action as two bare glyphs with no capsule, as macOS 27 Finder draws Share, Tags and Action on a white
+                // window (the hover and pressed pills stay; refinement audit 2026-11-02). Tags: the colour tags of the selection,
+                // and Tags… for named ones (FP-21, FP-63).
+                Item {
                     width: 2 * Tokens.toolbarCapsule
                     height: Tokens.toolbarCapsule
-                    fillOpacity: Tokens.toolbarCapsuleFillOpacity
                     anchors.verticalCenter: parent.verticalCenter
 
                     Row {

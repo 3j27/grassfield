@@ -330,6 +330,7 @@ Window {
             SearchField {
                 id: search
                 objectName: "search"
+                toolbar: true
                 width: Tokens.activitySearchWidth
                 anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                 Accessible.name: qsTr("Search processes")
