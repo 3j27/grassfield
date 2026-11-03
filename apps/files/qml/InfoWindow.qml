@@ -17,24 +17,24 @@ Window {
 
     // Tags, read again whenever Files writes tags (FilesApp.tagRevision).
     readonly property string tagsReason: {
-        root.app.tagRevision;
+        void root.app.tagRevision;
         return root.app.tagsUnavailable([root.info.url]);
     }
     readonly property var tagStates: {
-        root.app.tagRevision;
+        void root.app.tagRevision;
         // Also for a read-only item: its tags show (disabled swatches), only changing them is refused.
         return root.app.colorTagStates([root.info.url]);
     }
     // Every tag of the item by name, those of other applications too (the swatches show the colour ones). Read live:
     // `info` is the snapshot taken when the window opened.
     readonly property string tagNames: {
-        root.app.tagRevision;
+        void root.app.tagRevision;
         return root.app.tagNamesOf(root.info.url).join(", ");
     }
 
     // The folder's own look, read again whenever Files writes one (FilesApp.folderStyleRevision).
     readonly property var folderStyle: {
-        root.app.folderStyleRevision;
+        void root.app.folderStyleRevision;
         return root.info.isDir ? root.app.folderStyleOf(root.info.url) : {color: "", glyph: ""};
     }
     readonly property string customizeReason: root.info.isDir ? root.app.folderStyleUnavailable([root.info.url]) : "x"

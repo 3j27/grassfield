@@ -11,7 +11,7 @@ TestCase {
     when: viewer.visible
 
     QtObject {
-        id: backend
+        id: backendItem
         property var files: [
             {name: "a.png", path: "/x/a.png", url: "file:///x/a.png", kind: "image"},
             {name: "b.png", path: "/x/b.png", url: "file:///x/b.png", kind: "image"},
@@ -38,7 +38,7 @@ TestCase {
 
     Viewer {
         id: viewer
-        backend: backend
+        backend: backendItem
         globalMenu: false
     }
 
@@ -116,15 +116,15 @@ TestCase {
         const subtitle = textOf(viewer.contentItem, viewer.subtitle);
         compare(title.font.pixelSize, Tokens.typographyBodySize);
         const row = Tokens.previewSidebarItemHeight;
-        backend.textScale = 1.3;
+        backendItem.textScale = 1.3;
         compare(Tokens.previewSidebarItemHeight, Math.round(row * 1.3), "a PDF's file-name row grows with the text");
         compare(Appearance.textScale, 1.3);
         compare(title.font.pixelSize, Math.round(13 * 1.3), "the title follows Text size");
-        backend.increaseContrast = true;
+        backendItem.increaseContrast = true;
         verify(Appearance.increaseContrast);
         verify(Qt.colorEqual(subtitle.color, Appearance.colors.text), "secondary text in the text colour under Increase Contrast");
-        backend.increaseContrast = false;
-        backend.textScale = 1;
+        backendItem.increaseContrast = false;
+        backendItem.textScale = 1;
         compare(title.font.pixelSize, Tokens.typographyBodySize);
     }
 

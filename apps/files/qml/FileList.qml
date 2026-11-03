@@ -67,7 +67,7 @@ FocusScope {
 
     function rowPosition(model: var, row: int): point {
         if (row < 0)
-            return root.mapToItem(null, Tokens.spacingLg, header.height + Tokens.spacingLg);
+            return root.mapToItem(null, Tokens.spacingLg, headerRow.height + Tokens.spacingLg);
         return list.mapToItem(null, Tokens.spacingLg * 2, (row + 1) * Tokens.filesListRowHeight - list.contentY + list.originY);
     }
 
@@ -103,7 +103,7 @@ FocusScope {
 
     // Header ------------------------------------------------------------------------------------
     Row {
-        id: header
+        id: headerRow
         x: list.x - (list.contentX - list.originX)
         width: list.contentWidth
         height: Tokens.filesListHeaderHeight
@@ -122,7 +122,7 @@ FocusScope {
                 readonly property bool active: root.tab.sortKey === column.modelData.key
 
                 width: column.modelData.key === 0 ? root.nameWidth : column.modelData.key === 2 ? Tokens.filesListDateWidth : column.modelData.key === 3 ? Tokens.filesListSizeWidth : Tokens.filesListKindWidth
-                height: header.height
+                height: headerRow.height
                 activeFocusOnTab: false
                 Accessible.role: Accessible.ColumnHeader
                 Accessible.name: column.modelData.title
@@ -178,7 +178,7 @@ FocusScope {
     }
 
     Rectangle {
-        anchors.top: header.bottom
+        anchors.top: headerRow.bottom
         width: parent.width
         height: Tokens.appsBorderWidth
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
@@ -223,7 +223,7 @@ FocusScope {
 
     ListView {
         id: list
-        anchors.top: header.bottom
+        anchors.top: headerRow.bottom
         anchors.topMargin: Tokens.appsBorderWidth
         anchors.left: parent.left
         anchors.right: parent.right

@@ -28,7 +28,7 @@ Singleton {
     property var documentList: []
 
     readonly property var applications: {
-        Apps.revision;
+        void Apps.revision;
         // Named in the shell's language (Apps.displayName).
         return Logic.applications(root.state, root.max, id => {
             const entry = Apps.lookup(id);

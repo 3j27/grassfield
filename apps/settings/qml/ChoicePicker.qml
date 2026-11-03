@@ -174,7 +174,10 @@ FocusScope {
                 width: root.pictureWidth
                 height: root.pictureHeight
                 sourceComponent: root.picture
+                // The picture is whatever component the page gives; it declares `choice` (qmllint cannot see that).
+                // qmllint disable missing-property
                 onLoaded: item.choice = Qt.binding(() => cell.modelData.id)
+                // qmllint enable missing-property
             }
 
             Text {

@@ -19,7 +19,7 @@ FocusScope {
     // Bumped by every change of the listing (dates, names, tags) so the info panel reads the current item again.
     property int revision: 0
     readonly property var info: {
-        root.revision;
+        void root.revision;
         const m = root.model;
         return m && m.currentRow >= 0 ? m.info(m.currentRow) : null;
     }

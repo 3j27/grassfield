@@ -11,17 +11,17 @@ Item {
     id: root
 
     property string title: ""
-    property alias model: grid.model
-    property alias expanded: grid.expanded
+    property alias model: gridItem.model
+    property alias expanded: gridItem.expanded
     property real lead: Tokens.settingsWallpaperAddSectionGap
-    readonly property alias grid: grid
+    readonly property alias grid: gridItem
     default property alias extra: extras.data
 
     signal activated(int index)
 
     width: parent ? parent.width : implicitWidth
     implicitWidth: Tokens.settingsContentMaxWidth
-    implicitHeight: extras.y + extras.height + (extras.height === 0 && grid.named ? Tokens.settingsWallpaperSectionGap - Tokens.settingsWallpaperAddSectionGap : 0)
+    implicitHeight: extras.y + extras.height + (extras.height === 0 && gridItem.named ? Tokens.settingsWallpaperSectionGap - Tokens.settingsWallpaperAddSectionGap : 0)
     Accessible.role: Accessible.Grouping
     Accessible.name: root.title
 
@@ -43,11 +43,11 @@ Item {
     // Show All (n) / Show Fewer: plain text in the secondary colour, a button for the keys and assistive technology.
     Text {
         id: more
-        visible: grid.overflows
+        visible: gridItem.overflows
         anchors.right: parent.right
         y: root.lead - baselineOffset
         textFormat: Text.PlainText
-        text: grid.expanded ? qsTr("Show Fewer") : qsTr("Show All (%1)").arg(grid.model.length)
+        text: gridItem.expanded ? qsTr("Show Fewer") : qsTr("Show All (%1)").arg(gridItem.model.length)
         color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyBodySize
@@ -55,10 +55,10 @@ Item {
         Accessible.role: Accessible.Button
         Accessible.name: text
         Accessible.focusable: true
-        Accessible.onPressAction: grid.expanded = !grid.expanded
+        Accessible.onPressAction: gridItem.expanded = !gridItem.expanded
         Keys.onPressed: event => {
             if (ActivationKeys.activation(event.key)) {
-                grid.expanded = !grid.expanded;
+                gridItem.expanded = !gridItem.expanded;
                 event.accepted = true;
             }
         }
@@ -76,22 +76,22 @@ Item {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: grid.expanded = !grid.expanded
+            onClicked: gridItem.expanded = !gridItem.expanded
         }
     }
 
     WallpaperGrid {
-        id: grid
+        id: gridItem
         y: root.lead + Tokens.settingsWallpaperTilesTop
         width: parent.width
         accessibleName: root.title
         onActivated: index => root.activated(index)
-        onExpandRequested: grid.expanded = true
+        onExpandRequested: gridItem.expanded = true
     }
 
     Column {
         id: extras
-        y: grid.y + grid.height
+        y: gridItem.y + gridItem.height
         width: parent.width
     }
 }

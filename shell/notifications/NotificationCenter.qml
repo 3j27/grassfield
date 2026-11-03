@@ -179,15 +179,15 @@ Variants {
         }
 
         component CenterContent: Item {
-            id: host
+            id: hostItem
 
-            readonly property Item panel: panel
+            readonly property Item panel: panelItem
             // The column's surface holds the keyboard (the compositor sent it the focus after the Exclusive layer
             // mapped, which is a moment later than the open): reported for the test status line.
             readonly property bool keyboardHeld: Window.active
             // Per output: the name of the output whose content holds it (Notifications.centerKeyboardScreen).
-            onKeyboardHeldChanged: host.report(keyboardHeld)
-            Component.onDestruction: host.report(false)
+            onKeyboardHeldChanged: hostItem.report(keyboardHeld)
+            Component.onDestruction: hostItem.report(false)
             function report(held: bool): void {
                 const name = (win.modelData ? win.modelData.name : "");
                 if (held)
@@ -207,7 +207,7 @@ Variants {
             property int surfaceSeq: 0
             // Anything that moves or resizes a surface without changing its own geometry (list.motionTick counts the
             // frames of a card sliding or of the column reflowing).
-            readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panel.x + panel.y + list.motionTick + gallery.x + gallery.y + (gallery.item ? 1 : 0)
+            readonly property real tick: list.contentY + list.contentHeight + list.count + list.height + panelItem.x + panelItem.y + list.motionTick + gallery.x + gallery.y + (gallery.item ? 1 : 0)
             // The app the pointer is over (group controls), and how many hover handlers of each app are active.
             property string hoverApp: ""
             property var hoverCounts: ({})
@@ -216,8 +216,8 @@ Variants {
                 id: hoverRelease
                 interval: Appearance.duration(Tokens.motionFast)
                 onTriggered: {
-                    if (!CenterLogic.isHovered(host.hoverCounts, host.hoverApp))
-                        host.hoverApp = "";
+                    if (!CenterLogic.isHovered(hostItem.hoverCounts, hostItem.hoverApp))
+                        hostItem.hoverApp = "";
                 }
             }
 
@@ -225,7 +225,7 @@ Variants {
             Timer {
                 id: pruneSurfaces
                 interval: 2 * Appearance.duration(Tokens.motionNormal) + 1
-                onTriggered: host.surfaces = host.surfaces.filter(r => r.item)
+                onTriggered: hostItem.surfaces = hostItem.surfaces.filter(r => r.item)
             }
 
             // A pointer on a card of an app group (the card or the x on its corner), or leaving it (a short grace
@@ -287,9 +287,9 @@ Variants {
 
             Component.onCompleted: {
                 shown = true;
-                panel.forceActiveFocus();
+                panelItem.forceActiveFocus();
                 glideStart.restart();
-                host.takeGalleryRequest();
+                hostItem.takeGalleryRequest();
             }
 
             // Edit Widgets… on the desktop (Notifications.openWidgetGallery): the gallery opens with the column.
@@ -297,14 +297,14 @@ Variants {
                 if (!Notifications.galleryWanted)
                     return;
                 Notifications.galleryWanted = false;
-                panel.galleryOpen = true;
+                panelItem.galleryOpen = true;
             }
 
             Connections {
                 target: Notifications
 
                 function onGalleryWantedChanged(): void {
-                    host.takeGalleryRequest();
+                    hostItem.takeGalleryRequest();
                 }
             }
 
@@ -313,20 +313,20 @@ Variants {
             Timer {
                 id: glideStart
                 interval: Appearance.duration(Tokens.motionNormal)
-                onTriggered: panel.glide = true
+                onTriggered: panelItem.glide = true
             }
 
             Variants {
                 id: regions
-                model: host.surfaces
+                model: hostItem.surfaces
 
                 Region {
                     id: region
 
                     required property var modelData
                     readonly property rect box: {
-                        host.tick;
-                        return host.rectOf(region.modelData);
+                        hostItem.tick;
+                        return hostItem.rectOf(region.modelData);
                     }
 
                     x: Math.round(box.x)
@@ -342,13 +342,13 @@ Variants {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
                 onPressed: mouse => {
-                    if (!host.overSurface(mouse.x, mouse.y))
+                    if (!hostItem.overSurface(mouse.x, mouse.y))
                         Notifications.closeCenter();
                 }
             }
 
             FocusScope {
-                id: panel
+                id: panelItem
 
                 // Widgets: the gallery overlay and the context menu of a placed widget.
                 property bool galleryOpen: false
@@ -361,7 +361,7 @@ Variants {
                 readonly property int gutter: Math.ceil(Tokens.notificationCloseSize / 3)
 
                 function openWidgetMenu(tile: Item, x: real, y: real, entry: var): void {
-                    const p = tile.mapToItem(panel, x, y);
+                    const p = tile.mapToItem(panelItem, x, y);
                     menuX = p.x;
                     menuY = p.y;
                     menuReturn = tile;
@@ -373,13 +373,13 @@ Variants {
                     if (menuReturn)
                         menuReturn.forceActiveFocus();
                     else
-                        panel.forceActiveFocus();
+                        panelItem.forceActiveFocus();
                 }
 
                 function applyWidgetMenu(action: string): void {
                     const entry = menuEntry;
                     menuEntry = null;
-                    panel.forceActiveFocus();
+                    panelItem.forceActiveFocus();
                     if (!entry)
                         return;
                     if (action === "remove")
@@ -396,15 +396,15 @@ Variants {
                 // the window at once: the window can still be 0 wide when the column is created, and animating x then
                 // swept the column across the whole screen from the left (owner, real session 2026-10-22). Under Reduce
                 // Motion the column fades in at its place instead (macOS: slides become fades; ADR-0039 step 5).
-                property real slideOffset: host.shown || Appearance.reduceMotion ? 0 : width + Tokens.notificationCenterInset
+                property real slideOffset: hostItem.shown || Appearance.reduceMotion ? 0 : width + Tokens.notificationCenterInset
                 property bool glide: false
                 // The column at rest on the output (the window covers it): every card's glass is judged over this area, wherever
                 // the list scrolls it (G-3 per surface).
-                readonly property rect restRect: Qt.rect(host.width - width - Tokens.notificationCenterInset, y, width, height)
-                x: host.width - width - Tokens.notificationCenterInset + slideOffset
+                readonly property rect restRect: Qt.rect(hostItem.width - width - Tokens.notificationCenterInset, y, width, height)
+                x: hostItem.width - width - Tokens.notificationCenterInset + slideOffset
                 y: Tokens.menubarHeight + Tokens.notificationCenterInset
                 width: Tokens.notificationCenterWidth
-                height: host.height - y - Tokens.notificationCenterInset
+                height: hostItem.height - y - Tokens.notificationCenterInset
                 Accessible.role: Accessible.Window
                 Accessible.name: qsTr("Notifications")
                 Keys.onEscapePressed: Notifications.closeCenter()
@@ -414,17 +414,17 @@ Variants {
                 // sees it. Off while the widget gallery or a widget menu has the keyboard.
                 Shortcut {
                     sequence: "Tab"
-                    enabled: win.open && !panel.galleryOpen && panel.menuEntry === null
+                    enabled: win.open && !panelItem.galleryOpen && panelItem.menuEntry === null
                     onActivated: list.tabStep(true)
                 }
 
                 Shortcut {
                     sequences: ["Shift+Tab", "Backtab"]
-                    enabled: win.open && !panel.galleryOpen && panel.menuEntry === null
+                    enabled: win.open && !panelItem.galleryOpen && panelItem.menuEntry === null
                     onActivated: list.tabStep(false)
                 }
 
-                opacity: host.shown || !Appearance.reduceMotion ? 1 : 0
+                opacity: hostItem.shown || !Appearance.reduceMotion ? 1 : 0
 
                 Behavior on opacity {
                     enabled: Appearance.reduceMotion
@@ -450,7 +450,7 @@ Variants {
                     id: titleRow
 
                     readonly property bool shown: list.count > 0
-                    readonly property rect area: Qt.rect(panel.restRect.x, panel.restRect.y, panel.width, Tokens.notificationTitleRowHeight)
+                    readonly property rect area: Qt.rect(panelItem.restRect.x, panelItem.restRect.y, panelItem.width, Tokens.notificationTitleRowHeight)
                     readonly property var known: Appearance.backdrops[Screen.name] ?? null
                     readonly property var range: known ? (known.grid ? (GlassTint.gridRange(known.grid, area, Tokens.glassBackdropPad) ?? known) : known) : null
                     readonly property string ink: GlassTint.inkOn(range, [String(Appearance.darkColors.text), String(Appearance.lightColors.text)], Tokens.menubarToneNeededContrast)
@@ -470,7 +470,7 @@ Variants {
                         radius: height / 2
                         shadowEnabled: false
                         visible: width > 0
-                        Component.onCompleted: host.addSurface(titlePlate, false, Math.floor(height / 2), null)
+                        Component.onCompleted: hostItem.addSurface(titlePlate, false, Math.floor(height / 2), null)
                     }
 
                     Text {
@@ -543,17 +543,17 @@ Variants {
 
                 NotificationList {
                     id: list
-                    x: -panel.gutter
-                    y: titleRow.height - panel.gutter
-                    width: parent.width + panel.gutter
-                    host: host
-                    panel: panel
+                    x: -panelItem.gutter
+                    y: titleRow.height - panelItem.gutter
+                    width: parent.width + panelItem.gutter
+                    host: hostItem
+                    panel: panelItem
                     editTarget: editPill
                     closeTarget: closeDisk
                     headTarget: clearAllButton
                     // As tall as its content (the area below the last card is outside the list, so a click there closes);
                     // the footer sits one spacing.lg below it, or at the bottom of the column when the list fills it.
-                    bottomReserve: footer.height + Tokens.spacingLg
+                    bottomReserve: widgetsFooter.height + Tokens.spacingLg
                     height: Math.min(contentHeight + topMargin, Math.max(0, parent.height - y - bottomReserve))
                     footer: widgetsArea
                     onCountChanged: pruneSurfaces.restart()
@@ -565,11 +565,11 @@ Variants {
 
                     Column {
                         width: list.width
-                        leftPadding: panel.gutter
+                        leftPadding: panelItem.gutter
                         topPadding: Widgets.center.length > 0 ? Tokens.spacingMd : 0
 
                         Flow {
-                            width: parent.width - panel.gutter
+                            width: parent.width - panelItem.gutter
                             spacing: Tokens.widgetGap
 
                             Repeater {
@@ -581,13 +581,13 @@ Variants {
                                     required property var modelData
 
                                     entry: modelData
-                                    cell: (list.width - panel.gutter - Tokens.widgetGap) / 2
-                                    onMenuRequested: (x, y) => panel.openWidgetMenu(tile, x, y, modelData)
+                                    cell: (list.width - panelItem.gutter - Tokens.widgetGap) / 2
+                                    onMenuRequested: (x, y) => panelItem.openWidgetMenu(tile, x, y, modelData)
                                     onRemoveRequested: {
                                         Widgets.remove(modelData.uid);
-                                        panel.forceActiveFocus();
+                                        panelItem.forceActiveFocus();
                                     }
-                                    Component.onCompleted: host.addSurface(tile, true, Tokens.widgetRadius, null)
+                                    Component.onCompleted: hostItem.addSurface(tile, true, Tokens.widgetRadius, null)
                                     onActiveFocusChanged: {
                                         if (!activeFocus)
                                             return;
@@ -606,7 +606,7 @@ Variants {
                 // Footer (macOS model): Edit Widgets and the close circle, centred under the column, one spacing.lg below
                 // the last card. No Clear All here: it lives on the group headers.
                 Row {
-                    id: footer
+                    id: widgetsFooter
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: Math.min(list.y + list.height + Tokens.spacingLg, parent.height - height)
                     height: Tokens.notificationCenterCloseDisk
@@ -616,7 +616,7 @@ Variants {
                     // Glides with the cards when the list shrinks or grows (not during the first layout); jumps with them
                     // under Reduce Motion (NotificationList.still).
                     Behavior on y {
-                        enabled: panel.glide && !Appearance.reduceMotion
+                        enabled: panelItem.glide && !Appearance.reduceMotion
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionNormal)
                             easing.type: Easing.BezierSpline
@@ -626,10 +626,10 @@ Variants {
 
                     Pill {
                         id: editPill
-                        surfaceHost: host
+                        surfaceHost: hostItem
                         anchors.verticalCenter: parent.verticalCenter
                         text: qsTr("Edit Widgets")
-                        onClicked: panel.galleryOpen = true
+                        onClicked: panelItem.galleryOpen = true
                     }
 
                     Item {
@@ -654,7 +654,7 @@ Variants {
                             anchors.fill: parent
                             radius: width / 2
                             shadowEnabled: false
-                            Component.onCompleted: host.addSurface(closeSurface, false, Math.floor(width / 2), null)
+                            Component.onCompleted: hostItem.addSurface(closeSurface, false, Math.floor(width / 2), null)
                         }
 
                         Icon {
@@ -684,24 +684,24 @@ Variants {
                 // Widget context menu (sizes, Remove Widget) at the click or the focused tile.
                 MouseArea {
                     anchors.fill: parent
-                    visible: panel.menuEntry !== null
+                    visible: panelItem.menuEntry !== null
                     acceptedButtons: Qt.AllButtons
-                    onPressed: panel.closeWidgetMenu()
+                    onPressed: panelItem.closeWidgetMenu()
                 }
 
                 Loader {
                     id: widgetMenu
-                    active: panel.menuEntry !== null
-                    x: Math.max(Tokens.spacingSm, Math.min(panel.menuX, panel.width - width - Tokens.spacingSm))
-                    y: Math.max(Tokens.spacingSm, Math.min(panel.menuY, panel.height - height - Tokens.spacingSm))
+                    active: panelItem.menuEntry !== null
+                    x: Math.max(Tokens.spacingSm, Math.min(panelItem.menuX, panelItem.width - width - Tokens.spacingSm))
+                    y: Math.max(Tokens.spacingSm, Math.min(panelItem.menuY, panelItem.height - height - Tokens.spacingSm))
                     sourceComponent: WidgetMenu {
-                        entry: panel.menuEntry
+                        entry: panelItem.menuEntry
                         moves: {
-                            const at = Widgets.center.findIndex(e => e.uid === panel.menuEntry.uid);
+                            const at = Widgets.center.findIndex(e => e.uid === panelItem.menuEntry.uid);
                             return {up: at > 0, down: at >= 0 && at < Widgets.center.length - 1};
                         }
-                        onChoose: action => panel.applyWidgetMenu(action)
-                        onCloseRequested: panel.closeWidgetMenu()
+                        onChoose: action => panelItem.applyWidgetMenu(action)
+                        onCloseRequested: panelItem.closeWidgetMenu()
                         Component.onCompleted: forceActiveFocus()
                     }
                 }
@@ -717,7 +717,7 @@ Variants {
                         right: 0,
                         bottom: 0
                     })
-                readonly property var rect: CenterLogic.galleryRect(host.width, host.height, {
+                readonly property var rect: CenterLogic.galleryRect(hostItem.width, hostItem.height, {
                     menubar: Tokens.menubarHeight,
                     inset: Tokens.notificationCenterInset,
                     insetLeft: Tokens.widgetGalleryInsetLeft,
@@ -730,13 +730,13 @@ Variants {
                 y: rect.y
                 width: rect.width
                 height: rect.height
-                active: panel.galleryOpen
+                active: panelItem.galleryOpen
                 sourceComponent: WidgetGallery {
                     screenName: (win.modelData ? win.modelData.name : "")
-                    surfaceHost: host
+                    surfaceHost: hostItem
                     onClosed: {
-                        panel.galleryOpen = false;
-                        panel.forceActiveFocus();
+                        panelItem.galleryOpen = false;
+                        panelItem.forceActiveFocus();
                     }
                     Component.onCompleted: forceActiveFocus()
                 }

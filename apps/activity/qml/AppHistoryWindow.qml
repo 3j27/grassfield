@@ -16,7 +16,7 @@ Window {
     readonly property var history: root.app.appHistory
     // The tests read them.
     readonly property alias periodPicker: periodPicker
-    readonly property alias rows: rows
+    readonly property alias rows: rowsItem
     readonly property alias unavailableText: unavailableText
 
     // The figures share the room after the name by weight: a date needs more than a count.
@@ -27,7 +27,7 @@ Window {
         {key: "launches", title: qsTr("Launches"), numeric: true, weight: 0.7},
         {key: "lastUsed", title: qsTr("Last Used"), numeric: true, weight: 1.3}
     ]
-    readonly property real figureUnit: Math.max(0, (rows.width - Tokens.activityAppHistoryNameWidth) / 4)
+    readonly property real figureUnit: Math.max(0, (rowsItem.width - Tokens.activityAppHistoryNameWidth) / 4)
 
     function widthOf(index: int): real {
         return index === 0 ? Tokens.activityAppHistoryNameWidth : root.figureUnit * root.columns[index].weight;
@@ -116,7 +116,7 @@ Window {
         visible: !root.history.unavailable
         anchors.top: bar.bottom
         anchors.topMargin: Tokens.spacingMd
-        x: rows.x
+        x: rowsItem.x
         height: Tokens.activityHeaderHeight
 
         Repeater {
@@ -195,7 +195,7 @@ Window {
     }
 
     ListView {
-        id: rows
+        id: rowsItem
         objectName: "historyRows"
         visible: !root.history.unavailable
         anchors.top: headerRow.bottom
@@ -220,7 +220,7 @@ Window {
             required property string lastUsed
             required property string accessibleText
             readonly property var cells: [row.name, row.cpuTime, row.memoryPeak, row.launches, row.lastUsed]
-            width: rows.width
+            width: rowsItem.width
             height: Tokens.activityRowHeight
             Accessible.role: Accessible.Row
             Accessible.name: row.accessibleText
@@ -281,9 +281,9 @@ Window {
     }
 
     ScrollBar {
-        flickable: rows
+        flickable: rowsItem
         anchors.right: parent.right
-        anchors.top: rows.top
+        anchors.top: rowsItem.top
         anchors.bottom: parent.bottom
         anchors.margins: Tokens.spacingXs
     }

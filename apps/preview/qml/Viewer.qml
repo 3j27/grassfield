@@ -6,7 +6,7 @@ import Grassfield.Ui
 // sidebar (the files of the folder when several are open, page thumbnails for PDF) and the view of the current file.
 // Nothing is ever written: zoom, rotation and page are properties of the view.
 Window {
-    id: win
+    id: viewerWin
 
     // Set by the launcher (src/main.cpp).
     required property var backend
@@ -14,10 +14,10 @@ Window {
     required property bool globalMenu
 
     // Drawn as key (ADR-0039 step 17): active, or held while a shell menu or the Control Center is open (Appearance.looksKey).
-    readonly property bool keyLook: Appearance.looksKey(win, win.active)
-    property int current: win.backend.startIndex
+    readonly property bool keyLook: Appearance.looksKey(viewerWin, viewerWin.active)
+    property int current: viewerWin.backend.startIndex
     // Several files named on the command line show their list at once; the folder of a single image starts without it.
-    property bool sidebarOpen: !win.backend.browsing
+    property bool sidebarOpen: !viewerWin.backend.browsing
     property bool searchOpen: false
     property bool infoOpen: false
     property bool slideshow: false
@@ -25,22 +25,22 @@ Window {
     // ADR-0015: the window draws its own chrome (the unified toolbar below); the apps' tagger (apps/windowchrome.h) names
     // its role for the compositor, whose plugin then draws no titlebar on it.
     property string gfChromeRole: "viewer"
-    readonly property int fileCount: win.backend.files.length
-    readonly property bool canGoPrevious: win.current > 0
-    readonly property bool canGoNext: win.current < win.fileCount - 1
+    readonly property int fileCount: viewerWin.backend.files.length
+    readonly property bool canGoPrevious: viewerWin.current > 0
+    readonly property bool canGoNext: viewerWin.current < viewerWin.fileCount - 1
     readonly property var view: content.view
     readonly property bool isPdf: content.info.kind === "pdf" && content.info.ok === true
-    readonly property bool hasSidebar: win.fileCount > 1 || win.isPdf
-    readonly property bool showSidebar: win.sidebarOpen && win.hasSidebar
-    readonly property int pages: win.view ? win.view.pageCount : 1
+    readonly property bool hasSidebar: viewerWin.fileCount > 1 || viewerWin.isPdf
+    readonly property bool showSidebar: viewerWin.sidebarOpen && viewerWin.hasSidebar
+    readonly property int pages: viewerWin.view ? viewerWin.view.pageCount : 1
     readonly property bool onImage: content.info.kind === "image" && content.info.ok === true
     // Second line of the title: the position among the files, then the page of a document.
     readonly property string subtitle: {
         const parts = [];
-        if (win.fileCount > 1)
-            parts.push(qsTr("%1 of %2").arg(win.current + 1).arg(win.fileCount));
-        if (win.pages > 1)
-            parts.push(qsTr("Page %1 of %2").arg((win.view?.currentPage ?? 0) + 1).arg(win.pages));
+        if (viewerWin.fileCount > 1)
+            parts.push(qsTr("%1 of %2").arg(viewerWin.current + 1).arg(viewerWin.fileCount));
+        if (viewerWin.pages > 1)
+            parts.push(qsTr("Page %1 of %2").arg((viewerWin.view?.currentPage ?? 0) + 1).arg(viewerWin.pages));
         return parts.join("  ·  ");
     }
 
@@ -53,58 +53,58 @@ Window {
     color: Appearance.windowFill
 
     Theme {
-        backend: win.backend
+        backend: viewerWin.backend
     }
 
     // Previous or next file of the list (no wrap, like a file manager); a slideshow keeps its own timer.
     function go(delta: int): void {
-        const next = Math.max(0, Math.min(win.fileCount - 1, win.current + delta));
-        if (next !== win.current)
-            win.current = next;
+        const next = Math.max(0, Math.min(viewerWin.fileCount - 1, viewerWin.current + delta));
+        if (next !== viewerWin.current)
+            viewerWin.current = next;
     }
 
     function openSearch(): void {
-        win.searchOpen = true;
+        viewerWin.searchOpen = true;
         searchInput.forceActiveFocus();
         searchInput.selectAll();
     }
 
     function closeSearch(): void {
-        win.searchOpen = false;
+        viewerWin.searchOpen = false;
         searchInput.text = "";
         content.forceActiveFocus();
-        if (win.view)
-            win.view.forceActiveFocus();
+        if (viewerWin.view)
+            viewerWin.view.forceActiveFocus();
     }
 
     function toggleSlideshow(): void {
-        if (win.slideshow) {
-            win.endSlideshow();
+        if (viewerWin.slideshow) {
+            viewerWin.endSlideshow();
             return;
         }
-        if (win.fileCount < 2)
+        if (viewerWin.fileCount < 2)
             return;
-        win.slideshowPaused = false;
-        win.slideshow = true;
-        win.visibility = Window.FullScreen;
+        viewerWin.slideshowPaused = false;
+        viewerWin.slideshow = true;
+        viewerWin.visibility = Window.FullScreen;
     }
 
     function endSlideshow(): void {
-        win.slideshow = false;
-        win.visibility = Window.Windowed;
+        viewerWin.slideshow = false;
+        viewerWin.visibility = Window.Windowed;
     }
 
     onCurrentChanged: {
-        if (win.searchOpen)
-            win.closeSearch();
+        if (viewerWin.searchOpen)
+            viewerWin.closeSearch();
     }
 
     // Global menu (T1). Its shortcuts repeat some of the ones below: every Shortcut whose key is also a menu shortcut
     // acts on activatedAmbiguously too (Qt hands such a key to one of the two per press, see GlobalMenu.qml).
     Loader {
-        active: win.globalMenu
+        active: viewerWin.globalMenu
         sourceComponent: GlobalMenu {
-            win: win
+            win: viewerWin
         }
     }
 
@@ -112,20 +112,20 @@ Window {
     Timer {
         interval: Tokens.previewSlideshowInterval
         repeat: true
-        running: win.slideshow && !win.slideshowPaused
+        running: viewerWin.slideshow && !viewerWin.slideshowPaused
         onTriggered: {
-            if (win.canGoNext)
-                win.go(1);
+            if (viewerWin.canGoNext)
+                viewerWin.go(1);
             else
-                win.endSlideshow();
+                viewerWin.endSlideshow();
         }
     }
 
     // Keys: plain keys are ignored while the search field has the focus.
     Shortcut {
         sequence: "Ctrl+W"
-        onActivated: win.close()
-        onActivatedAmbiguously: win.close()
+        onActivated: viewerWin.close()
+        onActivatedAmbiguously: viewerWin.close()
     }
     Shortcut {
         sequence: "Ctrl+Q"
@@ -133,113 +133,113 @@ Window {
     }
     Shortcut {
         sequence: "Ctrl+F"
-        enabled: win.view?.canSearch ?? false
-        onActivated: win.openSearch()
-        onActivatedAmbiguously: win.openSearch()
+        enabled: viewerWin.view?.canSearch ?? false
+        onActivated: viewerWin.openSearch()
+        onActivatedAmbiguously: viewerWin.openSearch()
     }
     Shortcut {
         sequence: "Ctrl+G"
-        enabled: (win.view?.canSearch ?? false) && win.searchOpen
-        onActivated: win.view.nextMatch()
-        onActivatedAmbiguously: win.view.nextMatch()
+        enabled: (viewerWin.view?.canSearch ?? false) && viewerWin.searchOpen
+        onActivated: viewerWin.view.nextMatch()
+        onActivatedAmbiguously: viewerWin.view.nextMatch()
     }
     Shortcut {
         sequence: "Ctrl+Shift+G"
-        enabled: (win.view?.canSearch ?? false) && win.searchOpen
-        onActivated: win.view.previousMatch()
-        onActivatedAmbiguously: win.view.previousMatch()
+        enabled: (viewerWin.view?.canSearch ?? false) && viewerWin.searchOpen
+        onActivated: viewerWin.view.previousMatch()
+        onActivatedAmbiguously: viewerWin.view.previousMatch()
     }
     Shortcut {
         sequences: ["Ctrl+Alt+2", "Ctrl+Shift+S"]
-        enabled: win.hasSidebar
-        onActivated: win.sidebarOpen = !win.sidebarOpen
-        onActivatedAmbiguously: win.sidebarOpen = !win.sidebarOpen
+        enabled: viewerWin.hasSidebar
+        onActivated: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
+        onActivatedAmbiguously: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
     }
     Shortcut {
         sequence: "Ctrl+I"
-        onActivated: win.infoOpen = !win.infoOpen
-        onActivatedAmbiguously: win.infoOpen = !win.infoOpen
+        onActivated: viewerWin.infoOpen = !viewerWin.infoOpen
+        onActivatedAmbiguously: viewerWin.infoOpen = !viewerWin.infoOpen
     }
     Shortcut {
         sequence: "Ctrl+Shift+F"
-        enabled: win.fileCount > 1
-        onActivated: win.toggleSlideshow()
-        onActivatedAmbiguously: win.toggleSlideshow()
+        enabled: viewerWin.fileCount > 1
+        onActivated: viewerWin.toggleSlideshow()
+        onActivatedAmbiguously: viewerWin.toggleSlideshow()
     }
     Shortcut {
         sequence: "Ctrl+R"
-        enabled: win.view?.canRotate ?? false
-        onActivated: win.view.rotate(1)
-        onActivatedAmbiguously: win.view.rotate(1)
+        enabled: viewerWin.view?.canRotate ?? false
+        onActivated: viewerWin.view.rotate(1)
+        onActivatedAmbiguously: viewerWin.view.rotate(1)
     }
     Shortcut {
         sequence: "Ctrl+L"
-        enabled: win.view?.canRotate ?? false
-        onActivated: win.view.rotate(-1)
-        onActivatedAmbiguously: win.view.rotate(-1)
+        enabled: viewerWin.view?.canRotate ?? false
+        onActivated: viewerWin.view.rotate(-1)
+        onActivatedAmbiguously: viewerWin.view.rotate(-1)
     }
     Shortcut {
         sequences: ["+", "=", "Ctrl++", "Ctrl+="]
-        enabled: (win.view?.canZoom ?? false) && !searchInput.activeFocus
-        onActivated: win.view.zoomIn()
-        onActivatedAmbiguously: win.view.zoomIn()
+        enabled: (viewerWin.view?.canZoom ?? false) && !searchInput.activeFocus
+        onActivated: viewerWin.view.zoomIn()
+        onActivatedAmbiguously: viewerWin.view.zoomIn()
     }
     Shortcut {
         sequences: ["-", "Ctrl+-"]
-        enabled: (win.view?.canZoom ?? false) && !searchInput.activeFocus
-        onActivated: win.view.zoomOut()
-        onActivatedAmbiguously: win.view.zoomOut()
+        enabled: (viewerWin.view?.canZoom ?? false) && !searchInput.activeFocus
+        onActivated: viewerWin.view.zoomOut()
+        onActivatedAmbiguously: viewerWin.view.zoomOut()
     }
     Shortcut {
         sequences: ["0", "Ctrl+0"]
-        enabled: (win.view?.canZoom ?? false) && !searchInput.activeFocus
-        onActivated: win.view.actualSize()
-        onActivatedAmbiguously: win.view.actualSize()
+        enabled: (viewerWin.view?.canZoom ?? false) && !searchInput.activeFocus
+        onActivated: viewerWin.view.actualSize()
+        onActivatedAmbiguously: viewerWin.view.actualSize()
     }
     Shortcut {
         sequence: "Ctrl+9"
-        enabled: win.view?.canZoom ?? false
-        onActivated: win.view.fit()
-        onActivatedAmbiguously: win.view.fit()
+        enabled: viewerWin.view?.canZoom ?? false
+        onActivated: viewerWin.view.fit()
+        onActivatedAmbiguously: viewerWin.view.fit()
     }
     Shortcut {
         sequence: "Left"
-        enabled: win.fileCount > 1 && !searchInput.activeFocus
-        onActivated: win.go(-1)
-        onActivatedAmbiguously: win.go(-1)
+        enabled: viewerWin.fileCount > 1 && !searchInput.activeFocus
+        onActivated: viewerWin.go(-1)
+        onActivatedAmbiguously: viewerWin.go(-1)
     }
     Shortcut {
         sequence: "Right"
-        enabled: win.fileCount > 1 && !searchInput.activeFocus
-        onActivated: win.go(1)
-        onActivatedAmbiguously: win.go(1)
+        enabled: viewerWin.fileCount > 1 && !searchInput.activeFocus
+        onActivated: viewerWin.go(1)
+        onActivatedAmbiguously: viewerWin.go(1)
     }
     // Page Up and Down turn the pages of a multi-page image; on any other image they go to the previous and next file.
     Shortcut {
         sequence: "PgUp"
-        enabled: win.onImage && !searchInput.activeFocus && (win.pages > 1 || win.fileCount > 1)
-        onActivated: win.pages > 1 ? win.view.goToPage(win.view.currentPage - 1) : win.go(-1)
+        enabled: viewerWin.onImage && !searchInput.activeFocus && (viewerWin.pages > 1 || viewerWin.fileCount > 1)
+        onActivated: viewerWin.pages > 1 ? viewerWin.view.goToPage(viewerWin.view.currentPage - 1) : viewerWin.go(-1)
     }
     Shortcut {
         sequence: "PgDown"
-        enabled: win.onImage && !searchInput.activeFocus && (win.pages > 1 || win.fileCount > 1)
-        onActivated: win.pages > 1 ? win.view.goToPage(win.view.currentPage + 1) : win.go(1)
+        enabled: viewerWin.onImage && !searchInput.activeFocus && (viewerWin.pages > 1 || viewerWin.fileCount > 1)
+        onActivated: viewerWin.pages > 1 ? viewerWin.view.goToPage(viewerWin.view.currentPage + 1) : viewerWin.go(1)
     }
     Shortcut {
         sequence: "Space"
-        enabled: (content.info.kind === "audio" || content.info.kind === "video" || win.slideshow) && !searchInput.activeFocus
-        onActivated: win.slideshow ? win.slideshowPaused = !win.slideshowPaused : win.view.togglePlay()
+        enabled: (content.info.kind === "audio" || content.info.kind === "video" || viewerWin.slideshow) && !searchInput.activeFocus
+        onActivated: viewerWin.slideshow ? viewerWin.slideshowPaused = !viewerWin.slideshowPaused : viewerWin.view.togglePlay()
     }
     Shortcut {
         sequence: "Esc"
-        enabled: win.searchOpen || win.infoOpen || win.slideshow
+        enabled: viewerWin.searchOpen || viewerWin.infoOpen || viewerWin.slideshow
         onActivated: {
-            if (win.slideshow)
-                win.endSlideshow();
-            else if (win.infoOpen)
-                win.infoOpen = false;
+            if (viewerWin.slideshow)
+                viewerWin.endSlideshow();
+            else if (viewerWin.infoOpen)
+                viewerWin.infoOpen = false;
             else
-                win.closeSearch();
+                viewerWin.closeSearch();
         }
     }
 
@@ -250,26 +250,26 @@ Window {
     UnifiedToolbar {
         id: toolbar
         width: parent.width
-        height: win.slideshow ? 0 : Tokens.previewToolbarHeight
-        visible: !win.slideshow
+        height: viewerWin.slideshow ? 0 : Tokens.previewToolbarHeight
+        visible: !viewerWin.slideshow
         z: 2
-        window: win
+        window: viewerWin
         showTitle: false
-        doubleClickAction: win.backend.titlebarDoubleClick
-        canMinimize: win.backend.canMinimize
+        doubleClickAction: viewerWin.backend.titlebarDoubleClick
+        canMinimize: viewerWin.backend.canMinimize
 
         ToolbarGroup {
             id: sidebarGroup
             x: toolbar.contentStart
             anchors.verticalCenter: parent.verticalCenter
-            visible: win.hasSidebar
+            visible: viewerWin.hasSidebar
 
             ToolButton {
                 capsule: true
                 accessibleName: qsTr("Thumbnails")
                 checkable: true
-                checked: win.showSidebar
-                onClicked: win.sidebarOpen = !win.sidebarOpen
+                checked: viewerWin.showSidebar
+                onClicked: viewerWin.sidebarOpen = !viewerWin.sidebarOpen
 
                 Glyph {
                     anchors.centerIn: parent
@@ -296,9 +296,9 @@ Window {
                 width: parent.width
                 elide: Text.ElideMiddle
                 textFormat: Text.PlainText
-                text: win.title
+                text: viewerWin.title
                 // Dimmed while the window is not key (macOS 27; ADR-0039 step 17).
-                color: win.keyLook ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+                color: viewerWin.keyLook ? Appearance.colors.text : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyBodySize
                 font.weight: Tokens.typographyMenuBoldWeight
@@ -310,7 +310,7 @@ Window {
                 visible: text !== ""
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
-                text: win.subtitle
+                text: viewerWin.subtitle
                 color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.typographyCaptionSize
@@ -330,13 +330,13 @@ Window {
             spacing: Tokens.spacingMd
 
             ToolbarGroup {
-                visible: win.fileCount > 1
+                visible: viewerWin.fileCount > 1
 
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Previous")
-                    enabled: win.canGoPrevious
-                    onClicked: win.go(-1)
+                    enabled: viewerWin.canGoPrevious
+                    onClicked: viewerWin.go(-1)
 
                     Glyph {
                         anchors.centerIn: parent
@@ -346,8 +346,8 @@ Window {
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Next")
-                    enabled: win.canGoNext
-                    onClicked: win.go(1)
+                    enabled: viewerWin.canGoNext
+                    onClicked: viewerWin.go(1)
 
                     Glyph {
                         anchors.centerIn: parent
@@ -357,7 +357,7 @@ Window {
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Slideshow")
-                    onClicked: win.toggleSlideshow()
+                    onClicked: viewerWin.toggleSlideshow()
 
                     Glyph {
                         anchors.centerIn: parent
@@ -367,12 +367,12 @@ Window {
             }
 
             ToolbarGroup {
-                visible: win.view?.canZoom ?? false
+                visible: viewerWin.view?.canZoom ?? false
 
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Zoom Out")
-                    onClicked: win.view.zoomOut()
+                    onClicked: viewerWin.view.zoomOut()
 
                     Glyph {
                         anchors.centerIn: parent
@@ -382,7 +382,7 @@ Window {
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Zoom to Fit")
-                    onClicked: win.view.fit()
+                    onClicked: viewerWin.view.fit()
 
                     Glyph {
                         anchors.centerIn: parent
@@ -392,7 +392,7 @@ Window {
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Zoom In")
-                    onClicked: win.view.zoomIn()
+                    onClicked: viewerWin.view.zoomIn()
 
                     Glyph {
                         anchors.centerIn: parent
@@ -402,12 +402,12 @@ Window {
             }
 
             ToolbarGroup {
-                visible: win.view?.canRotate ?? false
+                visible: viewerWin.view?.canRotate ?? false
 
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Rotate Left")
-                    onClicked: win.view.rotate(-1)
+                    onClicked: viewerWin.view.rotate(-1)
 
                     Glyph {
                         anchors.centerIn: parent
@@ -417,7 +417,7 @@ Window {
                 ToolButton {
                     capsule: true
                     accessibleName: qsTr("Rotate Right")
-                    onClicked: win.view.rotate(1)
+                    onClicked: viewerWin.view.rotate(1)
 
                     Glyph {
                         anchors.centerIn: parent
@@ -431,8 +431,8 @@ Window {
                     capsule: true
                     accessibleName: qsTr("Info")
                     checkable: true
-                    checked: win.infoOpen
-                    onClicked: win.infoOpen = !win.infoOpen
+                    checked: viewerWin.infoOpen
+                    onClicked: viewerWin.infoOpen = !viewerWin.infoOpen
 
                     Glyph {
                         anchors.centerIn: parent
@@ -444,8 +444,8 @@ Window {
             // Search (PDF): a circle that opens into a field.
             Item {
                 id: searchBox
-                visible: win.view?.canSearch ?? false
-                width: win.searchOpen ? Tokens.previewSearchWidth : Tokens.toolbarCapsule
+                visible: viewerWin.view?.canSearch ?? false
+                width: viewerWin.searchOpen ? Tokens.previewSearchWidth : Tokens.toolbarCapsule
                 height: Tokens.toolbarCapsule
 
                 // The toolbar's rimmed glass capsule, as the groups beside it (ADR-0039 step 16).
@@ -456,10 +456,10 @@ Window {
 
                 ToolButton {
                     anchors.centerIn: parent
-                    visible: !win.searchOpen
+                    visible: !viewerWin.searchOpen
                     capsule: true
                     accessibleName: qsTr("Search in document")
-                    onClicked: win.openSearch()
+                    onClicked: viewerWin.openSearch()
 
                     Glyph {
                         anchors.centerIn: parent
@@ -469,7 +469,7 @@ Window {
 
                 Glyph {
                     id: searchIcon
-                    visible: win.searchOpen
+                    visible: viewerWin.searchOpen
                     kind: "search"
                     color: Appearance.colors.textSecondary
                     x: Tokens.spacingMd
@@ -479,7 +479,7 @@ Window {
                 TextInput {
                     id: searchInput
                     TextCursor {}
-                    visible: win.searchOpen
+                    visible: viewerWin.searchOpen
                     anchors {
                         left: searchIcon.right
                         leftMargin: Tokens.spacingSm
@@ -496,15 +496,15 @@ Window {
                     Accessible.role: Accessible.EditableText
                     Accessible.name: qsTr("Search in document")
                     Keys.onPressed: event => {
-                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && win.view) {
+                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && viewerWin.view) {
                             if (event.modifiers & Qt.ShiftModifier)
-                                win.view.previousMatch();
+                                viewerWin.view.previousMatch();
                             else
-                                win.view.nextMatch();
+                                viewerWin.view.nextMatch();
                             event.accepted = true;
                         }
                     }
-                    Keys.onEscapePressed: win.closeSearch()
+                    Keys.onEscapePressed: viewerWin.closeSearch()
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
@@ -523,9 +523,9 @@ Window {
                         rightMargin: Tokens.spacingMd
                         verticalCenter: parent.verticalCenter
                     }
-                    visible: win.searchOpen && searchInput.text !== ""
+                    visible: viewerWin.searchOpen && searchInput.text !== ""
                     textFormat: Text.PlainText
-                    text: win.view && win.view.matches !== undefined ? qsTr("%1 found").arg(win.view.matches) : ""
+                    text: viewerWin.view && viewerWin.view.matches !== undefined ? qsTr("%1 found").arg(viewerWin.view.matches) : ""
                     color: Appearance.colors.textSecondary
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.typographyCaptionSize
@@ -539,8 +539,8 @@ Window {
     Item {
         id: info
         z: 3
-        visible: win.infoOpen && !win.slideshow
-        x: win.width - width - Tokens.spacingMd
+        visible: viewerWin.infoOpen && !viewerWin.slideshow
+        x: viewerWin.width - width - Tokens.spacingMd
         y: toolbar.height
         width: Tokens.previewInfoWidth
         height: infoRows.height + 2 * Tokens.spacingMd
@@ -619,7 +619,7 @@ Window {
         width: parent.width
         height: Tokens.appsBorderWidth
         z: 2
-        visible: !win.slideshow && win.view !== null && win.view.scrolled === true
+        visible: !viewerWin.slideshow && viewerWin.view !== null && viewerWin.view.scrolled === true
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -632,7 +632,7 @@ Window {
             bottom: parent.bottom
             left: parent.left
         }
-        width: win.showSidebar && !win.slideshow ? Tokens.previewSidebarWidth : 0
+        width: viewerWin.showSidebar && !viewerWin.slideshow ? Tokens.previewSidebarWidth : 0
         visible: width > 0
         clip: true
 
@@ -649,7 +649,7 @@ Window {
             ListView {
                 id: fileList
 
-                readonly property bool compact: win.isPdf
+                readonly property bool compact: viewerWin.isPdf
 
                 anchors {
                     top: parent.top
@@ -657,12 +657,12 @@ Window {
                     right: parent.right
                     margins: Tokens.spacingSm
                 }
-                height: win.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - 2 * Tokens.spacingSm) : 0
-                visible: win.fileCount > 1
+                height: viewerWin.fileCount > 1 ? (fileList.compact ? Math.min(contentHeight, panel.height / 3) : panel.height - 2 * Tokens.spacingSm) : 0
+                visible: viewerWin.fileCount > 1
                 clip: true
                 spacing: Tokens.spacingXs
-                model: win.backend.files
-                currentIndex: win.current
+                model: viewerWin.backend.files
+                currentIndex: viewerWin.current
                 highlightMoveDuration: 0
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Files")
@@ -678,7 +678,7 @@ Window {
 
                     required property int index
                     required property var modelData
-                    readonly property bool selected: row.index === win.current
+                    readonly property bool selected: row.index === viewerWin.current
                     readonly property real cellHeight: Math.round(Tokens.previewThumbnailWidth * 3 / 4)
 
                     width: fileList.width
@@ -694,7 +694,7 @@ Window {
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.radiusMenu
                         color: rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                         border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
-                        border.color: win.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+                        border.color: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                     }
 
                     Item {
@@ -731,7 +731,7 @@ Window {
                                     margins: Tokens.spacingXs
                                 }
                                 textFormat: Text.PlainText
-                                text: row.modelData.kind === "text" && !fileList.compact ? win.backend.textSnippet(row.index) : ""
+                                text: row.modelData.kind === "text" && !fileList.compact ? viewerWin.backend.textSnippet(row.index) : ""
                                 color: Tokens.previewPaperInk
                                 font.family: Tokens.typographyMonoFamily
                                 font.pixelSize: Tokens.previewThumbnailTextSize
@@ -756,7 +756,7 @@ Window {
                             color: "transparent"
                             radius: Tokens.radiusControl
                             border.width: Tokens.controlFocusOutline
-                            border.color: win.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+                            border.color: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
                         }
                     }
 
@@ -785,7 +785,7 @@ Window {
                         id: rowMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: win.current = row.index
+                        onClicked: viewerWin.current = row.index
                     }
                 }
             }
@@ -800,21 +800,21 @@ Window {
                     right: parent.right
                     margins: Tokens.spacingSm
                 }
-                active: win.isPdf && win.view !== null
+                active: viewerWin.isPdf && viewerWin.view !== null
                 source: "Thumbnails.qml"
             }
 
             Binding {
                 target: thumbs.item
                 property: "document"
-                value: win.view?.document
-                when: thumbs.item !== null && win.view !== null
+                value: viewerWin.view?.document
+                when: thumbs.item !== null && viewerWin.view !== null
             }
             Binding {
                 target: thumbs.item
                 property: "pdfView"
-                value: win.view
-                when: thumbs.item !== null && win.view !== null
+                value: viewerWin.view
+                when: thumbs.item !== null && viewerWin.view !== null
             }
         }
     }
@@ -827,8 +827,8 @@ Window {
             left: sidebar.right
             right: parent.right
         }
-        backend: win.backend
-        fileIndex: win.current
+        backend: viewerWin.backend
+        fileIndex: viewerWin.current
         searchText: searchInput.text
         focus: true
     }

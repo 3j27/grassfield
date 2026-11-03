@@ -24,8 +24,8 @@ Window {
     readonly property alias stopButton: stopButton
     readonly property alias infoButton: infoButton
     readonly property alias moreButton: moreButton
-    readonly property alias actionMenu: actionMenu
-    readonly property alias sheets: sheets
+    readonly property alias actionMenu: actionMenuItem
+    readonly property alias sheets: sheetsItem
 
     title: qsTr("Activity Monitor")
     width: root.backend.savedWidth > 0 ? root.backend.savedWidth : Tokens.activityWindowWidth
@@ -200,18 +200,18 @@ Window {
         if (efficiency.on)
             efficiency.set(false);
         else if (root.backend.askEfficiency)
-            sheets.openEfficiency();
+            sheetsItem.openEfficiency();
         else
             efficiency.set(true);
     }
 
     function runAction(id: string): void {
         if (id === "quit")
-            sheets.openQuit();
+            sheetsItem.openQuit();
         else if (id === "inspect")
             root.backend.inspectSelection();
         else if (id === "signal")
-            sheets.openSignal();
+            sheetsItem.openSignal();
         else if (id === "efficiency")
             root.toggleEfficiency();
         else if (id === "copy")
@@ -220,8 +220,8 @@ Window {
 
     // The action menu under its button, or the context menu at the pointer (`x`, `y` in the window).
     function openActionMenu(x: real, y: real): void {
-        actionMenu.items = root.actionItems();
-        actionMenu.openAt(x, y);
+        actionMenuItem.items = root.actionItems();
+        actionMenuItem.openAt(x, y);
     }
 
     UnifiedToolbar {
@@ -271,7 +271,7 @@ Window {
                         iconName: "xmark-octagon"
                         enabled: root.backend.actions.canQuit
                         accessibleName: qsTr("Quit Process")
-                        onClicked: sheets.openQuit()
+                        onClicked: sheetsItem.openQuit()
 
                         HoverHandler {
                             id: stopHover
@@ -442,7 +442,7 @@ Window {
 
     // The action menu (the "…" button) and the rows' context menu.
     MenuPopup {
-        id: actionMenu
+        id: actionMenuItem
         objectName: "actionMenu"
         accessibleName: qsTr("Actions")
         focusBack: processList
@@ -451,7 +451,7 @@ Window {
 
     // AM50 to AM56: the sheets, over everything else.
     ActionSheets {
-        id: sheets
+        id: sheetsItem
         objectName: "actionSheets"
         actions: root.backend.actions
         backend: root.backend
@@ -555,7 +555,7 @@ Window {
     }
     Key {
         sequence: "Ctrl+Alt+Q"
-        run: () => sheets.openQuit()
+        run: () => sheetsItem.openQuit()
     }
     Key {
         sequence: "Ctrl+I"

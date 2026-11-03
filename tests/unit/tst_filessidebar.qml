@@ -20,7 +20,7 @@ TestCase {
     property var menus: []
 
     ListModel {
-        id: places
+        id: placesItem
 
         property string current: "file:///media/usb"
 
@@ -96,8 +96,8 @@ TestCase {
         }
 
         function rowForUrl(url): int {
-            for (let i = 0; i < places.count; i++) {
-                if (String(places.get(i).url) === String(url))
+            for (let i = 0; i < placesItem.count; i++) {
+                if (String(placesItem.get(i).url) === String(url))
                     return i;
             }
             return -1;
@@ -112,7 +112,7 @@ TestCase {
     QtObject {
         id: fakeApp
 
-        property var places: places
+        property var places: placesItem
         property var hiddenTags: []
     }
 
@@ -260,9 +260,9 @@ TestCase {
         const listView = findList(sidebar);
         verify(listView !== null);
         compare(listView.itemAtIndex(0).opacity, 1);
-        places.setProperty(0, "unavailable", true);
+        placesItem.setProperty(0, "unavailable", true);
         tryCompare(listView.itemAtIndex(0), "opacity", Tokens.materialDisabledOpacity);
-        places.setProperty(0, "unavailable", false);
+        placesItem.setProperty(0, "unavailable", false);
         tryCompare(listView.itemAtIndex(0), "opacity", 1);
     }
 

@@ -74,7 +74,7 @@ Scope {
 
     // The stored (raw) value of a dotted key in parsedFile, undefined when the file has none.
     function rawValue(path: string): var {
-        root.parsedFileRevision;
+        void root.parsedFileRevision;
         let node = root.parsedFile;
         for (const part of path.split(".")) {
             if (node === null || node === undefined || typeof node !== "object" || Array.isArray(node))
@@ -93,7 +93,7 @@ Scope {
         // A file the Settings app refuses to edit (an integer beyond 2^53, a duplicate key: JsonSafety) shows its defaults
         // there under a banner: the shell reads the same, never the values of a file it could not rewrite safely either.
         if (root.unsafeFile && SettingsContract.DEFAULTS[path] !== undefined) {
-            root.parsedFileRevision;
+            void root.parsedFileRevision;
             return JSON.parse(JSON.stringify(SettingsContract.DEFAULTS[path]));
         }
         return SettingsContract.normalize(path, rawValue(path));
@@ -526,7 +526,7 @@ Scope {
                     base[key] = over[key];
             }
         };
-        root.parsedFileRevision;
+        void root.parsedFileRevision;
         overlay(merged, root.parsedFile);
         return merged;
     }

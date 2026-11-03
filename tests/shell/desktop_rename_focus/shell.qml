@@ -74,14 +74,18 @@ ShellRoot {
                 // A hidden field never commits, even if accepted() were somehow emitted.
                 field.accepted();
                 root.check("hidden accept ignored", root.accepted === 0);
+                // qmllint disable missing-property
                 icon.renaming = true;
+                // qmllint enable missing-property
             } else if (root.phase === 1) {
                 root.check("field enabled while renaming", field.enabled && field.visible);
                 root.check("field focused while renaming", field.activeFocus);
                 field.accepted();
                 root.check("accept while renaming", root.accepted === 1);
                 // End the rename the way the view does, then take focus back to the sink.
+                // qmllint disable missing-property
                 icon.renaming = false;
+                // qmllint enable missing-property
                 sink.forceActiveFocus();
             } else if (root.phase === 2) {
                 root.check("field lost focus", !field.activeFocus);
