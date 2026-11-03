@@ -40,19 +40,12 @@ Window {
     readonly property real toolbarMin: Math.max(toolbar.controls.contentStart, Tokens.windowItemsInset) + viewerWin.toolbarRest
     readonly property bool roomForSidebar: viewerWin.width >= Tokens.previewSidebarWidth + viewerWin.toolbarNeed
     readonly property bool showSidebar: viewerWin.sidebarOpen && viewerWin.hasSidebar && viewerWin.roomForSidebar
-    // The sidebar toggle (button and shortcut): asked for in a window too narrow for it, the window widens to fit it when the
-    // screen allows (as macOS), else nothing changes.
+    // The sidebar toggle (button and shortcut) is off while the window is too narrow for the sidebar: a client cannot resize its
+    // own window on Wayland, so Preview never writes its width; widening the window brings the sidebar back if it is wanted.
+    readonly property bool canToggleSidebar: viewerWin.hasSidebar && viewerWin.roomForSidebar
     function toggleSidebar(): void {
-        if (viewerWin.sidebarOpen && viewerWin.hasSidebar && !viewerWin.roomForSidebar) {
-            const want = Math.ceil(Tokens.previewSidebarWidth + viewerWin.toolbarNeed);
-            const room = viewerWin.screen ? viewerWin.screen.desktopAvailableWidth : want;
-            if (room >= want)
-                viewerWin.width = want;
-            return;
-        }
-        viewerWin.sidebarOpen = !viewerWin.sidebarOpen;
-        if (viewerWin.sidebarOpen && viewerWin.hasSidebar && !viewerWin.roomForSidebar)
-            viewerWin.toggleSidebar();
+        if (viewerWin.canToggleSidebar)
+            viewerWin.sidebarOpen = !viewerWin.sidebarOpen;
     }
     readonly property int pages: viewerWin.view ? viewerWin.view.pageCount : 1
     readonly property bool onImage: content.info.kind === "image" && content.info.ok === true
@@ -173,7 +166,7 @@ Window {
     }
     Shortcut {
         sequences: ["Ctrl+Alt+2", "Ctrl+Shift+S"]
-        enabled: viewerWin.hasSidebar
+        enabled: viewerWin.canToggleSidebar
         onActivated: viewerWin.toggleSidebar()
         onActivatedAmbiguously: viewerWin.toggleSidebar()
     }
@@ -307,6 +300,8 @@ Window {
             ToolButton {
                 capsule: true
                 accessibleName: qsTr("Thumbnails")
+                enabled: viewerWin.canToggleSidebar
+                tooltip: viewerWin.canToggleSidebar ? qsTr("Thumbnails") : qsTr("Make the window wider to show the sidebar")
                 checkable: true
                 checked: viewerWin.showSidebar
                 // One white disc, as macOS 27: the group's own capsule is the disc; a checked pill inside it would be a second one.

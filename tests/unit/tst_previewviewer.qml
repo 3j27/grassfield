@@ -293,16 +293,13 @@ TestCase {
             const toggleRight = toggle.mapToItem(toolbar, toggle.width, 0).x;
             verify(tools.x >= toggleRight, v.title + ": the tools (x " + tools.x + ") clear the toggle (right " + toggleRight + ")");
             verify(tools.x + tools.width <= toolbar.width, v.title + ": the tools stay in the toolbar");
-            // Asking for the sidebar in a window too narrow for it widens the window when the screen allows.
-            const want = Math.ceil(Tokens.previewSidebarWidth + v.toolbarNeed);
+            // The toggle is off below the threshold (a client cannot resize its own window on Wayland) and on above it.
+            verify(!toggle.enabled, v.title + ": the toggle is disabled in a window too narrow for the sidebar");
+            verify(toggle.tooltip.indexOf("wider") >= 0, v.title + ": its tooltip says why: " + toggle.tooltip);
+            const was = v.width;
             v.toggleSidebar();
-            wait(300);
-            if (v.screen.desktopAvailableWidth >= want) {
-                verify(v.width >= want, v.title + ": the window widened to " + want + ", is " + v.width);
-                verify(v.showSidebar, v.title + ": the sidebar shows after the toggle");
-            }
-            v.width = v.minimumWidth;
-            wait(300);
+            compare(v.sidebarOpen, true, v.title + ": the toggle changes nothing when it is off");
+            compare(v.width, was, v.title + ": and never resizes the window");
             v.width = 900;
             wait(300);
             verify(v.showSidebar, v.title + ": the sidebar comes back when the window widens");
@@ -311,8 +308,21 @@ TestCase {
             const toggle2 = findIn(toolbar2, it => it.accessibleName === "Thumbnails");
             const tools2 = findChild(v.contentItem, "toolsRow");
             verify(tools2.x >= toggle2.mapToItem(toolbar2, toggle2.width, 0).x, v.title + ": clear with the sidebar shown");
+            verify(toggle2.enabled, v.title + ": the toggle is enabled in a window wide enough");
             verify(toolbar2.x >= sideBar.width, v.title + ": the toolbar starts after the sidebar");
             v.sidebarOpen = false;
+        }
+    }
+
+    // Preview never writes its own window's width (on Wayland the compositor keeps the size, so the layout would be wrong).
+    function test_neverWritesItsOwnWidth() {
+        for (const file of ["../../apps/preview/qml/Viewer.qml", "../../apps/preview/qml/Content.qml", "../../apps/preview/qml/Thumbnails.qml"]) {
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl(file), false);
+            xhr.send();
+            const lines = xhr.responseText.split("\n").filter(l => !/^\s*\/\//.test(l));
+            for (const l of lines)
+                verify(!/\b(viewerWin|Window\.window)\.(width|height)\s*=[^=]/.test(l), file + ": " + l);
         }
     }
 
