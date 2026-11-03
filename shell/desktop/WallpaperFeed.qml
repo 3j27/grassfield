@@ -356,12 +356,14 @@ Scope {
     }
 
     // `fit` and `color` are the settings' own unless the caller decides (the online aspect rule).
-    function startPrepare(path: string, fit: string, color: string): void {
+    // `var`, not `string`: an omitted argument of a typed `string` parameter arrives as the text "undefined" (Qt 6.11 and
+    // 6.12), which no fit accepts, so every file wallpaper failed with invalid-path ("This path can't be used", rc1-18).
+    function startPrepare(path: string, fit: var, color: var): void {
         currentSrc = path;
         status = imageUrl === "" ? "preparing" : status;
         reason = "";
         publish();
-        startJob("prepare", WallpaperConfig.prepareArgs(WallpaperState.tool, path, pixelWidth, pixelHeight, fit || cfg.fit, color || cfg.color, WallpaperState.preparedDir, Tokens.menubarHeight * scale, Tokens.wallpaperCacheMaxBytes, WallpaperState.currentFiles()), Tokens.wallpaperToolTimeoutMs, false);
+        startJob("prepare", WallpaperConfig.prepareArgs(WallpaperState.tool, path, pixelWidth, pixelHeight, typeof fit === "string" && fit !== "" ? fit : cfg.fit, typeof color === "string" && color !== "" ? color : cfg.color, WallpaperState.preparedDir, Tokens.menubarHeight * scale, Tokens.wallpaperCacheMaxBytes, WallpaperState.currentFiles()), Tokens.wallpaperToolTimeoutMs, false);
     }
 
     function startList(): void {
