@@ -4,14 +4,15 @@
 # code a Grassfield fork was taken from: read the change, port or reject it in the fork (and say so in
 # docs/specs/security.md "Upstream base"), then re-pin with `scripts/dev/upstream-drift.sh --update`.
 #
-# omarchy-package 4.0.4-1
-# upstream basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5 (v4.0.4, byte-identical to the installed files)
-# reviewed-against basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0 (v4.0.6)
+# omarchy-package 4.0.6-1
+# upstream basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0 (v4.0.6, byte-identical to the installed files)
+# previous basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5 (v4.0.4; re-pinned 2026-11-03 after the review in
+# docs/specs/security.md "Upstream base", "4.0.4 -> 4.0.6 re-pin")
 #
 # sha256 | upstream path (relative to OMARCHY_PATH) | Grassfield files derived from it (comma-separated)
-3f0a265a09f7957e8f5d74666595d3136ec64899c414426190460f9e2098e701 shell/plugins/lock/Service.qml shell/security/lock/Lock.qml
-50f5c81e2e94fab32395a5bc3cce982e30a10ab1b3f56cc58f29055951518a51 shell/plugins/services/idle/Service.qml shell/security/idle/Idle.qml
-dfd8e994bd774b9d6d5375f1380a51db1813ce2c060a37c3519c75f0c089dde6 shell/plugins/polkit/PolkitAgent.qml shell/security/polkit/AuthAgent.qml
+661ce2b70e6deadb293b0a7a2c2f19d10086ab191913ceb6d716bcc9b24fc7c4 shell/plugins/lock/Service.qml shell/security/lock/Lock.qml
+f9ec3c2645e28ec83e8c19641a4762e50ec891ecfa90094b15048de20d6bffaa shell/plugins/services/idle/Service.qml shell/security/idle/Idle.qml
+33b31505ec127294eb906944bd2a15a97453229e78e22f816b4363ccb7d3e74c shell/plugins/polkit/PolkitAgent.qml shell/security/polkit/AuthAgent.qml
 6081b11c89d47ab3242a5eb25793724ebd09e1a99aa391950fea6e08b559cb39 bin/omarchy-system-sleep-lock shell/security/idle/IdleModel.js,packaging/shims/omarchy-shell
 e5004580e41475932f852d622b36ec07bfb0e98633c4d3c3055071a54d0eda07 bin/omarchy-hyprland-session-locked shell/security/lock/Lock.qml
 # Software Update (ADR-0033 step 1): the Omarchy commands and template the [grassfield] client relies on (identical in
@@ -24,7 +25,7 @@ c64ea844feb1849375e7cd43dde98933293b0e0f0f522e1ba2c6572d86386c7b bin/omarchy-hoo
 cd1b703031a7456b2bd1302166a2cd29a1db8007f15bed954f64e742502aa552 bin/omarchy-update packaging/bin/grassfield-update-check,apps/settings/src/systemguard.cpp,packaging/pacman/grassfield-update-helper
 9448e1748b10e46bb4310be37d69d0eba6090f69c71264cce4fc6f344278cb7d bin/omarchy-update-lock packaging/bin/grassfield-update-check,packaging/bin/grassfield-channel-set,packaging/bin/grassfield-update-run
 257387ccfcca6211f7bc6bf2cc500bd07d4066c8354f7b869400bc5153e6d645 bin/omarchy-update-available packaging/bin/grassfield-update-check
-f8d1b779b71c76b4f3b36fd1a90e891aee38ff362c1c2a9953f85363150ac4f5 default/pacman/pacman-stable.conf packaging/pacman/grassfield-channel.sh
+f8a4933a4d58b0935cc660da888cda2b4246c3c0926464d3e2e0e432c9354d70 default/pacman/pacman-stable.conf packaging/pacman/grassfield-channel.sh
 f2d76f443b3b6b553790a766cf39aef48ae457cae670538d4390d9457cfa40cc bin/omarchy-update-status packaging/shims/omarchy-shell
 01c6af7dcc7d76c23b5f95f594516195d569ede9f0f8f48f932ec5ff3531a08f bin/omarchy-launch-floating-terminal-with-presentation apps/settings/src/systemguard.cpp,apps/settings/qml/SoftwareUpdateState.qml
 7bc95f8a0a3ae35cfd81453e08194f5660c27cf59528c7d95b4345f362030b60 bin/omarchy-update-restart apps/settings/qml/SoftwareUpdateState.qml,packaging/pacman/grassfield-update-helper,packaging/bin/grassfield-update-run
@@ -36,7 +37,7 @@ f2d76f443b3b6b553790a766cf39aef48ae457cae670538d4390d9457cfa40cc bin/omarchy-upd
 22a4b71541270a7d7c6ed85d480f9f2888df059e030d30860caf4c1f9a601dda bin/omarchy-update-pkg-prune packaging/pacman/grassfield-update-helper
 a154bb5fd33ad3288be4783557887a7207176e9d05bc72585c30e27fea8e3e7b bin/omarchy-snapshot packaging/pacman/grassfield-update-helper
 848005a3ae94d0d260476247eb7be90e0581b5ff329ae414c21b686fe8b993ad bin/omarchy-update-stay-awake packaging/pacman/grassfield-update-helper
-1a7277106e9f3de34325d27dac5bc6c8e778a83eabeeebcc4e0b921c66be74de bin/omarchy-update-keyring packaging/pacman/grassfield-update-helper
+4fbcc471cb0f668c516b84cafd57347a41b501d9d645c94c1941a8a05f64a1da bin/omarchy-update-keyring packaging/pacman/grassfield-update-helper
 5eb31930e2a09c73c33e1ad86baa86e5260f085414d86343e5d38d54e6930d46 bin/omarchy-update-system-pkgs packaging/pacman/grassfield-update-helper
 dae1379216754e372f749ce4a4f3232b20225d08e2d0784d7607bba113ebbc62 bin/omarchy-update-system-pkgs-when-conflicted packaging/pacman/grassfield-update-helper
 aa56714de498170cf9460923dc1047dd89dcc3b08e21809ad2d764ebd1553fed bin/omarchy-update-pacman-guard packaging/pacman/grassfield-update-helper
