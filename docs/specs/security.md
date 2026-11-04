@@ -1145,6 +1145,17 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   the final relock still releases a lock Hyprland uses). Closing this window needs a compositor-side lock/unlock event
   (e.g. from `grassfield-compositor`) or `allow_session_lock_restore = false` (which breaks crash recovery):
   owner/compositor decision.
+- Every lock check (the ownership timer, the keyboard-focus event, monitor answers) runs on the shell's event loop, so a
+  foreign release is noticed only when that loop is free. A restarted shell's start-up holds it: in the integrator's run
+  of 2026-11-04 every locked restart logged nothing for 1.2–2.1 s after its entrance, and a foreign locker that released
+  ~1.5 s after the restarted shell took its lock over left the session unlocked until the fresh lock was requested
+  1350 ms (1616 ms on main) after the release, with the 100 ms check in force throughout (not the 1 s one: the "every
+  1000 ms" line logged at that relock came from `relock()` clearing the suspicion before the lock was lost, fixed).
+  Needs a live foreign lock client at a shell restart and its release, normally the user authenticating to it, within
+  those seconds. `foreign-restart` releases once the restarted shell's entrance is logged and its IPC, served on the same
+  loop, answered within 500 ms five times in a row (≤ 150 ms still asserted), and prints the slowest answer it saw (the
+  hold). Narrowing it needs a lighter start-up while locked (the entrance's first frames); Quickshell offers no check off
+  the event loop.
 - Keyboards that come and go (2026-10-24): when the session's only keyboard device goes away and another appears (a
   desktop's Bluetooth keyboard reconnecting at resume, on the lock screen), Quickshell ignores the keys of its re-created
   `wl_keyboard` until it gets a new `wl_keyboard.leave` and `enter`: the lock's password field (and the polkit dialog) is
@@ -1212,6 +1223,7 @@ same directory and the modules move without moving a file), one step at a time u
 | `tests/security/foreign_locker/` | Nested fixture: a foreign ext-session-lock client (Quickshell), released over IPC `foreign unlock`; refuses to lock without `GRASSFIELD_FOREIGN_LOCKER=1` or on the owner's instance (`.dev/main.instance`) |
 | `tests/security/reload_locked.sh` | Nested scenario: reload with marker missing/forged, `kill -9` (L1), forged marker + crash, graceful exit (SIGTERM, `qs kill`: DT-21), file watcher off, foreign locker takeover/restart (release → fresh lock ≤ 150 ms), `lock lock` and before-sleep during a desync, forced races `relock-confirm` and `foreign-gap`, `probe-cost`, `pam-audit`; `probe-memory` (10 min, explicit) |
 | `tests/security/pam_audit.sh` | Read-only PAM attempt audit over every Quickshell instance log of this tree (sourced by `reload_locked.sh`) |
+| `tests/security/nested_ready.sh`, `nested_ready_unit.sh` | Readiness wait of `reload_locked.sh` and `lock_privacy.sh` (bounded, `READY_SECONDS`, default 60): GF-REF listed and a lock state from the shell, before any step and after each shell restart; an empty answer is never a state, a timeout FAILs. Offline test with stub `hyprctl` and `qs` |
 
 IPC (all on the shell instance; classes in "IPC surface"): `lock lock` → `ok` / `already-locked` / `refused: missing-pam`
 (when already locked, the session lock is re-verified, see "Lock ownership"); `lock lid` → the same or `docked`. Dev
