@@ -68,6 +68,7 @@ ShellRoot {
         ["menubar.clockShowSeconds", true, () => Settings.menubarClockShowSeconds === true],
         ["keyboard.shortcutStyle", "mac", () => Settings.keyboardShortcutStyle === "mac" && Appearance.shortcutStyle === "mac"],
         ["keyboard.shortcutStyle", "bogus", () => Settings.keyboardShortcutStyle === "automatic"],
+        ["keyboard.showInputMenu", false, () => Settings.keyboardShowInputMenu === false],
         ["region.formats", "fr_CH", () => Settings.regionFormats === "fr_CH"],
         ["region.formats", "fr_CH; rm", () => Settings.regionFormats === "auto"],
         ["region.firstDayOfWeek", "sunday", () => Settings.regionFirstDayOfWeek === "sunday"],

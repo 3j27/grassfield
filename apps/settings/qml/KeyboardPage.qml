@@ -178,5 +178,16 @@ SettingsPage {
                 onClicked: root.sourcesRequested(root.sources, root.layouts)
             }
         }
+
+        SettingsRow {
+            title: qsTr("Show Input menu in menu bar")
+            subtitle: root.sources.length < 2 ? qsTr("The menu appears once there are two input sources.") : ""
+
+            Toggle {
+                accessibleName: qsTr("Show Input menu in menu bar")
+                checked: root.store.value("keyboard.showInputMenu")
+                onToggled: c => root.store.set("keyboard.showInputMenu", c)
+            }
+        }
     }
 }

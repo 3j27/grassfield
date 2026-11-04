@@ -97,7 +97,8 @@
     "highlight": "automatic"
   },
   "keyboard": {
-    "shortcutStyle": "automatic"
+    "shortcutStyle": "automatic",
+    "showInputMenu": true
   },
   "region": {
     "formats": "auto",

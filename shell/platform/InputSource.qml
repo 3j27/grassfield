@@ -112,8 +112,62 @@ QtObject {
     readonly property bool available: Logic.menuShown(sources.length, true)
     readonly property string shortLabel: activeIndex >= 0 && activeIndex < sources.length ? Logic.label(sources[activeIndex], sources) : ""
 
+    // xkb's description of each source in the shell's language, {"fr": "Français", "us": "Anglais (États-Unis)"}; empty for English
+    // and until layout-names.py has answered. DISPLAY ONLY: activeIndex matches Hyprland's English names (`names`).
+    property var menuNames: ({})
+    property bool menuStale: false
+
     function nameOf(source: var): string {
-        return Logic.sourceName(source, names);
+        return menuNames[Logic.sourceKey(source)] ?? Logic.sourceName(source, names);
+    }
+
+    // Asks layout-names.py for every source name in one run (a second helper next to the HUD's: the HUD asks one name at a time).
+    function translateMenu(): void {
+        const language = Translator.language;
+        if (!Logic.needsLookup(language) || sources.length === 0 || Object.keys(names).length === 0) {
+            menuNames = {};
+            return;
+        }
+        if (menuLookup.running) {
+            menuStale = true;
+            return;
+        }
+        menuLookup.language = language;
+        menuLookup.asked = sources;
+        menuLookup.command = ["python3", "-I", Quickshell.shellPath("platform/layout-names.py"), language].concat(sources.map(s => Logic.sourceName(s, names)));
+        menuLookup.running = true;
+    }
+
+    onSourcesChanged: translateMenu()
+    onNamesChanged: translateMenu()
+
+    property Connections languageWatch: Connections {
+        target: Translator
+
+        function onLanguageChanged(): void {
+            root.translateMenu();
+        }
+    }
+
+    property Process menuLookup: Process {
+        property string language: ""
+        property var asked: []
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (root.menuLookup.language === Translator.language)
+                    root.menuNames = Logic.parseTranslations(text, root.menuLookup.asked, root.names);
+            }
+        }
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: exitCode => {
+            // qmllint enable signal-handler-parameters
+            if (root.menuStale) {
+                root.menuStale = false;
+                root.translateMenu();
+            }
+        }
     }
 
     // Makes the source at `index` the one in use on every keyboard (Hyprland: `switchxkblayout all`, a request, not a dispatcher).

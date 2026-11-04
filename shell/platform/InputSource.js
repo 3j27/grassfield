@@ -136,6 +136,23 @@ function sourceName(source, names) {
     return (names && names[key]) || key;
 }
 
+// The key of a source in the translated names: "fr" or "fr:bepo".
+function sourceKey(source) {
+    return source.variant ? source.layout + ":" + source.variant : source.layout;
+}
+
+// The helper's answer for several names at once (layout-names.py prints one line per name, in the order given): {key: translated}
+// for the sources, the English name for a line that is missing or unreadable. Only the names the helper was asked for are taken.
+function parseTranslations(output, sourcesList, names) {
+    const lines = String(output === undefined || output === null ? "" : output).split("\n");
+    const out = {};
+    sourcesList.forEach((s, i) => {
+        const line = (lines[i] || "").trim();
+        out[sourceKey(s)] = line === "" || line.length > 128 ? sourceName(s, names) : line;
+    });
+    return out;
+}
+
 // The short label the menu bar shows (macOS shows the source's flag or abbreviation): the layout's code in capitals, "FR", "US";
 // a variant of a layout another source also uses adds its own ("FR bepo"), so two sources never show the same label.
 function label(source, all) {

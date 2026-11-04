@@ -206,4 +206,17 @@ TestCase {
         verify(InputSource.menuShown(4, undefined));
         verify(!InputSource.menuShown(2, false));
     }
+
+    // The menu rows show xkb's description in the shell's language (layout-names.py, one line per name); matching stays English.
+    function test_menuNamesAreTranslatedByKey() {
+        const list = [{layout: "fr", variant: ""}, {layout: "us", variant: ""}, {layout: "fr", variant: "bepo"}];
+        const names = {"fr": "French", "us": "English (US)", "fr:bepo": "French (Bepo)"};
+        const out = InputSource.parseTranslations("Français\nAnglais (États-Unis)\n", list, names);
+        compare(out.fr, "Français");
+        compare(out.us, "Anglais (États-Unis)");
+        compare(out["fr:bepo"], "French (Bepo)");
+        compare(InputSource.parseTranslations(undefined, list, names).us, "English (US)");
+        compare(InputSource.parseTranslations("x".repeat(200), list, names).fr, "French");
+        compare(InputSource.sourceKey({layout: "fr", variant: "bepo"}), "fr:bepo");
+    }
 }

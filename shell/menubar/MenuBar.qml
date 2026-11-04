@@ -314,8 +314,9 @@ Scope {
             // Screen sharing (ADR-0035 D-6, step 7b): while an app shares the screen through the portal (xdph's streams). Never
             // optional: a privacy indicator does not give way when the status area is crowded.
             readonly property bool showScreenShare: SharePicker.sharing
-            // The Input menu (macOS: shown as soon as there are two input sources): the source in use, FR or US.
-            readonly property bool showInput: InputSource.available
+            // The Input menu (macOS: shown as soon as there are two input sources, Settings > Keyboard > Input Sources can hide
+            // it): the source in use, FR or US.
+            readonly property bool showInput: InputSource.available && Settings.keyboardShowInputMenu
             // Crowding (macOS: status items that would collide with the menus are hidden): the status area gets the width
             // between the application menus and the right inset; optional items (third-party, Now Playing, Search) give way
             // leftmost first, never the system items, Quick Settings or the clock (StatusLogic.hiddenItems). Implicit widths

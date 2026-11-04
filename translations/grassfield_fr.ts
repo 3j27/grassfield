@@ -6972,6 +6972,14 @@
         <source>Edit…</source>
         <translation>Modifier…</translation>
     </message>
+    <message>
+        <source>Show Input menu in menu bar</source>
+        <translation>Afficher le menu de saisie dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>The menu appears once there are two input sources.</source>
+        <translation>Le menu apparaît dès qu’il y a deux méthodes de saisie.</translation>
+    </message>
 </context>
 <context>
     <name>KeyboardShortcutsSheet</name>
