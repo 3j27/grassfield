@@ -194,6 +194,46 @@ TestCase {
         verify(ids(t.win).indexOf("battery") < 0);
     }
 
+    // The pane choice (the owner's report of rc1-22, a desktop PC: no power modes, no way to keep it awake): without a battery
+    // the sidebar has Energy in Battery's place (macOS 27), with one Battery; Battery asked for without a battery shows
+    // Energy and the other way round; a battery that appears moves the selection without a new history entry.
+    function test_energyInPlaceOfBattery() {
+        const t = make(testCase.touchpad);
+        verify(!t.win.hasBattery);
+        verify(ids(t.win).indexOf("energy") >= 0, "no battery: Energy");
+        verify(ids(t.win).indexOf("battery") < 0);
+        const energy = t.win.available.find(s => s.id === "energy");
+        compare(energy.title, "Energy");
+        compare(energy.group, t.win.available.find(s => s.id === "wifi").group, "in Battery's group");
+        t.win.select("battery");
+        compare(t.win.selectedId, "energy");
+        compare(t.win.sectionTitle, "Energy");
+        tryVerify(() => find(t.win.contentItem, i => i.title === "Energy" && i.setMode !== undefined && i.store !== undefined) !== null);
+        verify(find(t.win.contentItem, i => i.setLimit !== undefined) === null, "no Battery page");
+        const back = t.win.navState.back.length;
+        // A battery appears (UPower answers late): Battery replaces Energy, selected, no history entry.
+        t.backend.finished("main.power", true, testCase.battery);
+        verify(ids(t.win).indexOf("battery") >= 0);
+        verify(ids(t.win).indexOf("energy") < 0);
+        compare(t.win.selectedId, "battery");
+        compare(t.win.navState.back.length, back);
+        tryVerify(() => find(t.win.contentItem, i => i.setLimit !== undefined) !== null, 2000, "the Battery page");
+        t.win.select("energy");
+        compare(t.win.selectedId, "battery", "Energy asked for with a battery: Battery");
+        // Search finds Energy by its words on a computer without a battery.
+        t.backend.finished("main.power", true, JSON.stringify({present: false}));
+        compare(t.win.selectedId, "energy");
+        t.win.query = "sleep";
+        verify(t.win.filtered.some(s => s.id === "energy"));
+        t.win.query = "";
+    }
+
+    // --section=battery at start on a desktop (the shell's Battery Settings… cannot be there, but a stale command can): Energy.
+    function test_startOnBatteryWithoutBattery() {
+        const t = make(testCase.touchpad, {startSection: "battery"});
+        compare(t.win.selectedId, "energy");
+    }
+
     // Mouse while a mouse is there, Trackpad where there is one; asked for the other, the one there is shown.
     function test_pointerPane() {
         const pad = make(testCase.touchpad);
@@ -305,6 +345,13 @@ TestCase {
         compare(info.topic, "charging");
         info.limitRequested(true);
         verify(!info.shown, "the answer closes the sheet");
+        // Battery > Options…: the sleep option's sheet, with the window's store.
+        batteryPage.optionsRequested();
+        const options = sheet(t.win, "store", s => s.title === "Options");
+        verify(options.shown);
+        verify(options.store !== null);
+        options.accepted();
+        options.close();
         // Printers: a printer's sheet, then Remove Printer…'s confirmation.
         t.win.select("printers");
         const printers = find(t.win.contentItem, i => i.detailsRequested !== undefined && i.addRequested !== undefined);

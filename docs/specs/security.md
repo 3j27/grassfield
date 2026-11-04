@@ -57,7 +57,7 @@ inherited one). A `GRASSFIELD_DEV=1` that leaks into a real session (environment
 user manager) therefore changes nothing: no dev hook answers, PAM is not suppressed (the lock can be opened), the sleep
 inhibitor is taken, and the lock logs once "GRASSFIELD_DEV=1 ignored in a real session". Users: `Lock.devHooks`
 (`lock status|devReload|devPauseOwnershipCheck|devForgeUnlockedAnswer|devLockView`, PAM suppression), `Idle.devHooks`
-(`idle status|devSleep|devDisplayOff`, the display power-off default), `SleepInhibitor.dev` (no inhibitor in dev),
+(`idle status|devSleep|devDisplayOff|devAutoSleep`, the display power-off default, no automatic sleep), `SleepInhibitor.dev` (no inhibitor in dev),
 `polkit status`, and, outside the security modules, `Mode.dev` (`VisualFixtures.dev` is exactly `Mode.dev`,
 `VisualFixtures.active` exactly `Mode.fixtures`), which every other IPC test hook checks (BarTone, Capabilities,
 Widgets). Tests: `tests/security/tst_devgate.qml` (the gate as the security modules import it, 225 pairs against the
@@ -191,7 +191,7 @@ does not check its gate.
 | lock | lock | action | SUPER+CTRL+Q, screen corner, Grassfield menu (in process). Only ever locks |
 | lock | lid | action | lid switch: `config/hypr/grassfield/system.lua` → `/usr/lib/grassfield/grassfield-lid closed` (D-4). Only ever locks; `docked` in clamshell mode |
 | lock | status, devReload, devPauseOwnershipCheck, devForgeUnlockedAnswer, devLockView | dev | `reload_locked.sh`, `l2_wrong_password.sh`; the pause widens the foreign-release window |
-| idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
+| idle | status, devSleep, devDisplayOff, devAutoSleep | dev | `reload_locked.sh`, `lock_privacy.sh`; `devAutoSleep` shortens the automatic sleep delay (the dev session never suspends) |
 | saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
 | secrets | state | dev | the secret sheets' state (ADR-0035 D-9, step 9b): the bridge connection, the name's state, counts of the shown, held, waiting and lingering requests; never a requester or a text (`tests/security/secret_bridge.sh`) |
@@ -791,6 +791,41 @@ a mutation). Both layers cover the output, so a capture is black while either sh
   until input (the monitor stays armed while it is idle, `offForInactivity`); any input, an unlock without input (fingerprint)
   or a change of power source switches them on. Always off in the nested dev session (no dev hook: nothing needed one). NOT VERIFIED on hardware or in nested here
   (no compositor in the cloud container; L2†).
+- Automatic sleep (2026-11-04, Settings > Energy without a battery, Battery > Options… with one; macOS 27): before this,
+  nothing in Grassfield or Omarchy suspended a computer on idle (logind `IdleAction=ignore`, Omarchy's idle service never
+  suspends), so a computer never slept by itself. Now `IdleModel.AUTO_SLEEP_SECONDS` (60 s) after this module turned the
+  displays off for lack of input (either monitor above) the computer sleeps, through `systemctl --no-ask-password suspend` (logind, never an authorization prompt behind the lock; an
+  application's sleep block inhibitor refuses it, and the lock before sleep runs as for any sleep):
+  - only when `energy.preventSleep` is false, on battery and on the power adapter alike ("Prevent automatic sleeping when
+    the display is off"; integrator decision 2026-11-04: macOS always sleeps on battery, but Grassfield and Omarchy never
+    suspended a computer by itself and the owner runs long builds and agents on battery). Default true, and anything but an
+    exact false reads as true (`IdleModel.sleepPrevented`): a value that cannot be read gives back the old behaviour (no
+    sleep by itself), never a sleep;
+  - only while the displays are off by this module, no input and no Wayland idle inhibitor for the delay (a third
+    `IdleMonitor`, `respectInhibitors: true`, enabled only then, with a monotonic `Timer` for the delay itself), and no
+    ScreenSaver cookie held (`IdleModel.autoSleepArmed`);
+  - only in the LOCKED state with the lock secure (`IdleModel.autoSleepAction(Lock.currentState(),
+    Lock.currentlySecure())`, both read afresh: `suspend` in LOCKED and secure, `lock` in exactly UNLOCKED, `wait` in
+    LOCKING, AUTHENTICATING, RELEASING, LOCKED but not verified yet, or an unknown state), read once more right before
+    `systemctl` runs (review of 95dab794: `Lock.holding` included AUTHENTICATING and RELEASING and skipped the verification,
+    so a fingerprint success just before the due time could start a suspend during the release fade; `tst_idlemodel`
+    `test_noSuspendDuringTheReleaseFade`). A lock that settles LOCKED and secure after the due time decides again; an unlock (UNLOCKED) ends the attempt, so a fingerprint touch over the due time can never lead to the lock-first path and undo the unlock (review of 2a19231d, `IdleModel.autoSleepOnLockChange`, `test_unlockOverTheDueTimeEndsTheAttempt`). An unlocked
+    session (Require password after the display turns off later than the sleep, or Never) is locked first
+    (`Lock.lock("sleep")`, which lights the displays until the lock holds), and the next due time suspends: Grassfield never
+    puts an unlocked, unconfirmed or opening session to sleep, even with a degraded sleep inhibitor;
+  - a request that did not end in a sleep (logind refused it: a download's sleep block inhibitor; a refused lock; a wake
+    without input) is asked again every `IdleModel.AUTO_SLEEP_RETRY_MS` (5 minutes, monotonic, so the time asleep does not
+    count) while the displays stay off (review of 95dab794: a laptop otherwise stayed awake all night once the download
+    ended); never a tight loop, and input (the displays come on) stops it (`test_autoSleepRetry`);
+  - the idle lock, the display-off lock and the displays' power-off never read `energy.preventSleep` (`timings`,
+    `idleArmed`, `inactiveOffArmed`, `requireAfterDisplayOffMs`, `displaysOff` do not take it; `test_lockIndependentOfSleep`).
+    The one lock the setting can lead to is the lock before an automatic sleep on a session that is not locked yet, which
+    only ever adds a lock: never removes, delays or skips one (`test_autoSleepOnlyAddsLocks`: the automatic sleep's code
+    calls `Lock.lock("sleep")` and two read-only getters, nothing else on Lock). The displays still turn off and the session
+    still locks as Lock Screen says, whatever the switch says;
+  - never in the nested dev session (`RunMode.dev`): a due suspend is counted (`idle status` `autoSleepSuppressed`) and
+    logged, never run; `idle devAutoSleep <1..600>` shortens the delay for a nested test.
+  Real suspend NOT VERIFIED (L2†, owner).
 - The lock surface (2026-10-26): `lock.showUser` false hides the picture and the name, `lock.showMessage` shows
   `lock.message` (plain text, one line stored, at most two lines drawn) above them. Display only.
 - `org.freedesktop.ScreenSaver` inhibitors (GF-016 residual, done 2026-10-24; ADR-0008 and ADR-0010 amendments):
@@ -1185,7 +1220,7 @@ hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locki
 for 10 s), `lock devForgeUnlockedAnswer` → `forged` | `not-holding` (counts one "unlocked" answer Hyprland never gave,
 as a stale answer would; only a confirmed relock can follow), `lock devLockView` → JSON {state, field: empty|filled,
 message, failedAttempts, pamSuppressed} (never the text or its length), `idle devSleep before|after` → `ok`
-(before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`,
+(before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`, `idle devAutoSleep <1..600>` → `ok`,
 `idle status` → JSON, `polkit status` → `registered|unregistered`.
 
 States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> releasing

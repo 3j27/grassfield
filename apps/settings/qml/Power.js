@@ -77,6 +77,61 @@ function commands(profiles, onBattery) {
     return onBattery ? [ac, battery] : [battery, ac];
 }
 
+// ---- Energy (a computer without a battery: macOS 27 shows Energy in place of Battery) ----
+
+// macOS 27's Energy Mode over power-profiles-daemon's profiles, in macOS's order: Automatic is balanced, Low Power is
+// power-saver, High Power is performance.
+var ENERGY_MODES = [{id: "automatic", profile: "balanced"}, {id: "low", profile: "power-saver"}, {id: "high", profile: "performance"}];
+
+// The modes this computer offers (`available`: the profiles power-profiles-daemon lists), in macOS's order; none without the
+// daemon.
+function energyModes(available) {
+    const list = Array.isArray(available) ? available : [];
+    return ENERGY_MODES.filter(m => list.indexOf(m.profile) >= 0).map(m => m.id);
+}
+
+// The profile Omarchy applies on the power adapter (a computer without a battery is always on it): the one it remembers when
+// the daemon offers it, else its own default (performance where offered, else balanced), as omarchy-powerprofiles-set does.
+function adapterProfile(acProfile, available) {
+    const list = Array.isArray(available) ? available : [];
+    const remembered = String(acProfile === undefined || acProfile === null ? "" : acProfile).trim();
+    if (PROFILES.indexOf(remembered) >= 0 && list.indexOf(remembered) >= 0)
+        return remembered;
+    return list.indexOf("performance") >= 0 ? "performance" : "balanced";
+}
+
+// The Energy Mode shown: the one of the profile Omarchy applies; "" when the daemon offers nothing (the row is disabled).
+function energyMode(acProfile, available) {
+    if (energyModes(available).length === 0)
+        return "";
+    const profile = adapterProfile(acProfile, available);
+    for (const m of ENERGY_MODES) {
+        if (m.profile === profile)
+            return m.id;
+    }
+    return "";
+}
+
+// The command that sets a mode: Omarchy's, for the power adapter (it applies it at once and remembers it, as Battery's Low
+// Power Mode does). null for a mode this computer does not offer.
+function energyCommand(mode, available) {
+    for (const m of ENERGY_MODES) {
+        if (m.id === mode)
+            return energyModes(available).indexOf(mode) >= 0 ? ["omarchy-powerprofiles-set", "ac", m.profile] : null;
+    }
+    return null;
+}
+
+// The pane Settings shows for a section id (Main.qml), as macOS does: Battery on a computer with a battery, Energy without
+// one; asked for the other, this one. Any other id as it is.
+function paneFor(id, hasBattery) {
+    if (id === "battery" && hasBattery !== true)
+        return "energy";
+    if (id === "energy" && hasBattery === true)
+        return "battery";
+    return id;
+}
+
 // `omarchy-powerprofiles-list`: one profile name per line.
 function parseProfiles(text) {
     return String(text).split("\n").map(s => s.trim()).filter(s => PROFILES.indexOf(s) >= 0);

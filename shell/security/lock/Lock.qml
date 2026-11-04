@@ -216,6 +216,12 @@ Singleton {
         return Machine.isHolding(controller.currentState()) && sessionLock.secure && verified;
     }
 
+    // The state machine's state, read afresh (LockMachine.js: unlocked, locking, locked, authenticating, releasing): the
+    // automatic sleep suspends only in LOCKED (shell/security/idle/IdleModel.js autoSleepAction). Read-only.
+    function currentState(): string {
+        return controller.currentState();
+    }
+
     // Engage the lock. reason: "ipc" | "menu" | "idle" | "display-off" | "sleep" | "lid" | "restore". Returns "ok",
     // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
     // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock once

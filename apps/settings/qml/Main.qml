@@ -26,7 +26,7 @@ Window {
     property bool canMinimize: true
     // Colour of each section's icon tile: a vivid color.tile family name (a soft vertical gradient, TileGradient), white glyph on it.
     readonly property var tileColors: ({
-            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", sound: "pink", displays: "blue", appearance: "black", wallpaper: "cyan",
+            wifi: "blue", bluetooth: "blue", network: "blue", vpn: "blue", battery: "green", energy: "green", sound: "pink", displays: "blue", appearance: "black", wallpaper: "cyan",
             accessibility: "blue", desktop: "black", menubar: "graphite", search: "blue", notifications: "red", focus: "purple", lock: "black",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             "software-update": "graphite",
@@ -58,6 +58,8 @@ Window {
         {id: "network", group: 1, title: qsTr("Network"), icon: "globe", keywords: qsTr("ethernet wired ip address router dns firewall")},
         {id: "vpn", group: 1, title: qsTr("VPN"), icon: "vpn", keywords: qsTr("vpn wireguard openvpn tunnel")},
         {id: "battery", group: 1, title: qsTr("Battery"), icon: "battery", keywords: qsTr("battery power low power mode energy health charging charge limit")},
+        // A computer without a battery shows Energy in its place (macOS 27): Energy Mode and Prevent automatic sleeping.
+        {id: "energy", group: 1, title: qsTr("Energy"), icon: "bolt", keywords: qsTr("energy power mode low power high power performance sleep prevent automatic sleeping display off")},
         {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about software update storage date time language region login items startup")},
         {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("vision physical motor zoom display motion keyboard")},
         {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
@@ -99,14 +101,24 @@ Window {
     property string query: ""
     // The state a pane shows under its title in the toolbar (Battery), "" for none.
     readonly property string pageSubtitle: (page.item as BatteryPage)?.subtitle ?? ""
-    // Battery is there only on a computer with a laptop battery (macOS shows it on a laptop only).
+    // Battery is there only on a computer with a laptop battery (macOS shows it on a laptop only); Energy on the others (UPower
+    // reports no battery, or does not answer).
     property bool hasBattery: false
+    // The pane shown follows the battery (Power.paneFor): the sidebar's selection moves to Battery or Energy without a new
+    // history entry.
+    onHasBatteryChanged: {
+        const shown = root.pointerPane(root.selectedId);
+        if (shown === root.selectedId)
+            return;
+        root.navState = Object.assign({}, root.navState, {current: shown});
+        root.selectedId = shown;
+    }
     // Mouse while a mouse is connected and Trackpad where there is one (macOS): MouseTrackpad.pointers of the kernel's input
     // devices, read again with the system state while the window is active.
     property bool hasMouse: false
     property bool hasTouchpad: false
-    readonly property var available: root.sections.filter(s => (s.id !== "battery" || root.hasBattery) && (s.id !== "mouse" || root.hasMouse)
-        && (s.id !== "trackpad" || root.hasTouchpad))
+    readonly property var available: root.sections.filter(s => (s.id !== "battery" || root.hasBattery) && (s.id !== "energy" || !root.hasBattery)
+        && (s.id !== "mouse" || root.hasMouse) && (s.id !== "trackpad" || root.hasTouchpad))
     readonly property var filtered: {
         const q = root.query.trim().toLowerCase();
         if (q === "")
@@ -217,9 +229,10 @@ Window {
         root.selectedId = shown;
     }
 
-    // Asked for Mouse without a mouse, or for Trackpad without a touchpad, the other is shown when it is there.
+    // Asked for Mouse without a mouse, or for Trackpad without a touchpad, the other is shown when it is there; asked for
+    // Battery without a battery, Energy, and the other way round (Power.paneFor).
     function pointerPane(id: string): string {
-        return MouseTrackpad.paneFor(id, {mouse: root.hasMouse, touchpad: root.hasTouchpad});
+        return Power.paneFor(MouseTrackpad.paneFor(id, {mouse: root.hasMouse, touchpad: root.hasTouchpad}), root.hasBattery);
     }
 
     function readPointers(): void {
@@ -239,12 +252,12 @@ Window {
 
     function navBack(): void {
         root.navState = NavHistory.back(root.navState);
-        root.selectedId = root.navState.current;
+        root.selectedId = root.pointerPane(root.navState.current);
     }
 
     function navForward(): void {
         root.navState = NavHistory.forward(root.navState);
-        root.selectedId = root.navState.current;
+        root.selectedId = root.pointerPane(root.navState.current);
     }
 
     // Return in the search field: the first result opens and the list takes the keyboard.
@@ -747,7 +760,8 @@ Window {
                 case "vpn":
                     return vpnPage;
                 case "battery":
-                    return batteryPage;
+                case "energy":
+                    return root.hasBattery ? batteryPage : energyPage;
                 case "sound":
                     return soundPage;
                 case "displays":
@@ -849,7 +863,24 @@ Window {
             backend: root.backend
             system: sys
             onInfoRequested: (topic, power) => batteryInfo.openFor(topic, power)
+            onOptionsRequested: powerOptionsSheet.open()
         }
+    }
+
+    // A computer without a battery (macOS 27 Energy): Energy Mode and Prevent automatic sleeping when the display is off.
+    Component {
+        id: energyPage
+        EnergyPage {
+            backend: root.backend
+            system: sys
+            store: cfg
+        }
+    }
+
+    // Battery > Options…: Prevent automatic sleeping when the display is off (on battery and on the power adapter).
+    PowerOptionsSheet {
+        id: powerOptionsSheet
+        store: cfg
     }
 
     // Battery > (i): Battery Health, Charging (the charge limit goes back to the page).
@@ -1352,7 +1383,7 @@ Window {
     readonly property list<Item> sheets: [batteryInfo, wifiPassword, networkDetails, forgetNetwork, bluetoothDevice, forgetDevice,
         displayKeep, displayArrange, printerSheet, removePrinter, addPrinter, keyboardShortcuts, inputSources, layoutPicker,
         volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, clearClipboardHistory, screenSaverSheet,
-        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet, finishSheet]
+        lockMessageSheet, batteryOptionsSheet, powerOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet, finishSheet]
 
     Instantiator {
         model: root.sheets

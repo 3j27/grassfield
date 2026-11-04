@@ -65,6 +65,9 @@
     "showMessage": false,
     "message": ""
   },
+  "energy": {
+    "preventSleep": true
+  },
   "hotCorners": {
     "topLeft": "none",
     "topRight": "none",

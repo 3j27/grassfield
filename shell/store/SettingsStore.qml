@@ -303,6 +303,9 @@ Scope {
     readonly property bool lockShowUser: read("lock.showUser")
     readonly property bool lockShowMessage: read("lock.showMessage")
     readonly property string lockMessage: read("lock.message")
+    // On the power adapter (or without a battery) the computer does not sleep by itself once the displays are off
+    // (macOS 27 Energy, Battery > Options). Sleep only: never read by a lock decision (shell/security/idle).
+    readonly property bool energyPreventSleep: read("energy.preventSleep")
     // The kinds of results Search shows (Settings > Search > Search Results), and the last Delete Search History (milliseconds
     // since the epoch, 0 = never; a real: it does not fit an int).
     readonly property bool searchShowApps: read("search.showApps")
