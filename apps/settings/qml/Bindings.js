@@ -74,6 +74,7 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Overview"),
     QT_TRANSLATE_NOOP("Bindings", "Search"),
     QT_TRANSLATE_NOOP("Bindings", "Clipboard history"),
+    QT_TRANSLATE_NOOP("Bindings", "Emoji & Symbols"),
     QT_TRANSLATE_NOOP("Bindings", "Previous input source"),
     QT_TRANSLATE_NOOP("Bindings", "Next input source"),
     QT_TRANSLATE_NOOP("Bindings", "Apps"),

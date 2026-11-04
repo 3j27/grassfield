@@ -15,7 +15,8 @@ import qs.services
 //  - lock: SessionState.locked (what shell.qml binds to Lock.locked) closes every open surface: Search (and drops its
 //    query), Apps, the Notification Center, the Overview, any Popups kind (Control Center, menus, sheets);
 //  - refusal: while locked, every way into each surface stays closed: Search show/toggle, Apps show/toggle, Notification
-//    Center toggle and the widget gallery, Overview show/toggle, Popups open/toggle/openCentered/confirm/notice;
+//    Center toggle and the widget gallery, Overview show/toggle, Popups open/toggle/openCentered/confirm/notice, Emoji &
+//    Symbols toggle;
 //  - unlock: the surfaces open again.
 // The IPC functions, bindings, screen corners and gestures all end in these entry points (tests/security/lock_surfaces.sh
 // checks that statically, with the Dock keyboard mode, window commands and the polkit sheet). Prints
@@ -208,7 +209,7 @@ ShellRoot {
         check("locked: overview.show stays closed", !overview.open);
         overview.toggle();
         check("locked: overview.toggle stays closed", !overview.open);
-        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "forcequit", "appabout", "notice", "confirm", "tiling", "tilingSuggest", "sharePicker", "screenshare"];
+        const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "volume", "network", "battery", "controlcenter", "dock", "dockstack", "forcequit", "appabout", "notice", "confirm", "tiling", "tilingSuggest", "sharePicker", "screenshare", "emoji"];
         const opened = [];
         for (const k of kinds) {
             Popups.open(k, "", 0, 0, "left", {});
@@ -229,6 +230,9 @@ ShellRoot {
         if (Popups.active)
             opened.push("notice");
         check("locked: no popup kind opens (" + opened.join(", ") + ")", opened.length === 0);
+        // ADR-0045 OC-3: Ctrl+Super+Space (IPC emoji toggle) asks Hyprland nothing and opens nothing.
+        Emoji.toggle();
+        check("locked: Emoji.toggle stays closed and places nothing", !Popups.active && !Emoji.placing);
         // Tiling step 3 (integrator review of 4ead6fb): the plugin's tile-hover event and Super+Ctrl+L go through here.
         TilingHover.show({address: "1", state: "open", light: {x: 0, y: 0, w: 14, h: 14}, tileable: true});
         TilingHover.show({address: "1", state: "enter", light: {x: 0, y: 0, w: 14, h: 14}, tileable: true});

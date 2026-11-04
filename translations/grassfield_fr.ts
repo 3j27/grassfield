@@ -2405,6 +2405,10 @@
         <translation>Historique du presse-papiers</translation>
     </message>
     <message>
+        <source>Emoji &amp; Symbols</source>
+        <translation>Emojis et symboles</translation>
+    </message>
+    <message>
         <source>Previous input source</source>
         <translation>Méthode de saisie précédente</translation>
     </message>
@@ -4593,6 +4597,76 @@
     <message>
         <source>Quit</source>
         <translation>Quitter</translation>
+    </message>
+</context>
+<context>
+    <name>Emoji</name>
+    <message>
+        <source>Recently Used</source>
+        <translation>Utilisés récemment</translation>
+    </message>
+    <message>
+        <source>Smileys &amp; People</source>
+        <translation>Smileys et personnes</translation>
+    </message>
+    <message>
+        <source>Animals &amp; Nature</source>
+        <translation>Animaux et nature</translation>
+    </message>
+    <message>
+        <source>Food &amp; Drink</source>
+        <translation>Nourriture et boissons</translation>
+    </message>
+    <message>
+        <source>Activity</source>
+        <translation>Activités</translation>
+    </message>
+    <message>
+        <source>Travel &amp; Places</source>
+        <translation>Voyages et lieux</translation>
+    </message>
+    <message>
+        <source>Objects</source>
+        <translation>Objets</translation>
+    </message>
+    <message>
+        <source>Symbols</source>
+        <translation>Symboles</translation>
+    </message>
+    <message>
+        <source>Flags</source>
+        <translation>Drapeaux</translation>
+    </message>
+    <message>
+        <source>All</source>
+        <translation>Tous</translation>
+    </message>
+</context>
+<context>
+    <name>EmojiPanel</name>
+    <message>
+        <source>Emoji &amp; Symbols</source>
+        <translation>Emojis et symboles</translation>
+    </message>
+    <message>
+        <source>Search</source>
+        <translation>Rechercher</translation>
+    </message>
+    <message>
+        <source>Emoji grid</source>
+        <translation>Grille d’emojis</translation>
+    </message>
+    <message>
+        <source>Emoji list not available</source>
+        <translation>Liste d’emojis indisponible</translation>
+    </message>
+    <message>
+        <source>No Results</source>
+        <translation>Aucun résultat</translation>
+    </message>
+    <message>
+        <source>Categories</source>
+        <translation>Catégories</translation>
     </message>
 </context>
 <context>

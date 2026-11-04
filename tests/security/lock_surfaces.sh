@@ -5,7 +5,8 @@
 #   wiring    shell.qml mirrors Lock.locked into SessionState.locked; Overview and Switcher get the lock state;
 #   refusal   each surface's entry point refuses while locked as its first decision: Popups.open, Search.show,
 #             AppsController.show, Overview.show, Notifications.toggleCenter/openWidgetGallery, Dock.enterKeyboardMode,
-#             the four window commands (IPC target "windows"), Switcher.step, the exit cover (ExitCover.cover);
+#             the four window commands (IPC target "windows"), Switcher.step, the exit cover (ExitCover.cover), Emoji &
+#             Symbols (Emoji.toggle, and Emoji.place once the pointer's answer came);
 #   closing   each surface closes when the lock engages (Popups, Search, Apps, Notification Center, Overview, Dock keyboard
 #             mode, Switcher);
 #   routes    every IPC action that opens a surface goes through that entry point (search toggle, apps toggle/open,
@@ -89,6 +90,11 @@ first_decision("shell/dock/Dock.qml", "enterKeyboardMode", R)
 first_decision("shell/dock/Dock.qml", "reopen", R, lines=1)
 # ADR-0040 step 7 (the integrator's review of e067f26f, NIT): the exit cover stays down while locked.
 first_decision("shell/overlay/ExitCover.qml", "cover", R, lines=1)
+# ADR-0045 OC-3: Emoji & Symbols (Ctrl+Super+Space) asks nothing and opens nothing while locked (a close comes before the
+# refusal: closing is always allowed), and the pointer's answer opens it only when the session is still unlocked.
+first_decision("shell/services/Emoji.qml", "toggle", R, lines=8)
+emoji = read("shell/services/Emoji.qml")
+expect("shell/services/Emoji.qml: place() opens nothing once the session locked", re.search(r"if\s*\(SessionState\.locked\)\s*return;[\s\S]*Popups\.open", code(function(emoji, "place") or "")) is not None)
 toggle = function(read("shell/notifications/Notifications.qml"), "toggleCenter") or ""
 opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
@@ -164,6 +170,7 @@ closes("shell/dock/Dock.qml", r"target:\s*SessionState.*?onLockedChanged.*?Sessi
 closes("shell/switcher/Switcher.qml", r"onLockedChanged:.*?if\s*\(locked\)\s*cancel\(\)", "ends when the session locks")
 closes("shell/desktop/IconsView.qml", r"target:\s*SessionState.*?onLockedChanged.*?SessionState\.locked.*?root\.closeMenu\(\"outside\"\).*?root\.closeAbout\(\"outside\"\)", "closes its menu and card when the session locks")
 closes("shell/desktop/DesktopWidgets.qml", r"target:\s*SessionState.*?onLockedChanged.*?SessionState\.locked.*?scope\.closeMenu\(\)", "closes the widget menu when the session locks")
+closes("shell/services/Emoji.qml", r"target:\s*SessionState.*?onLockedChanged.*?root\.placing\s*=\s*false;.*?root\.cancelInsert\(\"locked\"\)", "stops placing the panel and drops a waiting insertion when the session locks")
 
 # IPC actions route through the refusing entry points.
 def route(path, target, name, pattern):
@@ -181,6 +188,7 @@ route("shell/notifications/Notifications.qml", "notifications", "toggleCenter", 
 route("shell/menubar/MenuBar.qml", "menubar", "open", r"bar\.popup\(")
 route("shell/menubar/MenuBar.qml", "menubar", "panel", r"Popups\.open\(")
 route("shell/dock/Dock.qml", "dock", "keyboard", r"root\.enterKeyboardMode\(\)")
+route("shell/services/Emoji.qml", "emoji", "toggle", r"root\.toggle\(\)")
 search =read("shell/search/Search.qml")
 expect("Search.toggle() opens only through show()", re.search(r"else\s+show\(", code(function(search, "toggle") or "")) is not None)
 expect("Search.toggleClipboard() opens only through show()", re.search(r"if\s*\(!open\)\s*show\(", code(function(search, "toggleClipboard") or "")) is not None
@@ -533,7 +541,8 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   shell/overview/Overview.qml shell/notifications/Notifications.qml shell/dock/Dock.qml shell/platform/Compositor.qml shell/switcher/Switcher.qml \
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
   shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml \
-  shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml shell/overlay/ExitCover.qml; do
+  shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml shell/overlay/ExitCover.qml \
+  shell/services/Emoji.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -541,6 +550,8 @@ cp -a "$root/shell/security" "$mut/shell/" # the wall-clock scan reads every fil
 python3 -I "$tmp/check.py" "$mut" >/dev/null 2>&1 && pass "mutation: the unchanged copy passes" || bad "mutation: the unchanged copy fails"
 for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/overlay/ExitCover.qml#SessionState.refuses("exit cover")#false' \
+  'shell/services/Emoji.qml#SessionState.refuses("emoji")#false' \
+  'shell/services/Emoji.qml#        if (SessionState.locked)\n            return;\n        root.cancelInsert#        root.cancelInsert' \
   'shell/desktop/DesktopWidgets.qml#SessionState.refuses("widget menu")#false' \
   'shell/desktop/IconsView.qml#root.closeMenu("outside");#root.closeAbout("outside");' \
   'shell/platform/Compositor.qml#SessionState.refuses("windows cycleApp")#false' \

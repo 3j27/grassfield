@@ -41,3 +41,4 @@ singleton SharePicker 1.0 SharePicker.qml
 singleton SoftwareUpdate 1.0 SoftwareUpdate.qml
 singleton ActivityLink 1.0 ActivityLink.qml
 singleton KeyWindow 1.0 KeyWindow.qml
+singleton Emoji 1.0 Emoji.qml
