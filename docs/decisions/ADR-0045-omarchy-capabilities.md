@@ -49,7 +49,23 @@ Grassfield has since ADR-0034. Corrected with this ADR.
    "Disk Encryption" « Chiffrement du disque », "Hibernation" « Hibernation », "Share Network" « Partager le réseau »,
    "Terminal and Developer Apps" « Terminal et apps de développement », "Send with LocalSend" « Envoyer avec LocalSend »,
    "Weather" « Météo ».
-6. **Owner decisions superseded (2026-11-04).** The 2026-10-26 entries of `docs/specs/settings.md` — "no Sharing pane" and
+7. **macOS 27 design for every tool (owner, 2026-11-04: « Et tous ces outils doivent avoir un design mac os 27 »).** Every
+   surface this ADR adds is a Grassfield surface drawn with Grassfield.Ui components and tokens to macOS 27 (layout,
+   proportions, radii, states, motion; ADR-0024 glass; ADR-0039 rules), never an Omarchy UI, a gum prompt or a bare terminal
+   when the system offers a way around it. So the setups of OC-0.4 are native wherever a system service has its own polkit
+   action (the ADR-0030 path: the service asks polkit, Grassfield's polkit sheet asks the password, as macOS does):
+   - Remote Login switch: systemd's `EnableUnitFiles`/`DisableUnitFiles` and `StartUnit`/`StopUnit` on `sshd.service` only,
+     when OpenSSH is installed;
+   - Disk Encryption "Change Password…": a macOS 27 sheet (current password, new password, verify) calling UDisks2's
+     `org.freedesktop.UDisks2.Encrypted.ChangePassphrase` on the root file system's LUKS device, when UDisks2 answers;
+   - Fingerprint: enrolling and deleting fingers in a macOS 27 sheet through fprintd's D-Bus API (`net.reactivated.Fprint`:
+     Claim, EnrollStart, the EnrollStatus signal, EnrollStop, Release, ListEnrolledFingers, DeleteEnrolledFingers2), when
+     fprintd is installed.
+   What no system service exposes (installing a package, editing PAM files, the FIDO2 key setup, the hibernation swap file,
+   initramfs and boot entry, the first OpenSSH, fprintd or voxtype install) stays Omarchy's script in Omarchy's terminal, opened
+   from a macOS 27 sheet that says what will happen and why a terminal opens. That gap is documented under "Known
+   limitations" (master-prompt §1 honesty rule), not hidden.
+8. **Owner decisions superseded (2026-11-04).** The 2026-10-26 entries of `docs/specs/settings.md` — "no Sharing pane" and
    "Touch ID & Password is out of scope: fingerprint enrolment belongs to Omarchy's own setup, and changing a password is not a
    Settings action here" — are superseded for exactly what this ADR adds: a Sharing pane holding Remote Login only, a
    Fingerprint & Security Key pane and Disk Encryption's "Change Password…". The spirit stays: the enrolment, the PAM edits and
