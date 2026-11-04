@@ -871,3 +871,28 @@ double-click with the default and with zoom, Window > Zoom, the light under its 
 no second request, and Nautilus's own buttons do nothing, in that run with Hyprland's own maximize as well (the run's
 first check, the desktop portal refused on the private bus, failed too): an environment matter of that test, followed
 there, not of this amendment.
+
+## Amendment 2026-11-04: one set of traffic lights on third-party windows: Firefox joins the list, the GTK themes draw the lights
+Owner's rc1-22 screenshots from a second machine: Firefox showed the plugin's bar over its own tab strip with Firefox's own
+grey controls (two bars, two sets); Chromium, tagged client chrome, showed plain grey glyphs, no lights ("Chrome has no
+traffic lights"). macOS model: one set per window, top left, close red, minimize yellow, zoom green, glyphs under the
+pointer, grey when inactive; browsers draw these lights in their tab strip.
+
+| Question | Choice | Why |
+|---|---|---|
+| Firefox | `firefox` and `org.mozilla.firefox` (Flatpak) join `gf-client-chrome-third-party` (and both maximize negations) | The owner's screenshot shows Firefox drawing its own controls with the session's GTK button layout. That its own close, minimize and zoom work here is NOT VERIFIED (not installed on the dev machine, not downloaded); the test stands a foot window with its app id in for the rule only. |
+| Google Chrome (`google-chrome`) | left out | No evidence of its Wayland app id on this machine (only Chromium's `chromium` is seen). Add it once the owner shows a `hyprctl clients` class. |
+| Lights on GTK client-side buttons | `ui/tools/gen-gtk-themes.py` styles them in all 36 themes (-hc and -dark included) from the plugin's `window.*` tokens: GTK 3 `headerbar`, `.titlebar`, `.default-decoration` `button.titlebutton.close/.minimize/.maximize`; GTK 4 `windowcontrols > button.*` | Same 14 pt disc at pitch 23, colours, inactive grey (backdrop), pressed colour (window.pressedOpacity), glyph (black at window.glyphOpacity, shown while the pointer is over the group), hit slop as a transparent border, first light centre at window.unifiedLightCentre. -hc adds a ring in the text colour and an opaque glyph. Close glyph is GTK's own icon; minus and plus are drawn as bars (GTK has no plus for zoom). |
+
+Limits (read in source and measured, not decided here):
+- libadwaita apps (Nautilus, most GNOME apps) do not read `gtk-theme` (ADR-0035 D-8; `GTK_THEME` would disable their
+  stylesheet), so the themes cannot give them lights; GTK has no system-wide user-CSS location (only
+  `~/.config/gtk-4.0/gtk.css`, the user's file, which Grassfield does not write). Their own buttons keep libadwaita's look
+  and the session's layout. Owner decision needed if lights there are wanted.
+- Chromium draws its caption buttons through GTK only in its GTK appearance; in Classic (the Omarchy default: its
+  `initial_preferences` sets no theme, `extensions.theme.system_theme`) it draws its own plain glyphs, which is the second
+  screenshot. No policy or command-line flag selects the appearance. User-level, non-root, supported: chrome://settings/appearance >
+  Theme > GTK, once. `initial_preferences` lives in /usr/lib/chromium, owned by Omarchy and rewritten by its migrations
+  (root); Grassfield does not edit a Chromium profile. No supported default for new users exists from Grassfield.
+- Tests: `tests/ci/gtk_themes.py` (every theme carries the token colours, states, selectors, size), `tests/shell/client_chrome_rules.sh`
+  (Firefox in the list, google-chrome not), `tests/compositor/third_party_chrome.sh` (stand-in window for the rule).
