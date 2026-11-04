@@ -104,7 +104,7 @@ def lights(tokens, dark):
     out.update({"lightGlyph": with_alpha("#000000", value(w["glyphOpacity"])), "lightGlyphHc": with_alpha("#000000", 1.0),
                 "lightDiameter": diameter, "lightGlyphSize": round(diameter * value(w["glyphRatio"])),
                 "lightGlyphStroke": max(1, round(diameter * value(w["glyphStroke"]))), "lightSlop": round(value(w["lightHitSlop"])),
-                "lightGap": value(w["lightGap"]), "lightCentre": value(w["unifiedLightCentre"])})
+                "lightGap": value(w["lightGap"]), "lightInset": value(w["titlebarLightInset"])})
     return out
 
 
@@ -152,72 +152,95 @@ def header(name, dark, hc, gtk):
 
 
 LIGHTS = (("close", "Close"), ("minimize", "Minimize"), ("maximize", "Zoom"))
-# GTK's own metrics under the lights: the spacing of the box that holds title buttons (GtkHeaderBar's 6 px, GtkWindowControls'
-# 6 px) and the header bar's side padding (6 px, Adwaita and Default); the lights are laid on top of them.
+# GTK's own metrics under the lights (GTK 3.24.52 Adwaita, GTK 4.24.1 Default): the spacing of the box that holds the title
+# buttons (GtkHeaderBar's and GtkWindowControls', 6 px), the header bar's side padding (6 px; 4 px in a default decoration, the
+# frame GTK 3 draws for a window without a header bar); the lights are laid on top of them.
 GTK_BOX_SPACING = 6
 GTK_BAR_PADDING = 6
+GTK_DECORATION_PADDING = 4
 
 
 def lights_css(version, hc, p):
     """The title buttons as traffic lights, the plugin's own (window.* tokens): the 14-pt disc at pitch 23 (gap 9), close red,
-    minimize yellow, zoom green; grey while the window is not active (backdrop); coloured again with their glyphs (x, -, +)
-    while the pointer is over the group, whatever the window state; darker while pressed. A transparent border of the hit slop
-    keeps the button wider than the disc (the background is clipped to the padding box), and the first disc sits where a
-    unified toolbar window's first light does (centre window.unifiedLightCentre). Increase Contrast adds a ring in the text
-    colour and an opaque glyph. GTK's own icon is the x; the minus and the plus are drawn as bars (a gradient), the zoom
-    glyph being no icon GTK has."""
+    minimize yellow, zoom green; grey while the window is not active (backdrop); coloured with its glyph (x, -, +) under the
+    pointer; darker while pressed; the first disc where the plugin's titlebar draws its first (window.titlebarLightInset), the
+    discs centred vertically in the bar (a header bar is taller than the plugin's 32 pt: macOS centres the lights in the bar).
+    A hit slop (window.lightHitSlop) keeps the button wider than the disc. Increase Contrast adds a ring in the text colour and
+    an opaque glyph. GTK's own icon is the x; the minus and the plus are drawn as bars (a gradient), GTK has no plus icon.
+    GTK 4 (Default, not libadwaita) shows all three glyphs while the pointer is over the group, as the plugin does; GTK 3 never
+    sets :hover on the box that holds the buttons (measured), so each button shows its own glyph and its own colour.
+    Specificity: every rule names its light (.close, .minimize, .maximize) and GTK 4's `.image-button`, so it outranks GTK's
+    `button.titlebutton:not(.appmenu)` (0,2,1), `.default-decoration.titlebar:not(headerbar) button.titlebutton` (0,3,2) and
+    Default's `button.image-button` (0,1,1) and `windowcontrols button:hover > image` (0,1,3), which paints a disc of its own."""
     d, slop, gap, size, stroke = p["lightDiameter"], p["lightSlop"], p["lightGap"], p["lightGlyphSize"], p["lightGlyphStroke"]
     glyph = p["lightGlyphHc"] if hc else p["lightGlyph"]
     ring = f"inset 0 0 0 1px {p['ink']}" if hc else "none"
     spacing = gap - 2 * slop
-    start = p["lightCentre"] - d // 2 - slop - GTK_BAR_PADDING
+    centre = value_of_inset(p) + d // 2  # first light's centre from the bar's left edge
+    start = centre - d // 2 - slop
     bar = f"linear-gradient({glyph}, {glyph})"
+    out = "\n/* Traffic lights (window.* tokens, as the compositor plugin's title bar draws them) */\n"
+    colour = lambda k: p["light" + dict(LIGHTS)[k]]  # noqa: E731
+    pressed = lambda k: p["light" + dict(LIGHTS)[k] + "Pressed"]  # noqa: E731
     if version == 3:
-        pre = ("headerbar", ".titlebar", ".default-decoration")
-        one = lambda k, state="": ", ".join(f"{x} button.titlebutton.{k}{state}" for x in pre)  # noqa: E731
-        group = lambda k, state="": ", ".join(f"{x} box:hover button.titlebutton.{k}{state}" for x in pre)  # noqa: E731
-        every = ", ".join(f"{x} button.titlebutton" for x in pre)
-        images = ", ".join(f"{x} button.titlebutton image" for x in pre)
-        shown = ", ".join(f"{x} box:hover button.titlebutton image" for x in pre)
-        glyph_of = lambda k: ", ".join(f"{x} box:hover button.titlebutton.{k} image" for x in pre)  # noqa: E731
-        lay = f"""{every} {{
+        pre = ("headerbar", ".default-decoration.titlebar")
+        sel = lambda k, state="": ", ".join(f"{x} button.titlebutton.{k}{state}" for x in pre)  # noqa: E731
+        img = lambda k, state="": ", ".join(f"{x} button.titlebutton.{k}{state} image" for x in pre)  # noqa: E731
+        every = ", ".join(sel(k) for k, _ in LIGHTS)
+        every_img = ", ".join(img(k) for k, _ in LIGHTS)
+        out += f"""{every} {{
   min-width: {d}px; min-height: {d}px; padding: 0; margin: 0 {spacing - GTK_BOX_SPACING}px 0 0;
   border: {slop}px solid transparent; border-radius: 50%; background-clip: padding-box; background-image: none;
   box-shadow: {ring}; text-shadow: none; -gtk-icon-shadow: none; color: transparent;
 }}
-{", ".join(f"{x} box.left" for x in pre)} {{ margin-left: {start}px; }}
-{images} {{ margin: -1px; min-width: 0; min-height: 0; padding: 0; color: transparent; -gtk-icon-shadow: none;
+headerbar box.left {{ margin-left: {start - GTK_BAR_PADDING}px; }}
+.default-decoration.titlebar box.left {{ margin-left: {start - GTK_DECORATION_PADDING}px; }}
+{every_img} {{ margin: -1px; min-width: 0; min-height: 0; padding: 0; color: transparent; -gtk-icon-shadow: none;
   background-repeat: no-repeat; background-position: center; background-image: none; }}
 """
-    else:
-        one = lambda k, state="": f"windowcontrols > button.{k}{state}"  # noqa: E731
-        group = lambda k, state="": f"windowcontrols:hover > button.{k}{state}"  # noqa: E731
-        every = "windowcontrols > button"
-        shown = "windowcontrols:hover > button > image"
-        glyph_of = lambda k: f"windowcontrols:hover > button.{k} > image"  # noqa: E731
-        lay = f"""windowcontrols {{ border-spacing: {spacing}px; }}
-windowcontrols.start {{ margin-left: {start}px; }}
+        for k, _ in LIGHTS:
+            # In the order of their specificity: the colour, grey in the backdrop, the colour under the pointer (also in the
+            # backdrop), the pressed colour.
+            out += f"{sel(k)} {{ background-color: {colour(k)}; }}\n"
+            out += f"{sel(k, ':backdrop')} {{ background-color: {p['lightInactive']}; }}\n"
+            out += f"{sel(k, ':hover')}, {sel(k, ':hover:backdrop')} {{ background-color: {colour(k)}; }}\n"
+            out += f"{sel(k, ':active')}, {sel(k, ':hover:active')}, {sel(k, ':hover:active:backdrop')} {{ background-color: {pressed(k)}; }}\n"
+        hov = lambda k: f"{img(k, ':hover')}, {img(k, ':hover:backdrop')}"  # noqa: E731
+        out += f"{hov('close')} {{ color: {glyph}; }}\n"
+        out += f"{hov('minimize')}, {hov('maximize')} {{ color: transparent; background-size: {size}px {stroke}px; }}\n"
+        out += f"{hov('minimize')} {{ background-image: {bar}; }}\n"
+        out += f"{hov('maximize')} {{ background-image: {bar}, {bar}; background-size: {size}px {stroke}px, {stroke}px {size}px; }}\n"
+        return out
+    sel = lambda k, state="": f"windowcontrols > button.image-button.{k}{state}"  # noqa: E731
+    grp = lambda k, state="": f"windowcontrols:hover > button.image-button.{k}{state}"  # noqa: E731
+    every = ", ".join(sel(k) for k, _ in LIGHTS)
+    every_img = ", ".join(sel(k) + " > image" for k, _ in LIGHTS)
+    out += f"""windowcontrols {{ border-spacing: {spacing}px; }}
+windowcontrols.start {{ margin-left: {start - GTK_BAR_PADDING}px; }}
 {every} {{
-  min-width: {d}px; min-height: {d}px; padding: 0; margin: 0;
-  border: {slop}px solid transparent; border-radius: 50%; background-clip: padding-box; background-image: none;
-  box-shadow: {ring}; outline-offset: 0; color: transparent;
+  min-width: {d + 2 * slop}px; min-height: {d + 2 * slop}px; margin: 0; padding: 0; border: none; border-radius: 0;
+  background: none; box-shadow: none; outline-offset: 0;
 }}
-{every} > image {{ margin: -1px; min-width: 0; min-height: 0; padding: 0; color: transparent; -gtk-icon-size: {d + 2}px;
-  background-repeat: no-repeat; background-position: center; background-image: none; }}
+{every_img} {{
+  min-width: {d}px; min-height: {d}px; margin: 0; padding: 0; border: none; border-radius: 50%; -gtk-icon-size: {d}px;
+  box-shadow: {ring}; color: transparent; background-repeat: no-repeat; background-position: center; background-image: none;
+}}
 """
-    out = f"""
-/* Traffic lights (window.* tokens, as the compositor plugin's title bar draws them) */
-{lay}"""
-    for k, K in LIGHTS:
-        out += f"{one(k)} {{ background-color: {p['light' + K]}; }}\n"
-        out += f"{one(k, ':backdrop')} {{ background-color: {p['lightInactive']}; }}\n"
-        out += f"{group(k)}, {group(k, ':backdrop')} {{ background-color: {p['light' + K]}; }}\n"
-        out += f"{group(k, ':active')}, {group(k, ':active:backdrop')} {{ background-color: {p['light' + K + 'Pressed']}; }}\n"
-    out += f"{shown} {{ color: {glyph}; }}\n"
-    out += f"{glyph_of('minimize')}, {glyph_of('maximize')} {{ color: transparent; background-size: {size}px {stroke}px; }}\n"
-    out += f"{glyph_of('minimize')} {{ background-image: {bar}; }}\n"
-    out += f"{glyph_of('maximize')} {{ background-image: {bar}, {bar}; background-size: {size}px {stroke}px, {stroke}px {size}px; }}\n"
+    for k, _ in LIGHTS:
+        out += f"{sel(k)} > image {{ background-color: {colour(k)}; }}\n"
+        out += f"{sel(k, ':backdrop')} > image {{ background-color: {p['lightInactive']}; }}\n"
+        out += f"{sel(k, ':hover')} > image, {grp(k)} > image, {grp(k, ':backdrop')} > image {{ background-color: {colour(k)}; }}\n"
+        out += f"{sel(k, ':hover:active')} > image, {grp(k, ':active')} > image, {grp(k, ':active:backdrop')} > image {{ background-color: {pressed(k)}; }}\n"
+    hov = lambda k: f"{sel(k, ':hover')} > image, {grp(k)} > image, {grp(k, ':backdrop')} > image"  # noqa: E731
+    out += f"{hov('close')} {{ color: {glyph}; }}\n"
+    out += f"{hov('minimize')}, {hov('maximize')} {{ color: transparent; background-size: {size}px {stroke}px; }}\n"
+    out += f"{hov('minimize')} {{ background-image: {bar}; }}\n"
+    out += f"{hov('maximize')} {{ background-image: {bar}, {bar}; background-size: {size}px {stroke}px, {stroke}px {size}px; }}\n"
     return out
+
+
+def value_of_inset(p):
+    return p["lightInset"]
 
 
 def gtk3_grounds(p):
