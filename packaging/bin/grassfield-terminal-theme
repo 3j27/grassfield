@@ -33,23 +33,28 @@
 #     signals grassfield-shell. Without the stand-ins nothing runs;
 #   - OMARCHY_PATH as the session gives it, else /usr/share/omarchy (as omarchy.lua finds Omarchy; omarchy-theme-set reads
 #     its themes from there);
-#   - stdin is /dev/null and it runs in a process session of its own; its output goes to a private temporary file (its last
-#     line is quoted when it fails).
+#   - stdin is /dev/null and it runs in a process session (and process group) of its own; its output goes to a private
+#     temporary file (its last line is quoted when it fails). Past RUN_LIMIT its whole process group gets SIGTERM, then
+#     SIGKILL after KILL_GRACE seconds; the lock is held until the group is gone.
 # Nothing runs when the theme is already Omarchy's (`omarchy-theme-current`), when another run holds the lock
 # ($XDG_RUNTIME_DIR/grassfield/terminal-theme.lock: this one waits for it, at most LOCK_WAIT seconds), or as root. Missing
 # Omarchy commands: nothing runs, exit 0.
 # Exit 0 applied or nothing to do; 1 refused or failed; 2 usage.
 #
 # Dev plumbing (ADR-0019, honoured only in a dev session: GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1"):
-# GRASSFIELD_TERMINAL_THEME_SHIMS, the stand-ins' directory in place of /usr/lib/grassfield/omarchy-shims
-# (tests/shell/terminal_theme.sh). In a dev session nothing runs without it: the owner's Omarchy theme is not a nested
-# session's to change. GRASSFIELD_CONFIG_HOME is honoured always, as by the shell (shell/lib/RunMode.js configDir).
+# GRASSFIELD_TERMINAL_THEME_SHIMS, the stand-ins' directory in place of /usr/lib/grassfield/omarchy-shims, and
+# GRASSFIELD_TERMINAL_THEME_RUN_LIMIT, RUN_LIMIT in seconds (tests/shell/terminal_theme.sh). A dev session never reaches the
+# owner's Omarchy: it runs only with the stand-in variable, an explicit OMARCHY_PATH that is not /usr/share/omarchy, and
+# omarchy-theme-set and omarchy-theme-current found (links resolved) in that tree's bin directory or among the stand-ins;
+# anything else is refused before any Omarchy command runs. Outside a dev session the stand-in variable is refused (a stray
+# test setting). GRASSFIELD_CONFIG_HOME is honoured always, as by the shell (shell/lib/RunMode.js configDir).
 # Standard library only.
 import fcntl
 import json
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -73,9 +78,12 @@ DEFAULTS = {"light": "Catppuccin Latte", "dark": "Tokyo Night"}
 # Removed from omarchy-theme-set's environment (see the header).
 UNSET = ("HYPRLAND_INSTANCE_SIGNATURE", "DCONF_PROFILE", "SUDO_ASKPASS")
 LOCK_WAIT = 120
-# omarchy-theme-set may install a VS Code extension from the network; past this it is stopped.
+# omarchy-theme-set may install a VS Code extension from the network; past this (seconds) its process group is stopped.
 RUN_LIMIT = 600
+KILL_GRACE = 5
 QUERY_LIMIT = 10
+PACKAGED_OMARCHY = "/usr/share/omarchy"
+STAND_IN_VAR = "GRASSFIELD_TERMINAL_THEME_SHIMS"
 
 
 def say(line):
@@ -124,7 +132,19 @@ def theme_key(name):
 
 def omarchy_path():
     """Omarchy's tree, as config/hypr/grassfield/omarchy.lua finds it (omarchy-theme-set reads its themes from there)."""
-    return os.environ.get("OMARCHY_PATH") or "/usr/share/omarchy"
+    return os.environ.get("OMARCHY_PATH") or PACKAGED_OMARCHY
+
+
+def fake_tree():
+    """A dev session's OMARCHY_PATH, when it names a tree of fakes: set explicitly, absolute, not the packaged Omarchy."""
+    explicit = os.environ.get("OMARCHY_PATH", "")
+    return explicit.startswith("/") and os.path.realpath(explicit) != os.path.realpath(PACKAGED_OMARCHY)
+
+
+def resolves_under(command, folders):
+    """True when the command (its links resolved) is a file directly in one of the folders (theirs resolved too)."""
+    home = os.path.dirname(os.path.realpath(command))
+    return any(home == os.path.realpath(f) for f in folders)
 
 
 def clean_path(shims):
@@ -206,7 +226,35 @@ def last_line(f):
     return line[:200]
 
 
-def apply(command, theme, env):
+def group_alive(pgid):
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def stop_group(proc):
+    """SIGTERM to omarchy-theme-set's whole process group (its session: start_new_session), SIGKILL to what is left after
+    KILL_GRACE seconds; returns once the group is gone (a process that made a session of its own has left it)."""
+    pgid = proc.pid
+    for sig, wait in ((signal.SIGTERM, KILL_GRACE), (signal.SIGKILL, KILL_GRACE)):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            pass
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            proc.poll()  # reaps the leader, so that it no longer counts
+            if not group_alive(pgid):
+                return
+            time.sleep(0.1)
+    proc.poll()
+
+
+def apply(command, theme, env, limit):
     """(exit code, last output line) of omarchy-theme-set <theme>."""
     with tempfile.TemporaryFile() as out:
         try:
@@ -215,16 +263,17 @@ def apply(command, theme, env):
         except OSError as e:
             return 127, str(e)
         try:
-            code = proc.wait(timeout=RUN_LIMIT)
+            code = proc.wait(timeout=limit)
         except subprocess.TimeoutExpired:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            return 124, "omarchy-theme-set did not finish in %d minutes" % (RUN_LIMIT // 60)
+            stop_group(proc)
+            return 124, "omarchy-theme-set did not finish within %d seconds" % limit
         return code, last_line(out)
+
+
+def run_limit(dev):
+    """RUN_LIMIT, or in a dev session GRASSFIELD_TERMINAL_THEME_RUN_LIMIT (whole seconds, 1 to RUN_LIMIT)."""
+    value = os.environ.get("GRASSFIELD_TERMINAL_THEME_RUN_LIMIT", "") if dev else ""
+    return int(value) if value.isdigit() and 1 <= int(value) <= RUN_LIMIT else RUN_LIMIT
 
 
 def main(argv):
@@ -236,11 +285,18 @@ def main(argv):
         say("refused: run it as the desktop user, not as root")
         return 1
     shims = SHIMS
-    if dev_session():
-        shims = os.environ.get("GRASSFIELD_TERMINAL_THEME_SHIMS", "")
+    dev = dev_session()
+    if dev:
+        shims = os.environ.get(STAND_IN_VAR, "")
         if not shims:
             say("refused: a dev session changes no Omarchy theme (GRASSFIELD_TERMINAL_THEME_SHIMS is the test stand-in)")
             return 1
+        if not fake_tree():
+            say("refused: a dev session needs OMARCHY_PATH set to a tree of fakes, never the installed Omarchy")
+            return 1
+    elif STAND_IN_VAR in os.environ:
+        say("refused: GRASSFIELD_TERMINAL_THEME_SHIMS is test plumbing, honoured only in a dev session")
+        return 1
 
     data = read_settings(os.path.join(config_dir(), "grassfield.json"))
     if not setting(data, "terminal.matchAppearance", False, lambda v: isinstance(v, bool)):
@@ -257,6 +313,10 @@ def main(argv):
     if not theme_set or not theme_current:
         say("skipped: Omarchy's theme commands are not installed")
         return 0
+    if dev and not all(resolves_under(c, (shims, os.path.join(omarchy_path(), "bin"))) for c in (theme_set, theme_current)):
+        say("refused: in a dev session omarchy-theme-set and omarchy-theme-current must be the fakes of OMARCHY_PATH/bin "
+            "or of the stand-ins")
+        return 1
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     if not runtime.startswith("/") or not os.path.isdir(runtime):
         say("refused: XDG_RUNTIME_DIR is not set")
@@ -276,7 +336,7 @@ def main(argv):
     if current and theme_key(current) == theme_key(theme):
         say("skipped: %s is already Omarchy's theme" % theme)
         return 0
-    code, line = apply(theme_set, theme, env)
+    code, line = apply(theme_set, theme, env, run_limit(dev))
     os.close(fd)
     if code != 0:
         say("failed: %s (omarchy-theme-set exit %d)" % (line, code))

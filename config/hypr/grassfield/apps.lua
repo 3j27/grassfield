@@ -6,8 +6,10 @@
 -- default/hypr/apps/battlenet.lua, default/hypr/apps/davinci-resolve.lua, default/hypr/apps/geforce.lua,
 -- default/hypr/apps/moonlight.lua, default/hypr/apps/retroarch.lua, default/hypr/apps/steam.lua,
 -- default/hypr/apps/telegram.lua, default/hypr/apps/pip.lua, default/hypr/apps/webcam-overlay.lua):
--- its match unchanged, and only the effects that still make sense. tests/shell/app_rules.sh holds every rule to the effects
--- the cited Omarchy file gives that match (nothing invented, nothing changed) and refuses the effects listed as not ported.
+-- its match unchanged (one exception: a match narrowed for safety keeps Omarchy's in `omarchy_match` and says why in
+-- `narrowed`, Picture-in-Picture), and only the effects that still make sense. tests/shell/app_rules.sh holds every rule to
+-- the effects the cited Omarchy file gives that match (nothing invented, nothing changed), allows the narrowing only where it
+-- lists it, and refuses the effects listed as not ported.
 --
 -- Not ported, and why:
 --   - `float`, `center`: every window floats (windows.lua gf-float-all) and Hyprland centres a new floating window.
@@ -38,7 +40,8 @@
 
 local M = { rules = {}, failed = {} }
 
--- Each entry: the Omarchy file (default/hypr/apps/<source>) and the rule as hl.window_rule takes it.
+-- Each entry: the Omarchy file (default/hypr/apps/<source>) and the rule as hl.window_rule takes it; `omarchy_match` and
+-- `narrowed` (not passed to Hyprland) record a match narrowed from Omarchy's and why.
 local RULES = {
   -- battlenet.lua: the installer draws Blizzard's own frame; the window manager adds none (no title bar, border, blur or
   -- shadow). The launcher keeps its own size.
@@ -72,9 +75,18 @@ local RULES = {
     match = { class = "org.telegram.desktop" },
     focus_on_activate = false },
   -- pip.lua: Picture-in-Picture stays above the other windows on every desktop and keeps its proportions when resized
-  -- (macOS). Its size is its own (above).
+  -- (macOS). Its size is its own (above). Narrowed (security review, LOW 1): Omarchy's title regex is not anchored, so a
+  -- window whose title only mentions the phrase (Preview showing "Picture-in-Picture.png", a Files folder of that name) could
+  -- be pinned over every desktop. Here the title is a browser's own PiP window title exactly (Firefox "Picture-in-Picture",
+  -- Chromium "Picture in picture") and the class one of the browsers Omarchy's browser.lua names (its chromium- and
+  -- firefox-based patterns), with the Flatpak Firefox (windows.lua lists it).
   { source = "pip.lua", name = "gf-app-pip",
-    match = { title = "(Picture.?in.?[Pp]icture)" },
+    omarchy_match = { title = "(Picture.?in.?[Pp]icture)" },
+    narrowed = "title anchored to a browser's PiP window title; class one of browser.lua's browsers",
+    match = {
+      class = "^((google-)?[cC]hrom(e|ium)|[bB]rave-browser|[mM]icrosoft-edge|Vivaldi-stable|helium|[fF]irefox|zen|librewolf|org\\.mozilla\\.firefox)$",
+      title = "^Picture[- ]in[- ][Pp]icture$",
+    },
     pin = true, keep_aspect_ratio = true },
   -- webcam-overlay.lua: Omarchy's camera overlay of a screen recording (`omarchy-capture-screenrecording`, mpv with a
   -- dedicated app id) at its corner, sized from the display's height, over every desktop, without taking the focus. A pinned
@@ -99,7 +111,7 @@ local RULES = {
 for _, entry in ipairs(RULES) do
   local rule = {}
   for key, value in pairs(entry) do
-    if key ~= "source" then
+    if key ~= "source" and key ~= "omarchy_match" and key ~= "narrowed" then
       rule[key] = value
     end
   end

@@ -192,7 +192,12 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   `theme-set` hooks run in the same sanitised environment. Nothing restarts or signals grassfield-shell (the signals name
   kitty, ghostty, btop, opencode, helix and tmux panes). The helper also: never runs when the theme is already current, waits
   for its lock, refuses root, skips silently without Omarchy's commands, refuses without the stand-ins or when its private
-  folder is a link or another user's; stdin /dev/null, a process session of its own. Settings: `omarchy-theme-list` in the read-only query allowlist.
+  folder is a link or another user's; stdin /dev/null, a process session of its own, whose whole process group gets SIGTERM
+  then SIGKILL past the run limit (the lock held until it is gone). A dev session (the test) runs only with the stand-in
+  variable, an explicit OMARCHY_PATH that is not /usr/share/omarchy and Omarchy's two theme commands resolved (links
+  followed) in that tree's bin or among the stand-ins; outside a dev session the stand-in variable is refused;
+  `tests/shell/terminal_theme.sh` runs with a PATH of its own folders only and checks that first. Settings:
+  `omarchy-theme-list` in the read-only query allowlist.
 
 ### OC-12 Per-application window rules (priority 3)
 - `config/hypr/grassfield/apps.lua`: Omarchy's `default/hypr/apps/*.lua` rules that still hold in a floating-first session
@@ -206,7 +211,8 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   (every window), application sizes (placement.lua, macOS model), `fullscreen` at map, Omarchy's look, JetBrains'
   `no_follow_mouse` (Grassfield is click-to-focus), QEMU and LocalSend (nothing left once those go), Hermes' HUD, Meet's PiP,
   and the PiP size and corner (Grassfield keeps a PiP window's own size). `tests/shell/app_rules.sh` holds each rule to the
-  cited file's text.
+  cited file's text. PiP's match is the one narrowing (security review LOW 1): the browsers' exact PiP window title and a
+  browser class, Omarchy's unanchored title kept as `omarchy_match` for that comparison.
 
 ### OC-13 LocalSend (priority 3)
 - Files: "Send with LocalSend…" in the Share menu and the context menu of the selection, when `localsend` exists: Omarchy's

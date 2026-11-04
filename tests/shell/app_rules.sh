@@ -7,6 +7,11 @@
 #             the same value (an effect may come from the rule of a tag that call adds, as pip.lua does); so nothing is invented
 #             or changed. SKIP without lua; the comparison SKIPs without Omarchy's files ($OMARCHY_PATH, else
 #             /usr/share/omarchy)
+#   narrowed  a rule may narrow Omarchy's match only when it is listed here (NARROWED) and keeps Omarchy's match in
+#             `omarchy_match` (the one compared above) with a reason in `narrowed`; the narrowed match constrains every key
+#             Omarchy's did. Picture-in-Picture (security review LOW 1): its title and class regexes pin a browser's PiP
+#             window ("Picture-in-Picture", "Picture in picture") and never a window that only mentions it ("Picture-in-
+#             Picture.png" in Preview, a Files folder), whether Hyprland matches the whole string or searches it
 #   kept out  no rule sets an effect ADR-0045 OC-12 leaves out (tiling, workspaces, Omarchy's look, full screen at map,
 #             float/center that every window already gets); size and move only for the camera overlay (its corner)
 # Hyprland's own acceptance (`Hyprland --verify-config`) is `just check-config`, on the owner's machine.
@@ -45,8 +50,9 @@ if ! command -v lua >/dev/null; then
 fi
 
 # --- ported: apply apps.lua with a recording hl ---
-# Prints "applied <n>", "failed <n>", then per rule "<source> <name> <match k=v;...> <effect k=v;...>" (tab-separated) with Lua
-# literals.
+# Prints "applied <n>", "failed <n>", then per rule, tab-separated, with Lua literals: the Omarchy file, the name, Omarchy's
+# match (`omarchy_match` when the rule narrows it, else its match) as k=v;..., the effects, the reason of a narrowing or "-",
+# and the match the rule gives Hyprland.
 cat >"$tmp/run.lua" <<'LUA'
 local function lit(v)
   if type(v) == "string" then return string.format("%q", v) end
@@ -70,8 +76,14 @@ hl = { window_rule = function(rule) applied[#applied + 1] = rule end }
 local M = dofile(arg[1])
 print("applied " .. #applied)
 print("failed " .. #M.failed)
-for _, e in ipairs(M.rules) do
-  print(e.source .. "\t" .. e.name .. "\t" .. pairs_of(e.match, {}) .. "\t" .. pairs_of(e, { source = true, name = true, match = true }))
+for i, e in ipairs(M.rules) do
+  local given = applied[i] or {}
+  local meta = { source = true, name = true, match = true, omarchy_match = true, narrowed = true }
+  for k in pairs(meta) do
+    if k ~= "name" and k ~= "match" and given[k] ~= nil then error(e.name .. ": " .. k .. " reached Hyprland") end
+  end
+  print(e.source .. "\t" .. e.name .. "\t" .. pairs_of(e.omarchy_match or e.match, {}) .. "\t" .. pairs_of(e, meta)
+    .. "\t" .. (e.narrowed or "-") .. "\t" .. pairs_of(given.match or {}, {}))
 end
 LUA
 out=$(cd "$tmp" && lua "$tmp/run.lua" "$rules" 2>&1)
@@ -83,11 +95,65 @@ n=$(wc -l <"$tmp/rules.txt")
 dups=$(cut -f2 "$tmp/rules.txt" | sort | uniq -d)
 [[ -z $dups ]] && pass "ported: every rule name once" || bad "ported: names used twice: $dups"
 grep -vqE $'^[a-z0-9-]+\\.lua\tgf-app-[a-z0-9-]+\t' "$tmp/rules.txt" && bad "ported: a rule without an Omarchy file or a gf-app- name" || pass "ported: every rule cites an Omarchy file and is named gf-app-*"
-if grep -E $'\t(.*;)?(move|size)=[^\t]*$' "$tmp/rules.txt" | grep -vq $'\tclass="\\^WebcamOverlay-'; then
+if [[ -n $(awk -F'\t' '$4 ~ /(^|;)(move|size)=/ && $6 !~ /^class="\^WebcamOverlay-/' "$tmp/rules.txt") ]]; then
   bad "kept out: size or move outside the camera overlay"
 else
   pass "kept out: size and move only for the camera overlay"
 fi
+
+# --- narrowed: only where listed, every key of Omarchy's match still constrained, and the PiP regexes on sample titles ---
+NARROWED="gf-app-pip"
+python3 -I - "$tmp/rules.txt" "$NARROWED" <<'PY' && pass "narrowed: only $NARROWED, every Omarchy key kept, PiP pins browsers' PiP windows only" || bad "narrowed: see above"
+import ast, re, sys
+
+listing, allowed = sys.argv[1], set(sys.argv[2].split())
+bad = 0
+
+
+def fields(text):
+    """k=v;... with Lua %q literals -> {k: str}."""
+    out = {}
+    for kv in filter(None, text.split(";")):
+        k, v = kv.split("=", 1)
+        out[k] = ast.literal_eval(v) if v.startswith('"') else v
+    return out
+
+
+for line in open(listing, encoding="utf-8"):
+    source, name, omarchy, effects, narrowed, given = line.rstrip("\n").split("\t")
+    o, g = fields(omarchy), fields(given)
+    if narrowed == "-":
+        if o != g:
+            print("  %s: its match differs from Omarchy's without a narrowing" % name)
+            bad = 1
+        continue
+    if name not in allowed:
+        print("  %s: narrows Omarchy's match but is not listed in NARROWED" % name)
+        bad = 1
+    for k in o:
+        if k not in g:
+            print("  %s: Omarchy's %s is no longer constrained" % (name, k))
+            bad = 1
+    if name == "gf-app-pip":
+        title, cls = re.compile(g.get("title", "")), re.compile(g.get("class", ""))
+        for t in ("Picture-in-Picture", "Picture in picture", "Picture in Picture"):
+            if not title.fullmatch(t) or not title.search(t):
+                print("  gf-app-pip: the title %r is not matched" % t)
+                bad = 1
+        for t in ("Picture-in-Picture.png", "Picture-in-Picture.png - Preview", "Files - Picture in picture", "Picture-in-Pictures"):
+            if title.fullmatch(t) or title.search(t):
+                print("  gf-app-pip: the title %r is matched" % t)
+                bad = 1
+        for c in ("chromium", "google-chrome", "Brave-browser", "firefox", "org.mozilla.firefox", "librewolf", "zen"):
+            if not cls.fullmatch(c) or not cls.search(c):
+                print("  gf-app-pip: the class %r is not matched" % c)
+                bad = 1
+        for c in ("org.grassfield.Preview", "org.grassfield.Files", "mpv", "org.mozillaXfirefox", "my-chromium-fork"):
+            if cls.fullmatch(c) or cls.search(c):
+                print("  gf-app-pip: the class %r is matched" % c)
+                bad = 1
+sys.exit(bad)
+PY
 
 apps=${OMARCHY_PATH:-/usr/share/omarchy}/default/hypr/apps
 if [[ ! -d $apps ]]; then
@@ -132,7 +198,7 @@ def calls(text):
 
 bad = 0
 for line in open(listing, encoding="utf-8"):
-    source, name, match, effects = line.rstrip("\n").split("\t")
+    source, name, match, effects = line.rstrip("\n").split("\t")[:4]
     path = os.path.join(apps, source)
     if not os.path.isfile(path):
         print("  %s: %s is not an Omarchy file" % (name, source))
