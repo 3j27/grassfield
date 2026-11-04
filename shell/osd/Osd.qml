@@ -41,19 +41,24 @@ Singleton {
         // NaN or infinite levels (bad IPC input, sensor glitch) are ignored; the rest is clamped.
         if (!isFinite(osdLevel))
             return;
+        showOn("", osdKind, osdLevel, osdMuted);
+    }
+
+    // The same on display `name` ("" for the active display), set before the pill shows so it never shows elsewhere first.
+    function showOn(name: string, osdKind: string, osdLevel: real, osdMuted: bool): void {
+        if (!isFinite(osdLevel))
+            return;
+        output = name;
         kind = osdKind === "brightness" || osdKind === "keyboard" ? osdKind : "volume";
         level = Math.max(0, Math.min(1, osdLevel));
         muted = osdMuted;
-        output = "";
         shown = true;
         hideTimer.restart();
     }
 
     // A display's brightness, on that display (`name`; "" for the active display).
     function showBrightnessOf(name: string, osdLevel: real): void {
-        showValue("brightness", osdLevel, false);
-        if (isFinite(osdLevel))
-            output = name;
+        showOn(name, "brightness", osdLevel, false);
     }
 
     // The layout changed (InputSource: only a real change of a keyboard that had another layout, so nothing with a single layout).

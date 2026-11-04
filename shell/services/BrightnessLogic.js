@@ -235,6 +235,18 @@ function sliderTarget(names, backlight, ddc, main) {
     return {kind: "none", output: ""};
 }
 
+// The entries of the outputs still connected: one that went away is forgotten at once, before anything else is looked up, so a
+// display plugged back is a new one whatever happens meanwhile.
+function forget(ddc, names) {
+    const list = Array.isArray(names) ? names : [];
+    const next = {};
+    for (const n of Object.keys(ddc || {})) {
+        if (list.indexOf(n) >= 0)
+            next[n] = ddc[n];
+    }
+    return next;
+}
+
 // The outputs to ask once (connected, external, a connector name, not virtual, never seen) and the entries of outputs that went away
 // dropped (a replug asks again: another display may be on that connector). `running`: output name -> true while a command
 // still runs for it; a new display on such a connector waits for that command to end (released) before it is asked, so one

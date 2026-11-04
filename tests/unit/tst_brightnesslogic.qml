@@ -232,5 +232,11 @@ TestCase {
         const idle = Logic.released(Object.assign(Logic.fresh(), {busy: true}), "DP-1");
         compare(idle.start, null);
         verify(!idle.entry.busy);
+        // An output that went away is forgotten at once (before the command is looked up), so plugging it back asks again.
+        const known = {"DP-1": okEntry(40), "DP-2": okEntry(10)};
+        compare(Object.keys(Logic.forget(known, ["eDP-1", "DP-2"])), ["DP-2"]);
+        compare(Logic.forget(known, ["DP-1", "DP-2"])["DP-1"].level, 40);
+        compare(Logic.forget(null, ["DP-1"]), {});
+        compare(Logic.forget(known, undefined), {});
     }
 }

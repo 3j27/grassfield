@@ -157,7 +157,11 @@ Singleton {
         const jobs = Object.assign({}, root.ddcJobs);
         jobs[name] = true;
         root.ddcJobs = jobs;
-        ddcJob.createObject(root, {output: name, serial: serial, argv: argv});
+        const job = ddcJob.createObject(root, {output: name, serial: serial, argv: argv});
+        if (job)
+            job.start();
+        else
+            root.ddcFinished(name, serial, "");
     }
 
     // A command of output `name` (started for its display number `serial`) ended and printed `text`.
@@ -178,10 +182,12 @@ Singleton {
             root.ddcRun(name, r.entry.serial, r.start);
     }
 
-    // The outputs changed (or the shell started): look for the command, then ask the new external outputs.
+    // The outputs changed (or the shell started): forget the outputs that went away at once (a display plugged back is asked
+    // again), look for the command, then ask the new external outputs.
     function ddcSync(): void {
         if (!root.ddcAllowed)
             return;
+        root.ddc = Logic.forget(root.ddc, root.outputNames);
         ddcCheck.running = false;
         ddcCheck.running = true;
     }
@@ -252,24 +258,29 @@ Singleton {
             property bool gotExit: false
             property bool reported: false
 
+            function start(): void {
+                proc.running = true;
+            }
+
             function check(): void {
                 if (job.gotOut && job.gotExit)
                     job.done();
             }
 
-            // Only a run that exited 0 answers; its output is the level.
+            // Only a run that exited 0 answers; its output is the level. The job goes once its process has exited, never before
+            // (one stopped on a hung bus answers at once, as not answered, and is not left running unseen).
             function done(): void {
-                if (job.reported)
-                    return;
-                job.reported = true;
-                root.ddcFinished(job.output, job.serial, job.code === 0 ? job.out : "");
-                job.destroy();
+                if (!job.reported) {
+                    job.reported = true;
+                    root.ddcFinished(job.output, job.serial, job.code === 0 ? job.out : "");
+                }
+                if (job.gotExit)
+                    job.destroy();
             }
 
             Process {
                 id: proc
                 command: job.argv
-                running: true
                 stdout: StdioCollector {
                     onStreamFinished: {
                         job.out = text;
@@ -280,7 +291,8 @@ Singleton {
                 // qmllint disable signal-handler-parameters
                 onExited: exitCode => {
                     // qmllint enable signal-handler-parameters
-                    job.code = exitCode;
+                    if (!job.reported)
+                        job.code = exitCode;
                     job.gotExit = true;
                     join.start();
                     job.check();
