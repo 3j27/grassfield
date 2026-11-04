@@ -11,6 +11,7 @@ Sheet {
     id: root
 
     required property var system
+    required property var backend
     property string setupId: ""
 
     // The setup started (the pane may say that it waits for the terminal).
@@ -41,14 +42,22 @@ Sheet {
                 message: qsTr("Omarchy stops Voxtype and removes it with its speech models and settings, in a Terminal window.")}
         })
 
+    // The Omarchy command (or Omarchy's launcher) that is not installed, "" when all are (ADR-0045 OC-0.3: looked for when the
+    // sheet opens; the sheet then says what is missing and starts nothing).
+    property string missing: ""
+
     title: root.texts[root.setupId] ? root.texts[root.setupId].title : ""
-    message: root.texts[root.setupId] ? root.texts[root.setupId].message : ""
+    message: root.missing !== "" ? qsTr("This needs Omarchy's “%1”, which is not installed on this computer.").arg(root.missing)
+        : root.texts[root.setupId] ? root.texts[root.setupId].message : ""
     confirmText: qsTr("Open Terminal")
+    confirmEnabled: root.missing === ""
 
     function openFor(id: string): void {
-        if (Setups.launchArgv(id) === null || root.texts[id] === undefined)
+        const argv = Setups.launchArgv(id);
+        if (argv === null || root.texts[id] === undefined)
             return;
         root.setupId = id;
+        root.missing = argv.find(c => !root.backend.hasCommand(c)) ?? "";
         root.open();
     }
 

@@ -336,7 +336,9 @@ TestCase {
 
     function test_terminalSheet() {
         const s = service(false, {});
-        const sheet = createTemporaryObject(terminalComp, testCase, {system: s.system});
+        s.backend.commands = ["omarchy-launch-floating-terminal-with-presentation", "omarchy-hibernation-setup", "omarchy-voxtype-model",
+            "omarchy-voxtype-install"];
+        const sheet = createTemporaryObject(terminalComp, testCase, {system: s.system, backend: s.backend});
         const launched = [];
         sheet.launched.connect(id => launched.push(id));
         sheet.openFor("hibernation-setup");
@@ -354,8 +356,17 @@ TestCase {
         verify(!sheet.shown);
         for (const id in Setups.TERMINAL)
             verify(sheet.texts[id] !== undefined && sheet.texts[id].message !== "", id);
+        // Omarchy's command missing (OC-0.3): the sheet says which, and starts nothing.
+        sheet.openFor("fido2-setup");
+        compare(sheet.missing, "omarchy-setup-security-fido2");
+        verify(sheet.message.indexOf("omarchy-setup-security-fido2") >= 0);
+        verify(!sheet.confirmEnabled);
+        sheet.confirm();
+        compare(s.backend.launches.length, 1);
+        sheet.cancel();
         const d = service(true, {});
-        const devSheet = createTemporaryObject(terminalComp, testCase, {system: d.system});
+        d.backend.commands = s.backend.commands;
+        const devSheet = createTemporaryObject(terminalComp, testCase, {system: d.system, backend: d.backend});
         devSheet.openFor("dictation-setup");
         devSheet.confirm();
         compare(d.backend.launches.length, 0);

@@ -1138,6 +1138,7 @@ Window {
     TerminalSetupSheet {
         id: terminalSetup
         system: sys
+        backend: root.backend
     }
 
     // A category of Privacy & Security: the section id names its key in the permission state (Privacy.js).

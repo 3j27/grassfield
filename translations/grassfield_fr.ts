@@ -14810,6 +14810,10 @@
         <translation>Omarchy arrête Voxtype et le supprime avec ses modèles vocaux et ses réglages, dans une fenêtre du Terminal.</translation>
     </message>
     <message>
+        <source>This needs Omarchy&apos;s “%1”, which is not installed on this computer.</source>
+        <translation>Cela nécessite «&#xa0;%1&#xa0;» d’Omarchy, qui n’est pas installé sur cet ordinateur.</translation>
+    </message>
+    <message>
         <source>Open Terminal</source>
         <translation>Ouvrir le Terminal</translation>
     </message>
