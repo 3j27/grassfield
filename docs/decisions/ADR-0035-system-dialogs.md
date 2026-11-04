@@ -1320,8 +1320,9 @@ Decision:
   - `org.gnome.desktop.interface`: `gtk-theme` (the Grassfield GTK theme for the appearance and the accent, owner decision
     Q7: `Grassfield-<accent>` or `Grassfield-<accent>-dark`, with `-hc` before `-dark` under Increase Contrast (decision
     2b-2), CSS-only themes generated at build time from `ui/tokens/tokens.json` that import GTK's built-in Adwaita/Default
-    stylesheet (HighContrast/Default-hc with `-hc`) and override only the accent and the selection colours (the radii stay
-    GTK's, decision 2b-7); MIT, no copy of Adwaita), `color-scheme`, `enable-animations` (not Reduce Motion); every other key
+    stylesheet (HighContrast/Default-hc with `-hc`) and override the accent and the selection colours (the radii stay
+    GTK's, decision 2b-7), since ADR-0040 the warm grounds (not in `-hc`) and since the ADR-0015 amendment of 2026-11-04 the title
+    buttons of GTK 3 header bars and GTK 4 window controls, drawn as the plugin's traffic lights; MIT, no copy of Adwaita), `color-scheme`, `enable-animations` (not Reduce Motion); every other key
     falls through to x-d-p-gtk (fonts and icons already come from the session dconf profile, ADR-0003 and ADR-0017).
   The backend has no window and stays running for the session (the frontend listens to its `SettingChanged`); it is started
   with the session, before the shell, and its unit has `Restart=on-failure` (`RestartSec=1`; counter-review of PR #13: without

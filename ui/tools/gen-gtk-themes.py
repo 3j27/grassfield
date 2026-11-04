@@ -5,7 +5,10 @@
 Contrast (-hc). Each is CSS only: GTK's own built-in stylesheet (GTK 3's Adwaita, or HighContrast with -hc; GTK 4's Default,
 or Default-hc; imported from the GTK library's resources, never copied) followed by Grassfield's rules for the places where
 that stylesheet draws its accent: selected rows and text, checked boxes, radios and switches, suggested buttons, progress
-bars, sliders and level bars, focused fields, selected tabs, menu items under the pointer, and links. The Settings portal
+bars, sliders and level bars, focused fields, selected tabs, menu items under the pointer, and links; then the warm grounds
+(ADR-0040, not in -hc) and the title buttons of client-side header bars, drawn as the compositor plugin's traffic lights
+(ADR-0015 amendment 2026-11-04; GTK 3 header bars and GTK 4 window controls, not libadwaita apps, which read no theme). The
+Settings portal
 backend names the theme of the current appearance, accent and contrast in org.gnome.desktop.interface gtk-theme
 (apps/portal-settings/src/portalvalues.h); GTK 3 apps read it with GTK_USE_PORTAL=1, GTK 4 apps with GDK_DEBUG=portals.
 Increase Contrast keeps the colours below (the shell's contrastBoost does not change the accent either): GTK's high-contrast

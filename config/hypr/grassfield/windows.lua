@@ -33,10 +33,15 @@ hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield
 -- 2026-11-04: with the plugin's bar it showed a second set of controls (Firefox's own, from the session's GTK button layout,
 -- in its tab strip); that its own close, minimize and zoom work here, and that they draw as traffic lights with the
 -- Grassfield GTK theme, is NOT VERIFIED (not installed on the dev machine; the owner checks it on the second machine).
+-- The one entry that breaks the rule above (controls seen to work here), on the owner's evidence alone. Known risk: with
+-- Firefox's "Title Bar" option on (Customize Toolbar), Firefox draws no controls and no plugin bar appears either, a window
+-- with none (checked with a stand-in window: tagged, no strip). Firefox's default is its own frame (CSD), the case the
+-- screenshot shows; a user who turns "Title Bar" on gets no controls until they turn it off again (or the list drops it).
 -- Google Chrome is left out: its Wayland app id (google-chrome is expected, from its desktop file) is not evidenced here.
 -- The traffic lights themselves come from the Grassfield GTK themes (ui/tools/gen-gtk-themes.py, window.* tokens), which
--- GTK 3 and plain GTK 4 apps and Chromium's GTK appearance read; libadwaita apps (Nautilus) ignore gtk-theme (ADR-0015
--- amendment 2026-11-04). Their zoom needs the exemption below (untagged, Evince's zoom request was suppressed), and GTK4's
+-- GTK 3 and plain GTK 4 apps and Chromium's GTK appearance read (measured nested at 1.25: tests/compositor/gtk_lights.sh;
+-- a fresh Chromium profile is "Classic" and draws plain grey buttons); libadwaita apps (Nautilus) ignore gtk-theme
+-- (ADR-0015 amendment 2026-11-04). Their zoom needs the exemption below (untagged, Evince's zoom request was suppressed), and GTK4's
 -- minimize button needs the plugin to offer minimize in xdg wm_capabilities (plugin work item P8; without the plugin
 -- Hyprland offers no minimize and GTK4 greys it). Others join only once verified. Same tag as Grassfield's apps: no
 -- plugin titlebar, no band in Overview and Stages, the app's own minimize and zoom work (exempt from the maximize
