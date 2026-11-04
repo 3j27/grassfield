@@ -81,6 +81,7 @@ ShellRoot {
             "lock.showMessage": "lockShowMessage",
             "lock.message": "lockMessage",
             "lock.requirePasswordAfterDisplayOff": "lockRequirePasswordAfterDisplayOff",
+            "energy.preventSleep": "energyPreventSleep",
             "search.showApps": "searchShowApps",
             "search.showDocuments": "searchShowDocuments",
             "search.showRecents": "searchShowRecents",
