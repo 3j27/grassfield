@@ -3474,6 +3474,29 @@
     </message>
 </context>
 <context>
+    <name>CodeChip</name>
+    <message>
+        <source>QR Code %1</source>
+        <translation>Code QR %1</translation>
+    </message>
+    <message>
+        <source>QR Code</source>
+        <translation>Code QR</translation>
+    </message>
+    <message>
+        <source>Link %1</source>
+        <translation>Lien %1</translation>
+    </message>
+    <message>
+        <source>Open Link</source>
+        <translation>Ouvrir le lien</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>Copier</translation>
+    </message>
+</context>
+<context>
     <name>ColorWell</name>
     <message>
         <source>Preset colours</source>
@@ -6651,6 +6674,18 @@
         <translation>Image %1</translation>
     </message>
     <message>
+        <source>Copy Text</source>
+        <translation>Copier le texte</translation>
+    </message>
+    <message>
+        <source>Select All Text</source>
+        <translation>Sélectionner tout le texte</translation>
+    </message>
+    <message>
+        <source>Text in image</source>
+        <translation>Texte de l’image</translation>
+    </message>
+    <message>
         <source>Pause</source>
         <translation>Pause</translation>
     </message>
@@ -7375,6 +7410,14 @@
     <message>
         <source>Number format</source>
         <translation>Format des nombres</translation>
+    </message>
+    <message>
+        <source>Select Text in Images</source>
+        <translation>Sélectionner le texte des images</translation>
+    </message>
+    <message>
+        <source>Select text in images to copy it or take action.</source>
+        <translation>Sélectionnez du texte dans des images pour le copier ou effectuer une action.</translation>
     </message>
 </context>
 <context>

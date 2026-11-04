@@ -2808,6 +2808,14 @@ QtObject {
     readonly property string previewPaperInk: "#4C4A46"
     // estimate: time one image stays in a slideshow [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewSlideshowInterval: 3000
+    // estimate (no capture): Select Text in Images, the text highlight colour over the words of a picture, translucent as macOS Live Text's selection so that the text stays readable under it [ref: docs/specs/preview.md]
+    readonly property real previewTextSelectionOpacity: 0.4
+    // estimate (no capture): Select Text in Images, the corner of a selected line's highlight, macOS Live Text's softly rounded boxes [ref: docs/specs/preview.md]
+    readonly property int previewTextSelectionRadius: 4
+    // estimate (no capture): Select Text in Images, the highlight reaches this far past the ink boxes tesseract gives, so that it covers the letters as macOS Live Text's does [ref: docs/specs/preview.md]
+    readonly property int previewTextSelectionOutset: 2
+    // estimate (no capture): Select Text in Images, the widest host name a QR code chip shows before eliding it in the middle [ref: docs/specs/preview.md]
+    readonly property int previewCodeChipLabelWidth: 220
 
     // F1 reference (docs/testing/f1-reference-gaps.md, Apps launcher): panel 844 +-1 pt wide (2x capture)
     readonly property int launcherPanelWidth: 844

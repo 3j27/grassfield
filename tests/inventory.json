@@ -162,6 +162,7 @@
  {"path": "tests/unit/tst_previewlisting.qml", "layer": "headless"},
  {"path": "tests/unit/tst_previewtoolbar.qml", "layer": "headless"},
  {"path": "tests/unit/tst_previewviewer.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_previewtextinimages.qml", "layer": "headless"},
  {"path": "tests/unit/tst_recentitems.qml", "layer": "headless"},
  {"path": "tests/unit/tst_rfkill.qml", "layer": "headless"},
  {"path": "tests/unit/tst_overlayblur.qml", "layer": "headless"},
