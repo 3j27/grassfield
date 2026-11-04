@@ -1495,7 +1495,10 @@ The capture toolbar and recording (ADR-0045 OC-1) differ from macOS 27 here:
   Remember Last Selection and no Show Floating Thumbnail options; the microphone list holds the default input only.
 - Save to Preview keeps the file on the Desktop (Preview cannot save a document); macOS keeps it unsaved in Preview.
 - Recordings are MP4 (gpu-screen-recorder's container, as Omarchy's), not MOV; no system audio (as macOS); no mouse clicks
-  shown.
+  shown. gpu-screen-recorder's `-cursor` option and its exit on SIGINT are taken from its documented behaviour and Omarchy's
+  use, not run in the cloud session that built this (no recorder there): NOT VERIFIED until the owner's session.
+- Show Mouse Pointer off: on a GPU where Hyprland draws the pointer in software, grim's picture holds the pointer all the
+  same (Omarchy's screenshot forces hardware cursors around grim; Grassfield's helper changes no compositor setting).
 - Esc does not cancel the countdown (the plate takes no keyboard, so that the window being captured stays the key window);
   Ctrl-Super-Esc does. The countdown is not shown while another recording runs (one state at a time); the timer still runs.
 - The session locking stops a recording through the shell: a shell that is not running (restarting) leaves the recording
