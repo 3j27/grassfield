@@ -150,14 +150,9 @@ bool isReadOnlyQuery(const QStringList &argv)
     //   omarchy-hw-fingerprint         exit status 0 when a USB fingerprint reader is there (it reads sysfs only)
     //   omarchy-hibernation-available  exit status 0 when hibernation is set up (it reads /sys/power/image_size and /proc/swaps
     //                                  and tests that /etc/mkinitcpio.conf.d/omarchy_resume.conf exists)
-    //   omarchy-network-qr --meta      the current Wi-Fi network's QR code as a matrix of 0 and 1 after one "meta" line (nmcli
-    //                                  reads, the secret through NetworkManager's own permission check, then qrencode); without
-    //                                  an interface argument Omarchy picks the device of the default route, else the first
-    //                                  connected Wi-Fi device, and its meta line names the network it encoded
+    // (omarchy-network-qr --meta writes nothing either, but its answer encodes the Wi-Fi password: isPrivateQuery, never here.)
     if (program == QLatin1String("omarchy-hw-fingerprint") || program == QLatin1String("omarchy-hibernation-available"))
         return args.isEmpty();
-    if (program == QLatin1String("omarchy-network-qr"))
-        return args == QStringList{QStringLiteral("--meta")};
     // Privacy & Security > Disk Encryption (ADR-0045 OC-8): the block devices as JSON, with what holds each mount point.
     if (program == QLatin1String("lsblk"))
         return args == QStringList{QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")};
@@ -168,6 +163,14 @@ bool isReadOnlyQuery(const QStringList &argv)
     // probes every i2c bus of the machine the first time (ddcutil detect), and a dev session's outputs are the nested
     // compositor's, which no display answers for: a dev session never asks the owner's displays (Displays shows no slider there).
     return false;
+}
+
+bool isPrivateQuery(const QStringList &argv)
+{
+    // omarchy-network-qr --meta: the current Wi-Fi network's QR code as a matrix of 0 and 1 after one "meta" line (nmcli reads,
+    // the secret through NetworkManager's own permission check, then qrencode); without an interface argument Omarchy picks the
+    // device of the default route, else the first connected Wi-Fi device, and its meta line names the network it encoded.
+    return argv == QStringList{QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")};
 }
 
 bool isPrinterName(const QString &name)

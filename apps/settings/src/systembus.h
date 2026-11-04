@@ -158,10 +158,12 @@ bool isFingerName(const QString &s);
 // (the caller's own user), EnrollStart(finger) (fprintd asks polkit, net.reactivated.fprint.device.enroll), then every status
 // fprintd sends goes to `progress` (on the job's thread) until one says done; EnrollStop and Release always follow a
 // successful EnrollStart and Claim. `stopped` is asked every quarter of a second: true ends the enrolment ("enroll-stopped").
-// No status for `idleMs` ends it too ("timed out"). Returns "" when fprintd said enroll-completed, else fprintd's final status
-// (enroll-failed, enroll-data-full, enroll-disconnected, enroll-unknown-error, enroll-duplicate) or the reason of a failed call.
+// No status for `idleMs` ends it too ("timed out"), and so does `totalMs` after EnrollStart answered whatever the reader sends
+// (someone else's touches cannot keep a forgotten enrolment going; security review of ADR-0045, L-5). Returns "" when fprintd
+// said enroll-completed, else fprintd's final status (enroll-failed, enroll-data-full, enroll-disconnected,
+// enroll-unknown-error, enroll-duplicate) or the reason of a failed call.
 QString enrollFinger(BusCaller &bus, const QString &finger, const std::function<void(const QString &)> &progress, const std::function<bool()> &stopped,
-                     int idleMs);
+                     int idleMs, int totalMs = 300000);
 
 // One action as the pages ask for it: {"op": "...", ...}; returns "" on success, else the reason. Invalid values are refused
 // here (mac, uuid and SSID shapes, booleans), whatever the QML sent. Ops:
@@ -196,15 +198,18 @@ QString enrollFinger(BusCaller &bus, const QString &finger, const std::function<
 // amendment of 2026-11-04):
 //   ssh.enable {on}             systemd's EnableUnitFiles ["sshd.service"] then StartUnit "sshd.service" (on), StopUnit then
 //                               DisableUnitFiles (off): that one unit, its name never taken from the page
-//                               (org.freedesktop.systemd1.manage-unit-files, manage-units)
+//                               (org.freedesktop.systemd1.manage-unit-files, manage-units). On is refused unless `sshSetUpFile`
+//                               (Omarchy's /etc/ssh/sshd_config.d/10-omarchy-hardening.conf, a test's file in the tests) is a file
 //   disk.passphrase {old, new}  UDisks2's Encrypted.ChangePassphrase(old, new, {}) on the LUKS device that holds the root file
 //                               system, found here again (diskState), never named by the page; each passphrase 1 to 512
 //                               characters without NUL (org.freedesktop.udisks2.encrypted-change-passphrase-system). The
-//                               passphrases are never logged and never part of an answer
+//                               passphrases are never logged and never part of an answer; no answer in time is "the disk did
+//                               not answer in time" (it may have changed), never a refusal
 //   fprint.enroll {finger}      enrollFinger without progress (the Backend runs it with its progress and stop)
 //   fprint.delete {finger}      fprintd's Claim, DeleteEnrolledFinger(finger), Release (net.reactivated.fprint.device.enroll)
 // `ownDirs`: the user's unit directories (user.enable acts only on a unit listed there, userUnits).
-QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs = {});
+QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs = {},
+                  const QString &sshSetUpFile = QStringLiteral("/etc/ssh/sshd_config.d/10-omarchy-hardening.conf"));
 
 // wifi.connectSecure's wait for the connection NetworkManager activates (`active`, from AddAndActivateConnection, with its new
 // profile `profile`), its State read every `pollMs` for `deadlineMs` at most: "" once it is up (2). One that went down (3, 4) or

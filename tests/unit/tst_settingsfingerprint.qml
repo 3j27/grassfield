@@ -252,6 +252,7 @@ TestCase {
         sheet.confirm();
         verify(!sheet.shown);
         compare(ended, 1);
+        compare(t.backend.stops, 1, "Done stops too (a no-op when nothing runs): no job outlives the sheet");
         // A failure from fprintd: Try Again starts over with the same finger, the sheet stays.
         sheet.openFor("left-thumb", 3);
         t.backend.progress("fprint.enroll", "enroll-data-full");
@@ -265,7 +266,7 @@ TestCase {
         compare(t.backend.busActions[t.backend.busActions.length - 1].op, {op: "fprint.enroll", finger: "left-thumb"});
         // Cancel while it runs: fprintd is told to stop.
         sheet.cancel();
-        compare(t.backend.stops, 1);
+        compare(t.backend.stops, 2);
         verify(!sheet.shown);
         compare(ended, 2);
         // The late answer of the stopped enrolment changes nothing.

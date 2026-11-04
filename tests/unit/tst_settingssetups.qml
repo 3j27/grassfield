@@ -87,6 +87,26 @@ TestCase {
         compare(Setups.sshCommand("", "host"), "");
         compare(Setups.sshCommand("a b", "host"), "");
         compare(Setups.sshCommand("chapdel", "host\nx"), "");
+        // On when it starts with the computer or runs now (started by hand, enabled-runtime): security review L-3.
+        verify(Setups.remoteLoginOn(on));
+        verify(Setups.remoteLoginOn({installed: true, enabled: false, active: true}));
+        verify(Setups.remoteLoginOn({installed: true, enabled: true, active: false}));
+        verify(!Setups.remoteLoginOn(off));
+        verify(!Setups.remoteLoginOn(null));
+    }
+
+    // The start-up disk's password is typed with the console's layout (security review L-2).
+    function test_startupLayout() {
+        compare(Setups.startupLayout("KEYMAP=fr-latin9\nXKBLAYOUT=fr\nXKBVARIANT=\n"), {keymap: "fr-latin9", layout: "fr", variant: ""});
+        compare(Setups.startupLayout("KEYMAP=de-latin1\n"), {keymap: "de-latin1", layout: "de", variant: ""}, "no XKB line: KEYMAP's name");
+        compare(Setups.startupLayout("XKBLAYOUT=\"us,fr\"\nXKBVARIANT=\"intl,\"\n"), {keymap: "", layout: "us", variant: "intl"}, "the first layout");
+        compare(Setups.startupLayout(""), {keymap: "", layout: "us", variant: ""});
+        compare(Setups.startupLayout("KEYMAP=../../x\n").layout, "us");
+        const fr = Setups.startupLayout("KEYMAP=fr\nXKBLAYOUT=fr\n");
+        verify(!Setups.layoutDiffers(fr, {layout: "fr", variant: ""}));
+        verify(Setups.layoutDiffers(fr, {layout: "us", variant: ""}));
+        verify(Setups.layoutDiffers(fr, {layout: "fr", variant: "bepo"}));
+        verify(!Setups.layoutDiffers(fr, null));
     }
 
     function test_diskEncryption() {
@@ -325,6 +345,14 @@ TestCase {
         s.backend.finished("sharing.state", true, JSON.stringify({installed: true, unitFileState: "enabled", active: true}));
         verify(page.on);
         compare(page.sshLine, "ssh chapdel@chapdels-laptop");
+        const row = find(page, i => i.title === "Remote Login" && i.subtitle !== undefined);
+        compare(row.subtitle, "");
+        // Running without starting with the computer: On, and said so (security review L-3); turning it off is systemd's.
+        s.backend.finished("sharing.state", true, JSON.stringify({installed: true, unitFileState: "disabled", active: true}));
+        verify(page.on);
+        compare(row.subtitle, "Running, but not started with the computer.");
+        page.setRemoteLogin(false);
+        compare(s.backend.busActions[1].op, {op: "ssh.enable", on: false});
         // A dev session sends nothing.
         const d = service(true, {"/etc/ssh/sshd_config.d/10-omarchy-hardening.conf": "x"});
         const devPage = createTemporaryObject(sharingComp, testCase, {backend: d.backend, system: d.system});
@@ -411,8 +439,38 @@ TestCase {
         sheet.confirm();
         s.backend.finished("disk.act", true, "");
         verify(!sheet.shown, "closed once changed");
+        // No answer in time is never "not changed" (security review L-1): from UDisks2, or the jobs' own limit.
+        for (const late of ["the disk did not answer in time", "timed out"]) {
+            sheet.openSheet();
+            fields[0].text = "x";
+            fields[1].text = "y";
+            fields[2].text = "y";
+            sheet.confirm();
+            s.backend.failed("disk.act", late);
+            s.backend.finished("disk.act", false, "");
+            compare(sheet.errorText, "The disk didn't answer in time. The password may have changed: try the new one first.", late);
+            sheet.cancel();
+        }
     }
 
+    // The keyboard layout the password is typed with at start-up, and a warning when the one in use is another (L-2).
+    function test_diskPasswordLayout() {
+        const s = service(false, {"/etc/vconsole.conf": "KEYMAP=fr-latin9\nXKBLAYOUT=fr\n",
+            "/usr/share/X11/xkb/rules/base.lst": "! layout\n  us              English (US)\n  fr              French\n"});
+        const sheet = createTemporaryObject(diskComp, testCase, {system: s.system, backend: s.backend});
+        const line = () => find(sheet, i => i.text !== undefined && String(i.text).indexOf("When the computer starts") === 0);
+        sheet.openSheet();
+        verify(!sheet.layoutDiffers, "no Settings choice: the session's layout, the console's");
+        compare(line().text, "When the computer starts, this password is typed with the start-up keyboard layout, French (fr-latin9).");
+        sheet.cancel();
+        s.backend.files = Object.assign({}, s.backend.files, {"/home/u/.config/grassfield/keyboard.lua": "return {\n  kb_layout = \"us,fr\",\n}\n"});
+        sheet.openSheet();
+        verify(sheet.layoutDiffers);
+        verify(line().text.indexOf("not with English (US), the one in use now") >= 0, line().text);
+    }
+
+    // The Wi-Fi code encodes the password: no Share Network… in a dev session (security review M-2; the Backend refuses the
+    // query there too).
     function test_shareNetworkSheet() {
         const s = service(false, {});
         const sheet = createTemporaryObject(shareComp, testCase, {backend: s.backend});

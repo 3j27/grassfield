@@ -150,6 +150,27 @@ Window {
         root.canMinimize = WindowActions.minimizeAvailable(file.exists && file.ok ? file.text : "");
     }
 
+    // The window goes away, closed (Ctrl+W, its close light: src/main.cpp only hides it, and the app lives on while About This
+    // Computer shows) or hidden any other way: what a sheet holds that must not outlive it ends now (security review of
+    // ADR-0045, M-1). A fingerprint enrolment stops (fprintd releases the reader: nobody else's finger can be enrolled as the
+    // owner's), the disk password's fields are emptied, the Wi-Fi code (it encodes the password) is dropped.
+    function endPrivateSheets(): void {
+        if (fingerprintEnroll.shown)
+            fingerprintEnroll.cancel();
+        root.backend.stopEnroll();
+        if (diskPassword.shown)
+            diskPassword.cancel();
+        diskPassword.clearFields();
+        if (shareNetwork.shown)
+            shareNetwork.close();
+    }
+
+    onClosing: root.endPrivateSheets()
+    onVisibleChanged: {
+        if (!root.visible)
+            root.endPrivateSheets();
+    }
+
     Component.onCompleted: {
         root.readPointers();
         root.navState = NavHistory.start(root.selectedId);
@@ -880,10 +901,12 @@ Window {
         id: networkDetails
         onForgetRequested: net => forgetNetwork.openFor(net)
         onShareRequested: net => shareNetwork.openFor(net)
-        // Share Network… where Omarchy's omarchy-network-qr is installed, looked for when the sheet opens (ADR-0045 OC-10).
+        // Share Network… where Omarchy's omarchy-network-qr is installed, looked for when the sheet opens (ADR-0045 OC-10); never
+        // in a dev session, whose Wi-Fi pane shows the owner's real network (its code would draw the owner's password into the
+        // evidence screenshots; the Backend refuses the query there too: security review of ADR-0045, M-2).
         onShownChanged: {
             if (networkDetails.shown)
-                networkDetails.canShare = root.backend.hasCommand("omarchy-network-qr");
+                networkDetails.canShare = !sys.dev && root.backend.hasCommand("omarchy-network-qr");
         }
     }
 

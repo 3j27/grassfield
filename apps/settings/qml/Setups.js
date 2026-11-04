@@ -66,6 +66,12 @@ var FILES = {
 
 // ---- Remote Login (OC-7) -------------------------------------------------------------------------------------------
 
+// Remote Login reads On when the server starts with the computer (unit file "enabled") or runs now (started another way: by
+// hand, "enabled-runtime", a link): the switch then turns it off (security review of ADR-0045, L-3).
+function remoteLoginOn(sharing) {
+    return sharing !== null && sharing !== undefined && (sharing.enabled || sharing.active);
+}
+
 // `sharing.state` (systembus.h sharingState): {installed, enabled (unit file state "enabled"), active}; null when not that.
 function parseSharing(text) {
     let j;
@@ -167,6 +173,37 @@ function passwordRoute(disk) {
 function passwordsReady(current, next, verify) {
     const c = String(current || ""), n = String(next || ""), v = String(verify || "");
     return c !== "" && n !== "" && n === v && c.length <= 512 && n.length <= 512 && c.indexOf("\u0000") < 0 && n.indexOf("\u0000") < 0;
+}
+
+// The keyboard layout the start-up disk's password is typed with (security review of ADR-0045, L-2): the console's, from
+// /etc/vconsole.conf, whose KEYMAP Omarchy's initramfs loads before it asks for the password (systemd writes XKBLAYOUT beside
+// it, the same layout under its XKB name). {keymap, layout, variant}: keymap as written ("fr-latin9"; "" when absent), layout and
+// variant XKBLAYOUT's and XKBVARIANT's first, else KEYMAP's name up to its first "-" ("fr-latin9" -> "fr"), else "us".
+function startupLayout(vconsoleText) {
+    const value = key => {
+        for (const line of String(vconsoleText || "").split("\n")) {
+            const m = /^\s*([A-Za-z_]+)\s*=\s*"?([^"#\s]*)"?/.exec(line);
+            if (m && m[1] === key)
+                return m[2];
+        }
+        return "";
+    };
+    const keymap = value("KEYMAP");
+    const xkb = value("XKBLAYOUT").split(",")[0];
+    const variant = value("XKBVARIANT").split(",")[0];
+    const fromKeymap = keymap.split("-")[0];
+    const name = s => /^[a-z]{2,8}$/.test(s);
+    if (name(xkb))
+        return {keymap: keymap, layout: xkb, variant: /^[A-Za-z0-9_-]{1,40}$/.test(variant) ? variant : ""};
+    return {keymap: keymap, layout: name(fromKeymap) ? fromKeymap : "us", variant: ""};
+}
+
+// Whether the input source in use (`current`: the first of Settings > Keyboard's sources, {layout, variant}) types otherwise
+// than the start-up layout: a password chosen with it may not be typeable when the computer starts.
+function layoutDiffers(startup, current) {
+    if (!startup || !current)
+        return false;
+    return current.layout !== startup.layout || (current.variant || "") !== (startup.variant || "");
 }
 
 // ---- Hibernation (OC-9) --------------------------------------------------------------------------------------------

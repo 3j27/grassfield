@@ -19,13 +19,19 @@ bool devSession();
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
 //   /usr/lib/grassfield/grassfield-channel-set (no argument: it prints the channel)            Software Update pane
-//   omarchy-hw-fingerprint, omarchy-hibernation-available (no argument), omarchy-network-qr --meta: Omarchy's read-only checks
+//   omarchy-hw-fingerprint, omarchy-hibernation-available (no argument): Omarchy's read-only checks (ADR-0045 OC-6, OC-9)
 //   lsblk -J -o NAME,TYPE,FSTYPE,MOUNTPOINTS                                                    Privacy & Security > Disk Encryption
 // Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030), never
 // omarchy-brightness-display-ddc <connector> (Displays reads an external display's level only in a real session: a dev session
-// never asks the owner's displays; it writes Omarchy's cache under $XDG_RUNTIME_DIR and probes the i2c buses, ADR-0045 OC-4).
-// Backend::query and Backend::run both use it.
+// never asks the owner's displays; it writes Omarchy's cache under $XDG_RUNTIME_DIR and probes the i2c buses, ADR-0045 OC-4),
+// never omarchy-network-qr (isPrivateQuery). Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
+
+// A query that writes nothing but answers with a secret, run only in a real session (Backend::readOnlyQuery, never in a dev
+// session, never by run()): exactly `omarchy-network-qr --meta`, Wi-Fi > Details > Share Network… (ADR-0045 OC-10), whose matrix
+// encodes the Wi-Fi password. A dev session's Wi-Fi pane reads the owner's real NetworkManager, and its screenshots are
+// committed as evidence: it never draws the owner's password (security review of ADR-0045, M-2).
+bool isPrivateQuery(const QStringList &argv);
 
 // The du arguments of the Storage pane: exactly -s -x --block-size=1 --, then 1 to 16 clean absolute paths inside the home.
 bool isFolderSizeQuery(const QStringList &args);

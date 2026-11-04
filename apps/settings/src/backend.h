@@ -132,7 +132,8 @@ public:
     // which a page shown again asks for while they run).
     Q_INVOKABLE void query(const QStringList &argv, const QString &tag, int timeoutMs = 5000, bool shared = false);
     // query() held to systemguard.h::isReadOnlyQuery in every session, as run() is: About's lspci and pacman -Q (the re-review
-    // of c6cf328 kept that backstop when they left run() for the GUI thread's sake). Anything else is refused (logged,
+    // of c6cf328 kept that backstop when they left run() for the GUI thread's sake); and, in a real session only, to
+    // isPrivateQuery (Share Network's QR code, ADR-0045 OC-10: never in a dev session). Anything else is refused (logged,
     // finished(tag, false)).
     Q_INVOKABLE void readOnlyQuery(const QStringList &argv, const QString &tag, int timeoutMs = 5000, bool shared = false);
     // State-changing action (Wi-Fi, Bluetooth, volume). Only nmcli, bluetoothctl and wpctl run. In a dev session

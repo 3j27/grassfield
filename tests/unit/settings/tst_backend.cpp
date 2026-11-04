@@ -245,6 +245,41 @@ TEST_F(BackendTest, AReadOnlyQueryTakesOnlyTheAllowListInARealSession)
     EXPECT_EQ(runs(QStringLiteral("gf-fake-query")), 1);
 }
 
+// Share Network's QR code (ADR-0045 OC-10) encodes the Wi-Fi password: readOnlyQuery runs it in a real session only, a dev
+// session (whose Wi-Fi pane reads the owner's real NetworkManager) never (security review of ADR-0045, M-2), and run() never.
+TEST_F(BackendTest, TheWifiCodeRunsInARealSessionOnly)
+{
+    writeRecorder(QStringLiteral("omarchy-network-qr"), "meta");
+    const QStringList code{QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")};
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    backend.readOnlyQuery(code, QStringLiteral("wifi.qr"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("wifi.qr")) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(QStringLiteral("wifi.qr")));
+    EXPECT_EQ(backend.run(code), QString());
+    backend.readOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta"), QStringLiteral("wlan0")}, QStringLiteral("stray"));
+    EXPECT_EQ(seen.finished.value(QStringLiteral("stray")), 1);
+    EXPECT_FALSE(seen.ok.value(QStringLiteral("stray")));
+    spinUntil([] { return false; }, 300);
+    EXPECT_EQ(recorded(QStringLiteral("omarchy-network-qr")).size(), 1);
+
+    EnvGuard env{"GRASSFIELD_DEV", "GRASSFIELD_SESSION"};
+    qputenv("GRASSFIELD_DEV", "1");
+    qunsetenv("GRASSFIELD_SESSION");
+    Backend dev;
+    Answers devSeen;
+    devSeen.listen(dev);
+    dev.readOnlyQuery(code, QStringLiteral("wifi.qr"));
+    EXPECT_EQ(devSeen.finished.value(QStringLiteral("wifi.qr")), 1); // refused at once
+    EXPECT_FALSE(devSeen.ok.value(QStringLiteral("wifi.qr")));
+    dev.query(code, QStringLiteral("wifi.qr.plain"));
+    EXPECT_EQ(devSeen.finished.value(QStringLiteral("wifi.qr.plain")), 1);
+    EXPECT_FALSE(devSeen.ok.value(QStringLiteral("wifi.qr.plain")));
+    spinUntil([] { return false; }, 300);
+    EXPECT_EQ(recorded(QStringLiteral("omarchy-network-qr")).size(), 1) << "nothing more ran in the dev session";
+}
+
 // ---- actions: one per tag while it may wait for a password ----
 
 // Language & Region shown again while Omarchy's prompt is up (omarchy-language may wait for pkexec) cannot start a second
