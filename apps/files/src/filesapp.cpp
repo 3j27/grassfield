@@ -3019,6 +3019,52 @@ void FilesApp::publishKnownTags()
     m_places->setTags(m_knownTags);
 }
 
+void FilesApp::followAmounts(KJob *tracked, KJob *source)
+{
+    connect(source, &KJob::processedAmountChanged, this, [this, tracked](KJob *, KJob::Unit unit, qulonglong amount) {
+        auto it = m_progress.find(tracked);
+        if (it != m_progress.end() && unit == KJob::Bytes) {
+            it->processed = amount;
+            if (!m_progressTimer.isActive())
+                m_progressTimer.start();
+        }
+    });
+    connect(source, &KJob::totalAmountChanged, this, [this, tracked](KJob *, KJob::Unit unit, qulonglong amount) {
+        auto it = m_progress.find(tracked);
+        if (it != m_progress.end() && unit == KJob::Bytes)
+            it->total = amount;
+    });
+    connect(source, &KJob::speed, this, [this, tracked](KJob *, unsigned long speed) {
+        auto it = m_progress.find(tracked);
+        if (it != m_progress.end())
+            it->speed = speed;
+    });
+    connect(source, &KJob::percentChanged, this, [this, tracked](KJob *, unsigned long percent) {
+        auto it = m_progress.find(tracked);
+        if (it != m_progress.end()) {
+            it->percent = int(percent);
+            if (!m_progressTimer.isActive())
+                m_progressTimer.start();
+        }
+    });
+}
+
+void FilesApp::forwardSubjobAmounts(const QPointer<KJob> &job, int tries)
+{
+    // The paste starts its copy or move from the event loop: look for it for two seconds (a paste that is a rename ends
+    // before and has none).
+    if (!job || !m_progress.contains(job))
+        return;
+    // KCompositeJob::addSubjob makes the subjob its child.
+    const auto subs = job->findChildren<KIO::CopyJob *>(Qt::FindDirectChildrenOnly);
+    if (!subs.isEmpty()) {
+        followAmounts(job, subs.first());
+        return;
+    }
+    if (tries > 0)
+        QTimer::singleShot(50, this, [this, job, tries] { forwardSubjobAmounts(job, tries - 1); });
+}
+
 void FilesApp::track(KJob *job, const QString &activity, const QString &verb, const QList<QUrl> &sources, const QUrl &destination)
 {
     m_jobs.append(job);
@@ -3052,32 +3098,10 @@ void FilesApp::track(KJob *job, const QString &activity, const QString &verb, co
         if (!m_progressTimer.isActive())
             m_progressTimer.start();
     });
-    connect(job, &KJob::processedAmountChanged, this, [this, job](KJob *, KJob::Unit unit, qulonglong amount) {
-        auto it = m_progress.find(job);
-        if (it != m_progress.end() && unit == KJob::Bytes) {
-            it->processed = amount;
-            if (!m_progressTimer.isActive())
-                m_progressTimer.start();
-        }
-    });
-    connect(job, &KJob::totalAmountChanged, this, [this, job](KJob *, KJob::Unit unit, qulonglong amount) {
-        auto it = m_progress.find(job);
-        if (it != m_progress.end() && unit == KJob::Bytes)
-            it->total = amount;
-    });
-    connect(job, &KJob::speed, this, [this, job](KJob *, unsigned long speed) {
-        auto it = m_progress.find(job);
-        if (it != m_progress.end())
-            it->speed = speed;
-    });
-    connect(job, &KJob::percentChanged, this, [this, job](KJob *, unsigned long percent) {
-        auto it = m_progress.find(job);
-        if (it != m_progress.end()) {
-            it->percent = int(percent);
-            if (!m_progressTimer.isActive())
-                m_progressTimer.start();
-        }
-    });
+    followAmounts(job, job);
+    // A paste is a job of its own that forwards no amounts (KIO::PasteJob): the copy or move it runs inside does.
+    if (!qobject_cast<KIO::CopyJob *>(job))
+        forwardSubjobAmounts(job, 40);
     connect(job, &QObject::destroyed, this, [this, job] {
         m_progress.remove(job);
         publishJobs();

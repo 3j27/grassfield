@@ -520,3 +520,45 @@ TEST_F(FileOps, APartlyUndoneCommandKeepsOnlyTheStepsNotUndone)
     EXPECT_FALSE(present(d("a-x.txt")));
     EXPECT_TRUE(app.canRedo());
 }
+
+// The Copy window of a paste (FP-68): KIO's PasteJob forwards no amounts, so a pasted copy showed a bar that stayed empty and no
+// "X of Y" line. Files follows the copy the paste runs inside: the published job tells the bytes, and names the items asked for
+// and the folder they go to.
+TEST_F(FileOps, APastedCopyShowsItsAmountsInTheCopyWindow)
+{
+    FilesApp app(QList<QUrl>{});
+    Told told(app);
+    // Enough files for the job to outlast the 250 ms the window's rows wait before they are published.
+    const QByteArray block(1024, 'x');
+    for (int i = 0; i < 8000; ++i)
+        write(d("src/big/f") + QString::number(i), block);
+    QDir().mkpath(d("dst"));
+    app.copyToClipboard({url(d("src/big"))}, false);
+    app.paste(url(d("dst")), nullptr);
+    bool shown = false;
+    QString detail;
+    QString title;
+    int percent = -1;
+    waitFor([&] {
+        const QVariantList rows = app.jobs();
+        if (!rows.isEmpty()) {
+            const QVariantMap row = rows.first().toMap();
+            const QString line = row.value(QStringLiteral("detail")).toString();
+            // The first row with amounts (a row before the sub-copy is found says "Preparing…").
+            if (line.contains(QStringLiteral(" of "))) {
+                shown = true;
+                detail = line;
+                title = row.value(QStringLiteral("title")).toString();
+                percent = row.value(QStringLiteral("percent")).toInt();
+            }
+        }
+        return shown || (rows.isEmpty() && present(d("dst/big/f7999")));
+    });
+    EXPECT_TRUE(shown) << "the paste published no amounts";
+    EXPECT_TRUE(title.contains(QStringLiteral("big"))) << title.toStdString();
+    EXPECT_TRUE(title.contains(QStringLiteral("dst"))) << title.toStdString();
+    EXPECT_GE(percent, 0);
+    // Let the job end before the scratch folder goes.
+    waitFor([&] { return app.jobs().isEmpty() && present(d("dst/big/f7999")); }, 60000);
+    EXPECT_TRUE(told.messages.isEmpty());
+}

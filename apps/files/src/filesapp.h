@@ -491,6 +491,9 @@ private:
     quint64 m_nextJobId = 1;
     QTimer m_progressTimer;
     void publishJobs();
+    // `source`'s amounts, speed and percent are `tracked`'s (the same job, or the copy a paste runs inside).
+    void followAmounts(KJob *tracked, KJob *source);
+    void forwardSubjobAmounts(const QPointer<KJob> &job, int tries);
     void readAppearance();
     QString configFile() const;
     // Adds `tag` to, or removes it from, each item (TagLogic::applyTag keeps every other entry as stored); reports
