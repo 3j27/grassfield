@@ -22,9 +22,9 @@ iso=$dev/isolated/$iso_name
 log=$dev/files-uninstall-shots-$lang.log
 keys=$root/scripts/dev/keys.sh
 pointer=$root/scripts/dev/pointer.sh
-# Where the first two icons are on the 1920x1080 reference output (set after looking at the first capture).
-alpha_x=${ALPHA_X:-0}
-alpha_y=${ALPHA_Y:-0}
+# Where Alpha is on the 1920x1080 reference output at scale 1.25 (Charlie is CHARLIE_DX to its right), from the first capture; pointer.sh takes logical pixels (the capture divided by 1.25).
+alpha_x=${ALPHA_X:-794}
+alpha_y=${ALPHA_Y:-272}
 
 [[ $lang == en || $lang == fr ]] || { echo "FAIL: language must be en or fr"; exit 1; }
 [[ -x $bin ]] || { echo "FAIL: $bin missing (run apps/files/build-direct.sh)"; exit 1; }
@@ -78,7 +78,7 @@ env DBUS_SESSION_BUS_ADDRESS="$bus" GRASSFIELD_FILES_NO_LAUNCH=1 GRASSFIELD_FILE
   GRASSFIELD_TRANSLATIONS_DIR="$dev/translations" \
   setsid "$root/scripts/dev/isolated.sh" --name "$iso_name" -- "$bin" "grassfield-apps:/" >"$log" 2>&1 </dev/null &
 app=$!
-sleep 6
+sleep 12
 kill -0 "$app" 2>/dev/null || { echo "FAIL: app exited"; cat "$log"; exit 1; }
 shot 1-grid
 if ((alpha_x == 0)); then echo "files_uninstall_shots: set ALPHA_X and ALPHA_Y from the first capture"; exit 0; fi
@@ -95,7 +95,7 @@ shot 3-alert
 "$keys" -k Escape
 sleep 0.5
 # Charlie, part of Omarchy: the same menu with Move to Trash dimmed.
-"$pointer" output "$output" abs "$((alpha_x + ${CHARLIE_DX:-0}))" "$alpha_y" sleep 100 click sleep 300 rclick >/dev/null
+"$pointer" output "$output" abs "$((alpha_x + ${CHARLIE_DX:-355}))" "$alpha_y" sleep 100 click sleep 300 rclick >/dev/null
 sleep 1
 shot 4-menu-omarchy
 "$keys" -k Escape

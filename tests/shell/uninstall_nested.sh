@@ -21,6 +21,8 @@ key() { "$root/scripts/dev/keys.sh" "$@" >/dev/null; sleep 0.25; }
 st() { ipc apps status | jq -r "$1"; }
 
 ipc apps close >/dev/null; ipc overview close >/dev/null; ipc search close >/dev/null; sleep 0.5
+# The panel opens on the focused screen: the pointer goes to the reference output first, the one the captures read.
+"$root/scripts/dev/pointer.sh" output GF-REF abs 960 540 sleep 200 click >/dev/null; sleep 0.5
 ipc apps open >/dev/null; sleep 1.5
 [[ $(st .open) == true ]]; check "the panel is open" $?
 mapfile -t ids < <(ipc apps status | jq -r '.visible[:6][]')
