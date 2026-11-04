@@ -68,8 +68,8 @@ export GRASSFIELD_STORE_FIXTURE=$fx GRASSFIELD_STORE_PKEXEC=$fx/bin/pkexec GRASS
 unset GRASSFIELD_STORE_CATALOG_URL
 
 stop_all() {
-  pkill -f "$store" 2>/dev/null
-  pkill -f "$files" 2>/dev/null
+  pkill -f "^$root/.*build/grassfield-store" 2>/dev/null
+  pkill -f "^$root/.*build/grassfield-files" 2>/dev/null
   "$root/scripts/dev/nested-down.sh" >/dev/null 2>&1
 }
 trap stop_all EXIT
@@ -102,7 +102,7 @@ shot 2-store-alert-from-launcher
 "$keys" -k Escape; sleep 1.5
 shot 3-after-escape
 [[ ! -s $fx/pkexec.log ]]; check "Escape (Cancel) removed nothing" $?
-pkill -f "$store" 2>/dev/null; sleep 1
+pkill -f "^$root/.*build/grassfield-store" 2>/dev/null; sleep 1
 
 # ---- Files: Move to Trash on Kdenlive
 ipc apps close >/dev/null; sleep 0.5
@@ -110,13 +110,13 @@ iso=files-uninstall-store
 work=$dev/isolated/$iso
 rm -rf -- "$work"
 mkdir -p "$work"/{home,config,cache,state,data}
-env -u DISPLAY WAYLAND_DISPLAY="$DEV_NESTED_SOCK" GRASSFIELD_FILES_NO_LAUNCH=1 QML_IMPORT_PATH="$root/ui" QT_QPA_PLATFORM=wayland \
+env -u DISPLAY WAYLAND_DISPLAY="$DEV_NESTED_SOCK" QML_IMPORT_PATH="$root/ui" QT_QPA_PLATFORM=wayland \
   setsid "$root/scripts/dev/isolated.sh" --name "$iso" -- "$files" "grassfield-apps:/" >"$dev/files-uninstall-store.log" 2>&1 </dev/null &
 sleep 14
 shot 4-files-grid
-echo "files grid captured; set KX KY (logical) from .dev/shots/uninstall-store-4-files-grid.png"
-kx=${KX:-0}
-ky=${KY:-0}
+echo "files grid captured (Kdenlive at logical KX KY from this capture)"
+kx=${KX:-1031}
+ky=${KY:-488}
 if ((kx > 0)); then
   "$pointer" output GF-REF abs "$kx" "$ky" sleep 100 click sleep 300 rclick >/dev/null; sleep 1
   shot 5-files-menu
