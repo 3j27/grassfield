@@ -5,7 +5,16 @@
 #include "runmode.h"
 #include "taglogic.h"
 
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusMetaType>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QIcon>
 #include <QStandardPaths>
 
@@ -65,7 +74,44 @@ PlacesModel::PlacesModel(QObject *parent, const DiskProbe::Options &disk)
         m_folderKinds.insert(path, kind);
         relist();
     });
+    qDBusRegisterMetaType<VolumeLogic::InterfaceMap>();
+    qDBusRegisterMetaType<VolumeLogic::ObjectMap>();
+    m_udisksTimer.setSingleShot(true);
+    m_udisksTimer.setInterval(200);
+    connect(&m_udisksTimer, &QTimer::timeout, this, &PlacesModel::refreshUdisks);
+    // A dev session may be given a file of volumes in place of the system bus (the visual tests: no real extra disk, no root).
+    const QString fake = devSession() ? qEnvironmentVariable("GRASSFIELD_FILES_FAKE_VOLUMES") : QString();
+    if (!fake.isEmpty()) {
+        m_udisksFake = true;
+        QFile file(fake);
+        QList<VolumeLogic::Volume> volumes;
+        if (file.open(QIODevice::ReadOnly)) {
+            for (const QJsonValue &v : QJsonDocument::fromJson(file.readAll()).array()) {
+                const QJsonObject o = v.toObject();
+                VolumeLogic::Volume volume;
+                volume.path = o.value(QLatin1String("path")).toString();
+                volume.device = o.value(QLatin1String("device")).toString();
+                volume.size = quint64(o.value(QLatin1String("size")).toDouble());
+                volume.name = VolumeLogic::volumeName(o.value(QLatin1String("label")).toString(), volume.size);
+                volume.icon = o.value(QLatin1String("removable")).toBool() ? QStringLiteral("drive-removable-media") : QStringLiteral("drive-harddisk");
+                volume.mountPoint = o.value(QLatin1String("mountPoint")).toString();
+                volumes.append(volume);
+            }
+        }
+        m_udisks = volumes;
+    } else {
+        QDBusConnection bus = QDBusConnection::systemBus();
+        if (bus.isConnected()) {
+            const QString service = QStringLiteral("org.freedesktop.UDisks2");
+            const QString manager = QStringLiteral("org.freedesktop.DBus.ObjectManager");
+            bus.connect(service, QStringLiteral("/org/freedesktop/UDisks2"), manager, QStringLiteral("InterfacesAdded"), this, SLOT(onUdisksSignal(QDBusMessage)));
+            bus.connect(service, QStringLiteral("/org/freedesktop/UDisks2"), manager, QStringLiteral("InterfacesRemoved"), this, SLOT(onUdisksSignal(QDBusMessage)));
+            bus.connect(service, QString(), QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"), this, SLOT(onUdisksSignal(QDBusMessage)));
+        }
+    }
     rebuild();
+    if (!m_udisksFake)
+        refreshUdisks();
     auto *notifier = Solid::DeviceNotifier::instance();
     connect(notifier, &Solid::DeviceNotifier::deviceAdded, this, &PlacesModel::rebuild);
     connect(notifier, &Solid::DeviceNotifier::deviceRemoved, this, &PlacesModel::rebuild);
@@ -232,6 +278,7 @@ void PlacesModel::relist()
 QList<PlacesModel::Place> PlacesModel::devicePlaces()
 {
     QList<Place> out;
+    QSet<QString> listed;
     const QList<Solid::Device> devices = Solid::Device::listFromType(Solid::DeviceInterface::StorageAccess);
     for (const Solid::Device &device : devices) {
         const auto *access = device.as<Solid::StorageAccess>();
@@ -251,10 +298,93 @@ QList<PlacesModel::Place> PlacesModel::devicePlaces()
         p.kind = QStringLiteral("volume");
         p.ejectable = p.mounted && drive && (drive->isRemovable() || drive->isHotpluggable());
         out.append(p);
+        listed.insert(p.udi);
         // Follow mounts and unmounts done elsewhere.
         connect(access, &Solid::StorageAccess::accessibilityChanged, this, &PlacesModel::rebuild, Qt::UniqueConnection);
     }
+    // The internal drives' filesystems (and any other udisks2 volume) Solid does not list.
+    for (const VolumeLogic::Volume &volume : std::as_const(m_udisks)) {
+        if (listed.contains(volume.path))
+            continue;
+        Place p;
+        p.section = QStringLiteral("locations");
+        p.name = volume.name;
+        p.udi = volume.path;
+        p.mounted = !volume.mountPoint.isEmpty();
+        p.url = p.mounted ? QUrl::fromLocalFile(volume.mountPoint) : QUrl();
+        p.iconName = symbolic(volume.icon, symbolic(QStringLiteral("drive-removable-media"), QStringLiteral("folder-symbolic")));
+        p.kind = QStringLiteral("volume");
+        p.udisks = true;
+        out.append(p);
+    }
     return out;
+}
+
+void PlacesModel::setUdisksVolumes(const QList<VolumeLogic::Volume> &volumes)
+{
+    if (volumes == m_udisks)
+        return;
+    m_udisks = volumes;
+    relist();
+}
+
+void PlacesModel::setUdisksTree(const VolumeLogic::ObjectMap &tree)
+{
+    setUdisksVolumes(VolumeLogic::volumes(tree));
+}
+
+void PlacesModel::onUdisksSignal(const QDBusMessage &message)
+{
+    if (message.member() == QLatin1String("PropertiesChanged")) {
+        // Only what changes a volume: its filesystem (mount points), its block device (label, type) or its partition.
+        const QString interface = message.arguments().value(0).toString();
+        if (!interface.endsWith(QLatin1String(".Filesystem")) && !interface.endsWith(QLatin1String(".Block")) && !interface.endsWith(QLatin1String(".Partition")))
+            return;
+    }
+    m_udisksTimer.start();
+}
+
+void PlacesModel::refreshUdisks()
+{
+    if (m_udisksFake)
+        return;
+    QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.UDisks2"), QStringLiteral("/org/freedesktop/UDisks2"),
+                                                       QStringLiteral("org.freedesktop.DBus.ObjectManager"), QStringLiteral("GetManagedObjects"));
+    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        const QDBusPendingReply<VolumeLogic::ObjectMap> reply = *w;
+        // No udisks2 (or no system bus): the list stays what Solid knows.
+        if (reply.isError())
+            return;
+        setUdisksTree(reply.value());
+    });
+}
+
+void PlacesModel::mountUdisks(const QString &path)
+{
+    // Filesystem.Mount with no options: udisks2 picks the mount point under /run/media/<user>, and asks polkit, which our own
+    // session agent answers when the disk is a system one. Never anything but a mount.
+    QDBusMessage call = QDBusMessage::createMethodCall(QStringLiteral("org.freedesktop.UDisks2"), path, QStringLiteral("org.freedesktop.UDisks2.Filesystem"),
+                                                       QStringLiteral("Mount"));
+    call << QVariantMap();
+    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, path](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        const QDBusPendingReply<QString> reply = *w;
+        setBusy(path, false);
+        if (reply.isError()) {
+            // "Already mounted" is not a failure: the list was behind.
+            if (reply.error().name() == QLatin1String("org.freedesktop.UDisks2.Error.AlreadyMounted")) {
+                refreshUdisks();
+                return;
+            }
+            emit error(tr("The volume could not be mounted."));
+            return;
+        }
+        refreshUdisks();
+        emit mounted(QUrl::fromLocalFile(reply.value()));
+    });
 }
 
 int PlacesModel::rowCount(const QModelIndex &parent) const
@@ -359,6 +489,15 @@ void PlacesModel::mount(int row)
     if (row < 0 || row >= m_places.size() || m_places[row].udi.isEmpty())
         return;
     const QString udi = m_places[row].udi;
+    if (m_places[row].udisks) {
+        if (m_places[row].mounted)
+            emit mounted(m_places[row].url);
+        else if (!m_udisksFake) {
+            setBusy(udi, true);
+            mountUdisks(udi);
+        }
+        return;
+    }
     Solid::Device device(udi);
     auto *access = device.as<Solid::StorageAccess>();
     if (!access)
@@ -387,6 +526,8 @@ void PlacesModel::mount(int row)
 void PlacesModel::eject(int row)
 {
     if (row < 0 || row >= m_places.size() || m_places[row].udi.isEmpty())
+        return;
+    if (m_places[row].udisks)
         return;
     const QString udi = m_places[row].udi;
     Solid::Device device(udi);

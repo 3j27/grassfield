@@ -62,7 +62,11 @@ selection").
    (Applications always; Go > Applications, Ctrl+Shift+A; whether a folder exists is asked off the GUI thread, and one on a
    mount that does not answer stays listed, dimmed, until it answers, ADR-0035 4b-18); Tags (F16);
    Locations = Computer (`/`), Solid storage volumes (not ignored, filesystem usage) with mount on click and eject
-   (`Solid::StorageAccess::setup/teardown`), Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
+   (`Solid::StorageAccess::setup/teardown`), every other filesystem udisks2 lists (the internal drives' partitions, mounted
+   or not; `VolumeLogic::volumes`: no swap, EFI, boot, reserved or recovery partition, no hint-ignored or hidden one, none
+   mounted on the system's own paths such as `/`, `/boot`, `/home`, `/var`), named by label else by size ("500 GB Volume"),
+   mounted on click by udisks2's `Filesystem.Mount` (polkit through the session's own agent; never a format, a
+   partition or a write; internal volumes have no Eject), the list kept by udisks2's ObjectManager signals, Network (`remote:/`) only when a KIO `smb` or `sftp` worker exists (its
    listing hides kio-extras' "Apple Devices" `afc:` entry, an Apple trademark in the UI, master-prompt §14:
    `FileLogic::hiddenNetworkEntry`),
    Trash (`trash:/`, full/empty icon from a KIO listing). Items accept drops.
@@ -101,7 +105,8 @@ selection").
    opened, link target, owner, group, permissions, access (read only).
 10. F10 Window: tabs (section "Tabs and windows": Ctrl+T, Ctrl+W, Ctrl+Shift+W, Ctrl+Alt+W, Ctrl+Tab, Ctrl+Shift+[ ],
     Ctrl+Shift+T, Ctrl+Alt+Shift+T, middle click, drag), new window (Ctrl+N), back/forward (Ctrl+[ / ],
-    Alt+Left/Right), enclosing folder (Ctrl+Up), open (Ctrl+O, Ctrl+Down), rename (Return, F2), Go to Folder (Ctrl+Shift+G / Ctrl+L:
+    Alt+Left/Right, a mouse's side buttons and the XF86Back / XF86Forward keys: `HistoryButtons.qml`, over every view and the
+    sidebar, in the browser window and the Open and Save panels), enclosing folder (Ctrl+Up), open (Ctrl+O, Ctrl+Down), rename (Return, F2), Go to Folder (Ctrl+Shift+G / Ctrl+L:
     `~`, paths, `trash:/`), Home (Ctrl+Shift+H), reload (Ctrl+R/F5), hidden files (Ctrl+H), search (Ctrl+F),
     context menu (Menu, Shift+F10). Path bar (clickable, drop targets) and status bar ("N items, X available",
     "K of N selected", job progress), both hidden by default (View > Show Path Bar, Show Status Bar; "Views and
