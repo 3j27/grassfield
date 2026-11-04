@@ -332,6 +332,9 @@ FocusScope {
             else if (action === "getInfo")
                 files.showInfo([files.dir]);
             else if (action === "wallpaper")
+                // SINGLE CALL SITE for "Change Wallpaper…" on a display: Settings has no display argument on main, so it opens the
+                // Wallpaper page; `root.screen.name` is the output the right click happened on, to preselect once Settings accepts
+                // a display (feat/main-display-wallpaper-per-display).
                 SettingsApp.openSection("wallpaper");
             else if (action === "editWidgets")
                 Notifications.openWidgetGallery(root.screen ? root.screen.name : "");
