@@ -77,7 +77,7 @@ FocusScope {
     // The Applications location: read-only, opening starts the application.
     readonly property bool isApplications: String(root.url).startsWith("grassfield-apps:")
     // Which applications of that location the Store may uninstall (ADR-0045; the Store's `--removable`, read when the
-    // location opens): "Move to Trash" on one of them is its uninstall, after the same alert as the launcher's.
+    // location opens): "Move to Trash" on one of them hands it to the Store, whose alert is the confirmation.
     readonly property var removableApps: UninstallLogic.parse(root.app.removableText)
     onIsApplicationsChanged: {
         if (root.isApplications)
@@ -547,13 +547,11 @@ FocusScope {
         if (urls.length === 0)
             return;
         if (root.activeFolder.isApplications) {
-            // Finder: moving an app out of Applications to the Trash uninstalls it. Here the Store does, after the alert;
-            // anything it may not remove is refused with the permission message (the location is read-only).
+            // Finder: moving an app out of Applications to the Trash uninstalls it. Here the Store is asked (ADR-0045 D1) and shows
+            // its own alert, the only confirmation; anything it may not remove is refused with the permission message (the
+            // location is read-only).
             if (root.applicationRemovable()) {
-                const id = root.selectedApplicationId();
-                const row = root.activeFolder.selectedRows()[0];
-                root.win.confirm(UninstallLogic.alertTitle(DisplayName.text(root.activeFolder.nameAt(row))), UninstallLogic.alertText(),
-                                 UninstallLogic.deleteLabel(), () => root.app.uninstallApplication(id));
+                root.app.uninstallApplication(root.selectedApplicationId());
                 return;
             }
             root.app.trash(urls);

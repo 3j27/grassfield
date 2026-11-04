@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deleting apps from the Apps panel in the NESTED session (ADR-0045 D6): the icons jiggle, removable apps show the delete badge,
-# its click asks "Delete “App”?" and nothing is removed (the alert is cancelled, Delete is never pressed here). Run it bare with a
+# one that is not removable hands nothing over. The badge's click for a removable app hands the app to the Store (its alert is
+# the only confirmation: tests/apps/uninstall_store_shots.sh), which would start a Store here, so it is not clicked. Run it bare with a
 # nested session up (scripts/dev/nested-up.sh, --ref-scale 1.25 for the captures); skipped without one. The Store's answer is given
 # through the dev-only IPC hook instead of asked, so no pacman, no Store and no package is involved. Captures in .dev/shots/.
 # Exit 0 when every check passes.
@@ -41,14 +42,9 @@ ipc apps edit >/dev/null; sleep 1
 # The badge's click, for a removable app and for one that is not.
 [[ $(ipc apps ask "${ids[2]}") == "not removable" ]]; check "an Omarchy app asks nothing" $?
 [[ $(ipc apps ask "${ids[3]}") == "not removable" ]]; check "a Grassfield app asks nothing" $?
-[[ $(st '.pendingDelete') == "" ]]; check "no alert for them" $?
-[[ $(ipc apps ask "${ids[0]}") == asked ]]; check "a removable app asks" $?
-sleep 1
-[[ $(st .pendingDelete) == "${ids[0]}" ]]; check "the alert is about that app" $?
-"$root/scripts/dev/shot.sh" uninstall-alert >/dev/null && echo "shot .dev/shots/uninstall-alert.png"
-# Esc cancels the alert and nothing is removed, a second Esc ends the jiggle, a third closes the panel.
+# Esc ends the jiggle and the panel stays.
 key -k Escape; sleep 0.5
-[[ $(st .pendingDelete) == "" ]]; check "Esc cancels the alert" $?
+[[ $(st .editing) == false ]]; check "Esc ends the jiggle" $?
 [[ $(st .open) == true ]]; check "the panel stays" $?
 ipc apps close >/dev/null; sleep 0.5
 [[ $(st .editing) == false ]]; check "closing the panel ends the jiggle" $?

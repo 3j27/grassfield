@@ -133,7 +133,6 @@ Scope {
     function hide(): void {
         open = false;
         editing = false;
-        pendingDelete = null;
         viewFirst = -1;
         viewLast = -1;
     }
@@ -250,15 +249,13 @@ Scope {
     }
 
     // ---- deleting apps (ADR-0045; macOS Launchpad's jiggle, x and alert) ------------------------
-    // The Store decides what may be removed and removes it: `grassfield-store --removable` answers once (read when the icons
-    // first jiggle), `grassfield-store --page=uninstall:<entry>` asks it to remove after the alert. Nothing is removed here.
+    // The Store decides what may be removed: `grassfield-store --removable` answers once (read when the icons first jiggle);
+    // `grassfield-store --page=uninstall:<entry>` asks it to open its alert. Nothing is confirmed or removed here.
 
     // True while the icons jiggle (a press held on an icon, or Option): removable apps show the delete badge.
     property bool editing: false
     // {entry: {app, name, block}} from the Store's answer; {} until it came (no badge: fail closed).
     property var removableMap: ({})
-    // The item the alert asks about, null when there is none.
-    property var pendingDelete: null
     // A dev session runs the tree's own build (apps/store/build-direct.sh), a real one the installed Store.
     readonly property string storeProgram: Mode.dev ? (Mode.devValue("STORE_CMD") || Quickshell.shellPath("../.dev/build/grassfield-store")) : "grassfield-store"
 
@@ -276,29 +273,18 @@ Scope {
 
     function stopEditing(): void {
         editing = false;
-        pendingDelete = null;
     }
 
-    // The badge, or Delete… in the context menu: the alert comes first.
-    function requestDelete(item: var): void {
-        if (removableItem(item))
-            pendingDelete = item;
-    }
-
-    function cancelDelete(): void {
-        pendingDelete = null;
-    }
-
-    // Delete in the alert: the Store plans and removes it (its sheet only when the plan says more than the alert did).
-    function confirmDelete(): void {
-        const item = pendingDelete;
+    // The badge's click: the Store is asked, and only asked (`--page=uninstall:<entry>`). Its own alert, in its own window, is the
+    // one confirmation; nothing is removed until Delete is pressed there (ADR-0045 D1). Returns whether it was handed over.
+    function requestDelete(item: var): bool {
         const args = item ? UninstallLogic.storeArguments(item.id) : null;
-        pendingDelete = null;
         if (!args || !removableItem(item))
-            return;
+            return false;
         stopEditing();
         hide();
         Quickshell.execDetached([storeProgram].concat(args));
+        return true;
     }
 
     Process {
@@ -385,12 +371,11 @@ Scope {
             return String(Object.keys(root.removableMap).length);
         }
 
-        // What the delete badge's click does: the alert for that app, when it is removable (dev session only).
+        // What the delete badge's click does: hands that app over to the Store when it is removable (dev session only).
         function ask(id: string): string {
             if (!VisualFixtures.dev)
                 return "refused";
-            root.requestDelete(root.itemById[id]);
-            return root.pendingDelete ? "asked" : "not removable";
+            return root.requestDelete(root.itemById[id]) ? "handed over" : "not removable";
         }
 
         // Test hook (dev session only, VisualFixtures.dev, SEC-04: it returns the typed query): JSON {open, query,
@@ -414,7 +399,6 @@ Scope {
                 panel: root.panel,
                 visible: vis,
                 editing: root.editing,
-                pendingDelete: root.pendingDelete ? root.pendingDelete.id : "",
                 removable: Object.keys(root.removableMap).length
             });
         }

@@ -312,31 +312,6 @@ Variants {
                 }
             }
 
-            // "Delete “App”?" (ADR-0045): the alert over the panel; Delete asks the Store, which plans and removes.
-            Sheet {
-                id: deleteAlert
-
-                title: UninstallLogic.alertTitle(root.controller.pendingDelete ? root.controller.pendingDelete.name : "")
-                message: UninstallLogic.alertText()
-                confirmText: UninstallLogic.deleteLabel()
-                cancelText: UninstallLogic.cancelLabel()
-                destructive: true
-                returnCancels: true
-                onAccepted: root.controller.confirmDelete()
-                onCanceled: root.controller.cancelDelete()
-            }
-
-            Connections {
-                target: root.controller
-
-                function onPendingDeleteChanged(): void {
-                    if (root.controller.pendingDelete)
-                        deleteAlert.open();
-                    else if (deleteAlert.visible)
-                        deleteAlert.close();
-                }
-            }
-
             // Outside the panel: a click closes.
             MouseArea {
                 anchors.fill: parent

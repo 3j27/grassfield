@@ -257,8 +257,8 @@ public:
     Q_INVOKABLE void launchApplication(const QUrl &url);
     // Asks the Store which applications it may uninstall (one run at a time, again at most once a minute), then removableText.
     Q_INVOKABLE void loadRemovableApplications();
-    // Move to Trash on an application, after the alert: `grassfield-store --page=uninstall:<id>.desktop` (the Store plans and
-    // removes it; Files runs nothing else). `id` is an Applications-location id; anything that is not one is refused.
+    // Move to Trash on an application: `grassfield-store --page=uninstall:<id>.desktop`. The Store opens its own alert and removes
+    // only after Delete there; Files asks nothing and runs nothing else. `id` is an Applications-location id; anything that is not one is refused.
     Q_INVOKABLE void uninstallApplication(const QString &id);
     QString removableText() const { return m_removableText; }
     // Glance: starts `grassfield-preview --glance` (detached) for the local regular files among `urls`.

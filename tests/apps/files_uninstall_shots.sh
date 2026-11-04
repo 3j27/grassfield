@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Nested pass (L1) for Move to Trash on an application in Files' Applications location (ADR-0045 D6): three fixture entries,
 # the Store's answer given by the dev-only GRASSFIELD_FILES_REMOVABLE_JSON (Alpha and Bravo removable, Charlie part of Omarchy),
-# the item menu of Alpha with "Move to Trash" enabled and of Charlie with it dimmed, then Alpha's alert "Delete “Alpha”?".
-# Delete is never pressed and nothing is installed or removed: no Store runs, no pacman, GRASSFIELD_FILES_NO_LAUNCH=1.
+# the item menu of Alpha with "Move to Trash" enabled and of Charlie with it dimmed. Files shows no alert of its own: the Store's
+# is the confirmation (tests/apps/uninstall_store_shots.sh). Nothing is installed or removed: no Store runs, no pacman,
+# GRASSFIELD_FILES_NO_LAUNCH=1.
 #
 # Safety: as tests/apps/files_applications_shots.sh (a fixture XDG_DATA_HOME under .dev/files-uninstall-shots, the app through
 # scripts/dev/isolated.sh on a private session bus and the nested Wayland socket only).
 # Requires: scripts/dev/nested-up.sh running (bare command), .dev/build/grassfield-files, dbus-daemon.
-# Usage: tests/apps/files_uninstall_shots.sh [en|fr] [output]   Shots: .dev/shots/files-uninstall-<lang>-*.png
+# Usage: tests/apps/files_uninstall_shots.sh [en|fr] [output]   Shots: .dev/shots/files-uninstall-<lang>-*.png (1-grid, 2-menu-removable, 3-menu-omarchy)
 set -uo pipefail
 
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -88,16 +89,10 @@ sleep 1
 shot 2-menu-removable
 "$keys" -k Escape
 sleep 0.5
-# The alert: File > Move to Trash is Ctrl+Backspace (the selection is Alpha's).
-"$keys" -M ctrl -k BackSpace -m ctrl
-sleep 1.5
-shot 3-alert
-"$keys" -k Escape
-sleep 0.5
 # Charlie, part of Omarchy: the same menu with Move to Trash dimmed.
 "$pointer" output "$output" abs "$((alpha_x + ${CHARLIE_DX:-355}))" "$alpha_y" sleep 100 click sleep 300 rclick >/dev/null
 sleep 1
-shot 4-menu-omarchy
+shot 3-menu-omarchy
 "$keys" -k Escape
 sleep 0.5
 "$keys" -M ctrl -k w -m ctrl

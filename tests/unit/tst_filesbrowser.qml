@@ -585,7 +585,8 @@ TestCase {
     }
 
     // Move to Trash on an application (ADR-0045; Finder: moving an app out of Applications uninstalls it): dimmed until the
-    // Store says it may remove that app, then the alert "Delete “App”?" and, on Delete only, the Store is asked to uninstall.
+    // Store says it may remove that app, then Files only hands the app to the Store (its own alert is the one confirmation:
+    // Files shows none and removes nothing itself).
     function test_applicationsMoveToTrashUninstalls() {
         const files = test.openFiles(false);
         const win = files.windows[0];
@@ -598,26 +599,19 @@ TestCase {
         fakeApp.uninstalled = [];
         const trash = () => tab.itemMenu(folder).find(i => i.id === "trash");
         compare(trash().enabled, false, "the Store has not answered: nothing is offered");
+        tab.trashSelection();
+        compare(fakeApp.uninstalled, [], "nothing is handed over while the Store has not said so");
         fakeApp.removableText = JSON.stringify({version: 1, entries: {"app0.desktop": {app: "x", name: "App 0", block: ""},
                                                                      "app1.desktop": {app: "y", name: "App 1", block: "omarchy"}}});
         compare(trash().enabled, true, "the Store may remove it");
         tab.trashSelection();
-        const sheet = test.shownSheet(win.contentItem);
-        verify(sheet, "the alert is shown");
-        compare(sheet.title, "Delete “App 0”?");
-        compare(sheet.message, "The app is removed from this computer. Its documents and settings in your home folder are kept.");
-        compare(sheet.confirmText, "Delete");
-        compare(fakeApp.uninstalled, [], "nothing runs before Delete");
-        sheet.close();
-        compare(fakeApp.uninstalled, [], "Cancel removes nothing");
-        tab.trashSelection();
-        const again = test.shownSheet(win.contentItem);
-        verify(again);
-        again.confirm();
-        compare(fakeApp.uninstalled, ["app0"], "Delete asks the Store for that application");
-        // An app the Store refuses (Omarchy's own), several, or none selected: dimmed and no alert.
+        compare(test.shownSheet(win.contentItem), null, "Files shows no alert of its own");
+        compare(fakeApp.uninstalled, ["app0"], "the Store is asked for that application, and only asked");
+        // An app the Store refuses (Omarchy's own), several, or none selected: dimmed and nothing handed over.
         folder.selected = [1];
         compare(trash().enabled, false, "part of Omarchy");
+        tab.trashSelection();
+        compare(fakeApp.uninstalled, ["app0"]);
         folder.selected = [0, 1];
         folder.selectedCount = 2;
         compare(trash().enabled, false, "several apps at once are not offered");

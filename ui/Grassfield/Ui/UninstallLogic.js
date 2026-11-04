@@ -2,8 +2,9 @@
 
 // Deleting an app from the launcher and from Files (ADR-0045; macOS: Launchpad's jiggle and its x, Finder's Move to Trash on
 // an app in Applications): the decisions both share, pure (unit-tested by tests/unit/tst_uninstall.qml). The Store decides what
-// may be removed and removes it (`grassfield-store --removable` answers, `grassfield-store --page=uninstall:<entry>` asks);
-// nothing here runs a command or removes anything.
+// may be removed (`grassfield-store --removable` answers) and is the only place that asks and removes: the launcher and Files
+// hand over `grassfield-store --page=uninstall:<entry>`, which opens the Store's own alert. Nothing here runs a command, asks
+// for confirmation or removes anything.
 
 const MAX_TEXT = 4 * 1024 * 1024;
 const ENTRY = /^[A-Za-z0-9][A-Za-z0-9._+@-]{0,200}$/;
@@ -67,6 +68,8 @@ function reason(map, id) {
         return qsTr("Part of Grassfield.");
     case "dependency":
         return qsTr("Installed with another app.");
+    case "protected":
+        return qsTr("Removing it would also remove part of the system.");
     case "notApp":
     case "notFromRepository":
     case "source":
@@ -76,24 +79,6 @@ function reason(map, id) {
         return qsTr("Apps can't be removed in this session.");
     }
     return qsTr("The Store can't remove this app now.");
-}
-
-// The alert (macOS: "Delete “App”?" with Delete and Cancel; its text says what is kept, which is the truth for packages,
-// Flatpaks and their data).
-function alertTitle(name) {
-    return qsTr("Delete “%1”?").arg(name);
-}
-
-function alertText() {
-    return qsTr("The app is removed from this computer. Its documents and settings in your home folder are kept.");
-}
-
-function deleteLabel() {
-    return qsTr("Delete");
-}
-
-function cancelLabel() {
-    return qsTr("Cancel");
 }
 
 // The arguments of the Store that asks for the removal of an entry, null for an id that is not one.

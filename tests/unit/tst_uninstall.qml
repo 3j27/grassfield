@@ -1,10 +1,9 @@
 import QtQuick
 import QtTest
 import "../../ui/Grassfield/Ui/UninstallLogic.js" as Uninstall
-import "../../apps/store/qml/Store.js" as Store
 
 // Deleting an app from the launcher and Files (ADR-0045): the Store's answer read fail-closed, what is removable and why not,
-// the alert's words, the arguments handed to the Store, the jiggle, and when the Store asks nothing more after the alert.
+// the arguments handed to the Store and the jiggle. The only alert is the Store's (tst_storeoperations.qml).
 TestCase {
     name: "Uninstall"
 
@@ -52,13 +51,7 @@ TestCase {
         compare(Uninstall.reason(map, "linux-thing"), "Part of the system.");
         compare(Uninstall.reason(map, "gcr-viewer"), "Installed with another app.");
         compare(Uninstall.reason(map, "nothing"), "The Store does not manage this app.");
-    }
-
-    function test_alertText() {
-        compare(Uninstall.alertTitle("GParted"), "Delete “GParted”?");
-        compare(Uninstall.alertText(), "The app is removed from this computer. Its documents and settings in your home folder are kept.");
-        compare(Uninstall.deleteLabel(), "Delete");
-        compare(Uninstall.cancelLabel(), "Cancel");
+        compare(Uninstall.reason({"x": {app: "x", name: "X", block: "protected"}}, "x"), "Removing it would also remove part of the system.");
     }
 
     function test_storeArguments() {
@@ -79,16 +72,5 @@ TestCase {
         // Periodic, and the icons do not rock together.
         fuzzyCompare(Uninstall.jiggleAngle(10, 4, 2.2, 190), Uninstall.jiggleAngle(200, 4, 2.2, 190), 1e-6);
         verify(Uninstall.jiggleAngle(10, 1, 2.2, 190) !== Uninstall.jiggleAngle(10, 2, 2.2, 190));
-    }
-
-    function test_quietRemoval() {
-        verify(Store.removalIsQuiet({refusal: "", packages: [{name: "gparted"}], dependents: []}));
-        verify(Store.removalIsQuiet({refusal: "", packages: []}));
-        verify(!Store.removalIsQuiet({refusal: "", packages: [{name: "a"}, {name: "orphan"}]}), "a second package: the sheet says so");
-        verify(!Store.removalIsQuiet({refusal: "protected", packages: [{name: "a"}], protected: "glib2"}));
-        verify(!Store.removalIsQuiet({refusal: "", packages: [{name: "a"}], dependents: ["b"]}));
-        verify(!Store.removalIsQuiet({refusal: "", packages: [{name: "a"}], protected: "glib2"}));
-        verify(!Store.removalIsQuiet(null));
-        verify(!Store.removalIsQuiet({}), "no refusal field: not a plan");
     }
 }
