@@ -290,6 +290,11 @@ TestCase {
             fakeApp.launched = fakeApp.launched.concat([String(target)]);
         }
         // The Store's answer to `--removable` (JSON text) and what Files asked it to uninstall (ADR-0045).
+        // FilesApp.trash: the Applications location refuses it with the permission message (nothing is trashed).
+        property var trashRefused: []
+        function trash(urls: var): void {
+            fakeApp.trashRefused = fakeApp.trashRefused.concat(urls.map(u => String(u)));
+        }
         property string removableText: ""
         property int removableLoads: 0
         property var uninstalled: []
