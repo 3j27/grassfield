@@ -138,8 +138,9 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      effective appearance (`shell/services/TerminalTheme.qml`: at each change of Light, Dark or Auto's hours, of the theme
      chosen for it, and once at login; one run at a time after `autoAppearance.terminalSettleMs`; never in a dev session)
      through `grassfield-terminal-theme light|dark` (packaging/bin), which runs Omarchy's `omarchy-theme-set` kept out of the
-     Grassfield session (no `HYPRLAND_INSTANCE_SIGNATURE`, dconf's default profile, the omarchy-shims first in PATH; every side
-     effect: ADR-0045 OC-11 "Implementation note") and nothing when the theme is already Omarchy's. Omarchy's terminals, tmux,
+     Grassfield session (first in PATH the run's own failing `hyprctl` and `pkexec` stand-ins, then the omarchy-shims; no
+     `HYPRLAND_INSTANCE_SIGNATURE` or `SUDO_ASKPASS`; dconf's default profile; every side effect: ADR-0045 OC-11
+     "Implementation note") and nothing when the theme is already Omarchy's. Omarchy's terminals, tmux,
      btop, Helix, Neovim, VS Code, Obsidian and Chromium's colour follow. Reduce Transparency
      (`accessibility.reduceTransparency`) and Reduce Motion (`accessibility.reduceMotion`) are in Accessibility > Display, as on
      macOS. Not built: macOS's Windows section (sidebar icon size, scroll bars, wallpaper tint in windows: no such keys).
@@ -335,9 +336,11 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
 - Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme is one for both sessions, so the Omarchy session follows the
   Grassfield appearance too (its wallpaper included); the footnote says so. Omarchy's theme change is slow (seconds: it
   regenerates its theme files and thumbnails, and may install a VS Code extension from the network), so the terminals follow
-  a moment after the appearance. Omarchy's Chromium colour is a machine policy written through Omarchy's passwordless sudoers
-  rule (`%wheel`); where that rule does not apply (a user outside `wheel`, the rule removed), Omarchy's script asks through
-  pkexec and Grassfield's authorization sheet shows, as Omarchy's own theme switcher would; Cancel leaves Chromium's colour.
+  a moment after the appearance. Chromium's colour follows only with Omarchy's passwordless sudoers rule (`%wheel`, which
+  Omarchy installs): it is a machine policy, and where that rule does not apply (a user outside `wheel`, the rule removed)
+  the helper's own `pkexec` stand-in fails as if pkexec were absent, so no administrator password is ever asked for and
+  Chromium keeps its colour. A user's own Omarchy `theme-set` hook that calls hyprctl gets the helper's failing `hyprctl`
+  stand-in (Grassfield's Hyprland is never reloaded by a theme change).
   GTK apps of this session may show Omarchy's dconf colour scheme for an instant when it changes, before Grassfield's portal
   value (ADR-0035 decision 2b-13). The keys are `terminal.*`, not ADR-0045's `appearance.terminal*` (contract version 1). The
   pop-ups list every theme in both menus (no light/dark filtering). Nested run and screenshot: NOT VERIFIED (cloud session).

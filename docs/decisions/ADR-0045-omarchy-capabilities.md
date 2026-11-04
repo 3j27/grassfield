@@ -156,22 +156,27 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   makes of it: its theme staging, `theme.name`, generated files and background symlink are Omarchy's state, read by nothing of
   Grassfield (shared on purpose); its calls to Omarchy's shell (`applyTheme`, `themeTransition`, the switcher's preload) reach
   the omarchy-shims stand-in, first in PATH and followed by Omarchy's bin directory so that the login shells it starts for its
-  app hooks (`bash -lc`) cannot put that directory before it, and are refused; `omarchy-restart-hyprctl`'s `hyprctl reload`
-  has no `HYPRLAND_INSTANCE_SIGNATURE` and reaches no compositor (ASSUMPTION: Hyprland 0.56.2's hyprctl refuses without it,
-  as earlier releases do); `omarchy-theme-set-gnome`'s gsettings writes (colour scheme, GTK theme, icon theme) go through
+  app hooks (`bash -lc`) cannot put that directory before it, and are refused; before the omarchy-shims in its PATH comes a
+  private folder the helper makes afresh at each run (`$XDG_RUNTIME_DIR/grassfield/terminal-theme-bin`, 0700, refused when
+  it is a link or another user's) with two stand-ins: `hyprctl`, which fails doing nothing, so `omarchy-restart-hyprctl`'s
+  `hyprctl reload` (the chain's only hyprctl call; a user's own `theme-set` hook that calls hyprctl gets the same) never
+  reloads Grassfield's Hyprland, and `HYPRLAND_INSTANCE_SIGNATURE` is removed as well; `omarchy-theme-set-gnome`'s gsettings writes (colour scheme, GTK theme, icon theme) go through
   dconf's default profile to the user database, exactly as in the Omarchy session: ADR-0017's profile shares that writable
   database and only adds read-only defaults with a locked icon theme, so "Omarchy's own database" is the user database
   reached without that lock, and the Grassfield look stays its own (icon theme locked, GTK appearance from Grassfield's portal,
   ADR-0035 D-8; an instant of Omarchy's colour scheme is ADR-0035 decision 2b-13); the terminal reloads (Alacritty's touch,
   Kitty, Ghostty, btop, opencode, Helix signals by name, foot and tmux OSC) and the theme files of Pi, Claude Code, Hermes, T3
-  Code, VS Code/VSCodium/Cursor, Obsidian and the RGB keyboard are the feature itself; the Chromium colour policy goes through
-  Omarchy's passwordless sudoers rule, and only where it does not apply does Omarchy's script ask through pkexec (Grassfield's
-  authorization sheet, Cancel leaves the colour: not neutralised, documented); `omarchy-notification-send` "No background was
+  Code, VS Code/VSCodium/Cursor, Obsidian and the RGB keyboard are the feature itself; the Chromium colour policy
+  (`omarchy-theme-set-browser-policy`) is written through Omarchy's passwordless sudoers rule (`sudo -n -l -l`, then `sudo`
+  only after that listing shows the NOPASSWD grant; no `-A` in the chain, `SUDO_ASKPASS` removed, stdin `/dev/null`), and
+  where that rule does not apply the script's `exec pkexec` finds the second stand-in, `pkexec`, which fails as if absent
+  (127): no administrator password sheet ever appears, and Chromium's colour is left as it was (a known limitation:
+  Chromium's colour follows only with Omarchy's passwordless rule, which Omarchy installs); `omarchy-notification-send` "No background was
   found for theme" (a theme without a background, none of the 22 shipped) is a Grassfield banner (audit O6); the user's own
   `theme-set` hooks run in the same sanitised environment. Nothing restarts or signals grassfield-shell (the signals name
   kitty, ghostty, btop, opencode, helix and tmux panes). The helper also: never runs when the theme is already current, waits
-  for its lock, refuses root, skips silently without Omarchy's commands, refuses without the stand-ins; stdin /dev/null, a
-  process session of its own. Settings: `omarchy-theme-list` in the read-only query allowlist.
+  for its lock, refuses root, skips silently without Omarchy's commands, refuses without the stand-ins or when its private
+  folder is a link or another user's; stdin /dev/null, a process session of its own. Settings: `omarchy-theme-list` in the read-only query allowlist.
 
 ### OC-12 Per-application window rules (priority 3)
 - `config/hypr/grassfield/apps.lua`: Omarchy's `default/hypr/apps/*.lua` rules that still hold in a floating-first session

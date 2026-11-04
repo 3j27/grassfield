@@ -10,8 +10,9 @@ import "TerminalThemeLogic.js" as Logic
 // With terminal.matchAppearance on, each change of the effective appearance (Settings.dark: Light, Dark, Auto at its hours),
 // of the theme chosen for it, and the first reading of grassfield.json at login run
 // `grassfield-terminal-theme light|dark` (packaging/bin), which applies the chosen Omarchy theme with omarchy-theme-set in an
-// environment kept out of this session (no HYPRLAND_INSTANCE_SIGNATURE, Omarchy's dconf profile, the omarchy-shims first in
-// PATH) and does nothing when that theme is already Omarchy's. The decision is TerminalThemeLogic.js.
+// environment kept out of this session (failing hyprctl and pkexec stand-ins and the omarchy-shims first in PATH, no
+// HYPRLAND_INSTANCE_SIGNATURE, dconf's default profile) and does nothing when that theme is already Omarchy's. The decision
+// is TerminalThemeLogic.js.
 //
 // One run at a time, after the inputs stayed unchanged for autoAppearance.terminalSettleMs (Light, Dark, Auto clicked in a
 // row make one run, for the last); a change made while a run goes on is decided when it ends. The helper runs in a scope of
