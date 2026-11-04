@@ -423,7 +423,7 @@ TestCase {
         compare(find(t.win.page, i => i.stop !== undefined && i.visible).Accessible.description, "Waiting for permission…");
     }
 
-    // A hand-over ("--page=uninstall:<entry>", from the launcher or Files, or any D-Bus peer: ADR-0045 D1) only OPENS the Store's own
+    // A hand-over ("--page=uninstall:<entry>", from the launcher or Files, or any D-Bus peer: ADR-0046 D1) only OPENS the Store's own
     // alert: the Store's name and the packages -Rns takes, Delete, Cancel the default. Nothing is removed until Delete is pressed
     // here: Return and Escape cancel, and no path of the hand-over calls uninstall.
     function test_handOverOnlyOpensTheAlert() {

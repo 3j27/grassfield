@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
     // Icons and screenshots come from third parties: every decoder (QML Image included) is bounded to this much memory.
     QImageReader::setAllocationLimit(128);
 
-    // `--removable` (ADR-0045 D1) answers the launcher and Files once and shows no window: offscreen, whatever the session says.
+    // `--removable` (ADR-0046 D1) answers the launcher and Files once and shows no window: offscreen, whatever the session says.
     for (int i = 1; i < argc; ++i) {
         if (qstrcmp(argv[i], "--removable") == 0) {
             qputenv("QT_QPA_PLATFORM", "offscreen");

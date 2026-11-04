@@ -19,7 +19,7 @@ struct DenyList {
     QSet<QString> holdPkg; // pacman's HoldPkg
     // What Grassfield's own packages list as optional dependencies (pacman -Qi "Optional Deps" of every grassfield-*): kio-extras,
     // cmake… Pacman would remove them (nothing requires an optional dependency) and part of Grassfield would stop working
-    // (Files' network places, the plugin rebuild): "Part of Grassfield" (ADR-0045 D3).
+    // (Files' network places, the plugin rebuild): "Part of Grassfield" (ADR-0046 D3).
     QSet<QString> grassfieldOptional;
     bool omarchyRead() const { return !omarchy.isEmpty(); }
 };

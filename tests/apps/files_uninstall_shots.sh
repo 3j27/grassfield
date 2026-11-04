@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nested pass (L1) for Move to Trash on an application in Files' Applications location (ADR-0045 D6): three fixture entries,
+# Nested pass (L1) for Move to Trash on an application in Files' Applications location (ADR-0046 D6): three fixture entries,
 # the Store's answer given by the dev-only GRASSFIELD_FILES_REMOVABLE_JSON (Alpha and Bravo removable, Charlie part of Omarchy),
 # the item menu of Alpha with "Move to Trash" enabled and of Charlie with it dimmed. Files shows no alert of its own: the Store's
 # is the confirmation (tests/apps/uninstall_store_shots.sh). Nothing is installed or removed: no Store runs, no pacman,

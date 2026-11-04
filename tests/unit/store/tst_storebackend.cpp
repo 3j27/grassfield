@@ -279,7 +279,7 @@ TEST(StoreBackend, NoCatalogHostButArchsData)
     EXPECT_EQ(ids(backend.search(QStringLiteral("gimp"))).value(0), QStringLiteral("org.gimp.GIMP"));
 }
 
-// ADR-0045 F1: a repository app the user installed that no catalog or AppStream data describes (Omarchy's repository has no
+// ADR-0046 F1: a repository app the user installed that no catalog or AppStream data describes (Omarchy's repository has no
 // AppStream data) is an app named by its package, with its entry, so that the launcher and Files can remove it; Omarchy's own
 // optional preinstall (aether) is not "Part of Omarchy", one of its base list (btop) is.
 TEST(StoreBackend, AnAppWithoutAppStreamDataIsRemovableByItsEntry)
@@ -332,7 +332,7 @@ TEST(StoreBackend, AnAppWithoutAppStreamDataIsRemovableByItsEntry)
     EXPECT_EQ(byEntry.value(QStringLiteral("kcmx.desktop")).toMap().value(QStringLiteral("block")).toString(), QStringLiteral("grassfield"));
 }
 
-// ADR-0045 D3: with `withPlans` (what `--removable` asks) a removable app whose -Rs plan would be refused is not offered: a package
+// ADR-0046 D3: with `withPlans` (what `--removable` asks) a removable app whose -Rs plan would be refused is not offered: a package
 // something needs ("dependency"), one whose plan takes a protected package ("protected"); a clean plan stays "".
 TEST(StoreBackend, ABadgeNeverLeadsToARefusal)
 {
@@ -1200,7 +1200,7 @@ TEST(StoreBackend, Updates)
     EXPECT_EQ(backend.actions(QStringLiteral("org.gimp.GIMP")).value(QStringLiteral("update")).toString(), QStringLiteral("none"))
         << "a repository app updates with the system, never on its own";
 
-    // The launcher's and Files' question (ADR-0045 D1): the installed apps by application entry, "" blocking nothing.
+    // The launcher's and Files' question (ADR-0046 D1): the installed apps by application entry, "" blocking nothing.
     const QVariantMap byEntry = backend.removalByEntry();
     ASSERT_TRUE(byEntry.contains(QStringLiteral("org.example.Notes.desktop"))) << "an installed Flatpak is listed by its entry";
     const QVariantMap notes = byEntry.value(QStringLiteral("org.example.Notes.desktop")).toMap();

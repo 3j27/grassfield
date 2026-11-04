@@ -218,7 +218,7 @@ public:
     // What the app's buttons may do now: {installed, launcher, get: "" or why not, uninstall: "" or why not} (getBlock,
     // uninstallBlock). Read again with `revision` and `operations`.
     Q_INVOKABLE QVariantMap actions(const QString &id) const;
-    // The installed apps by application entry, for the launcher and Files (ADR-0045 D1): {"<desktop id>.desktop": {app, name,
+    // The installed apps by application entry, for the launcher and Files (ADR-0046 D1): {"<desktop id>.desktop": {app, name,
     // block}}, block "" when "Uninstall…" is offered (uninstallBlock). An app the Store's model does not know is not listed.
     // `withPlans` also runs each removable repository app's -Rs plan (a pacman run each) and says "dependency", "protected" or "plan"
     // for one that would be refused: `--removable` asks, so that a delete badge never ends in a refusal.
@@ -251,7 +251,7 @@ public:
     // The first load; the window calls it once its first frame is up.
     void start();
     // Only the read of what is on this computer (no fetch, no recovery of an earlier operation, no lock check): `--removable`
-    // runs beside a Store that may be running an operation (ADR-0045 D1). loadingChanged says when it is done.
+    // runs beside a Store that may be running an operation (ADR-0046 D1). loadingChanged says when it is done.
     void loadOnly() { run(Job{}); }
 
     // Screenshots on and the Store online: screenshotSource's answer, and the provider's gate (kept current for it, since

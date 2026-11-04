@@ -289,7 +289,7 @@ TestCase {
         function launchApplication(target: url): void {
             fakeApp.launched = fakeApp.launched.concat([String(target)]);
         }
-        // The Store's answer to `--removable` (JSON text) and what Files asked it to uninstall (ADR-0045).
+        // The Store's answer to `--removable` (JSON text) and what Files asked it to uninstall (ADR-0046).
         // FilesApp.trash: the Applications location refuses it with the permission message (nothing is trashed).
         property var trashRefused: []
         function trash(urls: var): void {
@@ -589,7 +589,7 @@ TestCase {
         compare(fakeApp.opened, [String(folder.url)], "the file is opened");
     }
 
-    // Move to Trash on an application (ADR-0045; Finder: moving an app out of Applications uninstalls it): dimmed until the
+    // Move to Trash on an application (ADR-0046; Finder: moving an app out of Applications uninstalls it): dimmed until the
     // Store says it may remove that app, then Files only hands the app to the Store (its own alert is the one confirmation:
     // Files shows none and removes nothing itself).
     function test_applicationsMoveToTrashUninstalls() {

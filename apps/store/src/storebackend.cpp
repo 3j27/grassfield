@@ -214,7 +214,7 @@ DenyList readDenyList()
         deny.holdPkg = parsePackageList(hold.out);
     if (deny.holdPkg.isEmpty())
         deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("glibc")};
-    // What Grassfield's own packages list as optional dependencies (ADR-0045 D3): pacman -Qi of the installed grassfield-*.
+    // What Grassfield's own packages list as optional dependencies (ADR-0046 D3): pacman -Qi of the installed grassfield-*.
     // Unreadable: nothing is removable (the lists are cleared, as when Omarchy's cannot be read).
     const ChildResult installed = runChild(env::pacman(), {QStringLiteral("-Qq")});
     QStringList own;
@@ -411,7 +411,7 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     snap->apps = buildModel(model);
     // Repository apps the user installed that neither our catalog nor Arch's AppStream describe (Omarchy's own repository
     // has no AppStream data: Aether, Cliamp, Omacut…): listed by their package, so that Uninstall… reaches them from the
-    // product page, the launcher and Files (ADR-0045 F1). Only a package installed explicitly that owns an application entry.
+    // product page, the launcher and Files (ADR-0046 F1). Only a package installed explicitly that owns an application entry.
     {
         QSet<QString> listed, ids;
         for (const StoreApp &a : std::as_const(snap->apps)) {
@@ -1974,7 +1974,7 @@ QVariantMap StoreBackend::removalByEntry(bool withPlans) const
             continue;
         const QString name = view::summary(a, m_language).value(QStringLiteral("name")).toString();
         QString block = uninstallBlock(a);
-        // The badge must never lead to a refusal (ADR-0045 D3): a package whose -Rs plan hits a dependency or a protected package
+        // The badge must never lead to a refusal (ADR-0046 D3): a package whose -Rs plan hits a dependency or a protected package
         // is "not removable" before it is offered. The launcher's one-shot asks for this (a pacman run each); the pages do not.
         if (withPlans && block.isEmpty() && a.source == CatalogSource::Kind::Repo) {
             const RemovePlan plan = checkRemove({a.package}, s.deny, planTools(), false);

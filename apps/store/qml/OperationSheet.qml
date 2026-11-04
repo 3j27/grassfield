@@ -43,7 +43,7 @@ Sheet {
                                                 .concat(root.plan.packages || []) : []
     readonly property string appName: root.app.name || ""
 
-    // True while the sheet answers a hand-over ("uninstall:<entry>" from the launcher or Files, ADR-0045 D1): the Store's own alert
+    // True while the sheet answers a hand-over ("uninstall:<entry>" from the launcher or Files, ADR-0046 D1): the Store's own alert
     // "Delete “App”?", the app's icon and the packages -Rns takes, Cancel the default, and the only confirmation: a request
     // from another process can open this sheet and nothing more.
     property bool handedOver: false

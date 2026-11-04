@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# grassfield-store-helper's deny list without root and without pacman (ADR-0045 D2, D3): its denied() cut out of the file and
+# grassfield-store-helper's deny list without root and without pacman (ADR-0046 D2, D3): its denied() cut out of the file and
 # run on the vectors the Store's C++ rule runs (tests/fixtures/store/removal-vectors.json), the optional preinstalls named
 # in the helper and in apps/store/src/removal.cpp the same, and Omarchy's own removal list (when installed) covered. The
 # helper's other refusals (a name charset, required packages, a running pacman, an unfinished update) need root and a real
@@ -45,7 +45,7 @@ cpp_names=$(sed -n '/preinstalledApps()/,/^}/p' "$root/apps/store/src/removal.cp
 [[ -n $helper_names && $helper_names == "$cpp_names" ]] && ok "helper and removal.cpp name the same $(echo "$helper_names" | wc -l) preinstalled apps" ||
   bad "preinstalled apps differ: helper [$(echo $helper_names)] C++ [$(echo $cpp_names)]"
 
-# What Grassfield's packages list as optional dependencies (ADR-0045 D3), with a stand-in pacman answering as pacman -Qq and -Qi do.
+# What Grassfield's packages list as optional dependencies (ADR-0046 D3), with a stand-in pacman answering as pacman -Qq and -Qi do.
 sed -n '/^gf_optional_names() {/,/^}/p' "$helper" >"$work/gfopt.sh"
 [[ -s $work/gfopt.sh ]] && ok "gf_optional_names() found in the helper" || bad "gf_optional_names() not found"
 got=$(bash -c '
@@ -79,7 +79,7 @@ if [[ -r $list ]]; then
     [[ $(bash -c "$script") == DENIED ]] && missing="$missing $n"
   done
   [[ -z $missing ]] && ok "every package omarchy-remove-preinstalls drops is allowed ($(echo $want | wc -w))" ||
-    echo "NOTE: Omarchy's list holds a name the helper keeps:$missing (the list changed upstream: ADR-0045 D2)"
+    echo "NOTE: Omarchy's list holds a name the helper keeps:$missing (the list changed upstream: ADR-0046 D2)"
 else
   echo "SKIP: omarchy-remove-preinstalls is not installed"
 fi

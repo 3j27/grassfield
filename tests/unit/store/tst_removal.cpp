@@ -56,7 +56,7 @@ TEST(Removal, SharedVectors)
     }
 }
 
-// ADR-0045 D2: the apps Omarchy preinstalls and itself offers to remove are on its lists but not the system's; the rest of the
+// ADR-0046 D2: the apps Omarchy preinstalls and itself offers to remove are on its lists but not the system's; the rest of the
 // lists stays. D3: the session's runtime is protected by name, whatever the lists say.
 TEST(Removal, OptionalPreinstallsAndTheRuntime)
 {

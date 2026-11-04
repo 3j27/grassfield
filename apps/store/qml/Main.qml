@@ -145,7 +145,7 @@ Window {
         opSheet.show(Object.assign({}, app, root.backend.app(app.id)), "remove");
     }
 
-    // "--page=uninstall:<application entry>" (ADR-0045 D1): the launcher or Files asks, from another process, so this only OPENS the
+    // "--page=uninstall:<application entry>" (ADR-0046 D1): the launcher or Files asks, from another process, so this only OPENS the
     // Store's own alert (OperationSheet, handedOver): the app by its Store name and icon, the packages -Rns takes, Cancel the
     // default. Nothing runs until Delete is pressed here. An entry the Store does not know is said in the notice bar.
     function uninstallEntry(entry: string): void {

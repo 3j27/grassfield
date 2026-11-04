@@ -218,7 +218,7 @@ TestCase {
         function launchApplication(target: url): void {
             fakeApp.launched = fakeApp.launched.concat([String(target)]);
         }
-        // The Store's answer to `--removable` (ADR-0045): nothing here is removable, and nothing is asked.
+        // The Store's answer to `--removable` (ADR-0046): nothing here is removable, and nothing is asked.
         property string removableText: ""
         function loadRemovableApplications(): void {
         }

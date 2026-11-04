@@ -248,7 +248,7 @@ Scope {
         Apps.launch(rec.entry);
     }
 
-    // ---- deleting apps (ADR-0045; macOS Launchpad's jiggle, x and alert) ------------------------
+    // ---- deleting apps (ADR-0046; macOS Launchpad's jiggle, x and alert) ------------------------
     // The Store decides what may be removed: `grassfield-store --removable` answers once (read when the icons first jiggle);
     // `grassfield-store --page=uninstall:<entry>` asks it to open its alert. Nothing is confirmed or removed here.
 
@@ -276,7 +276,7 @@ Scope {
     }
 
     // The badge's click: the Store is asked, and only asked (`--page=uninstall:<entry>`). Its own alert, in its own window, is the
-    // one confirmation; nothing is removed until Delete is pressed there (ADR-0045 D1). Returns whether it was handed over.
+    // one confirmation; nothing is removed until Delete is pressed there (ADR-0046 D1). Returns whether it was handed over.
     function requestDelete(item: var): bool {
         const args = item ? UninstallLogic.storeArguments(item.id) : null;
         if (!args || !removableItem(item))

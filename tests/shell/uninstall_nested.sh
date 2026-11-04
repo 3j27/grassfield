@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deleting apps from the Apps panel in the NESTED session (ADR-0045 D6): the icons jiggle, removable apps show the delete badge,
+# Deleting apps from the Apps panel in the NESTED session (ADR-0046 D6): the icons jiggle, removable apps show the delete badge,
 # one that is not removable hands nothing over. The badge's click for a removable app hands the app to the Store (its alert is
 # the only confirmation: tests/apps/uninstall_store_shots.sh), which would start a Store here, so it is not clicked. Run it bare with a
 # nested session up (scripts/dev/nested-up.sh, --ref-scale 1.25 for the captures); skipped without one. The Store's answer is given

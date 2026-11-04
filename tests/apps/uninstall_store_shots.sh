@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nested pass (L1) for deleting an app (ADR-0045 D1): the launcher's delete badge and Files' Move to Trash only HAND the app to
+# Nested pass (L1) for deleting an app (ADR-0046 D1): the launcher's delete badge and Files' Move to Trash only HAND the app to
 # the Store, whose own alert is the one confirmation. Real launcher, real Files, real Store (.dev/build/grassfield-store), on a
 # made-up computer: a fake pacman that knows Kdenlive (its plan takes four more packages) and GParted, and a fake pkexec that only
 # writes its arguments to a log and exits 126 (cancelled): nothing is ever installed or removed, and the log must stay empty.

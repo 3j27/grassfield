@@ -18,7 +18,7 @@ GridView {
     // True once the cell pool has been filled by warmPool().
     property bool warmed: false
 
-    // Deleting apps (ADR-0045): the icons jiggle while `editing`; `removable` is the controller's check of one item.
+    // Deleting apps (ADR-0046): the icons jiggle while `editing`; `removable` is the controller's check of one item.
     property bool editing: false
     property var removable: item => false
 

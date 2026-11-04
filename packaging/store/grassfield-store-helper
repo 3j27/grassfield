@@ -77,7 +77,7 @@ log=$GS_DIR/$op.log
 (set -C && : >"$log") 2>/dev/null || { echo "grassfield-store-helper: operation $op was used before" >&2; exit 2; }
 exec >>"$log" 2>&1
 
-# Every message goes to the log and, best effort, to the journal (ADR-0045 D4: a removal is an audit event).
+# Every message goes to the log and, best effort, to the journal (ADR-0046 D4: a removal is an audit event).
 say() { echo "grassfield-store-helper: $*"; logger -t grassfield-store-helper -p authpriv.notice -- "$*" 9<&- 2>/dev/null || true; }
 # The exit file, by rename (the Store never reads half a file), then the exit.
 finish() { # code [message]
@@ -215,7 +215,7 @@ gf_names=$(gf_optional_names) || finish 6 "cannot read what Grassfield's package
 while IFS= read -r line; do [[ -n $line ]] && gfopt[$line]=1; done <<<"$gf_names"
 
 # What Grassfield's own packages list as optional dependencies (kio-extras, cmake…): pacman would remove them, nothing requires an
-# optional dependency, and part of Grassfield would stop working (ADR-0045 D3). One name per line.
+# optional dependency, and part of Grassfield would stop working (ADR-0046 D3). One name per line.
 gf_optional_names() {
   local -a own=()
   local qi
@@ -233,14 +233,14 @@ denied() { # name: 0 when the system, Omarchy or Grassfield needs it
     base | base-devel | filesystem | glibc | bash | coreutils | util-linux | shadow | pam | sudo | polkit | dbus | dbus-broker | \
       dbus-broker-units | kmod | mkinitcpio | dracut | grub | efibootmgr | refind | syslinux | snapper | btrfs-progs | \
       cryptsetup | lvm2 | plymouth | archlinux-keyring | intel-ucode | amd-ucode) return 0 ;;
-    # The session's runtime (ADR-0045 D3): the compositor, the shell, sound, network, the portals, the login. Qt is not here by
+    # The session's runtime (ADR-0046 D3): the compositor, the shell, sound, network, the portals, the login. Qt is not here by
     # prefix: pacman keeps every Qt package the session requires, and an app's own (qt6-speech) must stay removable.
     hyprland | quickshell | networkmanager | mesa | wireplumber | sddm | uwsm | gnome-keyring | xdg-desktop-portal | \
       xdg-desktop-portal-* | pipewire | pipewire-*) return 0 ;;
     linux | linux-* | systemd | systemd-* | limine | limine-* | pacman | pacman-* | yay | yay-* | omarchy | omarchy-* | \
       grassfield | grassfield-*) return 0 ;;
     *-firmware | *-firmware-*) return 0 ;;
-    # The apps Omarchy installs on every machine and itself offers to remove (omarchy-remove-preinstalls, ADR-0045 D2): on
+    # The apps Omarchy installs on every machine and itself offers to remove (omarchy-remove-preinstalls, ADR-0046 D2): on
     # Omarchy's lists, but not the system's: macOS lets you delete its optional bundled apps. Only HoldPkg keeps them.
     aether | cliamp | libreoffice-fresh | xournalpp | pinta | obsidian | obs-studio | kdenlive | moonlight-qt | lazydocker | \
       omacut | omacalc | omawrite) [[ -n ${hold[$1]-} ]]; return ;;
