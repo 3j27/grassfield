@@ -57,13 +57,32 @@ Singleton {
             probe.running = true;
     }
 
-    // The session locks: a recording stops, a countdown captures nothing (macOS: nothing is recorded behind the lock).
+    // Nothing is captured behind the lock (macOS): whenever the session is locked and the helper's state is not idle, the helper
+    // is stopped: a recording stops, a countdown or a choice captures nothing. Both edges count (CaptureFile.stopNeeded): the lock
+    // coming while a capture runs, and a capture becoming active while locked (a helper slow to start after Record, a shell
+    // restarted under the lock reading the state late). The helper also refuses to start under the lock and ends a recording when
+    // the lock comes on its own (it reads the lock marker), so this does not depend on the shell alone.
+    function enforceLock(): void {
+        if (CaptureFile.stopNeeded(SessionState.locked, root.phase))
+            root.stop();
+    }
+
+    onPhaseChanged: root.enforceLock()
+
+    // Still not idle under the lock (the stop could not reach the helper yet: its state was written before its recorder): asked
+    // again until the helper's state says idle.
+    Timer {
+        interval: 2000
+        repeat: true
+        running: CaptureFile.stopNeeded(SessionState.locked, root.phase)
+        onTriggered: root.stop()
+    }
+
     Connections {
         target: SessionState
 
         function onLockedChanged(): void {
-            if (SessionState.locked && root.phase !== "idle")
-                root.stop();
+            root.enforceLock();
         }
     }
 

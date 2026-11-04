@@ -45,6 +45,42 @@ TestCase {
         compare(CaptureFile.parse('{"v": 1, "phase": "countdown", "until": 9, "rect": {"x": "0", "y": 0, "w": 5, "h": 5}}').rect, null);
     }
 
+    function test_starting() {
+        compare(CaptureFile.parse('{"v": 1, "phase": "starting", "kind": "recording", "pid": 12, "start": 3}').phase, "starting");
+    }
+
+    // The lock and the helper's state, in either order (security review of OC-1, MEDIUM): the shell stops the helper whenever
+    // the session is locked and the state is not idle, also when the state becomes active only after the lock.
+    function test_stopUnderTheLock() {
+        verify(!CaptureFile.stopNeeded(false, "recording"), "unlocked: nothing to stop");
+        verify(!CaptureFile.stopNeeded(true, "idle"), "locked and idle: nothing to stop");
+        for (const phase of ["starting", "selecting", "countdown", "recording"])
+            verify(CaptureFile.stopNeeded(true, phase), phase);
+        verify(!CaptureFile.stopNeeded("yes", "recording"), "only a real lock state");
+        // Replays of the two orders as CaptureState sees them: each change of either value asks stopNeeded again.
+        const replay = events => {
+            let locked = false;
+            let phase = "idle";
+            let stops = 0;
+            for (const e of events) {
+                if (e.locked !== undefined)
+                    locked = e.locked;
+                if (e.text !== undefined)
+                    phase = CaptureFile.parse(e.text).phase;
+                if (CaptureFile.stopNeeded(locked, phase))
+                    stops++;
+            }
+            return stops;
+        };
+        const starting = '{"v": 1, "phase": "starting", "kind": "recording", "pid": 12, "start": 3}';
+        const recording = '{"v": 1, "phase": "recording", "kind": "recording", "pid": 12, "start": 3, "started": 1793800000000}';
+        verify(replay([{text: recording}, {locked: true}]) > 0, "the lock comes while recording");
+        verify(replay([{locked: true}, {text: starting}]) > 0, "Record, then the lock, then the helper's first state: stopped");
+        verify(replay([{locked: true}, {text: recording}]) > 0, "a shell restarted under the lock reads a recording late: stopped");
+        compare(replay([{locked: true}, {text: '{"v": 1, "phase": "idle"}'}]), 0, "locked with nothing running: no stop");
+        compare(replay([{text: recording}, {text: '{"v": 1, "phase": "idle"}'}, {locked: true}]), 0, "ended before the lock: no stop");
+    }
+
     function test_secondsLeft() {
         compare(CaptureFile.secondsLeft(1000, 6000), 5);
         compare(CaptureFile.secondsLeft(1001, 6000), 5, "4.999 s left shows 5");
