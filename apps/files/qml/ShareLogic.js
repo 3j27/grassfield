@@ -66,11 +66,19 @@ function sendArgv(urls) {
     return LOCALSEND_ARGV.concat(paths);
 }
 
-// The Share menu (the toolbar's Share button and the selection's Share submenu): LocalSend first, where macOS puts its
+// The Share menu (the toolbar's Share button, and the item menu's Share…): LocalSend first, where macOS puts its
 // nearby-device sharing. Shown only when LocalSend is installed (`installed`, FilesApp.localSendAvailable at the time the
-// menu is built); enabled only for a selection canSend takes. Empty when there is nothing to share with.
-function menuItems(installed, sendable, text) {
+// menu is built); enabled only for a selection canSend takes, and never in a development session (`dev`): there
+// `systemd-run --user` would start LocalSend in the user's service manager, on the owner's real desktop (security review of
+// OC-13, LOW 2). The item stays shown, dimmed, so the nested session still shows the menu as it is; FilesApp refuses the
+// send too. Empty when there is nothing to share with.
+function menuItems(installed, sendable, text, dev) {
     if (!installed)
         return [];
-    return [{id: "localsend", text: text, enabled: sendable === true}];
+    return [{id: "localsend", text: text, enabled: sendable === true && dev !== true}];
+}
+
+// Whether a send may run: a selection canSend takes, outside a development session.
+function maySend(urls, where, dev) {
+    return dev !== true && canSend(urls, where);
 }

@@ -1486,6 +1486,12 @@ void FilesApp::sendWithLocalSend(const QStringList &argv)
             return;
         }
     }
+    // A dev session sends nothing: `systemd-run --user` starts LocalSend in the user's service manager, with its environment,
+    // so it would open on the owner's real desktop with the files (security review of OC-13, LOW 2; as Preview's openLink).
+    if (devSession()) {
+        emit operationFailed(tr("Not sent: a development session doesn’t start LocalSend (it would open on the real desktop)."));
+        return;
+    }
     if (!localSendAvailable()) {
         emit operationFailed(tr("LocalSend isn’t installed."));
         return;

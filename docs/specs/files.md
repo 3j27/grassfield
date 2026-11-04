@@ -862,12 +862,20 @@ one service is LocalSend, which Omarchy installs (`install/omarchy-base.packages
   a shell. No `--` (LocalSend's command line has none, Omarchy passes the paths directly): every path is absolute, so none can
   read as an option. `FilesApp::sendWithLocalSend` checks the vector again (exactly that program and options, then paths that
   start with "/", hold no NUL and exist) and starts it detached; `GRASSFIELD_FILES_NO_LAUNCH=1` blocks it like any launch. A
-  refusal or a start failure shows in the window's banner. LocalSend then shows its own window: Omarchy floats and sizes it
+  development session (`GRASSFIELD_DEV=1`) sends nothing (security review of OC-13, LOW 2): `systemd-run --user` starts
+  LocalSend in the user's service manager with its environment, so it would open on the owner's real desktop with the
+  files. There the item stays in the Share menu, dimmed (`ShareLogic.menuItems`, so the nested session still shows the menu
+  as it is), the tab refuses with "Not sent: a development session doesn't start LocalSend (it would open on the real
+  desktop)." in the banner, and `FilesApp::sendWithLocalSend` refuses the same way (`runmode::dev()`, as Preview's
+  `openLink`). A refusal or a start failure shows in the window's banner. LocalSend then shows its own window: Omarchy floats and sizes it
   (`default/hypr/apps/localsend.lua`), a rule the Grassfield session loads only once the per-application rules of ADR-0045
   OC-12 port it; until then it opens where Grassfield's placement puts a new window.
-- Tests: `tests/unit/tst_filesshare.qml` (URL to path, local-only selections, the vector), `tests/unit/tst_filesbrowser.qml`
-  `test_shareSendsWithLocalSend` (Share… after Copy, the Share menu it opens at the item menu's point, the send through the stand-in FilesApp, nothing
-  from Applications, no Share without LocalSend), `tests/unit/tst_filesfinish.qml` (Share, Tags and Action in a row).
+- Tests: `tests/unit/tst_filesshare.qml` (URL to path, local-only selections, the vector, dimmed and never sent in a
+  development session), `tests/unit/tst_filesbrowser.qml` `test_shareSendsWithLocalSend` (Share… after Copy, the Share menu
+  it opens at the item menu's point, the send through the stand-in FilesApp, nothing from Applications, a development
+  session's refusal in the banner, no Share without LocalSend), `tests/unit/tst_filesfinish.qml` (Share, Tags and Action in a
+  row), `tests/unit/files/tst_fileops.cpp` `SendWithLocalSendRefusesOtherVectorsAndADevSession` (C++, not compiled in the
+  cloud session).
   Not verified: the C++ (not compiled in the cloud session), the glyph and the menus on screen (visual NOT verified), a real
   send to a device.
 

@@ -3038,6 +3038,10 @@
         <translation>Envoyer avec LocalSend…</translation>
     </message>
     <message>
+        <source>Not sent: a development session doesn’t start LocalSend (it would open on the real desktop).</source>
+        <translation>Non envoyé&#xa0;: une session de développement ne démarre pas LocalSend (il s’ouvrirait sur le vrai bureau).</translation>
+    </message>
+    <message>
         <source>Searching…</source>
         <translation>Recherche…</translation>
     </message>
@@ -5528,6 +5532,10 @@
     <message>
         <source>These items can’t be sent with LocalSend: only files and folders on this computer can.</source>
         <translation>Ces éléments ne peuvent pas être envoyés avec LocalSend&#xa0;: seuls les fichiers et dossiers de cet ordinateur peuvent l’être.</translation>
+    </message>
+    <message>
+        <source>Not sent: a development session doesn’t start LocalSend (it would open on the real desktop).</source>
+        <translation>Non envoyé&#xa0;: une session de développement ne démarre pas LocalSend (il s’ouvrirait sur le vrai bureau).</translation>
     </message>
     <message>
         <source>LocalSend isn’t installed.</source>

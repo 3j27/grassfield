@@ -617,6 +617,8 @@ TestCase {
         folder.isApplications = false;
         folder.selected = [0];
         fakeApp.localSendInstalled = true;
+        // A real session first: the stand-in is a development session by default.
+        fakeApp.devSession = false;
         const items = tab.itemMenu(folder);
         const ids = items.map(i => i.id ?? "-");
         const share = items.find(i => i.id === "share");
@@ -650,6 +652,15 @@ TestCase {
         tab.runAction("localsend", folder);
         compare(fakeApp.localSent, [], "nothing sent from Applications");
         folder.isApplications = false;
+        // A development session (security review LOW 2): the item is there, dimmed; a send is refused in the banner and
+        // FilesApp is never asked (systemd-run --user would open LocalSend on the owner's real desktop).
+        fakeApp.devSession = true;
+        compare(tab.shareMenu(folder)[0].enabled, false, "dimmed in a development session");
+        verify(tab.itemMenu(folder).find(i => i.id === "share") !== undefined, "Share… still shown");
+        browser.bannerText = "";
+        tab.runAction("localsend", folder);
+        compare(fakeApp.localSent, [], "nothing sent from a development session");
+        verify(browser.bannerText.indexOf("development session") >= 0, browser.bannerText);
         fakeApp.localSendInstalled = false;
         verify(tab.itemMenu(folder).find(i => i.id === "share") === undefined, "nothing to share with: no Share");
         compare(tab.shareMenu(folder), [], "and an empty Share menu");

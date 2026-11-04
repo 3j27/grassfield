@@ -1108,7 +1108,7 @@ FocusScope {
     function shareMenu(model: var): var {
         const urls = model ? model.selectedUrls() : [];
         const where = model ? {isTrash: model.isTrash, isApplications: model.isApplications} : null;
-        return ShareLogic.menuItems(root.app.localSendAvailable(), ShareLogic.canSend(urls, where), qsTr("Send with LocalSend…"));
+        return ShareLogic.menuItems(root.app.localSendAvailable(), ShareLogic.canSend(urls, where), qsTr("Send with LocalSend…"), root.app.devSession);
     }
 
     // Share… (macOS 13 and later): the Share menu opens where the item menu was (the menu layer keeps that anchor: the pointer,
@@ -1121,9 +1121,15 @@ FocusScope {
         layer.open(items, layer.anchorX, layer.anchorY, id => root.runAction(id, model), root.view, root.menuByKeyboard);
     }
 
-    // The selection to LocalSend (FilesApp.sendWithLocalSend checks the vector again and reports a failure).
+    // The selection to LocalSend (FilesApp.sendWithLocalSend checks the vector again and reports a failure). A development
+    // session sends nothing and says so in the window's banner (its menu item is dimmed; FilesApp refuses it too).
     function sendWithLocalSend(model: var): void {
-        if (!ShareLogic.canSend(model.selectedUrls(), {isTrash: model.isTrash, isApplications: model.isApplications}))
+        const where = {isTrash: model.isTrash, isApplications: model.isApplications};
+        if (root.app.devSession && ShareLogic.canSend(model.selectedUrls(), where)) {
+            root.win.showBanner(qsTr("Not sent: a development session doesn’t start LocalSend (it would open on the real desktop)."));
+            return;
+        }
+        if (!ShareLogic.maySend(model.selectedUrls(), where, root.app.devSession))
             return;
         root.app.sendWithLocalSend(ShareLogic.sendArgv(model.selectedUrls()));
     }
