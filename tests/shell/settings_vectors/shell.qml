@@ -98,6 +98,7 @@ ShellRoot {
             "capture.timer": "captureTimer",
             "capture.microphone": "captureMicrophone",
             "capture.showPointer": "captureShowPointer",
+            "capture.lastSelection": "captureLastSelection",
             "hotCorners.topLeft": "hotCornerTopLeft",
             "hotCorners.topRight": "hotCornerTopRight",
             "hotCorners.bottomLeft": "hotCornerBottomLeft",

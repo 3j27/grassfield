@@ -898,6 +898,15 @@
           "type": "boolean",
           "default": false,
           "description": "Options > Show Mouse Pointer: the pointer is drawn in screenshots and recordings."
+        },
+        "lastSelection": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9._-]{1,64}=-?[0-9]{1,6},-?[0-9]{1,6},[0-9]{1,6},[0-9]{1,6}(;[A-Za-z0-9._-]{1,64}=-?[0-9]{1,6},-?[0-9]{1,6},[0-9]{1,6},[0-9]{1,6}){0,15}$",
+          "default": "",
+          "description": "The last frame of Capture/Record Selected Portion per display, which the toolbar opens on again (macOS): `NAME=x,y,w,h` entries joined by `;` (at most 16), the display's connector name and the frame in its own logical coordinates; a frame off its display is brought back on it, an empty value or a display without one gets a centred frame. The toolbar writes it.",
+          "x-grassfield": {
+            "rule": "plainText"
+          }
         }
       }
     },

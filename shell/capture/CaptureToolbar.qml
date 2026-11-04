@@ -16,6 +16,15 @@ import "CaptureModel.js" as Model
 // The modes are the shared ToolButton (capsules, one checked, the neutral selection on glass, a tooltip each), the action the
 // shared primary Button, and Options opens the shared PopupMenu (section headers, check marks) above itself, inside this window.
 // Without gpu-screen-recorder the recordings' group is not shown (OC-0 rule 3).
+// The modes act on this surface as macOS 27's do (the design review of OC-1, H1):
+// - Selected Portion: a frame over the dimmed display (capture.veil around it, capture.border on it, eight handles), opened on
+//   the display's last frame (capture.lastSelection) or centred; a drag on a handle resizes it, inside moves it, outside draws a
+//   new one, with the size readout beside the pointer; Capture/Record and Return act on its geometry.
+// - Selected Window: the window under the pointer is tinted with the accent (every display's surface takes input then); a click
+//   captures it. Grassfield's cursor theme has no camera pointer: the arrow shows.
+// - Entire Screen: a click on a display captures or records that display; Capture keeps every display, Record this one.
+// The geometry goes to grassfield-capture (--geometry, --output); its crosshair stays the fallback (Return in Capture Selected
+// Window with no window known).
 Variants {
     id: root
 
@@ -46,8 +55,102 @@ Variants {
 
         required property ShellScreen modelData
 
-        readonly property bool shown: root.controller.open && root.controller.screenName === (modelData ? modelData.name : "")
+        readonly property string name: modelData ? modelData.name : ""
+        // The toolbar's display: the bar, the keyboard (exclusive) and the frame of the Selected Portion modes are here.
+        readonly property bool shown: root.controller.open && root.controller.screenName === win.name
+        // This display's surface takes input: the toolbar's display, and every display in the modes that take a click anywhere
+        // (an Entire Screen mode: the display clicked; Capture Selected Window: the window clicked).
+        readonly property bool covered: win.shown || root.controller.coversAll
         readonly property bool recordMode: Model.isRecord(root.controller.mode)
+        readonly property bool framing: win.shown && (root.controller.mode === "selection" || root.controller.mode === "recordSelection")
+        readonly property bool windowMode: win.covered && root.controller.mode === "window"
+        readonly property var bounds: ({w: win.width, h: win.height})
+        // The frame of the Selected Portion modes ({x, y, w, h}, this display's logical coordinates, CaptureModel.js), the part a
+        // press took ("" none, a handle, "inside", "outside", "click"), the pointer, and whether a drag is under way.
+        property var frame: ({x: 0, y: 0, w: 0, h: 0})
+        property string part: ""
+        property string hoverPart: "outside"
+        property point pointer: Qt.point(0, 0)
+        property bool dragging: false
+        // Capture Selected Window: the window under the pointer on this display ({x, y, w, h}, clipped to it) or null.
+        property var hovered: null
+
+        onFramingChanged: {
+            if (framing)
+                win.frame = root.controller.frameFor(win.name, win.bounds);
+            win.dragging = false;
+        }
+        onWidthChanged: win.keepFrame()
+        onHeightChanged: win.keepFrame()
+        onWindowModeChanged: win.hovered = null
+
+        // The display changed size (a new mode or scale): the frame stays on it.
+        function keepFrame(): void {
+            if (win.framing)
+                win.frame = Model.clampFrame(win.frame, win.bounds, Tokens.captureFrameMinSize);
+        }
+
+        // The window drawn on top under the point (this display's coordinates), from the platform's window list of the shown
+        // Desktop and the order the windows were activated in, clipped to the display; null when none.
+        function windowUnder(x: real, y: real): var {
+            const list = Compositor.windowsOn(win.name, Compositor.topologyRevision).map(w => ({
+                        x: w.x,
+                        y: w.y,
+                        w: w.w,
+                        h: w.h,
+                        fullscreen: w.fullscreen,
+                        stamp: w.toplevel && Compositor.recency.has(w.toplevel) ? Compositor.recency.get(w.toplevel) : 0
+                    }));
+            const hit = Model.windowAt(list, x, y);
+            return hit ? Model.clip(hit, win.bounds) : null;
+        }
+
+        function origin(): var {
+            return {x: win.modelData ? win.modelData.x : 0, y: win.modelData ? win.modelData.y : 0};
+        }
+
+        // Capture or Record (the button, Return): the frame in the Selected Portion modes, the window under the pointer in
+        // Capture Selected Window (none known: the helper's crosshair), every display (Record: this one) in the Entire Screen modes.
+        function act(): void {
+            const mode = root.controller.mode;
+            if (win.framing)
+                root.controller.trigger("", Model.geometryText(win.frame, win.origin()));
+            else if (mode === "window")
+                root.controller.trigger("", win.hovered ? Model.geometryText(win.hovered, win.origin()) : "");
+            else
+                root.controller.trigger("", "");
+        }
+
+        // A click on the display (outside the bar): in an Entire Screen mode it captures or records this display, in Capture
+        // Selected Window the window under it (nothing there: nothing happens, as macOS).
+        function clickAt(x: real, y: real): void {
+            const mode = root.controller.mode;
+            if (mode === "screen" || mode === "recordScreen") {
+                root.controller.trigger(win.name, "");
+            } else if (mode === "window") {
+                const hit = win.windowUnder(x, y);
+                if (hit)
+                    root.controller.trigger("", Model.geometryText(hit, win.origin()));
+            }
+        }
+
+        function cursorShapeOf(kind: string): int {
+            switch (kind) {
+            case "sizeFDiag":
+                return Qt.SizeFDiagCursor;
+            case "sizeBDiag":
+                return Qt.SizeBDiagCursor;
+            case "sizeHor":
+                return Qt.SizeHorCursor;
+            case "sizeVer":
+                return Qt.SizeVerCursor;
+            case "sizeAll":
+                return Qt.SizeAllCursor;
+            case "cross":
+                return Qt.CrossCursor;
+            }
+            return Qt.ArrowCursor;
+        }
         // The Options menu is open, and where it hangs from (its bottom left: over the Options button, above the bar).
         property bool menuOpen: false
         property point menuAt: Qt.point(0, 0)
@@ -80,8 +183,8 @@ Variants {
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
-        // keyboard focus.
-        visible: release.mapped
+        // keyboard focus. The other displays' surfaces (input only) never hold it.
+        visible: release.mapped || win.covered
         anchors {
             top: true
             bottom: true
@@ -94,9 +197,9 @@ Variants {
         WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-capture"
         // qmllint disable missing-type
-        // The whole display takes input while shown; nothing once closed: the surface stays mapped a moment for the keyboard
+        // The whole display takes input while covered; nothing once closed: the surface stays mapped a moment for the keyboard
         // release, and a click in that moment belongs to the window under it.
-        mask: win.shown ? null : passThrough
+        mask: win.covered ? null : passThrough
         BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 && win.shown ? blur : null
         // qmllint enable missing-type
 
@@ -109,6 +212,12 @@ Variants {
             Region {
                 item: win.menuOpen ? menuLoader : null
                 radius: Tokens.radiusMenu
+            }
+
+            // The size readout's plate, while it shows.
+            Region {
+                item: readout.visible ? readout : null
+                radius: Tokens.captureReadoutRadius
             }
         }
 
@@ -151,15 +260,176 @@ Variants {
         MouseArea {
             anchors.fill: parent
             z: 1000
-            visible: !win.shown
+            visible: !win.covered
             acceptedButtons: Qt.AllButtons
         }
 
-        // Around the bar: a press closes an open menu and goes nowhere else (macOS: the screen waits for the capture).
+        // The display around the bar (macOS 27: the screen is in capture mode). In the Selected Portion modes a drag on a
+        // handle resizes the frame, inside it moves it, outside it draws a new one; in Capture Selected Window the window under
+        // the pointer is highlighted and a click captures it; in an Entire Screen mode a click captures or records this display.
+        // Other presses go nowhere.
         MouseArea {
+            id: surface
+
+            property point pressedAt: Qt.point(0, 0)
+            property var pressedFrame: null
+
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: win.closeMenu()
+            hoverEnabled: win.covered
+            cursorShape: win.framing ? win.cursorShapeOf(Model.cursorFor(win.dragging ? win.part : win.hoverPart)) : Qt.ArrowCursor
+            onPressed: mouse => {
+                win.part = "";
+                if (mouse.button !== Qt.LeftButton)
+                    return;
+                surface.pressedAt = Qt.point(mouse.x, mouse.y);
+                surface.pressedFrame = win.frame;
+                win.part = win.framing ? Model.hitTest(win.frame, mouse.x, mouse.y, Tokens.captureHandleHitSize) : "click";
+            }
+            onPositionChanged: mouse => {
+                win.pointer = Qt.point(mouse.x, mouse.y);
+                if (!surface.pressed) {
+                    if (win.framing)
+                        win.hoverPart = Model.hitTest(win.frame, mouse.x, mouse.y, Tokens.captureHandleHitSize);
+                    else if (win.windowMode)
+                        win.hovered = win.windowUnder(mouse.x, mouse.y);
+                    return;
+                }
+                if (!win.framing || win.part === "" || win.part === "click")
+                    return;
+                const dx = mouse.x - surface.pressedAt.x;
+                const dy = mouse.y - surface.pressedAt.y;
+                // A press that has not moved yet is no drag (a click outside the frame leaves it as it is).
+                if (!win.dragging && Math.abs(dx) < 2 && Math.abs(dy) < 2)
+                    return;
+                win.dragging = true;
+                if (win.part === "inside")
+                    win.frame = Model.move(surface.pressedFrame, dx, dy, win.bounds);
+                else if (win.part === "outside")
+                    win.frame = Model.drawn(surface.pressedAt.x, surface.pressedAt.y, mouse.x, mouse.y, win.bounds, Tokens.captureFrameMinSize);
+                else
+                    win.frame = Model.resize(surface.pressedFrame, win.part, dx, dy, win.bounds, Tokens.captureFrameMinSize);
+            }
+            onReleased: mouse => {
+                const part = win.part;
+                win.part = "";
+                if (win.dragging) {
+                    win.dragging = false;
+                    root.controller.rememberFrame(win.name, win.frame);
+                    win.hoverPart = Model.hitTest(win.frame, mouse.x, mouse.y, Tokens.captureHandleHitSize);
+                    return;
+                }
+                if (part === "click" && mouse.button === Qt.LeftButton)
+                    win.clickAt(mouse.x, mouse.y);
+            }
+            onExited: win.hovered = null
+        }
+
+        // Capture Selected Window: the window under the pointer, tinted with the accent (macOS 27), its corner the window's.
+        Rectangle {
+            visible: win.windowMode && win.hovered !== null
+            x: win.hovered ? win.hovered.x : 0
+            y: win.hovered ? win.hovered.y : 0
+            width: win.hovered ? win.hovered.w : 0
+            height: win.hovered ? win.hovered.h : 0
+            radius: Tokens.captureWindowHighlightRadius
+            color: Appearance.withAlpha(Appearance.colors.accent, Tokens.captureWindowHighlightOpacity)
+        }
+
+        // The Selected Portion modes: the display dimmed around the frame (capture.veil), the frame's hairline (capture.border)
+        // and its eight handles.
+        Item {
+            id: frameLayer
+
+            anchors.fill: parent
+            visible: win.framing
+
+            Rectangle {
+                width: parent.width
+                height: win.frame.y
+                color: Model.qtColor(Tokens.captureVeil)
+            }
+
+            Rectangle {
+                y: win.frame.y + win.frame.h
+                width: parent.width
+                height: parent.height - y
+                color: Model.qtColor(Tokens.captureVeil)
+            }
+
+            Rectangle {
+                y: win.frame.y
+                width: win.frame.x
+                height: win.frame.h
+                color: Model.qtColor(Tokens.captureVeil)
+            }
+
+            Rectangle {
+                x: win.frame.x + win.frame.w
+                y: win.frame.y
+                width: parent.width - x
+                height: win.frame.h
+                color: Model.qtColor(Tokens.captureVeil)
+            }
+
+            Rectangle {
+                x: win.frame.x
+                y: win.frame.y
+                width: win.frame.w
+                height: win.frame.h
+                color: "transparent"
+                border.width: Tokens.captureBorderWidth
+                border.color: Model.qtColor(Tokens.captureBorder)
+            }
+
+            Repeater {
+                model: Model.handleCentres(win.frame)
+
+                delegate: Rectangle {
+                    required property var modelData
+
+                    x: Math.round(modelData.x - width / 2)
+                    y: Math.round(modelData.y - height / 2)
+                    width: Tokens.captureHandleSize
+                    height: Tokens.captureHandleSize
+                    radius: width / 2
+                    color: Model.qtColor(Tokens.captureBorder)
+                    border.width: Tokens.captureBorderWidth
+                    border.color: Model.qtColor(Tokens.captureVeil)
+                }
+            }
+
+            // The size readout beside the pointer while the frame is drawn, moved or resized: the picture's size in pixels.
+            Item {
+                id: readout
+
+                visible: win.dragging
+                width: readoutText.implicitWidth + 2 * Tokens.captureReadoutPaddingX
+                height: readoutText.implicitHeight + 2 * Tokens.captureReadoutPaddingY
+                x: Math.min(parent.width - width, win.pointer.x + Tokens.captureReadoutOffset)
+                y: Math.min(parent.height - height, win.pointer.y + Tokens.captureReadoutOffset)
+                Accessible.role: Accessible.StaticText
+                Accessible.name: readoutText.text
+
+                Material {
+                    glassClass: "menu"
+                    anchors.fill: parent
+                    radius: Tokens.captureReadoutRadius
+                    shadowEnabled: false
+                }
+
+                Text {
+                    id: readoutText
+
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: Model.readout(win.frame, readout.Screen.devicePixelRatio)
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.captureReadoutTextSize
+                    font.features: {"tnum": 1}
+                }
+            }
         }
 
         Item {
@@ -174,7 +444,7 @@ Variants {
                     break;
                 case Qt.Key_Return:
                 case Qt.Key_Enter:
-                    root.controller.trigger();
+                    win.act();
                     break;
                 case Qt.Key_Left:
                     root.controller.step(-1);
@@ -244,12 +514,14 @@ Variants {
 
                 anchors.centerIn: parent
 
+                // Close: a grey filled disc with the cross knocked out (macOS 27), in the secondary text colour.
                 ToolButton {
                     width: Tokens.captureToolbarButtonHeight
                     height: Tokens.captureToolbarButtonHeight
                     capsule: true
-                    iconName: "xmark-circle"
+                    iconName: "xmark-circle-fill"
                     glyphSize: Tokens.captureToolbarCloseIconSize
+                    tint: Appearance.colors.textSecondary
                     accessibleName: qsTr("Close")
                     onClicked: root.controller.hide()
                 }
@@ -331,12 +603,14 @@ Variants {
                 // The action: Capture, or Record in a recording mode (the default button, as macOS draws it).
                 Button {
                     anchors.verticalCenter: parent.verticalCenter
+                    // As tall as the bar's other controls, a capsule concentric with the bar.
+                    height: Tokens.captureToolbarButtonHeight
                     primary: true
                     capsule: true
                     focusPolicy: Qt.NoFocus
                     text: win.recordMode ? qsTr("Record") : qsTr("Capture")
                     enabled: !win.recordMode || root.controller.canRecord
-                    onClicked: root.controller.trigger()
+                    onClicked: win.act()
                 }
             }
         }

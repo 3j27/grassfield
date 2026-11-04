@@ -132,7 +132,8 @@
     "saveTo": "desktop",
     "timer": "none",
     "microphone": "none",
-    "showPointer": false
+    "showPointer": false,
+    "lastSelection": ""
   },
   "search": {
     "showApps": true,
