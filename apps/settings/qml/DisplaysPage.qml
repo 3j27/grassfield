@@ -72,7 +72,7 @@ SettingsPage {
             root.ddc = null;
         const argv = System.ddcBrightnessQuery(name);
         if (argv !== null)
-            root.system.query(argv, "display.ddc@" + name);
+            root.system.queryWithin(argv, "display.ddc@" + name, System.DDC_WAIT_MS);
     }
 
     onMonitorNameChanged: root.readDdc()

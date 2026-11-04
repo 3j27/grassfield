@@ -51,12 +51,16 @@ media-key bindings (the session config binds keys to the IPC targets below), sli
    `Brightness.qml` asks each connected external output its level once when it appears (the command with the output alone; the
    compositor's own `HEADLESS-`/`WAYLAND-`/`X11-` outputs are never asked), runs at most one command per output at a time (what comes
    meanwhile waits, merged: a set replaces what waited, key steps add up; DDC writes take 50 to 200 ms), and runs it as an argument
-   vector, never through a shell, after `command -v` found it (checked again whenever the outputs change). A key steps from the
+   vector, never through a shell, bounded by coreutils' `timeout -k 2 12` (the script's ddcutil is a child: `timeout` runs the command
+   in a process group of its own and ends the whole group, TERM after 12 s, KILL 2 s later; a TERM to the script alone would leave
+   ddcutil on the bus; security review LOW 3), after `command -v` found both (checked again whenever the outputs change). A key steps from the
    display's own level (the command reads it first), so a change made elsewhere (Settings, the display's buttons) is never stepped
    over. An output that did not answer its first query, or whose writes failed three times in a row, is a display without DDC/CI until
    it is plugged again: one journal line names it and what it needs. A missing command: one journal line, every external display keeps
-   its own brightness. A command still running after 15 s is stopped and counts as not answered. Tests: `tests/unit/tst_brightnesslogic.qml`
-   (the command's answer, the step, which display a key acts on, the queue).
+   its own brightness. A run that its bound ended (exit 124) counts as not answered. The output's queue is released only once the
+   process has really ended, never at a deadline: a run still going 18 s after its start (past the bound and its kill) gets a TERM
+   again (to `timeout`, which passes it to the group) and is still waited for, so two commands never share a bus. Tests:
+   `tests/unit/tst_brightnesslogic.qml` (the command's answer, the step, which display a key acts on, the queue, the bound).
 
 ## Acceptance criteria
 | ID | Test | Level |

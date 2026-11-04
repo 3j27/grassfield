@@ -19,9 +19,17 @@ var MAX_SET = 100;
 // A write that failed this many times in a row on a display that answered makes it a display without DDC/CI (its keys and
 // slider go back to what an uncontrollable display does), until it is plugged again.
 var MAX_FAILURES = 3;
-// A command still running after this long is stopped and counts as not answered (ddcutil on a bus that hangs). The first one
-// after a plug detects the bus, which takes seconds with several displays.
-var TIMEOUT_MS = 15000;
+// Every command runs bounded by coreutils' timeout: `timeout -k 2 12 omarchy-brightness-display-ddc ...`. The command is a bash
+// script whose ddcutil is a child: a signal to the script alone would leave ddcutil talking to the bus while the next command
+// starts. timeout runs the command in a process group of its own and signals the whole group, TERM after 12 s, KILL 2 s later,
+// so nothing of it outlives the run (security review, LOW 3). It then exits 124 (or 137) without output: not answered. 12 s
+// leaves room for the first call after a plug, which detects the bus (seconds with several displays); Settings > Displays
+// runs the same bounded form (apps/settings/qml/System.js, systemguard.cpp) inside its Backend's 15 s wait.
+var BOUND = ["timeout", "-k", "2", "12"];
+// The shell's own backstop: a run still going this long after it started (the bound plus the kill delay plus a margin) is
+// asked to stop again (TERM to timeout, which passes it to the group); its output stays busy until it has really exited, so
+// two commands never share a bus.
+var BACKSTOP_MS = 18000;
 
 // A laptop's own panel (eDP, LVDS, DSI), as Omarchy's omarchy-brightness-display and Settings' Displays.isBuiltIn tell it:
 // its brightness is the backlight's, never DDC/CI.
@@ -94,19 +102,20 @@ function answers(ddc, name) {
         && ddc[name].status === "ok";
 }
 
-// The argument vector of a request for output `name`, or null when there is nothing to run (a bad name, no net step).
+// The argument vector of a request for output `name` (the command under its bound, BOUND), or null when there is nothing to
+// run (a bad name, no net step).
 function argvFor(name, request) {
     if (!isConnector(name) || !request)
         return null;
     if (request.kind === "query")
-        return [COMMAND, name];
+        return BOUND.concat([COMMAND, name]);
     if (request.kind === "set" && typeof request.percent === "number" && isFinite(request.percent))
-        return [COMMAND, name, clampSet(request.percent) + "%"];
+        return BOUND.concat([COMMAND, name, clampSet(request.percent) + "%"]);
     if (request.kind === "step" && typeof request.steps === "number" && request.steps !== 0) {
         const amount = Math.min(MAX_SET, Math.abs(Math.round(request.steps)) * STEP);
         if (amount === 0)
             return null;
-        return [COMMAND, name, request.steps > 0 ? "+" + amount + "%" : amount + "%-"];
+        return BOUND.concat([COMMAND, name, request.steps > 0 ? "+" + amount + "%" : amount + "%-"]);
     }
     return null;
 }

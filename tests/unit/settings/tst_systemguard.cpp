@@ -263,14 +263,23 @@ TEST(ActionGuard, BrightnessTakesOneBacklightAndAPercentage)
 }
 
 // Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command with one connector and one whole
-// percentage. Its read (the connector alone) is not a query of the dev guard: a dev session never asks the owner's displays.
+// percentage, bounded by coreutils' timeout, which ends its whole process group (ddcutil included) within 14 s, before the
+// action's 15 s (security review, LOW 3): exactly `timeout -k 2 12 omarchy-brightness-display-ddc <connector> <N>%`. The bare
+// command and timeout around anything else are refused. Its read (the connector alone) is not a query of the dev guard: a dev
+// session never asks the owner's displays.
 TEST(ActionGuard, DdcBrightnessTakesOneConnectorAndAPercentage)
 {
+    const QString t = QStringLiteral("timeout");
     const QString d = QStringLiteral("omarchy-brightness-display-ddc");
-    const auto cmd = [&](const char *output, const char *value) {
-        return QStringList{d, QString::fromLatin1(output), QString::fromLatin1(value)};
+    const auto bounded = [&](std::initializer_list<const char *> rest) {
+        QStringList out{t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), d};
+        for (const char *a : rest)
+            out << QString::fromLatin1(a);
+        return out;
     };
-    EXPECT_TRUE(isActionProgram(d));
+    const auto cmd = [&](const char *output, const char *value) { return bounded({output, value}); };
+    EXPECT_TRUE(isActionProgram(t));
+    EXPECT_FALSE(isActionProgram(d));
     for (const char *ok : {"0%", "1%", "50%", "100%"})
         EXPECT_TRUE(isAllowedAction(cmd("DP-1", ok))) << ok;
     for (const char *ok : {"HDMI-A-1", "DP-10", "DVI-D-2", "eDP-1", "Unknown-1"})
@@ -283,12 +292,24 @@ TEST(ActionGuard, DdcBrightnessTakesOneConnectorAndAPercentage)
         EXPECT_FALSE(isAllowedAction(cmd(no, "50%"))) << no;
     EXPECT_FALSE(isConnectorName(QStringLiteral("A").repeated(25) + QStringLiteral("-1")));
     EXPECT_TRUE(isConnectorName(QStringLiteral("HDMI-A-1")));
-    EXPECT_FALSE(isAllowedAction({d}));
-    EXPECT_FALSE(isAllowedAction({d, QStringLiteral("DP-1")}));
-    EXPECT_FALSE(isAllowedAction({d, QStringLiteral("DP-1"), QStringLiteral("50%"), QStringLiteral("50%")}));
-    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/omarchy-brightness-display-ddc"), QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    // The bare command (its ddcutil could outlive the action's time limit), another bound, timeout around anything else.
+    EXPECT_FALSE(isAllowedAction({d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("60"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("9"), QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-s"), QStringLiteral("KILL"), QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("/usr/bin/omarchy-brightness-display-ddc"), QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("ddcutil"), QStringLiteral("setvcp"), QStringLiteral("10")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("x")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("rm"), QStringLiteral("-rf"), QStringLiteral("x")}));
+    EXPECT_FALSE(isAllowedAction({t}));
+    EXPECT_FALSE(isAllowedAction(bounded({})));
+    EXPECT_FALSE(isAllowedAction(bounded({"DP-1"})));
+    EXPECT_FALSE(isAllowedAction(bounded({"DP-1", "50%", "50%"})));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/timeout"), QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
     EXPECT_FALSE(isAllowedAction({QStringLiteral("omarchy-brightness-display"), QStringLiteral("--monitor"), QStringLiteral("DP-1"), QStringLiteral("50%")}));
     EXPECT_FALSE(isAllowedAction({QStringLiteral("ddcutil"), QStringLiteral("setvcp"), QStringLiteral("10"), QStringLiteral("50")}));
+    EXPECT_FALSE(isReadOnlyQuery(bounded({"DP-1"})));
     EXPECT_FALSE(isReadOnlyQuery({d, QStringLiteral("DP-1")}));
     EXPECT_FALSE(isReadOnlyQuery(cmd("DP-1", "50%")));
 }

@@ -163,7 +163,7 @@ bool isReadOnlyQuery(const QStringList &argv)
         return args == QStringList{QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")};
     // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
     // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
-    // Nor is omarchy-brightness-display-ddc with a connector alone (Displays: an external display's level, ADR-0045 OC-4). It
+    // Nor is `timeout -k 2 12 omarchy-brightness-display-ddc <connector>` (Displays: an external display's level, ADR-0045 OC-4). It
     // changes no setting and no display (a DDC/CI read of the brightness), but it writes its own cache under $XDG_RUNTIME_DIR and
     // probes every i2c bus of the machine the first time (ddcutil detect), and a dev session's outputs are the nested
     // compositor's, which no display answers for: a dev session never asks the owner's displays (Displays shows no slider there).
@@ -344,7 +344,7 @@ bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
         || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions")
-        || program == QLatin1String("omarchy-brightness-display-ddc") || program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set");
+        || program == QLatin1String("timeout") || program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set");
 }
 
 bool isBacklightName(const QString &name)
@@ -452,11 +452,14 @@ bool isAllowedAction(const QStringList &argv)
         return argv.size() == 6 && argv.at(1) == QLatin1String("-q") && argv.at(2) == QLatin1String("-d") && isBacklightName(argv.at(3))
             && argv.at(4) == QLatin1String("set") && percent.match(argv.at(5)).hasMatch();
     }
-    // Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command, one connector and a whole
-    // percentage, the form that sets a level (never `+N%` or `N%-`, the brightness keys' steps, which only the shell runs).
-    if (argv.first() == QLatin1String("omarchy-brightness-display-ddc")) {
+    // Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command bounded by coreutils' timeout, one
+    // connector and a whole percentage, the form that sets a level (never `+N%` or `N%-`, the brightness keys' steps, which only
+    // the shell runs). timeout ends the command's whole process group, its ddcutil included, within 14 s, before the 15 s this
+    // action is given (security review, LOW 3). timeout runs nothing else.
+    if (argv.first() == QLatin1String("timeout")) {
         static const QRegularExpression percent(QRegularExpression::anchoredPattern(QStringLiteral("(100|[1-9]?[0-9])%")));
-        return argv.size() == 3 && isConnectorName(argv.at(1)) && percent.match(argv.at(2)).hasMatch();
+        return argv.size() == 7 && argv.at(1) == QLatin1String("-k") && argv.at(2) == QLatin1String("2") && argv.at(3) == QLatin1String("12")
+            && argv.at(4) == QLatin1String("omarchy-brightness-display-ddc") && isConnectorName(argv.at(5)) && percent.match(argv.at(6)).hasMatch();
     }
     // Sound: exactly the three forms of the page (qml/System.js): a device made the default, its volume (0.00 to 1.00), its mute.
     if (argv.first() == QLatin1String("wpctl")) {

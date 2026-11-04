@@ -50,7 +50,8 @@ Bluetooth), PipeWire (Quickshell Pipewire), UPower, MPRIS, brightness via `brigh
 4. CC4 Do Not Disturb tile ↔ notifications DND.
 5. CC5 Display brightness slider, keyboard brightness if present. The Display slider drives the built-in display's backlight; on a
    computer without one, the main display (ADR-0044, `MainDisplay.screenName`) when it answers DDC/CI, through Omarchy's
-   `omarchy-brightness-display-ddc <output> N%` (ADR-0045 OC-4; one command at a time, the last value of a drag wins); else it is
+   `omarchy-brightness-display-ddc <output> N%` under `timeout -k 2 12` (ADR-0045 OC-4; one command at a time, the last value of a
+   drag wins); else it is
    hidden. Choice (`services/BrightnessLogic.js` `sliderTarget`): macOS Control Center's Display slider is the built-in display's,
    and on a Mac without one the main display's; it does not follow the pointer (the brightness keys do, docs/specs/osd.md O10).
    Same module, same slider (no other look, OC-0.7).
