@@ -60,6 +60,30 @@ TestCase {
             }
             function query(argv: var, tag: string): void {
             }
+            // The Qt screens as the Settings backend gives them (model and serial: the main display's identity).
+            function screens(): var {
+                return [{name: "eDP-1", model: "LGD", serial: "123"}, {name: "DP-2", model: "DELL", serial: "ABC"}];
+            }
+        }
+    }
+
+    // The settings store of the page: `displays.main` as a ConfigStore keeps it, writes recorded.
+    Component {
+        id: fakeStore
+        QtObject {
+            property var values: ({})
+            property var sets: []
+            function value(key: string): var {
+                void values;
+                return values[key] !== undefined ? values[key] : [];
+            }
+            function set(key: string, v: var): bool {
+                sets.push({key: key, value: v});
+                const next = Object.assign({}, values);
+                next[key] = v;
+                values = next;
+                return true;
+            }
         }
     }
 
@@ -70,9 +94,10 @@ TestCase {
         const service = createTemporaryObject(sc, testCase, {backend: backend});
         const pc = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/DisplaysPage.qml"));
         compare(pc.status, Component.Ready, pc.errorString());
-        const page = createTemporaryObject(pc, testCase, {backend: backend, system: service, width: 700, height: 900});
+        const store = createTemporaryObject(fakeStore, testCase);
+        const page = createTemporaryObject(pc, testCase, {backend: backend, system: service, store: store, width: 700, height: 900});
         verify(page);
-        return {backend: backend, page: page, service: service};
+        return {backend: backend, page: page, service: service, store: store};
     }
 
     function publish(t, trial) {
@@ -257,6 +282,25 @@ TestCase {
         verify(dev.service.dev);
         compare(dev.service.act("brightness", System.setBrightness("intel_backlight", 0.3), "display.brightness"), false);
         compare(dev.backend.actions.length, 0);
+    }
+
+    // ADR-0044: with two displays the page knows the main one (the built-in panel by default), and making the other main writes
+    // displays.main through the store, keyed by identity (model and serial from the Qt screens), never by the connector.
+    function test_page_mainDisplay() {
+        const monitors = [{name: "eDP-1", description: "LGD x", width: 1920, height: 1080, refreshRate: 60, x: 0, y: 0, scale: 1, transform: 0, availableModes: []},
+                          {name: "DP-2", description: "DELL x", width: 1920, height: 1080, refreshRate: 60, x: 1920, y: 0, scale: 1, transform: 0, availableModes: []}];
+        const u = makePage(false, monitors);
+        compare(u.page.mainName, "eDP-1");
+        u.page.selected = "DP-2";
+        compare(u.page.isMain, false);
+        u.page.makeMain("DP-2");
+        compare(u.store.sets.length, 1);
+        compare(u.store.sets[0].key, "displays.main");
+        compare(u.store.sets[0].value, [{set: ["s:DELL|ABC", "s:LGD|123"], main: "s:DELL|ABC"}]);
+        compare(u.page.mainName, "DP-2");
+        compare(u.page.isMain, true);
+        // The same panel on another port is still the main display.
+        compare(DisplayRole.resolve(u.store.values["displays.main"], [{name: "HDMI-A-1", model: "DELL", serial: "ABC"}, {name: "eDP-1", model: "LGD", serial: "123"}]).name, "HDMI-A-1");
     }
 
     function find(item, pred) {
