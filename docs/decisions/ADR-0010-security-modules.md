@@ -162,3 +162,33 @@ gcr system prompts, KIO network passwords, NetworkManager secrets, BlueZ pairing
 
 Nothing else of this ADR changes: no PAM module or PAM service file, no greeter, no setuid code and nothing that runs as
 root (the bridge is an unprivileged systemd user unit).
+
+## Amendment 2026-11-04 (automatic sleep; Settings > Energy and Battery > Options…, macOS 27) — Proposed
+The owner's report of rc1-22 on a desktop PC: no way to set the power profile, no way to keep the PC from sleeping. Before
+this amendment nothing in Grassfield or Omarchy suspended a computer on idle (logind `IdleAction=ignore`; Omarchy's idle
+service never suspends): what the owner saw was most likely the displays turning off (`lock.displayOffPower`, 10 minutes)
+and the session locking. macOS has both: the display turns off and locks per Lock Screen, and the computer sleeps shortly
+after, unless "Prevent automatic sleeping [on power adapter] when the display is off" is on (Energy without a battery,
+Battery > Options… with one; on battery a Mac always sleeps).
+
+**Decision (security-engineer, Proposed until the integrator and the owner accept it).** The idle module gains the
+automatic sleep: `IdleModel.AUTO_SLEEP_SECONDS` (60) after it turned the displays off for lack of input, with no input and
+no idle inhibitor since, the computer sleeps through `systemctl suspend`. On battery always; on the power adapter or without
+a battery only when `energy.preventSleep` is false. **Default true** (a deviation from macOS's default, where a desktop
+sleeps): Grassfield never put a computer to sleep by itself, the owner's machine runs long jobs on the power adapter, and an
+unreadable value must give back that behaviour, not a new one. The owner may choose macOS's default (false) later; nothing
+else changes then.
+
+**Rules.**
+- Locking is never weakened: no lock decision reads `energy.preventSleep` (pinned by `tst_idlemodel`); the displays still
+  turn off and the session still locks as `lock.*` says.
+- Grassfield suspends only while its own lock holds (`IdleModel.autoSleepAction`): an unlocked session is locked first,
+  and the sleep waits for the next due time with the lock holding; a lock being acquired waits; a lock refused (no PAM
+  service) leaves the computer awake and the session as it was. So a degraded sleep inhibitor (no logind delay) never makes
+  an automatic sleep unlocked.
+- Fail awake: a value that cannot be read, an unknown power source, a refused suspend (an application's sleep block
+  inhibitor) or a crashed shell all leave the computer awake, locked or unlocked exactly as Lock Screen made it. One request
+  per display-off period: no loop.
+- Never in the nested dev session (a due suspend is counted and logged, `idle status`); the new dev hook `idle
+  devAutoSleep <1..600>` only shortens the delay there.
+- Real suspend: NOT VERIFIED until the owner's L2 run (L3†).

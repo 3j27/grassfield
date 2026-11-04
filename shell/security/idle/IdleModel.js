@@ -87,6 +87,44 @@ function displaysOff(lockedIdle, inactiveOff, locked, holding) {
     return inactiveOff === true && (locked !== true || holding === true);
 }
 
+// ---- Automatic sleep (macOS 27 Energy and Battery > Options: the computer sleeps once the displays are off for
+// inactivity, unless "Prevent automatic sleeping ... when the display is off" is on). Sleep only: nothing here is read by a
+// lock decision above (timings, idleArmed, inactiveOffArmed, requireAfterDisplayOffMs, displaysOff take no part of it), and
+// the computer is only put to sleep by Grassfield while its own lock holds. ----
+
+// Seconds the displays stay off without input before the computer sleeps (macOS sleeps about a minute after the display).
+var AUTO_SLEEP_SECONDS = 60;
+
+// Automatic sleep is prevented: on battery never (macOS: a portable on battery always sleeps after the display), else
+// unless energy.preventSleep is exactly false. The value arrives read through the contract (a boolean, default true);
+// anything else, an unknown power source included, keeps the computer awake: Grassfield never put a computer to sleep by
+// itself before this setting, so a value that cannot be read gives back that behaviour, never another.
+function sleepPrevented(preventSleep, onBattery) {
+    if (onBattery === true)
+        return false;
+    return preventSleep !== false;
+}
+
+// The automatic sleep monitor is armed: this module turned the displays off for lack of input (the unlocked display-off
+// monitor or the lock screen's), sleep is not prevented, and no application holds an org.freedesktop.ScreenSaver inhibitor
+// (Wayland idle inhibitors: the monitor respects them). Anything but these exact values disarms it (fail awake).
+function autoSleepArmed(displaysOff, prevented, busInhibited) {
+    return displaysOff === true && prevented === false && busInhibited !== true;
+}
+
+// What a due automatic sleep does: "suspend" once Grassfield's lock holds (the session is locked and the compositor
+// confirmed it), "lock" when the session is not locked (the lock first; the sleep waits for the next due time, after the
+// lock holds), "wait" while a lock is being acquired. Never "suspend" on an unlocked or unconfirmed session: Grassfield
+// never puts an unlocked session to sleep (the lock before sleep, SleepInhibitor, would also lock it, but only while its
+// logind delay inhibitor is held).
+function autoSleepAction(locked, holding) {
+    if (locked === true && holding === true)
+        return "suspend";
+    if (locked !== true)
+        return "lock";
+    return "wait";
+}
+
 // Sleep inhibitor and PrepareForSleep watcher restarts (GF-030: never given up silently). A child that exits within
 // FAST_EXIT_MS of its start is a failure; MAX_FAST_FAILURES in a row make the module "degraded" (a notice tells the user)
 // and the child is then retried every SLOW_RETRY_MS instead of every FAST_RETRY_MS, for as long as the shell runs.

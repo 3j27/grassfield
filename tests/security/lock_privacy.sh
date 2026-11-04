@@ -25,6 +25,9 @@
 #                when it gives a frame; Hyprland reports LOCK on every monitor
 #   display-off  D-4: with `idle devDisplayOff 4` set before the lock, the shell turns the displays off after 4 s
 #                without input (idle status displayOff, Hyprland dpmsStatus) and on again on pointer motion
+#   auto-sleep   automatic sleep: energy.preventSleep false in the dev config and `idle devAutoSleep 2`: 2 s after the
+#                displays went off on the lock screen one sleep comes due and the dev session suppresses it (counted, never
+#                run); with it true (power adapter) none comes due; locked throughout. Leaves energy.preventSleep true
 #   cleanup      close the foot windows (the session stays locked)
 # The fixture steps read GF-REF only (headless: it always draws). privacy also reads WAYLAND-1, the nested window on the
 # owner's screen, which gives grim a frame only while the owner's compositor draws it: without one it is reported
@@ -522,6 +525,82 @@ step_display_off() {
   compositor_locked && pass "display-off: still locked" || fail "display-off: Hyprland no longer reports LOCK"
 }
 
+# The dev config this nested shell reads (GRASSFIELD_CONFIG_HOME=.dev/config, scripts/dev/shell-run.sh): energy.preventSleep
+# set to $1 (true/false), the rest of the file kept; the shell follows it live.
+set_prevent_sleep() {
+  local cfg=$dev/config/grassfield.json tmp
+  mkdir -p "$dev/config"
+  tmp=$(mktemp "$dev/config/.grassfield.json.XXXXXX")
+  if [[ -s $cfg ]]; then
+    jq --argjson v "$1" '.energy = ((.energy // {}) + {preventSleep: $v})' "$cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+  else
+    jq -n --argjson v "$1" '{version: 1, energy: {preventSleep: $v}}' >"$tmp" || { rm -f "$tmp"; return 1; }
+  fi
+  mv -f "$tmp" "$cfg"
+}
+
+idle_field() { jq -r "$1" <<<"$(ipc idle status)" 2>/dev/null; }
+
+# Waits until the lock screen's monitor has the displays off again (input first lights them).
+displays_off_again() {
+  local _
+  pointer GF-REF abs 760 460 sleep 100 abs 780 480 >/dev/null
+  for _ in $(seq 1 40); do
+    [[ $(idle_field '.displayOff') == false ]] && break
+    sleep 0.25
+  done
+  for _ in $(seq 1 60); do
+    [[ $(idle_field '.displayOff') == true ]] && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+# Automatic sleep (2026-11-04, Settings > Energy / Battery > Options…): locked with the displays off for 2 s without input
+# (`idle devAutoSleep 2`), a computer whose sleep is not prevented would suspend; the dev session never does: it counts the
+# due suspend (`autoSleepSuppressed`) instead. With energy.preventSleep on, on the power adapter, nothing is due. The session
+# stays locked either way. On battery the switch does not apply (macOS): that half is reported, not failed.
+step_auto_sleep() {
+  local before after prevented
+  echo "idle devAutoSleep 2 -> $(ipc idle devAutoSleep 2)"
+  set_prevent_sleep false || { fail "auto-sleep: the dev config could not be written"; return; }
+  for _ in $(seq 1 20); do [[ $(idle_field '.sleepPrevented') == false ]] && break; sleep 0.25; done
+  [[ $(idle_field '.sleepPrevented') == false ]] && pass "auto-sleep: energy.preventSleep false reaches the idle module (sleepPrevented false)" \
+    || fail "auto-sleep: sleepPrevented $(idle_field '.sleepPrevented') after writing false"
+  before=$(idle_field '.autoSleepSuppressed')
+  displays_off_again && pass "auto-sleep: the lock screen turned the displays off again" || fail "auto-sleep: the displays did not go off ($(ipc idle status))"
+  for _ in $(seq 1 40); do
+    after=$(idle_field '.autoSleepSuppressed')
+    [[ $after =~ ^[0-9]+$ && $before =~ ^[0-9]+$ ]] && ((after > before)) && break
+    sleep 0.25
+  done
+  [[ $after =~ ^[0-9]+$ && $before =~ ^[0-9]+$ ]] && ((after == before + 1)) \
+    && pass "auto-sleep: one automatic sleep came due 2 s after the displays went off, and the dev session suppressed it ($before -> $after)" \
+    || fail "auto-sleep: autoSleepSuppressed $before -> $after ($(ipc idle status))"
+  sleep 3
+  [[ $(idle_field '.autoSleepSuppressed') == "$after" ]] && pass "auto-sleep: at most one request per display-off period" \
+    || fail "auto-sleep: requested again without input ($(idle_field '.autoSleepSuppressed'))"
+  compositor_locked && pass "auto-sleep: still locked (LOCK on every monitor)" || fail "auto-sleep: Hyprland no longer reports LOCK"
+  set_prevent_sleep true || { fail "auto-sleep: the dev config could not be written"; return; }
+  for _ in $(seq 1 20); do [[ $(idle_field '.autoSleepArmed') == false || $(idle_field '.sleepPrevented') == true ]] && break; sleep 0.25; done
+  prevented=$(idle_field '.sleepPrevented')
+  before=$(idle_field '.autoSleepSuppressed')
+  displays_off_again || fail "auto-sleep: the displays did not go off with prevent-sleep on ($(ipc idle status))"
+  sleep 4
+  after=$(idle_field '.autoSleepSuppressed')
+  if [[ $prevented == true ]]; then
+    [[ $after == "$before" && $(idle_field '.autoSleepArmed') == false ]] \
+      && pass "auto-sleep: prevent-sleep on (power adapter): the displays are off, the session locked, and no sleep comes due" \
+      || fail "auto-sleep: prevent-sleep on, yet autoSleepSuppressed $before -> $after ($(ipc idle status))"
+    [[ $(idle_field '.displayOff') == true ]] && pass "auto-sleep: prevent-sleep keeps the displays' own power-off" \
+      || fail "auto-sleep: displays not off with prevent-sleep on"
+  else
+    echo "INFO auto-sleep: this machine runs on battery (UPower): the switch does not apply there (macOS), the sleep came due anyway ($before -> $after)"
+  fi
+  compositor_locked && pass "auto-sleep: still locked with prevent-sleep on" || fail "auto-sleep: Hyprland no longer reports LOCK"
+  echo "idle devAutoSleep 60 -> $(ipc idle devAutoSleep 60)"
+}
+
 step_cleanup() {
   local id
   for id in gf-privacy-probe gf-privacy-twin Bitwarden; do
@@ -532,7 +611,7 @@ step_cleanup() {
 }
 
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup screenshare control lock privacy display-off cleanup)
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup screenshare control lock privacy display-off auto-sleep cleanup)
 [[ $(ipc lock status) == unlocked || " ${steps[*]} " != *" lock "* ]] \
   || { echo "lock_privacy: the nested session is already locked; restart it (nested-down, nested-up) for the default run" >&2; exit 2; }
 for s in "${steps[@]}"; do

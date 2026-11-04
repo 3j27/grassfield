@@ -176,4 +176,121 @@ TestCase {
             compare(IdleModel.requireAfterDisplayOffMs(v), 0, String(v));
         verify(IdleModel.DIM_UNTIL_LOCK_MAX_MS > 0 && IdleModel.DIM_UNTIL_LOCK_MAX_MS <= 10000);
     }
+
+    // ---- Automatic sleep (macOS 27 Energy / Battery > Options: Prevent automatic sleeping [on power adapter] when the
+    // display is off; energy.preventSleep, default true). ----
+
+    // On battery the computer always sleeps (macOS); on the power adapter or without a battery only an exact false lets it.
+    // Anything else (the default, a value that cannot be read, an unknown power source) keeps it awake, as before the setting.
+    function test_sleepPrevented() {
+        verify(IdleModel.sleepPrevented(true, false), "prevented on the power adapter");
+        verify(!IdleModel.sleepPrevented(false, false), "switch off: sleeps on the power adapter");
+        verify(!IdleModel.sleepPrevented(true, true), "battery: sleeps whatever the switch says");
+        verify(!IdleModel.sleepPrevented(false, true));
+        for (const v of [undefined, null, "false", 0, "", "no", [], {}])
+            verify(IdleModel.sleepPrevented(v, false), "unreadable value " + JSON.stringify(v) + " keeps the computer awake");
+        // UPower unknown: anything but an exact true is the power adapter, where the switch decides.
+        for (const b of [undefined, null, "true", 1])
+            verify(IdleModel.sleepPrevented(true, b), "unknown source " + JSON.stringify(b));
+        verify(IdleModel.AUTO_SLEEP_SECONDS >= 30 && IdleModel.AUTO_SLEEP_SECONDS <= 120);
+    }
+
+    // Armed only while this module has the displays off for lack of input, sleep is not prevented, and no application holds
+    // an org.freedesktop.ScreenSaver inhibitor.
+    function test_autoSleepArmed() {
+        verify(IdleModel.autoSleepArmed(true, false, false));
+        verify(!IdleModel.autoSleepArmed(true, true, false), "prevented");
+        verify(!IdleModel.autoSleepArmed(false, false, false), "displays on");
+        verify(!IdleModel.autoSleepArmed(true, false, true), "an application inhibits idle over D-Bus");
+        // Fail awake: odd values never arm it.
+        verify(!IdleModel.autoSleepArmed("true", false, false));
+        verify(!IdleModel.autoSleepArmed(true, undefined, false), "an unknown prevention is not 'not prevented'");
+        verify(!IdleModel.autoSleepArmed(true, 0, false));
+        verify(IdleModel.autoSleepArmed(true, false, undefined), "no inhibitor reported");
+    }
+
+    // Grassfield suspends only while its own lock holds; an unlocked session is locked first; a lock being acquired waits.
+    function test_autoSleepAction() {
+        compare(IdleModel.autoSleepAction(true, true), "suspend");
+        compare(IdleModel.autoSleepAction(false, false), "lock");
+        compare(IdleModel.autoSleepAction(true, false), "wait", "the compositor has not confirmed the lock yet");
+        compare(IdleModel.autoSleepAction(false, true), "lock", "a stale holding never suspends an unlocked session");
+        compare(IdleModel.autoSleepAction(undefined, true), "lock");
+        compare(IdleModel.autoSleepAction(true, "true"), "wait");
+        compare(IdleModel.autoSleepAction(1, 1), "lock");
+    }
+
+    // The idle decisions of a session whose displays went off for inactivity (unlocked) or on the lock screen (locked and
+    // holding), with the switch on and off, on battery and on the power adapter: what Idle.qml derives from IdleModel.
+    function decisions(prevent, onBattery, locked, holding) {
+        const t = IdleModel.timings(5);
+        const prevented = IdleModel.sleepPrevented(prevent, onBattery);
+        const displaysOff = IdleModel.displaysOff(locked, !locked, locked, holding);
+        const armed = IdleModel.autoSleepArmed(displaysOff, prevented, false);
+        return {
+            lock: {
+                idleLock: t.enabled,
+                lockSeconds: t.lockSeconds,
+                idleArmed: IdleModel.idleArmed(t.enabled, locked, false, false),
+                inactiveOffArmed: IdleModel.inactiveOffArmed(IdleModel.inactiveDisplayOffSeconds(2, 10, onBattery), locked, !locked, false, false),
+                displayOffLockMs: IdleModel.requireAfterDisplayOffMs("immediately"),
+                displaysOff: displaysOff
+            },
+            sleep: armed ? IdleModel.autoSleepAction(locked, holding) : "none"
+        };
+    }
+
+    // Lock still happens: with prevent-sleep on or off, on battery or not, every lock decision is the same (the idle lock at
+    // 5 minutes, the display-off lock at once, the displays off); only the sleep differs. And no lock function takes the
+    // setting: their arity is what it was before it (a new parameter would have to be passed by Idle.qml, and reviewed).
+    function test_lockIndependentOfSleep() {
+        for (const onBattery of [false, true]) {
+            for (const state of [[false, false], [true, true]]) {
+                const on = decisions(true, onBattery, state[0], state[1]);
+                const off = decisions(false, onBattery, state[0], state[1]);
+                const odd = decisions("x", onBattery, state[0], state[1]);
+                compare(off.lock, on.lock, "battery " + onBattery + ", locked " + state[0]);
+                compare(odd.lock, on.lock);
+                verify(on.lock.idleLock && on.lock.lockSeconds === 300 && on.lock.displayOffLockMs === 0);
+                verify(on.lock.displaysOff, "the displays still turn off with prevent-sleep on");
+            }
+        }
+        compare(IdleModel.timings.length, 1);
+        compare(IdleModel.idleArmed.length, 4);
+        compare(IdleModel.inactiveOffArmed.length, 5);
+        compare(IdleModel.inactiveDisplayOffSeconds.length, 3);
+        compare(IdleModel.requireAfterDisplayOffMs.length, 1);
+        compare(IdleModel.displaysOff.length, 4);
+    }
+
+    // Prevent-sleep on: no automatic sleep on the power adapter; off: an unlocked session is locked first, a locked one
+    // sleeps. On battery the computer sleeps either way.
+    function test_idleDecisionsWithPreventSleep() {
+        compare(decisions(true, false, false, false).sleep, "none");
+        compare(decisions(true, false, true, true).sleep, "none");
+        compare(decisions(false, false, false, false).sleep, "lock");
+        compare(decisions(false, false, true, true).sleep, "suspend");
+        compare(decisions(true, true, false, false).sleep, "lock");
+        compare(decisions(true, true, true, true).sleep, "suspend");
+        compare(decisions(undefined, false, true, true).sleep, "none", "an unreadable setting keeps the computer awake");
+    }
+
+    // Idle.qml: the lock paths never read the sleep setting (a source check, comments included in what is read).
+    function test_idleQmlLockPathsIgnoreSleep() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../shell/security/idle/Idle.qml"), false);
+        xhr.send();
+        const text = xhr.responseText;
+        verify(text.length > 1000, "Idle.qml read (QML_XHR_ALLOW_FILE_READ=1)");
+        const lines = text.split("\n");
+        const lockLines = lines.filter(l => /IdleModel\.(timings|idleArmed|inactiveOffArmed|inactiveDisplayOffSeconds|requireAfterDisplayOffMs|displaysOff)\(|Lock\.lock\("(idle|display-off)"\)/.test(l));
+        verify(lockLines.length >= 6, "found the lock paths: " + lockLines.length);
+        for (const l of lockLines)
+            verify(!/preventSleep|sleepPrevented|autoSleep/.test(l), "a lock path reads the sleep setting: " + l.trim());
+        // The setting is read in exactly two places: the binding and the fresh check before acting.
+        compare(lines.filter(l => l.indexOf("Settings.energyPreventSleep") >= 0).length, 2);
+        // The suspend is asked for only on the "suspend" answer, and never in the dev session.
+        verify(/if \(root\.devHooks\) \{\s*root\.autoSleepSuppressed\+\+;/.test(text));
+        compare(lines.filter(l => l.indexOf("autoSleepRequest.running = true") >= 0).length, 1);
+    }
 }
