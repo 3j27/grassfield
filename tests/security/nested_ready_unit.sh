@@ -2,7 +2,8 @@
 # Offline checks of tests/security/nested_ready.sh, the readiness wait of the nested security scenarios (reload_locked.sh,
 # lock_privacy.sh): an empty or unknown `lock status` answer is "not ready", never a lock state; a timeout fails with a
 # reason; nothing proceeds on an unknown state. hyprctl and qs are stubs on PATH (a scratch directory): nothing here talks
-# to a compositor or a shell, and nothing is started but the stubs.
+# to a compositor or a shell, and nothing is started but the stubs. Also the start-up hold budget of reload_locked.sh's
+# foreign-restart (hold_budget: pass, fail, SKIP above the core count), taken from the script with stub helpers.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 fail=0
@@ -57,6 +58,12 @@ run 1
 desc="an unknown answer is not a lock state (exit 1)"
 check test "$rc:$nested_ready_state" = "1:"
 
+# A starting Quickshell instance answers this on stdout with exit 0 (Omarchy's omarchy-shell wrapper notes it).
+scenario "$gfref" $'Not ready to accept queries yet\nlocked'
+run 5
+desc="a starting instance's 'Not ready to accept queries yet' is waited out, never a state"
+check test "$rc:$nested_ready_state:$(cat "$scratch/calls")" = "0:locked:2"
+
 scenario '[{"name":"WAYLAND-1"}]' "unlocked"
 run 1
 desc="without GF-REF nothing is ready even when the shell answers (exit 1, reason names GF-REF)"
@@ -108,4 +115,33 @@ desc="lock_privacy.sh decides 'already locked' on the readiness state, not on a 
 check bash -c '! grep -q "\[\[ \$(ipc lock status) == unlocked" "$1" && grep -q "nested_ready_state == unlocked" "$1"' _ "$root/tests/security/lock_privacy.sh"
 desc="reload_locked.sh waits for the restarted shell to answer before its status checks (no bare wait after shell-run.sh)"
 check bash -c '! grep -A1 "scripts/dev/shell-run.sh\"$" "$1" | grep -q "wait_status locked"' _ "$root/tests/security/reload_locked.sh"
+
+# The start-up hold budget of foreign-restart (security review of 4e742050: the documented gap must not widen unnoticed):
+# hold_budget, taken from reload_locked.sh as it is, with stub pass/fail and a stub load.
+desc="foreign-restart checks the start-up hold against HOLD_MAX_MS (default 3000)"
+check grep -q 'hold_budget foreign-restart "\$slowest" "\${HOLD_MAX_MS:-3000}"' "$root/tests/security/reload_locked.sh"
+budget=$(sed -n '/^hold_budget() {/,/^}/p' "$root/tests/security/reload_locked.sh")
+desc="hold_budget is defined once in reload_locked.sh"
+check test "$(grep -c '^hold_budget() {' "$root/tests/security/reload_locked.sh")" = 1
+eval "$budget"
+# The scenario's own helpers, stubbed: pass/fail print and set the caller's status, the load is stub_loaded.
+pass() { echo "PASS $*"; }
+fail() { echo "FAIL $*"; status=1; }
+stub_loaded=0
+load_above_cores() { ((stub_loaded)); }
+budget_out() { # <loaded 0|1> <slowest> <max>: prints "<first word of the verdict> <status>"
+  local status=0 line
+  stub_loaded=$1
+  hold_budget foreign-restart "$2" "$3" >"$scratch/budget" 2>&1
+  line=$(head -n 1 "$scratch/budget")
+  echo "${line%% *} $status"
+}
+desc="a hold within the budget passes"
+check test "$(budget_out 0 2100 3000)" = "PASS 0"
+desc="a hold over the budget fails at a normal load"
+check test "$(budget_out 0 10000 3000)" = "FAIL 1"
+desc="a hold over the budget is a SKIP above the core count (never a pass, status unchanged)"
+check test "$(budget_out 1 10000 3000)" = "SKIP 0"
+desc="a missing measure fails at a normal load"
+check test "$(budget_out 0 "" 3000)" = "FAIL 1"
 exit "$fail"

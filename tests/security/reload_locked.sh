@@ -17,9 +17,10 @@
 #                   releases and exits -> Grassfield takes a fresh lock, nothing reaches foot
 #   foreign-restart (a) foreign locker holding the lock + marker forged "unlocked" + shell restart ->
 #                   the shell takes the lock over; once the restarted shell's start-up no longer holds its
-#                   event loop (entrance logged, five prompt IPC answers in a row; the hold seen is printed),
-#                   the foreign locker releases -> fresh Grassfield lock requested within FOREIGN_MAX_MS
-#                   (default 150)
+#                   event loop (entrance logged, five prompt IPC answers in a row), the foreign locker
+#                   releases -> fresh Grassfield lock requested within FOREIGN_MAX_MS (default 150). The hold
+#                   seen (slowest IPC answer) must stay within HOLD_MAX_MS (default 3000; SKIP, not judged,
+#                   when the load is above the core count)
 #   lock-desync     (c) desync held on purpose (periodic check paused by the dev hook
 #                   `lock devPauseOwnershipCheck`: Hyprland unlocked, shell "locked"), then `lock lock`
 #                   -> a real lock, triggered by that request
@@ -432,6 +433,22 @@ shell_settled() { # <seconds>
   if [[ -n $acquired ]]; then echo "$((settled / 1000 - $(date -d "$acquired" +%s%3N))) $slowest"; else echo "? $slowest"; fi
 }
 
+# Timing budget of the start-up hold: the slowest IPC answer shell_settled saw (the hold's width; 1.2-2.1 s in the
+# integrator's run of 2026-11-04) at most <max> ms. Load-sensitive like the project's other timing budgets
+# (scripts/dev/test.sh `load-sensitive`, tests/shell/stack_watch_cost.sh): with the 1-minute load above the core count it
+# is reported as SKIP, never a pass and never enforced. Not acquired-to-settled: that adds the time to the entrance and
+# the five-answer streak (about 4 s on the same run) and would hide the hold in noise.
+load_above_cores() { awk -v n="$(nproc)" '{ exit !($1 > n) }' /proc/loadavg; }
+hold_budget() { # <step> <slowest ms> <max ms>
+  if [[ $2 =~ ^[0-9]+$ ]] && (($2 <= $3)); then
+    pass "$1: the start-up held the shell's event loop at most $2 ms (<= $3)"
+  elif load_above_cores; then
+    echo "SKIP $1: start-up hold ${2:-?} ms (> $3) not judged at load $(cut -d' ' -f1 /proc/loadavg) (above $(nproc) cores)"
+  else
+    fail "$1: the start-up held the shell's event loop ${2:-?} ms (> $3 ms): the documented foreign-release gap widened (docs/specs/security.md, Known limitations)"
+  fi
+}
+
 step_foreign_restart() {
   local s settled slowest
   foreign_start foreign-restart
@@ -446,6 +463,8 @@ step_foreign_restart() {
   if settled=$(shell_settled 30); then
     read -r settled slowest <<<"$settled"
     echo "foreign-restart: the restarted shell's event loop settled $settled ms after its lock was acquired; slowest IPC answer meanwhile $slowest ms (a foreign release before then waits for that loop)"
+    # The documented gap must not widen unnoticed (security review of 4e742050): the slowest answer is the hold's width.
+    hold_budget foreign-restart "$slowest" "${HOLD_MAX_MS:-3000}"
   else
     fail "foreign-restart: the restarted shell's event loop did not settle within 30 s ($settled; .dev/shell.log): the release below may measure its start-up"
   fi

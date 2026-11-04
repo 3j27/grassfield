@@ -1153,9 +1153,10 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   1000 ms" line logged at that relock came from `relock()` clearing the suspicion before the lock was lost, fixed).
   Needs a live foreign lock client at a shell restart and its release, normally the user authenticating to it, within
   those seconds. `foreign-restart` releases once the restarted shell's entrance is logged and its IPC, served on the same
-  loop, answered within 500 ms five times in a row (≤ 150 ms still asserted), and prints the slowest answer it saw (the
-  hold). Narrowing it needs a lighter start-up while locked (the entrance's first frames); Quickshell offers no check off
-  the event loop.
+  loop, answered within 500 ms five times in a row (≤ 150 ms still asserted); the slowest answer it saw (the hold's
+  width) must stay ≤ 3 s (`HOLD_MAX_MS`; load-sensitive: SKIP above the core count), so the gap cannot widen unnoticed.
+  Narrowing it needs a lighter start-up while locked (the entrance's first frames); Quickshell offers no check off the
+  event loop.
 - Keyboards that come and go (2026-10-24): when the session's only keyboard device goes away and another appears (a
   desktop's Bluetooth keyboard reconnecting at resume, on the lock screen), Quickshell ignores the keys of its re-created
   `wl_keyboard` until it gets a new `wl_keyboard.leave` and `enter`: the lock's password field (and the polkit dialog) is
