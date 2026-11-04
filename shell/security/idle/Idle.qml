@@ -324,9 +324,11 @@ Scope {
     }
 
     // logind decides (an application's sleep block inhibitor refuses it) and runs the lock before sleep (SleepInhibitor).
+    // --no-ask-password: an automatic sleep never asks for authorization (polkit's suspend-multiple-sessions, another user
+    // logged in): refused, the computer stays awake; no authorization sheet waits behind the lock to suspend after unlock.
     Process {
         id: autoSleepRequest
-        command: ["systemctl", "suspend"]
+        command: ["systemctl", "--no-ask-password", "suspend"]
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0)
                 console.warn("grassfield-idle: automatic sleep refused by the system (systemctl suspend exit " + exitCode + "); staying awake, locked");

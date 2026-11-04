@@ -794,7 +794,7 @@ a mutation). Both layers cover the output, so a capture is black while either sh
 - Automatic sleep (2026-11-04, Settings > Energy without a battery, Battery > Options… with one; macOS 27): before this,
   nothing in Grassfield or Omarchy suspended a computer on idle (logind `IdleAction=ignore`, Omarchy's idle service never
   suspends), so a computer never slept by itself. Now `IdleModel.AUTO_SLEEP_SECONDS` (60 s) after this module turned the
-  displays off for lack of input (either monitor above) the computer sleeps, through `systemctl suspend` (logind; an
+  displays off for lack of input (either monitor above) the computer sleeps, through `systemctl --no-ask-password suspend` (logind, never an authorization prompt behind the lock; an
   application's sleep block inhibitor refuses it, and the lock before sleep runs as for any sleep):
   - on battery always (macOS); on the power adapter or without a battery only when `energy.preventSleep` is false
     ("Prevent automatic sleeping [on power adapter] when the display is off"). Default true, and anything but an exact

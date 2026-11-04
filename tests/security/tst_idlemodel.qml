@@ -292,5 +292,8 @@ TestCase {
         // The suspend is asked for only on the "suspend" answer, and never in the dev session.
         verify(/if \(root\.devHooks\) \{\s*root\.autoSleepSuppressed\+\+;/.test(text));
         compare(lines.filter(l => l.indexOf("autoSleepRequest.running = true") >= 0).length, 1);
+        // logind's own suspend, never with --ignore-inhibitors (-i) and never asking for authorization behind the lock.
+        verify(text.indexOf('command: ["systemctl", "--no-ask-password", "suspend"]') >= 0);
+        verify(!/systemctl[^\n]*(-i\b|--ignore-inhibitors|--force|-f\b)/.test(text));
     }
 }

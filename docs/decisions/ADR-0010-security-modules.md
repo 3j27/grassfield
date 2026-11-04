@@ -173,7 +173,7 @@ Battery > Options… with one; on battery a Mac always sleeps).
 
 **Decision (security-engineer, Proposed until the integrator and the owner accept it).** The idle module gains the
 automatic sleep: `IdleModel.AUTO_SLEEP_SECONDS` (60) after it turned the displays off for lack of input, with no input and
-no idle inhibitor since, the computer sleeps through `systemctl suspend`. On battery always; on the power adapter or without
+no idle inhibitor since, the computer sleeps through `systemctl --no-ask-password suspend` (never an authorization prompt). On battery always; on the power adapter or without
 a battery only when `energy.preventSleep` is false. **Default true** (a deviation from macOS's default, where a desktop
 sleeps): Grassfield never put a computer to sleep by itself, the owner's machine runs long jobs on the power adapter, and an
 unreadable value must give back that behaviour, not a new one. The owner may choose macOS's default (false) later; nothing
