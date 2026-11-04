@@ -5,7 +5,7 @@ import "Keyboard.js" as Keyboard
 
 // Keyboard > Input Sources > Edit…: the layouts in use, the first one at login; + adds one (LayoutPickerSheet, through Main.qml),
 // − removes the selected one, a drag (or Alt+Up/Down) moves it. Each change goes back to the page at once (`changed`), which
-// writes keyboard.lua; with two or more, Ctrl+Space selects the previous source and Ctrl+Option+Space the next on every keyboard (bindings.lua, from the layout count omarchy.lua keeps). A Latin layout always comes first, as
+// writes keyboard.lua; with two or more, Ctrl+Space selects the previous source and Ctrl+Option+Space the next on every keyboard (bindings.lua, bound from two layouts). A Latin layout always comes first, as
 // input.lua applies them (Keyboard.latinFirst: the bindings resolve against the first layout, and a Latin password must be
 // typeable at the lock screen); macOS keeps a Latin input source the same way: the last one cannot be removed.
 Sheet {

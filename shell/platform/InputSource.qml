@@ -35,6 +35,9 @@ QtObject {
         const event = Logic.parse(data);
         if (!event)
             return;
+        // A virtual keyboard (own keymap) is not an input source either: its events change nothing, as in the device list.
+        if (Logic.untyped(event.keyboard))
+            return;
         const next = Logic.step(memory, event);
         memory = next.state;
         // A keyboard without layout names (a virtual one with its own keymap) is not an input source: nothing changes.
@@ -172,7 +175,7 @@ QtObject {
 
     // Makes the source at `index` the one in use on every keyboard (Hyprland: `switchxkblayout all`, a request, not a dispatcher).
     function select(index: int): void {
-        const request = Logic.switchRequest(index, sources.length);
+        const request = Logic.switchSource(sources, index);
         if (request === null)
             return;
         activeIndex = index;

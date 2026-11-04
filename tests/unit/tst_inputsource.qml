@@ -219,4 +219,24 @@ TestCase {
         compare(InputSource.parseTranslations("x".repeat(200), list, names).fr, "French");
         compare(InputSource.sourceKey({layout: "fr", variant: "bepo"}), "fr:bepo");
     }
+
+    // Dropping an invalid code must not shift the index Hyprland counts: French is the third group of us,nec_vndr/jp,fr.
+    function test_switchUsesHyprlandsOwnIndex() {
+        const list = InputSource.sources("us,nec_vndr/jp,fr", ",,");
+        compare(list.map(s => s.layout), ["us", "fr"]);
+        compare(InputSource.switchSource(list, 1), "switchxkblayout all 2");
+        compare(InputSource.switchSource(list, 0), "switchxkblayout all 0");
+        compare(InputSource.switchSource(list, 2), null);
+        compare(InputSource.switchSource(list, -1), null);
+        compare(InputSource.switchSource(undefined, 0), null);
+        compare(InputSource.switchSource(InputSource.sources("fr,us", ","), 1), "switchxkblayout all 1");
+    }
+
+    // The device list and the layout events use one filter: a virtual keyboard is not an input source.
+    function test_virtualKeyboardsAreUntypedForEventsToo() {
+        verify(InputSource.untyped("hl-virtual-keyboard-vkbd"));
+        verify(InputSource.untyped("power-button"));
+        verify(!InputSource.untyped("at-translated-set-2-keyboard"));
+        verify(!InputSource.untyped(undefined));
+    }
 }

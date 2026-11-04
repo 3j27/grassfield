@@ -61,6 +61,11 @@ var MAX_SOURCES = 4;
 // Keyboards that are not typed on (Hyprland lists them with the seat's layouts all the same): a virtual keyboard, a button.
 var UNTYPED = /^(hl-virtual-keyboard|power-button|sleep-button|lid-switch|video-bus)/;
 
+// A keyboard that is not typed on (the same filter for the device list and for the layout events).
+function untyped(name) {
+    return UNTYPED.test(String(name === undefined || name === null ? "" : name));
+}
+
 function validCode(s) {
     return typeof s === "string" && /^[a-z][a-z0-9_-]*$/.test(s) && s.length <= 16;
 }
@@ -69,7 +74,9 @@ function validVariantCode(s) {
     return s === "" || (typeof s === "string" && /^[a-z0-9][a-z0-9_-]*$/.test(s) && s.length <= 32);
 }
 
-// The sources of a layout list and its variants: [{layout, variant}], the names that are not xkb codes dropped, at most four.
+// The sources of a layout list and its variants: [{layout, variant, index}], the names that are not xkb codes dropped, at most
+// four. `index` is the position in Hyprland's own list (the one `switchxkblayout` counts), which dropping a name shifts away
+// from the position in this one: "us,nec_vndr/jp,fr" keeps French at index 2.
 function sources(layout, variant) {
     const layouts = String(layout === undefined || layout === null ? "" : layout).split(",");
     const variants = String(variant === undefined || variant === null ? "" : variant).split(",");
@@ -77,7 +84,7 @@ function sources(layout, variant) {
     for (let i = 0; i < layouts.length && out.length < MAX_SOURCES; i++) {
         const v = variants[i] === undefined ? "" : variants[i];
         if (validCode(layouts[i]))
-            out.push({layout: layouts[i], variant: validVariantCode(v) ? v : ""});
+            out.push({layout: layouts[i], variant: validVariantCode(v) ? v : "", index: i});
     }
     return out;
 }
@@ -192,6 +199,13 @@ function stepIndex(index, count, by) {
     if (count <= 0)
         return 0;
     return ((index + by) % count + count) % count;
+}
+
+// The request for the source at position `at` of the list: Hyprland's own index of it (see sources), null for no such source.
+function switchSource(list, at) {
+    if (!Array.isArray(list) || !Number.isInteger(at) || at < 0 || at >= list.length)
+        return null;
+    return switchRequest(list[at].index, MAX_SOURCES * 16);
 }
 
 // The request that makes the source at `index` the one in use on every keyboard ("all": a keyboard plugged in later has the
