@@ -12,6 +12,9 @@ TextField {
 
     // In a window's toolbar: a lifted white capsule instead of the sidebar's flat field.
     property bool toolbar: false
+    // The 3-px focus ring while the field has the focus (default). A field that holds the focus as the only text input of a
+    // popover over a window that stays key (Emoji & Symbols, ADR-0045 OC-3) draws none, as macOS 27's picker does.
+    property bool focusRing: true
 
     implicitHeight: Tokens.toolbarSearchHeight
     fieldRadius: height / 2
@@ -43,7 +46,7 @@ TextField {
 
         FocusRing {
             shapeRadius: root.fieldRadius
-            visible: root.activeFocus
+            visible: root.focusRing && root.activeFocus
         }
     }
 
