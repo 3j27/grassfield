@@ -59,8 +59,8 @@ TestCase {
                 return true;
             }
             property var queries: []
-            function query(argv: var, tag: string): void {
-                queries.push({argv: argv, tag: tag});
+            function query(argv: var, tag: string, timeoutMs: var): void {
+                queries.push({argv: argv, tag: tag, timeoutMs: timeoutMs});
             }
         }
     }
@@ -350,11 +350,16 @@ TestCase {
 
     // ADR-0045 OC-4: an external display's brightness over DDC/CI, Omarchy's command; the connector alone reads it.
     function test_ddcCommands() {
-        compare(System.ddcBrightnessQuery("DP-1"), ["omarchy-brightness-display-ddc", "DP-1"]);
-        compare(System.ddcBrightnessQuery("HDMI-A-1"), ["omarchy-brightness-display-ddc", "HDMI-A-1"]);
-        compare(System.setDdcBrightness("DP-1", 0.456), ["omarchy-brightness-display-ddc", "DP-1", "46%"]);
-        compare(System.setDdcBrightness("DP-1", 1.4), ["omarchy-brightness-display-ddc", "DP-1", "100%"]);
-        compare(System.setDdcBrightness("DP-1", -1), ["omarchy-brightness-display-ddc", "DP-1", "0%"]);
+        compare(System.ddcBrightnessQuery("DP-1"), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1"]);
+        compare(System.ddcBrightnessQuery("HDMI-A-1"), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "HDMI-A-1"]);
+        compare(System.setDdcBrightness("DP-1", 0.456), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "46%"]);
+        compare(System.setDdcBrightness("DP-1", 1.4), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "100%"]);
+        compare(System.setDdcBrightness("DP-1", -1), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "0%"]);
+        // Security review LOW 3: the bound (12 s, then KILL 2 s later: 14 s at most) ends every run before the Backend gives up on
+        // it (an action's 15 s, the read's DDC_WAIT_MS), so its ddcutil never outlives it and the next write never meets it.
+        compare(System.DDC_BOUND, ["timeout", "-k", "2", "12"]);
+        verify((12 + 2) * 1000 < System.DDC_WAIT_MS);
+        verify((12 + 2) * 1000 < 15000, "Backend.act's default wait");
         for (const bad of ["", "-x", "DP-", "DP1", "DP-1 ", "../DP-1", "DP-1;rm", "eDP-1", "LVDS-1", undefined])
             compare(System.ddcBrightnessQuery(bad), null, JSON.stringify(bad));
         compare(System.setDdcBrightness("-d", 0.5), null);
@@ -376,8 +381,9 @@ TestCase {
         verify(t.page.hasBrightness, "the backlight's row");
         t.page.selected = "DP-1";
         compare(t.backend.queries.length, 1);
-        compare(t.backend.queries[0].argv, ["omarchy-brightness-display-ddc", "DP-1"]);
+        compare(t.backend.queries[0].argv, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1"]);
         compare(t.backend.queries[0].tag, "display.ddc@DP-1");
+        compare(t.backend.queries[0].timeoutMs, System.DDC_WAIT_MS, "the read is waited for past its bound");
         verify(!t.page.hasBrightness, "no row before the display answered");
         // The page's own refresh never asks again (each read is i2c traffic).
         t.page.refresh();
@@ -399,7 +405,7 @@ TestCase {
         verify(slider);
         slider.local = 0.6;
         slider.moved(0.6);
-        compare(t.backend.actions, [["omarchy-brightness-display-ddc", "DP-1", "60%"]]);
+        compare(t.backend.actions, [["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "60%"]]);
         verify(row.running);
         // More of the drag while it runs: nothing more is started, whatever the throttle says.
         slider.local = 0.7;
@@ -415,12 +421,12 @@ TestCase {
         // The running one answers: only the last value goes.
         t.backend.finished("display.brightness", true, "60\n");
         compare(t.backend.actions.length, 2);
-        compare(t.backend.actions[1], ["omarchy-brightness-display-ddc", "DP-1", "85%"]);
+        compare(t.backend.actions[1], ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "85%"]);
         t.backend.finished("display.brightness", true, "85\n");
         tryVerify(() => !row.busy);
         // The drag ended: the display's level is read again.
         compare(t.backend.queries.length, 2);
-        compare(t.backend.queries[1].argv, ["omarchy-brightness-display-ddc", "DP-1"]);
+        compare(t.backend.queries[1].argv, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1"]);
         t.backend.finished("display.ddc@DP-1", true, "85\n");
         compare(t.page.ddc.level, 0.85);
         // Back to the built-in panel: its backlight, no DDC/CI row.

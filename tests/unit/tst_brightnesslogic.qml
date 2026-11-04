@@ -51,13 +51,13 @@ TestCase {
     }
 
     function test_argv() {
-        compare(Logic.argvFor("DP-1", {kind: "query"}), ["omarchy-brightness-display-ddc", "DP-1"]);
-        compare(Logic.argvFor("DP-1", {kind: "set", percent: 40}), ["omarchy-brightness-display-ddc", "DP-1", "40%"]);
-        compare(Logic.argvFor("DP-1", {kind: "set", percent: 0}), ["omarchy-brightness-display-ddc", "DP-1", "1%"]);
-        compare(Logic.argvFor("DP-1", {kind: "set", percent: 140}), ["omarchy-brightness-display-ddc", "DP-1", "100%"]);
-        compare(Logic.argvFor("HDMI-A-1", {kind: "step", steps: 1}), ["omarchy-brightness-display-ddc", "HDMI-A-1", "+5%"]);
-        compare(Logic.argvFor("HDMI-A-1", {kind: "step", steps: -3}), ["omarchy-brightness-display-ddc", "HDMI-A-1", "15%-"]);
-        compare(Logic.argvFor("DP-1", {kind: "step", steps: 40}), ["omarchy-brightness-display-ddc", "DP-1", "+100%"]);
+        compare(Logic.argvFor("DP-1", {kind: "query"}), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1"]);
+        compare(Logic.argvFor("DP-1", {kind: "set", percent: 40}), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "40%"]);
+        compare(Logic.argvFor("DP-1", {kind: "set", percent: 0}), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "1%"]);
+        compare(Logic.argvFor("DP-1", {kind: "set", percent: 140}), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "100%"]);
+        compare(Logic.argvFor("HDMI-A-1", {kind: "step", steps: 1}), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "HDMI-A-1", "+5%"]);
+        compare(Logic.argvFor("HDMI-A-1", {kind: "step", steps: -3}), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "HDMI-A-1", "15%-"]);
+        compare(Logic.argvFor("DP-1", {kind: "step", steps: 40}), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "+100%"]);
         compare(Logic.argvFor("DP-1", {kind: "step", steps: 0}), null);
         compare(Logic.argvFor("DP-1", {kind: "set", percent: NaN}), null);
         compare(Logic.argvFor("-x", {kind: "query"}), null);
@@ -72,7 +72,7 @@ TestCase {
     // The first query: probing, then ok with its level, or none (one journal line: `failed`).
     function test_probe() {
         let r = Logic.request(Logic.fresh(), "DP-1", {kind: "query"});
-        compare(r.start, ["omarchy-brightness-display-ddc", "DP-1"]);
+        compare(r.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1"]);
         compare(r.entry.status, "probing");
         verify(r.entry.busy);
         let f = Logic.finished(r.entry, "DP-1", "40\n");
@@ -95,7 +95,7 @@ TestCase {
     // At most one command per output: what comes meanwhile waits; a set replaces what waited (the last value wins).
     function test_coalescingSets() {
         let r = Logic.request(okEntry(40), "DP-1", {kind: "set", percent: 50});
-        compare(r.start, ["omarchy-brightness-display-ddc", "DP-1", "50%"]);
+        compare(r.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "50%"]);
         compare(r.entry.level, 50);
         for (const p of [55, 60, 70]) {
             r = Logic.request(r.entry, "DP-1", {kind: "set", percent: p});
@@ -104,7 +104,7 @@ TestCase {
         }
         compare(r.entry.pending, {kind: "set", percent: 70});
         const f = Logic.finished(r.entry, "DP-1", "50\n");
-        compare(f.start, ["omarchy-brightness-display-ddc", "DP-1", "70%"], "only the last value is sent");
+        compare(f.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "70%"], "only the last value is sent");
         verify(f.entry.busy);
         compare(f.entry.pending, null);
         compare(f.entry.level, 70);
@@ -117,7 +117,7 @@ TestCase {
     // Key presses add up while a command runs; the printed level corrects the expected one.
     function test_coalescingSteps() {
         let r = Logic.request(okEntry(40), "DP-1", {kind: "step", steps: 1});
-        compare(r.start, ["omarchy-brightness-display-ddc", "DP-1", "+5%"]);
+        compare(r.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "+5%"]);
         compare(r.entry.level, 45);
         r = Logic.request(r.entry, "DP-1", {kind: "step", steps: 1});
         r = Logic.request(r.entry, "DP-1", {kind: "step", steps: 1});
@@ -126,7 +126,7 @@ TestCase {
         compare(r.entry.pending, {kind: "step", steps: 2});
         // The display was at 30, not 40 (Settings changed it): the command stepped from its own level.
         const f = Logic.finished(r.entry, "DP-1", "35\n");
-        compare(f.start, ["omarchy-brightness-display-ddc", "DP-1", "+10%"]);
+        compare(f.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "+10%"]);
         compare(f.entry.level, 45);
         // Up then down while one runs: nothing more to send.
         let u = Logic.request(okEntry(40), "DP-1", {kind: "step", steps: 1});
@@ -170,11 +170,33 @@ TestCase {
             last = Logic.finished(r.entry, "DP-1", "");
             e = last.entry;
             if (i < 2)
-                compare(last.start, ["omarchy-brightness-display-ddc", "DP-1", "+5%"], "what waited still runs");
+                compare(last.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "+5%"], "what waited still runs");
         }
         compare(e.status, "none");
         verify(last.failed);
         compare(last.start, null, "nothing more runs on a display that stopped answering");
+    }
+
+    // Security review LOW 3: every command runs under coreutils' timeout, which ends the command's whole process group (the bash
+    // script and its ddcutil), and the shell's backstop only comes after the bound and its kill. A run that timed out (timeout
+    // exits 124 without output) answers as not answered, and what waited for it starts only then: however long it runs, never
+    // two commands on one bus.
+    function test_bound() {
+        compare(Logic.BOUND, ["timeout", "-k", "2", "12"]);
+        for (const req of [{kind: "query"}, {kind: "set", percent: 50}, {kind: "step", steps: -1}])
+            compare(Logic.argvFor("DP-1", req).slice(0, 5), ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc"]);
+        verify(Logic.BACKSTOP_MS > (12 + 2) * 1000, "the backstop waits past the bound and its kill");
+        let r = Logic.request(okEntry(40), "DP-1", {kind: "set", percent: 50});
+        verify(r.start !== null);
+        for (let i = 0; i < 5; i++) {
+            r = Logic.request(r.entry, "DP-1", {kind: "step", steps: 1});
+            compare(r.start, null, "nothing more starts while the first runs");
+        }
+        verify(r.entry.busy);
+        const f = Logic.finished(r.entry, "DP-1", "");
+        compare(f.entry.failures, 1);
+        compare(f.entry.status, "ok");
+        compare(f.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1", "+25%"], "what waited, once the first has ended");
     }
 
     // The keys act on the active display when it can be changed; else on the built-in panel's backlight (macOS).
@@ -226,7 +248,7 @@ TestCase {
         compare(s.ddc["DP-1"].pending, {kind: "query"});
         compare(s.ddc["DP-1"].serial, 8);
         const r = Logic.released(s.ddc["DP-1"], "DP-1");
-        compare(r.start, ["omarchy-brightness-display-ddc", "DP-1"], "its own query runs once the old command ends");
+        compare(r.start, ["timeout", "-k", "2", "12", "omarchy-brightness-display-ddc", "DP-1"], "its own query runs once the old command ends");
         compare(r.entry.status, "probing");
         verify(r.entry.busy);
         const idle = Logic.released(Object.assign(Logic.fresh(), {busy: true}), "DP-1");

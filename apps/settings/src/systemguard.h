@@ -22,7 +22,7 @@ bool devSession();
 //   omarchy-hw-fingerprint, omarchy-hibernation-available (no argument), omarchy-network-qr --meta: Omarchy's read-only checks
 //   lsblk -J -o NAME,TYPE,FSTYPE,MOUNTPOINTS                                                    Privacy & Security > Disk Encryption
 // Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030), never
-// omarchy-brightness-display-ddc <connector> (Displays reads an external display's level only in a real session: a dev session
+// timeout -k 2 12 omarchy-brightness-display-ddc <connector> (Displays reads an external display's level only in a real session: a dev session
 // never asks the owner's displays; it writes Omarchy's cache under $XDG_RUNTIME_DIR and probes the i2c buses, ADR-0045 OC-4).
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
@@ -51,7 +51,7 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
 bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
-// & Region, omarchy-powerprofiles-set for Battery, brightnessctl and omarchy-brightness-display-ddc for Displays, lpoptions for
+// & Region, omarchy-powerprofiles-set for Battery, brightnessctl and timeout (around omarchy-brightness-display-ddc only) for Displays, lpoptions for
 // Printers: the user's own CUPS defaults; /usr/lib/grassfield/grassfield-channel-set for Software Update). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
 // changes and adding or removing a printer are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
@@ -81,8 +81,9 @@ bool isPrinterUri(const QString &uri);
 
 // A whole action command line: an allowed program, for xdg-open exactly one clean https link (xdg-open hands anything else, a
 // local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
-// exactly `-q -d <backlight> set <0-100>%`, for omarchy-brightness-display-ddc exactly `<connector> <0-100>%` (Omarchy's DDC/CI
-// command, an external display's brightness, ADR-0045 OC-4; it keeps the level within 1..100), for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
+// exactly `-q -d <backlight> set <0-100>%`, for timeout exactly `-k 2 12 omarchy-brightness-display-ddc <connector> <0-100>%`
+// (Omarchy's DDC/CI command, an external display's brightness, ADR-0045 OC-4, which keeps the level within 1..100; coreutils'
+// timeout ends its whole process group, ddcutil included, within 14 s: security review LOW 3), for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
 // `set-mute <id> 0|1`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
 // ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions), for grassfield-channel-set (the
 // installed /usr/lib/grassfield/grassfield-channel-set, never one found on PATH) exactly one of `stable`, `beta`, `repair`,

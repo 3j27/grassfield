@@ -198,7 +198,7 @@ Singleton {
         if (!root.ddcCommand) {
             if (Object.keys(s.ddc).length > 0 && !root.ddcMissingLogged) {
                 root.ddcMissingLogged = true;
-                console.info("brightness: " + Logic.COMMAND + " is missing; external displays keep their own brightness");
+                console.info("brightness: " + Logic.COMMAND + " (or coreutils' " + Logic.BOUND[0] + ") is missing; external displays keep their own brightness");
             }
             root.ddc = ({});
             return;
@@ -228,10 +228,10 @@ Singleton {
             console.info("brightness: dev session, external displays are not asked over DDC/CI");
     }
 
-    // A fixed command line, no data in it.
+    // A fixed command line, no data in it: the command's path, printed only when coreutils' timeout (its bound) is there too.
     Process {
         id: ddcCheck
-        command: ["sh", "-c", "command -v " + Logic.COMMAND]
+        command: ["sh", "-c", "command -v " + Logic.BOUND[0] + " >/dev/null && command -v " + Logic.COMMAND]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.ddcCommand = text.trim() !== "";
@@ -240,9 +240,11 @@ Singleton {
         }
     }
 
-    // One run of the DDC command for one output: an argument vector, its output read once it has exited (a process that could
-    // not start has none: the answer comes from the exit alone, a moment later), stopped when it runs longer than
-    // BrightnessLogic.TIMEOUT_MS. Reports to ddcFinished exactly once, then goes.
+    // One run of the DDC command for one output: an argument vector under its bound (BrightnessLogic.BOUND: coreutils' timeout
+    // ends the whole process group, ddcutil included), its output read once it has ended (a process that could not start has
+    // none: the answer comes from its end alone, a moment later). It reports to ddcFinished exactly once, and only once its
+    // process has really ended: until then the output stays busy and nothing else runs on its bus. A run still going after
+    // BrightnessLogic.BACKSTOP_MS (past the bound and its kill) is asked to stop again and still waited for. Then it goes.
     Component {
         id: ddcJob
 
@@ -255,7 +257,11 @@ Singleton {
             property string out: ""
             property int code: -1
             property bool gotOut: false
-            property bool gotExit: false
+            // The process ended: its exit came, or it stopped running and no exit came within the join (one that could not
+            // start never exits).
+            property bool ended: false
+            property bool stopped: false
+            property bool timedOut: false
             property bool reported: false
 
             function start(): void {
@@ -263,19 +269,23 @@ Singleton {
             }
 
             function check(): void {
-                if (job.gotOut && job.gotExit)
+                if (job.gotOut && job.ended)
                     job.done();
             }
 
-            // Only a run that exited 0 answers; its output is the level. The job goes once its process has exited, never before
-            // (one stopped on a hung bus answers at once, as not answered, and is not left running unseen).
+            function end(): void {
+                job.ended = true;
+                join.start();
+                job.check();
+            }
+
+            // Only a run that exited 0 within its time answers; its output is the level. Never before the process has ended.
             function done(): void {
-                if (!job.reported) {
-                    job.reported = true;
-                    root.ddcFinished(job.output, job.serial, job.code === 0 ? job.out : "");
-                }
-                if (job.gotExit)
-                    job.destroy();
+                if (job.reported || !job.ended)
+                    return;
+                job.reported = true;
+                root.ddcFinished(job.output, job.serial, job.code === 0 && !job.timedOut ? job.out : "");
+                job.destroy();
             }
 
             Process {
@@ -291,28 +301,40 @@ Singleton {
                 // qmllint disable signal-handler-parameters
                 onExited: exitCode => {
                     // qmllint enable signal-handler-parameters
-                    if (!job.reported)
-                        job.code = exitCode;
-                    job.gotExit = true;
-                    join.start();
-                    job.check();
+                    job.code = exitCode;
+                    job.end();
+                }
+                // Not running any more: its exit (and output) may still be on the way; the join settles it.
+                onRunningChanged: {
+                    if (!proc.running) {
+                        job.stopped = true;
+                        join.start();
+                    }
                 }
             }
 
             Timer {
                 id: join
                 interval: 150
-                onTriggered: job.done()
+                onTriggered: {
+                    if (job.stopped)
+                        job.ended = true;
+                    job.done();
+                }
             }
 
+            // TERM to timeout, which passes it to the command's group and kills the group 2 s later.
             Timer {
-                interval: Logic.TIMEOUT_MS
+                interval: Logic.BACKSTOP_MS
                 running: true
                 onTriggered: {
-                    if (proc.running)
+                    job.timedOut = true;
+                    if (proc.running) {
                         proc.signal(15);
-                    job.code = -1;
-                    job.done();
+                    } else {
+                        job.stopped = true;
+                        job.end();
+                    }
                 }
             }
         }
