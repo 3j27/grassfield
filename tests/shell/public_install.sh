@@ -30,7 +30,13 @@ mkdir -p "$BIN" "$S" "$W/home" "$W/run" "$W/tmp" "$W/render"
 # ---- 1. render.py ---------------------------------------------------------------------------------------------------
 printf 'GRASSFIELD_REPO_BASE=%s\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_REPO_BASE_PREVIOUS=\nGRASSFIELD_SIGNING_FINGERPRINT=%s\n' \
   "$BASE" "$FPR" >"$W/good.conf"
+# The shipped repository.conf names the real host and the owner's key since 2026-11-04 (ADR-0043 g): it renders. The
+# placeholder refusal is tested on a conf with the old .invalid base.
 python3 -I "$root/packaging/install/render.py" --conf "$root/packaging/pacman/repository.conf" --template "$TPL" \
+  --out "$W/render/shipped" >"$W/o" 2>&1
+expect 'render accepts the shipped repository.conf (real host, owner key)' "$?" 0
+sed 's#^GRASSFIELD_REPO_BASE=.*#GRASSFIELD_REPO_BASE=https://packages.grassfield.invalid#' "$W/good.conf" >"$W/placeholder.conf"
+python3 -I "$root/packaging/install/render.py" --conf "$W/placeholder.conf" --template "$TPL" \
   --out "$W/render/placeholder" >"$W/o" 2>&1
 expect 'render refuses the placeholder repository.conf' "$?" 1
 has 'render names the placeholder' 'placeholder' "$W/o"

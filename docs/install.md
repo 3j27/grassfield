@@ -1,7 +1,11 @@
 # Install Grassfield / Installer Grassfield
 
-DRAFT (ADR-0043). Not published: the host, the key fingerprint and the checksum below are placeholders until the owner chooses
-the hosting (O8) and provides the signing key (O11), and the legal review is done. Brouillon : rien n'est publié.
+PUBLISHED, UNANNOUNCED (ADR-0043 h, owner decision of 2026-11-04). The repository is at https://packages.grassfield.site with
+signing key E4921A382C349308BAA50D2F44C31B5D862EBEFA; nothing links to this page and the site stays noindex. The legal review
+stays mandatory before any announcement. The checksum below is for the script rendered from the current `repository.conf`
+(`just render-install`; recompute it with `sha256sum` after any change to the template or the conf). SITE and README are
+placeholders until the announcement. Publié, non annoncé : aucun lien, le site reste noindex ; la revue juridique précède
+toute annonce.
 
 ---
 
@@ -18,15 +22,15 @@ choose which one starts at login, and you can go back at any time.
 ### Install
 Open a terminal in Omarchy. Do not use `sudo` yourself. One line:
 ```bash
-curl -fsSL https://HOST.PLACEHOLDER/install/grassfield-install.sh | bash
+curl -fsSL https://packages.grassfield.site/install/grassfield-install.sh | bash
 ```
 Or, to look at the script and check it first (download, check, run):
 ```bash
-curl -fsSLO https://HOST.PLACEHOLDER/install/grassfield-install.sh
-curl -fsSLO https://HOST.PLACEHOLDER/install/grassfield-install.sh.sha256
+curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh
+curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh.sha256
 sha256sum -c grassfield-install.sh.sha256 && bash grassfield-install.sh
 ```
-Checksum: `SHA256: CHECKSUM.PLACEHOLDER`, also published at SITE.PLACEHOLDER and README.PLACEHOLDER.
+Checksum: `SHA256: be3342cfcc6865ec927985134beaa65cfbee844f437d1196d4f533835bd5a5fa` (`grassfield-install.sh`), also published next to the script as `grassfield-install.sh.sha256`; the site and the README will carry it at the announcement (SITE.PLACEHOLDER, README.PLACEHOLDER).
 
 **What each form protects against, and what it does not**
 - *The one line* runs whatever the host serves at that moment. You rely on the TLS connection to the host and on the host
@@ -35,7 +39,7 @@ Checksum: `SHA256: CHECKSUM.PLACEHOLDER`, also published at SITE.PLACEHOLDER and
   host proves nothing against a compromised host**: whoever controls the host can serve a script and a matching checksum. It
   protects against a damaged or cut download. To get a real check, compare the checksum with the copy published at the other
   places above (the site and the README), which an attacker would also have to change.
-- In both cases the signing key is pinned inside the script (fingerprint `FINGERPRINT.PLACEHOLDER`, to compare with the site).
+- In both cases the signing key is pinned inside the script (fingerprint `E4921A382C349308BAA50D2F44C31B5D862EBEFA`, to compare with the site).
   The script fetches the key into a temporary keyring and checks that its **primary** key has exactly that fingerprint before
   pacman sees it. Packages are then accepted only if their signature verifies against a key pacman trusts.
 - **The Grassfield key becomes trusted by pacman for every repository, not only Grassfield's** (pacman does not limit a key
@@ -89,15 +93,15 @@ Omarchy : tu choisis ce qui démarre à la connexion et tu peux revenir en arri�
 ### Installer
 Ouvre un terminal dans Omarchy. N'utilise pas `sudo` toi-même. Une ligne :
 ```bash
-curl -fsSL https://HOST.PLACEHOLDER/install/grassfield-install.sh | bash
+curl -fsSL https://packages.grassfield.site/install/grassfield-install.sh | bash
 ```
 Ou, pour lire et vérifier le script d'abord (télécharger, vérifier, lancer) :
 ```bash
-curl -fsSLO https://HOST.PLACEHOLDER/install/grassfield-install.sh
-curl -fsSLO https://HOST.PLACEHOLDER/install/grassfield-install.sh.sha256
+curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh
+curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh.sha256
 sha256sum -c grassfield-install.sh.sha256 && bash grassfield-install.sh
 ```
-Somme de contrôle : `SHA256: CHECKSUM.PLACEHOLDER`, aussi publiée sur SITE.PLACEHOLDER et README.PLACEHOLDER.
+Somme de contrôle : `SHA256: be3342cfcc6865ec927985134beaa65cfbee844f437d1196d4f533835bd5a5fa` (`grassfield-install.sh`), aussi publiée à côté du script (`grassfield-install.sh.sha256`) ; le site et le README la porteront à l'annonce (SITE.PLACEHOLDER, README.PLACEHOLDER).
 
 **Ce que chaque forme protège, et ce qu'elle ne protège pas**
 - *La ligne unique* exécute ce que l'hôte sert à cet instant. Tu t'appuies sur la connexion TLS vers l'hôte et sur l'hôte
@@ -106,7 +110,7 @@ Somme de contrôle : `SHA256: CHECKSUM.PLACEHOLDER`, aussi publiée sur SITE.PLA
   téléchargée **depuis le même hôte ne prouve rien contre un hôte compromis** : qui contrôle l'hôte peut servir un script et la
   somme qui lui correspond. Elle protège d'un téléchargement abîmé ou coupé. Pour une vraie vérification, compare la somme avec
   la copie publiée ailleurs (le site et le README), qu'un attaquant devrait aussi modifier.
-- Dans les deux cas la clé de signature est fixée dans le script (empreinte `FINGERPRINT.PLACEHOLDER`, à comparer avec le
+- Dans les deux cas la clé de signature est fixée dans le script (empreinte `E4921A382C349308BAA50D2F44C31B5D862EBEFA`, à comparer avec le
   site). Le script récupère la clé dans un trousseau temporaire et vérifie que sa clé **primaire** a exactement cette empreinte
   avant que pacman la voie. Les paquets ne sont ensuite acceptés que si leur signature est vérifiée par une clé de confiance de pacman.
 - **La clé de Grassfield devient une clé de confiance de pacman pour tous les dépôts, pas seulement celui de Grassfield**

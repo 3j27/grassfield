@@ -670,6 +670,13 @@ the change to the first published release, where a miss would ship a desktop wit
 since the channel's keyring must be grassfield-packages' `keyring/`, the whole package (its `keyring-check.sh`).
 
 ## Amendments
+- **Activation (owner decision of 2026-11-04), recorded 2026-11-04.** Amends h's "activated after the legal review": the
+  repository is published at `https://packages.grassfield.site` now, **unannounced** (no link from the site, the site stays
+  noindex), before the legal review, which stays mandatory before any public announcement. The owner's key
+  (`E4921A382C349308BAA50D2F44C31B5D862EBEFA`, created 2026-11-04) is in `repository.conf` and
+  `grassfield-signing-key.asc`: builds set Software Update up for real ("Set Up…" appears) and the Store fetches the catalog.
+  The first release is a Grassfield tag (`v1.0.0-rc1`, beta channel: e, O15); publishing still needs the owner's approval of
+  each run in `publish-beta` / `publish-stable`.
 - **Hosting and key (owner decisions O8, O8b, O11 of 2026-11-03), recorded 2026-11-03.** The host is
   `packages.grassfield.site` on Cloudflare R2 (h.5); `repository.conf` carries the base and no fingerprint; the owner makes the
   key with `docs/owner-setup/make-signing-key.sh`. Nothing is published.

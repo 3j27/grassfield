@@ -125,7 +125,7 @@ conf() { printf 'GRASSFIELD_REPO_BASE=%s\nGRASSFIELD_REPO_MIRRORS=%s\nGRASSFIELD
 gen() { rm -rf "$W/gen" && python3 -I "$G" --conf "$1" --key "$2" --out "$W/gen" 2>>"$W/log"; }
 conf file:///srv/primary file:///srv/mirror file:///srv/old "$K1" >"$W/test.conf"
 conf file:///srv/newhost "" file:///srv/primary "$K1" >"$W/newhost.conf"
-expect "generate.py: the shipped repository.conf (placeholder base, no key) is a valid keyless build" gen /src/packaging/pacman/repository.conf /src/packaging/pacman/grassfield-signing-key.asc
+expect "generate.py: the shipped repository.conf (packages.grassfield.site, the owner's key E4921A38, activated 2026-11-04) is a valid keyed build" gen /src/packaging/pacman/repository.conf /src/packaging/pacman/grassfield-signing-key.asc
 expect "generate.py: the test build (file:// base, mirror, previous base, K1)" gen "$W/test.conf" "$W/k1.asc"
 expect "templates: SigLevel = Required, the primary then the mirror, \$arch kept" bash -c "grep -v '^#' $W/gen/grassfield-beta.conf | tr '\n' '|' | grep -qxF 'SigLevel = Required|Server = file:///srv/primary/beta/\$arch|Server = file:///srv/mirror/beta/\$arch|'"
 conf file:///srv/primary "" "" "$KR" >"$W/bad.conf"
@@ -335,8 +335,11 @@ env BASH_ENV="$W/evil/bashenv" PATH="$W/evil:$PATH" SHELLOPTS=xtrace 'BASH_FUNC_
 expect "BASH_ENV, an exported function and PATH are ignored (no marker written)" bash -c "! ls $W/pwned-* 2>/dev/null"
 cp -a /usr/share/grassfield/pacman "$W/pacman.real"
 gen /src/packaging/pacman/repository.conf /src/packaging/pacman/grassfield-signing-key.asc && cp "$W"/gen/* /usr/share/grassfield/pacman/
+expect "the shipped build names the owner's key (E4921A382C349308BAA50D2F44C31B5D862EBEFA) and the real host" bash -c "grep -qx 'GRASSFIELD_SIGNING_FINGERPRINT=E4921A382C349308BAA50D2F44C31B5D862EBEFA' /usr/share/grassfield/pacman/repository.conf && grep -qx 'GRASSFIELD_REPO_BASE=https://packages.grassfield.site' /usr/share/grassfield/pacman/repository.conf"
+# A build made without a key (the shipped files with the fingerprint blanked) still refuses.
+sed -i "s/^GRASSFIELD_SIGNING_FINGERPRINT=.*/GRASSFIELD_SIGNING_FINGERPRINT=/" /usr/share/grassfield/pacman/repository.conf
 out=$(chset alice stable 2>&1); rc=$?
-expect "the shipped build (no key): grassfield-channel-set stable refused 'no signing key in this build'" test "$rc:$(grep -c 'no signing key in this build' <<<"$out")" == 1:1
+expect "a keyless build: grassfield-channel-set stable refused 'no signing key in this build'" test "$rc:$(grep -c 'no signing key in this build' <<<"$out")" == 1:1
 out=$("$H" set stable 2>&1); rc=$?
 expect "... and the helper itself refuses the same" test "$rc:$(grep -c 'no signing key in this build' <<<"$out")" == 1:1
 sed -i "s/^GRASSFIELD_SIGNING_FINGERPRINT=.*/GRASSFIELD_SIGNING_FINGERPRINT=$K1/" /usr/share/grassfield/pacman/repository.conf

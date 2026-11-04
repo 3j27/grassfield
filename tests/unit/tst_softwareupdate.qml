@@ -290,7 +290,7 @@ TestCase {
     function test_aBuildWithoutKeyOrHostCannotSetUp() {
         const conf = (base, fp) => "# comment\nGRASSFIELD_REPO_BASE=" + base + "\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_SIGNING_FINGERPRINT=" + fp + "\n";
         const fp = "0123456789ABCDEF0123456789ABCDEF01234567";
-        verify(!Logic.buildReady(conf("https://packages.grassfield.site", "")), "the shipped repository.conf: the host, no key yet (O11)");
+        verify(!Logic.buildReady(conf("https://packages.grassfield.site", "")), "a build made without the key (the shipped repository.conf names it since 2026-11-04)");
         verify(Logic.buildReady(conf("https://packages.grassfield.site", fp)), "the host with the owner's key");
         verify(!Logic.buildReady(conf("https://packages.grassfield.invalid", "")), "the old placeholder");
         verify(!Logic.buildReady(conf("https://packages.grassfield.invalid", fp)), "a key but no host");

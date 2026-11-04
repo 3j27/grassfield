@@ -166,8 +166,23 @@ and a signed `[grassfield]` repository built with a throwaway key, `render.py` r
 | IN7 | Languages | EN + FR · EN | EN + FR | **EN + FR** |
 | IN8 | Where the checksum is published | host, README, site | all three | **host, README and site** |
 
+### h. Activation (owner decision of 2026-11-04)
+The owner decided to publish the repository at `https://packages.grassfield.site` now, **unannounced** (no link from the site,
+the site stays noindex), before the legal review, which stays mandatory before any public announcement. This amends ADR-0033
+h's "activated after the legal review" (recorded there too). `repository.conf` now carries
+`GRASSFIELD_SIGNING_FINGERPRINT=E4921A382C349308BAA50D2F44C31B5D862EBEFA` and `grassfield-signing-key.asc` holds the owner's
+public key (v4 EdDSA, one primary, no subkey), so `just render-install` renders the real script (sha256
+`be3342cfcc6865ec927985134beaa65cfbee844f437d1196d4f533835bd5a5fa`, to be recomputed whenever the template or the conf changes). Rendered files are build output (`build/install/`, ignored
+by the repository) and are not committed.
+
+Bucket keys, so that the documented commands work (the bucket is `grassfield`, objects are served at the base):
+`install/grassfield-install.sh` and `install/grassfield-install.sh.sha256` (both `Cache-Control: no-cache`), and
+`grassfield-signing-key.asc` at the root (the script's host-file fallback, `$GF_BASE/grassfield-signing-key.asc`). The owner
+uploads them with `wrangler r2 object put` (commands in `docs/owner-setup/hosting-and-key.md`); the packages arrive with the
+first run of grassfield-packages' publishing job.
+
 ## Consequences
-- `just render-install` fails today by design (placeholder host, empty fingerprint): the first release needs O8 and O11.
+- `just render-install` refuses a conf with the `.invalid` host or an empty fingerprint, by design. It succeeds since 2026-11-04 (h).
 - A source build (`makepkg -si`, the owner's flow) is unaffected; the script targets users of the repository.
 - The default install changes the boot screen and rebuilds the boot image (root, minutes): ADR-0042's owner-run guide
   (`docs/owner-setup/login-boot-themes.md`) remains the reference for the fallback and for the manual revert; the owner's
