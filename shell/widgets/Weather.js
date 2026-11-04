@@ -65,9 +65,10 @@ function reportUrl(base, query) {
     return base + "/" + String(query || "") + "?format=j1";
 }
 
-// curl's argument vector for a report URL (one run, no shell): failures as an exit code (-f), quiet but for errors, only the
-// URL's own protocol (https; http for the loopback test server) for the request and any redirect, at most `seconds` and
-// `maxBytes`. null for any other URL.
+// curl's argument vector for a report URL (one run, no shell): `-q` first, so no ~/.curlrc is read (a user's rc could turn
+// off certificate checks, add a proxy or write the answer elsewhere; curl honours -q only as its first argument), failures as
+// an exit code (-f), quiet but for errors, only the URL's own protocol (https; http for the loopback test server) for the
+// request and any redirect, at most `seconds` and `maxBytes`. null for any other URL.
 function fetchArgs(url, seconds, maxBytes) {
     const u = String(url || "");
     let proto = "";
@@ -77,7 +78,7 @@ function fetchArgs(url, seconds, maxBytes) {
         proto = "=http";
     else
         return null;
-    return ["curl", "-fsS", "--proto", proto, "--proto-redir", proto, "--max-redirs", "3", "--max-time", String(seconds),
+    return ["curl", "-q", "-fsS", "--proto", proto, "--proto-redir", proto, "--max-redirs", "3", "--max-time", String(seconds),
             "--max-filesize", String(maxBytes), "-H", "Accept: application/json", "--", u];
 }
 
@@ -127,7 +128,8 @@ function observed(text) {
     return minutes === null ? null : {date: m[1], minutes: minutes};
 }
 
-// Sunrise and sunset of a j1 day, in the place's minutes; null when either is missing (polar day or night: the day symbols).
+// Sunrise and sunset of a j1 day, in the place's minutes; null when either is missing (no astronomy, or a polar day or night
+// that j1 writes as "No sunrise" / "No sunset"): the hour decides then (nightByHour).
 function sunOf(day) {
     const a = day ? first(day.astronomy) : null;
     if (!a)
@@ -137,8 +139,15 @@ function sunOf(day) {
     return rise === null || set === null || rise >= set ? null : {rise: rise, set: set};
 }
 
+// Night by the hour alone (no sunrise and sunset known): before 6:00 and from 18:00.
+function nightByHour(minutes) {
+    return minutes !== null && minutes !== undefined && (minutes < 6 * 60 || minutes >= 18 * 60);
+}
+
 function isNight(minutes, sun) {
-    return minutes !== null && sun !== null && (minutes < sun.rise || minutes >= sun.set);
+    if (minutes === null)
+        return false;
+    return sun === null ? nightByHour(minutes) : minutes < sun.rise || minutes >= sun.set;
 }
 
 // "1500" -> 900 (j1's hourly "time" is hhmm without padding: "0", "300", ... "2100").
@@ -247,6 +256,18 @@ function condition(code, night) {
             return {key: CONDITIONS[i].key, symbol: night ? CONDITIONS[i].night : CONDITIONS[i].day};
     }
     return {key: "unknown", symbol: "cloud"};
+}
+
+// The sky macOS draws behind its Weather widget, one of three gradients (the widget.weatherSky* tokens): "night" after
+// sunset and before sunrise at the place, "day" by day when it is clear or partly cloudy, "cloudy" by day under anything
+// else (overcast, fog, rain, snow, storms, an unknown code). An unavailable report keeps the neutral "cloudy" sky, its last
+// values on it. Before any report the widget asks with the hour of the shell's own clock (nightByHour).
+function sky(key, night, unavailable) {
+    if (unavailable)
+        return "cloudy";
+    if (night)
+        return "night";
+    return key === "clear" || key === "partlyCloudy" ? "day" : "cloudy";
 }
 
 // °F for the formats of the United States, Liberia and Myanmar (Omarchy's localeUsesImperial), °C everywhere else.

@@ -58,6 +58,10 @@ TestCase {
     function test_fetchArgs() {
         const args = Weather.fetchArgs("https://wttr.in/Lyon?format=j1", 10, maxBytes);
         compare(args[0], "curl");
+        // Security review LOW 5: -q first (curl honours it only there), so no ~/.curlrc can turn off certificate checks, add a
+        // proxy or write the answer elsewhere.
+        compare(args[1], "-q", "no curlrc");
+        compare(args.indexOf("-q"), 1, "once");
         compare(args[args.length - 1], "https://wttr.in/Lyon?format=j1", "the URL last");
         compare(args[args.length - 2], "--", "after --");
         verify(args.indexOf("-fsS") > 0, "fail on HTTP errors, quiet");
@@ -65,7 +69,9 @@ TestCase {
         compare(args[args.indexOf("--proto-redir") + 1], "=https", "redirects too");
         compare(args[args.indexOf("--max-time") + 1], "10");
         compare(args[args.indexOf("--max-filesize") + 1], String(maxBytes));
-        compare(Weather.fetchArgs("http://127.0.0.1:8123/Lyon?format=j1", 10, maxBytes)[3], "=http", "the loopback test server");
+        const loop = Weather.fetchArgs("http://127.0.0.1:8123/Lyon?format=j1", 10, maxBytes);
+        compare(loop[1], "-q");
+        compare(loop[loop.indexOf("--proto") + 1], "=http", "the loopback test server");
         for (const bad of ["", "http://wttr.in/Lyon", "https://wttr.in.example.com/x", "https://evil.example/https://wttr.in/", "file:///etc/passwd"])
             compare(Weather.fetchArgs(bad, 10, maxBytes), null, bad);
     }
@@ -126,7 +132,13 @@ TestCase {
         compare(noWeather.hours, []);
         compare(noWeather.current.tempC, 12, "the current values still");
         const polar = Weather.parseReport(fixtureWith(d => d.weather[0].astronomy[0].sunset = "No sunset"), maxBytes, 5);
-        compare(polar.current.night, false, "no sunset: day symbols");
+        compare(polar.current.night, false, "no sunset known: the hour decides, 4:15 PM is day");
+        compare(polar.hours[1].night, true, "and 9 PM is night");
+        const noAstronomy = Weather.parseReport(fixtureWith(d => {
+            d.current_condition[0].localObsDateTime = "2026-11-04 09:40 PM";
+            delete d.weather[0].astronomy;
+        }), maxBytes, 1);
+        compare(noAstronomy.current.night, true, "no astronomy: night by the hour");
         const noTime = Weather.parseReport(fixtureWith(d => d.current_condition[0].localObsDateTime = "later"), maxBytes, 2);
         compare(noTime.observed, null);
         compare(noTime.hours.map(h => h.minutes), [0, 180], "no observation time: the first day's slots from midnight");
@@ -180,7 +192,7 @@ TestCase {
             symbols[c.day] = true;
             symbols[c.night] = true;
         }
-        symbols["location"] = true;
+        symbols["location-fill"] = true;
         for (const s in symbols) {
             const xhr = new XMLHttpRequest();
             xhr.open("GET", Qt.resolvedUrl("../../branding/icons/symbolic/" + s + ".svg"), false);
@@ -207,6 +219,27 @@ TestCase {
         compare(Weather.tempText(-0.4), "0°", "no minus zero");
         compare(Weather.tempText(null), "--");
         compare(Weather.tempText(NaN), "--");
+    }
+
+    // The sky behind the widget (design review H2): day for clear and partly cloudy by day, night after sunset whatever falls,
+    // grey by day under anything else, and the neutral grey when the report is unavailable.
+    function test_sky() {
+        compare(Weather.sky("clear", false, false), "day");
+        compare(Weather.sky("partlyCloudy", false, false), "day");
+        compare(Weather.sky("clear", true, false), "night");
+        compare(Weather.sky("rain", true, false), "night");
+        for (const key of ["cloudy", "fog", "drizzle", "rain", "heavyRain", "snow", "sleet", "blizzard", "thunderstorms", "unknown"])
+            compare(Weather.sky(key, false, false), "cloudy", key);
+        compare(Weather.sky("clear", false, true), "cloudy", "unavailable: the neutral sky");
+        compare(Weather.sky("clear", true, true), "cloudy");
+        verify(Weather.nightByHour(0));
+        verify(Weather.nightByHour(5 * 60 + 59));
+        verify(!Weather.nightByHour(6 * 60));
+        verify(!Weather.nightByHour(17 * 60 + 59));
+        verify(Weather.nightByHour(18 * 60));
+        verify(!Weather.nightByHour(null), "unknown time: day");
+        const r = Weather.parseReport(fixture(), maxBytes, 5);
+        compare(Weather.sky(Weather.condition(r.current.code, r.current.night).key, r.current.night, false), "day", "the fixture's 4:15 PM, partly cloudy");
     }
 
     function test_placeAndClock() {

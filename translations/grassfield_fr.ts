@@ -16104,7 +16104,7 @@
     </message>
     <message>
         <source>H:%1 L:%2</source>
-        <translation>Max. %1 Min. %2</translation>
+        <translation>Max.&#xa0;: %1 Min.&#xa0;: %2</translation>
     </message>
     <message>
         <source>Weather unavailable</source>
