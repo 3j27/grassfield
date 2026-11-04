@@ -6803,6 +6803,17 @@
     </message>
 </context>
 <context>
+    <name>InputMenu</name>
+    <message>
+        <source>Input menu</source>
+        <translation>Menu de saisie</translation>
+    </message>
+    <message>
+        <source>Open Keyboard Settings…</source>
+        <translation>Ouvrir les réglages du clavier…</translation>
+    </message>
+</context>
+<context>
     <name>InputSourcesSheet</name>
     <message>
         <source>Input Sources</source>
@@ -8266,6 +8277,10 @@
     <message>
         <source>Do Not Disturb is on</source>
         <translation>Ne pas déranger est activé</translation>
+    </message>
+    <message>
+        <source>Input source: %1</source>
+        <translation>Méthode de saisie&#xa0;: %1</translation>
     </message>
     <message>
         <source>Network: %1</source>
