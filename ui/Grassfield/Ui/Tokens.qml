@@ -933,6 +933,8 @@ QtObject {
     readonly property int autoAppearanceDarkToHour: 7
     // ms between two evaluations of the schedule while Auto is selected (minute resolution) [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceRecheckInterval: 60000
+    // estimate: ms the effective appearance and the Terminal and Developer Apps settings stay unchanged before Omarchy's theme follows them (Light, Dark, Auto clicked in a row run one theme change, for the last; ADR-0045 OC-11) [ref: docs/specs/settings.md § Functional requirements]
+    readonly property int autoAppearanceTerminalSettleMs: 1500
 
     // docs/specs/notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
