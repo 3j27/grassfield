@@ -59,7 +59,7 @@ TestCase {
         const src = xhr.responseText.replace(/\/\/.*$/gm, "");
         verify(/model: Quickshell\.screens\s/.test(src), "a surface on every screen");
         verify(!/Quickshell\.screens\.filter/.test(src));
-        verify(/visible: true/.test(src), "mapped with Show Desktop Items off too");
+        verify(/visible: Entrance\.revealed \|\| Entrance\.expected\["wallpaper:" \+ win\.modelData\.name\] === true/.test(src), "mapped after the wallpaper, whatever Show Desktop Items says");
         verify(/iconsHere: win\.iconsHere/.test(src));
         verify(/readonly property bool iconsHere: modelData\.name === scope\.primaryName && Settings\.desktopShowIcons/.test(src));
         verify(/files: desktopFiles/.test(src), "one DesktopFiles for every screen");

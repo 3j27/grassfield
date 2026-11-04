@@ -41,35 +41,28 @@ check "GF-REF: the empty-desktop menu is open ($n px differ, need >= $min_menu_p
 vs_pointer abs 300 700 click >/dev/null
 vs_park
 
-# 2. Second display.
+# 2. Second display. The nested window's output cannot be captured (grim returns a blank image), so the menu itself is not
+# checked there by pixels: the check is that the desktop surface exists on that output, the thing that was missing.
 if [[ -n $other ]]; then
-  "$VS_ROOT/scripts/dev/pointer.sh" output "$other" abs 200 200 >/dev/null
-  sleep 1
-  obase=$(shot_of "ddisp-second-base" "$other")
-  "$VS_ROOT/scripts/dev/pointer.sh" output "$other" abs 300 300 rclick >/dev/null
-  sleep 1
-  omenu=$(shot_of "ddisp-second-menu" "$other")
-  n=$(vs_px_diff "$obase" "$omenu")
-  check "$other: the empty-desktop menu is open ($n px differ, need >= $min_menu_px)" test "$n" -ge "$min_menu_px"
-  "$VS_ROOT/scripts/dev/pointer.sh" output "$other" abs 1000 600 click >/dev/null
-  sleep 0.5
-  vs_park
+  total=$("$VS_ROOT/scripts/nestctl" layers -j | jq '[.. | objects | select(.namespace? == "grassfield-desktop-icons")] | length' 2>/dev/null || echo 0)
+  check "a desktop surface on every output ($total grassfield-desktop-icons surfaces, 2 outputs)" test "$total" -ge 2
+  echo "NOT VERIFIED by pixels: the menu on $other (its output cannot be captured)"
 else
   echo "NOT VERIFIED: the nested session has no second output"
 fi
 
 # 3. Snap: drag Notes.txt (the second icon of the right-most column) to a point off every cell centre.
 pos=$VS_DEV/state/desktop-icons.json
-before=$(jq -c . "$pos" 2>/dev/null || echo "{}")
+before=$(jq -c .positions "$pos" 2>/dev/null || echo "{}")
 echo "slots before: $before"
-vs_pointer abs "${SNAP_FROM_X:-1424}" "${SNAP_FROM_Y:-140}" sleep 300 down sleep 200 drag "${SNAP_TO_X:-1171}" "${SNAP_TO_Y:-373}" sleep 300 up >/dev/null
+vs_pointer abs "${SNAP_FROM_X:-1470}" "${SNAP_FROM_Y:-190}" sleep 300 down sleep 200 drag "${SNAP_TO_X:-1171}" "${SNAP_TO_Y:-373}" sleep 300 up >/dev/null
 vs_park
 sleep 1
-after=$(jq -c . "$pos" 2>/dev/null || echo "{}")
+after=$(jq -c .positions "$pos" 2>/dev/null || echo "{}")
 echo "slots after: $after"
 snap=$(vs_capture "ddisp-snapped-drop")
 echo "$snap"
-check "the slots are whole cells" jq -e 'to_entries | all(.value.col == (.value.col | floor) and .value.row == (.value.row | floor))' "$pos"
+check "the slots are whole cells" jq -e '.positions | to_entries | all(.value.col == (.value.col | floor) and .value.row == (.value.row | floor))' "$pos"
 check "the drop moved Notes.txt" test "$before" != "$after"
 check "no QML error in the shell log" test "$(grep -cE 'TypeError|ReferenceError|Binding loop' "$VS_DEV/shell.log")" = 0
 exit $fail

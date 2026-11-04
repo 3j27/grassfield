@@ -62,7 +62,9 @@ Scope {
             }
 
             screen: modelData
-            visible: true
+            // Mapped once this output's wallpaper is (or the entrance is over): a surface of the same layer that maps before the
+            // wallpaper's first frame sits under it, and the icons and the menu would be hidden by the picture.
+            visible: Entrance.revealed || Entrance.expected["wallpaper:" + win.modelData.name] === true
             anchors {
                 top: true
                 bottom: true
