@@ -7,6 +7,9 @@
 #   forward   a running app with two windows behind another app's window: a click brings both forward, the most recent one has the
 #             focus; a second click does not cycle
 #   minimized every window of the app minimized: a click restores the most recent one only
+#   (forward and minimized run with dock.clickMinimizes off: they check the macOS click)
+#   clickmin  dock.clickMinimizes on (the default): a click on a frontmost app minimizes all its windows, a click on an app with every
+#             window minimized restores them all, the most recent focused; a click on an app that is not frontmost brings it forward
 #   reopen    every window closed (the tile stays as a recent app): a click starts the app again
 #   desktop   a window on another Desktop: a click switches to that Desktop and focuses it
 #   hold      a press under 550 ms is a click (launches), a press over it opens the Dock menu and launches nothing
@@ -40,11 +43,17 @@ cleanup() {
   (( was_running )) || "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
   return 0
 }
-trap cleanup EXIT
+# dock.clickMinimizes in this tree's settings (.dev/config), which the shell follows live; the cleanup puts the default back.
+click_min() { # true|false
+  local cfg=$VS_DEV/config/grassfield.json
+  jq --argjson v "$1" '.dock.clickMinimizes = $v' "$cfg" > "$cfg.new" && mv "$cfg.new" "$cfg" || return 1
+  sleep 2
+}
+trap 'click_min true >/dev/null 2>&1; cleanup' EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
-(( ${#parts[@]} )) || parts=(launch double forward minimized reopen desktop badge hold holdtiles retitle mapdrop closeclick interrupt rightclick reduced)
+(( ${#parts[@]} )) || parts=(launch double forward minimized clickmin reopen desktop badge hold holdtiles retitle mapdrop closeclick interrupt rightclick reduced)
 want() { local p; for p in "${parts[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 mkdir -p "$out" "$VS_DEV/share/applications" "$VS_DEV/share/gflaunch"
@@ -272,6 +281,7 @@ if want double; then
 fi
 
 if want forward || want minimized; then
+  click_min false
   clean_state forward
   kill_class gfLA
   vs_sleep 1
@@ -327,6 +337,42 @@ if want minimized; then
   min=$(nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length')
   [[ $min -eq 1 && $(active_class) == gfLB ]]; RC=$?
   check "minimized: one gfLB window restored and focused, one still minimized (minimized: $min, active: $(active_class))" $RC
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+fi
+
+if want clickmin; then
+  click_min true
+  clean_state clickmin
+  quiet gfLA gfLB
+  vs_sleep 1
+  vs_spawn foot --app-id gfLB
+  wait_count gfLB 1 10
+  vs_spawn foot --app-id gfLB
+  wait_count gfLB 2 10
+  vs_spawn foot --app-id gfLA
+  wait_count gfLA 1 10
+  sleep 2
+  gfLB_min() { nest clients -j | jq '[.[] | select(.class == "gfLB" and .workspace.name == "special:minimized")] | length'; }
+  [[ $(active_class) == gfLA ]]; RC=$?
+  check "clickmin: setup, gfLA in front (active: $(active_class))" $RC
+  read -r x y <<<"$(tile_xy gfLB)"
+  dock_click "$x" "$y"
+  sleep 1.5
+  [[ $(active_class) == gfLB && $(gfLB_min) -eq 0 ]]; RC=$?
+  check "clickmin: a click on an app that is not frontmost brings it forward (active: $(active_class), minimized: $(gfLB_min))" $RC
+  vs_capture clickmin-1-frontmost >/dev/null 2>&1 || true
+  dock_click "$x" "$y"
+  sleep 2.5
+  [[ $(gfLB_min) -eq 2 ]]; RC=$?
+  check "clickmin: a click on the frontmost app minimizes both its windows (minimized: $(gfLB_min))" $RC
+  vs_capture clickmin-2-minimized >/dev/null 2>&1 || true
+  dock_click "$x" "$y"
+  sleep 2.5
+  [[ $(gfLB_min) -eq 0 && $(active_class) == gfLB ]]; RC=$?
+  check "clickmin: a click with every window minimized restores both, gfLB focused (minimized: $(gfLB_min), active: $(active_class))" $RC
+  vs_capture clickmin-3-restored >/dev/null 2>&1 || true
+  kill_class gfLA
+  kill_class gfLB
   vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
 fi
 
