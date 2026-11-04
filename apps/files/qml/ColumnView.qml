@@ -75,13 +75,17 @@ FocusScope {
     Item {
         id: dragProxy
         visible: false
-        width: Tokens.filesColumnRowHeight
-        height: Tokens.filesColumnRowHeight
+        width: Tokens.filesIconSize
+        height: Tokens.filesIconSize
         Drag.dragType: Drag.Automatic
         // No link: Wayland drag and drop has none (a drop proposing it is refused); Files makes an alias itself
         // for Option-Cmd (FilesApp.drop).
         Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
         Drag.proposedAction: Qt.MoveAction
+        // The icon at the icon view's size, held at its middle (the other views' drag image).
+        Drag.imageSourceSize: Qt.size(Tokens.filesIconSize, Tokens.filesIconSize)
+        Drag.hotSpot.x: Tokens.filesIconSize / 2
+        Drag.hotSpot.y: Tokens.filesIconSize / 2
         Drag.onDragFinished: dropAction => {
             dragProxy.Drag.active = false;
             root.dragging = false;

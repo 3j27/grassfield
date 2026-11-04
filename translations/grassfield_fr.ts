@@ -4637,6 +4637,22 @@
         <translation>Zéro octet</translation>
     </message>
     <message>
+        <source>%1 %2 items</source>
+        <translation>%1 %2 éléments</translation>
+    </message>
+    <message>
+        <source>%1 “%2”</source>
+        <translation>%1 «&#xa0;%2&#xa0;»</translation>
+    </message>
+    <message>
+        <source>%1 %2 items to “%3”</source>
+        <translation>%1 %2 éléments vers «&#xa0;%3&#xa0;»</translation>
+    </message>
+    <message>
+        <source>%1 “%2” to “%3”</source>
+        <translation>%1 «&#xa0;%2&#xa0;» vers «&#xa0;%3&#xa0;»</translation>
+    </message>
+    <message>
         <source>Other</source>
         <translation>Autre</translation>
     </message>
@@ -4671,18 +4687,6 @@
     <message>
         <source>%1 PB</source>
         <translation>%1 Po</translation>
-    </message>
-    <message>
-        <source>%1 items</source>
-        <translation>%1 éléments</translation>
-    </message>
-    <message>
-        <source>%1 %2</source>
-        <translation>%1 %2</translation>
-    </message>
-    <message>
-        <source>%1 %2 to “%3”</source>
-        <translation>%1 %2 vers «&#xa0;%3&#xa0;»</translation>
     </message>
     <message>
         <source>About 1 second</source>

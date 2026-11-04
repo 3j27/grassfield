@@ -124,7 +124,10 @@ TestCase {
         }
         function contextMenu(model: var, row: int, x: real, y: real, keyboard: bool): void {
         }
+        // Every drop the views pass on (a drag that ends without a drop passes none).
+        property var drops: []
         function dropUrls(urls: var, destination: url, model: var): void {
+            fakeTab.drops = fakeTab.drops.concat([String(destination)]);
         }
         function springHover(url: url): void {
         }
@@ -315,5 +318,40 @@ TestCase {
         wait(100);
         compare(fakeTab.dragEvents, [], "no drag started");
         columns.activeModel.isApplications = false;
+    }
+
+    // A drag that ends without a drop moves nothing, however it ends: Escape (the platform ends the drag; offscreen it ends
+    // at once, so no drop is delivered), a release outside every target, or over the dragged row itself (its own drop area
+    // is off while it is selected). No drop reaches the tab.
+    function dragNoteTxtBy(dx: real, dy: real): void {
+        const file = rowNamed("note.txt");
+        const start = file.mapToItem(test, 40, file.height / 2);
+        mousePress(test, start.x, start.y);
+        for (let i = 1; i <= 6; i++)
+            mouseMove(test, start.x + i * 8, start.y);
+        mouseMove(test, start.x + dx, start.y + dy);
+        mouseRelease(test, start.x + dx, start.y + dy);
+    }
+
+    function test_aDragThatEndsWithoutADropPassesNoDrop() {
+        tryVerify(() => rowNamed("note.txt") !== null, 2000, "the column is listed");
+        fakeTab.drops = [];
+        const ends = [[0, 300], [600, 0], [48, 0]];
+        for (const e of ends) {
+            fakeTab.dragEvents = [];
+            dragNoteTxtBy(e[0], e[1]);
+            tryVerify(() => fakeTab.dragEvents.indexOf("finished") > 0, 2000, "the drag ended");
+            tryVerify(() => !columns.dragging, 2000, "the view is free again");
+        }
+        compare(fakeTab.drops, [], "no drop reached the tab");
+    }
+
+    // What a drag carries is the row pressed: a click on a row selects that row alone.
+    function test_thePressedRowIsTheOnlySelection() {
+        tryVerify(() => rowNamed("note.txt") !== null, 2000, "the column is listed");
+        const file = rowNamed("note.txt");
+        mouseClick(file, 40, file.height / 2, Qt.LeftButton);
+        compare(columns.activeModel.selectedUrls().length, 1);
+        compare(String(columns.activeModel.selectedUrls()[0]), "file:///sandbox/note.txt");
     }
 }

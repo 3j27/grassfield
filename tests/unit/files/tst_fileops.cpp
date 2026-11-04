@@ -562,3 +562,23 @@ TEST_F(FileOps, APastedCopyShowsItsAmountsInTheCopyWindow)
     waitFor([&] { return app.jobs().isEmpty() && present(d("dst/big/f7999")); }, 60000);
     EXPECT_TRUE(told.messages.isEmpty());
 }
+
+// A drop that is no move: on the folder the item is in (the release over the source's own column), or of a folder on itself or
+// into its own tree. Nothing is moved or copied, no job runs, and a folder dropped into itself says why.
+TEST_F(FileOps, ADropOnTheSourcesOwnPlaceMovesNothing)
+{
+    FilesApp app(QList<QUrl>{});
+    Told told(app);
+    write(d("a.txt"), "a");
+    write(d("dir/b.txt"), "b");
+    QDir().mkpath(d("dir/sub"));
+    app.drop({url(d("a.txt"))}, url(m_dir.path()), nullptr);
+    app.drop({url(d("dir"))}, url(d("dir")), nullptr);
+    app.drop({url(d("dir"))}, url(d("dir/sub")), nullptr);
+    EXPECT_TRUE(app.jobs().isEmpty());
+    EXPECT_EQ(told.messages.size(), 2) << "the two drops into itself say so, the one on its own folder is quiet";
+    EXPECT_EQ(read(d("a.txt")), QByteArray("a"));
+    EXPECT_EQ(read(d("dir/b.txt")), QByteArray("b"));
+    EXPECT_FALSE(present(d("dir/sub/dir")));
+    EXPECT_FALSE(present(d("dir/dir")));
+}

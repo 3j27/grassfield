@@ -329,10 +329,13 @@ QString copyTitle(const QString &verb, const QString &firstItem, int count, cons
 {
     if (verb.isEmpty() || (firstItem.isEmpty() && count <= 0))
         return {};
-    const QString what = count > 1 ? tr("%1 items").arg(count) : QStringLiteral("“%1”").arg(displayName(firstItem));
+    // The quotes are part of the translated strings (French writes « %1 »).
+    const bool several = count > 1;
+    const QString item = displayName(firstItem);
     if (destination.isEmpty())
-        return tr("%1 %2").arg(verb, what);
-    return tr("%1 %2 to “%3”").arg(verb, what, displayName(destination));
+        return several ? tr("%1 %2 items").arg(verb).arg(count) : tr("%1 “%2”").arg(verb, item);
+    const QString folder = displayName(destination);
+    return several ? tr("%1 %2 items to “%3”").arg(verb).arg(count).arg(folder) : tr("%1 “%2” to “%3”").arg(verb, item, folder);
 }
 
 QString remainingText(qulonglong seconds)
