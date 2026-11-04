@@ -397,6 +397,19 @@ TEST(ActionGuard, PowerProfilesTakeASourceAndAProfileOnly)
     EXPECT_FALSE(isReadOnlyQuery({set, QStringLiteral("ac"), QStringLiteral("balanced")}));
 }
 
+// Appearance > Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme names are a query with no argument; applying a
+// theme is never one (the shell's grassfield-terminal-theme does it, not Settings).
+TEST(QueryGuard, OmarchyThemeListOnly)
+{
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-theme-list")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-theme-list"), QStringLiteral("--all")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("/usr/bin/omarchy-theme-list")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-theme-set"), QStringLiteral("Tokyo Night")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-theme-current")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("omarchy-theme-set"), QStringLiteral("Tokyo Night")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("omarchy-theme-set"), QStringLiteral("Tokyo Night")}));
+}
+
 TEST(ActionGuard, OmarchyLanguageMayWaitForItsPrompt)
 {
     // It may ask for a password: one at a time per tag (Backend::act, InFlight); wpctl and xdg-open never do.

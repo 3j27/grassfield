@@ -2,11 +2,14 @@ import QtQuick
 import QtTest
 import Grassfield.Ui
 import "../../apps/settings/qml" as SettingsQml
+import "../../apps/settings/qml/TerminalThemes.js" as TerminalThemes
 
 // Settings > Appearance as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Appearance): every control writes
 // its key (the appearance thumbnails, the glass slider from clear to tinted, the accent swatches and their keys, the text
 // highlight, the icon style, the tint and folder colours as pop-ups), the tint row shows only with Tinted, and a stored colour
-// in another case still names its palette entry.
+// in another case still names its palette entry. Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme names read with
+// the read-only omarchy-theme-list, the switch and the two pop-ups write their keys, the pop-ups dimmed while the switch is
+// off, a stored theme that is no longer listed still named, the group hidden while no theme is listed.
 TestCase {
     id: testCase
     name: "SettingsAppearance"
@@ -26,7 +29,10 @@ TestCase {
                     "accent.highlight": "automatic",
                     "icons.mode": "default",
                     "icons.tint": "accent",
-                    "icons.folderColor": "theme"
+                    "icons.folderColor": "theme",
+                    "terminal.matchAppearance": false,
+                    "terminal.lightTheme": "Catppuccin Latte",
+                    "terminal.darkTheme": "Tokyo Night"
                 })
             property var writes: []
             function value(key: string): var {
@@ -48,11 +54,34 @@ TestCase {
         }
     }
 
-    function make() {
+    // The machine door of the Terminal and Developer Apps group (ADR-0045 OC-11): the queries asked, and the Backend's answer.
+    Component {
+        id: backendComponent
+        QtObject {
+            signal finished(string tag, bool ok, string output)
+        }
+    }
+
+    Component {
+        id: systemComponent
+        QtObject {
+            property var queries: []
+            function query(argv: var, tag: string): void {
+                queries.push({argv: argv, tag: tag});
+            }
+        }
+    }
+
+    function make(withSystem) {
         const store = createTemporaryObject(storeComponent, testCase);
-        const page = createTemporaryObject(pageComponent, testCase, {store: store});
+        const props = {store: store};
+        if (withSystem) {
+            props.backend = createTemporaryObject(backendComponent, testCase);
+            props.system = createTemporaryObject(systemComponent, testCase);
+        }
+        const page = createTemporaryObject(pageComponent, testCase, props);
         verify(page);
-        return {store: store, page: page};
+        return {store: store, page: page, backend: props.backend, system: props.system};
     }
 
     function find(item, pred) {
@@ -316,6 +345,60 @@ TestCase {
 
     function test_iconRowAtMinimumWidthEnglish() {
         checkIconRow("Icon style", ["Default", "Dark", "Clear", "Tinted"]);
+    }
+
+    function terminalGroup(page) {
+        return find(page, i => i.caption === "Terminal and Developer Apps");
+    }
+
+    function test_terminalThemesParse() {
+        const valid = n => SettingsContract.validate("terminal.lightTheme", n) === "";
+        compare(TerminalThemes.parse("Catppuccin\nCatppuccin Latte\n\nTokyo Night\nTokyo Night\n", valid), ["Catppuccin", "Catppuccin Latte", "Tokyo Night"]);
+        // Names the setting would refuse are not offered (a slash, a leading dot, a control character).
+        compare(TerminalThemes.parse("a/b\n.hidden\nRetro 82\nx\u0007y\n", valid), ["Retro 82"]);
+        compare(TerminalThemes.parse(undefined, valid), []);
+        compare(TerminalThemes.choices(["Nord", "White"], "White").map(c => c.id), ["Nord", "White"]);
+        compare(TerminalThemes.choices(["Nord", "White"], "Gone Theme").map(c => c.id), ["Gone Theme", "Nord", "White"]);
+        compare(TerminalThemes.choices(["Nord"], "Nord")[0], {id: "Nord", text: "Nord"});
+    }
+
+    function test_terminalGroupHiddenWithoutThemes() {
+        const alone = make(false);
+        verify(!terminalGroup(alone.page).visible, "the page alone (no machine door) shows no group");
+        const t = make(true);
+        compare(t.system.queries, [{argv: ["omarchy-theme-list"], tag: "appearance.themes"}]);
+        verify(!terminalGroup(t.page).visible, "hidden until omarchy-theme-list answers");
+        t.backend.finished("appearance.themes", false, "");
+        verify(!terminalGroup(t.page).visible, "hidden when Omarchy's command is missing or fails");
+        t.backend.finished("other.tag", true, "Nord\n");
+        verify(!terminalGroup(t.page).visible, "another query's answer is not the theme list");
+    }
+
+    function test_terminalGroupWritesItsKeys() {
+        const t = make(true);
+        t.backend.finished("appearance.themes", true, "Catppuccin Latte\nNord\nRose Pine\nTokyo Night\n");
+        const group = terminalGroup(t.page);
+        verify(group.visible);
+        verify(group.footnote !== "", "the footnote says the Omarchy session shares the theme");
+        const sw = named(t.page, "Match Appearance");
+        const light = named(t.page, "Light Theme");
+        const dark = named(t.page, "Dark Theme");
+        verify(sw && light && dark);
+        compare(light.model.map(m => m.id), ["Catppuccin Latte", "Nord", "Rose Pine", "Tokyo Night"]);
+        compare(light.value, "Catppuccin Latte");
+        compare(dark.value, "Tokyo Night");
+        verify(!light.enabled && !dark.enabled, "the pop-ups are dimmed while Match Appearance is off");
+        sw.toggled(true);
+        compare(last(t.store), ["terminal.matchAppearance", true]);
+        verify(light.enabled && dark.enabled);
+        light.picked("Rose Pine");
+        compare(last(t.store), ["terminal.lightTheme", "Rose Pine"]);
+        dark.picked("Nord");
+        compare(last(t.store), ["terminal.darkTheme", "Nord"]);
+        // A stored theme that is no longer listed is still named by its pop-up.
+        t.store.set("terminal.darkTheme", "Gone Theme");
+        compare(dark.model[0].id, "Gone Theme");
+        compare(dark.value, "Gone Theme");
     }
 
     // The measured pitch holds when the names are short (English): the audit's 51.5.

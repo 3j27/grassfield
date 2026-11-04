@@ -940,6 +940,8 @@ Window {
         id: appearancePage
         AppearancePage {
             store: cfg
+            backend: root.backend
+            system: sys
         }
     }
 

@@ -1474,6 +1474,26 @@
         <translation>Effets de verre</translation>
     </message>
     <message>
+        <source>Terminal and Developer Apps</source>
+        <translation>Terminal et apps de développement</translation>
+    </message>
+    <message>
+        <source>The Omarchy session uses the same theme and its wallpaper.</source>
+        <translation>La session Omarchy utilise le même thème et son fond d’écran.</translation>
+    </message>
+    <message>
+        <source>Match Appearance</source>
+        <translation>Suivre l’apparence</translation>
+    </message>
+    <message>
+        <source>Light Theme</source>
+        <translation>Thème clair</translation>
+    </message>
+    <message>
+        <source>Dark Theme</source>
+        <translation>Thème sombre</translation>
+    </message>
+    <message>
         <source>Default</source>
         <translation>Par défaut</translation>
     </message>
