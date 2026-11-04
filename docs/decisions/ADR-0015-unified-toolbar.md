@@ -889,10 +889,11 @@ Limits (read in source and measured, not decided here):
   stylesheet), so the themes cannot give them lights; GTK has no system-wide user-CSS location (only
   `~/.config/gtk-4.0/gtk.css`, the user's file, which Grassfield does not write). Their own buttons keep libadwaita's look
   and the session's layout. Owner decision needed if lights there are wanted.
-- Chromium draws its caption buttons through GTK only in its GTK appearance; in Classic (the Omarchy default: its
-  `initial_preferences` sets no theme, `extensions.theme.system_theme`) it draws its own plain glyphs, which is the second
-  screenshot. No policy or command-line flag selects the appearance. User-level, non-root, supported: chrome://settings/appearance >
+- Chromium: NOT VERIFIED in nested (no slot: the load stayed above 8). Expected from the owner's second screenshot: its
+  Classic appearance draws its own plain glyphs and only its GTK appearance (pref `extensions.theme.system_theme`, present in
+  the binary) asks GTK for the buttons. Omarchy's seed (`/usr/lib/chromium/initial_preferences`) sets no theme. No policy or command-line flag selects the appearance. User-level, non-root, supported: chrome://settings/appearance >
   Theme > GTK, once. `initial_preferences` lives in /usr/lib/chromium, owned by Omarchy and rewritten by its migrations
   (root); Grassfield does not edit a Chromium profile. No supported default for new users exists from Grassfield.
+- The lights as rendered by GTK 3 and GTK 4, at 1.25, active, inactive and on hover: NOT VERIFIED (same reason).
 - Tests: `tests/ci/gtk_themes.py` (every theme carries the token colours, states, selectors, size), `tests/shell/client_chrome_rules.sh`
   (Firefox in the list, google-chrome not), `tests/compositor/third_party_chrome.sh` (stand-in window for the rule).
