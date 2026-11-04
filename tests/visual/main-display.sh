@@ -25,8 +25,12 @@ case ${1:-} in
   click)
     vs_pointer abs "${2:?x}" "${3:?y}" sleep 300 click >/dev/null
     ;;
+  rclick)
+    vs_pointer abs "${2:?x}" "${3:?y}" sleep 300 rclick >/dev/null
+    ;;
   shot)
-    "$VS_ROOT/scripts/dev/shot.sh" "${2:?name}" "${3:-$VS_OUTPUT}"
+    # A capture of the nested window output (WAYLAND-1) can hang: bounded.
+    timeout 40 "$VS_ROOT/scripts/dev/shot.sh" "${2:?name}" "${3:-$VS_OUTPUT}"
     ;;
   main)
     # Both outputs have no EDID here: their identity is the connector (n:<name>).
