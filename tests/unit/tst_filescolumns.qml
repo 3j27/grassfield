@@ -27,6 +27,7 @@ TestCase {
             property string title: "sandbox"
             property bool loading: false
             property string error: ""
+            property bool isApplications: false
 
             signal revealRequested(int row, bool rename)
 
@@ -99,6 +100,17 @@ TestCase {
             function isRecents(url: url): bool {
                 return false;
             }
+            function uriList(urls: var): string {
+                return urls.join("\r\n");
+            }
+        }
+        // BrowserTab's drag bracket: dragStarted before the system drag, dragFinished from its end.
+        property var dragEvents: []
+        function dragStarted(): void {
+            fakeTab.dragEvents = fakeTab.dragEvents.concat(["started"]);
+        }
+        function dragFinished(dropAction: int): void {
+            fakeTab.dragEvents = fakeTab.dragEvents.concat(["finished"]);
         }
         function createModel(owner: var): var {
             return listingComponent.createObject(owner);
@@ -254,5 +266,54 @@ TestCase {
         columns.activeModel.select(-1, 0);
         columns.width = wide;
         columns.anchors.fill = test;
+    }
+
+    // A row of a column drags (the view had no drag source: items could not be moved or copied from it); the system drag is
+    // bracketed by the tab's dragStarted and dragFinished (BrowserTab keeps the view that started it alive until then).
+    function test_aDragFromAColumnIsBracketed() {
+        tryVerify(() => rowNamed("note.txt") !== null, 2000, "the column is listed");
+        fakeTab.dragEvents = [];
+        const file = rowNamed("note.txt");
+        const start = file.mapToItem(test, 40, file.height / 2);
+        mousePress(test, start.x, start.y);
+        for (let i = 1; i <= 6; i++)
+            mouseMove(test, start.x + i * 8, start.y);
+        mouseRelease(test, start.x + 48, start.y);
+        tryVerify(() => fakeTab.dragEvents.length >= 1, 2000, "the drag started");
+        compare(fakeTab.dragEvents[0], "started");
+        // Offscreen, the platform drag ends at once (no drop).
+        tryVerify(() => fakeTab.dragEvents.indexOf("finished") > 0, 2000, "and ended after it started");
+        tryVerify(() => !columns.dragging, 2000, "the view is free again");
+    }
+
+    // The columns stay as they are while a drag from one of them runs (a spring-loaded folder would free the column the
+    // drag came from under the platform's nested event loop); the location the drag ended at is shown after it.
+    function test_theColumnsWaitForTheDragThatStartedInThem() {
+        tryVerify(() => rowNamed("note.txt") !== null, 2000, "the column is listed");
+        columns.dragging = true;
+        fakeTab.segments = [{url: "file:///other"}];
+        compare(String(columns.activeModel.url), "file:///sandbox", "no column is replaced during the drag");
+        verify(columns.syncPending, "the change is kept");
+        columns.dragging = false;
+        columns.syncAfterDrag();
+        compare(String(columns.activeModel.url), "file:///other", "the location is shown once the drag has ended");
+        verify(!columns.syncPending);
+        fakeTab.segments = [{url: "file:///sandbox"}];
+    }
+
+    // Nothing is dragged out of the Applications location (read-only).
+    function test_nothingIsDraggedOutOfApplications() {
+        tryVerify(() => rowNamed("note.txt") !== null, 2000, "the column is listed");
+        const file = rowNamed("note.txt");
+        fakeTab.dragEvents = [];
+        columns.activeModel.isApplications = true;
+        const start = file.mapToItem(test, 40, file.height / 2);
+        mousePress(test, start.x, start.y);
+        for (let i = 1; i <= 6; i++)
+            mouseMove(test, start.x + i * 8, start.y);
+        mouseRelease(test, start.x + 48, start.y);
+        wait(100);
+        compare(fakeTab.dragEvents, [], "no drag started");
+        columns.activeModel.isApplications = false;
     }
 }
