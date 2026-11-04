@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Grassfield.Ui
 import "../../shell/capture/CaptureModel.js" as Model
 
 // The capture toolbar's decisions (ADR-0045 OC-1, docs/specs/system-dialogs.md "Capture toolbar"): the modes in macOS 27's
@@ -53,8 +54,16 @@ TestCase {
 
     function test_helperArgs() {
         const plain = {saveTo: "desktop", timer: "none", microphone: "none", showPointer: false};
-        compare(Model.helperArgs("screen", plain, "DP-1"), ["screen", "--save", "desktop"]);
-        compare(Model.helperArgs("window", plain, "DP-1"), ["window", "--save", "desktop"]);
+        compare(Model.helperArgs("screen", plain, ""), ["screen", "--save", "desktop"], "the Capture button: every display");
+        compare(Model.helperArgs("screen", plain, "DP-1"), ["screen", "--save", "desktop", "--output", "DP-1"], "a display clicked");
+        compare(Model.helperArgs("window", plain, "DP-1"), ["window", "--save", "desktop"], "no window: the helper's crosshair");
+        compare(Model.helperArgs("window", plain, "", "100,50 800x600"), ["window", "--save", "desktop", "--geometry", "100,50 800x600"]);
+        compare(Model.helperArgs("selection", plain, "", "-10,20 300x200"), ["selection", "--save", "desktop", "--geometry", "-10,20 300x200"]);
+        compare(Model.helperArgs("recordSelection", plain, "DP-1", "10,20 300x200"),
+            ["record", "selection", "--save", "desktop", "--geometry", "10,20 300x200"]);
+        compare(Model.helperArgs("screen", plain, "", "10,20 300x200"), ["screen", "--save", "desktop"], "no geometry for a screen");
+        compare(Model.helperArgs("selection", plain, "", "10,20 300x200 "), ["selection", "--save", "desktop"], "a malformed one: none");
+        compare(Model.helperArgs("selection", plain, "", "1.5,20 300x200"), ["selection", "--save", "desktop"]);
         compare(Model.helperArgs("selection", {saveTo: "clipboard", timer: "5", microphone: "default", showPointer: true}, "DP-1"),
             ["selection", "--save", "clipboard", "--timer", "5", "--pointer"], "no microphone for a screenshot");
         compare(Model.helperArgs("recordScreen", {saveTo: "documents", timer: "10", microphone: "default", showPointer: true}, "DP-1"),
@@ -97,5 +106,134 @@ TestCase {
         compare(Model.choice("mode:screen", o), null, "the menu never changes the mode");
         compare(Model.choice("", o), null);
         compare(Model.choice("saveTo:desktop:x", o), null);
+    }
+
+    // ---- the selection frame ----
+    readonly property var screen: ({w: 1920, h: 1080})
+
+    function test_defaultAndClamp() {
+        compare(Model.defaultFrame(screen), {x: 480, y: 270, w: 960, h: 540}, "centred, half each way");
+        compare(Model.clampFrame({x: 1800, y: -40, w: 400, h: 300}, screen, 8), {x: 1520, y: 0, w: 400, h: 300}, "moved back on");
+        compare(Model.clampFrame({x: 0, y: 0, w: 5000, h: 2}, screen, 8), {x: 0, y: 0, w: 1920, h: 8}, "the display at most, 8 at least");
+        compare(Model.clampFrame({x: 10.4, y: 20.6, w: 300.5, h: 200.2}, screen, 8), {x: 10, y: 21, w: 301, h: 200}, "whole numbers");
+        compare(Model.clampFrame(null, screen, 8), Model.defaultFrame(screen));
+        compare(Model.clampFrame({x: NaN, y: 0, w: 1, h: 1}, screen, 8), Model.defaultFrame(screen));
+    }
+
+    function test_handles() {
+        const f = {x: 100, y: 100, w: 200, h: 100};
+        compare(Model.handleCentres(f).map(h => h.id), Model.HANDLES);
+        compare(Model.handleCentres(f)[4], {id: "bottomRight", x: 300, y: 200});
+        compare(Model.hitTest(f, 100, 100, 22), "topLeft");
+        compare(Model.hitTest(f, 110, 90, 22), "topLeft", "within half the hit area");
+        compare(Model.hitTest(f, 200, 102, 22), "top");
+        compare(Model.hitTest(f, 299, 150, 22), "right");
+        compare(Model.hitTest(f, 205, 208, 22), "bottom");
+        compare(Model.hitTest(f, 150, 200, 22), "outside", "on the bottom edge away from its handle: a new frame");
+        compare(Model.hitTest(f, 99, 199, 22), "bottomLeft");
+        compare(Model.hitTest(f, 150, 140, 22), "inside");
+        compare(Model.hitTest(f, 50, 50, 22), "outside");
+        compare(Model.hitTest(f, 400, 150, 22), "outside");
+        // A tiny frame: the corners win over the edge middles.
+        compare(Model.hitTest({x: 100, y: 100, w: 8, h: 8}, 104, 100, 22), "topLeft");
+        compare(Model.cursorFor("topLeft"), "sizeFDiag");
+        compare(Model.cursorFor("bottomLeft"), "sizeBDiag");
+        compare(Model.cursorFor("left"), "sizeHor");
+        compare(Model.cursorFor("bottom"), "sizeVer");
+        compare(Model.cursorFor("inside"), "sizeAll");
+        compare(Model.cursorFor("outside"), "cross");
+    }
+
+    function test_resize() {
+        const f = {x: 100, y: 100, w: 200, h: 100};
+        compare(Model.resize(f, "bottomRight", 50, 20, screen, 8), {x: 100, y: 100, w: 250, h: 120});
+        compare(Model.resize(f, "topLeft", -30, -40, screen, 8), {x: 70, y: 60, w: 230, h: 140});
+        compare(Model.resize(f, "right", 10, 999, screen, 8), {x: 100, y: 100, w: 210, h: 100}, "an edge handle moves one edge");
+        compare(Model.resize(f, "top", 999, -10, screen, 8), {x: 100, y: 90, w: 200, h: 110});
+        compare(Model.resize(f, "left", 300, 0, screen, 8), {x: 300, y: 100, w: 100, h: 100}, "past the opposite edge it turns over");
+        compare(Model.resize(f, "bottomRight", -250, -150, screen, 8), {x: 50, y: 50, w: 50, h: 50}, "a corner past both edges");
+        compare(Model.resize(f, "right", -197, 0, screen, 8), {x: 100, y: 100, w: 8, h: 100}, "never thinner than the minimum");
+        compare(Model.resize(f, "bottomRight", 5000, 5000, screen, 8), {x: 100, y: 100, w: 1820, h: 980}, "kept on the display");
+        compare(Model.resize(f, "topLeft", -500, -500, screen, 8), {x: 0, y: 0, w: 300, h: 200});
+        compare(Model.resize({x: 1910, y: 0, w: 10, h: 10}, "left", 15, 0, screen, 8), {x: 1912, y: 0, w: 8, h: 10},
+            "at the display's edge the minimum keeps inside it");
+    }
+
+    function test_moveAndDraw() {
+        const f = {x: 100, y: 100, w: 200, h: 100};
+        compare(Model.move(f, 30, -20, screen), {x: 130, y: 80, w: 200, h: 100});
+        compare(Model.move(f, -500, 5000, screen), {x: 0, y: 980, w: 200, h: 100}, "the frame moves whole and stays on");
+        compare(Model.drawn(500, 400, 200, 100, screen, 8), {x: 200, y: 100, w: 300, h: 300}, "any direction");
+        compare(Model.drawn(10, 10, -50, 5000, screen, 8), {x: 0, y: 10, w: 10, h: 1070}, "clamped to the display");
+        compare(Model.drawn(500, 400, 502, 401, screen, 8), {x: 500, y: 400, w: 8, h: 8}, "a tiny drag: the minimum");
+    }
+
+    function test_readoutAndGeometry() {
+        compare(Model.readout({x: 0, y: 0, w: 300, h: 200}, 1), "300 × 200");
+        compare(Model.readout({x: 0, y: 0, w: 300, h: 201}, 1.25), "375 × 251", "the picture's pixels at the display's scale");
+        compare(Model.readout({x: 0, y: 0, w: 300, h: 200}, 0), "300 × 200");
+        compare(Model.geometryText({x: 10, y: 20, w: 300, h: 200}, {x: 2560, y: 0}), "2570,20 300x200");
+        compare(Model.geometryText({x: 10, y: 20, w: 300, h: 200}, {x: -1920, y: -1080}), "-1910,-1060 300x200");
+        verify(Model.GEOMETRY.test(Model.geometryText({x: 10, y: 20, w: 300, h: 200}, {x: -1920, y: 0})));
+    }
+
+    function test_lastSelection() {
+        const text = Model.withSelection("", "DP-1", {x: 10, y: 20, w: 300, h: 200});
+        compare(text, "DP-1=10,20,300,200");
+        const two = Model.withSelection(text, "HDMI-A-1", {x: -5, y: 0, w: 64, h: 48});
+        compare(two, "DP-1=10,20,300,200;HDMI-A-1=-5,0,64,48");
+        compare(Model.withSelection(two, "DP-1", {x: 1, y: 2, w: 3, h: 4}), "HDMI-A-1=-5,0,64,48;DP-1=1,2,3,4", "replaced, moved last");
+        compare(Model.selectionFor(two, "DP-1", screen, 8), {x: 10, y: 20, w: 300, h: 200});
+        compare(Model.selectionFor(two, "HDMI-A-1", screen, 8), {x: 0, y: 0, w: 64, h: 48}, "brought back on its display");
+        compare(Model.selectionFor(two, "eDP-1", screen, 8), Model.defaultFrame(screen), "no frame yet: centred");
+        compare(Model.selectionFor("garbage;DP-1=1,2,0,4", "DP-1", screen, 8), Model.defaultFrame(screen), "an empty frame is no frame");
+        compare(Model.withSelection(two, "a b", {x: 1, y: 2, w: 3, h: 4}), two, "an odd display name changes nothing");
+        compare(Model.withSelection(two, "DP-1", {x: 1, y: 2, w: 0, h: 4}), two, "an empty frame changes nothing");
+        let many = "";
+        for (let i = 0; i < 20; i++)
+            many = Model.withSelection(many, "D-" + i, {x: i, y: 0, w: 10, h: 10});
+        const kept = Model.parseSelections(many);
+        compare(kept.length, Model.SELECTIONS_MAX, "at most 16 displays, the oldest go");
+        compare(kept[0][0], "D-4");
+        // What the toolbar writes is what the settings contract accepts (capture.lastSelection's schema pattern).
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../config/schema/grassfield.schema.json"), false);
+        xhr.send();
+        const pattern = new RegExp(JSON.parse(xhr.responseText).properties.capture.properties.lastSelection.pattern);
+        verify(pattern.test(many) && pattern.test(two) && pattern.test(""), "within the contract");
+        verify(!pattern.test("DP-1=1,2,3"), "and the contract refuses what the toolbar would not write");
+    }
+
+    // ---- Capture Selected Window ----
+    function test_windowAt() {
+        const back = {x: 0, y: 0, w: 1000, h: 800, stamp: 10};
+        const front = {x: 100, y: 100, w: 200, h: 200, stamp: 50};
+        const later = {x: 150, y: 150, w: 200, h: 200, stamp: 0};
+        compare(Model.windowAt([back, front], 150, 150), front, "the most recently activated window there");
+        compare(Model.windowAt([back, front], 500, 500), back);
+        compare(Model.windowAt([back, front], 1500, 500), null, "no window: nothing");
+        compare(Model.windowAt([later, {x: 100, y: 100, w: 200, h: 200, stamp: 0}], 160, 160).x, 100, "equal stamps: the later one");
+        const full = {x: 0, y: 0, w: 1920, h: 1080, stamp: 30, fullscreen: true};
+        compare(Model.windowAt([back, full], 500, 500), full, "a full-screen window hides the windows activated before it");
+        compare(Model.windowAt([back, full, front], 150, 150), front, "a window activated after it is over it");
+        compare(Model.windowAt([{x: 0, y: 0, w: 0, h: 10, stamp: 99}], 0, 5), null, "an empty window is not there");
+        compare(Model.windowAt(null, 0, 0), null);
+    }
+
+    function test_clip() {
+        compare(Model.clip({x: -50, y: 900, w: 300, h: 400}, screen), {x: 0, y: 900, w: 250, h: 180}, "the part on the display");
+        compare(Model.clip({x: 2000, y: 0, w: 100, h: 100}, screen), null);
+        compare(Model.clip({x: 10.6, y: 0, w: 100, h: 100}, screen), {x: 11, y: 0, w: 100, h: 100});
+    }
+
+    // The capture.* colours are slurp's #rrggbbaa; the frame and the veil draw them in QML, which reads #aarrggbb.
+    function test_qtColor() {
+        compare(Model.qtColor("#0000002E"), "#2E000000");
+        compare(Model.qtColor("#FFFFFFE6"), "#E6FFFFFF");
+        compare(Model.qtColor("#123456"), "#123456", "a colour without alpha is left as it is");
+        const veil = Qt.color(Model.qtColor(Tokens.captureVeil));
+        verify(Math.abs(veil.a - 0x2E / 255) < 0.01 && veil.r === 0, "the veil is a light black, not transparent");
+        const border = Qt.color(Model.qtColor(Tokens.captureBorder));
+        verify(border.r === 1 && border.g === 1 && border.b === 1 && border.a > 0.85, "the border is near-white, not yellow");
     }
 }

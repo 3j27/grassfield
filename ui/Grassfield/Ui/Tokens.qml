@@ -3824,6 +3824,26 @@ QtObject {
     readonly property int captureCountdownRadius: 26
     // estimate: the seconds left, large digits on the countdown plate [ref: docs/specs/system-dialogs.md § Capture toolbar]
     readonly property int captureCountdownTextSize: 64
+    // estimate: the smallest frame of the Selected Portion modes, each way (logical px): a drag or a handle never makes it thinner, so it stays a frame with handles [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureFrameMinSize: 8
+    // estimate: a handle of the selection frame, a small disc at each corner and in the middle of each edge, in the frame's colour with a veil-coloured rim, as macOS 27 draws its eight handles [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureHandleSize: 8
+    // estimate: the square a press takes a handle in, wider than the drawn disc so that it is easy to catch, as macOS's handles are [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureHandleHitSize: 22
+    // estimate: the size readout (W x H in pixels) next to the pointer while the frame is drawn, moved or resized, the caption size [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutTextSize: 11
+    // estimate: the readout's side padding on its small glass plate [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutPaddingX: 6
+    // estimate: the readout's top and bottom padding [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutPaddingY: 3
+    // estimate: the readout plate's corner, a small capsule-like plate [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutRadius: 6
+    // estimate: the readout sits this far right of and below the pointer, as macOS shows the dimensions beside the crosshair [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutOffset: 14
+    // estimate: Capture Selected Window lays the accent colour at this opacity over the window under the pointer, as macOS 27 tints the window it will capture [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property real captureWindowHighlightOpacity: 0.3
+    // the window highlight's corner follows the window's own: Hyprland rounding 17 at power 2.6, measured 16.7 (ADR-0024 section 1, Window corners) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureWindowHighlightRadius: 17
 
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4

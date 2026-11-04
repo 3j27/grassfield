@@ -332,6 +332,8 @@ Scope {
     readonly property string captureTimer: read("capture.timer")
     readonly property string captureMicrophone: read("capture.microphone")
     readonly property bool captureShowPointer: read("capture.showPointer")
+    // The last frame of the Selected Portion modes per display ("NAME=x,y,w,h;..."; CaptureModel.parseSelections reads it).
+    readonly property string captureLastSelection: read("capture.lastSelection")
 
     readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
     readonly property string hotCornerTopRight: read("hotCorners.topRight")

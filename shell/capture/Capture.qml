@@ -43,6 +43,10 @@ Scope {
             microphone: Settings.captureMicrophone,
             showPointer: Settings.captureShowPointer
         })
+    // The Entire Screen modes take a click on any display, Capture Selected Window a click on a window of any display: every
+    // display's surface takes input then (the bar and the keyboard stay on the toolbar's display). The Selected Portion modes
+    // draw their frame on the toolbar's display.
+    readonly property bool coversAll: open && (mode === "screen" || mode === "recordScreen" || mode === "window")
     // The helper's arguments waiting for the toolbar's surface to be gone (run by `launch`).
     property var pending: null
 
@@ -73,6 +77,7 @@ Scope {
         CaptureState.probeRecorder();
         screenName = Compositor.activeScreenName;
         mode = Model.startMode(Settings.captureMode, canRecord);
+        Compositor.refreshToplevels();
         open = true;
     }
 
@@ -106,14 +111,32 @@ Scope {
             Settings.setCaptureOption(change.key, change.value);
     }
 
-    // Capture or Record (the button, Return): the toolbar goes first, then the helper runs, so that neither the bar nor its
-    // keyboard is in the picture and the window it captures is key again.
-    function trigger(): void {
+    // Capture or Record (the button, Return, a click on a display or a window): the toolbar goes first, then the helper runs,
+    // so that neither the bar, its frame nor its keyboard is in the picture and the window it captures is key again. `output`:
+    // the display to capture or record ("" for every display, the toolbar's for Record Entire Screen); `geometry`: the frame or
+    // the window clicked, "X,Y WxH" in the compositor's coordinates ("" lets the helper's crosshair choose: the fallback).
+    function trigger(output: string, geometry: string): void {
         if (!open || (Model.isRecord(mode) && !canRecord))
             return;
-        pending = Model.helperArgs(mode, options, screenName);
+        pending = Model.helperArgs(mode, options, mode === "recordScreen" && output === "" ? screenName : output, geometry);
         hide();
         launch.restart();
+    }
+
+    // The frame a display opens with in the Selected Portion modes (its last one, else centred), and the one to keep for it.
+    function frameFor(name: string, bounds: var): var {
+        return Model.selectionFor(Settings.captureLastSelection, name, bounds, Tokens.captureFrameMinSize);
+    }
+
+    function rememberFrame(name: string, frame: var): void {
+        Settings.setCaptureOption("lastSelection", Model.withSelection(Settings.captureLastSelection, name, frame));
+    }
+
+    // The window list of Capture Selected Window comes from Hyprland's window data, read again when the mode shows (a window
+    // moved since the shell last read it).
+    onModeChanged: {
+        if (open && mode === "window")
+            Compositor.refreshToplevels();
     }
 
     // The surface stays mapped focusReturn.releaseHoldMs after it gives the keyboard back (KeyboardRelease); a moment more lets

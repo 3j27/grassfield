@@ -7,7 +7,16 @@
 // The file is the user's own (0600 in a 0700 folder, written by rename) and still data: every field is checked, a field that
 // does not read is dropped, and a file that does not read at all is "idle".
 
-var PHASES = ["idle", "selecting", "countdown", "recording"];
+// "starting": a recording's helper has begun (written at once, before anything slow), "selecting": its crosshair shows.
+var PHASES = ["idle", "starting", "selecting", "countdown", "recording"];
+
+// Whether the shell must stop the helper now: the session is locked (or locking) and a capture is anything but idle. Asked on
+// every change of either, so that a recording that becomes active after the lock (its helper was slow to start, or the shell
+// restarted under the lock and reads the state late) is stopped too, not only one running when the lock came (security review
+// of OC-1, MEDIUM).
+function stopNeeded(locked, phase) {
+    return locked === true && PHASES.indexOf(phase) > 0;
+}
 var OUTPUT_NAME = /^[A-Za-z0-9._-]{1,64}$/;
 
 // $XDG_RUNTIME_DIR/grassfield/capture-state.json, the helper's path; in a dev session with GRASSFIELD_STATE_HOME, a file of the

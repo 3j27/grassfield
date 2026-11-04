@@ -111,6 +111,8 @@ ShellRoot {
         ["capture.timer", 10, () => Settings.captureTimer === "none"],
         ["capture.microphone", "default", () => Settings.captureMicrophone === "default"],
         ["capture.showPointer", true, () => Settings.captureShowPointer === true],
+        ["capture.lastSelection", "DP-1=10,20,300,200", () => Settings.captureLastSelection === "DP-1=10,20,300,200"],
+        ["capture.lastSelection", "DP-1=10,20,300,200;", () => Settings.captureLastSelection === ""],
         ["hotCorners.topLeft", "overview", () => Settings.hotCornerTopLeft === "overview"],
         ["hotCorners.topRight", "notifications", () => Settings.hotCornerTopRight === "notifications"],
         ["hotCorners.bottomLeft", "apps", () => Settings.hotCornerBottomLeft === "apps"],

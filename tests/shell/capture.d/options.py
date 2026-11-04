@@ -88,6 +88,8 @@ elif name == "slurp":
         sys.exit(1)  # -r: only a box can be chosen
     print(answer)
 elif name == "hyprctl":
+    if env.get("FAKE_SLOW_HYPRCTL"):
+        time.sleep(1)
     if sys.argv[2] == "cursorpos":
         if "FAKE_CURSOR" not in env:
             sys.exit(1)
@@ -205,10 +207,37 @@ def stop(**extra):
 
 # ---- usage: the toolbar's argv only; anything else runs nothing ----
 for bad in (["record"], ["record", "window"], ["screen", "--timer", "3"], ["screen", "--save", "nowhere"], ["selection", "--mic"],
-            ["screen", "--output", "DP-1"], ["record", "selection", "--output", "DP-1"], ["record", "screen", "--output", "a b"],
-            ["screen", "--pointer", "--pointer"], ["screen", "--timer"], ["stop", "now"], ["window", "extra"]):
+            ["selection", "--output", "DP-1"], ["record", "selection", "--output", "DP-1"], ["record", "screen", "--output", "a b"],
+            ["screen", "--pointer", "--pointer"], ["screen", "--timer"], ["stop", "now"], ["window", "extra"],
+            # --geometry: whole numbers in slurp's form, a positive size, only where an area is chosen
+            ["screen", "--geometry", "0,0 10x10"], ["record", "screen", "--geometry", "0,0 10x10"],
+            ["selection", "--geometry", "0,0 0x10"], ["selection", "--geometry", "0,0 10x0"], ["selection", "--geometry", "a,b cxd"],
+            ["selection", "--geometry", " 0,0 10x10"], ["selection", "--geometry", "0,0 10x10 "], ["selection", "--geometry", "0.5,0 10x10"],
+            ["selection", "--geometry", "0,0 10x-1"], ["selection", "--geometry", "0,0  10x10"], ["selection", "--geometry", "0,0,10,10"],
+            ["window", "--geometry", "0,0 10x10", "--geometry", "0,0 10x10"], ["selection", "--geometry"]):
     r, _ = capture(bad)
     check(r.returncode == 2 and calls() == [], "usage refused, nothing run: %r" % bad)
+
+# ---- the toolbar's own choice: --geometry (its frame, the window clicked), --output (the display clicked) ----
+r, _ = capture(["selection", "--geometry", "2600,40 300x200"])
+grim = calls("grim")
+check(r.returncode == 0 and calls("slurp") == [] and calls("pkill") == [] and grim and grim[0]["argv"][:2] == ["-g", "2600,40 300x200"],
+      "Capture Selected Portion with the toolbar's frame: that area, no crosshair [%r]" % (grim[0]["argv"] if grim else None))
+r, _ = capture(["window", "--geometry", "100,50 800x600", "--pointer"])
+grim = calls("grim")
+check(r.returncode == 0 and calls("slurp") == [] and grim and grim[0]["argv"][:3] == ["-g", "100,50 800x600", "-c"],
+      "Capture Selected Window with the window clicked: its box, no crosshair [%r]" % (grim[0]["argv"] if grim else None))
+for off, why in (("2500,40 300x200", "across two displays"), ("4400,0 200x100", "past the right edge"),
+                 ("-10,0 100x100", "left of every display"), ("0,2800 100x100", "below DP-1")):
+    r, _ = capture(["selection", "--geometry", off])
+    check(r.returncode == 2 and calls("grim") == [] and calls("slurp") == [] and [c["name"] for c in calls()] == ["hyprctl"],
+          "--geometry %s (%s) is refused: nothing captured, only Hyprland's displays read" % (off, why))
+r, _ = capture(["screen", "--output", "DP-1"])
+grim = calls("grim")
+check(r.returncode == 0 and [g["argv"][:2] for g in grim] == [["-o", "DP-1"]],
+      "a click on a display in Capture Entire Screen: that display only [%r]" % [g["argv"] for g in grim])
+r, _ = capture(["screen", "--output", "VGA-9"])
+check(r.returncode == 1 and calls("grim") == [], "a display that is not there: nothing")
 
 # ---- the window mode: the crosshair restricted to the windows ----
 r, _ = capture(["window"], FAKE_SLURP="click:150,70")
@@ -463,6 +492,70 @@ fcntl.flock(lock, fcntl.LOCK_UN)
 os.close(lock)
 with open(state_file, "w") as f:
     json.dump({"v": 1, "phase": "idle"}, f)
+
+# ---- recording the toolbar's frame ----
+proc, ok = recording(["selection", "--geometry", "2600,40 300x200"])
+argv = recorder_argv()
+check(ok and argv[:2] == ["-w", "300x200+2600+40"] and "-s" not in argv and calls("slurp") == [],
+      "Record Selected Portion with the toolbar's frame: that area as WxH+X+Y, no crosshair [%r]" % argv)
+stop()
+proc.wait(timeout=30)
+proc, ok = recording(["selection", "--geometry", "2560,0 1920x1080"])
+argv = recorder_argv()
+check(ok and argv[:4] == ["-w", "HDMI-A-1", "-s", "0x0"], "a frame that is a whole display records that display [%r]" % argv)
+stop()
+proc.wait(timeout=30)
+r, _ = capture(["record", "selection", "--geometry", "2500,40 300x200"])
+check(r.returncode == 2 and calls("gpu-screen-recorder") == [] and state().get("phase") == "idle",
+      "a frame across two displays is refused: nothing recorded, the state idle")
+
+# ---- the session lock: nothing is captured or recorded behind it, whoever asked ----
+marker = os.path.join(runtime, "grassfield-lock-default")
+LOCKED_MONITORS = json.dumps([dict(m, solitaryBlockedBy=["LOCK"]) for m in json.loads(MONITORS)])
+
+
+def mark(text):
+    with open(marker, "w") as f:
+        f.write(text)
+
+
+mark("locked sleeps=3\n")
+r, _ = capture(["record", "screen"])
+check(r.returncode == 1 and calls("gpu-screen-recorder") == [] and state().get("phase") == "idle",
+      "the shell's marker says locked: the recording is refused before the recorder starts")
+r, _ = capture(["selection", "--geometry", "2600,40 300x200"])
+check(r.returncode == 1 and calls("grim") == [] and calls("notify-send") == [], "the marker says locked: no picture")
+r, _ = capture(["screen"])
+check(r.returncode == 1 and calls("grim") == [], "the marker says locked: no picture of the screen either")
+mark("unlocked sleeps=3\n")
+r, _ = capture(["record", "screen"], FAKE_MONITORS=LOCKED_MONITORS)
+check(r.returncode == 1 and calls("gpu-screen-recorder") == [], "Hyprland reports the lock (LOCK on the displays): no recording")
+r, _ = capture(["selection", "--geometry", "2600,40 300x200"], FAKE_MONITORS=LOCKED_MONITORS)
+check(r.returncode == 1 and calls("grim") == [], "Hyprland reports the lock: no picture")
+# The session locks while a recording runs (no shell to stop it): the helper reads the marker and ends the recording itself.
+count = len(files(desktop))
+proc, ok = recording(["screen"])
+mark("locked\n")
+proc.wait(timeout=30)
+sig = [c for c in calls("gpu-screen-recorder") if c.get("signal")]
+check(ok and sig and sig[0]["signal"] == "SIGINT" and len(files(desktop)) == count + 1 and state().get("phase") == "idle",
+      "the session locks during a recording: the helper ends it (SIGINT) within its poll and saves the movie")
+mark("unlocked\n")
+# The session locks during a recording's countdown: the recorder never starts.
+proc = start(["record", "screen", "--timer", "5"])
+wait_for(lambda: state().get("phase") == "countdown")
+mark("locked\n")
+proc.wait(timeout=30)
+check(proc.returncode == 1 and calls("gpu-screen-recorder") == [] and state().get("phase") == "idle",
+      "the session locks during the countdown: nothing recorded, the state idle")
+# A recording writes its state at once ("starting"), before anything slow, so the shell sees it coming.
+mark("unlocked\n")
+proc = start(["record", "selection"], FAKE_SLURP="", FAKE_SLOW_HYPRCTL="1")
+seen = wait_for(lambda: state().get("phase") in ("starting", "selecting"), 5)
+first = state().get("phase")
+proc.wait(timeout=30)
+check(seen and first == "starting", "a recording's state says starting before it reads Hyprland's displays [%r]" % first)
+os.unlink(marker)
 
 # ---- French ----
 for f in files(desktop):

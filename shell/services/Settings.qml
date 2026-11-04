@@ -132,6 +132,7 @@ Singleton {
     readonly property string captureTimer: store.captureTimer
     readonly property string captureMicrophone: store.captureMicrophone
     readonly property bool captureShowPointer: store.captureShowPointer
+    readonly property string captureLastSelection: store.captureLastSelection
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
     // The remembered choices of the main display (ui/Grassfield/Ui/DisplayRole.js); services/MainDisplay.qml resolves them.
