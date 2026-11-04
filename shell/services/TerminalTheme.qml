@@ -45,7 +45,8 @@ Singleton {
         if (d.action === "suppress") {
             console.info("dev guard: terminal theme " + d.mode + " suppressed");
         } else if (d.action === "run") {
-            runner.command = ["systemd-run", "--user", "--scope", "--collect", "--quiet", "--description=Grassfield terminal theme", "--", root.tool, d.mode];
+            runner.command = ["systemd-run", "--user", "--scope", "--collect", "--quiet", "--description=Grassfield terminal theme", "--",
+                root.tool, d.mode];
             runner.running = true;
         }
     }

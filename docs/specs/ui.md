@@ -23,6 +23,8 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 |---|---|---|---|
 | `version` | int | 1 | contract |
 | `appearance` | `"dark"` \| `"light"` \| `"auto"` | `"dark"` | Appearance.dark (`auto`: light by day, dark 19:00-07:00 local, docs/specs/controlcenter.md "Auto appearance") |
+| `terminal.matchAppearance` | bool | false | services/TerminalTheme.qml: Omarchy's theme follows the effective appearance (`appearance`, Auto's hours included) through `grassfield-terminal-theme` (ADR-0045 OC-11; docs/specs/settings.md, Appearance) |
+| `terminal.lightTheme`, `terminal.darkTheme` | string, an Omarchy theme name as `omarchy-theme-list` prints it (`^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,62}$`) | `"Catppuccin Latte"`, `"Tokyo Night"` | the theme `grassfield-terminal-theme light` / `dark` applies (ADR-0045 names them `appearance.terminal*`: `appearance` is a string in contract version 1) |
 | `material.transparency` | number 0–1 | 0.25 | Appearance.transparency |
 | `accessibility.reduceTransparency` | bool | false | Appearance |
 | `accessibility.reduceMotion` | bool | false | Appearance |

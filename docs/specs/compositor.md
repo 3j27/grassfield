@@ -1666,7 +1666,27 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
 - Placement: a browser window (class list in `placement.lua`) that opens smaller than 72 % x 82 % of the monitor's usable
   area (output minus the menu bar and Dock) is grown to that size; larger sizes are kept, and the window is centred by
   Hyprland.
+- Per-application rules (ADR-0045 OC-12, `config/hypr/grassfield/apps.lua`, loaded by `core.lua` after `privacy.lua` in
+  both sessions, optional): the rules of Omarchy 4.0.6's `default/hypr/apps/*.lua` that hold in a floating-first session,
+  copied with their match and only the effects kept, each citing its file (pinned in `docs/upstream/omarchy.lock`):
+  Battle.net's installer without the window manager's frame (`decorate = false`, no blur, no shadow), DaVinci Resolve's
+  menus and dialogs keeping the focus while they show (`stay_focused`, not its main window nor the Project Manager),
+  GeForce NOW, Moonlight, RetroArch and Steam keeping the screen awake while full screen (`idle_inhibit = "fullscreen"`,
+  which the shell's idle honours), Telegram not taking the focus on a new message (`focus_on_activate = false`; it asks for
+  attention instead), Picture-in-Picture (a title "Picture-in-Picture" / "Picture in picture") pinned above every window
+  on every desktop with its proportions kept, and Omarchy's camera overlay (`WebcamOverlay-small|medium|large`) at the
+  bottom-right corner, sized from the display's height, pinned, without taking the focus. Left out (the file's header says
+  why): float and center (every window), an application's own size (placement), full screen at map, Omarchy's opacity,
+  tags, borders and rounding, browser tiling and the special workspace of the screen-sharing indicator, JetBrains'
+  `no_follow_mouse` (click-to-focus already), Hermes' HUD, Google Meet's Picture-in-Picture and the PiP's size and corner.
+  `tests/shell/app_rules.sh`: the wiring, the effects left out, and each rule against the cited Omarchy file's text.
 - **Known limit:** other applications' first windows keep the size they ask for (terminal, Grassfield apps, dialogs,
   panels). Lua cannot tell a dialog, a popup or a utility panel from a main window (no parent or modal field on
   `HL.Window`), so a minimum size for every first window would also enlarge those. Widening the rule needs that signal
   (plugin, or an app class list).
+- **Known limits (OC-12):** the rules were not run by Hyprland here (`Hyprland --verify-config` and the nested session are
+  the owner's: `just check-config`, then each application by hand). Picture-in-Picture opens where Hyprland centres it,
+  not in a corner, and a pinned window is not refitted by `placement.lua`. Omarchy's camera overlay keeps the plugin's
+  title bar (32 px above it) and may sit under a wide Dock in its corner. Whether Hyprland's `idle_inhibit = "fullscreen"`
+  also counts a zoomed (maximized) window is not verified. Apps Omarchy adds rules for in a later release are not picked
+  up (the rules are copied; `just check-upstream` shows the upstream change).
