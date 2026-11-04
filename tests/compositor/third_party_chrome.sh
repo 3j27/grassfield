@@ -37,6 +37,8 @@
 # The Dock is brought to the output first (the pointer rests on its bottom edge, as minimize.sh's dock_to): a session
 # started with the focus on the small WAYLAND-1 has its Dock there. Clicks come after a fresh pointer motion: a window
 # moved under a resting pointer has no pointer focus, and a click there is lost.
+# Firefox (firefox, org.mozilla.firefox; owner's rc1-22 screenshot 2026-11-04) is on the list but not installed here: a foot
+# window with its app id checks the rule (T, S); its own buttons are NOT VERIFIED. Google Chrome is not on the list.
 # Not on the list, the plugin's titlebar kept (not tagged, the strip above them): foot; a Chromium web app (--app: no
 # frame of its own).
 # The layout the clients are given: org.gnome.desktop.wm.preferences button-layout read in a client's environment
@@ -297,6 +299,22 @@ p=$(client_run foot foot --window-size-pixels=640x300); pids+=("$p")
 wait_mapped '^foot$' || { say "setup error: foot did not map"; exit 2; }
 judge foot '^foot$' 0
 stop_app "$p" '^foot$'
+
+# Firefox (`firefox`; `org.mozilla.firefox` for the Flatpak) joined the list on the owner's rc1-22 screenshot (2026-11-04). It is
+# not installed here and not downloaded: a foot window with Firefox's Wayland app id stands in for it and proves the rule only
+# (T, S: the tag, no plugin strip). That Firefox's own close, minimize and zoom work, and that they draw as traffic lights with
+# the Grassfield GTK theme, is NOT VERIFIED: the owner checks it on the second machine.
+for id in firefox org.mozilla.firefox; do
+  cls="^${id//./\\.}\$"
+  p=$(client_run "foot" foot --app-id="$id" --window-size-pixels=640x300); pids+=("$p")
+  if wait_mapped "$cls"; then
+    say "class $id (a foot window standing in for Firefox: the rule only, its own buttons NOT VERIFIED)"
+    judge "stand-in-$id" "$cls" 1
+  else
+    check "class $id: mapped" 1 "$(ctl clients -j | jq -c '[.[].class]')"
+  fi
+  stop_app "$p" "$cls"
+done
 
 # Header-bar apps with the session's GTK layout: close, minimize, zoom on the left, 23 px below the window's top.
 for gtk in "evince|Evince (GTK3 header bar)|^org\\.gnome\\.Evince$|evince|22|63|101" \

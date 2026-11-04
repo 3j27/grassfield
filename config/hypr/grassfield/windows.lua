@@ -10,8 +10,8 @@ hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true }
 -- suppression. Two rules make the negation of those matches (any class but Grassfield's and the third-party list below;
 -- or no xdg tag and not in that list) without reading the tag itself: the tag is a dynamic effect, the suppression a
 -- static one read at map. tests/shell/client_chrome_rules.sh checks that both negations are built from the two lists.
-hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview|Store|Activity)|chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, suppress_event = "maximize" })
-hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "negative:^(chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview|Store|Activity)|chromium|firefox|org\\.mozilla\\.firefox|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "negative:^(chromium|firefox|org\\.mozilla\\.firefox|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
 
 -- Client chrome (ADR-0015): Grassfield apps that draw their own lights and toolbar are tagged
 -- `grassfield-client-chrome`; the compositor plugin draws no titlebar on them (plugin work item P1, docs/specs/compositor.md)
@@ -29,7 +29,14 @@ hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield
 -- (close,minimize,maximize: on the left, packaging/dconf/grassfield.d/20-window-buttons.conf;
 -- tests/compositor/third_party_chrome.sh): Chromium's browser window (its --app web apps draw no frame and keep the
 -- plugin's titlebar), Obsidian (its controls top right, in its own order), Evince (GTK3 header bar) and Nautilus
--- (GTK4/libadwaita). Their zoom needs the exemption below (untagged, Evince's zoom request was suppressed), and GTK4's
+-- (GTK4/libadwaita). Firefox (`firefox`; `org.mozilla.firefox` for the Flatpak) was added on the owner's rc1-22 screenshot,
+-- 2026-11-04: with the plugin's bar it showed a second set of controls (Firefox's own, from the session's GTK button layout,
+-- in its tab strip); that its own close, minimize and zoom work here, and that they draw as traffic lights with the
+-- Grassfield GTK theme, is NOT VERIFIED (not installed on the dev machine; the owner checks it on the second machine).
+-- Google Chrome is left out: its Wayland app id (google-chrome is expected, from its desktop file) is not evidenced here.
+-- The traffic lights themselves come from the Grassfield GTK themes (ui/tools/gen-gtk-themes.py, window.* tokens), which
+-- GTK 3 and plain GTK 4 apps and Chromium's GTK appearance read; libadwaita apps (Nautilus) ignore gtk-theme (ADR-0015
+-- amendment 2026-11-04). Their zoom needs the exemption below (untagged, Evince's zoom request was suppressed), and GTK4's
 -- minimize button needs the plugin to offer minimize in xdg wm_capabilities (plugin work item P8; without the plugin
 -- Hyprland offers no minimize and GTK4 greys it). Others join only once verified. Same tag as Grassfield's apps: no
 -- plugin titlebar, no band in Overview and Stages, the app's own minimize and zoom work (exempt from the maximize
@@ -37,7 +44,7 @@ hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield
 -- controls: take it out of this list. Known limit (ADR-0015 amendment 2026-10-25): the GTK apps and Chromium draw the
 -- buttons of the GTK button layout, so a user layout without minimize or zoom leaves them a partial set (none without
 -- any button).
-hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chromium|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, tag = "+grassfield-client-chrome" })
+hl.window_rule({ name = "gf-client-chrome-third-party", match = { class = "^(chromium|firefox|org\\.mozilla\\.firefox|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, tag = "+grassfield-client-chrome" })
 
 -- The Open and Save panels (grassfield-portal, ADR-0035 D-4) draw a sheet's frame and no lights; a panel takes the Wayland app
 -- id of the application it belongs to (its Dock tile, its menu bar), so its xdg tag alone says it is one: no plugin
