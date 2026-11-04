@@ -50,7 +50,7 @@ TestCase {
 
     function test_registryIsValid() {
         compare(Registry.validateAll(), "");
-        compare(Registry.ids().join(","), "clock,calendar,battery,nowplaying,system");
+        compare(Registry.ids().join(","), "clock,calendar,battery,nowplaying,system,weather");
     }
 
     function test_registryMatchesManifestFiles() {

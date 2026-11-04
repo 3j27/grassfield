@@ -88,6 +88,8 @@ FocusScope {
             return;
         w.size = Qt.binding(() => root.size);
         w.active = Qt.binding(() => root.active);
+        // A gallery preview is the only host without pointer interaction.
+        w.preview = Qt.binding(() => !root.interactive);
     }
 
     // A widget that failed to load shows nothing but its name (never a blank tile).

@@ -30,7 +30,8 @@ Browse and manage files on KDE Frameworks KIO (owner decision D6): the feature i
 `grassfield-files`, app id `org.grassfield.Files`; never "Finder"). Trash, mounts, network protocols and thumbnailers
 are KIO/Solid's, never reimplemented. Non-goals for v1: an indexed search (the shell Search covers files; the tag
 search walks one folder tree, F16), named tags created in Files (only the colour tags are set here; tags of other
-applications are shown, kept and searchable), sharing, a built-in viewer (Space
+applications are shown, kept and searchable), sharing services of its own (the Share menu offers LocalSend, Omarchy's,
+since ADR-0045 OC-13: see "Share menu" below), a built-in viewer (Space
 starts Glance of `grassfield-preview`, see `docs/specs/preview.md`). Recents and Group By arrived with PR 2 ("Views and
 selection").
 
@@ -301,6 +302,8 @@ installed (not built here).
 - No job-tracker service (kuiserver): progress shows in the status bar (jobs run with `HideProgressInfo`).
 - Compositor plugin absent (nested dev): no titlebar; the window still works (title in the toolbar).
 - Icon theme missing a name: generic MIME icon, then `text-x-generic` / `folder`.
+- LocalSend (`localsend`) or `systemd-run` not on PATH: no Share button in the toolbar and no Share submenu (looked up when
+  a window opens or becomes active and when a menu is built); a send that cannot start says so in the window's banner.
 
 ## Automated tests · Manual verification steps
 - `scripts/dev/test.sh` (gtest + QML), `scripts/dev/qmllint.sh`, `tests/apps/files_sandbox.sh [output]` (needs
@@ -354,7 +357,12 @@ installed (not built here).
 - Thumbnails come from KIO's thumbnail plugins (kio-extras, installed 2026-10-17: images, PDF, video); a type without
   a plugin keeps its MIME icon. The Network place (kio-extras smb/sftp workers) lists MTP devices and SMB shares; the
   "Apple Devices" entry is hidden (§14).
-- No sharing. Search (ADR-0027) finds names through localsearch, then plocate, then a bounded walk of the home folder
+- Sharing is LocalSend only (Share > Send with LocalSend…, ADR-0045 OC-13): no Mail, Messages or nearby-device sheet of
+  Grassfield's own. LocalSend opens its own window to pick the device; the receiving device must be running LocalSend
+  (and reachable on the local network: Omarchy's firewall opens LocalSend's port 53317 on this machine). Only local files
+  and folders can be sent (not the Trash, Applications, a server's items or a search of a server). Not in the File menu
+  (macOS has Share… there too). The send was not run in the cloud session that built it (no LocalSend there).
+- Search (ADR-0027) finds names through localsearch, then plocate, then a bounded walk of the home folder
   (200 000 items, 2000 results, 32 levels); contents only where localsearch indexed them; results do not update live
   (a file created while they are shown appears at the next search). The Open and Save panels still filter their folder
   (F-14). Recents lists what `recently-used.xbel` holds (files
@@ -465,7 +473,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-17 | Back/forward capsule, title, ••• Action menu, search circle | done (lot 5, F1 match) | Finder-Home | — | — | — |
 | FP-18 | View switcher group (4 views; a single view popup ⌃ when the window is narrow) | done (PR 2: measured, 161 x 36; the pop-up while searching or where the title has no room) | Finder-Home, Finder-Search | — | — | 2 |
 | FP-19 | Group By toolbar button (grid ⌃) | done (PR 2) | Finder-Home | FolderModel sections | — | 2 |
-| FP-20 | Share button | missing | Finder-Home | — | no AirDrop or system share sheet on this system: not shown (non-goal "sharing") | never |
+| FP-20 | Share button | done (ADR-0045 OC-13): a bare glyph before Tags while LocalSend is installed; its menu, and the item menu's Share submenu after Copy, start with "Send with LocalSend…" (where macOS puts AirDrop) | Finder-Home | LocalSend (Omarchy's `omarchy-menu-share` invocation) | no Mail, Messages or other services; no Share… in the File menu | — |
 | FP-21 | Tags toolbar button (tag the selection) | done (combined PR 3–5): the colour tags and Tags… from the toolbar button; glyph measured on Finder-Search (18 pt) | Finder-Home | `user.xdg.tags` (F16) | — | 5 |
 | FP-22 | Search field expands to the full width while searching | done (combined PR 3–5): the field takes the toolbar's free width while a search is shown, the title keeping its room | Finder-Gallery, Finder-Search | — | — | 3 |
 | FP-23 | View > Hide/Show Toolbar ⌥⌘T, Sidebar ⌃⌘S, Path Bar ⌥⌘P, Status Bar ⌘/ (path and status bars hidden by default) | done (PR 2) except Hide Toolbar (the toolbar holds the window controls when the sidebar is hidden) | Finder-Home (no bars), Finder-Search (path bar) | QSettings | — | 2 |
@@ -835,6 +843,32 @@ macOS: the Finder is the first Dock tile, cannot be removed, and opens every fol
 - **Dock:** a fixed first "Files" tile before the Apps tile (docs/specs/dock.md item 20); own icon `org.grassfield.Files` (an original green folder, `branding/icons/apps/`, installed in hicolor; Settings and Preview have `org.grassfield.Settings` / `org.grassfield.Preview`). The generic `system-file-manager` is never used as the Files icon: the theme that was the base until 2026-10-21 (WhiteSur) drew it as a Finder-like face, which is Apple trade dress; Breeze draws a filing cabinet.
 - **Folders opened by the shell** (desktop double-click, Dock Trash, Search "Show in folder", Apps `revealExecutable`, any `gio open` / `xdg-open` of a folder) open in Grassfield Files in a REAL session (`GRASSFIELD_SESSION=1`, not dev), whatever the user's default handler is. `Apps.folderAware` / `AppLaunch.folderAwareArgv` rewrite `gio open T...` and `xdg-open T` into `bash shell/services/open-real.sh <opener> T...`, started through the app-scope launch path (`Apps.scoped`, uwsm-app): every folder target (a directory, a `file:` URL of one, `trash:///`) goes to one `grassfield-files` process, every other target to the opener the shell asked for (files keep the user's default handler). Without `grassfield-files` on PATH everything goes to the opener. `gtk-launch`, `gio trash` and the like are unchanged. A dev session keeps the dev open policy (ADR-0011, `scripts/dev/open-policy.sh`).
 - Tests: `tests/shell/open_real.sh` (the script with fake Files, gio and xdg-open), `tests/unit/tst_applaunch.qml` (`folderAwareArgv`), `tests/unit/tst_dockmodel.qml`.
+
+## Share menu (ADR-0045 OC-13, LocalSend)
+
+macOS: the toolbar's Share button and the item menu's Share open the sharing services, nearby-device sharing first. Here the
+one service is LocalSend, which Omarchy installs (`install/omarchy-base.packages`) and offers in its own Share menu.
+
+- **Where:** a Share button, a bare glyph (`ViewGlyph` "share": a tray open at the top and a rising arrow) before Tags in the
+  toolbar, and a Share submenu after Copy / Copy as Pathname in the item menu (the same rows, `BrowserTab.shareMenu`). Its
+  first item is "Send with LocalSend…" « Envoyer avec LocalSend… ». Both exist only while `localsend` and `systemd-run` are on
+  PATH (`FilesApp.localSendAvailable`, `QStandardPaths::findExecutable`, looked up when a window opens or becomes active and
+  each time a menu is built). The button is dimmed without a selection, in the Trash and in Applications; the item is
+  dimmed unless every selected item is a local file or folder (`ShareLogic.canSend`: `file:///` URLs only, so no `trash:/`,
+  `grassfield-apps:/`, network or search location). The Open and Save panels have no Share.
+- **Send:** `ShareLogic.sendArgv` builds Omarchy's own invocation (`bin/omarchy-menu-share`): `systemd-run --user --quiet
+  --collect localsend --headless send <path> ...`, one argument per item (each once, in the selection's order), never through
+  a shell. No `--` (LocalSend's command line has none, Omarchy passes the paths directly): every path is absolute, so none can
+  read as an option. `FilesApp::sendWithLocalSend` checks the vector again (exactly that program and options, then paths that
+  start with "/", hold no NUL and exist) and starts it detached; `GRASSFIELD_FILES_NO_LAUNCH=1` blocks it like any launch. A
+  refusal or a start failure shows in the window's banner. LocalSend then shows its own window: Omarchy floats and sizes it
+  (`default/hypr/apps/localsend.lua`), a rule the Grassfield session loads only once the per-application rules of ADR-0045
+  OC-12 port it; until then it opens where Grassfield's placement puts a new window.
+- Tests: `tests/unit/tst_filesshare.qml` (URL to path, local-only selections, the vector), `tests/unit/tst_filesbrowser.qml`
+  `test_shareSendsWithLocalSend` (the submenu after Copy, the toolbar's menu, the send through the stand-in FilesApp, nothing
+  from Applications, no Share without LocalSend), `tests/unit/tst_filesfinish.qml` (Share, Tags and Action in a row).
+  Not verified: the C++ (not compiled in the cloud session), the glyph and the menus on screen (visual NOT verified), a real
+  send to a device.
 
 ## Toolbar capsules (visual audit 2026-10-25, priority 11)
 macOS model, measured: back/forward are one 72 x 36 capsule (`toolbar.groupButton` 34 each), the view switcher a 36-pt capsule whose selected view is a lighter pill, the search a 36-pt circle that expands to `files.searchWidth` 200 while it has the focus or text. Settings has the same back/forward capsule over its detail pane (history of the panes, `apps/settings/qml/NavHistory.js`, `tst_navhistory.qml`). Fills are `Appearance.buttonFill` (6 % grey in light), the pill `Appearance.chipFill`; contrast in `WindowSurfacePairs`.

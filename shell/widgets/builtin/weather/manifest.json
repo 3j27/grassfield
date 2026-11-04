@@ -1,0 +1,8 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "version": "1.0.0",
+  "sizes": ["small", "medium"],
+  "contract": "widgets/1",
+  "permissions": ["weather"]
+}
