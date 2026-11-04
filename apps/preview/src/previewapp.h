@@ -1,9 +1,11 @@
 #pragma once
 
 #include <QFileSystemWatcher>
+#include <QHash>
 #include <QMutex>
 #include <QObject>
 #include <QQuickImageProvider>
+#include <QSet>
 #include <QStringList>
 #include <QThread>
 #include <QTimer>
@@ -11,6 +13,8 @@
 #include <QVariantMap>
 
 #include <atomic>
+
+class QProcess;
 
 #include "previewlogic.h"
 #include "shortcutstyle.h"
@@ -44,6 +48,8 @@ class PreviewApp : public QObject
     Q_PROPERTY(QString accentHighlight READ accentHighlight NOTIFY appearanceChanged)
     // keyboard.shortcutStyle resolved for this device: "mac" (macOS symbols in menus) or "pc" (text), shortcutstyle.h.
     Q_PROPERTY(QString shortcutStyle READ shortcutStyle NOTIFY appearanceChanged)
+    // preview.textInImages of grassfield.json (default true): Select Text in Images (ADR-0045 OC-2), off when it is false.
+    Q_PROPERTY(bool textInImages READ textInImages NOTIFY appearanceChanged)
 
 public:
     PreviewApp(const QStringList &paths, const QStringList &errors, bool glance, int startIndex = 0, bool browsing = false, QObject *parent = nullptr);
@@ -70,6 +76,7 @@ public:
     QString accentColor() const { return m_accentColor; }
     QString accentHighlight() const { return m_accentHighlight; }
     QString shortcutStyle() const { return m_shortcutStyle; }
+    bool textInImages() const { return m_textInImages; }
 
     // Path of file `index` for the image provider (render thread): empty when out of range.
     QString pathAt(int index) const;
@@ -86,15 +93,37 @@ public:
     // `current`.
     Q_INVOKABLE void openInPreview(int current = 0) const;
 
+    // Select Text in Images (ADR-0045 OC-2, docs/specs/preview.md P13). Starts one recognition in the background
+    // (preview::recognitionCommand: "languages", "text" with tesseract's -l value, or "qr") and returns its number; the
+    // answer comes as recognized(). For "text" and "qr", file `index` (an image of the list) is decoded in a worker thread
+    // and handed to the tool on its standard input. 0, and no answer, when nothing starts: the tool is not installed (one
+    // journal line per tool and process, nothing on screen), the tool or the languages are refused, or the file is not a
+    // regular image file of the list.
+    Q_INVOKABLE int recognize(const QString &tool, int index, const QString &languages = QString());
+    // Stops recognition `request` (another image is shown, the setting went off): no answer comes for it.
+    Q_INVOKABLE void cancelRecognition(int request);
+    // Puts `text` on the clipboard. `concealed` adds the password-manager hint (x-kde-passwordManagerHint "secret", what
+    // Omarchy's `wl-copy --sensitive` sets): a QR code may hold a one-time-password secret, which the clipboard history
+    // (ADR-0034) then never records.
+    Q_INVOKABLE void copyText(const QString &text, bool concealed) const;
+    // Opens a QR code's link in the user's browser: `xdg-open <link>` (scoped in a real session) for a link that passes
+    // preview::isOpenableLink, never from a dev session (ADR-0019). Returns whether it started.
+    Q_INVOKABLE bool openLink(const QString &link) const;
+
 signals:
     void appearanceChanged();
     void filesChanged();
     void listingChanged();
+    // The answer of recognition `request` of `tool`: the tool's exit code (-1 when it could not start, crashed, ran past
+    // preview::kRecognitionTimeoutMs, wrote more than preview::kRecognitionOutputMax, or the image could not be decoded)
+    // and its standard output as UTF-8.
+    void recognized(int request, const QString &tool, int exitCode, const QString &output);
 
 private:
     QVariantMap inspectPath(const QString &path) const;
     void readAppearance();
     void applyBrowse(const preview::Browse &browse, const QVariantList &files);
+    void startTool(int request, const QString &tool, const preview::Recognition &command, const QByteArray &image);
 
     mutable QMutex m_lock; // guards m_paths (written on the GUI thread, read by the image provider)
     QStringList m_paths;
@@ -119,7 +148,15 @@ private:
     QString m_accentHighlight = QStringLiteral("automatic");
     const bool m_macDevice = grassfield::apps::macDeviceHere();
     QString m_shortcutStyle = QStringLiteral("pc");
+    bool m_textInImages = true;
     QFileSystemWatcher m_watcher;
+    // Recognitions: the last number given, those whose image a worker is decoding, the tools running, the decoders still
+    // alive (joined when the backend goes), and the tools found missing (logged once).
+    int m_lastRequest = 0;
+    QSet<int> m_decoding;
+    QHash<int, QProcess *> m_tools;
+    QList<QThread *> m_decoders;
+    QSet<QString> m_missingTools;
 };
 
 // image://preview/<frame>/<file index>: decoded with the allocation and size caps, EXIF rotation applied.

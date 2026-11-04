@@ -211,6 +211,44 @@ bool isSystemPath(const QString &canonical)
     return false;
 }
 
+Recognition recognitionCommand(const QString &tool, const QString &languages)
+{
+    Recognition out;
+    if (tool == QLatin1String("languages")) {
+        out.program = QStringLiteral("tesseract");
+        out.arguments = {QStringLiteral("--list-langs")};
+    } else if (tool == QLatin1String("text")) {
+        static const QRegularExpression names(QStringLiteral("^[A-Za-z0-9_]{1,32}(\\+[A-Za-z0-9_]{1,32}){0,3}$"));
+        if (!names.match(languages).hasMatch())
+            return {};
+        out.program = QStringLiteral("tesseract");
+        // `stdin stdout`: the image on the standard input, the answer on the standard output; `tsv` is tesseract's own
+        // configuration file that writes the word boxes.
+        out.arguments = {QStringLiteral("stdin"), QStringLiteral("stdout"), QStringLiteral("--oem"), QStringLiteral("1"),
+                         QStringLiteral("--psm"), QStringLiteral("3"), QStringLiteral("--dpi"), QStringLiteral("300"),
+                         QStringLiteral("-l"), languages, QStringLiteral("tsv")};
+        out.image = true;
+    } else if (tool == QLatin1String("qr")) {
+        out.program = QStringLiteral("zbarimg");
+        out.arguments = {QStringLiteral("-q"), QStringLiteral("-Sdisable"), QStringLiteral("-Sqrcode.enable"), QStringLiteral("-")};
+        out.image = true;
+    }
+    return out;
+}
+
+bool isOpenableLink(const QString &link)
+{
+    if (link.isEmpty() || link.size() > 2048 || link.startsWith(QLatin1Char('-')))
+        return false;
+    for (const QChar c : link) {
+        if (c.isSpace() || c.category() == QChar::Other_Control || c.category() == QChar::Other_Format)
+            return false;
+    }
+    const QUrl url(link, QUrl::StrictMode);
+    return url.isValid() && (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https")) && !url.host().isEmpty()
+        && url.userInfo().isEmpty();
+}
+
 Arguments resolveArguments(const QStringList &args, const QString &cwd)
 {
     Arguments out;
