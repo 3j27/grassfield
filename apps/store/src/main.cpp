@@ -4,6 +4,11 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImageReader>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTimer>
+
+#include <cstdio>
 #include <QLibraryInfo>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
@@ -44,6 +49,12 @@ int main(int argc, char *argv[])
     // Icons and screenshots come from third parties: every decoder (QML Image included) is bounded to this much memory.
     QImageReader::setAllocationLimit(128);
 
+    // `--removable` (ADR-0044 D1) answers the launcher and Files once and shows no window: offscreen, whatever the session says.
+    for (int i = 1; i < argc; ++i) {
+        if (qstrcmp(argv[i], "--removable") == 0)
+            qputenv("QT_QPA_PLATFORM", "offscreen");
+    }
+
     QGuiApplication app(argc, argv);
     // The app's static text is rasterised natively (ADR-0039 Q5, step 19): distance-field glyphs carry 8 to 20 % less ink than
     // macOS's, so text read greyer and softer; no app text is scaled or animated (an item that is sets its own renderType).
@@ -67,7 +78,28 @@ int main(int argc, char *argv[])
                                                     "search:<words>, installed or updates."),
                                         QStringLiteral("page"));
     parser.addOption(pageOption);
+    const QCommandLineOption removableOption(QStringLiteral("removable"),
+                                             QObject::tr("Print, as JSON, the installed apps by application entry and whether the Store may uninstall each."));
+    parser.addOption(removableOption);
     parser.process(app);
+
+    if (parser.isSet(removableOption)) {
+        // One-shot: the read of this computer's apps, printed once it is done; the launcher and Files run it (never two
+        // Stores: it takes no bus name, starts no operation and touches no state file).
+        grassfield::store::StoreBackend backend;
+        QObject::connect(&backend, &grassfield::store::StoreBackend::loadingChanged, &app, [&backend, &app] {
+            if (backend.loading())
+                return;
+            const QJsonObject doc{{QStringLiteral("version"), 1}, {QStringLiteral("entries"), QJsonObject::fromVariantMap(backend.removalByEntry())}};
+            const QByteArray text = QJsonDocument(doc).toJson(QJsonDocument::Compact) + '\n';
+            fwrite(text.constData(), 1, static_cast<size_t>(text.size()), stdout);
+            fflush(stdout);
+            app.quit();
+        });
+        QTimer::singleShot(120000, &app, [&app] { app.exit(1); });
+        backend.loadOnly();
+        return app.exec();
+    }
 
     // One Store per user (storeinstance.h): a second launch hands its page and its activation token to the running one and
     // leaves (Files' "Search the Store", a second click on its entry).

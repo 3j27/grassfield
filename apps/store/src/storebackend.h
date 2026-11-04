@@ -218,6 +218,11 @@ public:
     // What the app's buttons may do now: {installed, launcher, get: "" or why not, uninstall: "" or why not} (getBlock,
     // uninstallBlock). Read again with `revision` and `operations`.
     Q_INVOKABLE QVariantMap actions(const QString &id) const;
+    // The installed apps by application entry, for the launcher and Files (ADR-0044 D1): {"<desktop id>.desktop": {app, name,
+    // block}}, block "" when "Uninstall…" is offered (uninstallBlock). An app the Store's model does not know is not listed.
+    Q_INVOKABLE QVariantMap removalByEntry() const;
+    // The app an application entry ("x" or "x.desktop") belongs to, as `actions` takes it: "" when the Store does not know it.
+    Q_INVOKABLE QString appForEntry(const QString &desktopId) const;
     // The sheet's default button: the operation joins the queue, with the plan made last for this app (false when there is
     // none, or the app cannot be installed or removed).
     Q_INVOKABLE bool install(const QString &id);
@@ -243,6 +248,9 @@ public:
 
     // The first load; the window calls it once its first frame is up.
     void start();
+    // Only the read of what is on this computer (no fetch, no recovery of an earlier operation, no lock check): `--removable`
+    // runs beside a Store that may be running an operation (ADR-0044 D1). loadingChanged says when it is done.
+    void loadOnly() { run(Job{}); }
 
     // Screenshots on and the Store online: screenshotSource's answer, and the provider's gate (kept current for it, since
     // it fetches off the GUI thread and a page may still ask after the Store went offline).

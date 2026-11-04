@@ -52,6 +52,22 @@ Sheet {
         root.backend.plan(app.id, kind);
     }
 
+    // An uninstall the launcher or Files already confirmed with its own alert (ADR-0044 D1; "uninstall:<entry>"): the plan is
+    // made first, and the sheet opens only when the plan says more than the alert did (a refusal, or anything besides the app
+    // itself); otherwise the removal starts at once and polkit asks for the password, as on macOS after the alert.
+    property bool pendingRemoval: false
+
+    function showConfirmedRemoval(app: var): void {
+        if (root.visible)
+            return;
+        root.app = app;
+        root.kind = "remove";
+        root.plan = null;
+        root.pendingUpdate = false;
+        root.pendingRemoval = true;
+        root.backend.plan(app.id, "remove");
+    }
+
     // Update (a Flatpak's, or the Flatpak group's Update All): its plan first, the sheet only when it has something to say.
     function showUpdate(app: var): void {
         if (root.visible)
@@ -68,7 +84,14 @@ Sheet {
         function onPlanReady(app: string, kind: string, plan: var): void {
             if (app !== root.app.id || kind !== root.kind)
                 return;
-            if (root.pendingUpdate) {
+            if (root.pendingRemoval) {
+                root.pendingRemoval = false;
+                root.plan = plan;
+                if (Store.removalIsQuiet(plan))
+                    root.backend.uninstall(app);
+                else
+                    root.open();
+            } else if (root.pendingUpdate) {
                 root.pendingUpdate = false;
                 root.plan = plan;
                 const quiet = plan.refusal === "" && (plan.widened || []).length === 0 && (plan.unknown || []).length === 0;

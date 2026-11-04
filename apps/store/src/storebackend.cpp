@@ -1907,6 +1907,42 @@ QVariantMap StoreBackend::actions(const QString &id) const
             {QStringLiteral("update"), a->installed ? update : QStringLiteral("none")}};
 }
 
+QVariantMap StoreBackend::removalByEntry() const
+{
+    QVariantMap out;
+    if (!m_snapshot)
+        return out;
+    const Snapshot &s = *m_snapshot;
+    const auto add = [&out](const QString &desktop, const QString &id, const QString &name, const QString &block) {
+        if (isDesktopId(desktop) && !out.contains(desktop))
+            out.insert(desktop, QVariantMap{{QStringLiteral("app"), id}, {QStringLiteral("name"), name}, {QStringLiteral("block"), block}});
+    };
+    for (const StoreApp &a : s.apps) {
+        // Installed repository and Flatpak apps (web apps and recipes keep their Installed page: not a launcher's business).
+        if (!a.installed || (a.source != CatalogSource::Kind::Repo && a.source != CatalogSource::Kind::Flatpak))
+            continue;
+        const QString name = view::summary(a, m_language).value(QStringLiteral("name")).toString();
+        const QString block = uninstallBlock(a);
+        QStringList ids = a.source == CatalogSource::Kind::Repo ? s.entries.value(a.package) : QStringList{};
+        if (!a.desktopId.isEmpty())
+            ids.prepend(a.desktopId);
+        for (const QString &desktop : std::as_const(ids))
+            add(desktop, a.id, name, block);
+    }
+    // The user's Flatpaks Flathub's AppStream does not have: removed as "flatpak:<app id>".
+    for (const QString &app : s.flatpaks) {
+        if (!s.index.contains(app) && isFlatpakId(app))
+            add(app + QStringLiteral(".desktop"), QStringLiteral("flatpak:") + app, app, flatpakBlock());
+    }
+    return out;
+}
+
+QString StoreBackend::appForEntry(const QString &desktopId) const
+{
+    const QString key = desktopId.endsWith(QLatin1String(".desktop")) ? desktopId : desktopId + QStringLiteral(".desktop");
+    return removalByEntry().value(key).toMap().value(QStringLiteral("app")).toString();
+}
+
 PlanTools StoreBackend::planTools() const
 {
     PlanTools tools;
