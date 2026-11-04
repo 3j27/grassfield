@@ -1,0 +1,2 @@
+Premiere version signee, depuis packages.grassfield.site, sur le canal beta.
+Les coins des fenetres suivent un seul rayon mesure, avec un liseret sombre et des retouches depuis 1.0.0-rc1.

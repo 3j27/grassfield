@@ -1,7 +1,8 @@
 # Install Grassfield / Installer Grassfield
 
-PUBLISHED, UNANNOUNCED (ADR-0043 h, owner decision of 2026-11-04). The repository is at https://packages.grassfield.site with
-signing key E4921A382C349308BAA50D2F44C31B5D862EBEFA; nothing links to this page and the site stays noindex. The legal review
+PUBLISHED, UNANNOUNCED, BETA ONLY (ADR-0043 h, owner decision of 2026-11-04). The repository is at https://packages.grassfield.site with
+signing key E4921A382C349308BAA50D2F44C31B5D862EBEFA; nothing links to this page and the site stays noindex. The only channel is beta
+(1.0.0-rc2; the script installs from it by default and refuses `--channel stable` while stable is empty). The legal review
 stays mandatory before any announcement. The checksum below is for the script rendered from the current `repository.conf`
 (`just render-install`; recompute it with `sha256sum` after any change to the template or the conf). SITE and README are
 placeholders until the announcement. Publié, non annoncé : aucun lien, le site reste noindex ; la revue juridique précède
@@ -30,7 +31,7 @@ curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh
 curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh.sha256
 sha256sum -c grassfield-install.sh.sha256 && bash grassfield-install.sh
 ```
-Checksum: `SHA256: be3342cfcc6865ec927985134beaa65cfbee844f437d1196d4f533835bd5a5fa` (`grassfield-install.sh`), also published next to the script as `grassfield-install.sh.sha256`; the site and the README will carry it at the announcement (SITE.PLACEHOLDER, README.PLACEHOLDER).
+Checksum: `SHA256: c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2` (`grassfield-install.sh`), also published next to the script as `grassfield-install.sh.sha256`; the site and the README will carry it at the announcement (SITE.PLACEHOLDER, README.PLACEHOLDER).
 
 **What each form protects against, and what it does not**
 - *The one line* runs whatever the host serves at that moment. You rely on the TLS connection to the host and on the host
@@ -101,7 +102,7 @@ curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh
 curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh.sha256
 sha256sum -c grassfield-install.sh.sha256 && bash grassfield-install.sh
 ```
-Somme de contrôle : `SHA256: be3342cfcc6865ec927985134beaa65cfbee844f437d1196d4f533835bd5a5fa` (`grassfield-install.sh`), aussi publiée à côté du script (`grassfield-install.sh.sha256`) ; le site et le README la porteront à l'annonce (SITE.PLACEHOLDER, README.PLACEHOLDER).
+Somme de contrôle : `SHA256: c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2` (`grassfield-install.sh`), aussi publiée à côté du script (`grassfield-install.sh.sha256`) ; le site et le README la porteront à l'annonce (SITE.PLACEHOLDER, README.PLACEHOLDER).
 
 **Ce que chaque forme protège, et ce qu'elle ne protège pas**
 - *La ligne unique* exécute ce que l'hôte sert à cet instant. Tu t'appuies sur la connexion TLS vers l'hôte et sur l'hôte

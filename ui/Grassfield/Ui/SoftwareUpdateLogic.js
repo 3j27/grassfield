@@ -316,6 +316,13 @@ function buildReady(repositoryConf) {
     return m !== null && m[1] !== "invalid" && !/\.invalid$/.test(m[1]);
 }
 
+// The channel Set Up… chooses (owner decision of 2026-11-04, the macOS model: a prerelease build enrolls in the beta updates).
+// `versionText` is /usr/share/grassfield/VERSION: X.Y.Z-betaN or X.Y.Z-rcN gives "beta", a plain X.Y.Z or anything unreadable
+// gives "stable". A stable set up on a build that only the beta channel carries would point at an empty channel (ADR-0033 a2).
+function defaultChannel(versionText) {
+    return /^\d+\.\d+\.\d+-(beta|rc)\d+$/.test(String(versionText || "").trim()) ? "beta" : "stable";
+}
+
 // The release notes in the session's language (U6): [{version, date, text}], newest first as the checker lists them; French
 // when the UI is French and the release has it, English otherwise.
 function notesFor(grassfield, uiLanguage) {

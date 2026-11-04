@@ -27,13 +27,19 @@ BIN=$W/bin S=$W/state R=$W/root
 TPL=$root/packaging/install/grassfield-install.sh.in
 mkdir -p "$BIN" "$S" "$W/home" "$W/run" "$W/tmp" "$W/render"
 
+# The channel is decided by VERSION (ADR-0043 h): the scripts under test use a plain version (default stable); section 15 uses a
+# prerelease (default beta, stable refused).
+echo 1.0.0 >"$W/version-plain"
+echo 1.0.0-rc2 >"$W/version-pre"
+VPLAIN=(--version-file "$W/version-plain")
+
 # ---- 1. render.py ---------------------------------------------------------------------------------------------------
 printf 'GRASSFIELD_REPO_BASE=%s\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_REPO_BASE_PREVIOUS=\nGRASSFIELD_SIGNING_FINGERPRINT=%s\n' \
   "$BASE" "$FPR" >"$W/good.conf"
 # The shipped repository.conf names the real host and the owner's key since 2026-11-04 (ADR-0043 g): it renders. The
 # placeholder refusal is tested on a conf with the old .invalid base.
 python3 -I "$root/packaging/install/render.py" --conf "$root/packaging/pacman/repository.conf" --template "$TPL" \
-  --out "$W/render/shipped" >"$W/o" 2>&1
+  --out "$W/render/shipped" --version-file "$W/version-pre" >"$W/o" 2>&1
 expect 'render accepts the shipped repository.conf (real host, owner key)' "$?" 0
 sed 's#^GRASSFIELD_REPO_BASE=.*#GRASSFIELD_REPO_BASE=https://packages.grassfield.invalid#' "$W/good.conf" >"$W/placeholder.conf"
 python3 -I "$root/packaging/install/render.py" --conf "$W/placeholder.conf" --template "$TPL" \
@@ -47,10 +53,10 @@ expect 'render refuses an empty fingerprint' "$?" 1
 sed 's#^GRASSFIELD_REPO_BASE=.*#GRASSFIELD_REPO_BASE=file:///srv/repo#' "$W/good.conf" >"$W/file.conf"
 python3 -I "$root/packaging/install/render.py" --conf "$W/file.conf" --template "$TPL" --out "$W/render/file" >"$W/o" 2>&1
 expect 'render refuses a non-https base' "$?" 1
-python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/pub" >"$W/o" 2>&1
+python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/pub" "${VPLAIN[@]}" >"$W/o" 2>&1
 expect 'render (published form) with a real host and key' "$?" 0
 PUB=$W/render/pub/grassfield-install.sh
-python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/ok" --test-hook >"$W/o" 2>&1
+python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/ok" --test-hook "${VPLAIN[@]}" >"$W/o" 2>&1
 expect 'render (test form)' "$?" 0
 SCRIPT=$W/render/ok/grassfield-install.sh
 (cd "$W/render/pub" && sha256sum -c grassfield-install.sh.sha256 >/dev/null 2>&1)
@@ -807,6 +813,40 @@ conf_unchanged && pass 'symlinked log: nothing changed' || fail 'symlinked log: 
 fresh; mkdir -p "$LOGDIR"; echo old >"$LOGDIR/install.log"; chmod 644 "$LOGDIR/install.log"; run '' --dry-run
 expect 'an existing log is appended to and its mode is left alone' "$(stat -c %a "$LOGDIR/install.log")" 644
 has 'old log lines kept' old "$LOGDIR/install.log"
+
+# ---- 15. the default channel follows VERSION; stable is refused early while it is empty ----------------------------------
+echo 1.0.0-beta2 >"$W/version-beta"
+echo 1.0 >"$W/version-bad"
+python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/bad" --version-file "$W/version-bad" >"$W/o" 2>&1
+expect 'render refuses a VERSION that is not X.Y.Z or a -betaN / -rcN' "$?" 1
+python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/pre" --test-hook --version-file "$W/version-pre" >"$W/o" 2>&1
+expect 'render (prerelease VERSION)' "$?" 0
+python3 -I "$root/packaging/install/render.py" --conf "$W/good.conf" --template "$TPL" --out "$W/render/beta" --version-file "$W/version-beta" >"$W/o" 2>&1
+expect 'render (-betaN VERSION)' "$?" 0
+has 'a -betaN build defaults to beta' 'CHANNEL=beta SESSION=grassfield' "$W/render/beta/grassfield-install.sh"
+has 'the plain build defaults to stable' 'CHANNEL=stable SESSION=grassfield' "$PUB"
+has 'the plain build has a stable channel' 'readonly GF_STABLE_EMPTY=0' "$PUB"
+has 'the prerelease build knows stable is empty' 'readonly GF_STABLE_EMPTY=1' "$W/render/beta/grassfield-install.sh"
+SAVED=$SCRIPT
+SCRIPT=$W/render/pre/grassfield-install.sh
+fresh; run '' --yes
+expect 'prerelease: the default install exits 0' "$rc" 0
+has 'prerelease: the default channel is beta' 'grassfield-channel-set beta' "$S/calls"
+has 'prerelease: the repository points at beta' "Server = $BASE/beta/" "$R/etc/pacman.d/grassfield.conf"
+fresh; run '' --yes --channel stable
+expect 'prerelease: --channel stable exits 2' "$rc" 2
+has 'prerelease: it says the stable channel is empty' 'the stable channel is empty' "$W/out"
+has 'prerelease: and answers in French too' 'le canal stable est vide' "$W/out"
+expect 'prerelease: --channel stable runs nothing (no command at all)' "$(wc -c <"$S/calls")" 0
+conf_unchanged && pass 'prerelease: --channel stable leaves pacman.conf alone' || fail 'prerelease: --channel stable changed pacman.conf'
+[[ ! -e $LOGDIR/install.log ]] && pass 'prerelease: --channel stable writes no log' || fail 'prerelease: --channel stable wrote a log'
+fresh; run '' --dry-run --channel stable
+expect 'prerelease: --dry-run --channel stable is refused too' "$rc" 2
+fresh; run '' --yes --channel beta
+expect 'prerelease: --channel beta exits 0' "$rc" 0
+run '' --uninstall --yes --channel stable
+expect 'prerelease: --uninstall is not blocked by the channel' "$rc" 0
+SCRIPT=$SAVED
 
 # ---- 14. shellcheck (when installed) ----------------------------------------------------------------------------------
 if command -v shellcheck >/dev/null; then

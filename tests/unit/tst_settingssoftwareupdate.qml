@@ -397,6 +397,18 @@ TestCase {
         verify(!shown(t.page, i => i.footnote === "Grassfield updates were not set up: not allowed"), "the line goes with the next attempt");
     }
 
+    // A prerelease build sets up on beta (owner decision of 2026-11-04): -rcN and -betaN, never a plain version.
+    function test_setUpOnAPrereleaseBuildChoosesBeta() {
+        const t = make(answer("not-set-up"), {channel: "off", files: {"/usr/share/grassfield/VERSION": "1.0.0-rc2\n"}});
+        compare(t.updates.defaultChannel, "beta");
+        button(t.page, "Set Up…").clicked();
+        compare(t.backend.actions, [{argv: ["/usr/lib/grassfield/grassfield-channel-set", "beta"], tag: "update.channel.act"}]);
+        const plain = make(answer("not-set-up"), {channel: "off", files: {"/usr/share/grassfield/VERSION": "1.0.0\n"}});
+        compare(plain.updates.defaultChannel, "stable");
+        button(plain.page, "Set Up…").clicked();
+        compare(plain.backend.actions[0].argv[1], "stable");
+    }
+
     // Refusals: a build without its key or host hides Set Up… and says so.
     // Without a host or key the pane never contradicts itself: the system's updates are offered under the up-to-date or available
     // headline, with one line on Grassfield's own (integrator re-review of 5ae52b1, minor 1).

@@ -287,6 +287,16 @@ TestCase {
         compare(Logic.channelOf("Beta"), "");
     }
 
+    function test_aPrereleaseBuildSetsUpOnBeta() {
+        compare(Logic.defaultChannel("1.0.0-rc2\n"), "beta");
+        compare(Logic.defaultChannel("1.1.0-beta3"), "beta");
+        compare(Logic.defaultChannel("1.0.0"), "stable");
+        compare(Logic.defaultChannel(""), "stable");
+        compare(Logic.defaultChannel(undefined), "stable");
+        compare(Logic.defaultChannel("1.0.0-rc"), "stable", "not a version the build writes");
+        compare(Logic.defaultChannel("1.0.0.rc2"), "stable");
+    }
+
     function test_aBuildWithoutKeyOrHostCannotSetUp() {
         const conf = (base, fp) => "# comment\nGRASSFIELD_REPO_BASE=" + base + "\nGRASSFIELD_REPO_MIRRORS=\nGRASSFIELD_SIGNING_FINGERPRINT=" + fp + "\n";
         const fp = "0123456789ABCDEF0123456789ABCDEF01234567";

@@ -655,6 +655,7 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 | O8 (2026-11-03) | Domain and host name for the own-domain hosting (O8), asked in the integrator session | the owner's own domain, packages served from a sub-domain | **grassfield.site**; the repository is served at **https://packages.grassfield.site** (`GRASSFIELD_REPO_BASE`); still activated only after the legal review |
 | O8b (2026-11-03) | Storage and CDN behind that name (O8b) | S3-compatible storage + CDN | **Cloudflare R2** with Cloudflare's CDN, the host name as the bucket's custom domain; layout, cache rules and token in h.5 |
 | O11 (2026-11-03) | Who creates the signing key, and when (O11 said "later") | an agent or CI generates it · the owner generates it on their own machine | **now, by the owner, on their machine**, with `docs/owner-setup/make-signing-key.sh` (a throwaway GNUPGHOME, never `~/.gnupg`; the passphrase typed by the owner). The integrator and agents never see the secret key; they receive only the public key and the fingerprint (`docs/owner-setup/hosting-and-key.md`). `GRASSFIELD_SIGNING_FINGERPRINT` stays empty until the owner sends it (b.3), so a build still refuses ("no signing key in this build") |
+| O15b (2026-11-04) | What the first publication is, and which channel a prerelease build sets up on | 1.0.0-rc1 on both channels · 1.0.0-rc2 on beta, a prerelease build enrolls in beta (the macOS model) | **1.0.0-rc2, beta channel only (O15 unchanged), stable stays empty until after the legal review; a build whose VERSION has a -betaN or -rcN suffix sets Software Update up on `beta` (Settings "Set Up…" reads `/usr/share/grassfield/VERSION`), a plain version on `stable`; the public install script follows the same rule (ADR-0043 h)**. Reason: Set Up on rc2 pointing at an empty stable would fail its checks and block every Omarchy update (a2). |
 
 The owner gave every answer of O1-O22 on 2026-10-27: O1-O21 in this Claude Code session, through its question tool, and
 O22 to the integrator. SU-M1 was asked by the integrator on 2026-10-29 and confirmed by the owner through the question tool
@@ -675,8 +676,9 @@ since the channel's keyring must be grassfield-packages' `keyring/`, the whole p
   noindex), before the legal review, which stays mandatory before any public announcement. The owner's key
   (`E4921A382C349308BAA50D2F44C31B5D862EBEFA`, created 2026-11-04) is in `repository.conf` and
   `grassfield-signing-key.asc`: builds set Software Update up for real ("Set Up…" appears) and the Store fetches the catalog.
-  The first release is a Grassfield tag (`v1.0.0-rc1`, beta channel: e, O15); publishing still needs the owner's approval of
-  each run in `publish-beta` / `publish-stable`.
+  The first release is a Grassfield tag (`v1.0.0-rc2`, beta channel only: e, O15, owner decision O15b of 2026-11-04, pkgrel 1);
+  publishing still needs the owner's approval of each run in `publish-beta`. A prerelease build sets Software Update up on beta
+  (`SoftwareUpdateLogic.defaultChannel`, from `/usr/share/grassfield/VERSION`), so Set Up never points at the empty stable.
 - **Hosting and key (owner decisions O8, O8b, O11 of 2026-11-03), recorded 2026-11-03.** The host is
   `packages.grassfield.site` on Cloudflare R2 (h.5); `repository.conf` carries the base and no fingerprint; the owner makes the
   key with `docs/owner-setup/make-signing-key.sh`. Nothing is published.

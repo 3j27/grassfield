@@ -172,7 +172,7 @@ the site stays noindex), before the legal review, which stays mandatory before a
 h's "activated after the legal review" (recorded there too). `repository.conf` now carries
 `GRASSFIELD_SIGNING_FINGERPRINT=E4921A382C349308BAA50D2F44C31B5D862EBEFA` and `grassfield-signing-key.asc` holds the owner's
 public key (v4 EdDSA, one primary, no subkey), so `just render-install` renders the real script (sha256
-`be3342cfcc6865ec927985134beaa65cfbee844f437d1196d4f533835bd5a5fa`, to be recomputed whenever the template or the conf changes). Rendered files are build output (`build/install/`, ignored
+`c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2`, to be recomputed whenever the template or the conf changes). Rendered files are build output (`build/install/`, ignored
 by the repository) and are not committed.
 
 Bucket keys, so that the documented commands work (the bucket is `grassfield`, objects are served at the base):
@@ -180,6 +180,12 @@ Bucket keys, so that the documented commands work (the bucket is `grassfield`, o
 `grassfield-signing-key.asc` at the root (the script's host-file fallback, `$GF_BASE/grassfield-signing-key.asc`). The owner
 uploads them with `wrangler r2 object put` (commands in `docs/owner-setup/hosting-and-key.md`); the packages arrive with the
 first run of grassfield-packages' publishing job.
+
+**Installer default channel (owner decision O15b of 2026-11-04, ADR-0033).** `render.py` takes the default channel from `VERSION`
+(`--version-file`, default the repository's): `X.Y.Z-betaN` / `X.Y.Z-rcN` renders `CHANNEL=beta` and `GF_STABLE_EMPTY=1`, a plain
+`X.Y.Z` renders `CHANNEL=stable` and `GF_STABLE_EMPTY=0`, anything else is refused. While stable is empty, `--channel stable` (and
+`--dry-run --channel stable`) exits 2 from argument parsing, before the log, root, network or any file is touched, with a message in
+English and French; `--uninstall` is not affected. The first published script is rendered from `1.0.0-rc2`.
 
 ## Consequences
 - `just render-install` refuses a conf with the `.invalid` host or an empty fingerprint, by design. It succeeds since 2026-11-04 (h).
