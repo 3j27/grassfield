@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import "Nav.js" as Nav
+import "ShareLogic.js" as ShareLogic
 import "TagColors.js" as TagColors
 
 // One tab of a browser window: location, history, view mode, search and every action on the selection.
@@ -1004,6 +1005,11 @@ FocusScope {
         items.push({separator: true});
         items.push({id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")});
         items.push({id: "copyPath", text: count === 1 ? qsTr("Copy “%1” as Pathname").arg(name) : qsTr("Copy %1 Items as Pathnames").arg(count), shortcut: qsTr("Ctrl+Alt+C")});
+        // Share, after Copy where Finder places it (ADR-0045 OC-13): the toolbar Share button's menu as a submenu; none when
+        // there is nothing to share with (LocalSend not installed).
+        const share = root.shareMenu(model);
+        if (share.length > 0)
+            items.push({id: "share", text: qsTr("Share"), submenu: share});
         // Colour tags (macOS: a row of colour dots under the edit items).
         items.push({separator: true});
         items.push(root.tagRow(model));
@@ -1091,6 +1097,22 @@ FocusScope {
             {id: "sortDescending", text: qsTr("Descending"), checked: root.sortDescending},
             {id: "foldersFirst", text: qsTr("Keep Folders on Top"), checked: root.app.foldersFirst}
         ]};
+    }
+
+    // The Share menu of the selection (the toolbar's Share button, the item menu's Share submenu; ADR-0045 OC-13,
+    // ShareLogic.js): "Send with LocalSend…" first, where macOS puts its nearby-device sharing, when LocalSend is installed
+    // (looked up now: installed or removed while Files runs counts), enabled for local files and folders only.
+    function shareMenu(model: var): var {
+        const urls = model ? model.selectedUrls() : [];
+        const where = model ? {isTrash: model.isTrash, isApplications: model.isApplications} : null;
+        return ShareLogic.menuItems(root.app.localSendAvailable(), ShareLogic.canSend(urls, where), qsTr("Send with LocalSend…"));
+    }
+
+    // The selection to LocalSend (FilesApp.sendWithLocalSend checks the vector again and reports a failure).
+    function sendWithLocalSend(model: var): void {
+        if (!ShareLogic.canSend(model.selectedUrls(), {isTrash: model.isTrash, isApplications: model.isApplications}))
+            return;
+        root.app.sendWithLocalSend(ShareLogic.sendArgv(model.selectedUrls()));
     }
 
     // The toolbar Action menu: item actions for a selection, folder actions otherwise.
@@ -1224,6 +1246,9 @@ FocusScope {
             break;
         case "copyPath":
             root.app.copyPaths(model.selectedUrls());
+            break;
+        case "localsend":
+            root.sendWithLocalSend(model);
             break;
         case "terminal":
             root.app.openTerminal(model.selectedUrls()[0]);

@@ -35,7 +35,7 @@ Window {
     readonly property bool compactViews: {
         if (searchCapsule.expanded)
             return true;
-        const trailing = viewSwitcher.fullWidth + Tokens.filesGroupButtonWidth + tagsButton.width + actionButton.width + searchCapsule.width + 4 * Tokens.spacingSm;
+        const trailing = viewSwitcher.fullWidth + Tokens.filesGroupButtonWidth + (win.shareShown ? shareButton.width : 0) + tagsButton.width + actionButton.width + searchCapsule.width + 4 * Tokens.spacingSm;
         const room = toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - trailing - Tokens.windowItemsInset;
         return room < Math.min(titleMetrics.advanceWidth, Tokens.filesToolbarTitleMinWidth);
     }
@@ -304,9 +304,15 @@ Window {
     // App-wide errors show in the window the user last worked in: an action chosen in the global menu runs while the
     // shell's menu holds the keyboard, so no window is active at that moment.
     onActiveChanged: {
-        if (win.active)
+        if (win.active) {
             win.manager.lastActiveWindow = win;
+            win.shareShown = win.app.localSendAvailable();
+        }
     }
+
+    // The toolbar's Share button exists while there is something to share with (ADR-0045 OC-13: LocalSend installed), looked
+    // up when the window opens and each time it becomes active, so installing or removing LocalSend shows on the next visit.
+    property bool shareShown: win.app.localSendAvailable()
 
     Connections {
         target: win.app
@@ -837,16 +843,38 @@ Window {
                     }
                 }
 
-                // Tags and Action as two bare glyphs with no capsule, as macOS 27 Finder draws Share, Tags and Action on a white
-                // window (the hover and pressed pills stay; refinement audit 2026-11-02). Tags: the colour tags of the selection,
-                // and Tags… for named ones (FP-21, FP-63).
+                // Share, Tags and Action as bare glyphs with no capsule, as macOS 27 Finder draws them on a white window (the
+                // hover and pressed pills stay; refinement audit 2026-11-02). Share only while there is something to share with
+                // (ADR-0045 OC-13: LocalSend installed; FP-20). Tags: the colour tags of the selection, and Tags… for named
+                // ones (FP-21, FP-63).
                 Item {
-                    width: 2 * Tokens.toolbarCapsule
+                    width: (win.shareShown ? 3 : 2) * Tokens.toolbarCapsule
                     height: Tokens.toolbarCapsule
                     anchors.verticalCenter: parent.verticalCenter
 
                     Row {
                         anchors.fill: parent
+
+                        // The selection's Share menu (BrowserTab.shareMenu): "Send with LocalSend…" first, where macOS puts
+                        // its nearby-device sharing; dimmed without a selection, in the Trash and in Applications.
+                        ToolButton {
+                            id: shareButton
+                            visible: win.shareShown
+                            capsule: true
+                            buttonSize: Tokens.toolbarCapsule
+                            accessibleName: qsTr("Share")
+                            enabled: win.tab !== null && win.folder !== null && win.folder.selectedCount > 0 && !win.folder.isTrash && !win.folder.isApplications
+                            onClicked: {
+                                const p = shareButton.mapToItem(null, 0, shareButton.height + Tokens.spacingXs);
+                                win.menuLayer.open(win.tab.shareMenu(win.folder), p.x, p.y, id => win.tab.runAction(id, win.folder), win.tab.view, false);
+                            }
+
+                            ViewGlyph {
+                                anchors.centerIn: parent
+                                kind: "share"
+                                color: shareButton.glyphColor
+                            }
+                        }
 
                         ToolButton {
                             id: tagsButton

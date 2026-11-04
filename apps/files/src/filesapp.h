@@ -285,6 +285,10 @@ public:
     // New Terminal at Folder (decision F-7): the session's terminal (xdg-terminal-exec) opened in a local folder. Nothing
     // of the folder is run: the terminal is an application the user chose.
     Q_INVOKABLE void openTerminal(const QUrl &folder);
+    // Share > Send with LocalSend… (ADR-0045 OC-13): whether LocalSend (and systemd-run, which starts it) is on PATH now, and
+    // the send. `argv` is ShareLogic.js's vector, Omarchy's own invocation followed by the items; anything else is refused.
+    Q_INVOKABLE bool localSendAvailable() const;
+    Q_INVOKABLE void sendWithLocalSend(const QStringList &argv);
     // Rename N Items (RenameLogic): options {mode, find, replaceWith, addText, where, format, customFormat, startAt}. The
     // preview is the new names; renameItems returns "" or why nothing was renamed. Local items: all renamed or none (a
     // failure part-way puts back what was done), ONE undo step; items on a server are renamed one by one through KIO.

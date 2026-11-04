@@ -298,6 +298,15 @@ TestCase {
         function chooseApplication(urls: var): void {
             fakeApp.chosen = fakeApp.chosen.concat([urls.map(u => String(u))]);
         }
+        // Share > Send with LocalSend… (ADR-0045 OC-13): whether LocalSend is installed, and the vectors sent.
+        property bool localSendInstalled: true
+        property var localSent: []
+        function localSendAvailable(): bool {
+            return fakeApp.localSendInstalled;
+        }
+        function sendWithLocalSend(argv: var): void {
+            fakeApp.localSent = fakeApp.localSent.concat([argv]);
+        }
         property QtObject applicationChooser: QtObject {
             id: fakeChooser
             signal opened(int id, var request)
@@ -593,6 +602,45 @@ TestCase {
         const listed = tab.itemMenu(folder).find(i => i.id === "openWith");
         compare(listed.submenu.map(i => i.id ?? (i.separator ? "-" : "")), ["app:org.example.Editor.desktop", "-", "openWithOther"], "the type's applications, then Other…");
         fakeApp.openWithApps = [];
+        folder.selected = [];
+    }
+
+    // Share > Send with LocalSend… (ADR-0045 OC-13): with LocalSend installed the item menu has a Share submenu (after Copy,
+    // where Finder puts it) whose first item sends the local selection with Omarchy's invocation, and the toolbar has the Share
+    // button with the same menu; the Applications location sends nothing; without LocalSend there is no Share at all.
+    function test_shareSendsWithLocalSend() {
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        const tab = browser.tab;
+        const folder = tab.folder;
+        folder.isApplications = false;
+        folder.selected = [0];
+        fakeApp.localSendInstalled = true;
+        const items = tab.itemMenu(folder);
+        const ids = items.map(i => i.id ?? "-");
+        const share = items.find(i => i.id === "share");
+        verify(share !== undefined, "a Share submenu");
+        verify(ids.indexOf("share") > ids.indexOf("copyPath"), "after Copy as Pathname");
+        compare(share.text, "Share");
+        compare(share.submenu[0].id, "localsend", "LocalSend first");
+        compare(share.submenu[0].text, "Send with LocalSend…");
+        verify(share.submenu[0].enabled, "enabled for a local file");
+        compare(JSON.stringify(tab.shareMenu(folder)), JSON.stringify(share.submenu), "the toolbar's Share menu is the same");
+        fakeApp.localSent = [];
+        tab.runAction("localsend", folder);
+        compare(fakeApp.localSent.length, 1, "one send");
+        compare(fakeApp.localSent[0], ["systemd-run", "--user", "--quiet", "--collect", "localsend", "--headless", "send", "/sandbox"]);
+        verify(browser.shareShown, "the toolbar's Share button shows");
+        folder.isApplications = true;
+        compare(tab.shareMenu(folder)[0].enabled, false, "dimmed in Applications");
+        fakeApp.localSent = [];
+        tab.runAction("localsend", folder);
+        compare(fakeApp.localSent, [], "nothing sent from Applications");
+        folder.isApplications = false;
+        fakeApp.localSendInstalled = false;
+        verify(tab.itemMenu(folder).find(i => i.id === "share") === undefined, "nothing to share with: no Share");
+        compare(tab.shareMenu(folder), [], "and an empty Share menu");
+        fakeApp.localSendInstalled = true;
         folder.selected = [];
     }
 

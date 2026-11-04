@@ -103,6 +103,7 @@
  {"path": "tests/unit/tst_filessidebar.qml", "layer": "headless"},
  {"path": "tests/unit/tst_fileshistorybuttons.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filesnav.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_filesshare.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filestabs.qml", "layer": "headless"},
  {"path": "tests/unit/tst_filestags.qml", "layer": "headless"},
  {"path": "tests/unit/tst_focusreturn.qml", "layer": "headless"},

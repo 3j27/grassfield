@@ -2962,6 +2962,10 @@
         <translation>Super+4</translation>
     </message>
     <message>
+        <source>Send with LocalSend…</source>
+        <translation>Envoyer avec LocalSend…</translation>
+    </message>
+    <message>
         <source>Searching…</source>
         <translation>Recherche…</translation>
     </message>
@@ -3020,6 +3024,10 @@
     <message>
         <source>Ctrl+Alt+C</source>
         <translation>Ctrl+Alt+C</translation>
+    </message>
+    <message>
+        <source>Share</source>
+        <translation>Partager</translation>
     </message>
     <message>
         <source>Services</source>
@@ -3119,6 +3127,10 @@
     <message>
         <source>Group By</source>
         <translation>Grouper par</translation>
+    </message>
+    <message>
+        <source>Share</source>
+        <translation>Partager</translation>
     </message>
     <message>
         <source>Tags</source>
@@ -5205,6 +5217,22 @@
     <message>
         <source>New Folder with Selection</source>
         <translation>Nouveau dossier avec la sélection</translation>
+    </message>
+    <message>
+        <source>These items can’t be sent with LocalSend.</source>
+        <translation>Ces éléments ne peuvent pas être envoyés avec LocalSend.</translation>
+    </message>
+    <message>
+        <source>These items can’t be sent with LocalSend: only files and folders on this computer can.</source>
+        <translation>Ces éléments ne peuvent pas être envoyés avec LocalSend&#xa0;: seuls les fichiers et dossiers de cet ordinateur peuvent l’être.</translation>
+    </message>
+    <message>
+        <source>LocalSend isn’t installed.</source>
+        <translation>LocalSend n’est pas installé.</translation>
+    </message>
+    <message>
+        <source>LocalSend couldn’t be started.</source>
+        <translation>LocalSend n’a pas pu être démarré.</translation>
     </message>
     <message>
         <source>Rename %1 Items</source>
