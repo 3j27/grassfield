@@ -809,7 +809,7 @@ a mutation). Both layers cover the output, so a capture is black while either sh
     LOCKING, AUTHENTICATING, RELEASING, LOCKED but not verified yet, or an unknown state), read once more right before
     `systemctl` runs (review of 95dab794: `Lock.holding` included AUTHENTICATING and RELEASING and skipped the verification,
     so a fingerprint success just before the due time could start a suspend during the release fade; `tst_idlemodel`
-    `test_noSuspendDuringTheReleaseFade`). A change of the lock's state or of its secure flag decides again. An unlocked
+    `test_noSuspendDuringTheReleaseFade`). A lock that settles LOCKED and secure after the due time decides again; an unlock (UNLOCKED) ends the attempt, so a fingerprint touch over the due time can never lead to the lock-first path and undo the unlock (review of 2a19231d, `IdleModel.autoSleepOnLockChange`, `test_unlockOverTheDueTimeEndsTheAttempt`). An unlocked
     session (Require password after the display turns off later than the sleep, or Never) is locked first
     (`Lock.lock("sleep")`, which lights the displays until the lock holds), and the next due time suspends: Grassfield never
     puts an unlocked, unconfirmed or opening session to sleep, even with a degraded sleep inhibitor;

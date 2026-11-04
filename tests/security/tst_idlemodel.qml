@@ -332,7 +332,84 @@ TestCase {
         const text = source();
         verify(/id: autoSleepRetry\s*\n\s*interval: IdleModel\.AUTO_SLEEP_RETRY_MS\s*\n\s*repeat: true\s*\n\s*running: IdleModel\.autoSleepRetryArmed\(root\.autoSleepArmed, root\.autoSleepAsked\)/.test(text));
         verify(/id: autoSleepRetry[\s\S]*?onTriggered: \{\s*root\.autoSleepAsked = false;\s*root\.autoSleepCheck\(\);\s*\}/.test(text));
-        compare(text.split("\n").filter(l => l.indexOf("root.autoSleepAsked = false") >= 0).length, 3, "the period change, the retry, a re-check that refused");
+        compare(text.split("\n").filter(l => l.indexOf("root.autoSleepAsked = false") >= 0).length, 4, "the period change, the retry, a re-check that refused, an unlock");
+    }
+
+    // What a change of the lock does to a pending automatic sleep: decide again only once LOCKED and secure; an unlock ends
+    // the attempt; anything else, nothing.
+    function test_autoSleepOnLockChange() {
+        compare(IdleModel.autoSleepOnLockChange(Machine.LOCKED, true), "recheck");
+        compare(IdleModel.autoSleepOnLockChange(Machine.UNLOCKED, false), "end");
+        compare(IdleModel.autoSleepOnLockChange(Machine.UNLOCKED, true), "end");
+        for (const s of [Machine.LOCKING, Machine.AUTHENTICATING, Machine.RELEASING, undefined, "x"])
+            compare(IdleModel.autoSleepOnLockChange(s, true), "none", String(s));
+        compare(IdleModel.autoSleepOnLockChange(Machine.LOCKED, false), "none", "not secure yet");
+        verify(IdleModel.autoSleepDue(true, true, true, false));
+        verify(!IdleModel.autoSleepDue(true, true, false, false), "the delay has not passed");
+        verify(!IdleModel.autoSleepDue(true, true, true, true), "already asked");
+        verify(!IdleModel.autoSleepDue(true, false, true, false), "input or an inhibitor");
+        verify(!IdleModel.autoSleepDue(false, true, true, false), "disarmed");
+        verify(!IdleModel.autoSleepDue("true", true, true, false), "exact values only");
+    }
+
+    // Review of 2a19231d, the exact sequence: prevent-sleep off, the displays off on the lock screen, a fingerprint touch over
+    // the due time. The due time comes while AUTHENTICATING (wait), then the unlock ends in UNLOCKED: no lock and no suspend,
+    // whatever checks run afterwards (the deferred one, the idle monitor, the retry timer), until a new display-off period.
+    // The flags and the decisions are Idle.qml's, driven through IdleModel's own functions.
+    function test_unlockOverTheDueTimeEndsTheAttempt() {
+        const s = {armed: true, idle: true, waited: false, asked: false, state: Machine.AUTHENTICATING, secure: true, actions: []};
+        const check = () => {
+            if (!IdleModel.autoSleepDue(s.armed, s.idle, s.waited, s.asked))
+                return;
+            const a = IdleModel.autoSleepAction(s.state, s.secure);
+            if (a === "wait")
+                return;
+            s.asked = true;
+            s.actions.push(a);
+        };
+        const lockChanged = (state, secure) => {
+            s.state = state;
+            s.secure = secure;
+            const next = IdleModel.autoSleepOnLockChange(state, secure);
+            if (next === "end") {
+                s.waited = false;
+                s.asked = false;
+            } else if (next === "recheck") {
+                check();
+            }
+        };
+        // The due time is reached while the fingerprint is being checked.
+        s.waited = true;
+        check();
+        compare(s.actions, [], "AUTHENTICATING: wait");
+        // The fingerprint succeeds: RELEASING (the fade), then UNLOCKED.
+        lockChanged(Machine.RELEASING, true);
+        compare(s.actions, []);
+        lockChanged(Machine.UNLOCKED, false);
+        compare([s.waited, s.asked], [false, false], "the unlock ended the attempt");
+        // Every later check, in any order (the deferred one, an idle edge, a retry tick, the monitor timer's), does nothing.
+        for (let i = 0; i < 3; i++)
+            check();
+        compare(s.actions, [], "no lock and no suspend after the unlock");
+        // Only a new display-off period (the displays came on with the unlock and went off again: armed again, the delay
+        // passed again) can lead anywhere, and then from the state as it is then.
+        s.armed = false;
+        s.armed = true;
+        s.waited = true;
+        check();
+        compare(s.actions, ["lock"], "a new period on an unlocked session: the lock before sleep, as designed");
+        // A lock that settles later decides again: LOCKED and secure, suspend.
+        s.asked = false;
+        lockChanged(Machine.LOCKING, false);
+        lockChanged(Machine.LOCKED, true);
+        compare(s.actions, ["lock", "suspend"]);
+        // In Idle.qml: both lock signals go through autoSleepLockChanged, which ends the attempt or re-checks, never more.
+        const text = source();
+        verify(/function onSecureChanged\(\): void \{\s*root\.autoSleepLockChanged\(\);\s*\}/.test(text));
+        verify(/function onLockStateChanged\(\): void \{\s*root\.autoSleepLockChanged\(\);\s*\}/.test(text));
+        verify(/const next = IdleModel\.autoSleepOnLockChange\(Lock\.currentState\(\), Lock\.currentlySecure\(\)\);\s*if \(next === "end"\) \{\s*root\.autoSleepWaited = false;\s*root\.autoSleepAsked = false;\s*\} else if \(next === "recheck"\) \{\s*Qt\.callLater\(root\.autoSleepCheck\);\s*\}/.test(text));
+        compare(text.split("\n").filter(l => l.indexOf("Qt.callLater(root.autoSleepCheck)") >= 0).length, 1, "the only deferred check is the recheck");
+        verify(/if \(!sleepMonitor\.enabled \|\| !IdleModel\.autoSleepDue\(root\.autoSleepArmed, sleepMonitor\.isIdle, root\.autoSleepWaited, root\.autoSleepAsked\)\)\s*return;/.test(text));
     }
 
     function source() {

@@ -139,6 +139,25 @@ function autoSleepAction(state, secure) {
     return "wait";
 }
 
+// An automatic sleep is due: the monitor is armed, no input and no idle inhibitor for the delay (`idle`), the delay passed
+// since the displays went off (`waited`), and nothing was asked for yet in this attempt. Exact values only.
+function autoSleepDue(armed, idle, waited, asked) {
+    return armed === true && idle === true && waited === true && asked !== true;
+}
+
+// What a change of the lock (its state or its secure flag) does to a pending automatic sleep: "recheck" only once the
+// lock is LOCKED and secure (a lock that settled after the due time); "end" when the session is UNLOCKED (the user is back:
+// an unlock ends that attempt, so it can never lead to the lock-first path and undo the unlock; review of 2a19231d: a
+// fingerprint touch over the due time answered "wait", then "lock" once UNLOCKED); "none" otherwise (LOCKING,
+// AUTHENTICATING, RELEASING, LOCKED not secure yet, a state it does not know).
+function autoSleepOnLockChange(state, secure) {
+    if (state === "locked" && secure === true)
+        return "recheck";
+    if (state === "unlocked")
+        return "end";
+    return "none";
+}
+
 // Sleep inhibitor and PrepareForSleep watcher restarts (GF-030: never given up silently). A child that exits within
 // FAST_EXIT_MS of its start is a failure; MAX_FAST_FAILURES in a row make the module "degraded" (a notice tells the user)
 // and the child is then retried every SLOW_RETRY_MS instead of every FAST_RETRY_MS, for as long as the shell runs.

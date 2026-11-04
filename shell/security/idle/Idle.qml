@@ -279,7 +279,7 @@ Scope {
     }
 
     function autoSleepCheck(): void {
-        if (!root.autoSleepArmed || !sleepMonitor.enabled || !sleepMonitor.isIdle || !root.autoSleepWaited || root.autoSleepAsked)
+        if (!sleepMonitor.enabled || !IdleModel.autoSleepDue(root.autoSleepArmed, sleepMonitor.isIdle, root.autoSleepWaited, root.autoSleepAsked))
             return;
         // Read afresh at the moment of the decision (a binding that missed a change must not put the computer to sleep).
         if (IdleModel.sleepPrevented(Settings.energyPreventSleep) || root.busInhibited)
@@ -312,16 +312,29 @@ Scope {
         autoSleepRequest.running = true;
     }
 
-    // The lock's state settles after the due time (a lock still being confirmed, verified a moment later): decide again.
+    // A change of the lock (IdleModel.autoSleepOnLockChange, read afresh): a lock that settled LOCKED and secure after the due
+    // time decides again; an unlock ends the attempt (the delay starts over with the next display-off), so an unlock can never
+    // lead to the lock-first path and undo itself (review of 2a19231d: a fingerprint touch over the due time); anything else
+    // changes nothing.
+    function autoSleepLockChanged(): void {
+        const next = IdleModel.autoSleepOnLockChange(Lock.currentState(), Lock.currentlySecure());
+        if (next === "end") {
+            root.autoSleepWaited = false;
+            root.autoSleepAsked = false;
+        } else if (next === "recheck") {
+            Qt.callLater(root.autoSleepCheck);
+        }
+    }
+
     Connections {
         target: Lock
 
         function onSecureChanged(): void {
-            Qt.callLater(root.autoSleepCheck);
+            root.autoSleepLockChanged();
         }
 
         function onLockStateChanged(): void {
-            Qt.callLater(root.autoSleepCheck);
+            root.autoSleepLockChanged();
         }
     }
 

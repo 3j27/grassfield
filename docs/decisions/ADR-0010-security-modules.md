@@ -203,7 +203,14 @@ adapter; on a desktop, Energy's switch as before. Tests: battery with the switch
 - Fail awake: a value that cannot be read, a refused suspend (an application's sleep block inhibitor) or a crashed shell
   leave the computer awake, locked or unlocked exactly as Lock Screen made it. A request that did not end in a sleep is asked
   again every 5 minutes (`IdleModel.AUTO_SLEEP_RETRY_MS`, monotonic) while the displays stay off, so a laptop goes to sleep
-  once a download's inhibitor ends (review of 95dab794); never a tight loop; input stops it.
+  once a download's inhibitor ends (review of 95dab794); never a tight loop; input stops it. The same timer puts the computer
+  back to sleep 5 minutes after a wake without input (a timer or the network woke it, the displays stayed off): confirmed by
+  the integrator after the delta review of 2a19231d, as macOS goes back to sleep after a dark wake, and it fails closed (the
+  session stays LOCKED and secure, which a suspend requires).
+- An unlock ends a pending automatic sleep (`IdleModel.autoSleepOnLockChange`): the delay starts over with the next
+  display-off, so an unlock never leads to the lock before sleep and never undoes itself (review of 2a19231d: a fingerprint
+  touch over the due time answered "wait" while AUTHENTICATING, then "lock" once UNLOCKED; `tst_idlemodel`
+  `test_unlockOverTheDueTimeEndsTheAttempt`). A change of the lock decides again only once it is LOCKED and secure.
 - Never in the nested dev session (a due suspend is counted and logged, `idle status`); the new dev hook `idle
   devAutoSleep <1..600>` only shortens the delay there.
 - Real suspend: NOT VERIFIED until the owner's L2 run (L3†).
