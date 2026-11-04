@@ -240,6 +240,8 @@ Scope {
     readonly property string notificationsHistory: read("notifications.history")
     readonly property string notificationsPreviews: read("notifications.previews")
     readonly property bool desktopShowIcons: read("desktop.showIcons")
+    // The remembered choices of the main display, one per set of connected displays (DisplayRole.js, ADR-0044).
+    readonly property var displaysMain: read("displays.main")
     readonly property bool menubarShowBackground: read("menubar.showBackground")
     readonly property string menubarAutoHide: read("menubar.autoHide")
     readonly property bool menubarShowNowPlaying: read("menubar.showNowPlaying")

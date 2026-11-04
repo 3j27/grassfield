@@ -43,17 +43,19 @@ Singleton {
     property string written: ""
 
     function publish(): void {
-        if (root.statePath === "")
-            return;
-        if (stateFile.path !== root.statePath)
-            stateFile.path = root.statePath;
         const objects = Hyprland.monitors ? Hyprland.monitors.values : [];
         let monitors = objects.map(m => m.lastIpcObject).filter(o => o && o.name);
         // A refresh in flight leaves the objects without their answer: never publish none over the monitors already described.
         // None is published only when Hyprland has no monitor at all, or before any was ever described.
         if (monitors.length === 0 && objects.length > 0 && root.described.length > 0)
             monitors = root.described;
+        // `described` is also what the main display's identity reads (services/MainDisplay.qml: make, model and serial), so it is
+        // set whether or not there is a file to write.
         root.described = monitors;
+        if (root.statePath === "")
+            return;
+        if (stateFile.path !== root.statePath)
+            stateFile.path = root.statePath;
         const text = DisplaysFile.payload(monitors, root.backlight, root.trialState);
         // Quickshell reports every `monitors` answer as a change, changed or not (the lock asks every second): write only news.
         if (DisplaysFile.same(root.written, text))

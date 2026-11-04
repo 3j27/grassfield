@@ -36,7 +36,7 @@ function parseState(text) {
     if (!j || j.v !== 1 || !Array.isArray(j.monitors))
         return null;
     const monitors = j.monitors.filter(m => m && typeof m.name === "string" && m.name !== "" && !m.disabled).map(m => ({
-        name: m.name, description: typeof m.description === "string" ? m.description : "", make: String(m.make || ""), model: String(m.model || ""),
+        name: m.name, description: typeof m.description === "string" ? m.description : "", make: String(m.make || ""), model: String(m.model || ""), serial: String(m.serial || ""),
         width: num(m.width), height: num(m.height), refreshRate: num(m.refreshRate), x: num(m.x), y: num(m.y), scale: num(m.scale) || 1,
         transform: num(m.transform), physicalWidth: num(m.physicalWidth), physicalHeight: num(m.physicalHeight),
         modes: (Array.isArray(m.availableModes) ? m.availableModes : []).map(parseMode).filter(x => x !== null)}));

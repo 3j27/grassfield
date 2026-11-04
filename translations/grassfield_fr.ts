@@ -1683,6 +1683,10 @@
         <source>At %1, %2</source>
         <translation>À %1, %2</translation>
     </message>
+    <message>
+        <source>Main display. At %1, %2</source>
+        <translation>Écran principal. À %1, %2</translation>
+    </message>
 </context>
 <context>
     <name>AttributionCard</name>
@@ -4249,6 +4253,22 @@
     <message>
         <source>This display has no name Grassfield can keep its settings under.</source>
         <translation>Cet écran n’a pas de nom sous lequel Grassfield puisse conserver ses réglages.</translation>
+    </message>
+    <message>
+        <source>Use as</source>
+        <translation>Utiliser comme</translation>
+    </message>
+    <message>
+        <source>Holds the Dock, the desktop icons and the notifications.</source>
+        <translation>Contient le Dock, les icônes du bureau et les notifications.</translation>
+    </message>
+    <message>
+        <source>Main display</source>
+        <translation>Écran principal</translation>
+    </message>
+    <message>
+        <source>Extended display</source>
+        <translation>Écran étendu</translation>
     </message>
     <message>
         <source>Refresh rate</source>
@@ -15019,6 +15039,10 @@
     <message>
         <source>Play on battery power</source>
         <translation>Lire sur batterie</translation>
+    </message>
+    <message>
+        <source>The same wallpaper on every display. Choose a display to give it a wallpaper of its own.</source>
+        <translation>Le même fond d’écran sur chaque écran. Choisissez un écran pour lui donner son propre fond d’écran.</translation>
     </message>
     <message>
         <source>A video wallpaper pauses on battery, when you are away, under a full-screen window, and with Reduce Motion.</source>

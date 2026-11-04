@@ -95,7 +95,7 @@ Window {
     // An app's sub-pane of Notifications: "notifications/<app name>" (the name as the shell saw it).
     readonly property string notificationAppPrefix: "notifications/"
     readonly property string notificationApp: root.selectedId.indexOf(root.notificationAppPrefix) === 0 ? root.selectedId.substring(root.notificationAppPrefix.length) : ""
-    property string selectedId: root.startSection !== "" ? root.pointerPane(root.startSection) : "appearance"
+    property string selectedId: root.startSection !== "" ? root.pointerPane(root.paneOf(root.startSection)) : "appearance"
     property string query: ""
     // The state a pane shows under its title in the toolbar (Battery), "" for none.
     readonly property string pageSubtitle: (page.item as BatteryPage)?.subtitle ?? ""
@@ -195,8 +195,24 @@ Window {
     // Back and forward through the panes (the toolbar's capsule): NavHistory.js.
     property var navState: ({back: [], forward: [], current: ""})
 
+    // A section id may carry a display: "wallpaper@DP-2" opens Wallpaper on that output (the desktop's Change Wallpaper…).
+    function paneOf(id: string): string {
+        const i = id.indexOf("@");
+        return i < 0 ? id : id.substring(0, i);
+    }
+
+    function displayOf(id: string): string {
+        const i = id.indexOf("@");
+        return i < 0 ? "" : id.substring(i + 1);
+    }
+
+    // The output Wallpaper is asked to show; set again, to the same name too, at each request.
+    property string wallpaperDisplay: root.displayOf(root.startSection)
+
     function select(id: string): void {
-        const shown = root.pointerPane(id);
+        const shown = root.pointerPane(root.paneOf(id));
+        root.wallpaperDisplay = "";
+        root.wallpaperDisplay = root.paneOf(id) === "wallpaper" ? root.displayOf(id) : "";
         root.navState = NavHistory.visit(root.navState, shown);
         root.selectedId = shown;
     }
@@ -897,9 +913,13 @@ Window {
         DisplaysPage {
             backend: root.backend
             system: sys
+            store: cfg
             onKeepRequested: until => displayKeep.openFor(until)
             onTrialEnded: displayKeep.close()
-            onArrangeRequested: monitors => displayArrange.openFor(monitors)
+            onArrangeRequested: monitors => {
+                displayArrange.mainName = mainName;
+                displayArrange.openFor(monitors);
+            }
         }
     }
 
@@ -927,6 +947,7 @@ Window {
         id: wallpaperPage
         WallpaperPage {
             store: cfg
+            requestedDisplay: root.wallpaperDisplay
             backend: root.backend
             onScreenSaverRequested: screenSaverSheet.open()
         }

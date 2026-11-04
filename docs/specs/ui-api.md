@@ -41,6 +41,7 @@ add FolderIcon
 add PointerSize
 add PointerColors
 add WallpaperConfig
+add DisplayRole
 add GrassfieldArtwork
 add MenuPlace
 add IconShape singleton

@@ -127,7 +127,7 @@ FocusScope {
     }
     opacity: entrance
     // Final: the first layout is, or the icons are turned off in Settings (nothing to wait for).
-    readonly property bool entranceFinal: ready || (Settings.loaded && !iconsHere)
+    readonly property bool entranceFinal: ready || (Settings.loaded && MainDisplay.ready && !iconsHere)
     onEntranceFinalChanged: {
         if (entranceFinal && root.entranceKey !== "")
             Entrance.ready(root.entranceKey);
@@ -334,10 +334,9 @@ FocusScope {
             else if (action === "getInfo")
                 files.showInfo([files.dir]);
             else if (action === "wallpaper")
-                // SINGLE CALL SITE for "Change Wallpaper…" on a display: Settings has no display argument on main, so it opens the
-                // Wallpaper page; `root.screen.name` is the output the right click happened on, to preselect once Settings accepts
-                // a display (feat/main-display-wallpaper-per-display).
-                SettingsApp.openSection("wallpaper");
+                // SINGLE CALL SITE for "Change Wallpaper…" on a display: Settings opens Wallpaper on `root.screen.name`, the
+                // output the right click happened on (`--section=wallpaper --display=<output>`, ADR-0044 D-5).
+                SettingsApp.openSection("wallpaper", root.screen ? root.screen.name : "");
             else if (action === "editWidgets")
                 Notifications.openWidgetGallery(root.screen ? root.screen.name : "");
             else if (action.startsWith("cleanUp") && !root.ready)

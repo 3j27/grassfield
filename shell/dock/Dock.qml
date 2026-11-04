@@ -78,8 +78,21 @@ Scope {
     // effect, an auto-hidden Dock that never shows on its own: the 2 px strip at the Dock's edge is their only input, and the
     // pointer resting on it for Tokens.dockRevealDwell makes that output the Dock's (`moveDockTo`). It starts on the focused output.
     property string chosenScreen: ""
-    // Development sessions name their primary output (GRASSFIELD_DESKTOP_SCREEN, as the desktop icons do); the Dock starts there.
-    readonly property string startHint: Mode.devValue("DESKTOP_SCREEN")
+    // The Dock starts on the main display (macOS: Displays > Use as > Main display holds the Dock, ADR-0044), and
+    // moves there when the main display changes (a choice in Settings, the main display unplugged or plugged back); from then on
+    // the pointer reaching another output's Dock edge moves it, as before.
+    readonly property string startHint: MainDisplay.screenName
+
+    Connections {
+        target: MainDisplay
+
+        function onScreenNameChanged(): void {
+            const r = Geometry.afterMainChange(root.settled, root.chosenScreen, MainDisplay.screenName);
+            root.chosenScreen = r.chosen;
+            if (r.move !== "")
+                root.moveDockTo(r.move);
+        }
+    }
     readonly property var screenNames: Quickshell.screens.map(s => s.name)
     readonly property string dockScreen: Geometry.dockScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint)
 
@@ -440,7 +453,7 @@ Scope {
     // goes back (a later change of position or size is the user's and animates as before).
     property bool settled: false
     readonly property bool inputsFinal: Geometry.settledOn({
-        settings: Settings.loaded,
+        settings: Settings.loaded && MainDisplay.ready,
         apps: Apps.hiddenReady,
         screens: screenNames,
         start: Geometry.startScreen(screenNames, Compositor.focusedScreenName, startHint),
@@ -484,7 +497,7 @@ Scope {
 
     // The Dock starts on the focused output and stays where it is until the pointer moves it (focus changes do not).
     function latchStartScreen(): void {
-        chosenScreen = Geometry.latchScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint);
+        chosenScreen = Geometry.latchScreenWhen(Settings.loaded && MainDisplay.ready, chosenScreen, screenNames, Compositor.focusedScreenName, startHint);
     }
 
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the

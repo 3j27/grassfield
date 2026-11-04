@@ -7,8 +7,8 @@ import qs.osd
 import qs.services
 import qs.platform
 
-// Banner stack, top-right under the menu bar, on ONE screen: the focused one (first screen
-// when unknown). A single window and a single Repeater, so there is exactly one set of
+// Banner stack, top-right under the menu bar, on ONE screen: the main display (MainDisplay,
+// ADR-0044; the focused one when none is known). A single window and a single Repeater, so there is exactly one set of
 // banner delegates (hover state and expiry belong to the one visible banner). The window is
 // mapped only while a banner exists; delegates exist only for the banners that are shown
 // (the rest of the queue is just model rows). While the OSD pill is visible the stack sits
@@ -18,7 +18,8 @@ PanelWindow {
     // qmllint enable uncreatable-type
     id: win
 
-    readonly property string targetName: Compositor.activeScreenName
+    // The banners show on the main display (macOS: notifications appear on the display that holds the menu bar and Dock, ADR-0044).
+    readonly property string targetName: MainDisplay.screenName !== "" ? MainDisplay.screenName : Compositor.activeScreenName
     readonly property var targetScreen: {
         for (const s of Quickshell.screens) {
             if (s.name === targetName)

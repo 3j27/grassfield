@@ -10,6 +10,8 @@ Sheet {
     id: root
 
     property var monitors: []
+    // The main display's output name: its tile has the solid menu bar (ADR-0044).
+    property string mainName: ""
     // name -> {x, y}: where each display is placed, in layout pixels.
     property var placed: ({})
 
@@ -128,7 +130,8 @@ Sheet {
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: Displays.isBuiltIn(tile.modelData) ? qsTr("Built-in Display") : (String(tile.modelData.model).trim() || tile.modelData.name)
-                Accessible.description: qsTr("At %1, %2").arg(tile.where.x).arg(tile.where.y)
+                Accessible.description: tile.isMain ? qsTr("Main display. At %1, %2").arg(tile.where.x).arg(tile.where.y) : qsTr("At %1, %2").arg(tile.where.x).arg(tile.where.y)
+                readonly property bool isMain: tile.modelData.name === root.mainName
 
                 // The shared ring outside the display, after a key only (ADR-0039 step 7).
                 KeyFocus {
@@ -172,7 +175,8 @@ Sheet {
                     height: Tokens.settingsDisplayMenuBarHeight
                     radius: Tokens.settingsDisplayRadius
                     color: Appearance.colors.text
-                    opacity: Tokens.materialDisabledOpacity
+                    // The main display's bar is the solid one (macOS: the white bar on the main display's tile).
+                    opacity: tile.isMain ? 1 : Tokens.materialDisabledOpacity
                 }
 
                 Text {

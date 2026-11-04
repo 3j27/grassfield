@@ -15,8 +15,8 @@ import "DesktopSurfaces.js" as Surfaces
 // surface (which is never touched from here). The surface takes the whole screen so that a click on empty desktop can
 // start a rubber band, focus the desktop and open the desktop menu; the widgets live in a higher layer and keep their own
 // input. Nothing animates or repaints on a timer.
-// The icons are on one screen (DesktopSurfaces.iconsScreen: the first one, or the output named by GRASSFIELD_DESKTOP_SCREEN,
-// dev only), with Show Desktop Items on; the other screens carry the bare-desktop menu only. The surfaces share one
+// The icons are on one screen (DesktopSurfaces.iconsScreen: the main display, MainDisplay.screenName, ADR-0044; the dev
+// override GRASSFIELD_DESKTOP_SCREEN is read there, once), with Show Desktop Items on; the other screens carry the bare-desktop menu only. The surfaces share one
 // DesktopFiles: the folder, the slots and the file operations are that screen's.
 //
 // Keyboard focus (ADR-0012, KeyboardFocus.js): the desktop is click-to-focus. Keyboard interactivity is None
@@ -29,7 +29,7 @@ Scope {
     id: scope
 
     // The one place that decides which screen shows the icons.
-    readonly property string primaryName: Surfaces.iconsScreen(Mode.devValue("DESKTOP_SCREEN"), Quickshell.screens.map(s => s.name))
+    readonly property string primaryName: !MainDisplay.ready ? "" : Surfaces.iconsScreen(MainDisplay.screenName, Quickshell.screens.map(s => s.name))
 
     DesktopFiles {
         id: desktopFiles
