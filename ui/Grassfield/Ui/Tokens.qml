@@ -2250,6 +2250,28 @@ QtObject {
     readonly property int widgetSurfacePad: 40
     // estimate: widgets v1, cap of placements per list in widgets.json [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetMaxEntries: 64
+    // estimate: the Weather widget's current temperature, the large light figure under the place (macOS 27 Weather widget, small and medium; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherTempSize: 42
+    // estimate: the Weather widget's condition symbol above the condition text (macOS 27 Weather widget; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherSymbolSize: 18
+    // estimate: a symbol of the medium Weather widget's row of hours, between the hour and the temperature (macOS 27 Weather widget; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherHourSymbolSize: 20
+    // estimate: the location arrow after the place when the location is found from the IP address (macOS: after My Location's place) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherArrowSize: 11
+    // macOS 27 Weather widget (medium): Now and the next five forecast columns [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherHours: 6
+    // ADR-0045 OC-14: the weather is fetched again every 30 minutes while a Weather widget is placed and shown [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherRefreshMs: 1800000
+    // estimate: the first retry after a failed fetch (2 min), doubled after each further failure up to weatherRefreshMs [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherRetryMs: 120000
+    // estimate: curl's --max-time for one wttr.in request (Omarchy's weather panel gives it 10 s); the shell stops a run that outlives twice that [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherFetchSeconds: 10
+    // estimate: the largest wttr.in answer read (a j1 report is about 50 KB): curl's --max-filesize and the parser's cap [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherMaxBytes: 1048576
+    // estimate: the longest place name Edit Location… takes [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherLocationMaxChars: 100
+    // estimate: Edit Location…'s popover, a field and two buttons (macOS 27 widget editing popover; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherEditorWidth: 280
     // estimate: widgets v1, widgets.json larger than this is rejected [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetMaxFileBytes: 262144
 

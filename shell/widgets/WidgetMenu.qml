@@ -1,8 +1,8 @@
 import QtQuick
 import Grassfield.Ui
 
-// Context menu of a placed widget: its sizes (current one checked), the keyboard moves and Remove Widget.
-// `action` carries "size:<size>", "move:<left|right|up|down>" or "remove". `moves` ({direction: enabled}) lists the moves
+// Context menu of a placed widget: the Weather widget's Edit Location…, its sizes (current one checked), the keyboard moves
+// and Remove Widget. `action` carries "weather:location", "size:<size>", "move:<left|right|up|down>" or "remove". `moves` ({direction: enabled}) lists the moves
 // this place offers: the four directions on the desktop grid, up and down in the Notifications panel (GF-106: a widget can
 // be moved without the pointer); empty offers none.
 PopupMenu {
@@ -19,6 +19,12 @@ PopupMenu {
 
     model: {
         const items = [];
+        // A widget's own edit item first, as macOS puts "Edit “Weather”": the Weather widget's place (ADR-0045 OC-14), only
+        // when Omarchy's omarchy-weather-location is there to save it.
+        if (entry.id === "weather" && WeatherSampler.canEditLocation) {
+            items.push({id: "weather:location", text: qsTr("Edit Location…")});
+            items.push({separator: true});
+        }
         const sizes = Registry.sizesOf(entry.id);
         for (let i = 0; i < sizes.length; i++)
             items.push({

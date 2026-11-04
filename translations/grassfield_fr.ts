@@ -7433,6 +7433,33 @@
     </message>
 </context>
 <context>
+    <name>LocationEditor</name>
+    <message>
+        <source>Weather location</source>
+        <translation>Lieu de la météo</translation>
+    </message>
+    <message>
+        <source>Location</source>
+        <translation>Lieu</translation>
+    </message>
+    <message>
+        <source>City or place</source>
+        <translation>Ville ou lieu</translation>
+    </message>
+    <message>
+        <source>Leave it empty to use the place wttr.in finds from your IP address.</source>
+        <translation>Laissez-le vide pour utiliser le lieu que wttr.in déduit de votre adresse IP.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+</context>
+<context>
     <name>Lock</name>
     <message>
         <source>Authentication service unavailable. The session stays locked.</source>
@@ -10612,6 +10639,14 @@
     <message>
         <source>System</source>
         <translation>Système</translation>
+    </message>
+    <message>
+        <source>Weather</source>
+        <translation>Météo</translation>
+    </message>
+    <message>
+        <source>Weather from wttr.in, for the place saved in Omarchy, or else the place wttr.in finds from your IP address.</source>
+        <translation>Météo de wttr.in, pour le lieu enregistré dans Omarchy, ou sinon le lieu que wttr.in déduit de votre adresse IP.</translation>
     </message>
     <message>
         <source>Small</source>
@@ -15209,6 +15244,114 @@
     </message>
 </context>
 <context>
+    <name>Weather</name>
+    <message>
+        <source>Current Location</source>
+        <translation>Position actuelle</translation>
+    </message>
+    <message>
+        <source>H:%1 L:%2</source>
+        <translation>Max. %1 Min. %2</translation>
+    </message>
+    <message>
+        <source>Weather unavailable</source>
+        <translation>Météo indisponible</translation>
+    </message>
+    <message>
+        <source>Loading…</source>
+        <translation>Chargement…</translation>
+    </message>
+    <message>
+        <source>Now</source>
+        <translation>Maint.</translation>
+    </message>
+    <message>
+        <source>Weather, %1, %2, %3</source>
+        <translation>Météo, %1, %2, %3</translation>
+    </message>
+    <message>
+        <source>Weather, %1</source>
+        <translation>Météo, %1</translation>
+    </message>
+    <message>
+        <source>Clear</source>
+        <translation>Dégagé</translation>
+    </message>
+    <message>
+        <source>Sunny</source>
+        <translation>Ensoleillé</translation>
+    </message>
+    <message>
+        <source>Partly Cloudy</source>
+        <translation>Partiellement nuageux</translation>
+    </message>
+    <message>
+        <source>Cloudy</source>
+        <translation>Nuageux</translation>
+    </message>
+    <message>
+        <source>Fog</source>
+        <translation>Brouillard</translation>
+    </message>
+    <message>
+        <source>Drizzle</source>
+        <translation>Bruine</translation>
+    </message>
+    <message>
+        <source>Freezing Drizzle</source>
+        <translation>Bruine verglaçante</translation>
+    </message>
+    <message>
+        <source>Rain</source>
+        <translation>Pluie</translation>
+    </message>
+    <message>
+        <source>Heavy Rain</source>
+        <translation>Fortes pluies</translation>
+    </message>
+    <message>
+        <source>Freezing Rain</source>
+        <translation>Pluie verglaçante</translation>
+    </message>
+    <message>
+        <source>Sleet</source>
+        <translation>Grésil</translation>
+    </message>
+    <message>
+        <source>Snow</source>
+        <translation>Neige</translation>
+    </message>
+    <message>
+        <source>Heavy Snow</source>
+        <translation>Fortes chutes de neige</translation>
+    </message>
+    <message>
+        <source>Blowing Snow</source>
+        <translation>Rafales de neige</translation>
+    </message>
+    <message>
+        <source>Blizzard</source>
+        <translation>Blizzard</translation>
+    </message>
+    <message>
+        <source>Thunderstorms</source>
+        <translation>Orages</translation>
+    </message>
+    <message>
+        <source>%1AM</source>
+        <translation>%1AM</translation>
+    </message>
+    <message>
+        <source>%1PM</source>
+        <translation>%1PM</translation>
+    </message>
+    <message>
+        <source>%1</source>
+        <comment>an hour of a 24-hour clock in the row of forecast hours</comment>
+        <translation>%1 h</translation>
+    </message>
+</context>
+<context>
     <name>WidgetGallery</name>
     <message>
         <source>Widget gallery</source>
@@ -15267,6 +15410,10 @@
     <message>
         <source>Widget menu</source>
         <translation>Menu du widget</translation>
+    </message>
+    <message>
+        <source>Edit Location…</source>
+        <translation>Modifier le lieu…</translation>
     </message>
     <message>
         <source>Move Left</source>

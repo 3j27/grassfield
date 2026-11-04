@@ -125,6 +125,17 @@ FocusScope {
                 font.weight: Tokens.typographyMenuBoldWeight
             }
 
+            // Where a widget's data comes from when it is not this computer (Weather: wttr.in).
+            WidgetLabel {
+                width: parent.width
+                visible: text !== ""
+                text: Registry.description(row.modelData.id)
+                color: Appearance.colors.textSecondary
+                size: Tokens.typographyCaptionSize
+                wrapMode: Text.WordWrap
+                elide: Text.ElideNone
+            }
+
             SizePicker {
                 sizes: row.modelData.sizes
                 current: row.pickedSize

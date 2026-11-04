@@ -247,6 +247,7 @@
  {"path": "tests/unit/tst_tracking.qml", "layer": "headless"},
  {"path": "tests/unit/tst_wallpaper.qml", "layer": "headless"},
  {"path": "tests/unit/tst_widgets.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_weather.qml", "layer": "headless"},
  {"path": "tests/unit/tst_windowtiling.qml", "layer": "headless"},
  {"path": "tests/unit/files/tst_appscope.cpp", "layer": "logic"},
  {"path": "tests/unit/files/tst_applications.cpp", "layer": "logic"},

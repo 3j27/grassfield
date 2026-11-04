@@ -1,0 +1,111 @@
+{
+  "current_condition": [
+    {
+      "FeelsLikeC": "10",
+      "FeelsLikeF": "50",
+      "cloudcover": "50",
+      "humidity": "76",
+      "localObsDateTime": "2026-11-04 04:15 PM",
+      "observation_time": "03:15 PM",
+      "precipInches": "0.0",
+      "precipMM": "0.0",
+      "pressure": "1016",
+      "pressureInches": "30",
+      "temp_C": "12",
+      "temp_F": "54",
+      "uvIndex": "1",
+      "visibility": "10",
+      "visibilityMiles": "6",
+      "weatherCode": "116",
+      "weatherDesc": [{"value": "Partly cloudy"}],
+      "weatherIconUrl": [{"value": ""}],
+      "winddir16Point": "SW",
+      "winddirDegree": "225",
+      "windspeedKmph": "15",
+      "windspeedMiles": "9"
+    }
+  ],
+  "nearest_area": [
+    {
+      "areaName": [{"value": "Paris"}],
+      "country": [{"value": "France"}],
+      "latitude": "48.867",
+      "longitude": "2.333",
+      "population": "2138551",
+      "region": [{"value": "Ile-de-France"}],
+      "weatherUrl": [{"value": ""}]
+    }
+  ],
+  "request": [{"query": "Lat 48.86 and Lon 2.34", "type": "LatLon"}],
+  "weather": [
+    {
+      "astronomy": [{"moon_illumination": "98", "moon_phase": "Full Moon", "moonrise": "05:02 PM", "moonset": "08:31 AM", "sunrise": "07:58 AM", "sunset": "05:16 PM"}],
+      "avgtempC": "10",
+      "avgtempF": "50",
+      "date": "2026-11-04",
+      "hourly": [
+        {"time": "0", "tempC": "8", "tempF": "46", "weatherCode": "113", "weatherDesc": [{"value": "Clear"}]},
+        {"time": "300", "tempC": "7", "tempF": "45", "weatherCode": "113", "weatherDesc": [{"value": "Clear"}]},
+        {"time": "600", "tempC": "7", "tempF": "44", "weatherCode": "116", "weatherDesc": [{"value": "Partly cloudy"}]},
+        {"time": "900", "tempC": "9", "tempF": "48", "weatherCode": "116", "weatherDesc": [{"value": "Partly cloudy"}]},
+        {"time": "1200", "tempC": "13", "tempF": "55", "weatherCode": "119", "weatherDesc": [{"value": "Cloudy"}]},
+        {"time": "1500", "tempC": "14", "tempF": "57", "weatherCode": "116", "weatherDesc": [{"value": "Partly cloudy"}]},
+        {"time": "1800", "tempC": "11", "tempF": "52", "weatherCode": "266", "weatherDesc": [{"value": "Light drizzle"}]},
+        {"time": "2100", "tempC": "9", "tempF": "48", "weatherCode": "113", "weatherDesc": [{"value": "Clear"}]}
+      ],
+      "maxtempC": "14",
+      "maxtempF": "57",
+      "mintempC": "7",
+      "mintempF": "44",
+      "sunHour": "6.0",
+      "totalSnow_cm": "0.0",
+      "uvIndex": "1"
+    },
+    {
+      "astronomy": [{"moon_illumination": "94", "moon_phase": "Waning Gibbous", "moonrise": "05:30 PM", "moonset": "09:40 AM", "sunrise": "07:59 AM", "sunset": "05:14 PM"}],
+      "avgtempC": "6",
+      "avgtempF": "43",
+      "date": "2026-11-05",
+      "hourly": [
+        {"time": "0", "tempC": "7", "tempF": "45", "weatherCode": "113", "weatherDesc": [{"value": "Clear"}]},
+        {"time": "300", "tempC": "5", "tempF": "41", "weatherCode": "143", "weatherDesc": [{"value": "Mist"}]},
+        {"time": "600", "tempC": "3", "tempF": "38", "weatherCode": "248", "weatherDesc": [{"value": "Fog"}]},
+        {"time": "900", "tempC": "4", "tempF": "40", "weatherCode": "296", "weatherDesc": [{"value": "Light rain"}]},
+        {"time": "1200", "tempC": "7", "tempF": "45", "weatherCode": "308", "weatherDesc": [{"value": "Heavy rain"}]},
+        {"time": "1500", "tempC": "8", "tempF": "46", "weatherCode": "389", "weatherDesc": [{"value": "Moderate or heavy rain with thunder"}]},
+        {"time": "1800", "tempC": "5", "tempF": "41", "weatherCode": "116", "weatherDesc": [{"value": "Partly cloudy"}]},
+        {"time": "2100", "tempC": "3", "tempF": "37", "weatherCode": "122", "weatherDesc": [{"value": "Overcast"}]}
+      ],
+      "maxtempC": "8",
+      "maxtempF": "46",
+      "mintempC": "2",
+      "mintempF": "36",
+      "sunHour": "3.1",
+      "totalSnow_cm": "0.0",
+      "uvIndex": "1"
+    },
+    {
+      "astronomy": [{"moon_illumination": "88", "moon_phase": "Waning Gibbous", "moonrise": "06:01 PM", "moonset": "10:44 AM", "sunrise": "08:01 AM", "sunset": "05:13 PM"}],
+      "avgtempC": "0",
+      "avgtempF": "32",
+      "date": "2026-11-06",
+      "hourly": [
+        {"time": "0", "tempC": "1", "tempF": "34", "weatherCode": "326", "weatherDesc": [{"value": "Light snow"}]},
+        {"time": "300", "tempC": "0", "tempF": "32", "weatherCode": "338", "weatherDesc": [{"value": "Heavy snow"}]},
+        {"time": "600", "tempC": "-1", "tempF": "30", "weatherCode": "320", "weatherDesc": [{"value": "Moderate or heavy sleet"}]},
+        {"time": "900", "tempC": "-3", "tempF": "27", "weatherCode": "230", "weatherDesc": [{"value": "Blizzard"}]},
+        {"time": "1200", "tempC": "-2", "tempF": "28", "weatherCode": "284", "weatherDesc": [{"value": "Heavy freezing drizzle"}]},
+        {"time": "1500", "tempC": "0", "tempF": "32", "weatherCode": "314", "weatherDesc": [{"value": "Moderate or Heavy freezing rain"}]},
+        {"time": "1800", "tempC": "-1", "tempF": "30", "weatherCode": "113", "weatherDesc": [{"value": "Clear"}]},
+        {"time": "2100", "tempC": "-2", "tempF": "28", "weatherCode": "999", "weatherDesc": [{"value": "Unknown"}]}
+      ],
+      "maxtempC": "1",
+      "maxtempF": "34",
+      "mintempC": "-3",
+      "mintempF": "27",
+      "sunHour": "1.0",
+      "totalSnow_cm": "6.2",
+      "uvIndex": "0"
+    }
+  ]
+}

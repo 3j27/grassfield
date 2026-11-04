@@ -12,6 +12,9 @@ Item {
     property string size: "small"
     // False while the widget is not visible (gallery closed, Center closed): stop timers and sampling.
     property bool active: true
+    // True for the gallery's preview of a widget that is not placed: a widget whose data costs a network read (Weather) shows
+    // what is already known and never asks for more (ADR-0045 OC-14: fetched only while placed).
+    property bool preview: false
     // Appearance and motion settings, mirrored from the shell.
     property bool dark: Appearance.dark
     property bool reduceMotion: Appearance.reduceMotion
