@@ -1,0 +1,5 @@
+Uninstall apps from the launcher (press and hold) or from Files' Applications; the Store confirms each removal.
+Choose the main display in Displays and set a wallpaper per display; the desktop menu works on every display.
+Files lists every disk, follows the mouse's back and forward buttons, drags from Columns and shows copy progress.
+An Input menu and Ctrl+Space switch keyboard layouts; Energy offers power modes and a way to prevent sleep.
+Clicking the frontmost app in the Dock minimizes it; apps that draw their own title bar show traffic lights.

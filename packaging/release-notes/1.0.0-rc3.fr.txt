@@ -1,0 +1,5 @@
+Désinstallez une app depuis Apps (appui long) ou depuis Applications dans Fichiers ; le Store confirme chaque suppression.
+Choisissez l’écran principal dans Écrans et un fond d’écran par écran ; le menu du bureau fonctionne sur chaque écran.
+Fichiers affiche tous les disques, suit les boutons précédent et suivant de la souris, glisse depuis Colonnes et montre la progression des copies.
+Un menu de saisie et Ctrl+Espace changent de disposition de clavier ; Énergie propose des modes d’alimentation et empêche la mise en veille.
+Cliquer sur l’app au premier plan dans le Dock la réduit ; les apps qui dessinent leur propre barre de titre affichent les boutons de fenêtre colorés.

@@ -4,6 +4,14 @@ All notable changes of Grassfield Desktop. The version of every package, library
 file at the repository root (`scripts/dev/check-version.sh`, part of `just check`, keeps the consumers equal to it).
 Format: one section per version, newest first.
 
+## 1.0.0-rc3 (release candidate, 2026-11-05)
+
+The owner's report from a second machine (a desktop PC with several disks and displays), on the beta channel: uninstalling
+apps from the launcher and Files with the Store's own confirmation (ADR-0046); the main display and a wallpaper per display
+(ADR-0044); the desktop menu on every display; Files' disks, mouse back and forward, Columns drags and copy progress; the
+Input menu and Ctrl+Space; the Energy pane and prevent-sleep (ADR-0010 amendment); the Dock click that minimizes; traffic
+lights in GTK apps and browsers that draw their own title bar.
+
 ## 1.0.0-rc2 (release candidate, 2026-11-04)
 
 The first signed build published at packages.grassfield.site, on the beta channel (ADR-0033, owner decision of 2026-11-04):
