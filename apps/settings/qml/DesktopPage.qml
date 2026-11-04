@@ -129,6 +129,15 @@ SettingsPage {
         }
 
         SettingsRow {
+            title: qsTr("Click an open app’s icon to minimize its windows")
+            Toggle {
+                accessibleName: qsTr("Click an open app’s icon to minimize its windows")
+                checked: root.store.value("dock.clickMinimizes")
+                onToggled: c => root.store.set("dock.clickMinimizes", c)
+            }
+        }
+
+        SettingsRow {
             title: qsTr("Animate opening applications")
             Toggle {
                 accessibleName: qsTr("Animate opening applications")

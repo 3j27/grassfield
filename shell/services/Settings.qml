@@ -58,6 +58,7 @@ Singleton {
     readonly property var dockStackOptions: store.dockStackOptions
     readonly property bool dockShowRecents: store.dockShowRecents
     readonly property bool dockMinimizeIntoApp: store.dockMinimizeIntoApp
+    readonly property bool dockClickMinimizes: store.dockClickMinimizes
     readonly property bool dockAnimateOpening: store.dockAnimateOpening
     readonly property bool dockShowIndicators: store.dockShowIndicators
     readonly property bool dockEndTask: store.dockEndTask

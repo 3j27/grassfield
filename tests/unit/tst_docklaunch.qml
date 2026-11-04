@@ -204,4 +204,42 @@ TestCase {
         compare(Launch.menuWindows([], 40, "App").length, 0);
         compare(Launch.menuWindows(null, 40, "App").length, 0);
     }
+
+    function cw(ref, minimized, here, focused, stamp, fullscreen) {
+        return {ref: ref, minimized: minimized, here: here, focused: focused, fullscreen: !!fullscreen, stamp: stamp};
+    }
+
+    function test_clickFrontmostMinimizesAllVisible() {
+        const plan = Launch.clickPlan([cw("a", false, true, false, 5), cw("b", false, true, true, 9), cw("c", false, false, false, 7), cw("d", true, true, false, 1)], true);
+        compare(plan.action, "minimize");
+        compare(plan.refs, ["a", "b"]);
+    }
+
+    function test_clickFrontmostSkipsFullscreen() {
+        compare(Launch.clickPlan([cw("a", false, true, true, 5, true), cw("b", false, true, false, 9)], true).refs, ["b"]);
+        const only = Launch.clickPlan([cw("a", false, true, true, 5, true)], true);
+        compare(only.action, "forward");
+    }
+
+    function test_clickAllMinimizedRestoresAll() {
+        const plan = Launch.clickPlan([cw("a", true, true, false, 5), cw("b", true, true, false, 9), cw("c", true, true, false, 2)], true);
+        compare(plan.action, "restore");
+        compare(plan.refs, ["c", "a", "b"]);
+    }
+
+    function test_clickNotFrontmostComesForward() {
+        const plan = Launch.clickPlan([cw("a", false, true, false, 5), cw("b", false, true, false, 9)], true);
+        compare(plan.action, "forward");
+        compare(plan.refs, ["a", "b"]);
+        // Focused window on another Desktop: the app is not frontmost here.
+        compare(Launch.clickPlan([cw("a", false, false, true, 5), cw("b", false, true, false, 9)], true).action, "forward");
+        // Some minimized, none focused: forward (visible ones come forward).
+        compare(Launch.clickPlan([cw("a", true, true, false, 5), cw("b", false, true, false, 9)], true).action, "forward");
+    }
+
+    function test_clickSettingOffIsMacos() {
+        compare(Launch.clickPlan([cw("a", false, true, true, 5), cw("b", false, true, false, 9)], false), {action: "forward", refs: ["a", "b"]});
+        compare(Launch.clickPlan([cw("a", true, true, false, 5), cw("b", true, true, false, 9)], false), {action: "forward", refs: ["b"]});
+        compare(Launch.clickPlan([], true).refs.length, 0);
+    }
 }

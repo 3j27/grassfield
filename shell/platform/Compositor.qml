@@ -1741,6 +1741,8 @@ Singleton {
             "ref": toplevel,
             "minimized": isMinimized(toplevel),
             "here": here,
+            "focused": toplevel === root.focusedToplevel,
+            "fullscreen": !!toplevel.fullscreen,
             "stamp": recency.has(toplevel) ? recency.get(toplevel) : 0
         };
     }

@@ -351,7 +351,23 @@ Scope {
             root.launchItem(item);
             return;
         }
-        root.bringForward(item.windows);
+        root.clickRunning(item.windows);
+    }
+
+    // A click on a running app's tile. With dock.clickMinimizes the frontmost app's visible windows minimize (each into its own
+    // tile or the app icon, Compositor.minimize) and an all-minimized app comes back whole; otherwise bringForward (macOS).
+    function clickRunning(windows: var): void {
+        const plan = Launch.clickPlan(windows.map(t => Compositor.windowInfo(t)), Settings.dockClickMinimizes);
+        if (plan.action === "minimize") {
+            for (const top of plan.refs)
+                Compositor.minimize(top);
+        } else if (plan.action === "restore") {
+            for (const top of plan.refs)
+                Compositor.activate(top);
+            Compositor.groupForward(Compositor.addressOf(plan.refs[plan.refs.length - 1]));
+        } else {
+            root.bringForward(windows);
+        }
     }
 
     // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most

@@ -204,6 +204,10 @@
           "type": "boolean",
           "default": false
         },
+        "clickMinimizes": {
+          "type": "boolean",
+          "default": true
+        },
         "animateOpening": {
           "type": "boolean",
           "default": true

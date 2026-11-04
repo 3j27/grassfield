@@ -46,6 +46,29 @@ function activationPlan(windows) {
     return [visible.slice().sort(byRecency).pop().ref];
 }
 
+// What a click on a running app's tile does. `windows`: {ref, minimized, here, focused (owns the keyboard focus), fullscreen,
+// stamp}; `clickMinimizes`: Settings > Desktop & Dock "Click an open app's icon to minimize its windows". Returns
+// {action: "minimize" | "restore" | "forward", refs}, refs in the order to act on them (the most recent last).
+//   - setting on, the app is frontmost (a visible window of it on this Desktop is focused): minimize every visible window on this
+//     Desktop except full-screen ones (none left: forward, nothing is touched);
+//   - setting on, every window minimized: restore all of them, the most recent ends focused;
+//   - otherwise (setting off, or not frontmost): activationPlan, as macOS.
+function clickPlan(windows, clickMinimizes) {
+    const all = windows ? windows : [];
+    if (clickMinimizes && all.length > 0) {
+        const byRecency = (a, b) => a.stamp - b.stamp;
+        const frontmost = all.some(w => w.focused && !w.minimized && w.here);
+        if (frontmost) {
+            const targets = all.filter(w => !w.minimized && w.here && !w.fullscreen);
+            if (targets.length > 0)
+                return {action: "minimize", refs: targets.slice().sort(byRecency).map(w => w.ref)};
+        } else if (all.every(w => w.minimized)) {
+            return {action: "restore", refs: all.slice().sort(byRecency).map(w => w.ref)};
+        }
+    }
+    return {action: "forward", refs: activationPlan(all)};
+}
+
 // Processes to kill for "Force Quit" on an app's tile (Option variant of Quit): the distinct client PIDs of its windows. PIDs that
 // are not plain client processes (unknown 0, init 1, negatives, non-integers) are dropped, as Power.forceQuit refuses them.
 function forceQuitPids(pids) {

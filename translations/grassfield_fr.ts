@@ -4004,6 +4004,10 @@
         <translation>Réduire les fenêtres dans l’icône de l’application</translation>
     </message>
     <message>
+        <source>Click an open app’s icon to minimize its windows</source>
+        <translation>Cliquer sur l’icône d’une app ouverte réduit ses fenêtres</translation>
+    </message>
+    <message>
         <source>Animate opening applications</source>
         <translation>Animer l’ouverture des applications</translation>
     </message>
