@@ -12,32 +12,41 @@
 #
 # The capture toolbar (Shift-Cmd-5, shell/capture) runs the same modes with its options, and a window mode:
 #   grassfield-capture screen|window|selection [--save desktop|documents|clipboard|preview] [--timer 0|5|10] [--pointer]
-# `window` is the crosshair restricted to the windows (slurp -r): a click picks the window drawn on top there. --save: the
-# Desktop (the default, as above), the Documents folder (copied too), the clipboard only (no file, no notice, as macOS), or
-# Preview (the picture is kept on the Desktop, since Preview cannot save a document, and opened in Preview at once, no notice).
-# --timer: a countdown after the choice and before the picture; --pointer: grim draws the pointer (-c).
+#                      [--output NAME (screen)] [--geometry "X,Y WxH" (window, selection)]
+# The toolbar chooses on its own surface (macOS 27): the frame of Capture Selected Portion and the window clicked in Capture
+# Selected Window come as --geometry (whole numbers, a positive size, wholly on one enabled display, or the usage, exit 2), the
+# display clicked in Capture Entire Screen as --output (that display only; without it every display). Without --geometry the
+# helper's crosshair chooses (the keys, and the toolbar's fallback): `window` is the crosshair restricted to the windows (slurp
+# -r), a click picks the window drawn on top there. --save: the Desktop (the default, as above), the Documents folder (copied
+# too), the clipboard only (no file, no notice, as macOS), or Preview (the picture is kept on the Desktop, since Preview cannot
+# save a document, and opened in Preview at once, no notice). --timer: a countdown after the choice and before the picture;
+# --pointer: grim draws the pointer (-c).
 #   grassfield-capture record screen|selection [--save desktop|documents|preview] [--timer 0|5|10] [--pointer] [--mic]
-#                             [--output NAME]
+#                             [--output NAME (screen)] [--geometry "X,Y WxH" (selection)]
 # records with gpu-screen-recorder (an Omarchy base package) and Omarchy's backend arguments (omarchy-capture-screenrecording:
 # `-w <display> -s <size>` for a whole display, `-w WxH+X+Y` in logical coordinates for an area, `-k auto -f 60 -fm cfr
 # -fallback-cpu-encoding yes`, the microphone as `-a default_input -ac aac`; never the desktop's sound, as macOS). `screen`
-# records the display the toolbar is on (--output) or the focused one; `selection` the crosshair's choice (a whole display is
-# recorded as that display). The movie is written to a hidden file of this helper's in the destination and then takes its
-# name, "Screen Recording 2026-11-04 at 14.05.12.mp4" (the start time, translated), never replacing a file; a notice "Screen
-# Recording" with "Open" (Preview plays it) follows. A recording with --save clipboard is not offered (a movie is not copied):
-# it goes to the Desktop. While a recording or a countdown runs this helper holds a lock and keeps its state in a private file,
-# $XDG_RUNTIME_DIR/grassfield/capture-state.json (0600, by rename, in the 0700 folder of the capture notice), which the shell
-# watches (its countdown and the menu bar's stop item):
-#   {"v": 1, "phase": "idle" | "selecting" | "countdown" | "recording", "kind": "shot" | "recording", "pid", "start",
-#    "until" (ms since the epoch, countdown), "rect" {x, y, w, h} and "output" (where the capture is), "recorder",
-#    "recorderStart" and "started" (ms, recording)}
+# records the display clicked or the toolbar's (--output), else the focused one; `selection` the toolbar's frame (--geometry)
+# or the crosshair's choice (a whole display is recorded as that display). The movie is written to a hidden file of this
+# helper's in the destination and then takes its name, "Screen Recording 2026-11-04 at 14.05.12.mp4" (the start time,
+# translated), never replacing a file; a notice "Screen Recording" with "Open" (Preview plays it) follows. A recording with
+# --save clipboard is not offered (a movie is not copied): it goes to the Desktop. While a recording or a countdown runs this
+# helper holds a lock and keeps its state in a private file, $XDG_RUNTIME_DIR/grassfield/capture-state.json (0600, by rename,
+# in the 0700 folder of the capture notice), which the shell watches (its countdown and the menu bar's stop item):
+#   {"v": 1, "phase": "idle" | "starting" | "selecting" | "countdown" | "recording", "kind": "shot" | "recording",
+#    "pid", "start", "until" (ms since the epoch, countdown), "rect" {x, y, w, h} and "output" (where the capture is),
+#    "recorder", "recorderStart" and "started" (ms, recording)}
 #   grassfield-capture stop
 # ends what that state names (the menu bar's stop item, Ctrl-Cmd-Esc, the session locking): SIGINT to the recorder this helper
 # started (gpu-screen-recorder saves its file on SIGINT), recognised by its pid, its start time and its parent (this helper's
 # pid and start time), never by name; during a choice or a countdown, SIGINT to that helper, which then captures nothing. A
 # recorder still running STOP_SECONDS later is killed (Omarchy kills it after 5 s). Nothing starts while the session is
-# locked: Hyprland runs none of these keys under the lock, and the shell refuses the toolbar then and stops a recording when
-# the session locks.
+# locked: Hyprland runs none of these keys under the lock, the shell refuses the toolbar then, and this helper reads the lock
+# itself (session_locked: the shell's crash-recovery marker, which says "locked" from the moment a lock is asked for, and
+# Hyprland's displays blocked by "LOCK", as the omarchy-shell stand-in reads them) before a picture and before the recorder
+# starts; a recording writes its state ("starting") at once, so that the shell stops one that becomes active under the lock,
+# and the recording helper reads the marker every LOCK_POLL_SECONDS and ends the recording when the session locks, even
+# without a shell.
 import contextlib
 import datetime
 import fcntl
@@ -89,6 +98,10 @@ STOP_SECONDS = 10
 RECORDER = ["-k", "auto", "-f", "60", "-fm", "cfr", "-fallback-cpu-encoding", "yes"]
 RECORDER_MAX = (3840, 2160)
 OUTPUT_NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
+# The toolbar's --geometry, "X,Y WxH" in the compositor's logical coordinates, whole numbers (as slurp prints it).
+GEOMETRY_ARG = re.compile(r"(-?[0-9]{1,6}),(-?[0-9]{1,6}) ([0-9]{1,6})x([0-9]{1,6})")
+# While recording, the shell's lock marker is read this often (seconds): the session locking ends the recording.
+LOCK_POLL_SECONDS = 0.5
 
 TITLE = "Screenshot"
 NAME = "Screenshot %(date)s at %(time)s"
@@ -254,6 +267,48 @@ def snapped(sel, wins, screens):
 
 def geometry_text(r):
     return "%d,%d %dx%d" % (r["x"], r["y"], r["w"], r["h"])
+
+
+def on_one_display(sel, monitors):
+    # The toolbar's --geometry: a positive size wholly on one enabled display (its logical rectangle); else None.
+    if sel is None or sel["w"] <= 0 or sel["h"] <= 0:
+        return None
+    for _, r in displays(monitors):
+        if r["x"] <= sel["x"] and r["y"] <= sel["y"] and sel["x"] + sel["w"] <= r["x"] + r["w"] \
+                and sel["y"] + sel["h"] <= r["y"] + r["h"]:
+            return sel
+    return None
+
+
+def lock_requested():
+    # grassfield-shell's crash-recovery marker ($XDG_RUNTIME_DIR/grassfield-lock-<instance>, shell/security/LockMachine.js
+    # markerName and markerLine; read the same way by the omarchy-shell stand-in): "locked" or "locked sleeps=<n>" from the
+    # moment a lock is requested until the unlock, also while the shell is restarting.
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not os.path.isabs(runtime):
+        return False
+    instance = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") or os.environ.get("WAYLAND_DISPLAY") or "default"
+    path = os.path.join(runtime, "grassfield-lock-" + re.sub(r"[^A-Za-z0-9_.-]", "_", instance))
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as f:
+            words = f.read(64).split()
+    except OSError:
+        return False
+    return bool(words) and words[0] == b"locked"
+
+
+def session_locked(monitors=None):
+    # The session is locked, or a lock was asked for: the shell's marker, or Hyprland's own answer (a display blocked by
+    # "LOCK", as the omarchy-shell stand-in reads it). No capture starts then (ADR-0045 OC-1: nothing is recorded behind the
+    # lock, even when the lock came between the toolbar's action and this helper).
+    if lock_requested():
+        return True
+    for m in (monitors if monitors is not None else hyprctl("monitors")) or []:
+        blocked = m.get("solitaryBlockedBy") if isinstance(m, dict) else None
+        if isinstance(blocked, list) and "LOCK" in blocked:
+            return True
+    return False
 
 
 def user_dir(key, fallback):
@@ -627,11 +682,23 @@ def shot(opts):
     monitors = hyprctl("monitors")
     if mode == "screen":
         screens = displays(monitors)
+        if opts["output"]:
+            # The display clicked in the toolbar's Capture Entire Screen mode, and only it.
+            screens = [s for s in screens if s[0] == opts["output"]]
         shots = [["grim", "-o", name] + pointer for name, _ in screens]
         if not shots:
             return 1
         ready = close_previous()
         area, output = screens[0][1], screens[0][0]
+    elif opts["geometry"] is not None:
+        # The area chosen on the toolbar's own surface (its frame, the window clicked): no crosshair.
+        sel = on_one_display(opts["geometry"], monitors)
+        if sel is None:
+            sys.stderr.write("grassfield-capture: --geometry is not on one display\n")
+            return 2
+        ready = close_previous()
+        shots = [["grim", "-g", geometry_text(sel)] + pointer]
+        area, output = sel, ""
     else:
         if selecting(crosshair(mode == "window")):
             return 0
@@ -653,6 +720,8 @@ def shot(opts):
             if lock is not None:
                 os.close(lock)
     time.sleep(max(0.0, ready - time.monotonic()))
+    if session_locked():
+        return 1  # the session locked meanwhile: no picture of what the lock covers
     if save == "clipboard":
         # The clipboard only (macOS: no file, no thumbnail): the focused display's picture, or the choice.
         r = run(shots[0] + ["-"], timeout=30)
@@ -741,15 +810,27 @@ def record(opts):
         return 1
     signal.signal(signal.SIGINT, on_record_signal)
     signal.signal(signal.SIGTERM, on_record_signal)
+    # At once, before anything slow: the shell sees a recording coming (it stops one that starts while the session is locked).
+    write_state(dict(me(), phase="starting", kind="recording"))
     monitors = hyprctl("monitors")
     screens = displays(monitors)
     tmp = None
     try:
+        if session_locked(monitors):
+            return 1  # the session locked between the toolbar's Record and this helper: nothing is recorded
         if opts["mode"] == "screen":
             named = [s for s in screens if s[0] == opts["output"]] or screens[:1]
             if not named:
                 return 1
             target, rect, output = ("monitor", named[0][0]), named[0][1], named[0][0]
+            ready = close_previous()
+        elif opts["geometry"] is not None:
+            # The frame of the toolbar's Record Selected Portion: no crosshair.
+            rect = on_one_display(opts["geometry"], monitors)
+            if rect is None:
+                sys.stderr.write("grassfield-capture: --geometry is not on one display\n")
+                return 2
+            target, output = record_target(rect, screens)
             ready = close_previous()
         else:
             write_state(dict(me(), phase="selecting", kind="recording"))
@@ -763,8 +844,8 @@ def record(opts):
         time.sleep(max(0.0, ready - time.monotonic()))
         folder = destination(opts["save"])
         tmp = reserve(folder, "grassfield-recording", ".mp4") if folder else None
-        if tmp is None:
-            return 1
+        if tmp is None or session_locked():
+            return 1  # (the session locked during the choice or the countdown: nothing is recorded)
         argv = recorder_argv(target, monitors, opts, tmp)
         begun = datetime.datetime.now()
         RECORDING["starting"] = True
@@ -788,7 +869,17 @@ def record(opts):
                      started=int(time.time() * 1000), rect=rect, output=output))
     if RECORDING["pending"]:
         on_record_signal(signal.SIGINT, None)
-    proc.wait()
+    # The session locking ends the recording from here too (the shell's marker, read every LOCK_POLL_SECONDS): a shell that
+    # is not running then, or restarts under the lock, records nothing behind it.
+    told = False
+    while True:
+        try:
+            proc.wait(timeout=LOCK_POLL_SECONDS)
+            break
+        except subprocess.TimeoutExpired:
+            if not told and lock_requested():
+                told = True
+                on_record_signal(signal.SIGINT, None)
     write_state({"phase": "idle"})
     os.close(lock)
     # From here the notice's wait ends with the session, as a screenshot's does, and a late SIGINT ends it quietly.
@@ -819,7 +910,7 @@ def stop():
     # Exit 0 when something was told to end, 1 otherwise.
     state = read_state()
     phase = state.get("phase")
-    if phase not in ("selecting", "countdown", "recording"):
+    if phase not in ("starting", "selecting", "countdown", "recording"):
         return 1
     lock = take_lock()
     if lock is not None:
@@ -863,21 +954,28 @@ def parse(args):
         action, args = "record", args[1:]
     if not args or args[0] not in (RECORD_MODES if action == "record" else MODES):
         return None
-    out = {"action": action, "mode": args[0], "save": "desktop", "timer": 0, "pointer": False, "mic": False, "output": ""}
+    out = {"action": action, "mode": args[0], "save": "desktop", "timer": 0, "pointer": False, "mic": False, "output": "",
+           "geometry": None}
     seen, i = set(), 1
     while i < len(args):
         option = args[i]
         if option in seen:
             return None
         seen.add(option)
-        if option in ("--save", "--timer", "--output") and i + 1 < len(args):
+        if option in ("--save", "--timer", "--output", "--geometry") and i + 1 < len(args):
             value = args[i + 1]
             if option == "--save" and value in SAVE_TO:
                 out["save"] = value
             elif option == "--timer" and value in TIMERS:
                 out["timer"] = int(value)
-            elif option == "--output" and action == "record" and out["mode"] == "screen" and OUTPUT_NAME.fullmatch(value):
+            elif option == "--output" and out["mode"] == "screen" and OUTPUT_NAME.fullmatch(value):
                 out["output"] = value
+            elif option == "--geometry" and out["mode"] != "screen" and GEOMETRY_ARG.fullmatch(value):
+                # Whole numbers, a positive size (on one display: checked against Hyprland's displays when used).
+                m = GEOMETRY_ARG.fullmatch(value)
+                out["geometry"] = {"x": int(m[1]), "y": int(m[2]), "w": int(m[3]), "h": int(m[4])}
+                if out["geometry"]["w"] <= 0 or out["geometry"]["h"] <= 0:
+                    return None
             else:
                 return None
             i += 2
@@ -899,9 +997,9 @@ def main():
     opts = parse(sys.argv[1:])
     if opts is None:
         sys.stderr.write("usage: grassfield-capture screen|window|selection [--save desktop|documents|clipboard|preview]"
-                         " [--timer 0|5|10] [--pointer]\n"
+                         " [--timer 0|5|10] [--pointer] [--output NAME (screen)] [--geometry 'X,Y WxH' (window, selection)]\n"
                          "       grassfield-capture record screen|selection [--save desktop|documents|preview]"
-                         " [--timer 0|5|10] [--pointer] [--mic] [--output NAME]\n"
+                         " [--timer 0|5|10] [--pointer] [--mic] [--output NAME (screen)] [--geometry 'X,Y WxH' (selection)]\n"
                          "       grassfield-capture stop\n")
         return 2
     if opts["action"] == "stop":
