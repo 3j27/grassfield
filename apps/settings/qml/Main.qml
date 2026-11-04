@@ -861,7 +861,7 @@ Window {
         }
     }
 
-    // Battery > Options…: Prevent automatic sleeping on power adapter when the display is off.
+    // Battery > Options…: Prevent automatic sleeping when the display is off (on battery and on the power adapter).
     PowerOptionsSheet {
         id: powerOptionsSheet
         store: cfg

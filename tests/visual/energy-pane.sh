@@ -58,17 +58,8 @@ fl_check_wait "the shell's idle module follows it (sleepPrevented false)" 8 idle
 fl_check "nothing is armed while the displays are on (autoSleepArmed false, none suppressed)" idle_is '[.autoSleepArmed, .autoSleepSuppressed] | @csv' 'false,0'
 fl_check "turned back on in Settings" a11y_find "$pid" 'check box' '^Prevent automatic sleeping when the display is off$' --press --wait 5
 fl_check_wait "Settings writes energy.preventSleep true" 8 cfg_prevent_is true
-# On the power adapter (or without a battery) the switch decides; on battery it does not apply (macOS).
-on_battery=false
-for s in /sys/class/power_supply/*; do
-  [[ $(cat "$s/type" 2>/dev/null) == Mains ]] || continue
-  [[ $(cat "$s/online" 2>/dev/null) == 0 ]] && on_battery=true
-done
-if [[ $on_battery == false ]]; then
-  fl_check_wait "the shell's idle module follows it (sleepPrevented true on the power adapter)" 8 idle_is .sleepPrevented true
-else
-  fl_note "on battery: sleepPrevented stays false whatever the switch says (macOS); now $(idle_field .sleepPrevented)"
-fi
+# On battery and on the power adapter alike (integrator decision 2026-11-04): the switch decides.
+fl_check_wait "the shell's idle module follows it (sleepPrevented true)" 8 idle_is .sleepPrevented true
 fl_close_windows "$class"
 fl_check_wait "the Settings window is closed" 10 no_settings
 
@@ -81,7 +72,7 @@ no_energy_row() { ! a11y_find "$pid" 'list item' '^Energy$' --wait 2 >/dev/null;
 fl_check "the sidebar has no Energy" no_energy_row
 fl_check "Energy asked for: the Battery pane, with Low Power Mode" a11y_find "$pid" 'combo box' '^Low Power Mode$' --wait 10
 fl_check "Options… opens the sheet" a11y_find "$pid" '(push )?button' '^Battery options$' --press --wait 10
-fl_check "the sheet: Prevent automatic sleeping on power adapter when the display is off, on" a11y_find "$pid" 'check box' '^Prevent automatic sleeping on power adapter when the display is off$' --state checked --wait 5
+fl_check "the sheet: one switch, Prevent automatic sleeping when the display is off, on" a11y_find "$pid" 'check box' '^Prevent automatic sleeping when the display is off$' --state checked --wait 5
 vs_sleep 1.5
 fl_shot battery-options-light >/dev/null
 fl_close_windows "$class"

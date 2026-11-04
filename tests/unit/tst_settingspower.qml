@@ -402,9 +402,13 @@ TestCase {
         compare(comp.status, Component.Ready, comp.errorString());
         const sheet = createTemporaryObject(comp, testCase, {store: store});
         sheet.open();
-        const sw = find(sheet, i => i.accessibleName === "Prevent automatic sleeping on power adapter when the display is off" && i.toggled !== undefined);
+        // One switch, macOS's desktop wording, on battery and on the power adapter alike (integrator decision 2026-11-04); the
+        // footnote says so.
+        const sw = find(sheet, i => i.accessibleName === "Prevent automatic sleeping when the display is off" && i.toggled !== undefined);
         verify(sw);
         verify(sw.checked);
+        verify(find(sheet, i => i.accessibleName === "Prevent automatic sleeping on power adapter when the display is off") === null);
+        verify(find(sheet, i => typeof i.footnote === "string" && i.footnote.indexOf("Applies on battery and on power adapter.") === 0));
         sw.toggled(false);
         compare(store.writes, [{"energy.preventSleep": false}]);
         sw.toggled(true);

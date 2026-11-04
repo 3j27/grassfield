@@ -439,7 +439,7 @@
         "preventSleep": {
           "type": "boolean",
           "default": true,
-          "description": "On the power adapter, and on a computer without a battery, the computer does not go to sleep by itself once the displays are off for inactivity (macOS 27 Energy: Prevent automatic sleeping when the display is off; Battery > Options: ... on power adapter ...). On battery it sleeps a minute after the displays went off whatever this says (macOS). Sleep only: the displays still turn off and the session still locks as lock.* says. Default on: a Grassfield computer never went to sleep by itself before this key, and an unreadable value keeps it that way."
+          "description": "The computer does not go to sleep by itself once the displays are off for inactivity, on battery and on the power adapter alike (macOS 27 Energy, and Battery > Options…: Prevent automatic sleeping when the display is off; integrator decision 2026-11-04: macOS has no switch for battery, Grassfield does). Off: it sleeps a minute after the displays went off, only while its lock is confirmed. The displays still turn off and the session still locks as lock.* says; the only lock this key can add is the one before an automatic sleep. Default on: a Grassfield computer never went to sleep by itself before this key, and an unreadable value keeps it that way."
         }
       }
     },

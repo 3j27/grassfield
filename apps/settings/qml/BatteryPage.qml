@@ -18,7 +18,7 @@ SettingsPage {
 
     // Main.qml opens the (i) sheets and hands the charge limit back (setLimit).
     signal infoRequested(string topic, var power)
-    // Options… (macOS 27): Main.qml opens PowerOptionsSheet (Prevent automatic sleeping on power adapter when the display is off).
+    // Options… (macOS 27): Main.qml opens PowerOptionsSheet (Prevent automatic sleeping when the display is off; battery and power adapter).
     signal optionsRequested
 
     title: qsTr("Battery")

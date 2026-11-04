@@ -9549,12 +9549,12 @@
         <translation>Terminé</translation>
     </message>
     <message>
-        <source>On battery the computer sleeps once the display has been off for a minute. The display turns off and the session locks as set in Lock Screen.</source>
-        <translation>Sur batterie, l’ordinateur suspend son activité une minute après l’extinction de l’écran. L’écran s’éteint et la session se verrouille selon les réglages d’Écran verrouillé.</translation>
+        <source>Applies on battery and on power adapter. The display turns off and the session locks as set in Lock Screen.</source>
+        <translation>S’applique sur batterie et sur adaptateur secteur. L’écran s’éteint et la session se verrouille selon les réglages d’Écran verrouillé.</translation>
     </message>
     <message>
-        <source>Prevent automatic sleeping on power adapter when the display is off</source>
-        <translation>Empêcher la suspension d’activité automatique sur adaptateur secteur lorsque l’écran est éteint</translation>
+        <source>Prevent automatic sleeping when the display is off</source>
+        <translation>Empêcher la suspension d’activité automatique lorsque l’écran est éteint</translation>
     </message>
 </context>
 <context>
