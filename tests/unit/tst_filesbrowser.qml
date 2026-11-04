@@ -74,7 +74,7 @@ TestCase {
                 return false;
             }
             function nameAt(row: int): string {
-                return "";
+                return folder.isApplications ? "App " + row : "";
             }
             function urlAt(row: int): url {
                 return folder.isApplications ? "grassfield-app:/app" + row : folder.url;
@@ -288,6 +288,16 @@ TestCase {
         property var opened: []
         function launchApplication(target: url): void {
             fakeApp.launched = fakeApp.launched.concat([String(target)]);
+        }
+        // The Store's answer to `--removable` (JSON text) and what Files asked it to uninstall (ADR-0044).
+        property string removableText: ""
+        property int removableLoads: 0
+        property var uninstalled: []
+        function loadRemovableApplications(): void {
+            fakeApp.removableLoads++;
+        }
+        function uninstallApplication(id: string): void {
+            fakeApp.uninstalled = fakeApp.uninstalled.concat([id]);
         }
         function open(urls: var): void {
             fakeApp.opened = fakeApp.opened.concat(urls.map(u => String(u)));
@@ -572,6 +582,48 @@ TestCase {
         tab.openSelection();
         compare(fakeApp.launched, [], "a folder of files launches nothing");
         compare(fakeApp.opened, [String(folder.url)], "the file is opened");
+    }
+
+    // Move to Trash on an application (ADR-0044; Finder: moving an app out of Applications uninstalls it): dimmed until the
+    // Store says it may remove that app, then the alert "Delete “App”?" and, on Delete only, the Store is asked to uninstall.
+    function test_applicationsMoveToTrashUninstalls() {
+        const files = test.openFiles(false);
+        const win = files.windows[0];
+        const tab = win.tab;
+        const folder = tab.folder;
+        folder.isApplications = true;
+        folder.selected = [0];
+        folder.selectedCount = 1;
+        fakeApp.removableText = "";
+        fakeApp.uninstalled = [];
+        const trash = () => tab.itemMenu(folder).find(i => i.id === "trash");
+        compare(trash().enabled, false, "the Store has not answered: nothing is offered");
+        fakeApp.removableText = JSON.stringify({version: 1, entries: {"app0.desktop": {app: "x", name: "App 0", block: ""},
+                                                                     "app1.desktop": {app: "y", name: "App 1", block: "omarchy"}}});
+        compare(trash().enabled, true, "the Store may remove it");
+        tab.trashSelection();
+        const sheet = test.shownSheet(win.contentItem);
+        verify(sheet, "the alert is shown");
+        compare(sheet.title, "Delete “App 0”?");
+        compare(sheet.message, "The app is removed from this computer. Its documents and settings in your home folder are kept.");
+        compare(sheet.confirmText, "Delete");
+        compare(fakeApp.uninstalled, [], "nothing runs before Delete");
+        sheet.close();
+        compare(fakeApp.uninstalled, [], "Cancel removes nothing");
+        tab.trashSelection();
+        const again = test.shownSheet(win.contentItem);
+        verify(again);
+        again.confirm();
+        compare(fakeApp.uninstalled, ["app0"], "Delete asks the Store for that application");
+        // An app the Store refuses (Omarchy's own), several, or none selected: dimmed and no alert.
+        folder.selected = [1];
+        compare(trash().enabled, false, "part of Omarchy");
+        folder.selected = [0, 1];
+        folder.selectedCount = 2;
+        compare(trash().enabled, false, "several apps at once are not offered");
+        folder.selected = [];
+        folder.selectedCount = 0;
+        folder.isApplications = false;
     }
 
     // Open With (ADR-0035 5c-1): Finder's submenu, the type's applications then Other…, which asks for the Choose Application

@@ -41,6 +41,7 @@
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QThread>
+#include <QTimer>
 #include <QWindow>
 
 #include <memory>
@@ -1083,6 +1084,71 @@ void FilesApp::launchApplication(const QUrl &url)
             emit operationFailed(job->errorString());
     });
     job->start();
+}
+
+namespace {
+
+// Grassfield Store, when it is there: in a dev session the grassfield-store beside this binary (a dev build, ADR-0019), else the
+// PATH's; "" without one.
+QString storeProgram()
+{
+    const QString sibling = QCoreApplication::applicationDirPath() + QStringLiteral("/grassfield-store");
+    if (grassfield::apps::runmode::dev() && QFileInfo(sibling).isExecutable())
+        return sibling;
+    return QStandardPaths::findExecutable(QStringLiteral("grassfield-store"));
+}
+
+constexpr qint64 kMaxRemovableBytes = 4 * 1024 * 1024; // the Store's answer is far smaller; anything longer is not its answer
+constexpr int kRemovableTimeoutMs = 120000;
+constexpr int kRemovableFreshSeconds = 60;
+
+} // namespace
+
+void FilesApp::loadRemovableApplications()
+{
+    if (m_removableProcess || (m_removableAt.isValid() && m_removableAt.secsTo(QDateTime::currentDateTime()) < kRemovableFreshSeconds))
+        return;
+    const QString program = storeProgram();
+    if (program.isEmpty())
+        return; // no Store: nothing is offered for removal
+    auto *process = new QProcess(this);
+    m_removableProcess = process;
+    process->setProgram(program);
+    process->setArguments({QStringLiteral("--removable")});
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(process, &QProcess::finished, this, [this, process](int code, QProcess::ExitStatus status) {
+        const QByteArray out = process->readAllStandardOutput();
+        const bool ok = status == QProcess::NormalExit && code == 0 && out.size() <= kMaxRemovableBytes;
+        m_removableAt = QDateTime::currentDateTime();
+        const QString text = ok ? QString::fromUtf8(out) : QString();
+        if (text != m_removableText) {
+            m_removableText = text;
+            emit removableTextChanged();
+        }
+        process->deleteLater();
+    });
+    connect(process, &QProcess::errorOccurred, this, [process](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            process->deleteLater();
+    });
+    QTimer::singleShot(kRemovableTimeoutMs, process, [process] {
+        if (process->state() != QProcess::NotRunning)
+            process->kill();
+    });
+    process->start();
+}
+
+void FilesApp::uninstallApplication(const QString &id)
+{
+    // An id of the Applications location: what the Store keys an entry by, nothing an option or a path could ride on.
+    static const QRegularExpression valid(QStringLiteral(R"(\A[A-Za-z0-9][A-Za-z0-9._+@-]{0,200}\z)"));
+    const QString program = storeProgram();
+    if (!valid.match(id).hasMatch() || program.isEmpty() || launchingBlocked()) {
+        emit operationFailed(tr("The Store can’t uninstall this application."));
+        return;
+    }
+    if (!grassfield::apps::startApplication(program, {QStringLiteral("--page"), QStringLiteral("uninstall:") + id + QStringLiteral(".desktop")}))
+        emit operationFailed(tr("The Store could not be started."));
 }
 
 void FilesApp::glance(const QList<QUrl> &urls)
