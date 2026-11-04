@@ -22,8 +22,15 @@ struct Channel {
 std::optional<Channel> channelFromConf(const QByteArray &grassfieldConf);
 // GRASSFIELD_REPO_BASE of the installed repository.conf (/usr/share/grassfield/pacman/repository.conf); "" when absent.
 QString buildBase(const QByteArray &repositoryConf);
+// True when the build names a signing key (GRASSFIELD_SIGNING_FINGERPRINT non-empty), the condition grassfield-channel-set,
+// the helper, the update checker and Settings (SoftwareUpdateLogic.buildReady) use. Without it the catalog could not be
+// verified, so the Store asks nothing of the build's host.
+bool buildHasKey(const QByteArray &repositoryConf);
 // The build's base and `stable`.
 Channel defaultChannel(const QString &buildBase);
+// The channel of the installed repository.conf: its base when the build names a key (buildHasKey), else no base at all
+// (nothing fetchable, nothing requested).
+Channel buildChannel(const QByteArray &repositoryConf);
 // False while the base is a placeholder (a host under .invalid, ADR-0033 g) or not https.
 bool fetchable(const Channel &channel);
 

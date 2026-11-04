@@ -457,6 +457,8 @@
  {"path": "tests/shell/session_end.sh", "layer": "logic"},
  {"path": "tests/shell/lid.sh", "layer": "logic"},
  {"path": "tests/shell/login_session.sh", "layer": "logic"},
+ {"path": "tests/shell/make_signing_key.sh", "layer": "logic"},
+ {"path": "tests/shell/renew_signing_key.sh", "layer": "logic"},
  {"path": "tests/shell/session_displays.sh", "layer": "logic"},
  {"path": "tests/shell/session_input.sh", "layer": "logic"},
  {"path": "tests/shell/session_ground.sh", "layer": "logic"},

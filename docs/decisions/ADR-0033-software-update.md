@@ -301,6 +301,33 @@ a rotation done wrong, the only key revoked, an upload caught half way. The defe
    Q6: after `pacman-key --delete`, a package signed by that key is refused in any repository ("key … is unknown"). After
    `pacman -R` of a package whose `pre_remove` deletes it, the key is absent from pacman's keyring.
 
+9. **Renewing the key's expiry (security review of 2026-11-04).** The key made by `docs/owner-setup/make-signing-key.sh` is
+   an Ed25519 sign-only primary key with no subkey and **expires after 2 years**. After that date pacman rejects the key's
+   signatures: every client's `[grassfield]` sync fails (a2), and an extended key cannot reach a client through a keyring that
+   is itself signed by the expired key. So the expiry is a deadline, with a margin:
+   - **Procedure.** The owner runs `docs/owner-setup/renew-signing-key.sh --secret <offline copy> --fingerprint <pinned>`:
+     a throwaway GNUPGHOME on tmpfs (same safety as the creation script: never `~/.gnupg`, passphrase never on a command line,
+     cleanup on every exit but SIGKILL), `--quick-set-expire` on **the same primary key**, so the fingerprint, the pin in
+     `repository.conf` and `grassfield-trusted` do not change. It proves its output (a signature made from a fresh home that
+     holds only the new SECRET file, checked with gpgv against the new public key alone) and writes the extended public key,
+     the new SECRET file, `expiry.txt` and a README with the dates. The revocation certificate is not remade: it stays valid.
+   - **Margin.** The integrator puts the extended public key in `grassfield-keyring` (and
+     `packaging/pacman/grassfield-signing-key.asc`) and publishes it in both channels **at least 6 months before the expiry
+     date**. That is far above b.4's minimum for a new key (30 days in both channels and one release) because most machines
+     update rarely, and a machine that misses the deadline can no longer update at all. The owner replaces
+     `GRASSFIELD_SIGNING_KEY` in `publish-stable` and `publish-beta` and the two offline copies at the same time (gpg
+     refuses to sign with an expired key, so CI needs the extended secret key before the expiry date too).
+   - **A client that missed it** proceeds as in b.5's compromise case: "Turn Off…", then b.3a with the extended key.
+   - **Reminder (proposal; not built here, grassfield-packages is not touched).** A scheduled workflow in grassfield-packages
+     (weekly) reads the expiry date of the key in its `keyring/` (`gpg --with-colons --show-keys`) and of the last published
+     database's signing key, and **fails the run when either expires within 9 months** (a failed scheduled run emails the
+     owner; it can also open or refresh one issue). 9 months leaves three months to renew before the 6-month shipping
+     deadline. The creation and renewal scripts print the expiry date, the shipping deadline and the date from which the
+     reminder is expected.
+   - NOT VERIFIED: that `pacman-key --populate-from` of the extended public key updates the expiry of a key already in
+     pacman's keyring (gpg merges the new self-signature on import). To be tested in the container before the first renewal;
+     if it does not, the keyring's scriptlet must delete and re-add the key.
+
 ### c. Changing the channel: a helper behind Grassfield's own polkit action (owner decision O1)
 Writing `/etc/pacman.d/*` and `/etc/pacman.conf` needs root, and no system service owns these files, so there is no service
 polkit action to call (ADR-0030's route). The owner chose a Grassfield helper behind its own polkit action (option B). The
@@ -454,7 +481,7 @@ Rejected:
 ### g. The contract between the two repositories
 | Item | Value |
 |---|---|
-| Base URLs | `packaging/pacman/repository.conf` in this repository: `GRASSFIELD_REPO_BASE` (the primary; `https://packages.grassfield.invalid` until hosting exists), `GRASSFIELD_REPO_MIRRORS` (more bases serving the same snapshots, each a `Server` line after the primary), `GRASSFIELD_REPO_BASE_PREVIOUS` (bases a migration rewrites, h). grassfield-packages reads them from the checkout it builds. |
+| Base URLs | `packaging/pacman/repository.conf` in this repository: `GRASSFIELD_REPO_BASE` (the primary; `https://packages.grassfield.site`, owner decisions O8, O8b of 2026-11-03), `GRASSFIELD_REPO_MIRRORS` (more bases serving the same snapshots, each a `Server` line after the primary), `GRASSFIELD_REPO_BASE_PREVIOUS` (bases a migration rewrites, h). grassfield-packages reads them from the checkout it builds. |
 | Channel URL | `<base>/<channel>/<arch>/`, channel `stable` or `beta`, arch `x86_64`; `Server = <base>/<channel>/$arch` |
 | Repository | `grassfield`: `grassfield.db`, `grassfield.files`, each with `.sig`; real files, not repo-add's links |
 | Packages | exactly the files the database names, each with `.sig`: `grassfield-desktop`, `grassfield-compositor`, `grassfield-icons` (this PKGBUILD) and `grassfield-keyring` (grassfield-packages). Names `grassfield-*` only, no `replaces=`. Package file names never change content. `grassfield-desktop` depends on `grassfield-keyring` (O22): grassfield-packages refuses a release whose `grassfield-desktop` does not (its build, from the package's `.PKGINFO`, and its tree check, from the database). |
@@ -497,7 +524,7 @@ Rejected:
    databases and notes when newer than the snapshot's, the catalog when it differs, the rest kept); it refuses a `grassfield.db` older than the current one
    for any package, except a deliberate rollback below; it writes the pointer only if it still names the snapshot it read
    (a compare-and-swap on the storage's version tag), else it starts again. A conditional write on the chosen storage is NOT
-   VERIFIED (the host is not chosen, O8); without one, the serialization alone holds, with a fresh read of the pointer just
+   VERIFIED (the host is chosen, R2, but nothing is published to test it on; h.5); without one, the serialization alone holds, with a fresh read of the pointer just
    before the write. Details: ADR-0037 g.
    So the previous release is published again as a new snapshot (a pkgrel above the bad one when clients must move to it). Residual: a client whose two
    requests straddle the pointer write gets a mismatched pair once; that run fails ("signature … is invalid"), the next one
@@ -515,6 +542,74 @@ Rejected:
    GitHub Releases (not chosen) would change the Server's shape too (`…/download/<channel>-$arch`). A shape change needs the
    same migration.
 4. Considered and not chosen: GitHub Pages (a public repository and a 1 GB site), GitHub Releases, GitLab.
+5. **Concrete layout on Cloudflare R2 (owner decisions O8, O8b, 2026-11-03; amendment).** Nothing is created or published
+   by this record; the owner's steps are in `docs/owner-setup/hosting-and-key.md`. What is NOT VERIFIED is marked.
+   - **Bucket** `grassfield` (created by the owner on 2026-11-03: location WEUR, Standard class, empty). Its **custom domain** is
+     `packages.grassfield.site` (the zone `grassfield.site` was already on Cloudflare DNS, in the same account as R2: no nameserver move. The owner connected it on 2026-11-03 with wrangler's `r2 bucket domain add` (minimum TLS 1.2); ownership and SSL were still pending minutes later; the certificate is Cloudflare's. Agents change no DNS, domain or certificate). The public
+     `r2.dev` address stays disabled, so the only public name is the one in `repository.conf`.
+   - **Paths**, at the bucket's root, exactly as grassfield-packages writes its tree: `<channel>/x86_64/...` with channel
+     `stable` or `beta` (so `Server = https://packages.grassfield.site/<channel>/$arch`):
+     `<package>.pkg.tar.zst` and `.sig` (immutable), `snap/<id>/...` (immutable snapshots), `pointer` (`{"snapshot": "<id>"}`)
+     and `catalog/<sha256>.png`. `releases/<channel>/` and `withdrawn/<channel>/` are the publisher's inputs in the same
+     bucket; they hold no secret (packages and signatures already public), but nothing links to them.
+   - **OPEN DESIGN ITEM: how the fixed names resolve the pointer (h.2's edge rule).** Cloudflare's Redirect Rules cannot read
+     the pointer's content, so h.2's "edge rule" needs one of these. Nothing is built now: it is not needed before the first
+     publish, which waits for the legal review. Options:
+     (a) **A Cloudflare Worker on the custom domain** (free tier: 100,000 requests a day, enough to start) reproducing
+         grassfield-packages' `scripts/serve.py`: for the fixed names (`grassfield.db`, `grassfield.files`,
+         `grassfield-notes.json`, `grassfield-catalog.v1.json`, each with `.sig`) it reads `<channel>/x86_64/pointer` through an
+         R2 binding (no key) and answers `302` to `snap/<id>/<name>`, `Cache-Control: no-store`; a missing or malformed
+         pointer gives `404`; every other path goes to the bucket. Keeps h.2 as tested (Q2, R4: one pointer write switches
+         the database and its signature together). Costs one new component (JavaScript, about 40 lines), the owner's approval
+         and, above the free tier, a paid plan.
+     (b) **The publisher copies the snapshot's database and signature to the fixed names** (real objects), in the least
+         harmful order (the `.db` first, then its `.sig`). No order is safe for a client that reads the two files separately:
+         whichever is written first leaves a window in which a client gets a new file next to an old one ("signature ... is invalid", the
+         once-failed run of h.2's residual). Consistency window: the time between the two writes (about a second) plus any
+         cache lifetime; it can be shortened, never removed. No new component.
+     (c) **A pacman-side fix**: none exists. pacman fetches `<name>.db` and `<name>.db.sig` as two independent requests, and
+         `Server` has no indirection; a client-side workaround (a `CacheServer`, a hook) would add code as root's neighbour on
+         every machine.
+     **Recommendation: (a)**, because it is the only option that keeps h.2's atomic switch, and (b) only as a fallback if the
+     owner refuses a Worker, with its window stated in the pane's "failed once, then fine" behaviour. NOT VERIFIED: that a
+     Worker route in front of an R2 custom domain passes other requests to the bucket as assumed (to test on a scratch bucket
+     before the first publish), and R2's conditional `PutObject` (`If-Match` / `If-None-Match`) for the pointer's
+     compare-and-swap (below; without it, serialization alone holds).
+   - **Cache rules** (Cloudflare Cache Rules on `packages.grassfield.site`), consistent with h.2's pointer and
+     serialization: (1) the fixed names and `pointer` (path ends in `/pointer`, or in one of the names above): **Bypass
+     cache**, so a pointer write is seen at once by both the database and its signature (a stale `.db` next to a fresh
+     `.sig` is the R4 failure); (2) `/snap/`, `*.pkg.tar.zst`, `*.pkg.tar.zst.sig` and `/catalog/*.png`: **eligible, Edge
+     TTL and Browser TTL one year** (immutable names; a snapshot's files never change, and a snapshot deleted after 7 days
+     only leaves a copy nobody is pointed to). **Rule (2) carries a status-code TTL**, because an overriding Edge TTL would
+     otherwise cache errors for a year: `404` (and every other 4xx and 5xx) is **not cached** (`status_code_ttl` with value
+     -1, "no store"). Without it, a file requested a moment before its upload would stay "not found" at the edge for a
+     year. The exact `status_code_ttl` value for "do not cache" is to be confirmed in the dashboard (NOT VERIFIED here).
+     The publisher also sets the headers on upload, so the rule is not the only
+     line: `Cache-Control: no-store` on `pointer`, `public, max-age=31536000, immutable` on packages, signatures,
+     snapshot files and catalog images. Keep Always Online and Cache Reserve off, and no Cloudflare feature that rewrites
+     bodies (Rocket Loader, minify, Polish) for this host.
+   - **Credentials.** An **R2 API token scoped to the bucket `grassfield` only**, permission *Object Read & Write*, no other bucket, no
+     account permission; its Access Key ID and Secret Access Key become `GRASSFIELD_S3_ACCESS_KEY_ID` and
+     `GRASSFIELD_S3_SECRET_ACCESS_KEY` in the protected environments `publish-stable` and `publish-beta` of
+     grassfield-packages (the names its workflows read); the variables `GRASSFIELD_S3_BUCKET` (`grassfield`) and
+     `GRASSFIELD_S3_ENDPOINT` (`https://<account id>.r2.cloudflarestorage.com`) are not secrets; the integrator set both in
+     both environments. The token lives only there,
+     never on a `pull_request`. NOT VERIFIED: R2's S3 API honouring `If-Match` / `If-None-Match` on `PutObject` for h.2's
+     compare-and-swap of the pointer (to test on a scratch bucket); without it, h.2's serialization alone holds.
+   - **b.7's approval gap, resolved on 2026-11-03.** GitHub had refused the required-reviewers rule (HTTP 422):
+     `grassfieldhq` is on the Free plan and `grassfield-packages` was private. Options were (a) make it public (free
+     reviewers; the packages are public anyway), (b) GitHub Team (paid), (c) a weaker gate (`workflow_dispatch` only plus
+     branch protection). **The owner chose (a)**: a gitleaks scan of the full history (93 commits) found 3 false positives,
+     all Omarchy's public packaging-key fingerprint, then the owner made the repository public. The integrator then set, on
+     both environments `publish-stable` and `publish-beta`, the owner as required reviewer and a deployment branch policy
+     for `main` only; and on `main` branch protection with no force-push and no deletion (no required reviews). So b.7's
+     "the owner approves each run" holds. Secrets are still set by the owner only, in their own terminal.
+   - **What gates publication now.** The base is no longer the `.invalid` placeholder (h.1's first condition), so the gate is
+     what grassfield-packages already has: `publish.yml` and the release job stay `if: false` until the owner, after the
+     legal review, creates the two environments, sets the secrets and removes it. The shipped client with this base and no
+     key: Set Up refused, the checker never fetches (`not-set-up`), and Grassfield Store requests nothing either: its
+     `buildChannel` (`apps/store/src/channel.cpp`) takes the build's base only when `GRASSFIELD_SIGNING_FINGERPRINT` is
+     non-empty, the same condition as the others, so no installed Store contacts the host for a catalog it cannot verify.
 
 ### i. After an update
 - Logging out is needed and enough for a Grassfield update: Hyprland keeps the loaded plugin, and the shell and the plugin
@@ -557,6 +652,9 @@ Off…" and the beta switch never run there. Dev plumbing: `GRASSFIELD_UPDATE_FI
 | SU-M1 | Update Now (2026-10-29, the integrator's question after the incident of 2026-10-29) | as on a Mac: Grassfield's password dialog, a snapshot, Omarchy's update without a terminal through a Grassfield root helper behind its own polkit action, progress in Settings, Restart at the end, a compatibility check before the transaction (recommended) · keep Omarchy's terminal | **as on a Mac** (« Comme sur Mac », confirmed by the owner in the Claude Code session of step 3); "Step 3" |
 | SU-D4 | Telling the end of an Update Now run (step 4, delegated) | a notice for each end that leaves something to do or to know, whose click opens the pane, none for a restart or a log out while Settings' window is in front, whose end sheet asks it (recommended: macOS posts such a notification when its window is not in front) · a notice for a restart only · nothing outside the pane | **a notice for each end**, « décision déléguée par le propriétaire le 2026-10-27 : macOS d'abord, aucune intervention technique pour l'utilisateur »; "Step 4 as built" |
 | SU-M2 | Omarchy migrations that need `sudo` (2026-10-31, step 3's limit s3.8) | keep Omarchy's terminal for them (recommended by the session: no root widening) · Grassfield's own password window for each migration's `sudo` (a new password surface outside polkit) · one password: the password of Update Now also covers the migrations' `sudo` commands, run as root through Grassfield's helper (the widest root change; a dedicated design and an opus security review) | **one password** (« Mot de passe unique », the owner's answer to the question tool of the 2026-10-31 session); "Step 5" |
+| O8 (2026-11-03) | Domain and host name for the own-domain hosting (O8), asked in the integrator session | the owner's own domain, packages served from a sub-domain | **grassfield.site**; the repository is served at **https://packages.grassfield.site** (`GRASSFIELD_REPO_BASE`); still activated only after the legal review |
+| O8b (2026-11-03) | Storage and CDN behind that name (O8b) | S3-compatible storage + CDN | **Cloudflare R2** with Cloudflare's CDN, the host name as the bucket's custom domain; layout, cache rules and token in h.5 |
+| O11 (2026-11-03) | Who creates the signing key, and when (O11 said "later") | an agent or CI generates it · the owner generates it on their own machine | **now, by the owner, on their machine**, with `docs/owner-setup/make-signing-key.sh` (a throwaway GNUPGHOME, never `~/.gnupg`; the passphrase typed by the owner). The integrator and agents never see the secret key; they receive only the public key and the fingerprint (`docs/owner-setup/hosting-and-key.md`). `GRASSFIELD_SIGNING_FINGERPRINT` stays empty until the owner sends it (b.3), so a build still refuses ("no signing key in this build") |
 
 The owner gave every answer of O1-O22 on 2026-10-27: O1-O21 in this Claude Code session, through its question tool, and
 O22 to the integrator. SU-M1 was asked by the integrator on 2026-10-29 and confirmed by the owner through the question tool
@@ -572,6 +670,9 @@ the change to the first published release, where a miss would ship a desktop wit
 since the channel's keyring must be grassfield-packages' `keyring/`, the whole package (its `keyring-check.sh`).
 
 ## Amendments
+- **Hosting and key (owner decisions O8, O8b, O11 of 2026-11-03), recorded 2026-11-03.** The host is
+  `packages.grassfield.site` on Cloudflare R2 (h.5); `repository.conf` carries the base and no fingerprint; the owner makes the
+  key with `docs/owner-setup/make-signing-key.sh`. Nothing is published.
 - **ADR-0037 (Grassfield Store), 2026-10-27, Proposed with it.** d.3.5: the Store reads the list of other updates that
   step 2 adds (`otherPackages`, cut first at the 256 KiB cap), so it runs no second `checkupdates`. g: the Store catalog's files join the contract, and publication is the serialized
   publisher of h.2. h.2: one serialized publisher per channel that publishes the latest state, building from the current
@@ -645,7 +746,7 @@ since the channel's keyring must be grassfield-packages' `keyring/`, the whole p
 
 ## Step 1 as built (2026-10-27, branch `claude/software-update-step1`)
 Landed in this repository:
-- `packaging/pacman/`: `repository.conf` (still the `.invalid` base and no key, O11), the empty
+- `packaging/pacman/`: `repository.conf` (the base `https://packages.grassfield.site` since 2026-11-03, no key yet, O11), the empty
   `grassfield-signing-key.asc`, `generate.py` (build time: checks the values and the key file, which must be exactly the
   pinned public key, and writes `/usr/share/grassfield/pacman/{repository.conf,grassfield-stable.conf,grassfield-beta.conf,
   grassfield-signing-key.asc}`), `grassfield-channel-helper`, `grassfield-channel-scriptlet`, `grassfield-channel.sh`,

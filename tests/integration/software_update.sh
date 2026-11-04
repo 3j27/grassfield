@@ -340,6 +340,7 @@ expect "the shipped build (no key): grassfield-channel-set stable refused 'no si
 out=$("$H" set stable 2>&1); rc=$?
 expect "... and the helper itself refuses the same" test "$rc:$(grep -c 'no signing key in this build' <<<"$out")" == 1:1
 sed -i "s/^GRASSFIELD_SIGNING_FINGERPRINT=.*/GRASSFIELD_SIGNING_FINGERPRINT=$K1/" /usr/share/grassfield/pacman/repository.conf
+sed -i "s|^GRASSFIELD_REPO_BASE=.*|GRASSFIELD_REPO_BASE=https://packages.grassfield.invalid|" /usr/share/grassfield/pacman/repository.conf
 out=$(chset alice stable 2>&1); rc=$?
 expect "a build whose base is the .invalid placeholder: refused 'no package repository in this build'" test "$rc:$(grep -c 'no package repository in this build' <<<"$out")" == 1:1
 rm -rf /usr/share/grassfield/pacman && cp -a "$W/pacman.real" /usr/share/grassfield/pacman
