@@ -105,6 +105,40 @@ TEST_F(BusJobsTest, ResultComesBackOnTheStartingThreadOnce)
     EXPECT_EQ(seen->calls.load(), 1);
 }
 
+// fprintd's enrolment statuses (ADR-0045 OC-0.7): what a job posts runs on the starting thread, in order, before its `done`;
+// nothing posted runs after ~BusJobs.
+TEST_F(BusJobsTest, PostedWorkRunsOnTheStartingThreadInOrderAndNeverAfterTheJobsGo)
+{
+    auto seen = std::make_shared<Seen>();
+    auto order = std::make_shared<QStringList>();
+    auto threads = std::make_shared<QList<QThread *>>();
+    auto jobs = std::make_unique<BusJobs>(callers());
+    const BusJobs::Post post = jobs->poster();
+    jobs->start(
+        [post, order, threads](BusCaller &, QString *) {
+            for (const QString &s : {QStringLiteral("one"), QStringLiteral("two")})
+                post([order, threads, s] {
+                    order->append(s);
+                    threads->append(QThread::currentThread());
+                });
+            return QString();
+        },
+        [seen, order](const QString &, const QString &) {
+            order->append(QStringLiteral("done"));
+            ++seen->calls;
+        },
+        5000);
+    ASSERT_TRUE(spinUntil([&] { return seen->calls.load() > 0; }));
+    EXPECT_EQ(*order, (QStringList{QStringLiteral("one"), QStringLiteral("two"), QStringLiteral("done")}));
+    EXPECT_EQ(*threads, (QList<QThread *>{QThread::currentThread(), QThread::currentThread()}));
+    // Posted once the jobs are gone: dropped.
+    order->clear();
+    jobs.reset();
+    post([order] { order->append(QStringLiteral("late")); });
+    spinUntil([] { return false; }, 100);
+    EXPECT_TRUE(order->isEmpty());
+}
+
 TEST_F(BusJobsTest, AFailureCarriesItsReason)
 {
     auto seen = std::make_shared<Seen>();

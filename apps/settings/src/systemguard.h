@@ -19,6 +19,8 @@ bool devSession();
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
 //   /usr/lib/grassfield/grassfield-channel-set (no argument: it prints the channel)            Software Update pane
+//   omarchy-hw-fingerprint, omarchy-hibernation-available (no argument), omarchy-network-qr --meta: Omarchy's read-only checks
+//   lsblk -J -o NAME,TYPE,FSTYPE,MOUNTPOINTS                                                    Privacy & Security > Disk Encryption
 // Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030).
 // Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
@@ -99,6 +101,16 @@ int actionTimeoutMs(const QStringList &argv, int requested);
 //                                                                       migrations a run could not finish
 //   /usr/lib/grassfield/grassfield-session-end logout|restart            Software Update > Log Out…, Restart… (U14), after the
 //                                                                       pane's own confirmation: the path of the Grassfield menu
+//   omarchy-launch-floating-terminal-with-presentation <command>        ADR-0045 OC-0.4 and OC-0.7: the setups no system service
+//                                                                       offers, behind the pane's sheet that says why a terminal
+//                                                                       opens; <command> is exactly one of
+//                                                                       omarchy-setup-security-fingerprint, omarchy-remove-security-
+//                                                                       fingerprint, omarchy-setup-security-fido2, omarchy-remove-
+//                                                                       security-fido2, omarchy-setup-security-sshd, omarchy-drive-
+//                                                                       password, omarchy-hibernation-setup, omarchy-hibernation-
+//                                                                       remove, omarchy-voxtype-install, omarchy-voxtype-remove
+//   omarchy-voxtype-model                                               Keyboard > Dictation > Language Model… (it opens Omarchy's
+//                                                                       floating terminal itself)
 // Exactly these argument vectors, nothing else.
 bool isLaunch(const QStringList &argv);
 

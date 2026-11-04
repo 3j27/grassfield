@@ -69,6 +69,21 @@ const QString kSystemdPath = QStringLiteral("/org/freedesktop/systemd1");
 const QString kSystemdManager = QStringLiteral("org.freedesktop.systemd1.Manager");
 const QString kSystemdUnit = QStringLiteral("org.freedesktop.systemd1.Unit");
 const QString kNmWired = QStringLiteral("org.freedesktop.NetworkManager.Device.Wired");
+// ADR-0045 (OC-0.7): Remote Login is systemd's sshd.service and nothing else; Disk Encryption's password is UDisks2's; the
+// fingerprints are fprintd's. All on the system bus, each service asking polkit itself.
+const QString kSshdUnit = QStringLiteral("sshd.service");
+const QString kSshdPath = QStringLiteral("/org/freedesktop/systemd1/unit/sshd_2eservice");
+const QString kUDisks = QStringLiteral("org.freedesktop.UDisks2");
+const QString kUDisksPath = QStringLiteral("/org/freedesktop/UDisks2");
+const QString kUDisksBlock = QStringLiteral("org.freedesktop.UDisks2.Block");
+const QString kUDisksFilesystem = QStringLiteral("org.freedesktop.UDisks2.Filesystem");
+const QString kUDisksEncrypted = QStringLiteral("org.freedesktop.UDisks2.Encrypted");
+const QString kFprint = QStringLiteral("net.reactivated.Fprint");
+const QString kFprintManagerPath = QStringLiteral("/net/reactivated/Fprint/Manager");
+const QString kFprintManager = QStringLiteral("net.reactivated.Fprint.Manager");
+const QString kFprintDevice = QStringLiteral("net.reactivated.Fprint.Device");
+// An enrolment waits for fprintd's statuses in slices this long, asking between two whether the sheet was closed.
+constexpr int kEnrollSliceMs = 250;
 // The xdg-desktop-portal permission store (session bus; its bus name is also its interface).
 const QString kPermStore = QStringLiteral("org.freedesktop.impl.portal.PermissionStore");
 const QString kPermStorePath = QStringLiteral("/org/freedesktop/impl/portal/PermissionStore");
@@ -434,6 +449,65 @@ QString privileged(BusCaller &bus, const QString &service, const QString &path, 
     const BusReply r = bus.call(service, path, service, member, args, kPrivilegedMs);
     return r.ok ? QString() : fail(r.error);
 }
+
+// A disk passphrase as Settings passes it to UDisks2: a string of 1 to 512 characters without NUL (cryptsetup's own limit for a
+// typed passphrase is 512). Nothing else is checked: any character may be part of a passphrase.
+bool isDiskPassphrase(const QVariant &v)
+{
+    if (v.metaType() != QMetaType::fromType<QString>())
+        return false;
+    const QString s = v.toString();
+    return !s.isEmpty() && s.size() <= 512 && !s.contains(QChar(0));
+}
+
+// A byte string of UDisks2 (MountPoints, PreferredDevice): NUL-terminated on the bus.
+QByteArray unterminated(QByteArray bytes)
+{
+    while (bytes.endsWith('\0'))
+        bytes.chop(1);
+    return bytes;
+}
+
+// The LUKS device under the root file system, as UDisks2 has it: the object path of the block whose Encrypted interface opens
+// the block that the file system mounted at "/" lies on (Block.CryptoBackingDevice), and its /dev name in `device`. "" when
+// the root file system is not directly on a LUKS device (or UDisks2 does not know it: no error then), or when UDisks2 did not
+// answer (`error` holds why). LVM or another layer between the two is not followed.
+QString rootLuksDevice(BusCaller &bus, QString *error, QString *device)
+{
+    const BusReply r = bus.call(kUDisks, kUDisksPath, kObjectManager, QStringLiteral("GetManagedObjects"), {}, kReadMs);
+    if (!r.ok || r.args.isEmpty()) {
+        *error = r.ok ? QCoreApplication::translate("SystemBus", "empty reply") : r.error;
+        return QString();
+    }
+    const ManagedObjects objects = cast<ManagedObjects>(r.args.first());
+    for (auto it = objects.cbegin(); it != objects.cend(); ++it) {
+        if (!it.value().contains(kUDisksFilesystem))
+            continue;
+        bool root = false;
+        for (const QByteArray &mount : cast<QList<QByteArray>>(it.value().value(kUDisksFilesystem).value(QStringLiteral("MountPoints"))))
+            root = root || unterminated(mount) == QByteArray("/");
+        if (!root)
+            continue;
+        const QString backing = cast<QDBusObjectPath>(it.value().value(kUDisksBlock).value(QStringLiteral("CryptoBackingDevice"))).path();
+        if (backing.isEmpty() || backing == QLatin1String("/"))
+            return QString();
+        const auto luks = objects.constFind(QDBusObjectPath(backing));
+        if (luks == objects.cend() || !luks.value().contains(kUDisksEncrypted))
+            return QString();
+        *device = clean(QString::fromUtf8(unterminated(cast<QByteArray>(luks.value().value(kUDisksBlock).value(QStringLiteral("PreferredDevice"))))));
+        return backing;
+    }
+    return QString();
+}
+
+// What UDisks2 answers when the current passphrase opens no key slot (libblockdev: "No key available with this passphrase"),
+// said plainly; any other failure as the service gave it.
+QString passphraseFailure(const QString &error)
+{
+    if (error.contains(QLatin1String("No key available"), Qt::CaseInsensitive))
+        return QCoreApplication::translate("SystemBus", "the current password is not correct");
+    return fail(error);
+}
 } // namespace
 
 void registerBusTypes()
@@ -474,6 +548,14 @@ bool isReadOnlyCall(const QString &service, const QString &iface, const QString 
     if (service == kPermStore)
         return iface == kPermStore
             && (member == QLatin1String("Lookup") || member == QLatin1String("List") || member == QLatin1String("GetPermission"));
+    // Disk Encryption (ADR-0045): UDisks2's objects, to find the LUKS device under the root file system.
+    if (service == kUDisks)
+        return iface == kObjectManager && member == QLatin1String("GetManagedObjects");
+    // Fingerprint (ADR-0045): fprintd's reader and the user's enrolled fingers. Claim, an enrolment and a deletion are actions.
+    if (service == kFprint)
+        return (iface == kProps && (member == QLatin1String("Get") || member == QLatin1String("GetAll")))
+            || (iface == kFprintManager && member == QLatin1String("GetDefaultDevice"))
+            || (iface == kFprintDevice && member == QLatin1String("ListEnrolledFingers"));
     if (service != kNmService && service != kBluez)
         return false;
     if (iface == kProps)
@@ -1078,6 +1160,140 @@ QString hostNameFor(const QString &name)
     return out;
 }
 
+StateResult sharingState(BusCaller &bus)
+{
+    StateResult r;
+    // Read from the disk at each call (systemd does not cache it): the state right after an EnableUnitFiles, without a Reload.
+    const BusReply files = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("ListUnitFilesByPatterns"),
+                                    {QStringList(), QStringList{kSshdUnit}}, kReadMs);
+    if (!files.ok || files.args.isEmpty()) {
+        r.error = reasonOf(files.ok ? QCoreApplication::translate("SystemBus", "empty reply") : files.error);
+        return r;
+    }
+    QString state;
+    for (const auto &[path, fileState] : unitFiles(files.args.first())) {
+        if (path.section(QLatin1Char('/'), -1) == kSshdUnit)
+            state = clean(fileState);
+    }
+    const Props unit = state.isEmpty() ? Props() : allProperties(bus, kSystemd, kSshdPath, kSystemdUnit);
+    r.json = QJsonObject{{QStringLiteral("installed"), !state.isEmpty()},
+                         {QStringLiteral("unitFileState"), state},
+                         {QStringLiteral("active"), unit.ok && unit.map.value(QStringLiteral("ActiveState")).toString() == QLatin1String("active")}}; // i18n-ignore: a systemd state
+    r.ok = true;
+    return r;
+}
+
+StateResult diskState(BusCaller &bus)
+{
+    StateResult r;
+    QString error;
+    QString device;
+    const QString luks = rootLuksDevice(bus, &error, &device);
+    if (!error.isEmpty()) {
+        r.error = reasonOf(error);
+        return r;
+    }
+    r.json = QJsonObject{{QStringLiteral("encrypted"), !luks.isEmpty()}, {QStringLiteral("device"), device}};
+    r.ok = true;
+    return r;
+}
+
+bool isFingerName(const QString &s)
+{
+    static const QStringList names{QStringLiteral("left-thumb"),         QStringLiteral("left-index-finger"),  QStringLiteral("left-middle-finger"),
+                                   QStringLiteral("left-ring-finger"),   QStringLiteral("left-little-finger"), QStringLiteral("right-thumb"),
+                                   QStringLiteral("right-index-finger"), QStringLiteral("right-middle-finger"), QStringLiteral("right-ring-finger"),
+                                   QStringLiteral("right-little-finger")};
+    return names.contains(s);
+}
+
+StateResult fingerprintState(BusCaller &bus)
+{
+    StateResult r;
+    const BusReply device = bus.call(kFprint, kFprintManagerPath, kFprintManager, QStringLiteral("GetDefaultDevice"), {}, kReadMs);
+    if (!device.ok && device.error.startsWith(QLatin1String("net.reactivated.Fprint.Error.NoSuchDevice"))) {
+        r.json = QJsonObject{{QStringLiteral("present"), false}, {QStringLiteral("fingers"), QJsonArray()}};
+        r.ok = true;
+        return r;
+    }
+    if (!device.ok || device.args.isEmpty()) {
+        r.error = reasonOf(device.ok ? QCoreApplication::translate("SystemBus", "empty reply") : device.error);
+        return r;
+    }
+    const QString path = cast<QDBusObjectPath>(device.args.first()).path();
+    const Props p = allProperties(bus, kFprint, path, kFprintDevice);
+    const BusReply enrolled = bus.call(kFprint, path, kFprintDevice, QStringLiteral("ListEnrolledFingers"), {QString()}, kReadMs);
+    QJsonArray fingers;
+    if (enrolled.ok && !enrolled.args.isEmpty()) {
+        for (const QString &f : cast<QStringList>(enrolled.args.first())) {
+            if (isFingerName(f) && !fingers.contains(f))
+                fingers.append(f);
+        }
+    } else if (!enrolled.ok && !enrolled.error.startsWith(QLatin1String("net.reactivated.Fprint.Error.NoEnrolledPrints"))) {
+        r.error = reasonOf(enrolled.error);
+        return r;
+    }
+    r.json = QJsonObject{{QStringLiteral("present"), true},
+                         {QStringLiteral("name"), clean(p.map.value(QStringLiteral("name")))},
+                         {QStringLiteral("stages"), p.map.value(QStringLiteral("num-enroll-stages")).toInt()},
+                         {QStringLiteral("scanType"), clean(p.map.value(QStringLiteral("scan-type")))},
+                         {QStringLiteral("fingers"), fingers}};
+    r.ok = true;
+    return r;
+}
+
+QString enrollFinger(BusCaller &bus, const QString &finger, const std::function<void(const QString &)> &progress, const std::function<bool()> &stopped,
+                     int idleMs)
+{
+    if (!isFingerName(finger))
+        return QCoreApplication::translate("SystemBus", "invalid request");
+    const BusReply device = bus.call(kFprint, kFprintManagerPath, kFprintManager, QStringLiteral("GetDefaultDevice"), {}, kReadMs);
+    if (!device.ok || device.args.isEmpty())
+        return device.ok ? QCoreApplication::translate("SystemBus", "empty reply") : fail(device.error);
+    const QString path = cast<QDBusObjectPath>(device.args.first()).path();
+    // Listening first: the first status may come right after EnrollStart answers.
+    if (!bus.listen(kFprint, path, kFprintDevice, QStringLiteral("EnrollStatus")))
+        return QCoreApplication::translate("SystemBus", "the fingerprint reader cannot be followed");
+    const BusReply claim = bus.call(kFprint, path, kFprintDevice, QStringLiteral("Claim"), {QString()}, kPrivilegedMs);
+    if (!claim.ok)
+        return fail(claim.error);
+    QString result;
+    const BusReply start = bus.call(kFprint, path, kFprintDevice, QStringLiteral("EnrollStart"), {finger}, kPrivilegedMs);
+    if (!start.ok) {
+        result = fail(start.error);
+    } else {
+        QElapsedTimer idle;
+        idle.start();
+        while (true) {
+            if (stopped && stopped()) {
+                result = QStringLiteral("enroll-stopped");
+                break;
+            }
+            if (idle.elapsed() > idleMs) {
+                result = QCoreApplication::translate("SystemBus", "timed out");
+                break;
+            }
+            const BusReply s = bus.nextSignal(kEnrollSliceMs);
+            if (!s.ok || s.args.size() < 2)
+                continue;
+            // EnrollStatus(s result, b done): fprintd's own status names, passed on as they are (the page words them).
+            const QString status = clean(s.args.at(0)).left(64);
+            const bool done = s.args.at(1).toBool();
+            if (progress)
+                progress(status);
+            idle.restart();
+            if (done) {
+                result = status == QLatin1String("enroll-completed") ? QString() : status;
+                break;
+            }
+        }
+        // fprintd wants EnrollStop after the last status too; its own failure changes nothing for the person.
+        bus.call(kFprint, path, kFprintDevice, QStringLiteral("EnrollStop"), {}, kActMs);
+    }
+    bus.call(kFprint, path, kFprintDevice, QStringLiteral("Release"), {}, kActMs);
+    return result;
+}
+
 bool sessionAction(const QVariantMap &op)
 {
     const QString name = op.value(QStringLiteral("op")).toString();
@@ -1089,7 +1305,8 @@ bool privilegedAction(const QVariantMap &op)
     const QString name = op.value(QStringLiteral("op")).toString();
     return name.startsWith(QLatin1String("host.")) || name.startsWith(QLatin1String("time.")) || name == QLatin1String("wifi.forget")
         || name == QLatin1String("wifi.connectOpen") || name == QLatin1String("wifi.connectSecure") || name == QLatin1String("bt.pair")
-        || name == QLatin1String("power.chargeLimit") || name.startsWith(QLatin1String("printer."));
+        || name == QLatin1String("power.chargeLimit") || name.startsWith(QLatin1String("printer.")) || name == QLatin1String("ssh.enable")
+        || name == QLatin1String("disk.passphrase") || name.startsWith(QLatin1String("fprint."));
 }
 
 bool validAction(const QVariantMap &op)
@@ -1141,6 +1358,14 @@ bool validAction(const QVariantMap &op)
         const bool known = std::any_of(privacySelections().cbegin(), privacySelections().cend(), [&](const QPair<QString, QString> &t) { return t.first == kind; });
         return known && op.value(QStringLiteral("token")).metaType() == QMetaType::fromType<QString>() && isPortalToken(op.value(QStringLiteral("token")).toString());
     }
+    // ADR-0045: the unit, the disk and the reader are never the page's to name; nothing else may ride along.
+    if (name == QLatin1String("ssh.enable"))
+        return isBool(op.value(QStringLiteral("on"))) && op.size() == 2;
+    if (name == QLatin1String("disk.passphrase"))
+        return isDiskPassphrase(op.value(QStringLiteral("old"))) && isDiskPassphrase(op.value(QStringLiteral("new"))) && op.size() == 3;
+    if (name == QLatin1String("fprint.enroll") || name == QLatin1String("fprint.delete"))
+        return op.value(QStringLiteral("finger")).metaType() == QMetaType::fromType<QString>() && isFingerName(op.value(QStringLiteral("finger")).toString())
+            && op.size() == 2;
     return false;
 }
 
@@ -1306,6 +1531,54 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
             return r.ok || r.error.startsWith(QLatin1String("org.freedesktop.portal.Error.NotFound")) ? QString() : fail(r.error);
         }
     }
+    // Remote Login (ADR-0045 OC-7, OC-0.7): systemd's sshd.service, enabled and started, or stopped and disabled. systemd asks
+    // polkit for each call (manage-unit-files, then manage-units: two dialogs unless polkit keeps the first answer); no Reload
+    // (a third action): the unit file state is read from the disk (sharingState), and StartUnit starts the unit at once.
+    if (name == QLatin1String("ssh.enable")) {
+        const QStringList units{kSshdUnit};
+        if (op.value(QStringLiteral("on")).toBool()) {
+            const BusReply enable = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("EnableUnitFiles"), {units, false, false}, kPrivilegedMs);
+            if (!enable.ok)
+                return fail(enable.error);
+            const BusReply start = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("StartUnit"), {kSshdUnit, QStringLiteral("replace")}, kPrivilegedMs);
+            return start.ok ? QString() : fail(start.error);
+        }
+        const BusReply stop = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("StopUnit"), {kSshdUnit, QStringLiteral("replace")}, kPrivilegedMs);
+        if (!stop.ok)
+            return fail(stop.error);
+        const BusReply disable = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("DisableUnitFiles"), {units, false}, kPrivilegedMs);
+        return disable.ok ? QString() : fail(disable.error);
+    }
+    // Disk Encryption > Change Password… (ADR-0045 OC-8, OC-0.7): UDisks2 on the root file system's LUKS device, found here
+    // again; UDisks2 asks polkit (encrypted-change-passphrase-system) and needs the current passphrase to open a key slot.
+    if (name == QLatin1String("disk.passphrase")) {
+        QString error;
+        QString device;
+        const QString luks = rootLuksDevice(bus, &error, &device);
+        if (luks.isEmpty())
+            return error.isEmpty() ? QCoreApplication::translate("SystemBus", "the start-up disk is not encrypted") : fail(error);
+        const BusReply r = bus.call(kUDisks, luks, kUDisksEncrypted, QStringLiteral("ChangePassphrase"),
+                                    {op.value(QStringLiteral("old")).toString(), op.value(QStringLiteral("new")).toString(), QVariant::fromValue(QVariantMap())},
+                                    kPrivilegedMs);
+        return r.ok ? QString() : passphraseFailure(r.error);
+    }
+    // Fingerprint (ADR-0045 OC-6, OC-0.7): one enrolled finger deleted, the reader claimed for the call and released after.
+    if (name == QLatin1String("fprint.delete")) {
+        const BusReply device = bus.call(kFprint, kFprintManagerPath, kFprintManager, QStringLiteral("GetDefaultDevice"), {}, kReadMs);
+        if (!device.ok || device.args.isEmpty())
+            return device.ok ? QCoreApplication::translate("SystemBus", "empty reply") : fail(device.error);
+        const QString path = cast<QDBusObjectPath>(device.args.first()).path();
+        const BusReply claim = bus.call(kFprint, path, kFprintDevice, QStringLiteral("Claim"), {QString()}, kPrivilegedMs);
+        if (!claim.ok)
+            return fail(claim.error);
+        const BusReply r = bus.call(kFprint, path, kFprintDevice, QStringLiteral("DeleteEnrolledFinger"), {op.value(QStringLiteral("finger")).toString()}, kPrivilegedMs);
+        bus.call(kFprint, path, kFprintDevice, QStringLiteral("Release"), {}, kActMs);
+        return r.ok ? QString() : fail(r.error);
+    }
+    // Without the Backend's progress and stop (it runs enrollFinger itself): a status-less run, ended after kActMs of silence.
+    if (name == QLatin1String("fprint.enroll"))
+        return enrollFinger(bus, op.value(QStringLiteral("finger")).toString(), {}, {}, kActMs);
+
     if (name == QLatin1String("wifi.radio"))
         return setProperty(bus, kNmService, kNmPath, kNmIface, QStringLiteral("WirelessEnabled"), op.value(QStringLiteral("on")).toBool());
 
