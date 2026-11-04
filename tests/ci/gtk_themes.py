@@ -118,6 +118,48 @@ check(round(worst["Grassfield-green"], 2) == 2.32 and round(worst["Grassfield-gr
       f"the light green thin marks: 2.32:1 at worst on GTK's window, 2.46:1 under high contrast (pinned) "
       f"[{worst['Grassfield-green']:.2f}, {worst['Grassfield-green-hc']:.2f}]")
 
+# Traffic lights (ADR-0015 amendment 2026-11-04): every theme, -hc and dark included, styles the title buttons of GTK 3's header
+# bars and GTK 4's window controls with the plugin's own window.* tokens: the three colours, the grey of an inactive window
+# (backdrop) of its appearance, the pressed colours, the 14-pt disc, the glyph shown under the pointer on the group.
+with tempfile.TemporaryDirectory() as out:
+    gen.main(["gen-gtk-themes.py", out])
+    w = tokens["window"]
+    miss, shape = [], []
+    for name in names:
+        dark = name.endswith("-dark")
+        p = gen.palette(tokens, name.split("-")[1], dark)
+        grey = gen.value(w["inactiveLightDark" if dark else "inactiveLightLight"]).upper()
+        for path, version in (("gtk-3.0/gtk.css", 3), ("gtk-4.0/gtk.css", 4)):
+            text = (pathlib.Path(out) / name / path).read_text()
+            upper = text.upper()
+            want = [gen.value(w[k]).upper() for k in ("closeColor", "minimizeColor", "zoomColor")] + [grey] + \
+                   [p[f"light{k}Pressed"].upper() for k in ("Close", "Minimize", "Zoom")]
+            if not all(c in upper for c in want):
+                miss.append(f"{name} gtk{version}")
+            if version == 3:
+                needs = ["headerbar button.titlebutton.close", ".titlebar button.titlebutton.minimize",
+                         ".default-decoration button.titlebutton.maximize", "button.titlebutton.close:backdrop",
+                         "box:hover button.titlebutton.close"]
+            else:
+                needs = ["windowcontrols > button.close", "windowcontrols > button.minimize", "windowcontrols > button.maximize",
+                         "windowcontrols > button.close:backdrop", "windowcontrols:hover > button.close"]
+            needs += [f"min-width: {gen.value(w['lightDiameter'])}px", "border-radius: 50%", "background-clip: padding-box"]
+            if not all(n in text for n in needs):
+                shape.append(f"{name} gtk{version}")
+    check(not miss, f"every theme draws its title buttons in the plugin's light colours, grey and pressed from the tokens {miss}")
+    check(not shape, f"every theme styles close, minimize and maximize (GTK 3: header bar, .titlebar, .default-decoration; GTK 4: "
+                     f"windowcontrols) with their backdrop and group-hover states, a 14 px disc with a hit-slop border {shape}")
+    hc_ring = [n for n in names if ("-hc" in n) != ("inset 0 0 0 1px" in (pathlib.Path(out) / n / "gtk-4.0/gtk.css").read_text())]
+    check(not hc_ring, f"only the -hc themes ring a light in the text colour {hc_ring}")
+# The glyph on a light holds 3:1 on each (window.glyphOpacity, the plugin's: black at 0.62 over the light).
+glyph_low = []
+for k in ("closeColor", "minimizeColor", "zoomColor"):
+    light = gen.value(tokens["window"][k])
+    under = gen.mix(light, "#000000", gen.value(tokens["window"]["glyphOpacity"]))
+    if gen.contrast(light, under) < 3.0:
+        glyph_low.append(f"{k} {gen.contrast(light, under):.2f}")
+check(not glyph_low, f"the glyph holds 3:1 on each light {glyph_low}")
+
 # The text on the warm grounds (window, views, header bars): 7:1 or more in both appearances, as the shell's text.
 low_text = []
 for dark in (False, True):
