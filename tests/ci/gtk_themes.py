@@ -31,6 +31,25 @@ def check(ok, desc):
         failures += 1
 
 
+def specificity(selector):
+    """(ids, classes + pseudo-classes, types) of a compound selector chain; :not(x) counts as x."""
+    flat = re.sub(r":not\(([^)]*)\)", r"\1", selector)
+    ids = len(re.findall(r"#[\w-]+", flat))
+    classes = len(re.findall(r"\.[\w-]+|:[\w-]+|\[[^\]]*\]", flat))
+    types = len(re.findall(r"(?:^|[\s>+~])([a-zA-Z][\w-]*)", flat))
+    return (ids, classes, types)
+
+
+def needed_specificity(version, selector):
+    """What GTK's own stylesheets put against a light: GTK 3 Adwaita `button.titlebutton:not(.appmenu)` (0,2,1) and, in a default
+    decoration, `.default-decoration.titlebar:not(headerbar) button.titlebutton` (0,3,2); GTK 4 Default `button.image-button`
+    (0,1,1) and `windowcontrols button:hover > image` (0,1,3), `windowcontrols button > image` (0,0,3). A selector at or above
+    the figure wins (a tie by order)."""
+    if version == 3:
+        return (0, 3, 2) if ".default-decoration" in selector else (0, 2, 1)
+    return (0, 1, 3) if selector.rstrip().endswith("> image") else (0, 1, 1)
+
+
 tokens = gen.load()
 names = [name for name, _ in gen.themes(tokens)]
 check(len(names) == 36 and len(set(names)) == 36, f"36 distinct themes [{len(names)}]")
@@ -117,6 +136,66 @@ check(gen.contrast(green["accent"], green["window"]) < 3.0 and green["focus"] ==
 check(round(worst["Grassfield-green"], 2) == 2.32 and round(worst["Grassfield-green-hc"], 2) == 2.46,
       f"the light green thin marks: 2.32:1 at worst on GTK's window, 2.46:1 under high contrast (pinned) "
       f"[{worst['Grassfield-green']:.2f}, {worst['Grassfield-green-hc']:.2f}]")
+
+# Traffic lights (ADR-0015 amendment 2026-11-04): every theme, -hc and dark included, styles the title buttons of GTK 3's header
+# bars and GTK 4's window controls with the plugin's own window.* tokens: the three colours, the grey of an inactive window
+# (backdrop) of its appearance, the pressed colours, the 14-pt disc, the glyph shown under the pointer on the group.
+with tempfile.TemporaryDirectory() as out:
+    gen.main(["gen-gtk-themes.py", out])
+    w = tokens["window"]
+    miss, shape, low_spec = [], [], []
+    for name in names:
+        dark = name.endswith("-dark")
+        p = gen.palette(tokens, name.split("-")[1], dark)
+        grey = gen.value(w["inactiveLightDark" if dark else "inactiveLightLight"]).upper()
+        for path, version in (("gtk-3.0/gtk.css", 3), ("gtk-4.0/gtk.css", 4)):
+            text = (pathlib.Path(out) / name / path).read_text()
+            upper = text.upper()
+            want = [gen.value(w[k]).upper() for k in ("closeColor", "minimizeColor", "zoomColor")] + [grey] + \
+                   [p[f"light{k}Pressed"].upper() for k in ("Close", "Minimize", "Zoom")]
+            if not all(c in upper for c in want):
+                miss.append(f"{name} gtk{version}")
+            block = text[text.index("/* Traffic lights"):text.index("@define-color theme_selected_bg_color")]
+            if version == 3:
+                needs = ["headerbar button.titlebutton.close", ".default-decoration.titlebar button.titlebutton.minimize",
+                         "button.titlebutton.maximize:backdrop", "button.titlebutton.close:hover image",
+                         "button.titlebutton.close:hover:active:backdrop"]
+                # GTK 3 never sets :hover on the box that holds the buttons (measured in nested, Evince): no state may wait for it.
+                if "box:hover" in text:
+                    shape.append(f"{name} gtk3 hangs a state on box:hover")
+            else:
+                needs = ["windowcontrols > button.image-button.close", "windowcontrols > button.image-button.minimize > image",
+                         "windowcontrols > button.image-button.maximize:backdrop > image", "windowcontrols:hover > button.image-button.close"]
+            needs += [f"min-width: {gen.value(w['lightDiameter'])}px", "border-radius: 50%"]
+            if not all(n in text for n in needs):
+                shape.append(f"{name} gtk{version}")
+            # Specificity: each rule outranks GTK's own that reaches the same node (read from GTK 3.24.52 Adwaita and GTK 4.24.1
+            # Default): a tie is won by the later rule, ours come after the @import.
+            if text.index("@import") > text.index("/* Traffic lights"):
+                shape.append(f"{name} gtk{version} lights before the import")
+            for sels, _body in re.findall(r"([^{}]+)\{([^}]*)\}", block):
+                for sel in (s.strip() for s in sels.split(",")):
+                    if "button" not in sel:
+                        continue
+                    want = needed_specificity(version, sel)
+                    if specificity(sel) < want:
+                        low_spec.append(f"{name} gtk{version} {sel} {specificity(sel)} < {want}")
+    check(not miss, f"every theme draws its title buttons in the plugin's light colours, grey and pressed from the tokens {miss}")
+    check(not shape, f"every theme styles close, minimize and maximize (GTK 3: header bar, .default-decoration, per-button states, "
+                     f"never box:hover; GTK 4: windowcontrols > button.image-button) with backdrop, hover and pressed, a 14 px disc, "
+                     f"after the import {shape[:3]}")
+    check(not low_spec, f"every light rule outranks the GTK rule that reaches the same node (Default's .image-button, Adwaita's "
+                        f"default-decoration rule) {low_spec[:3]}")
+    hc_ring = [n for n in names if ("-hc" in n) != ("inset 0 0 0 1px" in (pathlib.Path(out) / n / "gtk-4.0/gtk.css").read_text())]
+    check(not hc_ring, f"only the -hc themes ring a light in the text colour {hc_ring}")
+# The glyph on a light holds 3:1 on each (window.glyphOpacity, the plugin's: black at 0.62 over the light).
+glyph_low = []
+for k in ("closeColor", "minimizeColor", "zoomColor"):
+    light = gen.value(tokens["window"][k])
+    under = gen.mix(light, "#000000", gen.value(tokens["window"]["glyphOpacity"]))
+    if gen.contrast(light, under) < 3.0:
+        glyph_low.append(f"{k} {gen.contrast(light, under):.2f}")
+check(not glyph_low, f"the glyph holds 3:1 on each light {glyph_low}")
 
 # The text on the warm grounds (window, views, header bars): 7:1 or more in both appearances, as the shell's text.
 low_text = []

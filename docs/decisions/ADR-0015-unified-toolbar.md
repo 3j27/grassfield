@@ -871,3 +871,62 @@ double-click with the default and with zoom, Window > Zoom, the light under its 
 no second request, and Nautilus's own buttons do nothing, in that run with Hyprland's own maximize as well (the run's
 first check, the desktop portal refused on the private bus, failed too): an environment matter of that test, followed
 there, not of this amendment.
+
+## Amendment 2026-11-04: one set of traffic lights on third-party windows: Firefox joins the list, the GTK themes draw the lights
+Owner's rc1-22 screenshots from a second machine: Firefox showed the plugin's bar over its own tab strip with Firefox's own
+grey controls (two bars, two sets); Chromium, tagged client chrome, showed plain grey glyphs, no lights ("Chrome has no
+traffic lights"). macOS model: one set per window, top left, close red, minimize yellow, zoom green, glyphs under the
+pointer, grey when inactive; browsers draw these lights in their tab strip.
+
+| Question | Choice | Why |
+|---|---|---|
+| Firefox | `firefox` and `org.mozilla.firefox` (Flatpak) join `gf-client-chrome-third-party` (and both maximize negations) | The owner's screenshot shows Firefox drawing its own controls with the session's GTK button layout. That its own close, minimize and zoom work here is NOT VERIFIED (not installed on the dev machine, not downloaded); the test stands a foot window with its app id in for the rule only. |
+| Google Chrome (`google-chrome`) | left out | No evidence of its Wayland app id on this machine (only Chromium's `chromium` is seen). Add it once the owner shows a `hyprctl clients` class. |
+| Lights on GTK client-side buttons | `ui/tools/gen-gtk-themes.py` styles them in all 36 themes (-hc and -dark included) from the plugin's `window.*` tokens: GTK 3 `headerbar`, `.titlebar`, `.default-decoration` `button.titlebutton.close/.minimize/.maximize`; GTK 4 `windowcontrols > button.*` | Same 14 pt disc at pitch 23, colours, inactive grey (backdrop), pressed colour (window.pressedOpacity), glyph (black at window.glyphOpacity, shown while the pointer is over the group; GTK 3: on the hovered light, see Limits), hit slop around the disc, first light centre at 16 (window.titlebarLightInset). -hc adds a ring in the text colour and an opaque glyph. Close glyph is GTK's own icon; minus and plus are drawn as bars (GTK has no plus for zoom). |
+
+Limits (read in source and measured nested at 1.25 with the plugin, `tests/compositor/gtk_lights.sh`):
+- GTK 3 never sets `:hover` on the box that holds the title buttons (measured in Evince: the rules first hung on `box:hover`,
+  and no glyph appeared, an inactive window's lights stayed grey under the pointer, a held close kept its colour). So in
+  GTK 3 (Evince, header-bar apps) the group is not one: the hovered light alone shows its colour (also in an inactive
+  window) and its glyph, and the pressed colour is its own; the other two keep their state. GTK 4 (Default, no libadwaita)
+  has `:hover` on the ancestors: the glyphs of all three show with the pointer over the group, as the plugin draws them.
+  Chromium (GTK appearance) draws the glyph of the hovered light only (its own hover model).
+- The lights outrank GTK's own rules: every rule names its light (`.close`, `.minimize`, `.maximize`) and GTK 4's
+  `.image-button`, above Default's `button.image-button` (0,1,1) and `windowcontrols button:hover > image` (0,1,3, its own hover
+  disc), Adwaita's `button.titlebutton:not(.appmenu)` (0,2,1) and `.default-decoration.titlebar:not(headerbar) button.titlebutton`
+  (0,3,2). `tests/ci/gtk_themes.py` computes the specificities and fails under them.
+- Geometry from the plugin's tokens: disc 14 pt, pitch 23, first centre at `window.titlebarLightInset` + 7 = 16 from the
+  left edge (the plugin's titlebar style, not the 26 of its unified toolbar). A header bar is taller (46 pt) than the plugin's
+  bar (32 pt): the lights are centred vertically in the bar, as macOS centres them in its toolbar. The 14 pt disc is 17.5
+  device px at 1.25; the plugin rounds to 18, GTK and Chromium draw 17 (measured with the same colour threshold).
+- libadwaita apps (Nautilus, most GNOME apps) do not read `gtk-theme` (ADR-0035 D-8), so the themes cannot give them lights;
+  GTK has no system-wide user-CSS location (only `~/.config/gtk-4.0/gtk.css`, the user's file, which Grassfield does not
+  write). Their buttons keep libadwaita's look and the session's layout. Owner decision needed if lights there are wanted.
+- Chromium: a fresh profile (what Omarchy's seed `/usr/lib/chromium/initial_preferences` gives: no theme) is in the Classic
+  appearance and draws plain grey buttons, the owner's second screenshot (measured: no light in the capture). With the GTK
+  appearance (pref `extensions.theme.system_theme` 1, set in a throwaway profile) it asks GTK and draws our lights. No policy
+  or command-line flag selects the appearance. User-level, non-root, supported: chrome://settings/appearance > Theme > GTK, once.
+  `initial_preferences` is in /usr/lib/chromium, owned by Omarchy and rewritten by its migrations (root); Grassfield does not
+  edit a Chromium profile. No supported default for new users exists from Grassfield.
+- Firefox with "Title Bar" on (Customize Toolbar) draws no controls, and the tagged window gets no plugin bar: a window with
+  none (checked with a stand-in). Accepted for Firefox, whose default is its own frame (the owner's screenshot); the list rule has
+  one entry on the owner's evidence only. A user who turns "Title Bar" on turns it off again for its controls, or the list drops
+  Firefox.
+
+Measured (device px, 1.25, light variant; `.dev/gtk-lights`; the dark variant gives the same figures):
+
+| | disc | first centre x | pitch | centre y | glyph on hover | inactive | pressed (close) |
+|---|---|---|---|---|---|---|---|
+| plugin (foot) | 18 | 20.0 | 29.0 | 20.0 (bar 40) | all three | grey | |
+| GTK 3 fixture | 17 | 20.0 | 28.5 | 28.5 (bar 57.5) | hovered one | grey | 119 px of #BA2E42-ish |
+| GTK 4 fixture | 17 | 20.0 | 28.5 | 28.5 | all three | grey | 113 px |
+| Evince (GTK 3) | 17 | 20.0 | 28.5 | 28.5 | hovered one | grey | 119 px |
+| Chromium, GTK appearance | 17 | 19.5 | 28.0 | 25.5 | hovered one | grey | 153 px |
+| Chromium, Classic | no lights | | | | | | |
+
+NOT VERIFIED: Firefox (its own close, minimize and zoom, and their look with our theme: the owner checks on the second
+machine); Nautilus and other libadwaita apps (no lights by design); Google Chrome.
+
+Tests: `tests/ci/gtk_themes.py` (every theme: token colours, states, selectors, specificity, no `box:hover`, size),
+`tests/shell/client_chrome_rules.sh` (Firefox in the list, google-chrome not), `tests/compositor/third_party_chrome.sh` (a
+stand-in window for the Firefox rule), `tests/compositor/gtk_lights.sh` (nested: the measures above).
