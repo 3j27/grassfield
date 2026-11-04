@@ -459,6 +459,7 @@
  {"path": "tests/shell/autostart_write.sh", "layer": "logic"},
  {"path": "tests/shell/check_schema_pattern.sh", "layer": "logic"},
  {"path": "tests/shell/client_chrome_rules.sh", "layer": "logic"},
+ {"path": "tests/shell/app_rules.sh", "layer": "logic"},
  {"path": "tests/shell/compositor_rebuild.sh", "layer": "logic"},
  {"path": "tests/shell/cursor_env.sh", "layer": "logic"},
  {"path": "tests/shell/session_end.sh", "layer": "logic"},
