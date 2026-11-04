@@ -60,7 +60,7 @@ Window {
         {id: "battery", group: 1, title: qsTr("Battery"), icon: "battery", keywords: qsTr("battery power low power mode energy health charging charge limit")},
         {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about software update storage date time language region login items startup")},
         {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("vision physical motor zoom display motion keyboard")},
-        {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint")},
+        {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint terminal")},
         {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins")},
         {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
         {id: "menubar", group: 2, title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
@@ -940,6 +940,8 @@ Window {
         id: appearancePage
         AppearancePage {
             store: cfg
+            backend: root.backend
+            system: sys
         }
     }
 

@@ -1474,6 +1474,26 @@
         <translation>Effets de verre</translation>
     </message>
     <message>
+        <source>Terminal and Developer Apps</source>
+        <translation>Terminal et apps de développement</translation>
+    </message>
+    <message>
+        <source>The Omarchy session uses the same theme and its wallpaper.</source>
+        <translation>La session Omarchy utilise le même thème et son fond d’écran.</translation>
+    </message>
+    <message>
+        <source>Match Appearance</source>
+        <translation>Suivre l’apparence</translation>
+    </message>
+    <message>
+        <source>Light Theme</source>
+        <translation>Thème clair</translation>
+    </message>
+    <message>
+        <source>Dark Theme</source>
+        <translation>Thème sombre</translation>
+    </message>
+    <message>
         <source>Default</source>
         <translation>Par défaut</translation>
     </message>
@@ -7791,10 +7811,6 @@
         <translation>Apparence</translation>
     </message>
     <message>
-        <source>dark light theme transparency material motion icons tint</source>
-        <translation>sombre clair thème transparence matière animation apparence icônes teinte</translation>
-    </message>
-    <message>
         <source>Wallpaper</source>
         <translation>Fond d’écran</translation>
     </message>
@@ -7881,6 +7897,10 @@
     <message>
         <source>vision physical motor zoom display motion keyboard</source>
         <translation>vue physique motricité zoom affichage mouvement clavier</translation>
+    </message>
+    <message>
+        <source>dark light theme transparency material motion icons tint terminal</source>
+        <translation>sombre clair thème transparence matière animation apparence icônes teinte terminal développement</translation>
     </message>
     <message>
         <source>dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins</source>

@@ -66,6 +66,10 @@ Singleton {
 
     readonly property string accentColor: store.accentColor
     readonly property string accentHighlight: store.accentHighlight
+    // Terminal and Developer Apps (ADR-0045 OC-11): read by TerminalTheme.qml.
+    readonly property bool terminalMatchAppearance: store.terminalMatchAppearance
+    readonly property string terminalLightTheme: store.terminalLightTheme
+    readonly property string terminalDarkTheme: store.terminalDarkTheme
     readonly property string keyboardShortcutStyle: store.keyboardShortcutStyle
     readonly property bool keyboardShowInputMenu: store.keyboardShowInputMenu
     readonly property string regionFormats: store.regionFormats

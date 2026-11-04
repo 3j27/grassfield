@@ -164,12 +164,49 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   it out of the Grassfield session: no `HYPRLAND_INSTANCE_SIGNATURE` (no reload of Grassfield's Hyprland), dconf writes to
   Omarchy's own database (not Grassfield's isolated one, ADR-0017), the omarchy-shims first in PATH. Omarchy's theme is shared:
   the Omarchy session gets the same theme and background (said in the pane).
+- **Implementation note (2026-11-04).** Keys `terminal.matchAppearance|lightTheme|darkTheme` (defaults off, "Catppuccin Latte",
+  "Tokyo Night"): `appearance` is a string in contract version 1, so `appearance.terminal*` cannot exist (the reason `accent.*`
+  exists). `shell/services/TerminalTheme.qml` runs `grassfield-terminal-theme light|dark` in a `systemd-run --user --scope`
+  of its own (Omarchy's work never counts against the shell's CPU and memory limits, and a shell restart does not cut it), one
+  run at a time, never in a dev session. What `omarchy-theme-set` 4.0.6 does from a Grassfield session, and what the helper
+  makes of it: its theme staging, `theme.name`, generated files and background symlink are Omarchy's state, read by nothing of
+  Grassfield (shared on purpose); its calls to Omarchy's shell (`applyTheme`, `themeTransition`, the switcher's preload) reach
+  the omarchy-shims stand-in, first in PATH and followed by Omarchy's bin directory so that the login shells it starts for its
+  app hooks (`bash -lc`) cannot put that directory before it, and are refused; before the omarchy-shims in its PATH comes a
+  private folder the helper makes afresh at each run (`$XDG_RUNTIME_DIR/grassfield/terminal-theme-bin`, 0700, refused when
+  it is a link or another user's) with two stand-ins: `hyprctl`, which fails doing nothing, so `omarchy-restart-hyprctl`'s
+  `hyprctl reload` (the chain's only hyprctl call; a user's own `theme-set` hook that calls hyprctl gets the same) never
+  reloads Grassfield's Hyprland, and `HYPRLAND_INSTANCE_SIGNATURE` is removed as well; `omarchy-theme-set-gnome`'s gsettings writes (colour scheme, GTK theme, icon theme) go through
+  dconf's default profile to the user database, exactly as in the Omarchy session: ADR-0017's profile shares that writable
+  database and only adds read-only defaults with a locked icon theme, so "Omarchy's own database" is the user database
+  reached without that lock, and the Grassfield look stays its own (icon theme locked, GTK appearance from Grassfield's portal,
+  ADR-0035 D-8; an instant of Omarchy's colour scheme is ADR-0035 decision 2b-13); the terminal reloads (Alacritty's touch,
+  Kitty, Ghostty, btop, opencode, Helix signals by name, foot and tmux OSC) and the theme files of Pi, Claude Code, Hermes, T3
+  Code, VS Code/VSCodium/Cursor, Obsidian and the RGB keyboard are the feature itself; the Chromium colour policy
+  (`omarchy-theme-set-browser-policy`) is written through Omarchy's passwordless sudoers rule (`sudo -n -l -l`, then `sudo`
+  only after that listing shows the NOPASSWD grant; no `-A` in the chain, `SUDO_ASKPASS` removed, stdin `/dev/null`), and
+  where that rule does not apply the script's `exec pkexec` finds the second stand-in, `pkexec`, which fails as if absent
+  (127): no administrator password sheet ever appears, and Chromium's colour is left as it was (a known limitation:
+  Chromium's colour follows only with Omarchy's passwordless rule, which Omarchy installs); `omarchy-notification-send` "No background was
+  found for theme" (a theme without a background, none of the 22 shipped) is a Grassfield banner (audit O6); the user's own
+  `theme-set` hooks run in the same sanitised environment. Nothing restarts or signals grassfield-shell (the signals name
+  kitty, ghostty, btop, opencode, helix and tmux panes). The helper also: never runs when the theme is already current, waits
+  for its lock, refuses root, skips silently without Omarchy's commands, refuses without the stand-ins or when its private
+  folder is a link or another user's; stdin /dev/null, a process session of its own. Settings: `omarchy-theme-list` in the read-only query allowlist.
 
 ### OC-12 Per-application window rules (priority 3)
 - `config/hypr/grassfield/apps.lua`: Omarchy's `default/hypr/apps/*.lua` rules that still hold in a floating-first session
   (Steam, JetBrains, QEMU, Telegram, LocalSend, DaVinci Resolve, Moonlight, GeForce Now, RetroArch, Battle.net, webcam overlay,
   picture-in-picture where Grassfield has none), each citing its source file, the upstream files pinned. Tiling-only rules are
   not ported.
+- **Implementation note (2026-11-04).** 13 rules from battlenet, davinci-resolve, geforce, moonlight, retroarch, steam,
+  telegram, pip and webcam-overlay, loaded by `core.lua` after `privacy.lua` (both sessions, optional). Per app, what holds:
+  effects that change behaviour (installer frame, Resolve's dialog focus, `idle_inhibit = "fullscreen"`, Telegram's
+  `focus_on_activate = false`, PiP `pin` and `keep_aspect_ratio`, the camera overlay's corner); not ported: `float`/`center`
+  (every window), application sizes (placement.lua, macOS model), `fullscreen` at map, Omarchy's look, JetBrains'
+  `no_follow_mouse` (Grassfield is click-to-focus), QEMU and LocalSend (nothing left once those go), Hermes' HUD, Meet's PiP,
+  and the PiP size and corner (Grassfield keeps a PiP window's own size). `tests/shell/app_rules.sh` holds each rule to the
+  cited file's text.
 
 ### OC-13 LocalSend (priority 3)
 - Files: "Send with LocalSend…" in the Share menu and the context menu of the selection, when `localsend` exists: Omarchy's

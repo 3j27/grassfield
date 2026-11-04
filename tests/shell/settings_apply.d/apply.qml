@@ -115,6 +115,10 @@ ShellRoot {
         ["accent.color", "graphite", () => Settings.accentColor === "graphite" && Appearance.colors.accent.toString().toLowerCase() === String(Tokens.colorAccentLight.graphite).toLowerCase()],
         ["accent.highlight", "pink", () => Settings.accentHighlight === "pink" && Appearance.highlight.toString().toLowerCase() === String(Tokens.colorAccentLight.pink).toLowerCase()],
         ["accent.highlight", "neon", () => Settings.accentHighlight === "automatic" && Appearance.highlight.toString().toLowerCase() === String(Appearance.colors.accent).toLowerCase()],
+        // Terminal and Developer Apps (ADR-0045 OC-11): the switch and the two Omarchy theme names; a name with a slash is refused.
+        ["terminal.matchAppearance", true, () => Settings.terminalMatchAppearance === true],
+        ["terminal.lightTheme", "Rose Pine", () => Settings.terminalLightTheme === "Rose Pine"],
+        ["terminal.darkTheme", "../nord", () => Settings.terminalDarkTheme === "Tokyo Night"],
         ["icons.mode", "tinted", () => Settings.iconMode === "tinted"],
         ["icons.tint", "#8e5bea", () => Settings.iconTint === "#8e5bea"],
         ["icons.folderColor", "#8e5bea", () => Settings.folderColor === "#8e5bea"],

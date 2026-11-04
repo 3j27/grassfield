@@ -261,6 +261,11 @@ Scope {
     readonly property bool menubarClockShowSeconds: read("menubar.clockShowSeconds")
     readonly property string accentColor: read("accent.color")
     readonly property string accentHighlight: read("accent.highlight")
+    // Settings > Appearance > Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme follows the effective appearance
+    // (services/TerminalTheme.qml runs grassfield-terminal-theme); the two Omarchy theme names, as omarchy-theme-list prints them.
+    readonly property bool terminalMatchAppearance: read("terminal.matchAppearance")
+    readonly property string terminalLightTheme: read("terminal.lightTheme")
+    readonly property string terminalDarkTheme: read("terminal.darkTheme")
     // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
     readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
     // Settings > Keyboard > Input Sources: the Input menu of the menu bar (it exists from two input sources on).

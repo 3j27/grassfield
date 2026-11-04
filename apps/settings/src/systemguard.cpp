@@ -128,6 +128,10 @@ bool isReadOnlyQuery(const QStringList &argv)
     // Battery: the power profiles this machine offers (Omarchy's list of power-profiles-daemon's).
     if (program == QLatin1String("omarchy-powerprofiles-list"))
         return args.isEmpty();
+    // Appearance > Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme names (two `find` listings of its theme
+    // folders, sorted and capitalised; it writes nothing).
+    if (program == QLatin1String("omarchy-theme-list"))
+        return args.isEmpty();
     // Printers (ADR-0030): the queues with their state, description and location; the default (the user's first); the device
     // URIs; what cupsd and DNS-SD find (Add Printer); one queue's options (its paper sizes). `lpoptions -p <queue> -l` lists,
     // it changes nothing; any other lpoptions form may write and is an action.
