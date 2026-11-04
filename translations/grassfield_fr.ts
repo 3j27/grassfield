@@ -2962,6 +2962,10 @@
         <translation>Espace</translation>
     </message>
     <message>
+        <source>Share…</source>
+        <translation>Partager…</translation>
+    </message>
+    <message>
         <source>Show in Enclosing Folder</source>
         <translation>Afficher dans le dossier parent</translation>
     </message>
@@ -3034,6 +3038,10 @@
         <translation>Envoyer avec LocalSend…</translation>
     </message>
     <message>
+        <source>Not sent: a development session doesn’t start LocalSend (it would open on the real desktop).</source>
+        <translation>Non envoyé&#xa0;: une session de développement ne démarre pas LocalSend (il s’ouvrirait sur le vrai bureau).</translation>
+    </message>
+    <message>
         <source>Searching…</source>
         <translation>Recherche…</translation>
     </message>
@@ -3092,10 +3100,6 @@
     <message>
         <source>Ctrl+Alt+C</source>
         <translation>Ctrl+Alt+C</translation>
-    </message>
-    <message>
-        <source>Share</source>
-        <translation>Partager</translation>
     </message>
     <message>
         <source>Services</source>
@@ -5528,6 +5532,10 @@
     <message>
         <source>These items can’t be sent with LocalSend: only files and folders on this computer can.</source>
         <translation>Ces éléments ne peuvent pas être envoyés avec LocalSend&#xa0;: seuls les fichiers et dossiers de cet ordinateur peuvent l’être.</translation>
+    </message>
+    <message>
+        <source>Not sent: a development session doesn’t start LocalSend (it would open on the real desktop).</source>
+        <translation>Non envoyé&#xa0;: une session de développement ne démarre pas LocalSend (il s’ouvrirait sur le vrai bureau).</translation>
     </message>
     <message>
         <source>LocalSend isn’t installed.</source>
@@ -16096,7 +16104,7 @@
     </message>
     <message>
         <source>H:%1 L:%2</source>
-        <translation>Max. %1 Min. %2</translation>
+        <translation>Max.&#xa0;: %1 Min.&#xa0;: %2</translation>
     </message>
     <message>
         <source>Weather unavailable</source>

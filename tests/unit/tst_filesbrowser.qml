@@ -605,9 +605,10 @@ TestCase {
         folder.selected = [];
     }
 
-    // Share > Send with LocalSend… (ADR-0045 OC-13): with LocalSend installed the item menu has a Share submenu (after Copy,
-    // where Finder puts it) whose first item sends the local selection with Omarchy's invocation, and the toolbar has the Share
-    // button with the same menu; the Applications location sends nothing; without LocalSend there is no Share at all.
+    // Share > Send with LocalSend… (ADR-0045 OC-13): with LocalSend installed the item menu has Share… (after Copy, where
+    // Finder 13 and later puts it), which opens the toolbar Share button's menu where the item menu was; its first item sends
+    // the local selection with Omarchy's invocation; the Applications location sends nothing; without LocalSend there is no
+    // Share at all.
     function test_shareSendsWithLocalSend() {
         const files = test.openFiles(false);
         const browser = files.windows[0];
@@ -616,18 +617,32 @@ TestCase {
         folder.isApplications = false;
         folder.selected = [0];
         fakeApp.localSendInstalled = true;
+        // A real session first: the stand-in is a development session by default.
+        fakeApp.devSession = false;
         const items = tab.itemMenu(folder);
         const ids = items.map(i => i.id ?? "-");
         const share = items.find(i => i.id === "share");
-        verify(share !== undefined, "a Share submenu");
+        verify(share !== undefined, "Share…");
         verify(ids.indexOf("share") > ids.indexOf("copyPath"), "after Copy as Pathname");
-        compare(share.text, "Share");
-        compare(share.submenu[0].id, "localsend", "LocalSend first");
-        compare(share.submenu[0].text, "Send with LocalSend…");
-        verify(share.submenu[0].enabled, "enabled for a local file");
-        compare(JSON.stringify(tab.shareMenu(folder)), JSON.stringify(share.submenu), "the toolbar's Share menu is the same");
+        compare(share.text, "Share…");
+        compare(share.submenu, undefined, "no submenu: it opens the Share menu");
+        const menu = tab.shareMenu(folder);
+        compare(menu[0].id, "localsend", "LocalSend first");
+        compare(menu[0].text, "Send with LocalSend…");
+        verify(menu[0].enabled, "enabled for a local file");
+        // The item menu at a point, then Share… from it: the Share menu opens at the same point, its choice sends.
+        tab.contextMenu(folder, 0, 120, 90, false);
+        verify(browser.menuLayer.visible, "the item menu is open");
+        const handler = browser.menuLayer.handler;
+        browser.menuLayer.close();
+        handler("share");
+        verify(browser.menuLayer.visible, "Share… opens the Share menu");
+        compare(browser.menuLayer.anchorX, 120, "where the item menu was");
+        compare(browser.menuLayer.anchorY, 90);
         fakeApp.localSent = [];
-        tab.runAction("localsend", folder);
+        const shareHandler = browser.menuLayer.handler;
+        browser.menuLayer.close();
+        shareHandler("localsend");
         compare(fakeApp.localSent.length, 1, "one send");
         compare(fakeApp.localSent[0], ["systemd-run", "--user", "--quiet", "--collect", "localsend", "--headless", "send", "/sandbox"]);
         verify(browser.shareShown, "the toolbar's Share button shows");
@@ -637,6 +652,15 @@ TestCase {
         tab.runAction("localsend", folder);
         compare(fakeApp.localSent, [], "nothing sent from Applications");
         folder.isApplications = false;
+        // A development session (security review LOW 2): the item is there, dimmed; a send is refused in the banner and
+        // FilesApp is never asked (systemd-run --user would open LocalSend on the owner's real desktop).
+        fakeApp.devSession = true;
+        compare(tab.shareMenu(folder)[0].enabled, false, "dimmed in a development session");
+        verify(tab.itemMenu(folder).find(i => i.id === "share") !== undefined, "Share… still shown");
+        browser.bannerText = "";
+        tab.runAction("localsend", folder);
+        compare(fakeApp.localSent, [], "nothing sent from a development session");
+        verify(browser.bannerText.indexOf("development session") >= 0, browser.bannerText);
         fakeApp.localSendInstalled = false;
         verify(tab.itemMenu(folder).find(i => i.id === "share") === undefined, "nothing to share with: no Share");
         compare(tab.shareMenu(folder), [], "and an empty Share menu");

@@ -59,5 +59,12 @@ TestCase {
         compare(ShareLogic.menuItems(false, true, "Send with LocalSend…"), [], "nothing to share with");
         compare(ShareLogic.menuItems(true, true, "Send with LocalSend…"), [{id: "localsend", text: "Send with LocalSend…", enabled: true}]);
         compare(ShareLogic.menuItems(true, false, "Send with LocalSend…")[0].enabled, false, "dimmed for a selection LocalSend cannot take");
+        // A development session (security review LOW 2): shown, dimmed, never sent (systemd-run --user would open LocalSend on
+        // the owner's real desktop).
+        compare(ShareLogic.menuItems(true, true, "Send with LocalSend…", true), [{id: "localsend", text: "Send with LocalSend…", enabled: false}]);
+        compare(ShareLogic.menuItems(true, true, "Send with LocalSend…", false)[0].enabled, true);
+        verify(ShareLogic.maySend(["file:///home/u/a.txt"], null, false));
+        verify(!ShareLogic.maySend(["file:///home/u/a.txt"], null, true), "never in a development session");
+        verify(!ShareLogic.maySend(["trash:/a.txt"], null, false));
     }
 }

@@ -5,14 +5,18 @@ import qs.services
 import qs.widgets
 import "../../Weather.js" as WeatherLogic
 
-// Weather widget (ADR-0045 OC-14), macOS 27's layout on Grassfield's widget glass. Small: the place (and the location arrow
-// when wttr.in found it from the IP address), the current temperature large, then at the bottom the condition's symbol, its
-// name and the day's high and low. Medium: the same place and temperature at the left, the symbol, condition and high and
-// low at the right, and under them a row of Now and the next forecast hours (wttr.in gives one every three hours), each
-// with its symbol and temperature. The data is the shared WeatherSampler's (wttr.in's report for Omarchy's saved place);
-// this widget only shows it and, while it is shown and placed (never as a gallery preview), counts as one of its users.
-// Failure: "Weather unavailable" and the last good values in the secondary colour. °F for the formats of the United States
-// (region.formats, else the session's), °C everywhere else. Texts go through qsTranslate with this file's context, as the
+// Weather widget (ADR-0045 OC-14), macOS 27's layout on the weather's own sky, as macOS draws it: a vertical gradient over
+// the whole tile, clipped to its corners (Tokens.widgetRadius), day, night or grey (Weather.sky: the condition and the
+// place's sunrise and sunset), with the dark palette's text colour for every text and glyph on it (A2: 4.5:1 on each sky,
+// tests/visual/test_contrast_tokens.py, backdrop weather-sky). On the desktop the host's dim (saturation and brightness
+// while a window has the focus) applies to the sky with the rest of the tile. Small: the place (and the filled location
+// arrow when wttr.in found it from the IP address), the current temperature large and light, then at the bottom the
+// condition's symbol, its name and the day's high and low. Medium: the same place and temperature at the left, the symbol,
+// condition and high and low at the right, and under them a row of Now and the next forecast slots (wttr.in gives one
+// every three hours), each with its symbol and temperature. The data is the shared WeatherSampler's (wttr.in's report for
+// Omarchy's saved place); this widget only shows it and, while it is shown and placed (never as a gallery preview), counts
+// as one of its users. Failure: "Weather unavailable" and the last good values on the neutral grey sky. °F for the formats
+// of the United States (region.formats, else the session's), °C everywhere else. Texts go through qsTranslate with this file's context, as the
 // Clock does (Registry.qml: qsTr stayed English in the first moments of a French session).
 WidgetBase {
     id: root
@@ -45,7 +49,19 @@ WidgetBase {
             out.push({label: root.hourLabel(h.minutes), symbol: WeatherLogic.condition(h.code, h.night).symbol, temp: WeatherLogic.tempText(WeatherLogic.pick(h, fahrenheit))});
         return out;
     }
-    readonly property color valueColor: greyed ? Appearance.colors.textSecondary : Appearance.colors.text
+    // The sky: the condition's by day, night's after sunset, grey when unavailable; before any report, the shell's own hour.
+    readonly property string skyName: {
+        if (root.greyed)
+            return WeatherLogic.sky("unknown", false, true);
+        if (root.report)
+            return WeatherLogic.sky(root.now.key, root.current.night, false);
+        const d = new Date();
+        return WeatherLogic.sky("clear", WeatherLogic.nightByHour(d.getHours() * 60 + d.getMinutes()), false);
+    }
+    readonly property color skyTop: skyName === "night" ? Tokens.widgetWeatherSkyNightTop : skyName === "day" ? Tokens.widgetWeatherSkyDayTop : Tokens.widgetWeatherSkyCloudyTop
+    readonly property color skyBottom: skyName === "night" ? Tokens.widgetWeatherSkyNightBottom : skyName === "day" ? Tokens.widgetWeatherSkyDayBottom : Tokens.widgetWeatherSkyCloudyBottom
+    // Every text and glyph on the sky, in both appearances (macOS: white on the sky).
+    readonly property color ink: Appearance.darkColors.text
 
     Accessible.role: Accessible.StaticText
     Accessible.name: report ? qsTranslate("Weather", "Weather, %1, %2, %3").arg(placeText).arg(tempText).arg(conditionText) + (rangeText !== "" ? ", " + rangeText : "") : qsTranslate("Weather", "Weather, %1").arg(conditionText !== "" ? conditionText : placeText)
@@ -114,6 +130,21 @@ WidgetBase {
             WeatherSampler.users -= 1;
     }
 
+    Rectangle {
+        anchors.fill: parent
+        radius: Tokens.widgetRadius
+        gradient: Gradient {
+            GradientStop {
+                position: 0
+                color: root.skyTop
+            }
+            GradientStop {
+                position: 1
+                color: root.skyBottom
+            }
+        }
+    }
+
     // The place, with the location arrow after it when the place is the IP address's (macOS: My Location).
     component Place: Row {
         id: placeRow
@@ -128,15 +159,16 @@ WidgetBase {
             text: root.placeText
             size: Tokens.typographyTitleSize
             font.weight: Tokens.typographyTitleWeight
+            color: root.ink
         }
 
         Icon {
             id: arrow
             anchors.verticalCenter: placeLabel.verticalCenter
             visible: WeatherSampler.byIp
-            name: "location"
+            name: "location-fill"
             size: Tokens.widgetWeatherArrowSize
-            color: Appearance.colors.text
+            color: root.ink
         }
     }
 
@@ -155,8 +187,8 @@ WidgetBase {
             width: parent.width
             text: root.tempText
             size: Tokens.widgetWeatherTempSize
-            font.weight: Tokens.typographySmallWeight
-            color: root.valueColor
+            font.weight: Tokens.widgetWeatherTempWeight
+            color: root.ink
         }
     }
 
@@ -172,7 +204,7 @@ WidgetBase {
             visible: root.report !== null
             name: root.now.symbol
             size: Tokens.widgetWeatherSymbolSize
-            color: root.valueColor
+            color: root.ink
         }
 
         WidgetLabel {
@@ -180,7 +212,7 @@ WidgetBase {
             visible: text !== ""
             text: root.conditionText
             font.weight: Tokens.typographyTitleWeight
-            color: root.greyed || !root.report ? Appearance.colors.textSecondary : Appearance.colors.text
+            color: root.ink
         }
 
         WidgetLabel {
@@ -188,7 +220,10 @@ WidgetBase {
             visible: text !== ""
             text: root.rangeText
             font.weight: Tokens.typographyTitleWeight
-            color: root.valueColor
+            // A wide high and low (French, two negative two-digit values) shrinks toward the caption size to fit the line.
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: Tokens.typographyCaptionSize
+            color: root.ink
         }
     }
 
@@ -205,7 +240,7 @@ WidgetBase {
             visible: root.report !== null
             name: root.now.symbol
             size: Tokens.widgetWeatherSymbolSize
-            color: root.valueColor
+            color: root.ink
         }
 
         WidgetLabel {
@@ -214,7 +249,7 @@ WidgetBase {
             visible: text !== ""
             text: root.conditionText
             font.weight: Tokens.typographyTitleWeight
-            color: root.greyed || !root.report ? Appearance.colors.textSecondary : Appearance.colors.text
+            color: root.ink
         }
 
         WidgetLabel {
@@ -223,7 +258,10 @@ WidgetBase {
             visible: text !== ""
             text: root.rangeText
             font.weight: Tokens.typographyTitleWeight
-            color: root.valueColor
+            // A wide high and low (French, two negative two-digit values) shrinks toward the caption size to fit the line.
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: Tokens.typographyCaptionSize
+            color: root.ink
         }
     }
 
@@ -251,14 +289,14 @@ WidgetBase {
                     text: column.modelData.label
                     size: Tokens.typographyCaptionSize
                     font.weight: Tokens.typographyTitleWeight
-                    color: Appearance.colors.textSecondary
+                    color: root.ink
                 }
 
                 Icon {
                     anchors.horizontalCenter: parent.horizontalCenter
                     name: column.modelData.symbol
                     size: Tokens.widgetWeatherHourSymbolSize
-                    color: root.valueColor
+                    color: root.ink
                 }
 
                 WidgetLabel {
@@ -266,7 +304,7 @@ WidgetBase {
                     horizontalAlignment: Text.AlignHCenter
                     text: column.modelData.temp
                     font.weight: Tokens.typographyTitleWeight
-                    color: root.valueColor
+                    color: root.ink
                 }
             }
         }

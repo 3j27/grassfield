@@ -302,7 +302,7 @@ installed (not built here).
 - No job-tracker service (kuiserver): progress shows in the status bar (jobs run with `HideProgressInfo`).
 - Compositor plugin absent (nested dev): no titlebar; the window still works (title in the toolbar).
 - Icon theme missing a name: generic MIME icon, then `text-x-generic` / `folder`.
-- LocalSend (`localsend`) or `systemd-run` not on PATH: no Share button in the toolbar and no Share submenu (looked up when
+- LocalSend (`localsend`) or `systemd-run` not on PATH: no Share button in the toolbar and no Share… in the item menu (looked up when
   a window opens or becomes active and when a menu is built); a send that cannot start says so in the window's banner.
 
 ## Automated tests · Manual verification steps
@@ -473,7 +473,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-17 | Back/forward capsule, title, ••• Action menu, search circle | done (lot 5, F1 match) | Finder-Home | — | — | — |
 | FP-18 | View switcher group (4 views; a single view popup ⌃ when the window is narrow) | done (PR 2: measured, 161 x 36; the pop-up while searching or where the title has no room) | Finder-Home, Finder-Search | — | — | 2 |
 | FP-19 | Group By toolbar button (grid ⌃) | done (PR 2) | Finder-Home | FolderModel sections | — | 2 |
-| FP-20 | Share button | done (ADR-0045 OC-13): a bare glyph before Tags while LocalSend is installed; its menu, and the item menu's Share submenu after Copy, start with "Send with LocalSend…" (where macOS puts AirDrop) | Finder-Home | LocalSend (Omarchy's `omarchy-menu-share` invocation) | no Mail, Messages or other services; no Share… in the File menu | — |
+| FP-20 | Share button | done (ADR-0045 OC-13): a bare glyph before Tags while LocalSend is installed; its menu, which the item menu's Share… after Copy opens where that menu was (macOS 13 and later), starts with "Send with LocalSend…" (where macOS puts AirDrop) | Finder-Home | LocalSend (Omarchy's `omarchy-menu-share` invocation) | no Mail, Messages or other services; no Share… in the File menu | — |
 | FP-21 | Tags toolbar button (tag the selection) | done (combined PR 3–5): the colour tags and Tags… from the toolbar button; glyph measured on Finder-Search (18 pt) | Finder-Home | `user.xdg.tags` (F16) | — | 5 |
 | FP-22 | Search field expands to the full width while searching | done (combined PR 3–5): the field takes the toolbar's free width while a search is shown, the title keeping its room | Finder-Gallery, Finder-Search | — | — | 3 |
 | FP-23 | View > Hide/Show Toolbar ⌥⌘T, Sidebar ⌃⌘S, Path Bar ⌥⌘P, Status Bar ⌘/ (path and status bars hidden by default) | done (PR 2) except Hide Toolbar (the toolbar holds the window controls when the sidebar is hidden) | Finder-Home (no bars), Finder-Search (path bar) | QSettings | — | 2 |
@@ -850,8 +850,9 @@ macOS: the toolbar's Share button and the item menu's Share open the sharing ser
 one service is LocalSend, which Omarchy installs (`install/omarchy-base.packages`) and offers in its own Share menu.
 
 - **Where:** a Share button, a bare glyph (`ViewGlyph` "share": a tray open at the top and a rising arrow) before Tags in the
-  toolbar, and a Share submenu after Copy / Copy as Pathname in the item menu (the same rows, `BrowserTab.shareMenu`). Its
-  first item is "Send with LocalSend…" « Envoyer avec LocalSend… ». Both exist only while `localsend` and `systemd-run` are on
+  toolbar, and Share… « Partager… » after Copy / Copy as Pathname in the item menu (and the Action menu), which opens the
+  same menu (`BrowserTab.shareMenu`) where the item menu was (macOS 13 and later; `openShareMenu`, at the menu layer's
+  anchor, a row selected when the item menu came from the keyboard). Its first item is "Send with LocalSend…" « Envoyer avec LocalSend… ». Both exist only while `localsend` and `systemd-run` are on
   PATH (`FilesApp.localSendAvailable`, `QStandardPaths::findExecutable`, looked up when a window opens or becomes active and
   each time a menu is built). The button is dimmed without a selection, in the Trash and in Applications; the item is
   dimmed unless every selected item is a local file or folder (`ShareLogic.canSend`: `file:///` URLs only, so no `trash:/`,
@@ -861,12 +862,20 @@ one service is LocalSend, which Omarchy installs (`install/omarchy-base.packages
   a shell. No `--` (LocalSend's command line has none, Omarchy passes the paths directly): every path is absolute, so none can
   read as an option. `FilesApp::sendWithLocalSend` checks the vector again (exactly that program and options, then paths that
   start with "/", hold no NUL and exist) and starts it detached; `GRASSFIELD_FILES_NO_LAUNCH=1` blocks it like any launch. A
-  refusal or a start failure shows in the window's banner. LocalSend then shows its own window: Omarchy floats and sizes it
+  development session (`GRASSFIELD_DEV=1`) sends nothing (security review of OC-13, LOW 2): `systemd-run --user` starts
+  LocalSend in the user's service manager with its environment, so it would open on the owner's real desktop with the
+  files. There the item stays in the Share menu, dimmed (`ShareLogic.menuItems`, so the nested session still shows the menu
+  as it is), the tab refuses with "Not sent: a development session doesn't start LocalSend (it would open on the real
+  desktop)." in the banner, and `FilesApp::sendWithLocalSend` refuses the same way (`runmode::dev()`, as Preview's
+  `openLink`). A refusal or a start failure shows in the window's banner. LocalSend then shows its own window: Omarchy floats and sizes it
   (`default/hypr/apps/localsend.lua`), a rule the Grassfield session loads only once the per-application rules of ADR-0045
   OC-12 port it; until then it opens where Grassfield's placement puts a new window.
-- Tests: `tests/unit/tst_filesshare.qml` (URL to path, local-only selections, the vector), `tests/unit/tst_filesbrowser.qml`
-  `test_shareSendsWithLocalSend` (the submenu after Copy, the toolbar's menu, the send through the stand-in FilesApp, nothing
-  from Applications, no Share without LocalSend), `tests/unit/tst_filesfinish.qml` (Share, Tags and Action in a row).
+- Tests: `tests/unit/tst_filesshare.qml` (URL to path, local-only selections, the vector, dimmed and never sent in a
+  development session), `tests/unit/tst_filesbrowser.qml` `test_shareSendsWithLocalSend` (Share… after Copy, the Share menu
+  it opens at the item menu's point, the send through the stand-in FilesApp, nothing from Applications, a development
+  session's refusal in the banner, no Share without LocalSend), `tests/unit/tst_filesfinish.qml` (Share, Tags and Action in a
+  row), `tests/unit/files/tst_fileops.cpp` `SendWithLocalSendRefusesOtherVectorsAndADevSession` (C++, not compiled in the
+  cloud session).
   Not verified: the C++ (not compiled in the cloud session), the glyph and the menus on screen (visual NOT verified), a real
   send to a device.
 

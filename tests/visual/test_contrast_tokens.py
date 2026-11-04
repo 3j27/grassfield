@@ -246,6 +246,11 @@ def backdrops(tok, role, appearance, t, wallpaper):
         return [tok.color(pal, appearance, "selection")]
     if kind == "rename-field":
         return [over(tok.color("colors", appearance, "fieldFill"), tok.path("desktopIcon.renameFillOpacity"), wallpaper)]
+    if kind == "weather-sky":
+        # The Weather widget's opaque skies (ADR-0045 OC-14, widget.weatherSky*): each gradient's two ends, the same in both
+        # appearances and at every transparency. Every channel grows from top to bottom, so the luminance does too and the
+        # ends are the extremes of the gradient.
+        return [hex_rgb(tok.path("widget.weatherSky%s%s" % (sky, end))) for sky in ("Day", "Night", "Cloudy") for end in ("Top", "Bottom")]
     if kind == "desktop-label":
         return [over(tok.color("darkColors", appearance, "shadow"), tok.path("desktopIcon.labelShadowOpacity"), wallpaper)]
     if kind == "lock-selection":
@@ -596,8 +601,8 @@ class ContrastTokens(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for r in self.roles:
             self.assertIn(r["kind"], THRESHOLD)
-            self.assertIn(r["backdrop"], ("material", "window", "window-pane", "accent", "selection", "rename-field", "desktop-label") + BAR_TONES
-                          + LOCK_BACKDROPS)
+            self.assertIn(r["backdrop"], ("material", "window", "window-pane", "accent", "selection", "rename-field", "desktop-label",
+                                          "weather-sky") + BAR_TONES + LOCK_BACKDROPS)
             for site in r["sites"]:
                 self.assertIn(site["class"], ("secondary", "danger", "alpha", "dynamic", "opacity", "opacity-dynamic", "primary",
                                               "backdrop"))

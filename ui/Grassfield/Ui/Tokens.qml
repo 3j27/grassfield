@@ -2297,6 +2297,20 @@ QtObject {
     readonly property int widgetMaxEntries: 64
     // estimate: the Weather widget's current temperature, the large light figure under the place (macOS 27 Weather widget, small and medium; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
     readonly property int widgetWeatherTempSize: 42
+    // estimate: the weight of the Weather widget's large temperature, lighter than the text under it as macOS 27 draws it (Inter Display Light) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherTempWeight: 300
+    // estimate (design review of ADR-0045 OC-14): the top of the Weather widget's day sky, clear and partly cloudy (macOS 27 draws the weather's sky behind the widget); color.dark.text holds 5.5:1 on it (A2, tests/visual/test_contrast_tokens.py, backdrop weather-sky) [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyDayTop: "#2A64AD"
+    // estimate (design review of ADR-0045 OC-14): the bottom of the day sky; the review's #3A78C2 left color.dark.text at 4.16:1, darkened to 4.92:1 (A2, backdrop weather-sky) [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyDayBottom: "#326CB2"
+    // estimate (design review of ADR-0045 OC-14): the top of the Weather widget's night sky (after sunset and before sunrise at the place); 15.8:1 for color.dark.text [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyNightTop: "#0F1B33"
+    // estimate (design review of ADR-0045 OC-14): the bottom of the night sky; 10.5:1 for color.dark.text [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyNightBottom: "#233A5E"
+    // estimate (design review of ADR-0045 OC-14): the top of the Weather widget's grey sky, by day under clouds, fog, rain, snow or storms, and the neutral sky of an unavailable report; 6.4:1 for color.dark.text [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyCloudyTop: "#4F5B66"
+    // estimate (design review of ADR-0045 OC-14): the bottom of the grey sky; the review's #66717C left color.dark.text at 4.58:1, darkened to 5.15:1 for a margin (A2, backdrop weather-sky) [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyCloudyBottom: "#5E6974"
     // estimate: the Weather widget's condition symbol above the condition text (macOS 27 Weather widget; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
     readonly property int widgetWeatherSymbolSize: 18
     // estimate: a symbol of the medium Weather widget's row of hours, between the hour and the temperature (macOS 27 Weather widget; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
