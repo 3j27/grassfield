@@ -265,6 +265,8 @@ Scope {
     readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
     // Settings > Keyboard > Input Sources: the Input menu of the menu bar (it exists from two input sources on).
     readonly property bool keyboardShowInputMenu: read("keyboard.showInputMenu")
+    // Settings > Keyboard > Dictation (ADR-0045 OC-5): Ctrl-Super-X runs voxtype; bindings.lua reads the file itself at each press.
+    readonly property bool keyboardDictation: read("keyboard.dictation")
     // auto | a locale name ("fr_CH"), and auto | monday … sunday (Settings > General > Language & Region): the formats of dates,
     // times and numbers, and the first day of the week in the calendars.
     readonly property string regionFormats: read("region.formats")

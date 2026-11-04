@@ -76,6 +76,7 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Clipboard history"),
     QT_TRANSLATE_NOOP("Bindings", "Previous input source"),
     QT_TRANSLATE_NOOP("Bindings", "Next input source"),
+    QT_TRANSLATE_NOOP("Bindings", "Start or stop dictation"),
     QT_TRANSLATE_NOOP("Bindings", "Apps"),
     "Notification Center",
     QT_TRANSLATE_NOOP("Bindings", "Lock screen"),
