@@ -73,6 +73,9 @@
   "desktop": {
     "showIcons": true
   },
+  "displays": {
+    "main": []
+  },
   "menubar": {
     "showBackground": false,
     "autoHide": "fullscreen",

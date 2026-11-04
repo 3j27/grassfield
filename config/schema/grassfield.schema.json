@@ -492,6 +492,39 @@
         }
       }
     },
+    "displays": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "main": {
+          "type": "array",
+          "description": "The main display (ADR-0044): one remembered choice per set of connected displays, newest first, at most 16. `set` is the sorted identities of the displays (model|serial, else model|connector, else the connector), `main` the one of them that holds the Dock, the desktop icons and the notifications. No entry for the connected set: the newest choice whose display is connected, else the built-in panel, else the first display.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "set": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "main": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "set",
+              "main"
+            ]
+          },
+          "default": [],
+          "x-grassfield": {
+            "rule": "mainDisplays"
+          }
+        }
+      }
+    },
     "menubar": {
       "type": "object",
       "additionalProperties": false,
