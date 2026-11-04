@@ -297,3 +297,52 @@ TEST(PlacesModelDisk, AHungStandardFolderIsListedUnavailable)
     }, kHungMs + 1000)) << "back when its read returns";
     QFile::remove(dirs.fileName());
 }
+
+// The Locations list shows the internal drives' filesystems udisks2 knows (VolumeLogic): after Computer, by name, an
+// unmounted one with no folder to open yet, none ejectable; they leave when udisks2 no longer lists them.
+TEST(PlacesModelDisk, UdisksVolumesAreListedInLocations)
+{
+    PlacesModel places(nullptr, options());
+    const auto rowOf = [&](const QString &udi) {
+        for (int r = 0; r < places.rowCount(); ++r)
+            if (places.data(places.index(r), PlacesModel::UdiRole).toString() == udi)
+                return r;
+        return -1;
+    };
+    VolumeLogic::Volume games;
+    games.path = QStringLiteral("/org/freedesktop/UDisks2/block_devices/sda1");
+    games.device = QStringLiteral("/dev/sda1");
+    games.name = QStringLiteral("Games");
+    games.icon = QStringLiteral("drive-harddisk");
+    games.size = 2'000'000'000'000ULL;
+    VolumeLogic::Volume data = games;
+    data.path = QStringLiteral("/org/freedesktop/UDisks2/block_devices/sda2");
+    data.device = QStringLiteral("/dev/sda2");
+    data.name = QStringLiteral("500 GB Volume");
+    data.mountPoint = QStringLiteral("/run/media/u/abc");
+    places.setUdisksVolumes({games, data});
+    const int g = rowOf(games.path);
+    const int d = rowOf(data.path);
+    ASSERT_GE(g, 0);
+    ASSERT_GE(d, 0);
+    EXPECT_EQ(places.data(places.index(g), PlacesModel::SectionRole).toString(), "locations");
+    EXPECT_EQ(places.data(places.index(g), PlacesModel::KindRole).toString(), "volume");
+    EXPECT_EQ(places.data(places.index(g), PlacesModel::NameRole).toString(), "Games");
+    EXPECT_FALSE(places.data(places.index(g), PlacesModel::MountedRole).toBool());
+    EXPECT_FALSE(places.data(places.index(g), PlacesModel::UrlRole).toUrl().isValid());
+    EXPECT_FALSE(places.data(places.index(g), PlacesModel::EjectableRole).toBool());
+    EXPECT_TRUE(places.data(places.index(d), PlacesModel::MountedRole).toBool());
+    EXPECT_EQ(places.data(places.index(d), PlacesModel::UrlRole).toUrl(), QUrl::fromLocalFile(QStringLiteral("/run/media/u/abc")));
+    EXPECT_EQ(places.rowForUrl(QUrl::fromLocalFile(QStringLiteral("/run/media/u/abc/Photos"))), -1);
+    EXPECT_EQ(places.rowForUrl(QUrl::fromLocalFile(QStringLiteral("/run/media/u/abc"))), d);
+    // A mounted one opens at once; Eject on an internal disk does nothing (never an unmount from the sidebar).
+    QUrl opened;
+    QObject::connect(&places, &PlacesModel::mounted, &places, [&](const QUrl &url) { opened = url; });
+    places.mount(d);
+    EXPECT_EQ(opened, QUrl::fromLocalFile(QStringLiteral("/run/media/u/abc")));
+    places.eject(d);
+    EXPECT_TRUE(places.data(places.index(d), PlacesModel::MountedRole).toBool());
+    places.setUdisksVolumes({});
+    EXPECT_EQ(rowOf(games.path), -1);
+    EXPECT_EQ(rowOf(data.path), -1);
+}
