@@ -20,6 +20,11 @@ FocusScope {
     // Screen and window of the hosting surface (the context menu is a PopupWindow anchored to it).
     required property ShellScreen screen
     required property var hostWindow
+    // The desktop folder, shared by the views of every screen (DesktopIcons.qml).
+    required property DesktopFiles files
+    // This screen shows the icons (the primary screen, Show Desktop Items on). Another screen only has the empty-desktop
+    // menu and the rubber band: no icon, no slot, nothing to arrange.
+    property bool iconsHere: true
     // The desktop surface holds the keyboard (KeyboardFocus.js "held"): the desktop keyboard actions below
     // (arrows, Return, Ctrl+O, Ctrl+Backspace, Ctrl+A, Space, Esc) run only then.
     property bool keysActive: false
@@ -80,14 +85,10 @@ FocusScope {
         return out;
     }
     readonly property var blocked: Logic.blockedSlots(widgetRects, leftInset, topInset, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight, grid.cols, grid.rows)
-    readonly property var lay: ready ? Logic.layout(files.names, files.positions, grid.cols, grid.rows, blocked) : ({})
+    readonly property var lay: ready && iconsHere ? Logic.layout(files.names, files.positions, grid.cols, grid.rows, blocked) : ({})
     readonly property var shown: files.entries.filter(e => lay[e.name] !== undefined)
     readonly property var selectedNames: Object.keys(selected).filter(n => selected[n] === true && lay[n] !== undefined)
     readonly property var selectedPaths: selectedNames.map(n => files.path(n))
-
-    DesktopFiles {
-        id: files
-    }
 
     // Keyboard focus events for the host's state machine (KeyboardFocus.js): {type: "menuOpened"},
     // {type: "menuClosed", how: "esc" | "item"}.
@@ -124,7 +125,7 @@ FocusScope {
     }
     opacity: entrance
     // Final: the first layout is, or the icons are turned off in Settings (nothing to wait for).
-    readonly property bool entranceFinal: ready || (Settings.loaded && !Settings.desktopShowIcons)
+    readonly property bool entranceFinal: ready || (Settings.loaded && !iconsHere)
     onEntranceFinalChanged: {
         if (entranceFinal && root.entranceKey !== "")
             Entrance.ready(root.entranceKey);
@@ -569,7 +570,7 @@ FocusScope {
     }
 
     Connections {
-        target: files
+        target: root.files
 
         // New Folder (a user action) opens the rename field of the folder it created.
         function onRenameWanted(name: string): void {
@@ -632,6 +633,7 @@ FocusScope {
 
     DropArea {
         anchors.fill: parent
+        enabled: root.iconsHere
         keys: ["text/uri-list", "application/x-grassfield-desktop-icons"]
         onDropped: drop => root.dropped(drop)
     }
@@ -652,8 +654,8 @@ FocusScope {
             name: modelData.name
             isDir: modelData.isDir
             filePath: modelData.path
-            folderColor: files.folderStyle(modelData.name).color
-            folderGlyph: files.folderStyle(modelData.name).glyph
+            folderColor: root.files.folderStyle(modelData.name).color
+            folderGlyph: root.files.folderStyle(modelData.name).glyph
             x: root.rectOf(modelData.name).x
             y: root.rectOf(modelData.name).y
             selected: root.selected[modelData.name] === true
@@ -761,11 +763,13 @@ FocusScope {
                 bounds: menuPopup.contentItem
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
+                itemsShown: Settings.desktopShowIcons
+                arrangeable: root.iconsHere
                 aboutWallpaper: WallpaperState.aboutEntry(root.screen.name) !== null
                 count: root.selectedNames.length
                 singleName: root.selectedNames.length === 1 ? root.selectedNames[0] : ""
-                pasteCount: files.clipboardPaths.length
-                openWithApps: files.openWithApps
+                pasteCount: root.files.clipboardPaths.length
+                openWithApps: root.files.openWithApps
                 onChoose: action => root.applyMenu(action)
                 onCloseRequested: root.closeMenu("esc")
             }

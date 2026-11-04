@@ -31,6 +31,41 @@ TestCase {
         compare(Logic.copyName(nfd, [nfc.replace(".txt", " copy.txt")], false), "Re\u0301sume\u0301 copy 2.txt");
     }
 
+    // Desktop icons always snap to the grid (macOS Sort By > Snap to Grid, on at first start here with no way to turn it
+    // off): a drop at any pixel lands on a whole cell, and an occupied cell gives the nearest free one.
+    function test_dropSnapsToTheNearestFreeCell() {
+        const w = 1000, cw = 100, ch = 100, cols = 10, rows = 5;
+        for (const [x, y] of [[3, 3], [431, 277], [999, 499], [512.5, 150.2]]) {
+            const s = Logic.slotAt(x, y, w, cw, ch, cols, rows);
+            verify(Number.isInteger(s.col) && Number.isInteger(s.row), "whole cell for " + x + "," + y);
+            verify(s.col >= 0 && s.col < cols && s.row >= 0 && s.row < rows);
+        }
+        // Dropped a little off the cell: the same cell wins.
+        compare(Logic.slotAt(620, 110, w, cw, ch, cols, rows), Logic.slotAt(650, 140, w, cw, ch, cols, rows));
+        // The wanted cell is taken: the nearest free cell, never the same one.
+        const taken = {};
+        taken[Logic.key(4, 2)] = true;
+        const spot = Logic.nearestFree(taken, {col: 4, row: 2}, cols, rows);
+        verify(spot !== null && !(spot.col === 4 && spot.row === 2));
+        compare(Math.abs(spot.col - 4) + Math.abs(spot.row - 2), 1);
+    }
+
+    // The desktop menu works on every display and does not depend on Show Desktop Items: one surface per screen, always
+    // mapped, and the icons only where iconsHere says so (the primary screen).
+    function test_everyScreenHasTheDesktopSurface() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../shell/desktop/DesktopIcons.qml"), false);
+        xhr.send();
+        const src = xhr.responseText.replace(/\/\/.*$/gm, "");
+        verify(/model: Quickshell\.screens\s/.test(src), "a surface on every screen");
+        verify(!/Quickshell\.screens\.filter/.test(src));
+        verify(/visible: true/.test(src), "mapped with Show Desktop Items off too");
+        verify(/iconsHere: win\.iconsHere/.test(src));
+        verify(/readonly property bool iconsHere: modelData\.name === scope\.primaryName && Settings\.desktopShowIcons/.test(src));
+        verify(/files: desktopFiles/.test(src), "one DesktopFiles for every screen");
+        verify((src.match(/DesktopFiles \{/g) || []).length === 1);
+    }
+
     function test_gridSize() {
         compare(Logic.gridSize(1000, 500, 100, 100).cols, 10);
         compare(Logic.gridSize(1000, 500, 100, 100).rows, 5);
