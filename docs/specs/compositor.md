@@ -1673,8 +1673,10 @@ window still on `special:minimized` (`scripts/nestctl -j clients`), keys typed w
   menus and dialogs keeping the focus while they show (`stay_focused`, not its main window nor the Project Manager),
   GeForce NOW, Moonlight, RetroArch and Steam keeping the screen awake while full screen (`idle_inhibit = "fullscreen"`,
   which the shell's idle honours), Telegram not taking the focus on a new message (`focus_on_activate = false`; it asks for
-  attention instead), Picture-in-Picture (a title "Picture-in-Picture" / "Picture in picture") pinned above every window
-  on every desktop with its proportions kept, and Omarchy's camera overlay (`WebcamOverlay-small|medium|large`) at the
+  attention instead), Picture-in-Picture (a browser's PiP window: exactly the title "Picture-in-Picture" / "Picture in
+  picture", and a class of Omarchy's browser.lua or the Flatpak Firefox; narrowed from Omarchy's unanchored title so that a
+  window that only mentions it, Preview showing "Picture-in-Picture.png", is never pinned) pinned above every window on every
+  desktop with its proportions kept, and Omarchy's camera overlay (`WebcamOverlay-small|medium|large`) at the
   bottom-right corner, sized from the display's height, pinned, without taking the focus. Left out (the file's header says
   why): float and center (every window), an application's own size (placement), full screen at map, Omarchy's opacity,
   tags, borders and rounding, browser tiling and the special workspace of the screen-sharing indicator, JetBrains'
