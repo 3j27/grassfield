@@ -7,6 +7,7 @@
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDir>
