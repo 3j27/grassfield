@@ -2962,6 +2962,10 @@
         <translation>Espace</translation>
     </message>
     <message>
+        <source>Share…</source>
+        <translation>Partager…</translation>
+    </message>
+    <message>
         <source>Show in Enclosing Folder</source>
         <translation>Afficher dans le dossier parent</translation>
     </message>
@@ -3092,10 +3096,6 @@
     <message>
         <source>Ctrl+Alt+C</source>
         <translation>Ctrl+Alt+C</translation>
-    </message>
-    <message>
-        <source>Share</source>
-        <translation>Partager</translation>
     </message>
     <message>
         <source>Services</source>
