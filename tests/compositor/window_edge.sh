@@ -257,8 +257,9 @@ capture() { # <name> <wallpaper hex>: once the wallpaper 150 px left of the wind
   fx0=$(px "$gx") fy0=$(px "$fy") fx1=$(px "$((gx + gw))") fy1=$(px "$((fy + fh))")
   magick "$run/$1.ppm" -crop "60x40+$((fx0 - 40))+$(((fy0 + fy1) / 2 - 20))" +repage -filter point -resize 300% "$run/$1-left-3x.png"
   magick "$run/$1.ppm" -crop "160x140+$((fx0 - 60))+$((fy1 - 40))" +repage -filter point -resize 300% "$run/$1-corner-3x.png"
-  # The four corners at 8x: the corner square and 8 device pixels past the edge.
-  r=$(awk -v r="$rounding" -v s="$scale" 'BEGIN { printf "%d", r * s + 8 }')
+  # The four corners at 8x: the corner square as Hyprland draws it (CWindow::rounding() = rounding x power / 2, times the
+  # scale, cut to whole device pixels) and 8 device pixels past the edge.
+  r=$(awk -v r="$rounding" -v p="$rounding_power" -v s="$scale" 'BEGIN { printf "%d", int(r * p / 2 * s) + 8 }')
   for c in "tl $((fx0 - 8)) $((fy0 - 8))" "tr $((fx1 - r + 8)) $((fy0 - 8))" "bl $((fx0 - 8)) $((fy1 - r + 8))" \
     "br $((fx1 - r + 8)) $((fy1 - r + 8))"; do
     read -r cn cx cy <<<"$c"

@@ -31,12 +31,13 @@ hl.config({
   },
 
   decoration = {
-    -- One window radius for every window (macOS 27, ADR-0024 C-1): about 16.6 pt circle-equivalent at 45 degrees in the
-    -- release captures, 4.9 pt from both edges; 20 at rounding_power 2.6 puts that point 4.7 in (20 x (1 - 2^(-1/2.6))),
-    -- the closest a window rule can reach: Hyprland 0.56.2 caps a rule's `rounding` at 20, and the rules
-    -- gf-third-party-rounding and gf-client-chrome-info-rounding (windows.lua) set the same 20. Continuous-corner
-    -- approximation.
-    rounding = 20,
+    -- One window radius for every window (macOS 27, ADR-0024 C-1): 16.5 to 16.7 pt circle-equivalent at 45 degrees in the
+    -- release captures, 4.8 to 4.9 pt from both edges. Hyprland 0.56.2 draws a corner of CWindow::rounding() =
+    -- rounding x rounding_power / 2 pt (22.1 here), cut to whole device pixels (27 at 1.25), as a superellipse of that
+    -- power: its 45-degree point is that radius x (1 - 2^(-1/2.6)) in. Measured on GF-REF at 1.25 with the captures'
+    -- method: 17 gives 4.88 to 4.89 pt (16.7 circle-equivalent), 16 gives 16.2, 18 gives 18.1, 20 gave 19.8. The rules
+    -- gf-third-party-rounding and gf-client-chrome-info-rounding (windows.lua) set the same 17 (a rule's cap is 20).
+    rounding = 17,
     rounding_power = 2.6,
     active_opacity = 1.0,
     inactive_opacity = 1.0,

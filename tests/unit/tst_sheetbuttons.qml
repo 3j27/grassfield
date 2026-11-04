@@ -3,7 +3,7 @@ import QtTest
 import Grassfield.Ui
 
 // Sheets and alerts as macOS 27 draws them (ADR-0039 step 10; docs/audits/design-polish-2026-10-29.md § 3.8, measured on the
-// 512 Pixels release captures): a sheet has the window's corner (radius.sheet 16, Q2 (a)), an alert a rounder one
+// 512 Pixels release captures): a sheet has the window's corner (radius.sheet 17, Q2 (a): the window's 16.7 circle-equivalent, ADR-0024 C-1), an alert a rounder one
 // (radius.alert 26, the owner's choice of 2026-10-31); a sheet's buttons are 24-pt rounded rectangles with a 7-pt corner,
 // not capsules, the Cancel and default pair one width, 20 from the sheet's right and bottom edges; an alert keeps its 28-pt
 // capsules. The shared Sheet is built here, and so is the shell's Dialog (Grassfield.Ui only), in both shapes.
@@ -81,7 +81,7 @@ TestCase {
     }
 
     function test_theTokens() {
-        compare(Tokens.radiusSheet, 16, "a sheet has the window's corner");
+        compare(Tokens.radiusSheet, 17, "a sheet has the window's corner (rounding 17 at power 2.6: 16.7 circle-equivalent)");
         compare(Tokens.radiusAlert, 26, "an alert is rounder, as macOS 27's");
         compare(Tokens.controlSheetButtonRadius, 7);
         compare(Tokens.controlButtonHeight, 24);

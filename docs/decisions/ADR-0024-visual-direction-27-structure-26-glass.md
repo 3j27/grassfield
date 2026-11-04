@@ -31,7 +31,7 @@ to what is behind them) follow macOS 26.** Where a macOS 27 trait concerns both 
 ### 1. From macOS 27 (coherence)
 | Trait | Value (measured, ui-finesse §7) | Replaces |
 |---|---|---|
-| Window corners | one radius, about 16.6 pt (circle-equivalent at 45°), for every window: Grassfield apps, third-party windows, dialogs. Hyprland: `rounding = 20` at `rounding_power = 2.6` (≈ 1.24 × r) globally and in both rules. Inner shapes concentric with it | 26 / 12 (macOS 26) |
+| Window corners | one radius, 16.5–16.7 pt (circle-equivalent at 45°), for every window: Grassfield apps, third-party windows, dialogs. Hyprland: `rounding = 17` at `rounding_power = 2.6` globally and in both rules, which draws a 22.1-pt corner (`CWindow::rounding()` = rounding × power / 2) measured at 16.7 (note 2026-11-04; was 20, which drew 26 pt and measured 19.8). Inner shapes concentric with it | 26 / 12 (macOS 26) |
 | Sidebars | edge to edge; light #ECECEC beside a white content area, no dividing line; coloured 20-pt icon tiles; selection 212 × 32, radius 8, 10 pt from both sidebar edges; search field a 28-pt capsule | flush grey sidebar with a line, monochrome glyphs (not the macOS 26 floating panel either) |
 | Toolbars | bars, one height, a continuous bar under the controls once content scrolls under them | — |
 | Menus | an icon only on the rows that have one, text otherwise about 16 pt from the edge; highlight 24 pt tall, about 5 pt from the sides, radius 7 (concentric with 12) | icon column in every menu, radius 6 |
@@ -125,7 +125,7 @@ After the F1 validation against macOS 27 (2026-10-26, `docs/audits/ui-finesse-20
 ## Plan (phases; each is a reviewed slice with `just check`, tests and `just shot`)
 Item by item (files, values, verification): `docs/audits/ui-finesse-2026-10-25/action-plan.md`.
 
-1. **Coherence (macOS 27):** window radius 20 at power 2.6 everywhere, after a nested 45° measurement; shadow and border
+1. **Coherence (macOS 27):** window radius 20 at power 2.6 everywhere (17 since the measurement of 2026-11-04); shadow and border
    per appearance; concentric inner radii; menus (row icons, 16-pt text, radius 7); white on the accent with a dark
    selection fill; dark window neutrals; light windows and groups; Settings and Files sidebars (tone, coloured tiles,
    selection); Search type and neutral selection; pixel-grid snapping (ui-finesse F5).
@@ -169,7 +169,7 @@ Finder capture getting-started gs-010-011 at 1.0748 px/pt), 2026-11-03:
 | Trait | Value | Token |
 |---|---|---|
 | Panel inset from the window's left, top, bottom edges | 8 pt (x 16, y 16 px; bottom 1785 of 1801 px); Finder 8-9 px | `window.sidebarPanelInset` 8 |
-| Panel corner | 18 to 19 pt, concentric with the 26-pt window corner (26 - 8 = 18) | `window.sidebarPanelRadius` 18 |
+| Panel corner | 18 to 19 pt, concentric with the 26-pt window corner (26 - 8 = 18). Ours since the note of 2026-11-04: concentric with our window's measured corner, 16.7 pt circle-equivalent less the inset, on whole device pixels (11 px at 1.25) | `window.sidebarPanelRadius` 8.7 (was 18) |
 | Panel width (Settings) | 215 pt, so a slot of 8 + 215 = 223 pt | `settings.sidebarWidth` 223 |
 | Panel fill | 249 against the 252 content ground (the window edge is 255): 6 levels under the window; the dark appearance keeps its own 6 (no dark capture: estimate) | `color.light.sidebarFill` #F7F6F3 (was #EEECE7, 15 under); `color.dark.sidebarFill` unchanged #25231F |
 | Rim | 1 pt (2 px at 2x), pure white (255) on the panel's edge, drawn as whole device pixels (1 px at 1.25) with its far edges snapped down, so it never splits between two pixels | `window.sidebarPanelRimWidth` 1, `window.sidebarPanelRimOpacity` 1.0 (dark: 0.08, estimate) |
@@ -367,4 +367,61 @@ review (2026-11-03) failed it:
 - Found on the way, not changed here: since Hyprland draws every window at `CWindow::rounding()` = 20 x 2.6 / 2 = 26 pt,
   C-1's arithmetic ("20 at rounding_power 2.6 puts that point 4.7 in") holds for 20 pt, not for the corner on screen:
   its 45-degree point is 26 x (1 - 2^(-1/2.6)) = 6.1 pt in, against macOS 27's 4.9 (what chrome.sh measures as 6 px at
-  scale 1). A rounding of 16 (20.8 pt drawn, 4.9 pt in) would match; left to a design batch.
+  scale 1). A rounding of 16 (20.8 pt drawn, 4.9 pt in) would match; left to a design batch. Resolved by the note of
+  2026-11-04 below: 17, measured.
+
+## Note (2026-11-04): the window corner, measured (C-1 corrected)
+C-1 set `rounding = 20` from the arithmetic "20 at power 2.6 puts the 45-degree point 4.7 pt in", which takes 20 as the
+radius Hyprland draws. It is not: Hyprland 0.56.2 draws a window's corner at `CWindow::rounding()` = `decoration.rounding`
+× `rounding_power` / 2 (read from the binary; 26 pt for 20), times the output's scale and cut to whole device pixels (the
+surface pass's and the border's radius are ints: 32 px at 1.25 for 32.5), as a superellipse of power 2.6 whose 45-degree
+point lies radius × (1 − 2^(−1/2.6)) = 0.234 × radius from both edges. The corners were about 19 % too round.
+
+**Method.** The 45-degree method the macOS 27 numbers come from (`docs/audits/ui-finesse-2026-10-25/tools/cornermeas.py`:
+the edges and the diagonal at the 50 % crossing, r = d / 0.2929), on luminance for GF-REF captures at 1.25 (light
+appearance, the edges of `tests/compositor/window_edge.sh`'s flat wallpapers) and on the alpha of the macOS captures.
+- macOS 27 (512 Pixels Golden Gate release captures, 2 px per pt, light): Settings General, Force Quit, Finder Home, all
+  four corners: 4.82–4.90 pt in, 16.47–16.75 pt circle-equivalent (C-1's 16.5–16.7 reproduced). Dark (Settings in
+  Appearance Dark, over the wallpaper): 4.81–4.82 pt, 16.42–16.46.
+- Ours, one rounding per window (Hyprland's `set_prop`, Settings and foot, light over #808080): 15 → 4.31–4.33 pt
+  (14.7–14.8), 16 → 4.73–4.75 (16.2), **17 → 4.88–4.89 (16.66–16.71)**, 18 → 5.31–5.32 (18.1–18.2), 20 → 5.80–5.82
+  (19.8–19.9). The drawn corners are 26, 27, 29 and 32 px (20.8, 22.1, 23.4 and 26 pt times 1.25, cut): the step from 16
+  to 17 is one device pixel, from 17 to 18 two. 17 at power 2.6 is the closest pair; the power stays 2.6.
+
+**Decision.** `rounding = 17` (looknfeel.lua) and 17 in the rules `gf-third-party-rounding` and
+`gf-client-chrome-info-rounding`: a 22.1-pt corner, 27 px at 1.25, 22 at 1, 33 at 1.5, 44 at 2.
+
+**What follows the corner.**
+- Hyprland's own: the surface, the border (the contact edge) and the shadow take `CWindow::rounding()` themselves.
+- The plugin: the bar's top corners, the tiling preview and the dark rim now take one value,
+  `gf::titlebar::windowCornerPx` (core/TitlebarLayout.hpp), the same int Hyprland cuts. The bar rounded it to the nearest
+  pixel instead (33 px for 32.5 at 1.25, 28 for 27.6): its corners measured 17.70 at 17 against the surface's 16.68 (20.9
+  against 19.8 at 20). Cut, 17.20: the bar's rectangle shader still sits about 0.15 px further in than the surface's at an
+  equal radius (16.52 against 16.16 at 16, where both are 26 px), under a quarter of a device pixel, no sliver at 8x.
+- Grassfield apps with client chrome: Hyprland rounds their surface; they draw nothing on the corner. Their sheets take
+  the window's corner: `radius.sheet` 17 (a circle of 21.25 px at 1.25 against the window's 16.7-pt circle-equivalent,
+  20.9 px; 16 was 20 px). Alerts keep 26 (the owner's decision of 2026-10-31).
+- The overview's live windows are Hyprland's; the shell's fallback thumbnails (`overview.thumbRadius`) and the Stages ring
+  are estimates of their own, not the window's corner.
+
+**After (rounding 17, GF-REF 1.25, Hyprland 0.56.2, `window_edge.sh` captures).** Light appearance, all four corners:
+Settings 4.87–4.93 pt (16.63–16.84), foot's surface 4.85–4.92 (16.54–16.79), Evince 4.86–4.95 (16.58–16.90); foot's
+plugin bar 5.03–5.04 (17.18–17.20). Before (20): 5.77–5.91 (19.7–20.2), the bar 6.11 (20.9). The edge, shadow and rim
+checks of `window_edge.sh` pass as before (200 OK), C2 (`window_edge.sh c2`) and `zoom_fill.sh` pass.
+
+**Limit: the dark appearance's outline.** A dark window over a light wallpaper shows Hyprland's contact pixel as part of
+its outline: one device pixel at 1.25 (0.8 pt; macOS 27 draws half a point at 2x), its outer arc Hyprland's
+(rounding() + border) × scale around the same centre. Measured the same way: 5.22–5.29 pt (17.8–18.1) against macOS 27's
+4.81–4.82 (16.4–16.5) in its dark capture; before, 6.16–6.37 (21.0–21.7). One rounding cannot match both appearances
+while the border's outer arc is Hyprland's; the light value, the one C-1 was measured on, decides.
+
+**The floating sidebar panel follows** (the integrator's request on this branch). `window.sidebarPanelRadius` was 18,
+concentric with "the 26-pt window corner" (26 − 8): macOS 26's window, not ours, whose corner measured 19.8 before and 16.7
+now. Concentric at the 8-pt inset, the panel's circle is the window's circle-equivalent less the inset, 16.7 − 8 = 8.7 pt
+(at the 45-degree point the two curves are then 8 pt apart along the diagonal, as along the sides). `SidebarPanel` (a
+`Rectangle`, circular corners) draws it on whole device pixels, as the inset is (10 px at 1.25): 11 px at 1.25 (8.8 pt,
+within 0.13 px of the concentric 10.875), 9 at 1, 13 at 1.5, 17 at 2; its rim and shadow take the same radius. Checked in
+nested at 1.25 on 8x crops of the top-left corners of Settings, Files and Preview, light and dark: along the corner's
+diagonal the window's edge is at 5.7 px and the panel's rim at 13 px, 10.3 px apart against the 10 px of the straight
+sides (with 18 they were about 15 px apart); in the dark appearance the window's rim and the panel's rim stay 6 device
+pixels of window apart, never touching.
