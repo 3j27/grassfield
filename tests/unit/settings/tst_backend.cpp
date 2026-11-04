@@ -362,6 +362,41 @@ TEST_F(BackendTest, UpdateNowStartsOmarchysLauncherDetached)
     EXPECT_EQ(recorded(launcher).size(), 1);
 }
 
+// ADR-0045 OC-0.4: a setup no system service offers opens Omarchy's terminal with Omarchy's command alone; the pane's sheet
+// explains first. Any other command in that terminal is refused.
+TEST_F(BackendTest, OmarchysSetupsStartInItsTerminalAndNothingElseDoes)
+{
+    const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
+    writeRecorder(launcher, "");
+    writeRecorder(QStringLiteral("omarchy-voxtype-model"), "");
+    Backend backend;
+    EXPECT_TRUE(backend.launch(QStringLiteral("hibernation setup"), {launcher, QStringLiteral("omarchy-hibernation-setup")}));
+    EXPECT_TRUE(backend.launch(QStringLiteral("dictation model"), {QStringLiteral("omarchy-voxtype-model")}));
+    EXPECT_FALSE(backend.launch(QStringLiteral("hibernation setup"), {launcher, QStringLiteral("omarchy-hibernation-setup"), QStringLiteral("--force")}));
+    EXPECT_FALSE(backend.launch(QStringLiteral("remote login"), {launcher, QStringLiteral("omarchy-remove-security-sshd")}));
+    ASSERT_TRUE(spinUntil([&] { return !recorded(launcher).isEmpty() && !recorded(QStringLiteral("omarchy-voxtype-model")).isEmpty(); }));
+    spinUntil([] { return false; }, 200);
+    ASSERT_EQ(recorded(launcher).size(), 1);
+    EXPECT_TRUE(recorded(launcher).at(0).startsWith(QStringLiteral("omarchy-hibernation-setup|")));
+}
+
+// ADR-0045 OC-0.3: a pane asks whether a plain command is on PATH (nothing runs); a path, a relative name or an option is no
+// command name.
+TEST_F(BackendTest, ACommandIsLookedUpByItsPlainNameOnly)
+{
+    writeRecorder(QStringLiteral("voxtype"), "");
+    Backend backend;
+    EXPECT_TRUE(backend.hasCommand(QStringLiteral("voxtype")));
+    EXPECT_FALSE(backend.hasCommand(QStringLiteral("fprintd-enroll")));
+    EXPECT_FALSE(backend.hasCommand(scratch(QStringLiteral("voxtype"))));
+    EXPECT_FALSE(backend.hasCommand(QStringLiteral("../voxtype")));
+    EXPECT_FALSE(backend.hasCommand(QStringLiteral("-voxtype")));
+    EXPECT_FALSE(backend.hasCommand(QString()));
+    EXPECT_FALSE(backend.hasCommand(QString(65, QLatin1Char('v'))));
+    spinUntil([] { return false; }, 100);
+    EXPECT_TRUE(recorded(QStringLiteral("voxtype")).isEmpty()) << "a look-up runs nothing";
+}
+
 // Update Now's runner keeps its state in the session's runtime folder; without one there is no file to read.
 TEST_F(BackendTest, TheRunnersStateIsInTheRuntimeFolder)
 {

@@ -52,6 +52,12 @@ TestCase {
             property var unreadable: []
             signal finished(string tag, bool ok, string output)
             signal failed(string tag, string reason)
+            // ADR-0045: a command on PATH (none here) and Omarchy's read-only checks (recorded nowhere: no answer comes).
+            function hasCommand(name: string): bool {
+                return false;
+            }
+            function readOnlyQuery(argv: var, tag: string): void {
+            }
             function readText(path: string): var {
                 if (unreadable.indexOf(path) >= 0)
                     return {exists: true, ok: false, text: ""};
@@ -95,7 +101,9 @@ TestCase {
     }
 
     function answer(t, json) {
-        compare(t.backend.busQueries[t.backend.busQueries.length - 1], {what: "privacy.state", tag: "privacy.state"});
+        // The store's state is the last query of the permissions (the hub also asks UDisks2 for Disk Encryption, ADR-0045).
+        const store = t.backend.busQueries.filter(q => q.what !== "disk.state");
+        compare(store[store.length - 1], {what: "privacy.state", tag: "privacy.state"});
         t.backend.finished("privacy.state", true, JSON.stringify(json === undefined ? testCase.stateJson : json));
     }
 
@@ -322,10 +330,12 @@ TestCase {
         verify(find(c.page, i => i.title === "constructor" && i.showToggle !== undefined));
     }
 
-    // The hub asks the store once, then counts: Location's value, each category's "None", "1 app", "2 apps".
+    // The hub asks the store once, then counts: Location's value, each category's "None", "1 app", "2 apps". (It also asks UDisks2
+    // once, for Disk Encryption: ADR-0045.)
     function test_hubCounts() {
         const t = make(hubComp);
-        compare(t.backend.busQueries.length, 1);
+        compare(t.backend.busQueries.filter(q => q.what === "privacy.state").length, 1);
+        compare(t.backend.busQueries.filter(q => q.what === "disk.state").length, 1);
         const location = find(t.page, i => i.text === "Location Services" && i.value !== undefined);
         compare(location.value, "", "nothing until the store answers");
         answer(t);

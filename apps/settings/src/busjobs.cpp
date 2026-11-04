@@ -94,6 +94,15 @@ void BusJobs::start(Job job, Done done, int timeoutMs)
     }).detach();
 }
 
+BusJobs::Post BusJobs::poster() const
+{
+    return [state = m_state](std::function<void()> f) {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        if (state->alive && state->mailbox)
+            QMetaObject::invokeMethod(state->mailbox, std::move(f), Qt::QueuedConnection);
+    };
+}
+
 bool InFlight::begin(const QString &tag, const QString &key)
 {
     if (m_items.contains(tag))

@@ -532,6 +532,62 @@ TEST(LaunchGuard, OnlyUpdateNowAndTheSessionEnd)
     EXPECT_FALSE(isLaunch({QStringLiteral("/usr/lib/grassfield/grassfield-channel-set"), QStringLiteral("beta")}));
 }
 
+// ADR-0045 (OC-6, OC-8, OC-9, OC-10): Omarchy's read-only checks with no argument, the QR code with --meta alone, lsblk with
+// its one column list; none of them takes a value from the page.
+TEST(QueryGuard, OmarchysChecksAndTheBlockDevicesAreExact)
+{
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-hw-fingerprint")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-hibernation-available")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-hw-fingerprint"), QStringLiteral("--help")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-hibernation-available"), QStringLiteral("x")}));
+    // An interface named by the page, the bare matrix, or anything after --meta: not a query.
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS"), QStringLiteral("/dev/sda")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,UUID")}));
+    // The setups and the scripts that change something are never queries, and never actions either.
+    for (const char *no : {"omarchy-hibernation-setup", "omarchy-drive-password", "omarchy-drive-info", "omarchy-voxtype-status", "omarchy-pkg-present",
+                           "omarchy-setup-security-sshd", "omarchy-launch-floating-terminal-with-presentation"}) {
+        EXPECT_FALSE(isReadOnlyQuery({QString::fromLatin1(no)})) << no;
+        EXPECT_FALSE(isAllowedAction({QString::fromLatin1(no)})) << no;
+    }
+}
+
+// ADR-0045 OC-0.4 and OC-0.7: each setup no system service offers is Omarchy's command alone in Omarchy's floating terminal,
+// as Omarchy's own menu starts it; Language Model… is Omarchy's command, which opens that terminal itself.
+TEST(LaunchGuard, OmarchysSetupsInItsTerminalExactly)
+{
+    const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
+    for (const char *command : {"omarchy-setup-security-fingerprint", "omarchy-remove-security-fingerprint", "omarchy-setup-security-fido2",
+                                "omarchy-remove-security-fido2", "omarchy-setup-security-sshd", "omarchy-drive-password", "omarchy-hibernation-setup",
+                                "omarchy-hibernation-remove", "omarchy-voxtype-install", "omarchy-voxtype-remove"}) {
+        const QString c = QString::fromLatin1(command);
+        EXPECT_TRUE(isLaunch({launcher, c})) << command;
+        // Never with an argument, never outside the terminal, never as an action or a query.
+        EXPECT_FALSE(isLaunch({launcher, c, QStringLiteral("--force")})) << command;
+        EXPECT_FALSE(isLaunch({launcher, c + QStringLiteral(" --force")})) << command;
+        EXPECT_FALSE(isLaunch({c})) << command;
+        EXPECT_FALSE(isAllowedAction({launcher, c})) << command;
+        EXPECT_FALSE(isReadOnlyQuery({launcher, c})) << command;
+    }
+    EXPECT_TRUE(isLaunch({QStringLiteral("omarchy-voxtype-model")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-voxtype-model")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("omarchy-voxtype-model"), QStringLiteral("x")}));
+    // Remote Login's switch is systemd's (systembus.h ssh.enable); Omarchy's removal of the server, a hibernation setup with
+    // --force, the voxtype configuration and a password change for another user are not Settings' to start.
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-remove-security-sshd")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-hibernation-setup --force")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-voxtype-config")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("passwd")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("voxtype setup model")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("/usr/bin/omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-drive-password")}));
+}
+
 TEST(ActionGuard, XdgOpenOnlyOpensOneCleanHttpsLink)
 {
     const QString open = QStringLiteral("xdg-open");

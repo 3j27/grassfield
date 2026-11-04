@@ -145,6 +145,22 @@ bool isReadOnlyQuery(const QStringList &argv)
     // pacman.conf, the included file and the build's repository.conf). The installed file, never one found on PATH.
     if (program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set"))
         return args.isEmpty();
+    // ADR-0045 (OC-6, OC-9, OC-10): Omarchy's own checks, each read in full (v4.0.6) and found to write nothing, so a dev
+    // session may run them too; no argument comes from the page.
+    //   omarchy-hw-fingerprint         exit status 0 when a USB fingerprint reader is there (it reads sysfs only)
+    //   omarchy-hibernation-available  exit status 0 when hibernation is set up (it reads /sys/power/image_size and /proc/swaps
+    //                                  and tests that /etc/mkinitcpio.conf.d/omarchy_resume.conf exists)
+    //   omarchy-network-qr --meta      the current Wi-Fi network's QR code as a matrix of 0 and 1 after one "meta" line (nmcli
+    //                                  reads, the secret through NetworkManager's own permission check, then qrencode); without
+    //                                  an interface argument Omarchy picks the device of the default route, else the first
+    //                                  connected Wi-Fi device, and its meta line names the network it encoded
+    if (program == QLatin1String("omarchy-hw-fingerprint") || program == QLatin1String("omarchy-hibernation-available"))
+        return args.isEmpty();
+    if (program == QLatin1String("omarchy-network-qr"))
+        return args == QStringList{QStringLiteral("--meta")};
+    // Privacy & Security > Disk Encryption (ADR-0045 OC-8): the block devices as JSON, with what holds each mount point.
+    if (program == QLatin1String("lsblk"))
+        return args == QStringList{QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")};
     // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
     // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
     // Nor is omarchy-brightness-display-ddc with a connector alone (Displays: an external display's level, ADR-0045 OC-4). It
@@ -397,9 +413,24 @@ int actionTimeoutMs(const QStringList &argv, int requested)
 bool isLaunch(const QStringList &argv)
 {
     static const QString sessionEnd = QStringLiteral("/usr/lib/grassfield/grassfield-session-end");
+    // The Omarchy commands Settings opens in Omarchy's floating terminal, each alone after the launcher (ADR-0033 U11, U28;
+    // ADR-0045 OC-0.4: the argv of Omarchy's own menu, default/omarchy/omarchy-menu.jsonc, where it has one).
+    static const QStringList inTerminal{QStringLiteral("omarchy-update"),
+                                        QStringLiteral("omarchy-migrate"),
+                                        QStringLiteral("omarchy-setup-security-fingerprint"),
+                                        QStringLiteral("omarchy-remove-security-fingerprint"),
+                                        QStringLiteral("omarchy-setup-security-fido2"),
+                                        QStringLiteral("omarchy-remove-security-fido2"),
+                                        QStringLiteral("omarchy-setup-security-sshd"),
+                                        QStringLiteral("omarchy-drive-password"),
+                                        QStringLiteral("omarchy-hibernation-setup"),
+                                        QStringLiteral("omarchy-hibernation-remove"),
+                                        QStringLiteral("omarchy-voxtype-install"),
+                                        QStringLiteral("omarchy-voxtype-remove")};
     return argv == QStringList{QStringLiteral("/usr/lib/grassfield/grassfield-update-run")}
-        || argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-update")}
-        || argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-migrate")}
+        || (argv.size() == 2 && argv.at(0) == QLatin1String("omarchy-launch-floating-terminal-with-presentation") && inTerminal.contains(argv.at(1)))
+        // Dictation's Language Model… (ADR-0045 OC-5): Omarchy's command opens its floating terminal itself (`voxtype setup model`).
+        || argv == QStringList{QStringLiteral("omarchy-voxtype-model")}
         || argv == QStringList{sessionEnd, QStringLiteral("logout")} || argv == QStringList{sessionEnd, QStringLiteral("restart")};
 }
 

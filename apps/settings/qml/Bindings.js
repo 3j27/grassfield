@@ -79,6 +79,7 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Emoji & Symbols"),
     QT_TRANSLATE_NOOP("Bindings", "Previous input source"),
     QT_TRANSLATE_NOOP("Bindings", "Next input source"),
+    QT_TRANSLATE_NOOP("Bindings", "Start or stop dictation"),
     QT_TRANSLATE_NOOP("Bindings", "Apps"),
     "Notification Center",
     QT_TRANSLATE_NOOP("Bindings", "Screenshot and recording options"),

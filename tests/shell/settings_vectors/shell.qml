@@ -109,6 +109,7 @@ ShellRoot {
             "terminal.darkTheme": "terminalDarkTheme",
             "keyboard.shortcutStyle": "keyboardShortcutStyle",
             "keyboard.showInputMenu": "keyboardShowInputMenu",
+            "keyboard.dictation": "keyboardDictation",
             "region.formats": "regionFormats",
             "region.firstDayOfWeek": "regionFirstDayOfWeek",
             "icons.mode": "iconMode",

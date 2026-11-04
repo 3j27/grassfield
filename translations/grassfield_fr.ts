@@ -2130,6 +2130,38 @@
         <translation>Niveau de la batterie</translation>
     </message>
     <message>
+        <source>Hibernation</source>
+        <translation>Hibernation</translation>
+    </message>
+    <message>
+        <source>On. When the computer hibernates, the session is saved to the start-up disk and the computer turns off.</source>
+        <translation>Activée. Lorsque l’ordinateur hiberne, la session est enregistrée sur le disque de démarrage et l’ordinateur s’éteint.</translation>
+    </message>
+    <message>
+        <source>Set up, but not available: the swap file is missing or smaller than the memory. Set it up again or remove it.</source>
+        <translation>Configurée, mais indisponible&#xa0;: le fichier d’échange manque ou est plus petit que la mémoire. Configurez-la de nouveau ou supprimez-la.</translation>
+    </message>
+    <message>
+        <source>Off. Hibernation saves the session to the start-up disk and turns the computer off; it needs a swap file as large as the memory.</source>
+        <translation>Désactivée. L’hibernation enregistre la session sur le disque de démarrage et éteint l’ordinateur&#xa0;; elle nécessite un fichier d’échange aussi grand que la mémoire.</translation>
+    </message>
+    <message>
+        <source>Set Up…</source>
+        <translation>Configurer…</translation>
+    </message>
+    <message>
+        <source>Remove…</source>
+        <translation>Supprimer…</translation>
+    </message>
+    <message>
+        <source>Set up hibernation</source>
+        <translation>Configurer l’hibernation</translation>
+    </message>
+    <message>
+        <source>Remove hibernation</source>
+        <translation>Supprimer l’hibernation</translation>
+    </message>
+    <message>
         <source>The battery cannot be read: UPower did not answer.</source>
         <translation>La batterie ne peut pas être lue&#xa0;: UPower n’a pas répondu.</translation>
     </message>
@@ -2419,6 +2451,10 @@
     <message>
         <source>Next input source</source>
         <translation>Méthode de saisie suivante</translation>
+    </message>
+    <message>
+        <source>Start or stop dictation</source>
+        <translation>Démarrer ou arrêter la dictée</translation>
     </message>
     <message>
         <source>Screenshot and recording options</source>
@@ -4334,6 +4370,57 @@
     </message>
 </context>
 <context>
+    <name>DiskPasswordSheet</name>
+    <message>
+        <source>Change the start-up disk&apos;s password</source>
+        <translation>Modifier le mot de passe du disque de démarrage</translation>
+    </message>
+    <message>
+        <source>This password unlocks the start-up disk when the computer starts. Other passwords of the disk keep working.</source>
+        <translation>Ce mot de passe déverrouille le disque de démarrage au démarrage de l’ordinateur. Les autres mots de passe du disque restent valables.</translation>
+    </message>
+    <message>
+        <source>Change Password</source>
+        <translation>Modifier le mot de passe</translation>
+    </message>
+    <message>
+        <source>Not applied in a dev session.</source>
+        <translation>Non appliqué dans une session de développement.</translation>
+    </message>
+    <message>
+        <source>The password cannot be changed now.</source>
+        <translation>Le mot de passe ne peut pas être modifié pour l’instant.</translation>
+    </message>
+    <message>
+        <source>The password was not changed: %1.</source>
+        <translation>Le mot de passe n’a pas été modifié&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>The password was not changed.</source>
+        <translation>Le mot de passe n’a pas été modifié.</translation>
+    </message>
+    <message>
+        <source>Current password</source>
+        <translation>Mot de passe actuel</translation>
+    </message>
+    <message>
+        <source>New password</source>
+        <translation>Nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>Verify</source>
+        <translation>Confirmer</translation>
+    </message>
+    <message>
+        <source>Verify the new password</source>
+        <translation>Confirmer le nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>The new passwords do not match.</source>
+        <translation>Les nouveaux mots de passe ne correspondent pas.</translation>
+    </message>
+</context>
+<context>
     <name>DisplayHeader</name>
     <message>
         <source>Built-in Display</source>
@@ -5772,6 +5859,251 @@
     </message>
 </context>
 <context>
+    <name>Fingerprint</name>
+    <message>
+        <source>Right index finger</source>
+        <translation>Index droit</translation>
+    </message>
+    <message>
+        <source>Left index finger</source>
+        <translation>Index gauche</translation>
+    </message>
+    <message>
+        <source>Right thumb</source>
+        <translation>Pouce droit</translation>
+    </message>
+    <message>
+        <source>Left thumb</source>
+        <translation>Pouce gauche</translation>
+    </message>
+    <message>
+        <source>Right middle finger</source>
+        <translation>Majeur droit</translation>
+    </message>
+    <message>
+        <source>Left middle finger</source>
+        <translation>Majeur gauche</translation>
+    </message>
+    <message>
+        <source>Right ring finger</source>
+        <translation>Annulaire droit</translation>
+    </message>
+    <message>
+        <source>Left ring finger</source>
+        <translation>Annulaire gauche</translation>
+    </message>
+    <message>
+        <source>Right little finger</source>
+        <translation>Auriculaire droit</translation>
+    </message>
+    <message>
+        <source>Left little finger</source>
+        <translation>Auriculaire gauche</translation>
+    </message>
+</context>
+<context>
+    <name>FingerprintEnrollSheet</name>
+    <message>
+        <source>Add a Fingerprint</source>
+        <translation>Ajouter une empreinte digitale</translation>
+    </message>
+    <message>
+        <source>Try Again</source>
+        <translation>Réessayer</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>Another enrolment is still running.</source>
+        <translation>Un autre enregistrement est encore en cours.</translation>
+    </message>
+    <message>
+        <source>Getting the fingerprint reader ready…</source>
+        <translation>Préparation du lecteur d’empreintes…</translation>
+    </message>
+    <message>
+        <source>Place your %1 on the sensor.</source>
+        <translation>Placez votre %1 sur le capteur.</translation>
+    </message>
+    <message>
+        <source>Lift your finger and rest it on the sensor again, a little differently each time.</source>
+        <translation>Soulevez votre doigt et posez-le de nouveau sur le capteur, un peu différemment à chaque fois.</translation>
+    </message>
+    <message>
+        <source>Adjust your grip to capture the edges of your fingerprint.</source>
+        <translation>Ajustez votre prise pour capturer les bords de votre empreinte.</translation>
+    </message>
+    <message>
+        <source>That touch was not read. Rest your finger on the sensor again.</source>
+        <translation>Ce contact n’a pas été lu. Posez de nouveau votre doigt sur le capteur.</translation>
+    </message>
+    <message>
+        <source>Swipe your finger across the whole sensor.</source>
+        <translation>Faites glisser votre doigt sur tout le capteur.</translation>
+    </message>
+    <message>
+        <source>Centre your finger on the sensor.</source>
+        <translation>Centrez votre doigt sur le capteur.</translation>
+    </message>
+    <message>
+        <source>Lift your finger, then rest it on the sensor again.</source>
+        <translation>Soulevez votre doigt, puis posez-le de nouveau sur le capteur.</translation>
+    </message>
+    <message>
+        <source>Your fingerprint is ready.</source>
+        <translation>Votre empreinte digitale est prête.</translation>
+    </message>
+    <message>
+        <source>The fingerprint reader has no room for another print.</source>
+        <translation>Le lecteur d’empreintes n’a plus de place pour une autre empreinte.</translation>
+    </message>
+    <message>
+        <source>The fingerprint reader was disconnected.</source>
+        <translation>Le lecteur d’empreintes a été déconnecté.</translation>
+    </message>
+    <message>
+        <source>This finger is already enrolled.</source>
+        <translation>Ce doigt est déjà enregistré.</translation>
+    </message>
+    <message>
+        <source>The fingerprint could not be enrolled.</source>
+        <translation>L’empreinte digitale n’a pas pu être enregistrée.</translation>
+    </message>
+    <message>
+        <source>The fingerprint could not be enrolled: %1.</source>
+        <translation>L’empreinte digitale n’a pas pu être enregistrée&#xa0;: %1.</translation>
+    </message>
+</context>
+<context>
+    <name>FingerprintPage</name>
+    <message>
+        <source>Fingerprint &amp; Security Key</source>
+        <translation>Empreinte et clé de sécurité</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Activé</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Désactivé</translation>
+    </message>
+    <message>
+        <source>Use your fingerprint or a security key instead of your password to unlock this computer, approve administrator prompts and run sudo.</source>
+        <translation>Utilisez votre empreinte digitale ou une clé de sécurité au lieu de votre mot de passe pour déverrouiller cet ordinateur, approuver les demandes d’administrateur et exécuter sudo.</translation>
+    </message>
+    <message>
+        <source>Fingerprint</source>
+        <translation>Empreinte digitale</translation>
+    </message>
+    <message>
+        <source>Not set up</source>
+        <translation>Non configurée</translation>
+    </message>
+    <message>
+        <source>Set Up…</source>
+        <translation>Configurer…</translation>
+    </message>
+    <message>
+        <source>Set up fingerprint</source>
+        <translation>Configurer l’empreinte digitale</translation>
+    </message>
+    <message>
+        <source>Fingerprints</source>
+        <translation>Empreintes digitales</translation>
+    </message>
+    <message>
+        <source>The fingerprint reader does not answer.</source>
+        <translation>Le lecteur d’empreintes ne répond pas.</translation>
+    </message>
+    <message>
+        <source>The fingerprint reader does not answer: %1.</source>
+        <translation>Le lecteur d’empreintes ne répond pas&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>fprintd finds no fingerprint reader.</source>
+        <translation>fprintd ne trouve aucun lecteur d’empreintes.</translation>
+    </message>
+    <message>
+        <source>Delete…</source>
+        <translation>Supprimer…</translation>
+    </message>
+    <message>
+        <source>Delete the fingerprint %1</source>
+        <translation>Supprimer l’empreinte %1</translation>
+    </message>
+    <message>
+        <source>No fingerprint enrolled</source>
+        <translation>Aucune empreinte enregistrée</translation>
+    </message>
+    <message>
+        <source>Add Fingerprint…</source>
+        <translation>Ajouter une empreinte…</translation>
+    </message>
+    <message>
+        <source>Use fingerprint for</source>
+        <translation>Utiliser l’empreinte pour</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s setup turns these on together. When the reader is not available (the lid is closed), the password is asked instead.</source>
+        <translation>La configuration d’Omarchy les active ensemble. Quand le lecteur n’est pas disponible (écran rabattu), le mot de passe est demandé à la place.</translation>
+    </message>
+    <message>
+        <source>Unlocking the lock screen</source>
+        <translation>Déverrouiller l’écran verrouillé</translation>
+    </message>
+    <message>
+        <source>Administrator prompts</source>
+        <translation>Demandes d’administrateur</translation>
+    </message>
+    <message>
+        <source>sudo in Terminal</source>
+        <translation>sudo dans le Terminal</translation>
+    </message>
+    <message>
+        <source>Remove Fingerprint Setup…</source>
+        <translation>Supprimer la configuration de l’empreinte…</translation>
+    </message>
+    <message>
+        <source>Security Key</source>
+        <translation>Clé de sécurité</translation>
+    </message>
+    <message>
+        <source>A FIDO2 security key that you plug in and touch. It is used for administrator prompts and sudo, not for the lock screen.</source>
+        <translation>Une clé de sécurité FIDO2 que vous branchez et touchez. Elle sert aux demandes d’administrateur et à sudo, pas à l’écran verrouillé.</translation>
+    </message>
+    <message>
+        <source>Security key</source>
+        <translation>Clé de sécurité</translation>
+    </message>
+    <message>
+        <source>Used for administrator prompts and sudo</source>
+        <translation>Utilisée pour les demandes d’administrateur et sudo</translation>
+    </message>
+    <message>
+        <source>Used for administrator prompts</source>
+        <translation>Utilisée pour les demandes d’administrateur</translation>
+    </message>
+    <message>
+        <source>Used for sudo</source>
+        <translation>Utilisée pour sudo</translation>
+    </message>
+    <message>
+        <source>Remove…</source>
+        <translation>Supprimer…</translation>
+    </message>
+    <message>
+        <source>Remove the security key</source>
+        <translation>Supprimer la clé de sécurité</translation>
+    </message>
+    <message>
+        <source>Set up a security key</source>
+        <translation>Configurer une clé de sécurité</translation>
+    </message>
+</context>
+<context>
     <name>FocusPage</name>
     <message>
         <source>Focus</source>
@@ -6000,6 +6332,10 @@
     <message>
         <source>Login Items</source>
         <translation>Ouverture</translation>
+    </message>
+    <message>
+        <source>Sharing</source>
+        <translation>Partage</translation>
     </message>
 </context>
 <context>
@@ -7292,6 +7628,50 @@
         <source>The menu appears once there are two input sources.</source>
         <translation>Le menu apparaît dès qu’il y a deux méthodes de saisie.</translation>
     </message>
+    <message>
+        <source>Dictation</source>
+        <translation>Dictée</translation>
+    </message>
+    <message>
+        <source>Use dictation wherever you can type text. To start and stop dictating, use the shortcut. Speech is recognised on this computer.</source>
+        <translation>Utilisez la dictée partout où vous pouvez saisir du texte. Pour commencer et arrêter la dictée, utilisez le raccourci. La parole est reconnue sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Dictation needs Voxtype, which Omarchy installs with its speech model.</source>
+        <translation>La dictée nécessite Voxtype, qu’Omarchy installe avec son modèle vocal.</translation>
+    </message>
+    <message>
+        <source>Set Up…</source>
+        <translation>Configurer…</translation>
+    </message>
+    <message>
+        <source>Set up dictation</source>
+        <translation>Configurer la dictée</translation>
+    </message>
+    <message>
+        <source>Shortcut</source>
+        <translation>Raccourci</translation>
+    </message>
+    <message>
+        <source>Ctrl+Super+X</source>
+        <translation>Ctrl+Super+X</translation>
+    </message>
+    <message>
+        <source>Speech model</source>
+        <translation>Modèle vocal</translation>
+    </message>
+    <message>
+        <source>Language Model…</source>
+        <translation>Modèle de langue…</translation>
+    </message>
+    <message>
+        <source>Remove…</source>
+        <translation>Supprimer…</translation>
+    </message>
+    <message>
+        <source>Remove dictation</source>
+        <translation>Supprimer la dictée</translation>
+    </message>
 </context>
 <context>
     <name>KeyboardShortcutsSheet</name>
@@ -8100,6 +8480,14 @@
         <translation>confidentialité autorisations localisation caméra appareil photo arrière-plan partage d’écran bureau à distance apps flatpak portail</translation>
     </message>
     <message>
+        <source>Fingerprint &amp; Security Key</source>
+        <translation>Empreinte et clé de sécurité</translation>
+    </message>
+    <message>
+        <source>fingerprint reader enrol finger security key fido2 sudo administrator unlock password</source>
+        <translation>empreinte digitale lecteur enregistrer doigt clé de sécurité fido2 sudo administrateur déverrouiller mot de passe</translation>
+    </message>
+    <message>
         <source>shortcuts keys bindings</source>
         <translation>raccourcis touches clavier</translation>
     </message>
@@ -8170,6 +8558,14 @@
     <message>
         <source>language region formats locale date number first day of week calendar</source>
         <translation>langue région formats paramètres régionaux date nombre premier jour de la semaine calendrier</translation>
+    </message>
+    <message>
+        <source>Sharing</source>
+        <translation>Partage</translation>
+    </message>
+    <message>
+        <source>sharing remote login ssh server</source>
+        <translation>partage session à distance ssh serveur</translation>
     </message>
     <message>
         <source>Do Not Disturb</source>
@@ -8262,6 +8658,14 @@
     <message>
         <source>Search settings</source>
         <translation>Rechercher dans les réglages</translation>
+    </message>
+    <message>
+        <source>Delete the fingerprint “%1”?</source>
+        <translation>Supprimer l’empreinte «&#xa0;%1&#xa0;»&#xa0;?</translation>
+    </message>
+    <message>
+        <source>This finger will no longer unlock this computer, approve administrator prompts or run sudo.</source>
+        <translation>Ce doigt ne pourra plus déverrouiller cet ordinateur, approuver les demandes d’administrateur ni exécuter sudo.</translation>
     </message>
     <message>
         <source>Are you sure you want to quit all applications and log out now?</source>
@@ -8974,6 +9378,10 @@
     <message>
         <source>Forget This Network…</source>
         <translation>Oublier ce réseau…</translation>
+    </message>
+    <message>
+        <source>Share Network…</source>
+        <translation>Partager le réseau…</translation>
     </message>
 </context>
 <context>
@@ -10549,6 +10957,30 @@
     <message>
         <source>These permissions apply when an app asks the desktop portal, as sandboxed apps (Flatpak, Snap) do. They do not limit apps that are not sandboxed, nor sandboxed apps given direct access to devices.</source>
         <translation>Ces autorisations s’appliquent quand une app passe par le portail de bureau, comme le font les apps isolées (Flatpak, Snap). Elles ne limitent ni les apps non isolées, ni les apps isolées qui ont un accès direct aux périphériques.</translation>
+    </message>
+    <message>
+        <source>Disk Encryption</source>
+        <translation>Chiffrement du disque</translation>
+    </message>
+    <message>
+        <source>On for the start-up disk (%1). Its password is asked when the computer starts.</source>
+        <translation>Activé pour le disque de démarrage (%1). Son mot de passe est demandé au démarrage de l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>On for the start-up disk. Its password is asked when the computer starts.</source>
+        <translation>Activé pour le disque de démarrage. Son mot de passe est demandé au démarrage de l’ordinateur.</translation>
+    </message>
+    <message>
+        <source>Off. The start-up disk is not encrypted, and encryption cannot be turned on in place: it is chosen when the system is installed.</source>
+        <translation>Désactivé. Le disque de démarrage n’est pas chiffré, et le chiffrement ne peut pas être activé sur place&#xa0;: il se choisit à l’installation du système.</translation>
+    </message>
+    <message>
+        <source>Change Password…</source>
+        <translation>Modifier le mot de passe…</translation>
+    </message>
+    <message>
+        <source>Change the disk password</source>
+        <translation>Modifier le mot de passe du disque</translation>
     </message>
     <message>
         <source>Location Services</source>
@@ -12636,6 +13068,37 @@
     </message>
 </context>
 <context>
+    <name>ShareNetworkSheet</name>
+    <message>
+        <source>Share “%1”</source>
+        <translation>Partager «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Point the camera of a phone or a tablet at this code to join the network. The code holds the network&apos;s password.</source>
+        <translation>Pointez l’appareil photo d’un téléphone ou d’une tablette vers ce code pour rejoindre le réseau. Le code contient le mot de passe du réseau.</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>OK</translation>
+    </message>
+    <message>
+        <source>The code was made for another network.</source>
+        <translation>Le code a été créé pour un autre réseau.</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s answer could not be read.</source>
+        <translation>La réponse d’Omarchy n’a pas pu être lue.</translation>
+    </message>
+    <message>
+        <source>QR code to join “%1”</source>
+        <translation>Code QR pour rejoindre «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>The code cannot be made: %1</source>
+        <translation>Le code ne peut pas être créé&#xa0;: %1</translation>
+    </message>
+</context>
+<context>
     <name>SharePickerPanel</name>
     <message>
         <source>Share Your Screen</source>
@@ -12716,6 +13179,33 @@
     <message>
         <source>Share</source>
         <translation>Partager</translation>
+    </message>
+</context>
+<context>
+    <name>SharingPage</name>
+    <message>
+        <source>Sharing</source>
+        <translation>Partage</translation>
+    </message>
+    <message>
+        <source>The state of Remote Login cannot be read.</source>
+        <translation>L’état de la session à distance ne peut pas être lu.</translation>
+    </message>
+    <message>
+        <source>To log in to this computer remotely, type “%1”.</source>
+        <translation>Pour vous connecter à cet ordinateur à distance, tapez «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>Remote Login lets people log in to this computer over SSH with a key you authorized. The first time, Omarchy sets it up in a Terminal window.</source>
+        <translation>La session à distance permet de se connecter à cet ordinateur par SSH avec une clé que vous avez autorisée. La première fois, Omarchy la configure dans une fenêtre du Terminal.</translation>
+    </message>
+    <message>
+        <source>Remote Login</source>
+        <translation>Session à distance</translation>
+    </message>
+    <message>
+        <source>On, but the SSH server is not running.</source>
+        <translation>Activée, mais le serveur SSH ne fonctionne pas.</translation>
     </message>
 </context>
 <context>
@@ -14363,6 +14853,14 @@
         <translation>Ce réseau n’est plus à portée</translation>
     </message>
     <message>
+        <source>the current password is not correct</source>
+        <translation>le mot de passe actuel est incorrect</translation>
+    </message>
+    <message>
+        <source>the fingerprint reader cannot be followed</source>
+        <translation>le lecteur d’empreintes ne peut pas être suivi</translation>
+    </message>
+    <message>
         <source>the network could not be joined, and its new settings could not be removed: %1</source>
         <translation>Impossible de rejoindre le réseau, et ses nouveaux réglages n’ont pas pu être supprimés&#xa0;: %1</translation>
     </message>
@@ -14377,6 +14875,10 @@
     <message>
         <source>that network does not take a password</source>
         <translation>Ce réseau ne prend pas de mot de passe</translation>
+    </message>
+    <message>
+        <source>the start-up disk is not encrypted</source>
+        <translation>le disque de démarrage n’est pas chiffré</translation>
     </message>
     <message>
         <source>no battery</source>
@@ -14522,6 +15024,105 @@
     <message>
         <source>Gray</source>
         <translation>Gris</translation>
+    </message>
+</context>
+<context>
+    <name>TerminalSetupSheet</name>
+    <message>
+        <source>Set Up Fingerprint</source>
+        <translation>Configurer l’empreinte digitale</translation>
+    </message>
+    <message>
+        <source>Omarchy installs the fingerprint reader&apos;s driver, enrols your right index finger and turns fingerprint on for the lock screen, administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.</source>
+        <translation>Omarchy installe le pilote du lecteur d’empreintes, enregistre votre index droit et active l’empreinte pour l’écran verrouillé, les demandes d’administrateur et sudo. Cela se fait dans une fenêtre du Terminal, car des logiciels sont installés et la façon dont cet ordinateur vérifie votre identité change&#xa0;; votre mot de passe y est demandé.</translation>
+    </message>
+    <message>
+        <source>Remove Fingerprint Setup</source>
+        <translation>Supprimer la configuration de l’empreinte</translation>
+    </message>
+    <message>
+        <source>Omarchy turns fingerprint off for the lock screen, administrator prompts and sudo, and removes the reader&apos;s driver. It runs in a Terminal window and asks for your password there.</source>
+        <translation>Omarchy désactive l’empreinte pour l’écran verrouillé, les demandes d’administrateur et sudo, et supprime le pilote du lecteur. Cela se fait dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>Set Up Security Key</source>
+        <translation>Configurer la clé de sécurité</translation>
+    </message>
+    <message>
+        <source>Omarchy installs the security key tools, registers the key you plug in and touch, and turns it on for administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.</source>
+        <translation>Omarchy installe les outils de clé de sécurité, enregistre la clé que vous branchez et touchez, et l’active pour les demandes d’administrateur et sudo. Cela se fait dans une fenêtre du Terminal, car des logiciels sont installés et la façon dont cet ordinateur vérifie votre identité change&#xa0;; votre mot de passe y est demandé.</translation>
+    </message>
+    <message>
+        <source>Remove Security Key</source>
+        <translation>Supprimer la clé de sécurité</translation>
+    </message>
+    <message>
+        <source>Omarchy turns the security key off for administrator prompts and sudo, deletes its registration and removes the security key tools. It runs in a Terminal window and asks for your password there.</source>
+        <translation>Omarchy désactive la clé de sécurité pour les demandes d’administrateur et sudo, supprime son enregistrement et les outils de clé de sécurité. Cela se fait dans une fenêtre du Terminal, qui demande votre mot de passe.</translation>
+    </message>
+    <message>
+        <source>Set Up Remote Login</source>
+        <translation>Configurer la session à distance</translation>
+    </message>
+    <message>
+        <source>Omarchy installs the SSH server if needed and starts it, opens the firewall&apos;s SSH port, adds your public key (from GitHub or pasted) and turns password logins off. It runs in a Terminal window because it asks for your key there. Afterwards the switch turns Remote Login on and off here.</source>
+        <translation>Omarchy installe le serveur SSH si nécessaire et le démarre, ouvre le port SSH du pare-feu, ajoute votre clé publique (depuis GitHub ou collée) et désactive les connexions par mot de passe. Cela se fait dans une fenêtre du Terminal, car votre clé y est demandée. Ensuite, l’interrupteur active et désactive la session à distance ici.</translation>
+    </message>
+    <message>
+        <source>Change Disk Password</source>
+        <translation>Modifier le mot de passe du disque</translation>
+    </message>
+    <message>
+        <source>The disk service does not answer, so Omarchy changes the start-up disk&apos;s password in a Terminal window: it asks for the new password twice, then for the current one.</source>
+        <translation>Le service des disques ne répond pas&#xa0;: Omarchy modifie le mot de passe du disque de démarrage dans une fenêtre du Terminal. Il demande deux fois le nouveau mot de passe, puis l’actuel.</translation>
+    </message>
+    <message>
+        <source>Set Up Hibernation</source>
+        <translation>Configurer l’hibernation</translation>
+    </message>
+    <message>
+        <source>Omarchy makes a swap file as large as the memory on the start-up disk, adds it to the start-up settings and rebuilds the start-up files. It runs in a Terminal window, asks before it starts and offers to restart at the end.</source>
+        <translation>Omarchy crée sur le disque de démarrage un fichier d’échange aussi grand que la mémoire, l’ajoute aux réglages de démarrage et reconstruit les fichiers de démarrage. Cela se fait dans une fenêtre du Terminal, qui demande avant de commencer et propose de redémarrer à la fin.</translation>
+    </message>
+    <message>
+        <source>Remove Hibernation</source>
+        <translation>Supprimer l’hibernation</translation>
+    </message>
+    <message>
+        <source>Omarchy removes the swap file and the hibernation settings, then rebuilds the start-up files. It runs in a Terminal window and asks before it starts.</source>
+        <translation>Omarchy supprime le fichier d’échange et les réglages d’hibernation, puis reconstruit les fichiers de démarrage. Cela se fait dans une fenêtre du Terminal, qui demande avant de commencer.</translation>
+    </message>
+    <message>
+        <source>Set Up Dictation</source>
+        <translation>Configurer la dictée</translation>
+    </message>
+    <message>
+        <source>Omarchy installs Voxtype and its speech model, about 150 MB, in a Terminal window. Speech is recognised on this computer: nothing is sent elsewhere.</source>
+        <translation>Omarchy installe Voxtype et son modèle vocal, environ 150&#xa0;Mo, dans une fenêtre du Terminal. La parole est reconnue sur cet ordinateur&#xa0;: rien n’est envoyé ailleurs.</translation>
+    </message>
+    <message>
+        <source>Choose a Speech Model</source>
+        <translation>Choisir un modèle vocal</translation>
+    </message>
+    <message>
+        <source>Voxtype lists its speech models in a Terminal window: larger ones recognise more and are slower. The one you choose is downloaded and used from then on.</source>
+        <translation>Voxtype présente ses modèles vocaux dans une fenêtre du Terminal&#xa0;: les plus grands reconnaissent mieux et sont plus lents. Celui que vous choisissez est téléchargé puis utilisé.</translation>
+    </message>
+    <message>
+        <source>Remove Dictation</source>
+        <translation>Supprimer la dictée</translation>
+    </message>
+    <message>
+        <source>Omarchy stops Voxtype and removes it with its speech models and settings, in a Terminal window.</source>
+        <translation>Omarchy arrête Voxtype et le supprime avec ses modèles vocaux et ses réglages, dans une fenêtre du Terminal.</translation>
+    </message>
+    <message>
+        <source>This needs Omarchy&apos;s “%1”, which is not installed on this computer.</source>
+        <translation>Cela nécessite «&#xa0;%1&#xa0;» d’Omarchy, qui n’est pas installé sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Open Terminal</source>
+        <translation>Ouvrir le Terminal</translation>
     </message>
 </context>
 <context>

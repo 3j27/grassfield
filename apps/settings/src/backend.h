@@ -4,6 +4,7 @@
 #include <QFileSystemWatcher>
 #include <QProcessEnvironment>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -53,6 +54,8 @@ class Backend : public QObject
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
     // XDG_STATE_HOME (else ~/.local/state): Battery reads Omarchy's remembered power profiles there (read-only).
     Q_PROPERTY(QString stateDir READ stateDir CONSTANT)
+    // The account's login name ($USER, else the home folder's name): Sharing > Remote Login's "ssh <user>@<host>" (ADR-0045).
+    Q_PROPERTY(QString userName READ userName CONSTANT)
     // Language & Region: Omarchy's language command is installed (found on PATH, not run; Omarchy 4.0.4 has none).
     Q_PROPERTY(bool omarchyLanguage READ omarchyLanguage CONSTANT)
     // Software Update (ADR-0033 d; docs/specs/updates.md U10): the shell's software-update.json (runmode.h stateDir), read
@@ -99,6 +102,11 @@ public:
     {
         const QString xdg = qEnvironmentVariable("XDG_STATE_HOME");
         return QDir::cleanPath(xdg.startsWith(QLatin1Char('/')) ? xdg : homeDir() + QStringLiteral("/.local/state"));
+    }
+    QString userName() const
+    {
+        const QString user = qEnvironmentVariable("USER");
+        return user.isEmpty() ? QDir(homeDir()).dirName() : user;
     }
     bool omarchyLanguage() const;
     QString softwareUpdateFile() const;
@@ -156,8 +164,17 @@ public:
     // for Privacy & Security "privacy.state" (the session bus: the portal permission store). busAct is the state-changing counterpart of act(): `op` is {op: "wifi.radio", on: true}
     // and the like (systembus.h runAction); in a dev session nothing is sent (one "dev guard: <what> suppressed" line,
     // suppressed(what), false returned); an op that is not well formed is refused (false).
+    // ADR-0045 (OC-0.7) adds the read-only "sharing.state" (sshd.service), "disk.state" (UDisks2's LUKS device under the root
+    // file system) and "fprint.state" (fprintd's reader and enrolled fingers), and the actions ssh.enable, disk.passphrase,
+    // fprint.delete and fprint.enroll. An enrolment sends each status fprintd gives as progress(tag, status) before its
+    // finished(tag, ...); stopEnroll() ends the one under way (the sheet closed), which then answers "enroll-stopped".
     Q_INVOKABLE void busQuery(const QString &what, const QString &tag);
     Q_INVOKABLE bool busAct(const QString &what, const QVariantMap &op, const QString &tag);
+    Q_INVOKABLE void stopEnroll();
+    // A program of that plain name is on PATH (QStandardPaths::findExecutable: nothing runs), asked when a pane needs it, so a
+    // setup done meanwhile in Omarchy's terminal counts at once (ADR-0045 OC-0.3). false for anything but 1 to 64 of
+    // [A-Za-z0-9._+-] starting with a letter or a digit.
+    Q_INVOKABLE bool hasCommand(const QString &name) const;
     // The outputs the compositor reports to this client (Qt screens): [{name, model, manufacturer, x, y, width,
     // height, scale, pixelWidth, pixelHeight, refreshRate, physicalWidth, physicalHeight (mm), primary}]. Read-only; never
     // talks to Hyprland.
@@ -199,6 +216,8 @@ signals:
     void failed(const QString &tag, const QString &reason);
     void suppressed(const QString &what);
     void pendingActionsChanged();
+    // One status of fprintd's enrolment under way (fprint.enroll), as fprintd names it ("enroll-stage-passed", ...).
+    void progress(const QString &tag, const QString &status);
 
 private:
     bool wallpaperAllowed(const QStringList &argv) const;
@@ -233,4 +252,6 @@ private:
     QStringList m_watched;
     struct Bus; // the system bus connection and the D-Bus jobs (busjobs.h), in backend.cpp
     std::unique_ptr<Bus> m_bus;
+    // The enrolment under way asks it between two waits for fprintd (stopEnroll, and ~Backend before the jobs go).
+    std::shared_ptr<std::atomic<bool>> m_enrollStop;
 };

@@ -167,6 +167,41 @@ if layouts >= 2 then
   bind("CTRL + ALT + SPACE", "Next input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"), { locked = true })
 end
 
+-- Dictation (ADR-0045 OC-5, Settings > Keyboard > Dictation): Ctrl-Super-X starts and stops Omarchy's voxtype, the command of
+-- Omarchy's own binding (default/hypr/bindings/voxtype.lua: `voxtype record toggle`); its push-to-talk on plain F9 is not
+-- bound, the function keys stay the applications'. The key exists only where voxtype is installed when this file is read
+-- (Omarchy's voxtype install and removal both read the configuration again: `hyprctl reload`), and never in a dev session (the
+-- owner's voxtype daemon would type into the owner's session). The switch, keyboard.dictation of grassfield.json, is read when
+-- the key is pressed, by the command the key starts (so it needs no reload when it changes, and nothing is read on the
+-- compositor's thread): a regular file only, through `timeout` (a FIFO in its place never blocks it), matched on the key
+-- `"dictation": true` (the contract names no other key dictation, and a JSON string cannot hold that text unescaped). While
+-- voxtype is installed the key is Grassfield's even with the switch off; it then does nothing.
+local function command_present(name)
+  if type(io.popen) ~= "function" then return false end
+  local ok, p = pcall(io.popen, "command -v " .. name .. " 2>/dev/null", "r")
+  if not ok or not p then return false end
+  local found = p:read("a") or ""
+  p:close()
+  return found ~= ""
+end
+
+local function settings_file()
+  local dev = os.getenv("GRASSFIELD_CONFIG_HOME")
+  if dev and dev ~= "" then return dev .. "/grassfield.json" end
+  local xdg = os.getenv("XDG_CONFIG_HOME")
+  local base = (xdg and xdg ~= "") and xdg or ((os.getenv("HOME") or "") .. "/.config")
+  return base .. "/grassfield/grassfield.json"
+end
+
+if not dev_session and command_present("voxtype") then
+  local file = settings_file()
+  if not file:find("%c") then
+    local q = "'" .. file:gsub("'", "'\\''") .. "'"
+    bind("SUPER + CTRL + X", "Start or stop dictation", hl.dsp.exec_cmd("[ -f " .. q .. " ] && timeout 2 grep -Eq '\"dictation\"[[:space:]]*:[[:space:]]*true' -- "
+      .. q .. " && exec voxtype record toggle"))
+  end
+end
+
 -- Apps
 bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 

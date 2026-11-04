@@ -725,6 +725,11 @@
           "type": "boolean",
           "description": "Show the Input menu (the input source in use, FR or US) in the menu bar (Settings > Keyboard > Input Sources). The menu only exists with two input sources or more, as on macOS, where it is on by default from two. Default true.",
           "default": true
+        },
+        "dictation": {
+          "type": "boolean",
+          "description": "Dictation (Settings > Keyboard > Dictation, ADR-0045 OC-5): Ctrl-Super-X starts and stops Omarchy's voxtype (`voxtype record toggle`, speech recognised on this computer) when this is on and voxtype is installed. Read by config/hypr/grassfield/bindings.lua when the key is pressed. Default false.",
+          "default": false
         }
       }
     },

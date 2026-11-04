@@ -7,6 +7,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <functional>
+
 // The Wi-Fi and Bluetooth sections over D-Bus (GF-049): NetworkManager (org.freedesktop.NetworkManager) and BlueZ (org.bluez), both
 // on the system bus, instead of scraping `nmcli` and `bluetoothctl`. The logic here talks to a BusCaller, so the unit tests
 // (tests/unit/settings/tst_systembus.cpp) run it against a canned one with no bus at all, and the integration tests
@@ -30,6 +32,14 @@ public:
     virtual ~BusCaller() = default;
     virtual BusReply call(const QString &service, const QString &path, const QString &iface, const QString &member, const QVariantList &args,
                           int timeoutMs) = 0;
+    // Signals (fprintd's enrolment, ADR-0045 OC-0.7): from now on, keep the `member` signals of `iface` that `service` sends
+    // from `path`, for nextSignal. One listen per caller; false when it cannot (no bus, or a second listen).
+    virtual bool listen(const QString & /*service*/, const QString & /*path*/, const QString & /*iface*/, const QString & /*member*/) { return false; }
+    // The arguments of the oldest signal kept by listen, waiting at most timeoutMs for one; !ok when none came in that time.
+    virtual BusReply nextSignal(int /*timeoutMs*/)
+    {
+        return {false, {}, QStringLiteral("org.freedesktop.DBus.Error.Timeout: no signal")}; // i18n-ignore: an error name, mapped to text by reasonOf
+    }
 };
 
 // The only methods a dev session may send (they read: properties, object lists, connection settings without secrets).
@@ -45,6 +55,12 @@ public:
     {
     }
     BusReply call(const QString &service, const QString &path, const QString &iface, const QString &member, const QVariantList &args, int timeoutMs) override;
+    // Receiving signals changes nothing: passed through in every session.
+    bool listen(const QString &service, const QString &path, const QString &iface, const QString &member) override
+    {
+        return m_inner.listen(service, path, iface, member);
+    }
+    BusReply nextSignal(int timeoutMs) override { return m_inner.nextSignal(timeoutMs); }
 
 private:
     BusCaller &m_inner;
@@ -120,6 +136,33 @@ StateResult userUnits(BusCaller &bus, const QStringList &ownDirs);
 //                 only when the portal already runs (NameHasOwner): Settings never starts it.
 StateResult privacyState(BusCaller &bus);
 
+// ADR-0045 (OC-0.7), on the system bus, read in a dev session too:
+//   sharingState  General > Sharing > Remote Login: systemd's sshd.service (ListUnitFilesByPatterns, read from the disk at each
+//                 call, and the unit's Properties) {"installed" (its unit file exists), "unitFileState" ("enabled",
+//                 "disabled", ... "" when not installed), "active" (ActiveState "active")}
+//   diskState     Privacy & Security > Disk Encryption: UDisks2's objects (GetManagedObjects) {"encrypted" (the root file
+//                 system lies directly on a LUKS device UDisks2 knows), "device" (that LUKS device's /dev name, "" when none)}.
+//                 UDisks2 not answering is a failure (the page then offers Omarchy's terminal).
+//   fingerprintState  Fingerprint & Security Key: fprintd's default reader (GetDefaultDevice, its Properties) and the user's
+//                 enrolled fingers (ListEnrolledFingers "", the caller's own: polkit net.reactivated.fprint.device.verify,
+//                 which the active session holds without a password) {"present" (a reader), "name", "stages" (touches an
+//                 enrolment takes, num-enroll-stages), "scanType" ("press" | "swipe"), "fingers": [fprintd's finger names]}
+StateResult sharingState(BusCaller &bus);
+StateResult diskState(BusCaller &bus);
+StateResult fingerprintState(BusCaller &bus);
+
+// fprintd's finger names (EnrollStart's argument): "left-thumb" ... "right-little-finger".
+bool isFingerName(const QString &s);
+
+// The enrolment of one finger through fprintd (ADR-0045 OC-0.7): GetDefaultDevice, listen to the device's EnrollStatus, Claim
+// (the caller's own user), EnrollStart(finger) (fprintd asks polkit, net.reactivated.fprint.device.enroll), then every status
+// fprintd sends goes to `progress` (on the job's thread) until one says done; EnrollStop and Release always follow a
+// successful EnrollStart and Claim. `stopped` is asked every quarter of a second: true ends the enrolment ("enroll-stopped").
+// No status for `idleMs` ends it too ("timed out"). Returns "" when fprintd said enroll-completed, else fprintd's final status
+// (enroll-failed, enroll-data-full, enroll-disconnected, enroll-unknown-error, enroll-duplicate) or the reason of a failed call.
+QString enrollFinger(BusCaller &bus, const QString &finger, const std::function<void(const QString &)> &progress, const std::function<bool()> &stopped,
+                     int idleMs);
+
 // One action as the pages ask for it: {"op": "...", ...}; returns "" on success, else the reason. Invalid values are refused
 // here (mac, uuid and SSID shapes, booleans), whatever the QML sent. Ops:
 //   wifi.radio {on}, wifi.connectKnown {uuid}, wifi.connectOpen {hex}, wifi.disconnect {}, wifi.scan {},
@@ -149,6 +192,17 @@ StateResult privacyState(BusCaller &bus);
 //                               ["NONE","0"] (two elements: one would read as no entry and the app would be asked again),
 //                               camera and background ["yes"] or ["no"]
 //   privacy.forget {kind, token}        Delete of one saved screencast or remoteDesktop selection
+// and ADR-0045's (OC-0.7), on the system bus, each service asking polkit itself (interactive, kPrivilegedMs per call; ADR-0030
+// amendment of 2026-11-04):
+//   ssh.enable {on}             systemd's EnableUnitFiles ["sshd.service"] then StartUnit "sshd.service" (on), StopUnit then
+//                               DisableUnitFiles (off): that one unit, its name never taken from the page
+//                               (org.freedesktop.systemd1.manage-unit-files, manage-units)
+//   disk.passphrase {old, new}  UDisks2's Encrypted.ChangePassphrase(old, new, {}) on the LUKS device that holds the root file
+//                               system, found here again (diskState), never named by the page; each passphrase 1 to 512
+//                               characters without NUL (org.freedesktop.udisks2.encrypted-change-passphrase-system). The
+//                               passphrases are never logged and never part of an answer
+//   fprint.enroll {finger}      enrollFinger without progress (the Backend runs it with its progress and stop)
+//   fprint.delete {finger}      fprintd's Claim, DeleteEnrolledFinger(finger), Release (net.reactivated.fprint.device.enroll)
 // `ownDirs`: the user's unit directories (user.enable acts only on a unit listed there, userUnits).
 QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs = {});
 

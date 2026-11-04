@@ -107,7 +107,8 @@
   },
   "keyboard": {
     "shortcutStyle": "automatic",
-    "showInputMenu": true
+    "showInputMenu": true,
+    "dictation": false
   },
   "region": {
     "formats": "auto",

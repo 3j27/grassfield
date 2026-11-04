@@ -16,11 +16,17 @@ SettingsPage {
     required property var backend
     required property var store
 
-    // Main.qml opens the sheets; the Input Sources sheet hands its changes back (setSources).
+    // Main.qml opens the sheets; the Input Sources sheet hands its changes back (setSources). setupRequested: Dictation's
+    // Omarchy commands in its terminal (TerminalSetupSheet, ADR-0045 OC-5).
     signal shortcutsRequested(var shortcuts)
     signal sourcesRequested(var sources, var layouts)
+    signal setupRequested(string id)
 
     title: qsTr("Keyboard")
+
+    // Omarchy's voxtype is installed (looked for on PATH, nothing runs), again whenever Settings is active again.
+    property bool voxtype: root.backend.hasCommand("voxtype")
+
 
     readonly property string path: root.backend.configFile.replace(/[^/]*$/, "keyboard.lua")
     property var choices: ({})
@@ -189,5 +195,74 @@ SettingsPage {
                 onToggled: c => root.store.set("keyboard.showInputMenu", c)
             }
         }
+    }
+
+    // Dictation (ADR-0045 OC-5), as macOS 27 places it under Text Input: the switch, the shortcut (Ctrl-Super-X, Omarchy's,
+    // which bindings.lua binds where voxtype is installed), the speech model and the removal. Recognition is local (Omarchy's
+    // voxtype, a Whisper model), as on-device dictation on macOS. Without voxtype, Set Up… opens Omarchy's installer in its
+    // terminal behind a sheet that says why (Main.qml: TerminalSetupSheet); voxtype is looked for again when Settings is active.
+    SettingsGroup {
+        caption: qsTr("Dictation")
+        captionDetail: qsTr("Use dictation wherever you can type text. To start and stop dictating, use the shortcut. Speech is recognised on this computer.")
+
+        SettingsRow {
+            title: qsTr("Dictation")
+            subtitle: root.voxtype ? "" : qsTr("Dictation needs Voxtype, which Omarchy installs with its speech model.")
+
+            Row {
+                spacing: Tokens.settingsAccessoryGap
+
+                Button {
+                    visible: !root.voxtype
+                    anchors.verticalCenter: parent.verticalCenter
+                    push: true
+                    text: qsTr("Set Up…")
+                    Accessible.name: qsTr("Set up dictation")
+                    onClicked: root.setupRequested("dictation-setup")
+                }
+
+                Toggle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    accessibleName: qsTr("Dictation")
+                    enabled: root.voxtype
+                    checked: root.voxtype && root.store.value("keyboard.dictation")
+                    onToggled: c => root.store.set("keyboard.dictation", c)
+                }
+            }
+        }
+
+        SettingsRow {
+            visible: root.voxtype
+            title: qsTr("Shortcut")
+            valueText: MenuShortcut.label(qsTr("Ctrl+Super+X"), Appearance.shortcutStyle)
+        }
+
+        SettingsRow {
+            visible: root.voxtype
+            title: qsTr("Speech model")
+            implicitHeight: Tokens.settingsPushRowHeight
+
+            Button {
+                push: true
+                text: qsTr("Language Model…")
+                onClicked: root.setupRequested("dictation-model")
+            }
+        }
+
+        SettingsRow {
+            visible: root.voxtype
+            implicitHeight: (Positioner.index > 0 ? 1 : 0) + Tokens.settingsPushRowHeight
+
+            Button {
+                push: true
+                text: qsTr("Remove…")
+                Accessible.name: qsTr("Remove dictation")
+                onClicked: root.setupRequested("dictation-remove")
+            }
+        }
+    }
+
+    ActiveAgain {
+        onReturned: root.voxtype = root.backend.hasCommand("voxtype")
     }
 }
