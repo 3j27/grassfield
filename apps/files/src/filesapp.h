@@ -469,7 +469,9 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    void track(KJob *job, const QString &activity);
+    // `verb` ("Copying"), `sources` and `destination` (the folder they go to) name the job in the Copy window: "Copying 12
+    // items to “Docs”". A job tracked without them is named by KIO's own descriptions.
+    void track(KJob *job, const QString &activity, const QString &verb = QString(), const QList<QUrl> &sources = {}, const QUrl &destination = QUrl());
     // The progress window's rows (FP-68): what each tracked job did so far.
     struct JobProgress {
         quint64 id = 0;
@@ -478,6 +480,8 @@ private:
         QString verb;
         QString item;
         QString destination;
+        // What the user asked for (set by track() when known): the title then names these, not the file KIO copies now.
+        int count = 0;
         qulonglong processed = 0;
         qulonglong total = 0;
         qulonglong speed = 0;
@@ -487,6 +491,9 @@ private:
     quint64 m_nextJobId = 1;
     QTimer m_progressTimer;
     void publishJobs();
+    // `source`'s amounts, speed and percent are `tracked`'s (the same job, or the copy a paste runs inside).
+    void followAmounts(KJob *tracked, KJob *source);
+    void forwardSubjobAmounts(const QPointer<KJob> &job, int tries);
     void readAppearance();
     QString configFile() const;
     // Adds `tag` to, or removes it from, each item (TagLogic::applyTag keeps every other entry as stored); reports

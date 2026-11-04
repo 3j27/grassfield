@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "IconSource.js" as IconSource
 import "Nav.js" as Nav
 
 // Column view: one column per folder from the first path segment to the tab's location, each with its
@@ -55,8 +56,58 @@ FocusScope {
             c.focusList();
     }
 
+    // A system drag started from a column (Drag.Automatic runs QDrag::exec in a nested event loop inside that column's
+    // mouse handler): the columns stay as they are until it has ended, as the tab keeps the view (BrowserTab.dragView),
+    // else a spring-loaded folder could free the column the drag came from under the running drag. The location the drag
+    // ends at is shown then.
+    property bool dragging: false
+    property bool syncPending: false
+
+    function syncAfterDrag(): void {
+        if (root.dragging || !root.syncPending)
+            return;
+        root.syncPending = false;
+        root.sync();
+    }
+
+    // Drag source shared by all columns (the system drag starts when Drag.active turns true): the selection of the column
+    // the drag started in.
+    Item {
+        id: dragProxy
+        visible: false
+        width: Tokens.filesIconSize
+        height: Tokens.filesIconSize
+        Drag.dragType: Drag.Automatic
+        // No link: Wayland drag and drop has none (a drop proposing it is refused); Files makes an alias itself
+        // for Option-Cmd (FilesApp.drop).
+        Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
+        Drag.proposedAction: Qt.MoveAction
+        // The icon at the icon view's size, held at its middle (the other views' drag image).
+        Drag.imageSourceSize: Qt.size(Tokens.filesIconSize, Tokens.filesIconSize)
+        Drag.hotSpot.x: Tokens.filesIconSize / 2
+        Drag.hotSpot.y: Tokens.filesIconSize / 2
+        Drag.onDragFinished: dropAction => {
+            dragProxy.Drag.active = false;
+            root.dragging = false;
+            root.tab.dragFinished(dropAction);
+            Qt.callLater(root.syncAfterDrag);
+        }
+    }
+
+    function startDrag(model: var, iconName: string): void {
+        dragProxy.Drag.mimeData = {"text/uri-list": root.tab.app.uriList(model.selectedUrls())};
+        dragProxy.Drag.imageSource = IconSource.url(iconName);
+        root.dragging = true;
+        root.tab.dragStarted();
+        dragProxy.Drag.active = true;
+    }
+
     // Keep the columns that still match the location, replace the rest.
     function sync(): void {
+        if (root.dragging) {
+            root.syncPending = true;
+            return;
+        }
         const urls = root.tab.segments.map(s => String(s.url));
         const current = [];
         for (let i = 0; i < columnsModel.count; i++)
@@ -443,9 +494,15 @@ FocusScope {
                 }
 
                 MouseArea {
+                    id: entryMouse
                     anchors.fill: parent
                     enabled: !entry.renaming
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    drag.target: col.model && col.model.isApplications ? null : dragProxy
+                    drag.threshold: Tokens.filesDragThreshold
+                    // Pressed on a row of a selection of several: the selection stays for a drag, a click without one
+                    // selects the row at the release (Finder).
+                    property bool collapseOnRelease: false
                     onPressed: event => {
                         root.activeColumn = col.index;
                         lv.forceActiveFocus();
@@ -454,8 +511,27 @@ FocusScope {
                             root.tab.contextMenu(col.model, entry.index, p.x, p.y, false);
                             return;
                         }
-                        col.model.select(entry.index, event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier), true);
+                        const mods = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier);
+                        if (entry.selected && mods === 0 && col.model.selectedCount > 1) {
+                            entryMouse.collapseOnRelease = true;
+                            return;
+                        }
+                        col.model.select(entry.index, mods, true);
                         root.userSelected(col.index);
+                    }
+                    onReleased: {
+                        if (entryMouse.collapseOnRelease && !entryMouse.drag.active) {
+                            col.model.select(entry.index, 0, true);
+                            root.userSelected(col.index);
+                        }
+                        entryMouse.collapseOnRelease = false;
+                    }
+                    onCanceled: entryMouse.collapseOnRelease = false
+                    drag.onActiveChanged: {
+                        if (entryMouse.drag.active) {
+                            entryMouse.collapseOnRelease = false;
+                            root.startDrag(col.model, entry.iconName);
+                        }
                     }
                     onDoubleClicked: event => {
                         if (event.button === Qt.LeftButton && Nav.columnDoubleClickOpens(entry.isDir, (event.modifiers & Qt.ControlModifier) !== 0))

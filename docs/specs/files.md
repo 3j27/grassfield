@@ -114,7 +114,9 @@ selection").
 11. F11 Drag and drop: items drag out as `text/uri-list` (Drag.Automatic, works with other apps); drops on the
     background, folders, sidebar items and path segments; same filesystem moves, otherwise copies; Option (Alt) copies,
     Cmd (Ctrl) moves, Cmd+Option makes a symbolic link (`FileLogic::dropAction`, "Views and selection" Drop modifiers);
-    Recents refuses every drop (no target, the drag shows it); spring-loaded folders open under a resting drag.
+    Recents refuses every drop (no target, the drag shows it); spring-loaded folders open under a resting drag. Every view
+    is a drag source (icons, list, columns, gallery strip); the column view keeps its columns until a drag that started in
+    one has ended (`ColumnView.dragging`), so a spring-loaded folder never frees the column the platform drag runs in.
 12. F12 Glance: Space and the menu item "Glance at “name”" call `FilesApp.glance(urls)`, which starts
     `grassfield-preview --glance -- <paths>` detached for the local regular files of the selection (folders and remote
     items are skipped, at most 50 files). The Glance window takes the focus; Space or Esc there closes it. Blocked by
@@ -520,7 +522,7 @@ Every new chord is checked against `bindings.lua` and `forwarding.lua` in its PR
 | FP-65 | Open With: the list, Other…, Change All… | done (combined PR 3–5): Other… (the Choose Application panel, ADR-0035), Change All… in Get Info (mimeapps.list) | Finder-Get-Info | KApplicationTrader, `mimeapps.list` | — | 5 |
 | FP-66 | Drag modifiers: ⌥ copies, ⌘ moves, ⌥⌘ makes an alias | done (PR 2) | none | `FilesApp.drop` | ⌘ is Ctrl: Ctrl-drag moves, Alt-drag copies, Ctrl+Alt makes a link (PR 2) | 2 |
 | FP-67 | File-exists sheet: Keep Both / Stop / Replace, Apply to All | done (ADR-0035 step 4a): Keep Both / Skip / Stop / Replace, Merge for folders, Apply to All | Finder-Replace | KIO `AskUserActionInterface` (ADR-0022) | — | 5 |
-| FP-68 | Copy progress window (name, bar, "41.9 MB of 111.6 MB – About 10 seconds", ×) | done (combined PR 3–5): the copy window (measured on Finder-Copy) with the bar, amounts, time left and a stop button; a paste reports no amounts (KIO's PasteJob forwards none: its bar stays empty) | Finder-Copy | KJob speed and size signals | the progress pie on the destination icon: later | 5 |
+| FP-68 | Copy progress window (name, bar, "41.9 MB of 111.6 MB – About 10 seconds", ×) | done (combined PR 3–5): the copy window (measured on Finder-Copy) with the bar, amounts, time left and a stop button; a paste follows the copy or move KIO's PasteJob runs inside (`FilesApp::forwardSubjobAmounts`), so it shows amounts too; the title names the items asked for and the folder they go to ("Copying 12 items to “Docs”", `FileLogic::copyTitle`), the line says "Preparing…" and the bar sweeps while KIO has no total (it is looking through the folders to copy) | Finder-Copy | KJob speed and size signals | the progress pie on the destination icon: later | 5 |
 | FP-69 | Print ⌘P | missing | none | the default application's print | — | later |
 | FP-70 | Show Package Contents, Burn to Disc | n/a | — | — | no bundles or optical burning in scope | never |
 

@@ -43,7 +43,7 @@ Window {
                 required property var modelData
                 width: root.width
                 height: Tokens.filesProgressRowHeight
-                Accessible.role: Accessible.ProgressBar
+                Accessible.role: Accessible.Grouping
                 Accessible.name: row.modelData.title
 
                 Icon {
@@ -66,22 +66,19 @@ Window {
                     font.pixelSize: Tokens.typographyBodySize
                 }
 
-                // The bar: the accent over a light track; a job that tells no amount fills nothing.
-                Rectangle {
+                // The bar: the accent over a light track; a job that tells no amount yet sweeps (indeterminate: it is still
+                // looking through what it has to copy).
+                ProgressBar {
                     id: track
                     x: Tokens.filesProgressTextInset
                     y: Tokens.filesProgressBarCenter - height / 2
                     width: parent.width - x - Tokens.filesProgressBarEnd
                     height: Tokens.filesProgressBarHeight
-                    radius: height / 2
-                    color: Appearance.withAlpha(Appearance.colors.text, Tokens.filesScopePillOpacity / 2)
-
-                    Rectangle {
-                        width: row.modelData.percent >= 0 ? track.width * row.modelData.percent / 100 : 0
-                        height: parent.height
-                        radius: parent.radius
-                        color: Appearance.colors.accent
-                    }
+                    from: 0
+                    to: 100
+                    value: Math.max(0, row.modelData.percent)
+                    indeterminate: row.modelData.percent < 0
+                    accessibleName: row.modelData.title
                 }
 
                 Text {

@@ -81,6 +81,24 @@ int compareGroups(const Group &a, const Group &b, const QCollator &collator);
 // "1.23 MB", "12.3 GB", "123 TB". Negative sizes (folders) give "--".
 QString formatSize(qint64 bytes, const QLocale &locale = QLocale());
 
+// The Copy window's lines (FP-68, Finder-Copy). The title names what the user asked for and where it goes, not the file KIO
+// copies at the moment: `verb` is KIO's word ("Copying"), `firstItem` the first item's name, `count` the items asked for
+// (0 when unknown), `destination` the folder's name. "Copying “a.txt” to “Docs”", "Copying 12 items to “Docs”"; with no
+// destination "Copying “a.txt”"; "" when there is no verb or no item to name (the caller keeps its own activity text).
+QString copyTitle(const QString &verb, const QString &firstItem, int count, const QString &destination);
+
+// "About 1 second", "About 40 seconds", "About 1 minute", "About 5 minutes" for `seconds` still to go.
+QString remainingText(qulonglong seconds);
+
+// The line under the bar: "41.9 MB of 111.6 MB – About 10 seconds" (no estimate while the speed is unknown), "Preparing…"
+// while the job tells no amount yet (it is still looking through the folders to copy), else "" (a job that only counts:
+// `percent` of 0..100, -1 when none).
+QString copyDetail(qulonglong processed, qulonglong total, qulonglong bytesPerSecond, int percent);
+
+// The bar's fill in percent: the bytes when the total is known, else the job's own percent; -1 when neither (the bar then
+// has no fill but a sweep: indeterminate).
+int copyPercent(qulonglong processed, qulonglong total, int percent);
+
 // "Today at 14:05", "Yesterday at 09:10", otherwise "<short date> at <short time>". Invalid gives "--".
 QString formatDate(const QDateTime &when, const QDateTime &now, const QLocale &locale = QLocale());
 

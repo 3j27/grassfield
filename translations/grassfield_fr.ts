@@ -4649,6 +4649,22 @@
         <translation>Zéro octet</translation>
     </message>
     <message>
+        <source>%1 %2 items</source>
+        <translation>%1 %2 éléments</translation>
+    </message>
+    <message>
+        <source>%1 “%2”</source>
+        <translation>%1 «&#xa0;%2&#xa0;»</translation>
+    </message>
+    <message>
+        <source>%1 %2 items to “%3”</source>
+        <translation>%1 %2 éléments vers «&#xa0;%3&#xa0;»</translation>
+    </message>
+    <message>
+        <source>%1 “%2” to “%3”</source>
+        <translation>%1 «&#xa0;%2&#xa0;» vers «&#xa0;%3&#xa0;»</translation>
+    </message>
+    <message>
         <source>Other</source>
         <translation>Autre</translation>
     </message>
@@ -4683,6 +4699,30 @@
     <message>
         <source>%1 PB</source>
         <translation>%1 Po</translation>
+    </message>
+    <message>
+        <source>About 1 second</source>
+        <translation>Environ 1 seconde</translation>
+    </message>
+    <message>
+        <source>About %1 seconds</source>
+        <translation>Environ %1 secondes</translation>
+    </message>
+    <message>
+        <source>About 1 minute</source>
+        <translation>Environ 1 minute</translation>
+    </message>
+    <message>
+        <source>About %1 minutes</source>
+        <translation>Environ %1 minutes</translation>
+    </message>
+    <message>
+        <source>Preparing…</source>
+        <translation>Préparation…</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
     </message>
     <message>
         <source>Today at %1</source>
@@ -5115,18 +5155,6 @@
         <translation>Les autorisations n’ont pas pu être modifiées : chmod ne peut pas être démarré.</translation>
     </message>
     <message>
-        <source>%1 “%2”</source>
-        <translation>%1 « %2 »</translation>
-    </message>
-    <message>
-        <source>%1 “%2” to “%3”</source>
-        <translation>%1 « %2 » vers « %3 »</translation>
-    </message>
-    <message>
-        <source>%1 of %2</source>
-        <translation>%1 sur %2</translation>
-    </message>
-    <message>
         <source>The name “%1” is already taken. Please choose a different name.</source>
         <translation>Le nom «&#xa0;%1&#xa0;» est déjà utilisé. Veuillez choisir un autre nom.</translation>
     </message>
@@ -5137,6 +5165,14 @@
     <message>
         <source>Redo %1</source>
         <translation>Rétablir %1</translation>
+    </message>
+    <message>
+        <source>Moving</source>
+        <translation>Déplacement</translation>
+    </message>
+    <message>
+        <source>Copying</source>
+        <translation>Copie</translation>
     </message>
     <message>
         <source>Make Alias</source>
@@ -5437,22 +5473,6 @@
     <message>
         <source>Searching “%1”</source>
         <translation>Recherche dans « %1 »</translation>
-    </message>
-    <message>
-        <source>About 1 second</source>
-        <translation>Environ 1 seconde</translation>
-    </message>
-    <message>
-        <source>About %1 seconds</source>
-        <translation>Environ %1 secondes</translation>
-    </message>
-    <message>
-        <source>About 1 minute</source>
-        <translation>Environ 1 minute</translation>
-    </message>
-    <message>
-        <source>About %1 minutes</source>
-        <translation>Environ %1 minutes</translation>
     </message>
     <message>
         <source>“%1” can’t be undone: something has changed since.</source>
