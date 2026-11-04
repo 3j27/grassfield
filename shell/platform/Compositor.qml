@@ -285,9 +285,10 @@ Singleton {
     // exist yet, appended before the Trash). Empty ({0,0,0,0}) without a Dock there: the plugin then
     // hides/shows the window without animation.
     // With "minimize into application icon" (dock.minimizeIntoApp) the rectangle is the tile of the window's app.
-    function dockRect(screenName: string, index: int, adding: bool, toplevel: var): var {
+    // `intoApp`: this window goes into its app's icon whatever the setting says (a minimize from a click on the app's tile).
+    function dockRect(screenName: string, index: int, adding: bool, toplevel: var, intoApp: var): var {
         const owner = root.dockOwners[root.dockScreenName] || root.dockOwners[screenName];
-        const rect = Minimized.finiteRect(owner ? owner.tileRect(index, adding, toplevel) : null);
+        const rect = Minimized.finiteRect(owner ? owner.tileRect(index, adding, toplevel, intoApp === true) : null);
         if (!rect) {
             // The plugin then hides or shows the window without animation: say why (once per reason, not per call).
             const why = !owner ? "no Dock registered for " + (root.dockScreenName || screenName) + " (registered: " + Object.keys(root.dockOwners).join(",") + ")" : "the Dock of " + (root.dockScreenName || screenName) + " has no tile rectangle for slot " + index;
@@ -314,6 +315,21 @@ Singleton {
     // animation toward the Dock; otherwise it is parked on special:minimized. Both use the same
     // hidden state, so the shell records it either way and rebuilds the record from it.
     function minimize(toplevel: var): bool {
+        return doMinimize(toplevel, false);
+    }
+
+    // A click on an app's Dock tile: the window goes into the app icon, no tile is added, so the Dock does not move under the
+    // pointer and the next click on the same spot brings it back. Other minimizes follow dock.minimizeIntoApp.
+    function minimizeIntoAppIcon(toplevel: var): bool {
+        return doMinimize(toplevel, true);
+    }
+
+    // Slot of a record among the minimized tiles the Dock shows (records minimized into the app icon have none).
+    function tileSlot(rec: var): int {
+        return root.minimized.filter(r => !r.intoApp).indexOf(rec);
+    }
+
+    function doMinimize(toplevel: var, intoApp: bool): bool {
         if (!toplevel || Minimized.has(root.minimized, toplevel))
             return false;
         // A window in full screen or a member of a Split View Desktop is not minimized (macOS; ADR-0036 D56, D61): the Window
@@ -328,8 +344,8 @@ Singleton {
             return false;
         // Rectangle of the tile this window gets (appended after the existing minimized tiles),
         // computed before the list changes.
-        const tile = dockRect(windowScreenName(top) || focusedScreenName, root.minimized.length, true, toplevel);
-        root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title, screen: windowScreenName(top)});
+        const tile = dockRect(windowScreenName(top) || focusedScreenName, root.minimized.filter(r => !r.intoApp).length, true, toplevel, intoApp);
+        root.minimized = Minimized.add(root.minimized, {toplevel: toplevel, address: address, appId: toplevel.appId, title: toplevel.title, screen: windowScreenName(top), intoApp: intoApp});
         if (Capabilities.has("minimize"))
             dispatchRequest(pluginWindowCall("minimize", address, tile));
         else
@@ -347,7 +363,7 @@ Singleton {
             return;
         // Restoring a window (Dock tile, Overview) is an activation: Show Desktop ends first, as in activate().
         root.endShowDesktop();
-        const tile = dockRect(focusedScreenName, root.minimized.indexOf(rec), false, toplevel);
+        const tile = dockRect(focusedScreenName, tileSlot(rec), false, toplevel, rec.intoApp === true);
         root.minimized = Minimized.remove(root.minimized, toplevel);
         if (Capabilities.has("minimize")) {
             dispatchRequest(pluginWindowCall("restore", rec.address, tile));
@@ -1743,6 +1759,7 @@ Singleton {
             "here": here,
             "focused": toplevel === root.focusedToplevel,
             "fullscreen": !!toplevel.fullscreen,
+            "split": root.inSplit(toplevel),
             "stamp": recency.has(toplevel) ? recency.get(toplevel) : 0
         };
     }

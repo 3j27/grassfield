@@ -237,6 +237,26 @@ TestCase {
         compare(Launch.clickPlan([cw("a", true, true, false, 5), cw("b", false, true, false, 9)], true).action, "forward");
     }
 
+    function test_clickRestoreStaysOnThisDesktop() {
+        // A minimized here, B visible on another Desktop (here false): restore A, do not switch to B.
+        const plan = Launch.clickPlan([cw("a", true, true, false, 5), cw("b", false, false, false, 9)], true);
+        compare(plan.action, "restore");
+        compare(plan.refs, ["a"]);
+        // Nothing minimized and nothing here: today's switch to the other Desktop.
+        compare(Launch.clickPlan([cw("b", false, false, false, 9)], true).action, "forward");
+    }
+
+    function test_clickSplitViewFallsBackToForward() {
+        const w = cw("a", false, true, true, 5);
+        w.split = true;
+        const plan = Launch.clickPlan([w], true);
+        compare(plan.action, "forward");
+        compare(plan.refs, ["a"]);
+        // A split member next to a free window: only the free one minimizes.
+        const f = cw("b", false, true, false, 9);
+        compare(Launch.clickPlan([w, f], true).refs, ["b"]);
+    }
+
     function test_clickSettingOffIsMacos() {
         compare(Launch.clickPlan([cw("a", false, true, true, 5), cw("b", false, true, false, 9)], false), {action: "forward", refs: ["a", "b"]});
         compare(Launch.clickPlan([cw("a", true, true, false, 5), cw("b", true, true, false, 9)], false), {action: "forward", refs: ["b"]});

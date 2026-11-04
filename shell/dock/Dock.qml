@@ -267,7 +267,7 @@ Scope {
         if (ready && Settings.dockShowRecents)
             writeRecents(step.recent);
         const shown = ready && Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, e => Apps.isListed(e) && !DockModel.isFilesId(e.id)) : apps;
-        const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
+        const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized.filter(r => !r.intoApp), Apps.lookup);
         const all = windows.instances;
         all.forEach(w => w.captureLayout());
         const folders = DockModel.folderItems(Stacks.folderList(Settings.dockFolders, Quickshell.env("HOME"), Tokens.dockStackMax));
@@ -325,7 +325,8 @@ Scope {
         onTriggered: root.pruneLaunching()
     }
 
-    function activateItem(item: var): void {
+    // `pointer`: a click (the only activation that minimizes, dock.clickMinimizes); keys and accessibility presses bring forward.
+    function activateItem(item: var, pointer: var): void {
         keyboardMode = false;
         // Fixtures only (dock noactivate): a click is logged ("dock-launch: tapped") but nothing starts, opens or comes forward.
         if (VisualFixtures.active && root.testNoActivate)
@@ -351,16 +352,21 @@ Scope {
             root.launchItem(item);
             return;
         }
-        root.clickRunning(item.windows);
+        root.clickRunning(item.windows, pointer === true);
     }
 
     // A click on a running app's tile. With dock.clickMinimizes the frontmost app's visible windows minimize (each into its own
     // tile or the app icon, Compositor.minimize) and an all-minimized app comes back whole; otherwise bringForward (macOS).
-    function clickRunning(windows: var): void {
-        const plan = Launch.clickPlan(windows.map(t => Compositor.windowInfo(t)), Settings.dockClickMinimizes);
+    function clickRunning(windows: var, pointer: bool): void {
+        const plan = Launch.clickPlan(windows.map(t => Compositor.windowInfo(t)), pointer && Settings.dockClickMinimizes);
         if (plan.action === "minimize") {
-            for (const top of plan.refs)
-                Compositor.minimize(top);
+            let done = 0;
+            for (const top of plan.refs) {
+                if (Compositor.minimizeIntoAppIcon(top))
+                    done++;
+            }
+            if (done === 0)
+                root.bringForward(windows); // every minimize was refused: a click never does nothing
         } else if (plan.action === "restore") {
             for (const top of plan.refs)
                 Compositor.activate(top);
@@ -831,7 +837,7 @@ Scope {
         // Same code path as a click on item `index`.
         function click(index: int): void {
             if (VisualFixtures.active && root.items[index])
-                root.activateItem(root.items[index]);
+                root.activateItem(root.items[index], true);
         }
 
         // Centre "x y" of tile `index` on `screen` in output coordinates (fixtures only; the magnification must be off).
@@ -1418,10 +1424,10 @@ Scope {
             // Rectangle (global layout coordinates) of the minimized tile `index` (0 = first right of the
             // separator): where that window lands (minimize, `adding`: the tile does not exist yet and is
             // appended before the Trash) or leaves from (restore). Called by Compositor for this screen.
-            function tileRect(index: int, adding: bool, toplevel: var): var {
+            function tileRect(index: int, adding: bool, toplevel: var, intoApp: bool): var {
                 const sep = root.items.findIndex(it => it.kind === "separator" && !it.divider);
                 const mon = Compositor.monitorByName(win.screen.name);
-                if (Settings.dockMinimizeIntoApp && toplevel && mon) {
+                if ((Settings.dockMinimizeIntoApp || intoApp) && toplevel && mon) {
                     // Minimize into the application icon: the window goes to (and comes from) its app's tile.
                     const at = root.items.findIndex(it => (it.kind === "app" || it.kind === "files") && it.windows.indexOf(toplevel) >= 0);
                     if (at >= 0)
@@ -2525,7 +2531,7 @@ Scope {
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: tap", Date.now(), "tile", tile.tileId);
                                         // A click: a stack or menu it opens shows its ring only after a key (ADR-0039 steps 8 and 25).
-                                        Popups.withPointer(true, () => root.activateItem(tile.modelData));
+                                        Popups.withPointer(true, () => root.activateItem(tile.modelData, true));
                                     }
                                 }
 
