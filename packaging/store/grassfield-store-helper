@@ -77,7 +77,8 @@ log=$GS_DIR/$op.log
 (set -C && : >"$log") 2>/dev/null || { echo "grassfield-store-helper: operation $op was used before" >&2; exit 2; }
 exec >>"$log" 2>&1
 
-say() { echo "grassfield-store-helper: $*"; }
+# Every message goes to the log and, best effort, to the journal (ADR-0046 D4: a removal is an audit event).
+say() { echo "grassfield-store-helper: $*"; logger -t grassfield-store-helper -p authpriv.notice -- "$*" 9<&- 2>/dev/null || true; }
 # The exit file, by rename (the Store never reads half a file), then the exit.
 finish() { # code [message]
   (($# > 1)) && say "$2"
@@ -198,8 +199,21 @@ if [[ $verb == install ]]; then
   finish 1 "pacman exited with $code"
 fi
 
+# What Grassfield's own packages list as optional dependencies (kio-extras, cmake…): pacman would remove them, nothing requires an
+# optional dependency, and part of Grassfield would stop working (ADR-0046 D3). One name per line.
+gf_optional_names() {
+  local -a own=()
+  local qi
+  mapfile -t own < <(pacman -Qq 2>/dev/null 9<&- | grep -E '^grassfield(-|$)')
+  ((${#own[@]})) || return 0
+  qi=$(pacman -Qi -- "${own[@]}" 2>/dev/null 9<&-) || return 1
+  awk '
+    /^[^ \t]/ { inopt = ($0 ~ /^Optional Deps[ \t]*:/); if (inopt) sub(/^[^:]*:[ \t]*/, ""); else next }
+    inopt { n = $0; sub(/^[ \t]+/, "", n); sub(/[^a-z0-9@._+-].*$/, "", n); if (n != "" && n != "None") print n }' <<<"$qi"
+}
+
 # remove: the rule of ADR-0037 b.1 (S16). The deny list lives here, in the code: changing it is a reviewed change.
-declare -A omarchy=() hold=() explicit=()
+declare -A omarchy=() hold=() explicit=() gfopt=()
 for list in "${GS_OMARCHY_LISTS[@]}"; do
   [[ -f $list ]] || continue
   while IFS= read -r line; do
@@ -210,15 +224,26 @@ done
 ((${#omarchy[@]})) || finish 6 "Omarchy's package lists are missing or empty: nothing can be removed"
 while IFS= read -r line; do [[ -n $line ]] && hold[$line]=1; done < <(pacman-conf HoldPkg 2>/dev/null 9<&-)
 while IFS= read -r line; do explicit[$line]=1; done < <(pacman -Qqe 2>/dev/null 9<&-)
+gf_names=$(gf_optional_names) || finish 6 "cannot read what Grassfield's packages list as optional dependencies: nothing can be removed"
+while IFS= read -r line; do [[ -n $line ]] && gfopt[$line]=1; done <<<"$gf_names"
 
 denied() { # name: 0 when the system, Omarchy or Grassfield needs it
+  [[ -n ${gfopt[$1]-} ]] && return 0
   case $1 in
     base | base-devel | filesystem | glibc | bash | coreutils | util-linux | shadow | pam | sudo | polkit | dbus | dbus-broker | \
       dbus-broker-units | kmod | mkinitcpio | dracut | grub | efibootmgr | refind | syslinux | snapper | btrfs-progs | \
       cryptsetup | lvm2 | plymouth | archlinux-keyring | intel-ucode | amd-ucode) return 0 ;;
+    # The session's runtime (ADR-0046 D3): the compositor, the shell, sound, network, the portals, the login. Qt is not here by
+    # prefix: pacman keeps every Qt package the session requires, and an app's own (qt6-speech) must stay removable.
+    hyprland | quickshell | networkmanager | mesa | wireplumber | sddm | uwsm | gnome-keyring | xdg-desktop-portal | \
+      xdg-desktop-portal-* | pipewire | pipewire-*) return 0 ;;
     linux | linux-* | systemd | systemd-* | limine | limine-* | pacman | pacman-* | yay | yay-* | omarchy | omarchy-* | \
       grassfield | grassfield-*) return 0 ;;
     *-firmware | *-firmware-*) return 0 ;;
+    # The apps Omarchy installs on every machine and itself offers to remove (omarchy-remove-preinstalls, ADR-0046 D2): on
+    # Omarchy's lists, but not the system's: macOS lets you delete its optional bundled apps. Only HoldPkg keeps them.
+    aether | cliamp | libreoffice-fresh | xournalpp | pinta | obsidian | obs-studio | kdenlive | moonlight-qt | lazydocker | \
+      omacut | omacalc | omawrite) [[ -n ${hold[$1]-} ]]; return ;;
   esac
   [[ -n ${omarchy[$1]-} || -n ${hold[$1]-} ]]
 }

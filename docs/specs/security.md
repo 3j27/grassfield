@@ -208,6 +208,7 @@ does not check its gate.
 | update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane); `packaging/bin/grassfield-pacman-watch` from `grassfield-pacman-watch.service`, started by its path unit when pacman's local database changed (ADR-0041 U31: origin `system`, announced as a scheduled check is). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
+| apps | edit, removable, ask | dev | test hooks of deleting apps (ADR-0046): `edit` makes the icons jiggle, `removable <json>` gives the Store's answer instead of asking it, `ask <id>` is the badge's click: for a removable app it hands the app to the Store (`grassfield-store --page=uninstall:<entry>`, which opens the Store's own alert; the launcher shows none); refused outside a dev session; none removes anything (only Delete in the Store's alert does) |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
 | overview | holdNextRelease, status, dropProbe | dev | `status` lists window titles and app ids; `dropProbe` (tiling step 6e, the follow-up of #78) runs the Overview's own drop of a window on a Desktop (ADR-0036 D72) and answers moved, refused or absent |
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
@@ -869,8 +870,12 @@ Store owns `org.grassfield.Store` (`.Dev` and a digest of the state directory in
 /org/grassfield/Store, one scriptable method `Open(s page, s token)`: a second launch hands it its `--page` (printable, at most
 512 characters) and its xdg-activation token (printable ASCII, at most 256) and leaves. The window checks the page again
 (Main.qml's openPage: a section, a category, an app, a search, Installed, Updates, or `type:<type>` for a well-formed media
-type); anything else keeps the page shown. It opens a page and brings the window forward, nothing else: no plan, no
-install, no removal, no update (each still needs its own button and, for the system's packages, the helper's password).
+type, or `uninstall:<application entry>`); anything else keeps the page shown. It opens a page and brings the window forward,
+nothing else: no plan, no install, no removal, no update (each still needs its own button and, for the system's packages, the
+helper's password). `uninstall:<entry>` (the launcher's delete badge, Files' Move to Trash; ADR-0046 D1) is the same: it only
+OPENS the Store's own confirmation, "Delete “App”?" with the app's Store name, icon and the packages `-Rns` takes, Cancel the
+default; no path of a hand-over calls `uninstall`, so any session-bus peer, a Flatpak included, can ask and nothing is removed
+until the user presses Delete in the Store (tst_storeoperations test_handOverOnlyOpensTheAlert).
 
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,

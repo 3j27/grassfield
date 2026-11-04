@@ -132,6 +132,7 @@ Scope {
 
     function hide(): void {
         open = false;
+        editing = false;
         viewFirst = -1;
         viewLast = -1;
     }
@@ -247,8 +248,60 @@ Scope {
         Apps.launch(rec.entry);
     }
 
+    // ---- deleting apps (ADR-0046; macOS Launchpad's jiggle, x and alert) ------------------------
+    // The Store decides what may be removed: `grassfield-store --removable` answers once (read when the icons first jiggle);
+    // `grassfield-store --page=uninstall:<entry>` asks it to open its alert. Nothing is confirmed or removed here.
+
+    // True while the icons jiggle (a press held on an icon, or Option): removable apps show the delete badge.
+    property bool editing: false
+    // {entry: {app, name, block}} from the Store's answer; {} until it came (no badge: fail closed).
+    property var removableMap: ({})
+    // A dev session runs the tree's own build (apps/store/build-direct.sh), a real one the installed Store.
+    readonly property string storeProgram: Mode.dev ? (Mode.devValue("STORE_CMD") || Quickshell.shellPath("../.dev/build/grassfield-store")) : "grassfield-store"
+
+    function removableItem(item: var): bool {
+        return !!item && UninstallLogic.removable(removableMap, item.id);
+    }
+
+    function startEditing(): void {
+        if (editing)
+            return;
+        editing = true;
+        if (!scanRemovable.running)
+            scanRemovable.running = true;
+    }
+
+    function stopEditing(): void {
+        editing = false;
+    }
+
+    // The badge's click: the Store is asked, and only asked (`--page=uninstall:<entry>`). Its own alert, in its own window, is the
+    // one confirmation; nothing is removed until Delete is pressed there (ADR-0046 D1). Returns whether it was handed over.
+    function requestDelete(item: var): bool {
+        const args = item ? UninstallLogic.storeArguments(item.id) : null;
+        if (!args || !removableItem(item))
+            return false;
+        stopEditing();
+        hide();
+        Quickshell.execDetached([storeProgram].concat(args));
+        return true;
+    }
+
+    Process {
+        id: scanRemovable
+
+        command: [root.storeProgram, "--removable"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (text.trim() !== "")
+                    root.removableMap = UninstallLogic.parse(text);
+            }
+        }
+    }
+
     function activate(item: var): void {
-        if (item)
+        // While the icons jiggle nothing launches (macOS).
+        if (item && !editing)
             launch(item.rec);
     }
 
@@ -302,6 +355,29 @@ Scope {
             root.hide();
         }
 
+        // Test hooks (dev session only): the icons jiggle as after a long press, and the Store's answer is given instead of
+        // asked (`removable '<json>'`, UninstallLogic.parse's format), so a nested capture needs no pacman.
+        function edit(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            root.editing = true; // no Store run: the answer is the one `removable` gave
+            return "ok";
+        }
+
+        function removable(json: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            root.removableMap = UninstallLogic.parse(json);
+            return String(Object.keys(root.removableMap).length);
+        }
+
+        // What the delete badge's click does: hands that app over to the Store when it is removable (dev session only).
+        function ask(id: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            return root.requestDelete(root.itemById[id]) ? "handed over" : "not removable";
+        }
+
         // Test hook (dev session only, VisualFixtures.dev, SEC-04: it returns the typed query): JSON {open, query,
         // category, chips, zone, selected, selectedId, keyNav, total, cols, panel: {x, y, w, h}, visible: [id]}.
         function status(): string {
@@ -321,7 +397,9 @@ Scope {
                 total: root.items.length,
                 cols: root.grid.cols,
                 panel: root.panel,
-                visible: vis
+                visible: vis,
+                editing: root.editing,
+                removable: Object.keys(root.removableMap).length
             });
         }
     }

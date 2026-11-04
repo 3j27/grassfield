@@ -43,11 +43,17 @@ Sheet {
                                                 .concat(root.plan.packages || []) : []
     readonly property string appName: root.app.name || ""
 
-    function show(app: var, kind: string): void {
+    // True while the sheet answers a hand-over ("uninstall:<entry>" from the launcher or Files, ADR-0046 D1): the Store's own alert
+    // "Delete “App”?", the app's icon and the packages -Rns takes, Cancel the default, and the only confirmation: a request
+    // from another process can open this sheet and nothing more.
+    property bool handedOver: false
+
+    function show(app: var, kind: string, handedOver: var): void {
         root.app = app;
         root.kind = kind;
         root.plan = null;
         root.pendingUpdate = false;
+        root.handedOver = handedOver === true && kind === "remove";
         root.open();
         root.backend.plan(app.id, kind);
     }
@@ -59,6 +65,7 @@ Sheet {
         root.app = app;
         root.kind = "update";
         root.plan = null;
+        root.handedOver = false;
         root.pendingUpdate = true;
         root.backend.plan(app.id, "update");
     }
@@ -90,7 +97,8 @@ Sheet {
         if (root.refusal === "" && root.getFlatpak)
             return qsTr("Get Flatpak?");
         if (root.refusal === "")
-            return root.removing ? qsTr("Uninstall “%1”?").arg(root.appName) : qsTr("Install “%1”?").arg(root.appName);
+            return root.handedOver ? qsTr("Delete “%1”?").arg(root.appName)
+                 : root.removing ? qsTr("Uninstall “%1”?").arg(root.appName) : qsTr("Install “%1”?").arg(root.appName);
         switch (root.refusal) {
         case "unfinished":
             return qsTr("Finish the system update first");
@@ -203,12 +211,12 @@ Sheet {
         if (root.refusal === "" && root.updating)
             return qsTr("Update");
         if (root.refusal === "")
-            return root.removing ? qsTr("Uninstall") : root.aur ? qsTr("Install from the AUR") : qsTr("Install");
+            return root.handedOver ? qsTr("Delete") : root.removing ? qsTr("Uninstall") : root.aur ? qsTr("Install from the AUR") : qsTr("Install");
         return root.updateFirst ? qsTr("Update Now…") : qsTr("OK");
     }
     destructive: root.removing && root.refusal === ""
     // An AUR install is never the default: a click, or Tab and Space, on "Install from the AUR".
-    returnCancels: root.aur && !root.removing && root.refusal === ""
+    returnCancels: (root.aur && !root.removing && root.refusal === "") || (root.handedOver && root.refusal === "")
     showCancel: root.refusal === "" || root.updateFirst
     confirmEnabled: root.plan !== null
 
@@ -230,6 +238,13 @@ Sheet {
         visible: root.plan === null
         indeterminate: true
         accessibleName: qsTr("Checking")
+    }
+
+    // The app, as the Store names it, for a removal asked from outside (the user's own .desktop name is never used).
+    AppIcon {
+        visible: root.handedOver && root.refusal === ""
+        source: root.app.icon || ""
+        size: Tokens.storeLockupIconSize
     }
 
     // Source, licence and sizes.

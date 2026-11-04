@@ -145,6 +145,23 @@ Window {
         opSheet.show(Object.assign({}, app, root.backend.app(app.id)), "remove");
     }
 
+    // "--page=uninstall:<application entry>" (ADR-0046 D1): the launcher or Files asks, from another process, so this only OPENS the
+    // Store's own alert (OperationSheet, handedOver): the app by its Store name and icon, the packages -Rns takes, Cancel the
+    // default. Nothing runs until Delete is pressed here. An entry the Store does not know is said in the notice bar.
+    function uninstallEntry(entry: string): void {
+        // A sheet already open keeps its app: a second hand-over (any peer can send one) must not switch what the user is about
+        // to confirm. The window still comes forward (main.cpp), and the user asks again once the alert is answered.
+        if (opSheet.visible)
+            return;
+        const id = root.backend.appForEntry(entry);
+        const app = id === "" ? null : root.backend.app(id);
+        if (!app || app.id === undefined) {
+            root.transientNotice = qsTr("The Store can't uninstall this app.");
+            return;
+        }
+        opSheet.show(Object.assign({}, app, root.backend.app(id)), "remove", true);
+    }
+
     // A Flatpak's Update, and Update All of the Flatpak group (step 4): the sheet asks only when an update lets an app reach
     // more than before (OperationSheet.showUpdate).
     function requestUpdate(app: var): void {
@@ -280,6 +297,8 @@ Window {
             root.openApp(arg);
         else if (kind === "installed")
             root.openInstalled();
+        else if (kind === "uninstall")
+            root.uninstallEntry(arg);
         else if (kind === "type" && /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/.test(arg.toLowerCase()))
             root.openType(arg.toLowerCase());
         else if (kind === "search") {

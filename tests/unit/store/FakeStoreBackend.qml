@@ -38,6 +38,7 @@ QtObject {
     property bool staleLock: false
     property var plans: ({})
     property var blocks: ({}) // appId -> {get, uninstall}
+    property var entries: ({"photo.desktop": "org.example.Photo"}) // application entry -> app id (appForEntry)
     property var opened: []
     property bool openWorks: true
 
@@ -96,6 +97,12 @@ QtObject {
         return {installed: installed, launcher: a ? a.launcher : installed,
                 get: installed ? "installed" : (b.get !== undefined ? b.get : ""), uninstall: b.uninstall !== undefined ? b.uninstall : (installed ? "" : "notInstalled"),
                 update: flatpakUpdates[id] !== undefined ? flatpakUpdates[id] : "none"};
+    }
+
+    function appForEntry(entry) {
+        calls.push("appForEntry:" + entry);
+        const key = entry.endsWith(".desktop") ? entry : entry + ".desktop";
+        return entries[key] || "";
     }
 
     function plan(id, kind) {

@@ -18,7 +18,13 @@ GridView {
     // True once the cell pool has been filled by warmPool().
     property bool warmed: false
 
+    // Deleting apps (ADR-0046): the icons jiggle while `editing`; `removable` is the controller's check of one item.
+    property bool editing: false
+    property var removable: item => false
+
     signal activated(var item)
+    signal deleteRequested(var item)
+    signal holdStarted
 
     clip: true
     boundsBehavior: Flickable.StopAtBounds
@@ -84,6 +90,11 @@ GridView {
         cellW: root.cellWidth
         cellH: root.cellHeight
         selected: root.selectedIndex === index && root.ringVisible
+        editing: root.editing
+        removable: root.editing && root.removable(modelData)
+        position: index
         onActivated: root.activated(modelData)
+        onDeleteRequested: root.deleteRequested(modelData)
+        onHoldStarted: root.holdStarted()
     }
 }

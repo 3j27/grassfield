@@ -280,6 +280,107 @@ TEST(StoreBackend, NoCatalogHostButArchsData)
     EXPECT_EQ(ids(backend.search(QStringLiteral("gimp"))).value(0), QStringLiteral("org.gimp.GIMP"));
 }
 
+// ADR-0046 F1: a repository app the user installed that no catalog or AppStream data describes (Omarchy's repository has no
+// AppStream data) is an app named by its package, with its entry, so that the launcher and Files can remove it; Omarchy's own
+// optional preinstall (aether) is not "Part of Omarchy", one of its base list (btop) is.
+TEST(StoreBackend, AnAppWithoutAppStreamDataIsRemovableByItsEntry)
+{
+    Scratch s;
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QByteArray b = base.toUtf8();
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "case \"$1\" in\n"
+                      "  -Sl) " + b + " -Sl; echo 'omarchy aether 1.0-1 [installed]'; echo 'omarchy btop 1.0-1 [installed]'\n"
+                      "       echo 'extra needed 1-1 [installed]'; echo 'extra taker 1-1 [installed]'; echo 'extra kcmx 1-1 [installed]' ;;\n"
+                      "  -Qqe) " + b + " -Qqe; echo aether; echo btop; echo needed; echo taker; echo kcmx ;;\n"
+                      "  -Qq) echo grassfield-desktop; echo gimp ;;\n"
+                      "  -Qi) printf '%s\\n' 'Name            : grassfield-desktop' 'Optional Deps   : kcmx: a Grassfield option [installed]' ;;\n"
+                      "  -Rs) case \"$*\" in\n"
+                      "         *aether*) echo 'aether 1.0-1' ;;\n"
+                      "         *needed*) echo \":: removing needed breaks dependency 'needed' required by other\"; exit 1 ;;\n"
+                      "         *taker*) echo 'taker 1-1'; echo 'glibc 2-1' ;;\n"
+                      "         *) exit 1 ;;\n"
+                      "       esac ;;\n"
+                      "  -Qu) exit 1 ;;\n"
+                      "  -Qo) shift; [ \"$1\" = -- ] && shift\n"
+                      "       for f in \"$@\"; do case $f in\n"
+                      "         */aether.desktop) echo \"$f is owned by aether 1.0-1\" ;;\n"
+                      "         */btop.desktop) echo \"$f is owned by btop 1.0-1\" ;;\n"
+                      "         */needed.desktop) echo \"$f is owned by needed 1-1\" ;;\n"
+                      "         */taker.desktop) echo \"$f is owned by taker 1-1\" ;;\n"
+                      "         */kcmx.desktop) echo \"$f is owned by kcmx 1-1\" ;;\n"
+                      "       esac; done ;;\n"
+                      "  *) exec " + b + " \"$@\" ;;\nesac");
+    QDir().mkpath(s.path(QStringLiteral("fixture/applications")));
+    QDir().mkpath(s.path(QStringLiteral("fixture/omarchy/install")));
+    for (const char *name : {"aether", "btop", "needed", "taker", "kcmx"})
+        storetest::writeFile(s.path(QStringLiteral("fixture/applications/%1.desktop").arg(QLatin1String(name))),
+                             QByteArray("[Desktop Entry]\nType=Application\nName=X\nExec=x\n"));
+    storetest::writeFile(s.path(QStringLiteral("fixture/omarchy/install/omarchy-base.packages")), "aether\nbtop\n");
+    StoreBackend backend;
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    const QVariantMap byEntry = backend.removalByEntry();
+    ASSERT_TRUE(byEntry.contains(QStringLiteral("aether.desktop"))) << "listed by its package";
+    EXPECT_EQ(byEntry.value(QStringLiteral("aether.desktop")).toMap().value(QStringLiteral("app")).toString(), QStringLiteral("aether"));
+    const QString aether = byEntry.value(QStringLiteral("aether.desktop")).toMap().value(QStringLiteral("block")).toString();
+    EXPECT_TRUE(aether.isEmpty() || aether == QLatin1String("dev")) << qPrintable(aether) << ": removable (a dev session has no pkexec)";
+    EXPECT_EQ(byEntry.value(QStringLiteral("btop.desktop")).toMap().value(QStringLiteral("block")).toString(), QStringLiteral("omarchy"));
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("aether")), QStringLiteral("aether"));
+    EXPECT_EQ(backend.actions(QStringLiteral("aether")).value(QStringLiteral("uninstall")).toString(), aether);
+    // Grassfield's own optional dependency (pacman -Qi grassfield-desktop lists kcmx): "Part of Grassfield", never offered.
+    EXPECT_EQ(byEntry.value(QStringLiteral("kcmx.desktop")).toMap().value(QStringLiteral("block")).toString(), QStringLiteral("grassfield"));
+}
+
+// ADR-0046 D3: with `withPlans` (what `--removable` asks) a removable app whose -Rs plan would be refused is not offered: a package
+// something needs ("dependency"), one whose plan takes a protected package ("protected"); a clean plan stays "".
+TEST(StoreBackend, ABadgeNeverLeadsToARefusal)
+{
+    Scratch s;
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QByteArray b = base.toUtf8();
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "case \"$1\" in\n"
+                      "  -Sl) " + b + " -Sl; echo 'extra aether 1.0-1 [installed]'; echo 'extra needed 1-1 [installed]'; echo 'extra taker 1-1 [installed]' ;;\n"
+                      "  -Qqe) " + b + " -Qqe; echo aether; echo needed; echo taker ;;\n"
+                      "  -Qo) shift; [ \"$1\" = -- ] && shift\n"
+                      "       for f in \"$@\"; do case $f in\n"
+                      "         */aether.desktop) echo \"$f is owned by aether 1.0-1\" ;;\n"
+                      "         */needed.desktop) echo \"$f is owned by needed 1-1\" ;;\n"
+                      "         */taker.desktop) echo \"$f is owned by taker 1-1\" ;;\n"
+                      "       esac; done ;;\n"
+                      "  -Rs) case \"$*\" in\n"
+                      "         *aether*) echo 'aether 1.0-1' ;;\n"
+                      "         *needed*) echo \":: removing needed breaks dependency 'needed' required by other\"; exit 1 ;;\n"
+                      "         *taker*) echo 'taker 1-1'; echo 'glibc 2-1' ;;\n"
+                      "         *) exit 1 ;;\n"
+                      "       esac ;;\n"
+                      "  -Qu) exit 1 ;;\n"
+                      "  *) exec " + b + " \"$@\" ;;\nesac");
+    QDir().mkpath(s.path(QStringLiteral("fixture/applications")));
+    QDir().mkpath(s.path(QStringLiteral("fixture/omarchy/install")));
+    for (const char *name : {"aether", "needed", "taker"})
+        storetest::writeFile(s.path(QStringLiteral("fixture/applications/%1.desktop").arg(QLatin1String(name))),
+                             QByteArray("[Desktop Entry]\nType=Application\nName=X\nExec=x\n"));
+    storetest::writeFile(s.path(QStringLiteral("fixture/omarchy/install/omarchy-base.packages")), "btop\n");
+    s.env->set("GRASSFIELD_STORE_PKEXEC", QStringLiteral("/usr/bin/true")); // a dev session with a pkexec: nothing is blocked by "dev"
+    StoreBackend backend;
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    const auto block = [](const QVariantMap &m, const char *entry) {
+        return m.value(QLatin1String(entry)).toMap().value(QStringLiteral("block")).toString();
+    };
+    const QVariantMap plain = backend.removalByEntry();
+    EXPECT_EQ(block(plain, "needed.desktop"), QString()) << "the pages do not run the plans";
+    EXPECT_EQ(block(plain, "taker.desktop"), QString());
+    const QVariantMap planned = backend.removalByEntry(true);
+    EXPECT_EQ(block(planned, "aether.desktop"), QString()) << "a clean plan stays offered";
+    EXPECT_EQ(block(planned, "needed.desktop"), QStringLiteral("dependency"));
+    EXPECT_EQ(block(planned, "taker.desktop"), QStringLiteral("protected"));
+}
+
 // Arch's app data fetched from the mirror (archlinux-appstream-data not installed), each failure with its own reason (the
 // integrator's note on PR #36): the package file the mirror no longer has and its .sig not served are "download" (the
 // window then offers Software Update), a signature pacman's rule refuses is "unverified".
@@ -1099,6 +1200,19 @@ TEST(StoreBackend, Updates)
     EXPECT_EQ(backend.actions(QStringLiteral("org.example.Paint")).value(QStringLiteral("update")).toString(), QStringLiteral("none"));
     EXPECT_EQ(backend.actions(QStringLiteral("org.gimp.GIMP")).value(QStringLiteral("update")).toString(), QStringLiteral("none"))
         << "a repository app updates with the system, never on its own";
+
+    // The launcher's and Files' question (ADR-0046 D1): the installed apps by application entry, "" blocking nothing.
+    const QVariantMap byEntry = backend.removalByEntry();
+    ASSERT_TRUE(byEntry.contains(QStringLiteral("org.example.Notes.desktop"))) << "an installed Flatpak is listed by its entry";
+    const QVariantMap notes = byEntry.value(QStringLiteral("org.example.Notes.desktop")).toMap();
+    EXPECT_EQ(notes.value(QStringLiteral("app")).toString(), QStringLiteral("org.example.Notes"));
+    EXPECT_EQ(notes.value(QStringLiteral("block")).toString(), backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("uninstall")).toString())
+        << "the same answer as the product page's menu";
+    EXPECT_FALSE(byEntry.contains(QStringLiteral("org.example.Paint.desktop"))) << "an app that is not installed is not listed";
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("org.example.Notes")), QStringLiteral("org.example.Notes")) << "with or without .desktop";
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("org.example.Notes.desktop")), QStringLiteral("org.example.Notes"));
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("../etc/passwd")), QString());
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("nothing.desktop")), QString());
 
     // Its plan: Flathub's newer metadata reaches the home folder, which the installed one does not.
     backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));

@@ -215,6 +215,23 @@ DenyList readDenyList()
         deny.holdPkg = parsePackageList(hold.out);
     if (deny.holdPkg.isEmpty())
         deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("glibc")};
+    // What Grassfield's own packages list as optional dependencies (ADR-0046 D3): pacman -Qi of the installed grassfield-*.
+    // Unreadable: nothing is removable (the lists are cleared, as when Omarchy's cannot be read).
+    const ChildResult installed = runChild(env::pacman(), {QStringLiteral("-Qq")});
+    QStringList own;
+    for (const QByteArray &line : installed.out.split('\n')) {
+        const QString name = QString::fromUtf8(line).trimmed();
+        if (installed.ok() && isPackageName(name) && (name == QLatin1String("grassfield") || name.startsWith(QLatin1String("grassfield-"))))
+            own.append(name);
+    }
+    if (!own.isEmpty()) {
+        own.sort();
+        const ChildResult qi = runChild(env::pacman(), QStringList{QStringLiteral("-Qi"), QStringLiteral("--")} + own);
+        if (qi.ok())
+            deny.grassfieldOptional = parseOptionalDeps(qi.out);
+        else
+            deny.omarchy.clear();
+    }
     return deny;
 }
 
@@ -393,6 +410,40 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     model.foreign = snap->foreign;
     model.catalogIcon = [&store](const CatalogIcon &icon) { return store.iconPath(icon); };
     snap->apps = buildModel(model);
+    // Repository apps the user installed that neither our catalog nor Arch's AppStream describe (Omarchy's own repository
+    // has no AppStream data: Aether, Cliamp, Omacut…): listed by their package, so that Uninstall… reaches them from the
+    // product page, the launcher and Files (ADR-0046 F1). Only a package installed explicitly that owns an application entry.
+    {
+        QSet<QString> listed, ids;
+        for (const StoreApp &a : std::as_const(snap->apps)) {
+            ids.insert(a.id);
+            listed.insert(a.package);
+            for (const QString &p : a.packages)
+                listed.insert(p);
+        }
+        QHash<QString, SyncPackage> byName;
+        for (const SyncPackage &p : std::as_const(snap->sync)) {
+            if (isStoreRepository(p.repo) && !byName.contains(p.name))
+                byName.insert(p.name, p);
+        }
+        QStringList names = snap->entries.keys();
+        names.sort();
+        for (const QString &pkg : std::as_const(names)) {
+            const auto it = byName.constFind(pkg);
+            if (it == byName.constEnd() || !it->installed || !snap->explicitPackages.contains(pkg) || listed.contains(pkg) || ids.contains(pkg)
+                || !isPackageName(pkg))
+                continue;
+            StoreApp a;
+            a.id = pkg;
+            a.repo = it->repo;
+            a.package = pkg;
+            a.packages = {pkg};
+            a.installed = true;
+            a.name = LocalizedText{pkg, {}};
+            a.desktopId = snap->entries.value(pkg).value(0);
+            snap->apps.append(a);
+        }
+    }
     // A setup runs from the installed Omarchy (b.2): hidden when Omarchy has no such recipe (spec, "Refusals"), and none
     // runs while a pinned file differs.
     const QString omarchy = env::omarchyRoot();
@@ -1906,6 +1957,53 @@ QVariantMap StoreBackend::actions(const QString &id) const
             {QStringLiteral("get"), a->installed ? QStringLiteral("installed") : getBlock(*a)},
             {QStringLiteral("uninstall"), uninstallBlock(*a)},
             {QStringLiteral("update"), a->installed ? update : QStringLiteral("none")}};
+}
+
+QVariantMap StoreBackend::removalByEntry(bool withPlans) const
+{
+    QVariantMap out;
+    if (!m_snapshot)
+        return out;
+    const Snapshot &s = *m_snapshot;
+    const auto add = [&out](const QString &desktop, const QString &id, const QString &name, const QString &block) {
+        if (isDesktopId(desktop) && !out.contains(desktop))
+            out.insert(desktop, QVariantMap{{QStringLiteral("app"), id}, {QStringLiteral("name"), name}, {QStringLiteral("block"), block}});
+    };
+    for (const StoreApp &a : s.apps) {
+        // Installed repository and Flatpak apps (web apps and recipes keep their Installed page: not a launcher's business).
+        if (!a.installed || (a.source != CatalogSource::Kind::Repo && a.source != CatalogSource::Kind::Flatpak))
+            continue;
+        const QString name = view::summary(a, m_language).value(QStringLiteral("name")).toString();
+        QString block = uninstallBlock(a);
+        // The badge must never lead to a refusal (ADR-0046 D3): a package whose -Rs plan hits a dependency or a protected package
+        // is "not removable" before it is offered. The launcher's one-shot asks for this (a pacman run each); the pages do not.
+        if (withPlans && block.isEmpty() && a.source == CatalogSource::Kind::Repo) {
+            const RemovePlan plan = checkRemove({a.package}, s.deny, planTools(), false);
+            if (plan.refusal == Refusal::Dependency)
+                block = QStringLiteral("dependency");
+            else if (plan.refusal == Refusal::Protected)
+                block = QStringLiteral("protected");
+            else if (plan.refusal == Refusal::Failed)
+                block = QStringLiteral("plan");
+        }
+        QStringList ids = a.source == CatalogSource::Kind::Repo ? s.entries.value(a.package) : QStringList{};
+        if (!a.desktopId.isEmpty())
+            ids.prepend(a.desktopId);
+        for (const QString &desktop : std::as_const(ids))
+            add(desktop, a.id, name, block);
+    }
+    // The user's Flatpaks Flathub's AppStream does not have: removed as "flatpak:<app id>".
+    for (const QString &app : s.flatpaks) {
+        if (!s.index.contains(app) && isFlatpakId(app))
+            add(app + QStringLiteral(".desktop"), QStringLiteral("flatpak:") + app, app, flatpakBlock());
+    }
+    return out;
+}
+
+QString StoreBackend::appForEntry(const QString &desktopId) const
+{
+    const QString key = desktopId.endsWith(QLatin1String(".desktop")) ? desktopId : desktopId + QStringLiteral(".desktop");
+    return removalByEntry().value(key).toMap().value(QStringLiteral("app")).toString();
 }
 
 PlanTools StoreBackend::planTools() const

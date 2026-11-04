@@ -272,7 +272,8 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.inTrash ? qsTr("Put Back") : qsTr("Move to Trash")
             shortcut: "Ctrl+Backspace"
-            enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable)
+            // An application of the Applications location the Store may uninstall (ADR-0046): the Store is asked, as the item menu does.
+            enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable || (bar.inApplications && bar.tab !== null && bar.tab.applicationRemovable()))
             onTriggered: bar.tab.trashSelection()
         }
         // Delete Immediately (⌥⌘⌫, FP-52): any item, confirmed.

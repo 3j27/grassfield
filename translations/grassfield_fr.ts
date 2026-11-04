@@ -1550,6 +1550,13 @@
     </message>
 </context>
 <context>
+    <name>AppsCell</name>
+    <message>
+        <source>Delete “%1”</source>
+        <translation>Supprimer « %1 »</translation>
+    </message>
+</context>
+<context>
     <name>AppsController</name>
     <message>
         <source>All</source>
@@ -5238,6 +5245,14 @@
         <translation>Copie</translation>
     </message>
     <message>
+        <source>The Store can’t uninstall this application.</source>
+        <translation>Le Store ne peut pas désinstaller cette application.</translation>
+    </message>
+    <message>
+        <source>The Store could not be started.</source>
+        <translation>Le Store n’a pas pu être lancé.</translation>
+    </message>
+    <message>
         <source>Make Alias</source>
         <translation>Créer un alias</translation>
     </message>
@@ -8128,6 +8143,10 @@
         <translation>Mises à jour</translation>
     </message>
     <message>
+        <source>The Store can&apos;t uninstall this app.</source>
+        <translation>Le Store ne peut pas désinstaller cette app.</translation>
+    </message>
+    <message>
         <source>Flatpak apps</source>
         <translation>Apps Flatpak</translation>
     </message>
@@ -9159,6 +9178,10 @@
         <translation>Obtenir Flatpak&#xa0;?</translation>
     </message>
     <message>
+        <source>Delete “%1”?</source>
+        <translation>Supprimer « %1 » ?</translation>
+    </message>
+    <message>
         <source>“%1” can&apos;t be installed from the AUR</source>
         <translation>«&#xa0;%1&#xa0;» ne peut pas être installée depuis l’AUR</translation>
     </message>
@@ -9301,6 +9324,10 @@
     <message>
         <source>Install from the AUR</source>
         <translation>Installer depuis l&apos;AUR</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
     </message>
     <message>
         <source>OK</source>
@@ -10612,6 +10639,10 @@
     <message>
         <source>Open this page first: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;words&gt;, installed or updates.</source>
         <translation>Ouvrir d’abord cette page&#xa0;: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;mots&gt;, installed ou updates.</translation>
+    </message>
+    <message>
+        <source>Print, as JSON, the installed apps by application entry and whether the Store may uninstall each.</source>
+        <translation>Affiche, en JSON, les apps installées par entrée d’application et si le Store peut désinstaller chacune.</translation>
     </message>
     <message>
         <source>See the processes and the resources they use.</source>
@@ -14478,6 +14509,45 @@
     <message>
         <source>Toolbar</source>
         <translation>Barre d’outils</translation>
+    </message>
+</context>
+<context>
+    <name>UninstallLogic</name>
+    <message>
+        <source>The Store does not manage this app.</source>
+        <translation>Le Store ne gère pas cette app.</translation>
+    </message>
+    <message>
+        <source>Part of the system.</source>
+        <translation>Fait partie du système.</translation>
+    </message>
+    <message>
+        <source>Part of Omarchy.</source>
+        <translation>Fait partie d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>Part of Grassfield.</source>
+        <translation>Fait partie de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Installed with another app.</source>
+        <translation>Installée avec une autre app.</translation>
+    </message>
+    <message>
+        <source>Removing it would also remove part of the system.</source>
+        <translation>Sa suppression retirerait aussi une partie du système.</translation>
+    </message>
+    <message>
+        <source>The Store can&apos;t remove this app.</source>
+        <translation>Le Store ne peut pas supprimer cette app.</translation>
+    </message>
+    <message>
+        <source>Apps can&apos;t be removed in this session.</source>
+        <translation>Les apps ne peuvent pas être supprimées dans cette session.</translation>
+    </message>
+    <message>
+        <source>The Store can&apos;t remove this app now.</source>
+        <translation>Le Store ne peut pas supprimer cette app maintenant.</translation>
     </message>
 </context>
 <context>

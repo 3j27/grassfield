@@ -35,6 +35,8 @@ DenyList vectorDeny(const QJsonObject &v)
         deny.omarchy.insert(n.toString());
     for (const QJsonValue &n : v.value(QStringLiteral("holdPkg")).toArray())
         deny.holdPkg.insert(n.toString());
+    for (const QJsonValue &n : v.value(QStringLiteral("gfOptional")).toArray())
+        deny.grassfieldOptional.insert(n.toString());
     return deny;
 }
 
@@ -52,6 +54,61 @@ TEST(Removal, SharedVectors)
         // "linux" is in the vectors' Omarchy list too: the system's reason wins.
         EXPECT_EQ(protectionName(protection(name, deny)), want) << qPrintable(name);
     }
+}
+
+// ADR-0046 D2: the apps Omarchy preinstalls and itself offers to remove are on its lists but not the system's; the rest of the
+// lists stays. D3: the session's runtime is protected by name, whatever the lists say.
+TEST(Removal, OptionalPreinstallsAndTheRuntime)
+{
+    DenyList deny;
+    deny.omarchy = {QStringLiteral("libreoffice-fresh"), QStringLiteral("obs-studio"), QStringLiteral("mpv"), QStringLiteral("chromium")};
+    deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("kdenlive")};
+    const RemovalFacts app{true, true, true, true};
+    EXPECT_EQ(removal(QStringLiteral("libreoffice-fresh"), app, deny), Removal::Removable);
+    EXPECT_EQ(removal(QStringLiteral("obs-studio"), app, deny), Removal::Removable);
+    EXPECT_EQ(removal(QStringLiteral("kdenlive"), app, deny), Removal::PartOfSystem) << "HoldPkg still keeps it";
+    EXPECT_EQ(removal(QStringLiteral("mpv"), app, deny), Removal::PartOfOmarchy);
+    EXPECT_EQ(removal(QStringLiteral("chromium"), app, deny), Removal::PartOfOmarchy);
+    for (const char *name : {"hyprland", "quickshell", "networkmanager", "mesa", "pipewire", "pipewire-pulse", "wireplumber",
+                             "xdg-desktop-portal-hyprland", "sddm", "uwsm", "gnome-keyring"})
+        EXPECT_EQ(removal(QString::fromLatin1(name), app, deny), Removal::PartOfSystem) << name;
+    // Qt is not protected by a prefix: pacman keeps what the session requires, and Kdenlive's plan (qt6-speech, qt6-networkauth)
+    // must not end in a refusal.
+    EXPECT_EQ(removal(QStringLiteral("qt6-speech"), RemovalFacts{true, true, true, true}, deny), Removal::Removable);
+    // Not prefixes of them by accident.
+    EXPECT_EQ(removal(QStringLiteral("qt5-base"), app, deny), Removal::Removable);
+    EXPECT_EQ(removal(QStringLiteral("mesa-utils"), app, deny), Removal::Removable);
+}
+
+// pacman -Qi of two Grassfield packages (LC_ALL=C): what they list as optional dependencies, whatever the reason's text.
+TEST(Removal, OptionalDependenciesOfGrassfield)
+{
+    const QByteArray qi =
+        "Name            : grassfield-desktop\n"
+        "Depends On      : qt6-base  quickshell\n"
+        "Optional Deps   : kio-extras: network places in Files [installed]\n"
+        "                  openexr: EXR thumbnails\n"
+        "                  perl\n"
+        "Required By     : None\n"
+        "\n"
+        "Name            : grassfield-compositor\n"
+        "Optional Deps   : cmake: rebuild the plugin [installed]\n"
+        "                  ninja>=1.11: faster builds\n"
+        "Optional For    : None\n"
+        "\n"
+        "Name            : grassfield-store\n"
+        "Optional Deps   : None\n"
+        "Required By     : None\n";
+    EXPECT_EQ(parseOptionalDeps(qi), (QSet<QString>{QStringLiteral("kio-extras"), QStringLiteral("openexr"), QStringLiteral("perl"),
+                                                    QStringLiteral("cmake"), QStringLiteral("ninja")}));
+    EXPECT_TRUE(parseOptionalDeps("").isEmpty());
+    EXPECT_FALSE(parseOptionalDeps(qi).contains(QStringLiteral("qt6-base"))) << "a hard dependency is pacman's own check";
+    DenyList deny;
+    deny.omarchy = {QStringLiteral("chromium")};
+    deny.grassfieldOptional = parseOptionalDeps(qi);
+    EXPECT_EQ(removal(QStringLiteral("cmake"), RemovalFacts{true, true, true, true}, deny), Removal::PartOfGrassfield);
+    EXPECT_EQ(removal(QStringLiteral("kio-extras"), RemovalFacts{true, true, true, true}, deny), Removal::PartOfGrassfield);
+    EXPECT_EQ(removal(QStringLiteral("gimp"), RemovalFacts{true, true, true, true}, deny), Removal::Removable);
 }
 
 TEST(Removal, PackageList)
