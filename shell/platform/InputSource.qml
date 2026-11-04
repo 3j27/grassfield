@@ -41,6 +41,10 @@ QtObject {
         if (!Logic.named(event.layout))
             return;
         layoutName = event.layout;
+        if (sources.length > 0)
+            activeIndex = Logic.activeIndex(sources, names, event.layout, activeIndex);
+        else
+            refresh();
         if (next.show)
             announce(event.layout);
     }
@@ -97,6 +101,116 @@ QtObject {
         }
     }
 
+    // ---- The input sources (the Input menu of the menu bar) ----------------------------------------------------------------
+    // The sources Hyprland holds, [{layout, variant}], and the position of the one in use (-1 until the first event names it).
+    // Read from the request socket (`j/devices`) at start, when the configuration is read again and when a layout event
+    // arrives while the list is empty (a keyboard plugged in later); never polled. Without a compositor (no request socket)
+    // the list stays empty and the Input menu is not shown.
+    property var sources: []
+    property var names: ({})
+    property int activeIndex: -1
+    readonly property bool available: Logic.menuShown(sources.length, true)
+    readonly property string shortLabel: activeIndex >= 0 && activeIndex < sources.length ? Logic.label(sources[activeIndex], sources) : ""
+
+    function nameOf(source: var): string {
+        return Logic.sourceName(source, names);
+    }
+
+    // Makes the source at `index` the one in use on every keyboard (Hyprland: `switchxkblayout all`, a request, not a dispatcher).
+    function select(index: int): void {
+        const request = Logic.switchRequest(index, sources.length);
+        if (request === null)
+            return;
+        activeIndex = index;
+        send(request, null);
+    }
+
+    // The previous or next source (macOS: Control-Space and Control-Option-Space), around the list.
+    function stepSource(by: int): void {
+        select(Logic.stepIndex(activeIndex < 0 ? 0 : activeIndex, sources.length, by));
+    }
+
+    function refresh(): void {
+        send("j/devices", text => {
+            const list = Logic.parseDevices(text);
+            sources = list;
+            if (list.length === 0)
+                activeIndex = -1;
+            else if (activeIndex < 0 || activeIndex >= list.length)
+                activeIndex = Logic.activeIndex(list, names, layoutName, -1);
+        });
+    }
+
+    // One connection per request (as SessionConfig's): the request, then the reply until Hyprland closes the connection;
+    // `done(text)` gets it (null: nothing to read).
+    function send(request: string, done: var): void {
+        const path = Hyprland.requestSocketPath || "";
+        if (path === "") {
+            console.info("grassfield-shell: input sources: no Hyprland request socket (" + request + ")");
+            return;
+        }
+        requestSocket.createObject(root, {"path": path, "request": request, "done": done});
+    }
+
+    property Component requestSocket: Component {
+        Socket {
+            id: sock
+
+            property string request: ""
+            property var done: null
+            property string reply: ""
+            property bool judged: false
+
+            function finish(): void {
+                if (sock.judged)
+                    return;
+                sock.judged = true;
+                sock.answerTimeout.stop();
+                sock.connected = false;
+                if (sock.done)
+                    sock.done(sock.reply);
+                Qt.callLater(() => sock.destroy());
+            }
+
+            parser: SplitParser {
+                splitMarker: ""
+                onRead: data => sock.reply += data
+            }
+            onConnectedChanged: {
+                if (connected) {
+                    write(sock.request);
+                    flush();
+                    sock.answerTimeout.start();
+                } else {
+                    sock.finish();
+                }
+            }
+
+            readonly property Timer answerTimeout: Timer {
+                interval: root.helperTimeoutMs
+                onTriggered: sock.finish()
+            }
+
+            // Judged after Quickshell's error handler has returned (closing from inside the signal crashes Quickshell 0.3.2).
+            Component.onCompleted: {
+                sock.error.connect(() => Qt.callLater(sock.finish));
+                sock.connected = true;
+            }
+        }
+    }
+
+    property FileView namesFile: FileView {
+        path: "/usr/share/X11/xkb/rules/base.lst"
+        printErrors: false
+        onLoaded: root.names = Logic.parseNames(text())
+    }
+
+    property Timer startRefresh: Timer {
+        interval: 1
+        running: true
+        onTriggered: root.refresh()
+    }
+
     property Process lookup: Process {
         stdout: StdioCollector {
             onStreamFinished: root.answered(text)
@@ -144,6 +258,11 @@ QtObject {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "activelayout")
                 root.feed(event.data);
+            // The configuration was read again (Settings changed the sources): the list and the position are asked again.
+            else if (event.name === "configreloaded") {
+                root.activeIndex = -1;
+                root.refresh();
+            }
         }
     }
 }

@@ -20,4 +20,5 @@ StackPopup 1.0 StackPopup.qml
 TilingPopover 1.0 TilingPopover.qml
 TilingSuggestions 1.0 TilingSuggestions.qml
 ScreenShareMenu 1.0 ScreenShareMenu.qml
+InputMenu 1.0 InputMenu.qml
 SharePickerPanel 1.0 SharePickerPanel.qml
