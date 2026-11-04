@@ -35,7 +35,8 @@
 #     its themes from there);
 #   - stdin is /dev/null and it runs in a process session (and process group) of its own; its output goes to a private
 #     temporary file (its last line is quoted when it fails). Past RUN_LIMIT its whole process group gets SIGTERM, then
-#     SIGKILL after KILL_GRACE seconds; the lock is held until the group is gone.
+#     SIGKILL after KILL_GRACE seconds; the lock is held until the group is gone, or for two graces at most when only
+#     processes this user cannot signal are left (a root step of the chain).
 # Nothing runs when the theme is already Omarchy's (`omarchy-theme-current`), when another run holds the lock
 # ($XDG_RUNTIME_DIR/grassfield/terminal-theme.lock: this one waits for it, at most LOCK_WAIT seconds), or as root. Missing
 # Omarchy commands: nothing runs, exit 0.
@@ -44,9 +45,10 @@
 # Dev plumbing (ADR-0019, honoured only in a dev session: GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1"):
 # GRASSFIELD_TERMINAL_THEME_SHIMS, the stand-ins' directory in place of /usr/lib/grassfield/omarchy-shims, and
 # GRASSFIELD_TERMINAL_THEME_RUN_LIMIT, RUN_LIMIT in seconds (tests/shell/terminal_theme.sh). A dev session never reaches the
-# owner's Omarchy: it runs only with the stand-in variable, an explicit OMARCHY_PATH that is not /usr/share/omarchy, and
-# omarchy-theme-set and omarchy-theme-current found (links resolved) in that tree's bin directory or among the stand-ins;
-# anything else is refused before any Omarchy command runs. Outside a dev session the stand-in variable is refused (a stray
+# owner's Omarchy: it runs only with the stand-in variable, an explicit absolute OMARCHY_PATH marked as a tree of fakes
+# (FAKE_MARK at its root; neither the tree nor its bin, links resolved, inside /usr/share/omarchy), and omarchy-theme-set and
+# omarchy-theme-current found, links resolved, directly in that tree's bin, outside the packaged Omarchy and the system
+# directories; anything else is refused before any Omarchy command runs. Outside a dev session the stand-in variable is refused (a stray
 # test setting). GRASSFIELD_CONFIG_HOME is honoured always, as by the shell (shell/lib/RunMode.js configDir).
 # Standard library only.
 import fcntl
@@ -259,7 +261,8 @@ def group_alive(pgid):
 
 def stop_group(proc):
     """SIGTERM to omarchy-theme-set's whole process group (its session: start_new_session), SIGKILL to what is left after
-    KILL_GRACE seconds; returns once the group is gone (a process that made a session of its own has left it)."""
+    KILL_GRACE seconds; returns once the group is gone (a process that made a session of its own has left it), or after the
+    two graces when what is left cannot be signalled by this user."""
     pgid = proc.pid
     for sig, wait in ((signal.SIGTERM, KILL_GRACE), (signal.SIGKILL, KILL_GRACE)):
         try:

@@ -193,9 +193,11 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   kitty, ghostty, btop, opencode, helix and tmux panes). The helper also: never runs when the theme is already current, waits
   for its lock, refuses root, skips silently without Omarchy's commands, refuses without the stand-ins or when its private
   folder is a link or another user's; stdin /dev/null, a process session of its own, whose whole process group gets SIGTERM
-  then SIGKILL past the run limit (the lock held until it is gone). A dev session (the test) runs only with the stand-in
-  variable, an explicit OMARCHY_PATH that is not /usr/share/omarchy and Omarchy's two theme commands resolved (links
-  followed) in that tree's bin or among the stand-ins; outside a dev session the stand-in variable is refused;
+  then SIGKILL past the run limit (the lock held until it is gone, two graces at most when what is left cannot be
+  signalled). A dev session (the test) runs only with the stand-in variable, an explicit absolute OMARCHY_PATH marked as a
+  tree of fakes (`grassfield-fake-omarchy` at its root; neither it nor its bin inside /usr/share/omarchy) and Omarchy's two
+  theme commands resolved (links followed) directly in that tree's bin, outside the packaged Omarchy and the system
+  directories; outside a dev session the stand-in variable is refused;
   `tests/shell/terminal_theme.sh` runs with a PATH of its own folders only and checks that first. Settings:
   `omarchy-theme-list` in the read-only query allowlist.
 

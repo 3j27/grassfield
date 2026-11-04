@@ -862,6 +862,9 @@ def record(opts):
         return 0
     finally:
         if RECORDING["proc"] is None:
+            # A late signal (the shell's stop of a "starting" state under the lock) is noted, not raised, while the idle
+            # state is written: raised here it would leave "starting" behind (final counter-review, INFO-1).
+            RECORDING["starting"] = True
             write_state({"phase": "idle"})
             if tmp is not None:
                 with contextlib.suppress(OSError):
