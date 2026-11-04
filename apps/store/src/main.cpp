@@ -51,8 +51,10 @@ int main(int argc, char *argv[])
 
     // `--removable` (ADR-0044 D1) answers the launcher and Files once and shows no window: offscreen, whatever the session says.
     for (int i = 1; i < argc; ++i) {
-        if (qstrcmp(argv[i], "--removable") == 0)
+        if (qstrcmp(argv[i], "--removable") == 0) {
             qputenv("QT_QPA_PLATFORM", "offscreen");
+            qputenv("QT_QPA_PLATFORMTHEME", "none"); // a GTK platform theme would look for a display and fail (exit 1)
+        }
     }
 
     QGuiApplication app(argc, argv);

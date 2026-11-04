@@ -392,6 +392,40 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     model.foreign = snap->foreign;
     model.catalogIcon = [&store](const CatalogIcon &icon) { return store.iconPath(icon); };
     snap->apps = buildModel(model);
+    // Repository apps the user installed that neither our catalog nor Arch's AppStream describe (Omarchy's own repository
+    // has no AppStream data: Aether, Cliamp, Omacut…): listed by their package, so that Uninstall… reaches them from the
+    // product page, the launcher and Files (ADR-0044 F1). Only a package installed explicitly that owns an application entry.
+    {
+        QSet<QString> listed, ids;
+        for (const StoreApp &a : std::as_const(snap->apps)) {
+            ids.insert(a.id);
+            listed.insert(a.package);
+            for (const QString &p : a.packages)
+                listed.insert(p);
+        }
+        QHash<QString, SyncPackage> byName;
+        for (const SyncPackage &p : std::as_const(snap->sync)) {
+            if (isStoreRepository(p.repo) && !byName.contains(p.name))
+                byName.insert(p.name, p);
+        }
+        QStringList names = snap->entries.keys();
+        names.sort();
+        for (const QString &pkg : std::as_const(names)) {
+            const auto it = byName.constFind(pkg);
+            if (it == byName.constEnd() || !it->installed || !snap->explicitPackages.contains(pkg) || listed.contains(pkg) || ids.contains(pkg)
+                || !isPackageName(pkg))
+                continue;
+            StoreApp a;
+            a.id = pkg;
+            a.repo = it->repo;
+            a.package = pkg;
+            a.packages = {pkg};
+            a.installed = true;
+            a.name = LocalizedText{pkg, {}};
+            a.desktopId = snap->entries.value(pkg).value(0);
+            snap->apps.append(a);
+        }
+    }
     // A setup runs from the installed Omarchy (b.2): hidden when Omarchy has no such recipe (spec, "Refusals"), and none
     // runs while a pinned file differs.
     const QString omarchy = env::omarchyRoot();

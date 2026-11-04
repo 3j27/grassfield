@@ -279,6 +279,44 @@ TEST(StoreBackend, NoCatalogHostButArchsData)
     EXPECT_EQ(ids(backend.search(QStringLiteral("gimp"))).value(0), QStringLiteral("org.gimp.GIMP"));
 }
 
+// ADR-0044 F1: a repository app the user installed that no catalog or AppStream data describes (Omarchy's repository has no
+// AppStream data) is an app named by its package, with its entry, so that the launcher and Files can remove it; Omarchy's own
+// optional preinstall (aether) is not "Part of Omarchy", one of its base list (btop) is.
+TEST(StoreBackend, AnAppWithoutAppStreamDataIsRemovableByItsEntry)
+{
+    Scratch s;
+    const QString base = s.path(QStringLiteral("fixture/bin/pacman-base"));
+    QFile::rename(s.path(QStringLiteral("fixture/bin/pacman")), base);
+    const QByteArray b = base.toUtf8();
+    storetest::script(s.path(QStringLiteral("fixture/bin/pacman")),
+                      "case \"$1\" in\n"
+                      "  -Sl) " + b + " -Sl; echo 'omarchy aether 1.0-1 [installed]'; echo 'omarchy btop 1.0-1 [installed]' ;;\n"
+                      "  -Qqe) " + b + " -Qqe; echo aether; echo btop ;;\n"
+                      "  -Qo) shift; [ \"$1\" = -- ] && shift\n"
+                      "       for f in \"$@\"; do case $f in\n"
+                      "         */aether.desktop) echo \"$f is owned by aether 1.0-1\" ;;\n"
+                      "         */btop.desktop) echo \"$f is owned by btop 1.0-1\" ;;\n"
+                      "       esac; done ;;\n"
+                      "  *) exec " + b + " \"$@\" ;;\nesac");
+    QDir().mkpath(s.path(QStringLiteral("fixture/applications")));
+    QDir().mkpath(s.path(QStringLiteral("fixture/omarchy/install")));
+    for (const char *name : {"aether", "btop"})
+        storetest::writeFile(s.path(QStringLiteral("fixture/applications/%1.desktop").arg(QLatin1String(name))),
+                             QByteArray("[Desktop Entry]\nType=Application\nName=X\nExec=x\n"));
+    storetest::writeFile(s.path(QStringLiteral("fixture/omarchy/install/omarchy-base.packages")), "aether\nbtop\n");
+    StoreBackend backend;
+    backend.start();
+    ASSERT_TRUE(settle(backend));
+    const QVariantMap byEntry = backend.removalByEntry();
+    ASSERT_TRUE(byEntry.contains(QStringLiteral("aether.desktop"))) << "listed by its package";
+    EXPECT_EQ(byEntry.value(QStringLiteral("aether.desktop")).toMap().value(QStringLiteral("app")).toString(), QStringLiteral("aether"));
+    const QString aether = byEntry.value(QStringLiteral("aether.desktop")).toMap().value(QStringLiteral("block")).toString();
+    EXPECT_TRUE(aether.isEmpty() || aether == QLatin1String("dev")) << qPrintable(aether) << ": removable (a dev session has no pkexec)";
+    EXPECT_EQ(byEntry.value(QStringLiteral("btop.desktop")).toMap().value(QStringLiteral("block")).toString(), QStringLiteral("omarchy"));
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("aether")), QStringLiteral("aether"));
+    EXPECT_EQ(backend.actions(QStringLiteral("aether")).value(QStringLiteral("uninstall")).toString(), aether);
+}
+
 // Arch's app data fetched from the mirror (archlinux-appstream-data not installed), each failure with its own reason (the
 // integrator's note on PR #36): the package file the mirror no longer has and its .sig not served are "download" (the
 // window then offers Software Update), a signature pacman's rule refuses is "unverified".

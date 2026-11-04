@@ -29,7 +29,10 @@ Why the owner could not remove software (read on the owner's stack and on this m
    the catalog's pins (setups).
 4. **An app the Store's model does not know** (explicitly installed repository package with an entry, but neither in the
    catalog nor in Arch's AppStream data, `storemodel.cpp`): `actions().uninstall == "source"`, no page, no Installed row.
-   **Not fixed here** (follow-up F1: a synthetic Store app for such a package; the helper already accepts it).
+   Measured on this machine with `--removable`: 43 of 89 entries were known to the Store; Omarchy's own repository has no
+   AppStream data, so Aether, Cliamp, Omacut, Omacalc and Omawrite (all preinstalls Omarchy offers to remove) had no Store
+   app at all. **Fixed here (F1)**: `StoreBackend` lists an explicitly installed repository package that owns an entry and has
+   no catalog or AppStream app as an app named by its package (no icon, no text), so "Uninstall…" reaches it.
 
 ## Decision
 **D1. One backend, the Store, reached through its existing instance IPC.** No new service, no new D-Bus method.
@@ -70,7 +73,7 @@ D3); base and base-devel (fixed list); `-Rns` only (D5); journal (D4); no concur
 "unfinished update" exit 4).
 
 ## Follow-ups
-F1 Store apps for packages without AppStream data. F2 web apps and recipe apps by entry. F3 Settings → Storage when it exists.
+F1 (done, above): a name and an icon for those apps from their application entry. F2 web apps and recipe apps by entry. F3 Settings → Storage when it exists.
 F4 a Required By column in `--removable` (`pacman -Qt`) so the badge is hidden before the plan refuses. F5 the second
 confirmation when the plan lists dependencies is the Store's sheet, by design.
 
