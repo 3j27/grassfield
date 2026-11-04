@@ -7018,6 +7018,10 @@
         <translation>Menu de saisie</translation>
     </message>
     <message>
+        <source>Show Emoji &amp; Symbols</source>
+        <translation>Afficher les emojis et symboles</translation>
+    </message>
+    <message>
         <source>Open Keyboard Settings…</source>
         <translation>Ouvrir les réglages du clavier…</translation>
     </message>
