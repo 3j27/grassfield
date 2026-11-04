@@ -74,6 +74,11 @@ hl.layer_rule({ name = "gf-bar-no-anim", match = { namespace = "^grassfield-(men
 -- The wallpaper maps with its final first frame and changes by the shell's own crossfade (ADR-0040 ID-3, ID-4): the
 -- compositor never fades it in under that.
 hl.layer_rule({ name = "gf-wallpaper-no-anim", match = { namespace = "^grassfield-wallpaper$" }, no_anim = true })
+-- The icons' surface (and its desktop menu) is above the wallpaper of its output whatever the mapping order: both are on the
+-- Background layer and Hyprland stacks a layer by map order unless a rule gives an order, so a display plugged in after the
+-- session started (its icons surface maps before its wallpaper's first frame) would be covered by the picture.
+hl.layer_rule({ name = "gf-wallpaper-order", match = { namespace = "^grassfield-wallpaper$" }, order = -10 })
+hl.layer_rule({ name = "gf-desktop-icons-order", match = { namespace = "^grassfield-desktop-icons$" }, order = 10 })
 -- The exit cover fades itself (ADR-0040 ID-10, one owner of motion: ID-4); the compositor adds no fade in or out.
 hl.layer_rule({ name = "gf-exit-cover-no-anim", match = { namespace = "^grassfield-exit-cover$" }, no_anim = true })
 -- The screenshot crosshair (slurp's layer, namespace "selection") goes at once: grim takes the picture as slurp ends, and a

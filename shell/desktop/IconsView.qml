@@ -766,8 +766,7 @@ FocusScope {
                 bounds: menuPopup.contentItem
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
-                itemsShown: Settings.desktopShowIcons
-                arrangeable: root.iconsHere
+                itemsHere: root.iconsHere
                 aboutWallpaper: WallpaperState.aboutEntry(root.screen.name) !== null
                 count: root.selectedNames.length
                 singleName: root.selectedNames.length === 1 ? root.selectedNames[0] : ""

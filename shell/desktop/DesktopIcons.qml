@@ -7,16 +7,17 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "KeyboardFocus.js" as Focus
+import "DesktopSurfaces.js" as Surfaces
 
-// Desktop icons (docs/specs/desktop.md): their own layer surface (namespace grassfield-desktop-icons)
-// on the Background layer of the primary screen, mapped after the wallpaper so it sits above it and
-// below the Bottom-layer widgets surface (which is never touched from here). The surface takes the
-// whole screen so that a click on empty desktop can start a rubber band and focus the desktop; the
-// widgets live in a higher layer and keep their own input. Nothing animates or repaints on a timer.
-// Primary screen: the first one, or the output named by GRASSFIELD_DESKTOP_SCREEN (dev only). Only the primary screen
-// shows the icons (macOS), but every screen has this surface, so a right click on the bare desktop of any display opens the
-// desktop menu (and a click there focuses the desktop), also when Show Desktop Items is off. The surfaces share one
-// DesktopFiles: the folder, the slots and the file operations are the primary's.
+// Desktop icons (docs/specs/desktop.md): a layer surface (namespace grassfield-desktop-icons) on the Background layer of
+// EVERY screen, above that screen's wallpaper (the layer rule gf-desktop-icons-order in config/hypr/grassfield/windows.lua
+// puts it there whatever the mapping order, so also for a display plugged in later) and below the Bottom-layer widgets
+// surface (which is never touched from here). The surface takes the whole screen so that a click on empty desktop can
+// start a rubber band, focus the desktop and open the desktop menu; the widgets live in a higher layer and keep their own
+// input. Nothing animates or repaints on a timer.
+// The icons are on one screen (DesktopSurfaces.iconsScreen: the first one, or the output named by GRASSFIELD_DESKTOP_SCREEN,
+// dev only), with Show Desktop Items on; the other screens carry the bare-desktop menu only. The surfaces share one
+// DesktopFiles: the folder, the slots and the file operations are that screen's.
 //
 // Keyboard focus (ADR-0012, KeyboardFocus.js): the desktop is click-to-focus. Keyboard interactivity is None
 // until a press on the desktop, then OnDemand; it goes back to None when the pointer leaves the surface or the
@@ -27,7 +28,8 @@ import "KeyboardFocus.js" as Focus
 Scope {
     id: scope
 
-    readonly property string primaryName: Mode.devValue("DESKTOP_SCREEN") || (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "")
+    // The one place that decides which screen shows the icons.
+    readonly property string primaryName: Surfaces.iconsScreen(Mode.devValue("DESKTOP_SCREEN"), Quickshell.screens.map(s => s.name))
 
     DesktopFiles {
         id: desktopFiles
@@ -42,8 +44,10 @@ Scope {
             id: win
 
             required property ShellScreen modelData
-            // The icons are on this screen: the primary one, with Show Desktop Items on.
-            readonly property bool iconsHere: modelData.name === scope.primaryName && Settings.desktopShowIcons
+            // The icons are on this screen (modelData is null while a removed output destroys the window).
+            readonly property bool iconsHere: Surfaces.iconsHere(modelData ? modelData.name : "", scope.primaryName, Settings.desktopShowIcons)
+            // This display's key for DesktopState.hold, taken once.
+            property string holdKey: ""
 
             property var kb: Focus.initial()
             // The compositor enforces click-to-focus. Requires "desktop-focus-v2": the first policy ("desktop-focus") misreads a
@@ -62,9 +66,7 @@ Scope {
             }
 
             screen: modelData
-            // Mapped once this output's wallpaper is (or the entrance is over): a surface of the same layer that maps before the
-            // wallpaper's first frame sits under it, and the icons and the menu would be hidden by the picture.
-            visible: Entrance.revealed || Entrance.expected["wallpaper:" + win.modelData.name] === true
+            visible: true
             anchors {
                 top: true
                 bottom: true
@@ -87,12 +89,13 @@ Scope {
 
             // The menu bar shows the desktop's name while the desktop (or its context menu) holds the keyboard.
             readonly property bool holding: win.visible && (win.hasKeys || win.kb.mode === "menu")
-            onHoldingChanged: DesktopState.holdsKeyboard = win.holding
-            // The output went away while this desktop held the keyboard: the flag must not stay true.
-            Component.onDestruction: {
-                if (win.holding)
-                    DesktopState.holdsKeyboard = false;
+            onHoldingChanged: DesktopState.hold(win.holdKey, win.holding)
+            Component.onCompleted: {
+                win.holdKey = win.modelData ? win.modelData.name : "";
+                DesktopState.hold(win.holdKey, win.holding);
             }
+            // The output went away while this desktop held the keyboard: its share of the flag goes with it.
+            Component.onDestruction: DesktopState.hold(win.holdKey, false)
 
             // Show Desktop (Compositor.showDesktop) hands the keyboard to the desktop: arrows and Tab then move between icons.
             Connections {
@@ -203,7 +206,7 @@ Scope {
                 // The wallpaper below no longer sees the pointer: report it for the hot corner re-arm.
                 HoverHandler {
                     id: hover
-                    onPointChanged: if (hovered)
+                    onPointChanged: if (hovered && win.modelData)
                         PointerTracker.report(win.modelData.name, point.position.x, point.position.y)
                     onHoveredChanged: if (!hovered)
                         win.feed({

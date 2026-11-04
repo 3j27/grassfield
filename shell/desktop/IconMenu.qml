@@ -16,11 +16,9 @@ PopupMenu {
     property string singleName: ""
     // The wallpaper on this screen is the online daily picture: the menu offers its attribution.
     property bool aboutWallpaper: false
-    // Show Desktop Items is on: New Folder and Paste have somewhere to show their result.
-    property bool itemsShown: true
-    // The icons are on the screen of this menu (the primary one): Clean Up and Clean Up By arrange them. Another display
-    // offers neither.
-    property bool arrangeable: true
+    // The icons are on the screen of this menu. Only there are New Folder and Paste (they show their result, and open a rename
+    // field, on that screen), Clean Up and Clean Up By offered; another display, or hidden items, offers none of them.
+    property bool itemsHere: true
     // Shortcut hints only when the matching desktop keyboard actions are enabled (IconsView.fileKeyActions).
     property bool showKeyHints: false
     // Files on the clipboard (text/uri-list), 0 when none: the desktop menu then offers Paste.
@@ -96,13 +94,13 @@ PopupMenu {
 
     function desktopItems(): var {
         const items = [];
-        if (itemsShown) {
+        if (itemsHere) {
             items.push({
                 id: "newFolder",
                 text: qsTr("New Folder")
             });
         }
-        if (itemsShown && pasteCount > 0) {
+        if (itemsHere && pasteCount > 0) {
             items.push({
                 id: "paste",
                 text: pasteCount > 1 ? qsTr("Paste %1 Items").arg(pasteCount) : qsTr("Paste Item"),
@@ -132,7 +130,7 @@ PopupMenu {
             id: "editWidgets",
             text: qsTr("Edit Widgets…")
         });
-        if (!arrangeable)
+        if (!itemsHere)
             return items;
         items.push({
             separator: true

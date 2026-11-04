@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
 import "../../shell/desktop/IconsLogic.js" as Logic
+import "../../shell/desktop/DesktopSurfaces.js" as Surfaces
+import "../../shell/services/DesktopHolders.js" as Holders
 
 // Desktop icons logic: grid placement (top-right, column-first), moves, navigation, rename
 // validation, positions persistence and pruning, URI lists, launcher parsing, folder resolution.
@@ -50,20 +52,43 @@ TestCase {
         compare(Math.abs(spot.col - 4) + Math.abs(spot.row - 2), 1);
     }
 
-    // The desktop menu works on every display and does not depend on Show Desktop Items: one surface per screen, always
-    // mapped, and the icons only where iconsHere says so (the primary screen).
-    function test_everyScreenHasTheDesktopSurface() {
-        const xhr = new XMLHttpRequest();
-        xhr.open("GET", Qt.resolvedUrl("../../shell/desktop/DesktopIcons.qml"), false);
-        xhr.send();
-        const src = xhr.responseText.replace(/\/\/.*$/gm, "");
-        verify(/model: Quickshell\.screens\s/.test(src), "a surface on every screen");
-        verify(!/Quickshell\.screens\.filter/.test(src));
-        verify(/visible: Entrance\.revealed \|\| Entrance\.expected\["wallpaper:" \+ win\.modelData\.name\] === true/.test(src), "mapped after the wallpaper, whatever Show Desktop Items says");
-        verify(/iconsHere: win\.iconsHere/.test(src));
-        verify(/readonly property bool iconsHere: modelData\.name === scope\.primaryName && Settings\.desktopShowIcons/.test(src));
-        verify(/files: desktopFiles/.test(src), "one DesktopFiles for every screen");
-        verify((src.match(/DesktopFiles \{/g) || []).length === 1);
+    // Which screens carry what: every screen has the desktop surface, the icons are on one (the named one, else the first).
+    function test_iconsAreOnOneScreen() {
+        compare(Surfaces.iconsScreen("", ["A", "B"]), "A");
+        compare(Surfaces.iconsScreen("B", ["A", "B"]), "B");
+        compare(Surfaces.iconsScreen("", []), "");
+        compare(Surfaces.iconsScreen("", null), "");
+        // A screen the shell cannot name yet is never the one, whatever is asked.
+        compare(Surfaces.iconsHere("", Surfaces.iconsScreen("", [""]), true), false);
+        const names = ["A", "B", "C"];
+        const main = Surfaces.iconsScreen("", names);
+        compare(names.filter(n => Surfaces.iconsHere(n, main, true)), ["A"]);
+        // Show Desktop Items off: the surface stays (the menu), no screen shows icons.
+        compare(names.filter(n => Surfaces.iconsHere(n, main, false)), []);
+        compare(Surfaces.iconsHere("A", main, undefined), false);
+        // A display plugged in later is not the icons' screen, and the first one going away moves the choice.
+        compare(Surfaces.iconsHere("D", main, true), false);
+        compare(Surfaces.iconsScreen("", ["B", "C"]), "B");
+    }
+
+    // Several desktop surfaces report the keyboard: a focus-out on A does not clear B whose menu is open.
+    function test_holdsKeyboardIsPerSurface() {
+        let h = {};
+        compare(Holders.any(h), false);
+        h = Holders.updated(h, "A", true);
+        h = Holders.updated(h, "B", true); // B: menuOpened
+        compare(Holders.any(h), true);
+        h = Holders.updated(h, "A", false); // A: focus out
+        compare(Holders.any(h), true, "B still holds it");
+        h = Holders.updated(h, "A", false);
+        compare(Holders.any(h), true, "a second release of A changes nothing");
+        h = Holders.updated(h, "B", false);
+        compare(Holders.any(h), false);
+        // An output removed while holding gives its share back.
+        h = Holders.updated(Holders.updated({}, "A", true), "A", false);
+        compare(Holders.any(h), false);
+        compare(Holders.any(null), false);
+        compare(Holders.any(Holders.updated(undefined, "A", true)), true);
     }
 
     function test_gridSize() {

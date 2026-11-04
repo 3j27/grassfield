@@ -36,16 +36,18 @@ TestCase {
         m.destroy();
     }
 
-    // Another display than the one with the icons: the menu opens there too, without what arranges or fills the icons' screen.
+    // Another display than the one with the icons: the menu opens there too, without New Folder, Paste (their rename field and
+    // result are on the icons' screen) and Clean Up.
     function test_secondDisplayOffersNoArrangement() {
-        const m = menu({kind: "desktop", arrangeable: false, pasteCount: 1});
-        compare(ids(m), ["newFolder", "paste", "getInfo", "wallpaper", "editWidgets"]);
+        const m = menu({kind: "desktop", itemsHere: false, pasteCount: 1});
+        compare(ids(m), ["getInfo", "wallpaper", "editWidgets"]);
+        verify(!m.model[0].separator, "no separator first");
         m.destroy();
     }
 
     // Show Desktop Items off: the surface is still there; nothing that makes or arranges items is offered.
     function test_itemsHiddenKeepsTheRest() {
-        const m = menu({kind: "desktop", itemsShown: false, arrangeable: false, pasteCount: 2});
+        const m = menu({kind: "desktop", itemsHere: false, pasteCount: 2});
         compare(ids(m), ["getInfo", "wallpaper", "editWidgets"]);
         verify(!m.model[0].separator);
         m.destroy();
