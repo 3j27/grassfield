@@ -8022,7 +8022,7 @@
     </message>
     <message>
         <source>Select text in images to copy it or take action.</source>
-        <translation>Sélectionnez du texte dans des images pour le copier ou effectuer une action.</translation>
+        <translation>Sélectionnez du texte dans les images pour le copier ou effectuer une action.</translation>
     </message>
 </context>
 <context>
