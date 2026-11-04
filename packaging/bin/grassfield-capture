@@ -791,9 +791,9 @@ def record(opts):
     proc.wait()
     write_state({"phase": "idle"})
     os.close(lock)
-    # From here the notice's wait ends with the session, as a screenshot's does.
+    # From here the notice's wait ends with the session, as a screenshot's does, and a late SIGINT ends it quietly.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
-    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGINT, raise_cancelled)
     path = None
     try:
         if os.path.getsize(tmp) > 0:
@@ -907,7 +907,10 @@ def main():
     if opts["action"] == "stop":
         return stop()
     if opts["action"] == "record":
-        return record(opts)
+        try:
+            return record(opts)
+        except Cancelled:
+            return 0
     # A signal (the session ending) still runs the clean-up of save_picture(): no hidden file is left on the Desktop. SIGINT
     # (stop, during the toolbar's countdown) ends the capture without a picture.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
