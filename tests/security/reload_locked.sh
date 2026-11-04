@@ -16,7 +16,10 @@
 #   foreign-takeover (b) a foreign locker takes over the live Grassfield lock -> still locked; it
 #                   releases and exits -> Grassfield takes a fresh lock, nothing reaches foot
 #   foreign-restart (a) foreign locker holding the lock + marker forged "unlocked" + shell restart ->
-#                   the shell takes the lock over; the foreign locker releases -> locked by Grassfield
+#                   the shell takes the lock over; once the restarted shell's start-up no longer holds its
+#                   event loop (entrance logged, five prompt IPC answers in a row; the hold seen is printed),
+#                   the foreign locker releases -> fresh Grassfield lock requested within FOREIGN_MAX_MS
+#                   (default 150)
 #   lock-desync     (c) desync held on purpose (periodic check paused by the dev hook
 #                   `lock devPauseOwnershipCheck`: Hyprland unlocked, shell "locked"), then `lock lock`
 #                   -> a real lock, triggered by that request
@@ -41,10 +44,14 @@
 # released over its IPC). Hyprland 0.56.2 (misc.allow_session_lock_restore = true) hands a live lock
 # to the next client and tells the previous holder nothing; a release by either client unlocks the
 # session. The foreign steps print "unlocked window": the time from the foreign release until Hyprland
-# reports the session locked again (bounded by the shell's 1 s ownership check, docs/specs/security.md).
+# reports the session locked again (bounded by the shell's ownership check, every 100 ms while a takeover
+# is suspected, and by its event loop being free, docs/specs/security.md).
 #
 # Requires scripts/dev/nested-up.sh (the shell runs with GRASSFIELD_DEV=1, which enables the
-# `lock devReload` hook). The nested session stays locked afterwards: finish with nested-down.sh.
+# `lock devReload` hook). Can start right after it: before any step, and after every shell restart,
+# it waits at most READY_SECONDS (default 60) for GF-REF and a lock state from the shell
+# (tests/security/nested_ready.sh); an empty answer is never a state, a timeout FAILs. The nested
+# session stays locked afterwards: finish with nested-down.sh.
 # Exit status: 0 when every requested step passed.
 set -uo pipefail
 
@@ -73,9 +80,14 @@ marker=$XDG_RUNTIME_DIR/grassfield-lock-${sig//[^A-Za-z0-9_.-]/_}
 typed=$dev/reload-typed.txt
 foreign=$root/tests/security/foreign_locker/ForeignLocker.qml
 status=0
+# How long the shell may take to answer IPC after nested-up or a restart (tests/security/nested_ready.sh).
+ready_secs=${READY_SECONDS:-60}
+# shellcheck source=nested_ready.sh
+. "$root/tests/security/nested_ready.sh"
 
 nested() { env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" "$@"; }
-ipc() { nested qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
+# Bounded: a stuck shell answers nothing (empty, never a state) instead of hanging the run.
+ipc() { nested timeout -k 2 10 qs ipc -p "$root/shell" call "$@" 2>/dev/null; }
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; status=1; }
 # Captures are evidence only (no check reads them), so each has a deadline and a missing one is a note. grim waits for
@@ -103,6 +115,16 @@ wait_status() { # <expected> <seconds>
   done
   echo "${got:-no-answer}"
   return 1
+}
+
+# After shell-run.sh: the restarted shell answers IPC only once its configuration has loaded (5-9 s in the integrator's
+# run of 2026-11-04, more on a loaded machine), and its empty answer until then is no lock state. Waits for a lock state
+# (nested_ready, at most $ready_secs), then for "locked" within <seconds>; prints the last status or why the shell is not
+# ready. Hyprland keeps the session locked meanwhile (the dead client's or the foreign locker's lock): the callers check
+# that separately (compositor_lock, no_leak).
+restarted_status() { # <seconds>
+  nested_ready "$sig" "$sock" "$root/shell" "$ready_secs" || { echo "not ready: $nested_ready_why"; return 1; }
+  wait_status locked "$1"
 }
 
 # SAFETY (R12 review #3 MAJOR): every probe this script types is letters only. A Return/newline/Enter in a probe that
@@ -173,17 +195,25 @@ step_setup() {
   : >"$typed"
   # New windows open on the monitor under the pointer: put it on the deterministic GF-REF output.
   "$root/scripts/dev/pointer.sh" output GF-REF abs 960 540 >/dev/null
-  # Raw mode: every key reaches cat at once, no Return needed.
+  # Raw mode: every key reaches cat at once, no Return needed. foot's own messages (never the typed text, which goes
+  # through its terminal to cat) go to .dev/reload-foot.log, so that a window that does not appear says why.
   env WAYLAND_DISPLAY="$sock" HYPRLAND_INSTANCE_SIGNATURE="$sig" \
-    setsid "$root/scripts/dev/isolated.sh" foot --app-id=gf-reload-probe -- sh -c 'stty raw -echo; exec cat >"$1"' sh "$typed" >/dev/null 2>&1 </dev/null &
+    setsid "$root/scripts/dev/isolated.sh" foot --app-id=gf-reload-probe -- sh -c 'stty raw -echo; exec cat >"$1"' sh "$typed" >"$dev/reload-foot.log" 2>&1 </dev/null &
   dev_record_pid "$dev/reload-foot.pid" "$!"
   local geo=""
-  for _ in $(seq 1 40); do
-    geo=$(nested hyprctl -j clients 2>/dev/null | jq -r '.[] | select(.class == "gf-reload-probe") | "\(.monitor) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+  for _ in $(seq 1 80); do
+    geo=$(nested timeout -k 2 5 hyprctl -j clients 2>/dev/null | jq -r '.[] | select(.class == "gf-reload-probe") | "\(.monitor) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
     [[ -n $geo ]] && break
     sleep 0.25
   done
-  [[ -n $geo ]] || { fail "setup: the foot probe window did not appear"; return; }
+  if [[ -z $geo ]]; then
+    if dev_live_pid "$dev/reload-foot.pid" >/dev/null; then
+      fail "setup: the foot probe window did not appear within 20 s (foot is running; see .dev/reload-foot.log)"
+    else
+      fail "setup: the foot probe window did not appear: foot exited ('$(tail -n 1 "$dev/reload-foot.log" 2>/dev/null)'; see .dev/reload-foot.log)"
+    fi
+    return
+  fi
   local mon x y w h name mx my
   read -r mon x y w h <<<"$geo"
   read -r name mx my < <(nested hyprctl -j monitors | jq -r --argjson m "$mon" '.[] | select(.id == $m) | "\(.name) \(.x) \(.y)"')
@@ -243,7 +273,7 @@ crash_and_restart() { # <name> <wait seconds>
   shot "$name-dead"
   no_leak "dead${name//-/}" "$name (shell dead)"
   "$root/scripts/dev/shell-run.sh"
-  if s=$(wait_status locked "$2"); then pass "$name: restarted shell status $s"; else fail "$name: restarted shell status $s"; fi
+  if s=$(restarted_status "$2"); then pass "$name: restarted shell status $s"; else fail "$name: restarted shell status $s"; fi
   shot "$name-restarted"
   no_leak "back${name//-/}" "$name (restarted)"
 }
@@ -272,7 +302,7 @@ graceful_case() { # <term|qskill>
   shot "graceful-$how-dead"
   no_leak "graceful${how}" "graceful-exit ($how, shell gone)"
   "$root/scripts/dev/shell-run.sh"
-  if s=$(wait_status locked 15); then pass "graceful-exit ($how): restarted shell status $s"; else fail "graceful-exit ($how): restarted shell status $s"; fi
+  if s=$(restarted_status 15); then pass "graceful-exit ($how): restarted shell status $s"; else fail "graceful-exit ($how): restarted shell status $s"; fi
   no_leak "gracefulback${how}" "graceful-exit ($how, restarted)"
 }
 
@@ -289,7 +319,7 @@ step_forged_crash() {
 
 # --- Foreign locker (R12 re-review: a lock taken over and released by another client) ---
 
-foreign_ipc() { nested qs ipc -p "$foreign" call foreign "$@" 2>/dev/null; }
+foreign_ipc() { nested timeout -k 2 10 qs ipc -p "$foreign" call foreign "$@" 2>/dev/null; }
 
 # All monitors list LOCK (read-only hyprctl query of the nested instance).
 compositor_locked() {
@@ -373,19 +403,59 @@ step_foreign_takeover() {
   no_leak afterforeign "foreign-takeover (after the foreign release)"
 }
 
+# Every lock check (the 100 ms ownership check, the keyboard-focus event, monitor answers) runs on the shell's event loop,
+# and a restarted shell's start-up holds that loop: in the integrator's run of 2026-11-04 each locked restart logged
+# nothing for 1.2-2.1 s after its entrance (shell/services/Entrance.qml: the menu bar, the Dock and the icons appear), and
+# a foreign release ~1.5 s after the takeover fell inside it: the fresh lock came 1350 ms (1616 ms on main) after the
+# release, the 100 ms check in force throughout. Waits at most <seconds> until the entrance is logged (it always is, within
+# its hard bound; shell-run.sh rewrites .dev/shell.log) and then until the shell answers `lock status` within 500 ms (qs
+# client start included, about 0.1 s) five times in a row: its IPC is served on that same loop, so a held loop answers
+# late and restarts the count. Prints "<ms from this shell's lock to settled> <slowest answer in ms>" (the slowest answer
+# is the width of the hold it saw); on timeout, what it saw, and fails.
+shell_settled() { # <seconds>
+  local deadline=$((SECONDS + $1)) entrance="" streak=0 t0 ms slowest=0 answer acquired settled=""
+  while ((SECONDS < deadline)); do
+    if [[ -z $entrance ]]; then
+      entrance=$(grep -m1 "grassfield-shell: entrance (" "$dev/shell.log" 2>/dev/null)
+      [[ -n $entrance ]] || { sleep 0.25; continue; }
+    fi
+    t0=${EPOCHREALTIME/./}
+    answer=$(ipc lock status)
+    ms=$(((${EPOCHREALTIME/./} - t0) / 1000))
+    ((ms > slowest)) && slowest=$ms
+    if [[ -n $answer ]] && ((ms <= 500)); then streak=$((streak + 1)); else streak=0; fi
+    ((streak >= 5)) && { settled=${EPOCHREALTIME/./}; break; }
+    sleep 0.1
+  done
+  [[ -n $settled ]] || { echo "${entrance:+entrance logged, }slowest IPC answer $slowest ms"; return 1; }
+  acquired=$(grep -m1 "grassfield-lock: locking -> locked (acquired)" "$dev/shell.log" 2>/dev/null | cut -c1-23)
+  if [[ -n $acquired ]]; then echo "$((settled / 1000 - $(date -d "$acquired" +%s%3N))) $slowest"; else echo "? $slowest"; fi
+}
+
 step_foreign_restart() {
-  local s
+  local s settled slowest
   foreign_start foreign-restart
   printf 'unlocked\n' >"$marker"
   echo "marker forged: $(cat "$marker")"
   "$root/scripts/dev/shell-run.sh"
-  if s=$(wait_status locked 15); then pass "foreign-restart: restarted shell status $s (took the foreign-held lock over)"; else fail "foreign-restart: restarted shell status $s"; fi
+  if s=$(restarted_status 15); then pass "foreign-restart: restarted shell status $s (took the foreign-held lock over)"; else fail "foreign-restart: restarted shell status $s"; fi
   grep "this shell did not take" "$dev/shell.log" | tail -n 1
+  # The release waits for the end of the restarted shell's start-up, so that the 150 ms bound below measures the ownership
+  # check and not the start-up. A release inside the start-up is a residual risk (docs/specs/security.md, "Known
+  # limitations"): its width is printed here, run after run.
+  if settled=$(shell_settled 30); then
+    read -r settled slowest <<<"$settled"
+    echo "foreign-restart: the restarted shell's event loop settled $settled ms after its lock was acquired; slowest IPC answer meanwhile $slowest ms (a foreign release before then waits for that loop)"
+  else
+    fail "foreign-restart: the restarted shell's event loop did not settle within 30 s ($settled; .dev/shell.log): the release below may measure its start-up"
+  fi
+  if s=$(wait_status locked 3); then pass "foreign-restart: status $s once the restarted shell settled"; else fail "foreign-restart: status $s once the restarted shell settled"; fi
   echo "foreign locker: $(foreign_ipc status)"
   no_leak restartforeign "foreign-restart (foreign locker present, shell restarted)"
   foreign_release_and_wait foreign-restart
   # The inherited lock keeps the 100 ms check even when a Grassfield surface holds the keyboard (R12 counter-review of
-  # 620f08c: ending it on keyboard focus brought back the ~1 s window): the fresh lock must follow within 150 ms.
+  # 620f08c: ending it on keyboard focus brought back the ~1 s window): the fresh lock must follow within 150 ms (the
+  # same bound as before the settle wait above).
   assert_react foreign-restart "${FOREIGN_MAX_MS:-150}"
   echo "marker: $(cat "$marker" 2>/dev/null || echo '<missing>')"
   shot foreign-restart-relocked
@@ -703,6 +773,20 @@ step_pam_audit() {
 steps=("$@")
 [[ ${#steps[@]} -gt 0 ]] || steps=(setup nowatch lock relock-confirm foreign-gap probe-cost marker-missing marker-unlocked l1 forged-crash graceful-exit foreign-takeover foreign-restart lock-desync sleep-desync cleanup pam-audit)
 assert_no_pam "before the run"
+# Ready first (tests/security/nested_ready.sh): GF-REF listed (setup opens its window there) and a lock state from the
+# shell. Right after nested-up the shell does not answer yet and GF-REF may not exist (the probe window once never
+# appeared). A timeout FAILs: no step runs on an unknown state. Only cleanup and pam-audit need no shell.
+needs_shell=0
+for s in "${steps[@]}"; do [[ $s == cleanup || $s == pam-audit ]] || needs_shell=1; done
+if ((needs_shell)); then
+  ready_rc=0
+  nested_ready "$sig" "$sock" "$root/shell" "$ready_secs" || ready_rc=$?
+  case $ready_rc in
+    0) echo "ready: GF-REF listed, lock status $nested_ready_state, after $nested_ready_ms ms" ;;
+    2) echo "reload_locked: $nested_ready_why" >&2; exit 2 ;;
+    *) echo "FAIL ready: $nested_ready_why (no step ran)"; exit 1 ;;
+  esac
+fi
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "reload_locked: unknown step $s" >&2; exit 2; }

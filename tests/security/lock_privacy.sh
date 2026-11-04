@@ -34,7 +34,9 @@
 # owner's screen, which gives grim a frame only while the owner's compositor draws it: without one it is reported
 # NOT VERIFIED (it carries no fixture; its lock is covered by LOCK on every monitor). Every wait is bounded
 # (timeout(1), counted loops); nothing waits forever.
-# Requires scripts/dev/nested-up.sh (GRASSFIELD_DEV=1 shell on a private bus: notify-send reaches only it).
+# Requires scripts/dev/nested-up.sh (GRASSFIELD_DEV=1 shell on a private bus: notify-send reaches only it). Can start right
+# after it: before any step, waits at most READY_SECONDS (default 60) for GF-REF and a lock state from the shell
+# (tests/security/nested_ready.sh); a timeout FAILs (exit 1) and runs no step.
 # Exit status: 0 when every requested step passed; NOT VERIFIED items are counted on the last line and leave it unchanged.
 set -uo pipefail
 
@@ -54,6 +56,8 @@ bus=$(cat "$dev/bus.address" 2>/dev/null || true)
 for tool in grim magick notify-send foot jq awk timeout; do
   command -v "$tool" >/dev/null || { echo "lock_privacy: $tool is not installed" >&2; exit 2; }
 done
+# shellcheck source=nested_ready.sh
+. "$root/tests/security/nested_ready.sh"
 
 work=$dev/lock-privacy
 mkdir -p "$work"
@@ -612,8 +616,22 @@ step_cleanup() {
 
 steps=("$@")
 [[ ${#steps[@]} -gt 0 ]] || steps=(setup screenshare control lock privacy display-off auto-sleep cleanup)
-[[ $(ipc lock status) == unlocked || " ${steps[*]} " != *" lock "* ]] \
-  || { echo "lock_privacy: the nested session is already locked; restart it (nested-down, nested-up) for the default run" >&2; exit 2; }
+# Ready first (tests/security/nested_ready.sh): GF-REF listed and a lock state from the shell. Right after nested-up the
+# shell does not answer yet, and its empty answer is no lock state (it once stopped this run as "already locked"). A
+# timeout FAILs: no step runs on an unknown state. Only `cleanup` needs no shell.
+needs_shell=0
+for s in "${steps[@]}"; do [[ $s == cleanup ]] || needs_shell=1; done
+if ((needs_shell)); then
+  ready_rc=0
+  nested_ready "$sig" "$sock" "$root/shell" "${READY_SECONDS:-60}" || ready_rc=$?
+  case $ready_rc in
+    0) echo "ready: GF-REF listed, lock status $nested_ready_state, after $nested_ready_ms ms" ;;
+    2) echo "lock_privacy: $nested_ready_why" >&2; exit 2 ;;
+    *) echo "FAIL ready: $nested_ready_why"; echo "lock_privacy: no step ran; exit status 1"; exit 1 ;;
+  esac
+  [[ $nested_ready_state == unlocked || " ${steps[*]} " != *" lock "* ]] \
+    || { echo "lock_privacy: the nested session is already $nested_ready_state; restart it (nested-down, nested-up) for the default run" >&2; exit 2; }
+fi
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "lock_privacy: unknown step $s" >&2; exit 2; }
