@@ -1217,7 +1217,7 @@ same directory and the modules move without moving a file), one step at a time u
 | `tests/security/ipc_inventory.sh` | IPC surface = the table above; every action has a real-session caller, every hook its gate |
 | `tests/security/screenshare_rules.sh` | SEC-01 rule set against Omarchy's, fixture tree, built-in matches always applied, wiring |
 | `tests/security/sleep_lock_units.sh` | GF-030/D-12: gate script per state, unit and drop-in lines, package path |
-| `tests/security/lock_privacy.sh` | Nested L4 (no notification or window content on the lock), DT-05 screen share, D-4 lid lock and display off |
+| `tests/security/lock_privacy.sh` | Nested L4 (no notification or window content on the lock), DT-05 screen share, D-4 lid lock and display off; reads GF-REF, so it restarts a shell that lacks `GRASSFIELD_DESKTOP_SCREEN=GF-REF` before its setup (the banners follow the main display, ADR-0044) |
 | `tests/security/l2_wrong_password.sh` | Nested L2 with real PAM (opt-in), 3 random wrong passwords, Return ≤ 3, one run per 15 min |
 | `tests/security/reload_order/` | Offscreen `qs` test of the Quickshell reload contract the lock relies on (run by `scripts/dev/test.sh`) |
 | `tests/security/marker_read/` | Offscreen `qs` test: marker reads through the real FileView (missing, `unlocked`, empty, mode 000, directory) |

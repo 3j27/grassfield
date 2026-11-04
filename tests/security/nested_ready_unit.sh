@@ -113,6 +113,10 @@ for f in reload_locked.sh lock_privacy.sh; do
 done
 desc="lock_privacy.sh decides 'already locked' on the readiness state, not on a raw ipc answer"
 check bash -c '! grep -q "\[\[ \$(ipc lock status) == unlocked" "$1" && grep -q "nested_ready_state == unlocked" "$1"' _ "$root/tests/security/lock_privacy.sh"
+desc="lock_privacy.sh pins the main display to GF-REF before its steps (ADR-0044: banners, Dock and icons follow it)"
+check awk '/^out=GF-REF / { o = NR } /shell_env GRASSFIELD_DESKTOP_SCREEN\) != "\$out"/ && !p { p = NR }
+  /scripts\/dev\/shell-run.sh" --desktop-screen "\$out"/ { r = NR } /^for s in "\$\{steps\[@\]\}"; do$/ { l = NR }
+  END { exit !(o && p > o && r > p && l > r) }' "$root/tests/security/lock_privacy.sh"
 desc="reload_locked.sh waits for the restarted shell to answer before its status checks (no bare wait after shell-run.sh)"
 check bash -c '! grep -A1 "scripts/dev/shell-run.sh\"$" "$1" | grep -q "wait_status locked"' _ "$root/tests/security/reload_locked.sh"
 
