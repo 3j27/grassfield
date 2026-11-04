@@ -46,6 +46,33 @@ function activationPlan(windows) {
     return [visible.slice().sort(byRecency).pop().ref];
 }
 
+// What a click on a running app's tile does. `windows`: {ref, minimized, here, focused (owns the keyboard focus), fullscreen,
+// stamp}; `clickMinimizes`: Settings > Desktop & Dock "Click an open app's icon to minimize its windows". Returns
+// {action: "minimize" | "restore" | "forward", refs}, refs in the order to act on them (the most recent last).
+//   - setting on, the app is frontmost (a visible window of it on this Desktop is focused): minimize every visible window on this
+//     Desktop except full-screen ones (none left: forward, nothing is touched);
+//   - setting on, nothing of the app shown on this Desktop but some windows minimized: restore all minimized ones, the most recent
+//     ends focused (windows on other Desktops are left alone);
+//   - full-screen windows and Split View members are never minimized (Compositor.minimize refuses them): forward;
+//   - otherwise (setting off, or not frontmost): activationPlan, as macOS.
+function clickPlan(windows, clickMinimizes) {
+    const all = windows ? windows : [];
+    if (clickMinimizes && all.length > 0) {
+        const byRecency = (a, b) => a.stamp - b.stamp;
+        const frontmost = all.some(w => w.focused && !w.minimized && w.here);
+        if (frontmost) {
+            const targets = all.filter(w => !w.minimized && w.here && !w.fullscreen && !w.split);
+            if (targets.length > 0)
+                return {action: "minimize", refs: targets.slice().sort(byRecency).map(w => w.ref)};
+        } else if (!all.some(w => !w.minimized && w.here) && all.some(w => w.minimized)) {
+            // Nothing of the app is shown on this Desktop: what was minimized comes back and stays here, even when the app has a
+            // window on another Desktop (that window is not visited).
+            return {action: "restore", refs: all.filter(w => w.minimized).sort(byRecency).map(w => w.ref)};
+        }
+    }
+    return {action: "forward", refs: activationPlan(all)};
+}
+
 // Processes to kill for "Force Quit" on an app's tile (Option variant of Quit): the distinct client PIDs of its windows. PIDs that
 // are not plain client processes (unknown 0, init 1, negatives, non-integers) are dropped, as Power.forceQuit refuses them.
 function forceQuitPids(pids) {

@@ -195,6 +195,7 @@ Scope {
     readonly property bool dockAutohide: read("dock.autohide")
     readonly property bool dockShowRecents: read("dock.showRecents")
     readonly property bool dockMinimizeIntoApp: read("dock.minimizeIntoApp")
+    readonly property bool dockClickMinimizes: read("dock.clickMinimizes")
     readonly property bool dockAnimateOpening: read("dock.animateOpening")
     readonly property bool dockShowIndicators: read("dock.showIndicators")
     // End Task in the Dock menus of running apps (ADR-0038 AQ5, AM63): off by default, as Windows' own.
