@@ -149,6 +149,10 @@ Window {
     // Store's own alert (OperationSheet, handedOver): the app by its Store name and icon, the packages -Rns takes, Cancel the
     // default. Nothing runs until Delete is pressed here. An entry the Store does not know is said in the notice bar.
     function uninstallEntry(entry: string): void {
+        // A sheet already open keeps its app: a second hand-over (any peer can send one) must not switch what the user is about
+        // to confirm. The window still comes forward (main.cpp), and the user asks again once the alert is answered.
+        if (opSheet.visible)
+            return;
         const id = root.backend.appForEntry(entry);
         const app = id === "" ? null : root.backend.app(id);
         if (!app || app.id === undefined) {

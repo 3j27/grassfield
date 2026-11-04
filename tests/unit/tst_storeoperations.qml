@@ -461,6 +461,29 @@ TestCase {
         verify(t.backend.calls.indexOf("uninstall:org.example.Photo") >= 0);
     }
 
+    // A hand-over while an alert is open is ignored: the alert for X keeps X (Delete cannot end up removing Y), and Y's plan is
+    // not even asked for.
+    function test_handOverWhileTheSheetIsOpenKeepsItsApp() {
+        const t = make({});
+        t.backend.entries = {"photo.desktop": "org.example.Photo", "paint.desktop": "org.example.Paint"};
+        t.win.openPage("uninstall:photo.desktop");
+        const s = sheet(t);
+        verify(s.visible);
+        compare(s.app.id, "org.example.Photo");
+        t.win.openPage("uninstall:paint.desktop");
+        compare(s.app.id, "org.example.Photo", "the open alert keeps its app");
+        verify(t.backend.calls.indexOf("plan:remove:org.example.Paint") < 0, "the second app's plan is never asked for");
+        t.backend.planReady("org.example.Photo", "remove", {refusal: "", packages: [{name: "photolab", version: "3-1", repo: "", size: ""}]});
+        compare(s.title, "Delete “Photo Lab”?");
+        s.confirm();
+        verify(t.backend.calls.indexOf("uninstall:org.example.Photo") >= 0);
+        verify(t.backend.calls.indexOf("uninstall:org.example.Paint") < 0, "Delete removed X, never Y");
+        // Once answered, the next hand-over opens its own alert.
+        t.win.openPage("uninstall:paint.desktop");
+        compare(s.app.id, "org.example.Paint");
+        s.cancel();
+    }
+
     // An entry the Store does not know, or a refusal: no alert to confirm, nothing runs.
     function test_handOverOfAnUnknownEntryRunsNothing() {
         const t = make({});
