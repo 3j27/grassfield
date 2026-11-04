@@ -555,6 +555,15 @@ seen = wait_for(lambda: state().get("phase") in ("starting", "selecting"), 5)
 first = state().get("phase")
 proc.wait(timeout=30)
 check(seen and first == "starting", "a recording's state says starting before it reads Hyprland's displays [%r]" % first)
+# A stop that arrives while the helper is still reading Hyprland's displays (counter-review of ADR-0045, LOW-1): the helper
+# ends and the state goes back to idle, never left "starting" with a dead pid (which kept Record disabled).
+proc = start(["record", "screen"], FAKE_SLOW_HYPRCTL="1")
+seen = wait_for(lambda: state().get("phase") == "starting", 5)
+stopped = stop()
+proc.wait(timeout=30)
+check(seen and proc.returncode == 0 and state().get("phase") == "idle" and calls("gpu-screen-recorder") == [],
+      "a stop during the first steps leaves the state idle and records nothing [%r, rc %r, stop %r]"
+      % (state().get("phase"), proc.returncode, getattr(stopped, "returncode", stopped)))
 os.unlink(marker)
 
 # ---- French ----

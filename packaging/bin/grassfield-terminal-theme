@@ -135,16 +135,37 @@ def omarchy_path():
     return os.environ.get("OMARCHY_PATH") or PACKAGED_OMARCHY
 
 
+# The file that marks a tree of fakes (the tests' OMARCHY_PATH). An Omarchy checkout that a developer's OMARCHY_PATH names
+# (omarchy-dev-link's) has none, so a dev session never takes it for one (counter-review of ADR-0045, LOW-3).
+FAKE_MARK = "grassfield-fake-omarchy"
+# Where real programs live: a dev session's theme commands are never there.
+SYSTEM_DIRS = ("/usr/", "/bin/", "/sbin/", "/opt/")
+
+
+def inside(path, root):
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
 def fake_tree():
-    """A dev session's OMARCHY_PATH, when it names a tree of fakes: set explicitly, absolute, not the packaged Omarchy."""
+    """A dev session's OMARCHY_PATH, when it names a tree of fakes: set explicitly, absolute, neither it nor its bin (links
+    resolved) in the packaged Omarchy, and marked by FAKE_MARK at its root."""
     explicit = os.environ.get("OMARCHY_PATH", "")
-    return explicit.startswith("/") and os.path.realpath(explicit) != os.path.realpath(PACKAGED_OMARCHY)
+    if not explicit.startswith("/"):
+        return False
+    packaged = os.path.realpath(PACKAGED_OMARCHY)
+    tree = os.path.realpath(explicit)
+    tree_bin = os.path.realpath(os.path.join(explicit, "bin"))
+    return not inside(tree, packaged) and not inside(tree_bin, packaged) and os.path.isfile(os.path.join(tree, FAKE_MARK))
 
 
-def resolves_under(command, folders):
-    """True when the command (its links resolved) is a file directly in one of the folders (theirs resolved too)."""
-    home = os.path.dirname(os.path.realpath(command))
-    return any(home == os.path.realpath(f) for f in folders)
+def fake_command(command):
+    """In a dev session: the command, its links resolved, is a file directly in the fake tree's bin (resolved), never in the
+    packaged Omarchy nor in a system directory. The stand-ins folder is not an alternative: the tests never need it, and a
+    stand-ins variable pointing at Omarchy's own bin would otherwise let the real commands through."""
+    real = os.path.realpath(command)
+    tree_bin = os.path.realpath(os.path.join(omarchy_path(), "bin"))
+    return (os.path.dirname(real) == tree_bin and not inside(real, os.path.realpath(PACKAGED_OMARCHY))
+            and not real.startswith(SYSTEM_DIRS))
 
 
 def clean_path(shims):
@@ -245,6 +266,10 @@ def stop_group(proc):
             os.killpg(pgid, sig)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # Only processes this user cannot signal are left (a root step of the chain, sudo's): keep waiting for the
+            # grace, the lock still held, rather than leave with a traceback (counter-review of ADR-0045, LOW-4).
+            pass
         deadline = time.monotonic() + wait
         while time.monotonic() < deadline:
             proc.poll()  # reaps the leader, so that it no longer counts
@@ -292,7 +317,7 @@ def main(argv):
             say("refused: a dev session changes no Omarchy theme (GRASSFIELD_TERMINAL_THEME_SHIMS is the test stand-in)")
             return 1
         if not fake_tree():
-            say("refused: a dev session needs OMARCHY_PATH set to a tree of fakes, never the installed Omarchy")
+            say("refused: a dev session needs OMARCHY_PATH set to a tree of fakes (marked " + FAKE_MARK + "), never the installed Omarchy")
             return 1
     elif STAND_IN_VAR in os.environ:
         say("refused: GRASSFIELD_TERMINAL_THEME_SHIMS is test plumbing, honoured only in a dev session")
@@ -313,9 +338,8 @@ def main(argv):
     if not theme_set or not theme_current:
         say("skipped: Omarchy's theme commands are not installed")
         return 0
-    if dev and not all(resolves_under(c, (shims, os.path.join(omarchy_path(), "bin"))) for c in (theme_set, theme_current)):
-        say("refused: in a dev session omarchy-theme-set and omarchy-theme-current must be the fakes of OMARCHY_PATH/bin "
-            "or of the stand-ins")
+    if dev and not all(fake_command(c) for c in (theme_set, theme_current)):
+        say("refused: in a dev session omarchy-theme-set and omarchy-theme-current must be the fakes of OMARCHY_PATH/bin")
         return 1
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     if not runtime.startswith("/") or not os.path.isdir(runtime):

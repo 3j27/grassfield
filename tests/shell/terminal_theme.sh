@@ -121,11 +121,18 @@ cat >"$tmp/fake/pkexec" <<'SH'
 echo "real pkexec $*" >>"$LOG"
 SH
 # An installed Omarchy and its privileged tools, for the hostile cases: any call is recorded and does nothing else.
-for name in omarchy-theme-set omarchy-theme-current sudo pkexec hyprctl omarchy-shell; do
+for name in omarchy-theme-set omarchy-theme-current sudo pkexec hyprctl omarchy-shell omarchy-restart-shell; do
   printf '#!/bin/sh\necho "REAL(system) %s $*" >>"$LOG"\n' "$name" >"$tmp/installed/bin/$name"
 done
 ln -s "$tmp/installed/bin/omarchy-theme-set" "$tmp/linked/bin/omarchy-theme-set"
 ln -s "$tmp/installed/bin/omarchy-theme-current" "$tmp/linked/bin/omarchy-theme-current"
+# The trees of fakes carry the helper's mark (grassfield-fake-omarchy); a checkout of Omarchy (omarchy-dev-link's) has none.
+for tree in "$tmp/omarchy" "$tmp/bare" "$tmp/linked"; do : >"$tree/grassfield-fake-omarchy"; done
+mkdir -p "$tmp/checkout/bin"
+for name in omarchy-theme-set omarchy-theme-current; do
+  printf '#!/bin/sh\necho "REAL(checkout) %s $*" >>"$LOG"\n' "$name" >"$tmp/checkout/bin/$name"
+done
+chmod +x "$tmp"/checkout/bin/*
 chmod +x "$tmp"/omarchy/bin/* "$tmp"/shims/* "$tmp"/fake/* "$tmp"/installed/bin/*
 chmod 700 "$tmp/run"
 ((EUID == 0)) && chown -R -h 65534:65534 "$tmp"
@@ -173,7 +180,7 @@ run() { # mode [VAR=value...]: the helper in a dev session with the stand-ins an
 }
 called() { grep -c '^args=' "$tmp/log"; }
 field() { sed -n "s/^$1=//p" "$tmp/log" | head -n 1; }
-nothing_real() { ! grep -q 'REAL(system)' "$tmp/log"; }
+nothing_real() { ! grep -q 'REAL(' "$tmp/log"; }
 
 echo "== settings"
 rm -f "$tmp/state"
@@ -277,7 +284,7 @@ run dark PATH="$hostile"
 expect "an installed Omarchy first in PATH: the fakes of OMARCHY_PATH still run (exit 0)" "$rc" 0
 expect "  the fake was applied" "$(field args)" "Tokyo Night"
 nothing_real && pass "  and nothing installed was reached" || fail "  something installed was reached: $(grep REAL "$tmp/log")"
-refused_dev="refused: a dev session needs OMARCHY_PATH set to a tree of fakes, never the installed Omarchy"
+refused_dev="refused: a dev session needs OMARCHY_PATH set to a tree of fakes (marked grassfield-fake-omarchy), never the installed Omarchy"
 for case in "OMARCHY_PATH=" "OMARCHY_PATH=/usr/share/omarchy" "OMARCHY_PATH=/usr/share/omarchy/" "OMARCHY_PATH=relative/omarchy"; do
   rm -f "$tmp/state"
   run dark PATH="$hostile" "$case"
@@ -286,7 +293,7 @@ for case in "OMARCHY_PATH=" "OMARCHY_PATH=/usr/share/omarchy" "OMARCHY_PATH=/usr
   expect "  runs nothing" "$(called)" 0
   nothing_real && pass "  and nothing installed was reached" || fail "  something installed was reached: $(grep REAL "$tmp/log")"
 done
-refused_where="refused: in a dev session omarchy-theme-set and omarchy-theme-current must be the fakes of OMARCHY_PATH/bin or of the stand-ins"
+refused_where="refused: in a dev session omarchy-theme-set and omarchy-theme-current must be the fakes of OMARCHY_PATH/bin"
 for tree in "$tmp/bare" "$tmp/linked"; do
   rm -f "$tmp/state"
   run dark PATH="$hostile" OMARCHY_PATH="$tree"
@@ -294,6 +301,18 @@ for tree in "$tmp/bare" "$tmp/linked"; do
   expect "  says so" "$out" "$refused_where"
   nothing_real && pass "  and nothing installed was reached" || fail "  something installed was reached: $(grep REAL "$tmp/log")"
 done
+# Counter-review of ADR-0045, LOW-3: an Omarchy checkout named by OMARCHY_PATH (no mark), and the stand-ins variable pointed at
+# a folder of real commands (it holds omarchy-shell and omarchy-restart-shell), are refused before anything runs.
+rm -f "$tmp/state"
+run dark PATH="$hostile" OMARCHY_PATH="$tmp/checkout"
+expect "a dev run whose OMARCHY_PATH is an unmarked checkout: exit 1" "$rc" 1
+expect "  says so" "$out" "$refused_dev"
+nothing_real && pass "  and nothing of it was reached" || fail "  something real was reached: $(grep REAL "$tmp/log")"
+rm -f "$tmp/state"
+run dark PATH="$hostile" GRASSFIELD_TERMINAL_THEME_SHIMS="$tmp/installed/bin"
+expect "a dev run whose stand-ins are a folder of real commands: exit 1" "$rc" 1
+expect "  says so" "$out" "$refused_where"
+nothing_real && pass "  and nothing installed was reached" || fail "  something installed was reached: $(grep REAL "$tmp/log")"
 
 echo "== limit"
 rm -f "$tmp/state" "$tmp/child"

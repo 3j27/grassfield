@@ -808,14 +808,16 @@ def record(opts):
     if lock is None:
         sys.stderr.write("grassfield-capture: a recording or a countdown is already running\n")
         return 1
+    tmp = None
     signal.signal(signal.SIGINT, on_record_signal)
     signal.signal(signal.SIGTERM, on_record_signal)
-    # At once, before anything slow: the shell sees a recording coming (it stops one that starts while the session is locked).
-    write_state(dict(me(), phase="starting", kind="recording"))
-    monitors = hyprctl("monitors")
-    screens = displays(monitors)
-    tmp = None
     try:
+        # At once, before anything slow: the shell sees a recording coming (it stops one that starts while the session is
+        # locked). Inside the try: a stop that arrives during these first steps raises Cancelled here, and the finally below
+        # writes the idle state back (counter-review of ADR-0045, LOW-1: it was left "starting" with a dead pid).
+        write_state(dict(me(), phase="starting", kind="recording"))
+        monitors = hyprctl("monitors")
+        screens = displays(monitors)
         if session_locked(monitors):
             return 1  # the session locked between the toolbar's Record and this helper: nothing is recorded
         if opts["mode"] == "screen":
