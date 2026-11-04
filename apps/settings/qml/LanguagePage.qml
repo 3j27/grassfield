@@ -204,6 +204,17 @@ SettingsPage {
             title: qsTr("Number format")
             valueText: root.formatsLocale.toString(1234567.89, "f", 2)
         }
+        // macOS's Live Text row (ADR-0045 OC-2): Preview and Glance read the text and the QR codes of still images with
+        // tesseract and zbarimg when they are installed (preview.textInImages; docs/specs/preview.md P13).
+        SettingsRow {
+            title: qsTr("Select Text in Images")
+            subtitle: qsTr("Select text in images to copy it or take action.")
+            Toggle {
+                accessibleName: qsTr("Select Text in Images")
+                checked: root.store.value("preview.textInImages")
+                onToggled: c => root.store.set("preview.textInImages", c)
+            }
+        }
     }
 
     DevNote {

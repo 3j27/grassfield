@@ -731,6 +731,18 @@
         }
       }
     },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Preview and Glance (docs/specs/preview.md).",
+      "properties": {
+        "textInImages": {
+          "type": "boolean",
+          "description": "Select Text in Images (Settings > General > Language & Region; macOS: Live Text; ADR-0045 OC-2): Preview and Glance read the text and the QR codes of a still image with tesseract and zbarimg when they are installed, so that its words can be selected and copied and a QR code's link opened. Read in the background from the file, never stored. Default true.",
+          "default": true
+        }
+      }
+    },
     "icons": {
       "type": "object",
       "additionalProperties": false,
