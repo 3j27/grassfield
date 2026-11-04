@@ -54,12 +54,9 @@ SettingsPage {
     property var backlight: null
 
     // ---- the main display (ADR-0044) ----
-    // The outputs as the shell identifies them: Qt's screens give the model and serial the shell's ShellScreen has too.
-    property var screens: []
-    readonly property var connected: root.monitors.map(m => {
-        const s = root.screens.find(x => x.name === m.name);
-        return {name: m.name, model: s && s.model ? s.model : "", serial: s && s.serial ? s.serial : ""};
-    })
+    // The outputs as the shell identifies them: Hyprland's make, model and serial from the state the shell publishes (Qt's
+    // screens have no serial under Wayland).
+    readonly property var connected: root.monitors.map(m => ({name: m.name, make: m.make, model: m.model, serial: m.serial}))
     readonly property var mainEntries: root.store.value("displays.main")
     readonly property string mainName: DisplayRole.resolve(root.mainEntries, root.connected).name
     readonly property bool isMain: root.monitor !== null && root.monitor.name === root.mainName
@@ -72,7 +69,6 @@ SettingsPage {
     }
 
     function refresh(): void {
-        root.screens = root.backend.screens();
         const path = root.backend.displaysStateFile;
         const r = path !== "" ? root.backend.readText(path) : {ok: false};
         root.displayState = r.ok ? Displays.parseState(r.text) : null;

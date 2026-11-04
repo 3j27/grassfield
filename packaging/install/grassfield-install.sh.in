@@ -33,7 +33,10 @@ GF_INCLUDE_LINE='Include = /etc/pacman.d/grassfield.conf'
 GF_SDDM_DROPIN=$GF_ROOT/etc/sddm.conf.d/zz-grassfield-theme.conf
 GF_BAK_SUFFIX=.grassfield-install-bak
 
-CHANNEL=stable SESSION=grassfield
+# The default channel and whether stable is empty are fixed at render time from VERSION (ADR-0043 h, owner decision of
+# 2026-11-04): a prerelease (-betaN, -rcN) installs from beta, and stable has no pointer until a plain version is published.
+readonly GF_STABLE_EMPTY=@GRASSFIELD_STABLE_EMPTY@
+CHANNEL=@GRASSFIELD_DEFAULT_CHANNEL@ SESSION=grassfield
 YES=0 DRY=0 UNINSTALL=0 SNAPSHOT=1 THEMES=1
 LOG='' STATE_DIR=''
 TMP=''
@@ -74,7 +77,7 @@ grassfield-install.sh: install Grassfield on Omarchy (as your user; sudo only wh
   grassfield-install.sh --uninstall [--no-snapshot] [--yes] [--dry-run]
   grassfield-install.sh --help
 
-  --channel C              stable (default) or beta
+  --channel C              beta or stable (default: @GRASSFIELD_DEFAULT_CHANNEL@; stable only once a plain version is published)
   --session S              which session the next login starts: grassfield (default) or omarchy (you switch later with
                            `grassfield-login set grassfield`)
   --without-login-themes   do not install and activate the Grassfield login screen (SDDM) and boot screen (Plymouth)
@@ -106,6 +109,12 @@ parse_args() {
     shift
   done
   [[ $CHANNEL == stable || $CHANNEL == beta ]] || { usage >&2; exit 2; }
+  # Early and before anything is written (no log, no root, no network): stable has nothing to install from yet.
+  if ((GF_STABLE_EMPTY)) && [[ $CHANNEL == stable ]] && ((!UNINSTALL)); then
+    printf '%s\n%s\n' 'grassfield-install.sh: the stable channel is empty: Grassfield is published as a beta only for now. Run without --channel, or with --channel beta.' \
+      "grassfield-install.sh : le canal stable est vide : Grassfield n est publie qu en beta pour l instant. Lance sans --channel, ou avec --channel beta." >&2
+    exit 2
+  fi
   [[ $SESSION == grassfield || $SESSION == omarchy ]] || { usage >&2; exit 2; }
 }
 

@@ -387,6 +387,23 @@ TestCase {
         compare(Geometry.dockScreen("", ["DP-1", "DP-2"], "DP-1", "HDMI-9"), "DP-1");
     }
 
+    // ADR-0044: the Dock is created before the settings are read and the main display is known. Nothing is latched until both
+    // are, so the fallback output never sticks; then it starts on the main display (the preferred output) whatever has focus.
+    function test_theSettingLoadedAfterTheDockWasCreatedStillDecides() {
+        const names = ["WAYLAND-1", "GF-REF"];
+        // Component.onCompleted: settings not loaded, main display unknown (hint "" and focus on the first output).
+        compare(Geometry.latchScreenWhen(false, "", names, "WAYLAND-1", ""), "");
+        // Settings loaded but the displays are not described yet: still nothing.
+        compare(Geometry.latchScreenWhen(false, "", names, "WAYLAND-1", "WAYLAND-1"), "");
+        // Both known, the stored main display is GF-REF: it latches there.
+        compare(Geometry.latchScreenWhen(true, "", names, "WAYLAND-1", "GF-REF"), "GF-REF");
+        // Latched once: a later focus change or main display change does not go through here.
+        compare(Geometry.latchScreenWhen(true, "GF-REF", names, "WAYLAND-1", "WAYLAND-1"), "GF-REF");
+        // The first layout waits for both (Geometry.settledOn gets settings && main ready).
+        verify(!Geometry.settledOn({settings: false, apps: true, screens: names, start: "GF-REF", waited: false}));
+        verify(Geometry.settledOn({settings: true, apps: true, screens: names, start: "GF-REF", waited: false}));
+    }
+
     function test_theDockStartsOnTheFocusedOutputAndStaysThere() {
         compare(Geometry.latchScreen("", ["DP-1", "DP-2"], "DP-2"), "DP-2");
         // Focus moving on does not move it; an unknown focus latches nothing.

@@ -186,7 +186,8 @@ TEST(StoreBackend, WithoutACatalog)
     const QVariantMap catalog = backend.catalogStatus();
     EXPECT_FALSE(catalog.value(QStringLiteral("inUse")).toBool());
     EXPECT_EQ(catalog.value(QStringLiteral("problem")), QStringLiteral("unavailable")); // nothing served
-    EXPECT_EQ(catalog.value(QStringLiteral("channel")), QStringLiteral("stable"));
+    // No VERSION in the fixture: only beta is safe (ADR-0033 O15b), whatever version this machine runs.
+    EXPECT_EQ(catalog.value(QStringLiteral("channel")), QStringLiteral("beta"));
     EXPECT_EQ(backend.appDataStatus().value(QStringLiteral("origin")), QStringLiteral("installed"));
 
     // Discover is the built-in one: rows by category, GIMP (Graphics) among them.

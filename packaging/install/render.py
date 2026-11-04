@@ -4,7 +4,8 @@
   render.py --conf packaging/pacman/repository.conf --template grassfield-install.sh.in --out DIR
 
 Reads repository.conf with the parser generate.py uses at build (one source of truth for the host and the fingerprint),
-substitutes the two values into the template and writes DIR/grassfield-install.sh (mode 0755) and
+substitutes the two values, and the default channel from VERSION (a -betaN / -rcN version installs from beta and refuses
+`--channel stable` while stable is empty; a plain version defaults to stable), into the template and writes DIR/grassfield-install.sh (mode 0755) and
 DIR/grassfield-install.sh.sha256 (sha256sum format, the checksum the install page publishes).
 
 Refuses (exit 1, nothing written) while the build is not publishable: a host ending in .invalid or an empty fingerprint
@@ -22,7 +23,22 @@ import generate  # noqa: E402  (packaging/pacman/generate.py: the repository.con
 NAME = "grassfield-install.sh"
 
 
-def render(conf_text, template, keep_test_hook=False):
+PRERELEASE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+-(beta|rc)[0-9]+$")
+PLAIN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+
+
+def channel_of(version):
+    """(default channel, stable is empty) from VERSION: a prerelease installs from beta, a plain version from stable."""
+    version = version.strip()
+    if PRERELEASE.match(version):
+        return "beta", "1"
+    if PLAIN.match(version):
+        return "stable", "0"
+    raise generate.Invalid(f"VERSION {version!r} is neither X.Y.Z nor X.Y.Z-betaN / X.Y.Z-rcN")
+
+
+def render(conf_text, template, keep_test_hook=False, version=""):
+    channel, stable_empty = channel_of(version)
     base, _mirrors, _previous, fpr = generate.parse(conf_text)
     host = re.sub(r"^https://", "", base).split("/")[0].split(":")[0]
     if not base.startswith("https://"):
@@ -35,6 +51,7 @@ def render(conf_text, template, keep_test_hook=False):
         # The test hook (a file prefix read from the environment) must not exist in the published script.
         template = "".join(l for l in template.splitlines(True) if "@TEST-HOOK@" not in l)
     text = template.replace("@GRASSFIELD_REPO_BASE@", base).replace("@GRASSFIELD_SIGNING_FINGERPRINT@", fpr)
+    text = text.replace("@GRASSFIELD_DEFAULT_CHANNEL@", channel).replace("@GRASSFIELD_STABLE_EMPTY@", stable_empty)
     if not keep_test_hook and "GRASSFIELD_INSTALL_ROOT" in text:
         raise generate.Invalid("the test hook is still in the rendered script")
     if re.search(r"@GRASSFIELD_[A-Z_]+@", text):
@@ -47,6 +64,8 @@ def main(argv):
     ap.add_argument("--conf", required=True)
     ap.add_argument("--template", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--version-file", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "VERSION"),
+                    help="the VERSION file that decides the default channel (default: the repository's)")
     ap.add_argument("--test-hook", action="store_true", help="keep the test hook (tests/shell/public_install.sh only)")
     args = ap.parse_args(argv)
     try:
@@ -54,7 +73,9 @@ def main(argv):
             conf = f.read()
         with open(args.template, encoding="utf-8") as f:
             template = f.read()
-        text = render(conf, template, args.test_hook)
+        with open(args.version_file, encoding="utf-8") as f:
+            version = f.read()
+        text = render(conf, template, args.test_hook, version)
     except (OSError, UnicodeDecodeError, generate.Invalid) as e:
         print(f"render.py: {e}", file=sys.stderr)
         return 1

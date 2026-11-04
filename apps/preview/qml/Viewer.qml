@@ -887,6 +887,8 @@ Window {
         backend: viewerWin.backend
         fileIndex: viewerWin.current
         searchText: searchInput.text
+        // A video or a sound opened in Preview plays at once, as in Quick Look; Play/Pause stays on the bar.
+        autoplay: true
         focus: true
     }
 }

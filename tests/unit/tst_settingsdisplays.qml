@@ -60,10 +60,6 @@ TestCase {
             }
             function query(argv: var, tag: string): void {
             }
-            // The Qt screens as the Settings backend gives them (model and serial: the main display's identity).
-            function screens(): var {
-                return [{name: "eDP-1", model: "LGD", serial: "123"}, {name: "DP-2", model: "DELL", serial: "ABC"}];
-            }
         }
     }
 
@@ -285,10 +281,10 @@ TestCase {
     }
 
     // ADR-0044: with two displays the page knows the main one (the built-in panel by default), and making the other main writes
-    // displays.main through the store, keyed by identity (model and serial from the Qt screens), never by the connector.
+    // displays.main through the store, keyed by identity (make, model and serial from Hyprland's monitors in the state file), never by the connector.
     function test_page_mainDisplay() {
-        const monitors = [{name: "eDP-1", description: "LGD x", width: 1920, height: 1080, refreshRate: 60, x: 0, y: 0, scale: 1, transform: 0, availableModes: []},
-                          {name: "DP-2", description: "DELL x", width: 1920, height: 1080, refreshRate: 60, x: 1920, y: 0, scale: 1, transform: 0, availableModes: []}];
+        const monitors = [{name: "eDP-1", make: "LG", model: "LGD", serial: "123", description: "LGD x", width: 1920, height: 1080, refreshRate: 60, x: 0, y: 0, scale: 1, transform: 0, availableModes: []},
+                          {name: "DP-2", make: "Dell", model: "DELL", serial: "ABC", description: "DELL x", width: 1920, height: 1080, refreshRate: 60, x: 1920, y: 0, scale: 1, transform: 0, availableModes: []}];
         const u = makePage(false, monitors);
         compare(u.page.mainName, "eDP-1");
         u.page.selected = "DP-2";
@@ -296,11 +292,11 @@ TestCase {
         u.page.makeMain("DP-2");
         compare(u.store.sets.length, 1);
         compare(u.store.sets[0].key, "displays.main");
-        compare(u.store.sets[0].value, [{set: ["s:DELL|ABC", "s:LGD|123"], main: "s:DELL|ABC"}]);
+        compare(u.store.sets[0].value, [{set: ["s:Dell|DELL|ABC", "s:LG|LGD|123"], main: "s:Dell|DELL|ABC"}]);
         compare(u.page.mainName, "DP-2");
         compare(u.page.isMain, true);
         // The same panel on another port is still the main display.
-        compare(DisplayRole.resolve(u.store.values["displays.main"], [{name: "HDMI-A-1", model: "DELL", serial: "ABC"}, {name: "eDP-1", model: "LGD", serial: "123"}]).name, "HDMI-A-1");
+        compare(DisplayRole.resolve(u.store.values["displays.main"], [{name: "HDMI-A-1", make: "Dell", model: "DELL", serial: "ABC"}, {name: "eDP-1", make: "LG", model: "LGD", serial: "123"}]).name, "HDMI-A-1");
     }
 
     function find(item, pred) {

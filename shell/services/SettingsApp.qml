@@ -20,8 +20,13 @@ Singleton {
     }
 
     // Settings showing one section first (`--section=<id>`: "wallpaper" for the desktop's Change Wallpaper…).
-    function openSection(section: string): void {
-        Apps.whenScopeKnown(() => root.openNow(section !== "" ? ["--section=" + section] : []));
+    // `display` (optional): an output name, which Wallpaper opens on (`--display=<output>`; a running Settings gets
+    // `wallpaper@<output>` over D-Bus from the second launch). Output names only: anything else is not passed.
+    function openSection(section: string, display: var): void {
+        const args = section !== "" ? ["--section=" + section] : [];
+        if (section !== "" && typeof display === "string" && /^[A-Za-z0-9._:-]{1,64}$/.test(display))
+            args.push("--display=" + display);
+        Apps.whenScopeKnown(() => root.openNow(args));
     }
 
     // About This Computer (ADR-0040 ID-19): Settings' own small window (`--about`, role "info"). An open one comes forward,

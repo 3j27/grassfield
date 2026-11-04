@@ -8,16 +8,16 @@ import "../../apps/settings/qml/Store.js" as Store
 TestCase {
     name: "DisplayRole"
 
-    readonly property var panel: ({name: "eDP-1", model: "LGD", serial: "123"})
-    readonly property var desk: ({name: "DP-2", model: "DELL U2723", serial: "ABC"})
-    readonly property var deskMoved: ({name: "HDMI-A-1", model: "DELL U2723", serial: "ABC"})
-    readonly property var tv: ({name: "HDMI-A-2", model: "TV", serial: ""})
-    readonly property var twinA: ({name: "DP-1", model: "ACME", serial: ""})
-    readonly property var twinB: ({name: "DP-3", model: "ACME", serial: ""})
+    readonly property var panel: ({name: "eDP-1", make: "LG", model: "LGD", serial: "123"})
+    readonly property var desk: ({name: "DP-2", make: "Dell", model: "DELL U2723", serial: "ABC"})
+    readonly property var deskMoved: ({name: "HDMI-A-1", make: "Dell", model: "DELL U2723", serial: "ABC"})
+    readonly property var tv: ({name: "HDMI-A-2", make: "Acme", model: "TV", serial: ""})
+    readonly property var twinA: ({name: "DP-1", make: "Acme", model: "ACME", serial: ""})
+    readonly property var twinB: ({name: "DP-3", make: "Acme", model: "ACME", serial: ""})
     readonly property var virtual: ({name: "GF-REF", model: "", serial: ""})
 
     function test_identity() {
-        compare(DisplayRole.identity(panel), "s:LGD|123");
+        compare(DisplayRole.identity(panel), "s:LG|LGD|123");
         // The same panel on another port is the same display.
         compare(DisplayRole.identity(deskMoved), DisplayRole.identity(desk));
         // No serial: the model with the connector, so identical monitors stay apart.
@@ -25,6 +25,31 @@ TestCase {
         // No EDID at all: the connector name alone.
         compare(DisplayRole.identity(virtual), "n:GF-REF");
         compare(DisplayRole.identity(null), "n:");
+    }
+
+    // Hyprland's monitors answer is the identity's source (Qt's screens have no serial): connected() joins it to the outputs.
+    function test_connectedJoinsHyprlandsAnswer() {
+        const described = [{name: "eDP-1", make: "LG", model: "LGD", serial: "123"}, {name: "DP-2", make: "Dell", model: "DELL U2723", serial: "ABC"}];
+        let c = DisplayRole.connected(["DP-2", "eDP-1"], described);
+        verify(c.ready);
+        compare(c.displays[0], {name: "DP-2", make: "Dell", model: "DELL U2723", serial: "ABC"});
+        compare(DisplayRole.identity(c.displays[0]), DisplayRole.identity(desk));
+        // An output Hyprland has not described yet: not ready, keyed by its connector.
+        c = DisplayRole.connected(["eDP-1", "HDMI-A-1"], described);
+        verify(!c.ready);
+        compare(DisplayRole.identity(c.displays[1]), "n:HDMI-A-1");
+        verify(!DisplayRole.connected([], described).ready);
+        verify(!DisplayRole.connected(["eDP-1"], null).ready);
+    }
+
+    // The setting is read after the shell and the Dock exist: the fallback until the main display is known, then the stored
+    // choice (what the Dock latches on, Geometry.latchScreenWhen, is tested in tst_dockgeometry).
+    function test_choiceReadAfterTheDisplaysAreKnown() {
+        const described = [{name: "eDP-1", make: "LG", model: "LGD", serial: "123"}, {name: "DP-2", make: "Dell", model: "DELL U2723", serial: "ABC"}];
+        const live = DisplayRole.connected(["eDP-1", "DP-2"], described).displays;
+        compare(DisplayRole.resolve([], live).name, "eDP-1");
+        const stored = DisplayRole.withMain([], live, DisplayRole.identity(desk));
+        compare(DisplayRole.resolve(stored, live).name, "DP-2");
     }
 
     function test_setIsOrderFree() {
@@ -121,17 +146,17 @@ TestCase {
         compare(entries.length, DisplayRole.MAX_ENTRIES);
         compare(DisplayRole.problem(entries), "");
         // The newest is first.
-        compare(entries[0].main, "s:M|S19");
+        compare(entries[0].main, "s:|M|S19");
     }
 
     function test_validation() {
-        const ok = [{set: ["s:LGD|123", "s:M|1"], main: "s:M|1"}];
+        const ok = [{set: ["s:LG|LGD|123", "s:M|1"], main: "s:M|1"}];
         compare(DisplayRole.problem([]), "");
         compare(DisplayRole.problem(ok), "");
         verify(DisplayRole.problem("x") !== "");
         verify(DisplayRole.problem({}) !== "");
         verify(DisplayRole.problem([{set: ["s:M|1"], main: "s:Z|9"}]) !== "");
-        verify(DisplayRole.problem([{set: ["s:M|1", "s:LGD|123"], main: "s:M|1"}]) !== "", "unsorted set");
+        verify(DisplayRole.problem([{set: ["s:M|1", "s:LG|LGD|123"], main: "s:M|1"}]) !== "", "unsorted set");
         verify(DisplayRole.problem([{set: ["s:M|1", "s:M|1"], main: "s:M|1"}]) !== "", "repeated key");
         verify(DisplayRole.problem([{set: [], main: ""}]) !== "");
         verify(DisplayRole.problem([{set: ["s:M|1"], main: "s:M|1", extra: 1}]) !== "");

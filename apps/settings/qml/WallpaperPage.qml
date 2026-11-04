@@ -599,7 +599,7 @@ SettingsPage {
     }
 
     // The display another surface asks for (the desktop's Change Wallpaper…: `grassfield-settings --section=wallpaper --display=<output
-    // name>`, or its stable id `s:<model>|<serial>`): the pane opens on it. "" asks for nothing. An unknown one is ignored.
+    // name>`, or the display's key): the pane opens on it. "" asks for nothing. An unknown one shows All Displays.
     property string requestedDisplay: ""
 
     function applyRequest(): void {
@@ -607,8 +607,8 @@ SettingsPage {
             return;
         root.refreshDisplays();
         const d = root.displays.find(x => x.name === root.requestedDisplay || x.key === root.requestedDisplay);
-        if (d)
-            root.displayId = d.key;
+        // An unknown output (unplugged, a stale request) shows All Displays, never the display the pane showed before.
+        root.displayId = d ? d.key : "all";
     }
 
     onRequestedDisplayChanged: root.applyRequest()

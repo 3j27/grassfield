@@ -399,6 +399,13 @@ function latchScreen(chosen, names, focused, preferred) {
     return chosen === "" ? startScreen(names, focused, preferred) : chosen;
 }
 
+// latchScreen once the start output is final: `ready` is false until the settings are read and the main display is known
+// (Settings.loaded and MainDisplay.ready), and nothing is latched before that, so the Dock never takes the fallback output
+// that a stored main display would overrule a moment later (ADR-0044; the Dock was created before the settings loaded).
+function latchScreenWhen(ready, chosen, names, focused, preferred) {
+    return ready === true ? latchScreen(chosen, names, focused, preferred) : chosen;
+}
+
 // The output the Dock latches on at the first settled layout: the start output, else (no focused output was ever reported: a
 // compositor without focus events, the fallback timer ran out) the output it is on, so that a focus event arriving later does
 // not move a Dock that is already drawn.

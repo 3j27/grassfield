@@ -53,8 +53,8 @@ single instance.
    wmx) are text, never handed to the player and never followed or fetched: decided by the canonical MIME type,
    its aliases and ancestors, the suffix, and the first 512 bytes (extensionless files).
 6. P6 Audio and video (`MediaView.qml`): QtMultimedia `MediaPlayer`, only the local `file:` URL of a validated file;
-   play/pause (button, Space in the viewer), a position slider, elapsed and total time. Glance starts playing at
-   once. A decode failure shows the player's message.
+   play/pause (button, Space in the viewer), a position slider, elapsed and total time. Glance and the Preview window start playing at
+   once (Quick Look; the sound goes to the default output, so the system mute applies). A decode failure shows the player's message.
 7. P7 Glance (`qml/Glance.qml`): same binary with `--glance`. A normal toplevel with app id
    `org.grassfield.Preview.Glance`, sized for the content of the first file on the screen it is shown on (image:
    native size scaled down to fit `preview.glanceScreenFraction` of the screen for the content area; PDF, text, video

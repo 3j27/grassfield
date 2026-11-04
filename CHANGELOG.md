@@ -4,6 +4,12 @@ All notable changes of Grassfield Desktop. The version of every package, library
 file at the repository root (`scripts/dev/check-version.sh`, part of `just check`, keeps the consumers equal to it).
 Format: one section per version, newest first.
 
+## 1.0.0-rc2 (release candidate, 2026-11-04)
+
+The first signed build published at packages.grassfield.site, on the beta channel (ADR-0033, owner decision of 2026-11-04):
+the window corners follow one measured radius, the dark rim and smaller refinements since rc1. A prerelease build sets Software
+Update up on beta; the public install script defaults to beta.
+
 ## 1.0.0-rc1 (release candidate, 2026-10-23)
 
 First candidate of 1.0.0, the first version with a changelog. It is the state after the independent audit GF-AUDIT-001

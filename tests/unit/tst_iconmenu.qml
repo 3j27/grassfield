@@ -36,6 +36,23 @@ TestCase {
         m.destroy();
     }
 
+    // Another display than the one with the icons: the menu opens there too, without New Folder, Paste (their rename field and
+    // result are on the icons' screen) and Clean Up.
+    function test_secondDisplayOffersNoArrangement() {
+        const m = menu({kind: "desktop", itemsHere: false, pasteCount: 1});
+        compare(ids(m), ["getInfo", "wallpaper", "editWidgets"]);
+        verify(!m.model[0].separator, "no separator first");
+        m.destroy();
+    }
+
+    // Show Desktop Items off: the surface is still there; nothing that makes or arranges items is offered.
+    function test_itemsHiddenKeepsTheRest() {
+        const m = menu({kind: "desktop", itemsHere: false, pasteCount: 2});
+        compare(ids(m), ["getInfo", "wallpaper", "editWidgets"]);
+        verify(!m.model[0].separator);
+        m.destroy();
+    }
+
     function test_pasteOnlyWithFilesOnTheClipboard() {
         const one = menu({kind: "desktop", pasteCount: 1});
         compare(ids(one).slice(0, 2), ["newFolder", "paste"]);

@@ -30,14 +30,21 @@ icons and the banners are on it. Menu bars stay on every display. New windows fo
 ### D-2 Storage: `displays.main`, one remembered choice per set of connected displays
 A new key of grassfield.json (contract version 1, additive; schema, generated `SettingsContract.js`, defaults):
 `displays.main` is a list, newest first, at most 16, of `{set: [<display key>...sorted], main: <display key in set>}`.
-- A display key is its identity, `DisplayRole.identity` (`ui/Grassfield/Ui/DisplayRole.js`): `s:<model>|<serial>` when it has a
-  serial, else `m:<model>|<connector>` (two identical monitors without a serial stay apart), else `n:<connector>` for an output
-  with no EDID at all. A connector name alone is never the key of a real monitor. The same panel on another port is the
-  same display. Quickshell's `ShellScreen` and Qt's `QScreen` expose model and serial but not the manufacturer, so the make
-  is not part of the key (the model string carries it).
+- A display key is its identity, `DisplayRole.identity` (`ui/Grassfield/Ui/DisplayRole.js`): `s:<make>|<model>|<serial>` when it
+  has a serial, else `m:<make>|<model>|<connector>` (two identical monitors without a serial stay apart), else `n:<connector>`
+  for an output with no EDID at all. A connector name alone is never the key of a real monitor. The same panel on another
+  port is the same display *when it reports a serial*. The data is Hyprland's `monitors` answer (`make`, `model`, `serial`),
+  which the shell already reads (`platform/Displays.qml` `described`) and publishes to Settings in the Displays state file:
+  Qt's `QScreen` and Quickshell's `ShellScreen` are not used, because Qt 6.12's `QWaylandScreen` has no serial (it is always
+  empty) and no make. A monitor with an EDID without a serial moves its key with its port.
 - One entry per set: the choice comes back when the same displays are connected again (laptop alone, laptop at the desk).
 - The Settings app writes it through `ConfigStore.set` (the existing store; the contract validates it). The shell reads it
-  through `SettingsStore` and resolves it in `shell/services/MainDisplay.qml` from `Quickshell.screens`, live.
+  through `SettingsStore` and resolves it in `shell/services/MainDisplay.qml` from `Quickshell.screens` joined to Hyprland's
+  answer, live. `MainDisplay.ready` is false until every output is described (or `Tokens.dockSettleTimeout` has passed), and
+  `screenName` is "" until then: the Dock waits for it and for the settings before it latches, so it never takes a fallback
+  output that the stored choice would overrule. Changes of the outputs (a hot-plug is a burst) take effect after
+  `Tokens.motionSlow`. The dev override `GRASSFIELD_DESKTOP_SCREEN` is read here, once, and is the main display while that
+  output exists: the Dock, the desktop icons (`DesktopSurfaces.iconsScreen`) and the banners all read `MainDisplay.screenName`.
 
 ### D-3 Resolution and fallback (`DisplayRole.resolve`)
 1. The choice made for exactly this set of connected displays.
@@ -62,11 +69,15 @@ display follows All Displays. Entry point for other surfaces (the desktop's Chan
 the D-Bus `Open("wallpaper@<output name>", token)`; the pane opens on that display (an unknown output is ignored, the pane
 then shows All Displays).
 
+Known limit (not changed here): the wallpaper's display identity (`WallpaperConfig.displayKey`) reads Qt's screens, whose serial is
+empty under Wayland, so a per-display wallpaper is in effect keyed by the connector name; moving a monitor to another port loses
+its wallpaper override until it is set again. Moving it to Hyprland's data is a follow-up.
+
 ### D-6 XWayland primary
 `xrandr --output <main> --primary` would need `xorg-xrandr` (not installed here, not a Grassfield dependency): not done,
 NOT VERIFIED, no new dependency. GTK/Qt/Wayland-native apps are unaffected.
 
 ## Consequences
 - Contract: `displays.main` (additive). Readers: shell (`MainDisplay`), Settings (Displays). Tests: `tests/unit/tst_displayrole.qml`.
-- The dev override `GRASSFIELD_DESKTOP_SCREEN` still wins for the Dock and the desktop icons in a development session.
+- The dev override `GRASSFIELD_DESKTOP_SCREEN` is folded into `MainDisplay`: the one source for the Dock, the icons and the banners.
 - The banners no longer follow the focused output: they stay on the main display (macOS).

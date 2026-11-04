@@ -78,11 +78,10 @@ Scope {
     // effect, an auto-hidden Dock that never shows on its own: the 2 px strip at the Dock's edge is their only input, and the
     // pointer resting on it for Tokens.dockRevealDwell makes that output the Dock's (`moveDockTo`). It starts on the focused output.
     property string chosenScreen: ""
-    // Development sessions name their primary output (GRASSFIELD_DESKTOP_SCREEN, as the desktop icons do); the Dock starts there.
-    // Otherwise the Dock starts on the main display (macOS: Displays > Use as > Main display holds the Dock, ADR-0044), and
+    // The Dock starts on the main display (macOS: Displays > Use as > Main display holds the Dock, ADR-0044), and
     // moves there when the main display changes (a choice in Settings, the main display unplugged or plugged back); from then on
     // the pointer reaching another output's Dock edge moves it, as before.
-    readonly property string startHint: Mode.devValue("DESKTOP_SCREEN") || MainDisplay.screenName
+    readonly property string startHint: MainDisplay.screenName
 
     Connections {
         target: MainDisplay
@@ -279,7 +278,7 @@ Scope {
         if (ready && Settings.dockShowRecents)
             writeRecents(step.recent);
         const shown = ready && Settings.dockShowRecents ? DockModel.withRecents(apps, Settings.dockRecent, Apps.lookup, Tokens.dockRecentMax, e => Apps.isListed(e) && !DockModel.isFilesId(e.id)) : apps;
-        const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized, Apps.lookup);
+        const tail = Settings.dockMinimizeIntoApp ? [] : DockModel.minimizedItems(Compositor.minimized.filter(r => !r.intoApp), Apps.lookup);
         const all = windows.instances;
         all.forEach(w => w.captureLayout());
         const folders = DockModel.folderItems(Stacks.folderList(Settings.dockFolders, Quickshell.env("HOME"), Tokens.dockStackMax));
@@ -337,7 +336,8 @@ Scope {
         onTriggered: root.pruneLaunching()
     }
 
-    function activateItem(item: var): void {
+    // `pointer`: a click (the only activation that minimizes, dock.clickMinimizes); keys and accessibility presses bring forward.
+    function activateItem(item: var, pointer: var): void {
         keyboardMode = false;
         // Fixtures only (dock noactivate): a click is logged ("dock-launch: tapped") but nothing starts, opens or comes forward.
         if (VisualFixtures.active && root.testNoActivate)
@@ -363,7 +363,28 @@ Scope {
             root.launchItem(item);
             return;
         }
-        root.bringForward(item.windows);
+        root.clickRunning(item.windows, pointer === true);
+    }
+
+    // A click on a running app's tile. With dock.clickMinimizes the frontmost app's visible windows minimize (each into its own
+    // tile or the app icon, Compositor.minimize) and an all-minimized app comes back whole; otherwise bringForward (macOS).
+    function clickRunning(windows: var, pointer: bool): void {
+        const plan = Launch.clickPlan(windows.map(t => Compositor.windowInfo(t)), pointer && Settings.dockClickMinimizes);
+        if (plan.action === "minimize") {
+            let done = 0;
+            for (const top of plan.refs) {
+                if (Compositor.minimizeIntoAppIcon(top))
+                    done++;
+            }
+            if (done === 0)
+                root.bringForward(windows); // every minimize was refused: a click never does nothing
+        } else if (plan.action === "restore") {
+            for (const top of plan.refs)
+                Compositor.activate(top);
+            Compositor.groupForward(Compositor.addressOf(plan.refs[plan.refs.length - 1]));
+        } else {
+            root.bringForward(windows);
+        }
     }
 
     // macOS: every window of the app comes forward, the most recent one ends focused; with everything minimized, the most
@@ -430,7 +451,7 @@ Scope {
     // goes back (a later change of position or size is the user's and animates as before).
     property bool settled: false
     readonly property bool inputsFinal: Geometry.settledOn({
-        settings: Settings.loaded,
+        settings: Settings.loaded && MainDisplay.ready,
         apps: Apps.hiddenReady,
         screens: screenNames,
         start: Geometry.startScreen(screenNames, Compositor.focusedScreenName, startHint),
@@ -474,7 +495,7 @@ Scope {
 
     // The Dock starts on the focused output and stays where it is until the pointer moves it (focus changes do not).
     function latchStartScreen(): void {
-        chosenScreen = Geometry.latchScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint);
+        chosenScreen = Geometry.latchScreenWhen(Settings.loaded && MainDisplay.ready, chosenScreen, screenNames, Compositor.focusedScreenName, startHint);
     }
 
     // Drag-out removal follows "cancel on interruption": anything that can take the pointer or the focus during a tile drag marks the
@@ -827,7 +848,7 @@ Scope {
         // Same code path as a click on item `index`.
         function click(index: int): void {
             if (VisualFixtures.active && root.items[index])
-                root.activateItem(root.items[index]);
+                root.activateItem(root.items[index], true);
         }
 
         // Centre "x y" of tile `index` on `screen` in output coordinates (fixtures only; the magnification must be off).
@@ -1414,10 +1435,10 @@ Scope {
             // Rectangle (global layout coordinates) of the minimized tile `index` (0 = first right of the
             // separator): where that window lands (minimize, `adding`: the tile does not exist yet and is
             // appended before the Trash) or leaves from (restore). Called by Compositor for this screen.
-            function tileRect(index: int, adding: bool, toplevel: var): var {
+            function tileRect(index: int, adding: bool, toplevel: var, intoApp: bool): var {
                 const sep = root.items.findIndex(it => it.kind === "separator" && !it.divider);
                 const mon = Compositor.monitorByName(win.screen.name);
-                if (Settings.dockMinimizeIntoApp && toplevel && mon) {
+                if ((Settings.dockMinimizeIntoApp || intoApp) && toplevel && mon) {
                     // Minimize into the application icon: the window goes to (and comes from) its app's tile.
                     const at = root.items.findIndex(it => (it.kind === "app" || it.kind === "files") && it.windows.indexOf(toplevel) >= 0);
                     if (at >= 0)
@@ -2521,7 +2542,7 @@ Scope {
                                         if (VisualFixtures.active)
                                             console.info("dock-launch: tap", Date.now(), "tile", tile.tileId);
                                         // A click: a stack or menu it opens shows its ring only after a key (ADR-0039 steps 8 and 25).
-                                        Popups.withPointer(true, () => root.activateItem(tile.modelData));
+                                        Popups.withPointer(true, () => root.activateItem(tile.modelData, true));
                                     }
                                 }
 

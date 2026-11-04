@@ -214,6 +214,22 @@ vs_spawn() {
   vs_track "$!"
 }
 
+# dock.clickMinimizes in this tree's settings (.dev/config), which the shell follows live.
+#   vs_click_min_get        prints true, false or unset (the key is absent: the default, true)
+#   vs_click_min_set VALUE  true | false | unset; waits for the shell to follow
+vs_click_min_get() {
+  jq -r 'if (.dock | type) == "object" and (.dock | has("clickMinimizes")) then .dock.clickMinimizes else "unset" end' "$VS_DEV/config/grassfield.json" 2>/dev/null || echo unset
+}
+vs_click_min_set() {
+  local cfg=$VS_DEV/config/grassfield.json
+  if [[ $1 == unset ]]; then
+    jq 'del(.dock.clickMinimizes)' "$cfg" > "$cfg.new" || return 1
+  else
+    jq --argjson v "$1" '.dock.clickMinimizes = $v' "$cfg" > "$cfg.new" || return 1
+  fi
+  mv "$cfg.new" "$cfg" && sleep 2
+}
+
 # Known state: no popups, no clients, dark (or VISUAL_APPEARANCE), transparency 0.25, motion reduced, pointer parked on GF-REF.
 vs_reset() {
   # VISUAL_APPEARANCE: the F1 audit (f1-audit.sh) captures the scenarios in the light appearance of the references.

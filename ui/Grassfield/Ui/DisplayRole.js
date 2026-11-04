@@ -34,18 +34,40 @@ function asArray(v, cap) {
     return out;
 }
 
-// The identity of a display `d` ({name, model, serial}: the compositor's output name, the EDID model and serial). The model
-// and the serial when it has one (the same panel on any port); else the model with its connector (two identical monitors
-// without a serial stay apart); else the connector name alone, only for an output with no EDID at all (a virtual one).
+// The identity of a display `d` ({name, make, model, serial}: the compositor's output name and the EDID make, model and
+// serial, as Hyprland's `monitors` answer gives them; Qt's QWaylandScreen has no serial, so Qt's screens are not used). The
+// make, model and serial when it has a serial (the same panel on any port); else the make and model with its connector (two
+// identical monitors without a serial stay apart); else the connector name alone, only for an output with no EDID at all
+// (a virtual one).
 function identity(d) {
-    const name = d && typeof d.name === "string" ? d.name : "";
-    const model = d && typeof d.model === "string" ? d.model : "";
-    const serial = d && typeof d.serial === "string" ? d.serial : "";
+    const str = k => d && typeof d[k] === "string" ? d[k] : "";
+    const name = str("name"), make = str("make"), model = str("model"), serial = str("serial");
     if (model !== "" && serial !== "")
-        return "s:" + model + "|" + serial;
+        return "s:" + make + "|" + model + "|" + serial;
     if (model !== "")
-        return "m:" + model + "|" + name;
+        return "m:" + make + "|" + model + "|" + name;
     return "n:" + name;
+}
+
+// The connected outputs (`names`) with the identity Hyprland gives them (`described`: its monitors answer, objects with name,
+// make, model, serial): {displays: [{name, make, model, serial}], ready}. `ready` is true when every output has been
+// described; an output not described yet has no make, model or serial (its key is its connector, n:<name>).
+function connected(names, described) {
+    const list = Array.isArray(names) ? names : [];
+    const byName = {};
+    for (const m of asArray(described, 64) || []) {
+        if (m && typeof m.name === "string")
+            byName[m.name] = m;
+    }
+    const str = (o, k) => o && typeof o[k] === "string" ? o[k] : "";
+    let ready = list.length > 0;
+    const displays = list.map(n => {
+        const m = byName[n];
+        if (!m)
+            ready = false;
+        return {name: n, make: str(m, "make"), model: str(m, "model"), serial: str(m, "serial")};
+    });
+    return {displays: displays, ready: ready};
 }
 
 // The sorted keys of the displays: the identity of a set of connected displays.

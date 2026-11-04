@@ -58,6 +58,7 @@ Singleton {
     readonly property var dockStackOptions: store.dockStackOptions
     readonly property bool dockShowRecents: store.dockShowRecents
     readonly property bool dockMinimizeIntoApp: store.dockMinimizeIntoApp
+    readonly property bool dockClickMinimizes: store.dockClickMinimizes
     readonly property bool dockAnimateOpening: store.dockAnimateOpening
     readonly property bool dockShowIndicators: store.dockShowIndicators
     readonly property bool dockEndTask: store.dockEndTask
@@ -122,7 +123,7 @@ Singleton {
     readonly property string screenSaverFolder: store.screenSaverFolder
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
-    // The remembered choices of the main display (ui/Grassfield/Ui/MainDisplay.js); platform/MainDisplay.qml resolves them.
+    // The remembered choices of the main display (ui/Grassfield/Ui/DisplayRole.js); services/MainDisplay.qml resolves them.
     readonly property var displaysMain: store.displaysMain
     readonly property bool menubarShowBackground: store.menubarShowBackground
     readonly property string menubarAutoHide: store.menubarAutoHide

@@ -79,6 +79,14 @@ inline QString grassfieldConf()
     return f.isEmpty() ? QStringLiteral("/etc/pacman.d/grassfield.conf") : f + QStringLiteral("/grassfield.conf");
 }
 
+// The installed Grassfield version (/usr/share/grassfield/VERSION): it decides which channel a build not set up follows
+// (releaseChannelOf).
+inline QString versionFile()
+{
+    const QString f = fixture();
+    return f.isEmpty() ? QStringLiteral("/usr/share/grassfield/VERSION") : f + QStringLiteral("/VERSION");
+}
+
 inline QString pacman()
 {
     const QString f = fixture();

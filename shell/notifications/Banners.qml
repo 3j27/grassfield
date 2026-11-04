@@ -7,8 +7,8 @@ import qs.osd
 import qs.services
 import qs.platform
 
-// Banner stack, top-right under the menu bar, on ONE screen: the focused one (first screen
-// when unknown). A single window and a single Repeater, so there is exactly one set of
+// Banner stack, top-right under the menu bar, on ONE screen: the main display (MainDisplay,
+// ADR-0044; the focused one when none is known). A single window and a single Repeater, so there is exactly one set of
 // banner delegates (hover state and expiry belong to the one visible banner). The window is
 // mapped only while a banner exists; delegates exist only for the banners that are shown
 // (the rest of the queue is just model rows). While the OSD pill is visible the stack sits

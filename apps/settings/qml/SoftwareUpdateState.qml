@@ -27,6 +27,8 @@ QtObject {
     // Read-only paths, a test seam (tests/unit/tst_settingssoftwareupdate.qml points them at its fixtures).
     property string includeFile: "/etc/pacman.d/grassfield.conf"
     property string repositoryFile: "/usr/share/grassfield/pacman/repository.conf"
+    // The build's version (a prerelease sets up on beta, SoftwareUpdateLogic.defaultChannel).
+    property string versionFile: "/usr/share/grassfield/VERSION"
     property string rebootMarker: root.backend.homeDir + "/.local/state/omarchy/reboot-required"
     property string kernelReleaseFile: "/proc/sys/kernel/osrelease"
     property string modulesDir: "/usr/lib/modules"
@@ -48,6 +50,11 @@ QtObject {
     // stable, beta, custom, repair, off; "" until read or when it cannot be read.
     property string channel: ""
     readonly property bool buildReady: SoftwareUpdateLogic.buildReady(root.backend.readText(root.repositoryFile).text)
+    // The channel Set Up… chooses: stable on a plain version, beta on a prerelease (-betaN, -rcN) and when it cannot be read.
+    readonly property string defaultChannel: SoftwareUpdateLogic.defaultChannel(root.backend.readText(root.versionFile).text)
+    // The installed version allows following stable (a plain X.Y.Z); otherwise "Off" in Beta Updates is unavailable, as in
+    // grassfield-channel-set, which refuses `stable` then.
+    readonly property bool stableAllowed: SoftwareUpdateLogic.stableAllowed(root.backend.readText(root.versionFile).text)
     // A Grassfield update in this session waits for a log out (GF-083, written to the file by the shell), or a toolkit
     // package replaced under it (ADR-0041 step 2b, U31: the shell writes the same flag; the list says which).
     readonly property bool logoutPending: root.file.logoutPending === true

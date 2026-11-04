@@ -195,6 +195,7 @@ Scope {
     readonly property bool dockAutohide: read("dock.autohide")
     readonly property bool dockShowRecents: read("dock.showRecents")
     readonly property bool dockMinimizeIntoApp: read("dock.minimizeIntoApp")
+    readonly property bool dockClickMinimizes: read("dock.clickMinimizes")
     readonly property bool dockAnimateOpening: read("dock.animateOpening")
     readonly property bool dockShowIndicators: read("dock.showIndicators")
     // End Task in the Dock menus of running apps (ADR-0038 AQ5, AM63): off by default, as Windows' own.
@@ -239,7 +240,7 @@ Scope {
     readonly property string notificationsHistory: read("notifications.history")
     readonly property string notificationsPreviews: read("notifications.previews")
     readonly property bool desktopShowIcons: read("desktop.showIcons")
-    // The remembered choices of the main display, one per set of connected displays (MainDisplay.js, ADR-0044).
+    // The remembered choices of the main display, one per set of connected displays (DisplayRole.js, ADR-0044).
     readonly property var displaysMain: read("displays.main")
     readonly property bool menubarShowBackground: read("menubar.showBackground")
     readonly property string menubarAutoHide: read("menubar.autoHide")

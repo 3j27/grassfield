@@ -40,6 +40,7 @@ ShellRoot {
         ["dock.stackOptions", {"/srv/x": {sort: "name", view: "list"}}, () => Settings.dockStackOptions["/srv/x"] && Settings.dockStackOptions["/srv/x"].view === "list"],
         ["dock.showRecents", false, () => Settings.dockShowRecents === false],
         ["dock.minimizeIntoApp", true, () => Settings.dockMinimizeIntoApp === true],
+        ["dock.clickMinimizes", false, () => Settings.dockClickMinimizes === false],
         ["dock.animateOpening", false, () => Settings.dockAnimateOpening === false],
         ["dock.showIndicators", false, () => Settings.dockShowIndicators === false],
         ["dock.endTask", true, () => Settings.dockEndTask === true],
