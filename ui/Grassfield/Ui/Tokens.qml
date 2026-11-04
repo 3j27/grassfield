@@ -245,6 +245,8 @@ QtObject {
     readonly property int radiusMenuBar: 0
     // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusMenu: 12
+    // estimate of macOS 26/27 popovers (rounder than a menu's 12): the Emoji & Symbols popover and the Weather widget's Edit Location popover, one radius for the role (ADR-0039 rule 2; design review of ADR-0045, M2); no capture of either in design/reference yet, F1 pending [ref: docs/specs/clipboard.md § Emoji & Symbols; docs/specs/widgets.md]
+    readonly property int radiusPopover: 18
     // a Settings group, its rows' rings and the boxes that sit with the groups (banners, the hero, a sheet's list well): macOS 27 measures 11.9 at the 45-degree point (Desktop & Dock's groups, 512 Pixels release capture); its own role, no longer the menus' radius (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
     readonly property int radiusGroup: 12
     // a cover art's corner in Now Playing (Control Center's module and the widget): macOS 27's Control Center measures 10.2 at the 45-degree point on its 40-pt artwork; the widget's is concentric with its tile (widget.radius 26 less its 16 padding); was radius.control 6 (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
@@ -1142,8 +1144,6 @@ QtObject {
     readonly property int emojiPadding: 10
     // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the popover's height; its width is the columns of cells plus the padding (344) [ref: docs/specs/clipboard.md § Emoji & Symbols]
     readonly property int emojiHeight: 380
-    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the popover's corner, rounder than a menu's 12 as macOS 26/27 popovers are; the blur region takes it (PopupKinds.blurCorner) [ref: docs/specs/clipboard.md § Emoji & Symbols]
-    readonly property int emojiRadius: 18
     // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the pitch of the glyph grid, rows and columns [ref: docs/specs/clipboard.md § Emoji & Symbols]
     readonly property int emojiCellSize: 36
     // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): an emoji's size in its cell [ref: docs/specs/clipboard.md § Emoji & Symbols]

@@ -102,7 +102,7 @@ FocusScope {
     Material {
         anchors.fill: parent
         glassClass: "menu"
-        radius: Tokens.emojiRadius
+        radius: Tokens.radiusPopover
     }
 
     SearchField {

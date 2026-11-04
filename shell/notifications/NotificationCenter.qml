@@ -705,7 +705,7 @@ Variants {
                     sourceComponent: LocationEditor {
                         onClosed: panelItem.closeWidgetMenu()
                         Component.onCompleted: {
-                            hostItem.addSurface(surface, false, Tokens.radiusMenu, null);
+                            hostItem.addSurface(surface, false, Tokens.radiusPopover, null);
                             forceActiveFocus();
                         }
                     }

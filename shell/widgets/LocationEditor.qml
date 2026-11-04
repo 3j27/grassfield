@@ -7,7 +7,7 @@ import Grassfield.Ui
 // empty field means, Cancel and Done. Return or Done saves it through WeatherSampler.setLocation (Omarchy's own
 // `omarchy-weather-location --set <name>`, `--clear` when empty: back to the place wttr.in finds from the IP address); Esc,
 // Cancel or a click outside (the host's) closes without saving. The host places it, gives it the keyboard and a blur region
-// of its shape (`surface`, Tokens.radiusMenu), as for the widget menu.
+// of its shape (`surface`, Tokens.radiusPopover: a popover's corner, as the Emoji & Symbols popover's).
 FocusScope {
     id: root
 
@@ -30,7 +30,7 @@ FocusScope {
         id: glass
         glassClass: "menu"
         anchors.fill: parent
-        radius: Tokens.radiusMenu
+        radius: Tokens.radiusPopover
     }
 
     // Clicks on the popover stay on it.

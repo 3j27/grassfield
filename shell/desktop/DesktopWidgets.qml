@@ -352,7 +352,8 @@ Variants {
             Region {
                 id: menuBlur
                 item: menuLoader
-                radius: Tokens.radiusMenu
+                // The widget menu's corner, or Edit Location…'s, a popover (radius.popover).
+                radius: scope.editEntry !== null ? Tokens.radiusPopover : Tokens.radiusMenu
             }
 
             Region {

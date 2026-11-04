@@ -25,14 +25,14 @@ function noticeSymbol(symbol) {
 
 // The corner of the Overlay's blur region behind a popup of `kind` (ADR-0039 step 4, G2): a dialog's own (`dialogCorner`,
 // radius.alert or radius.sheet, read from the loaded Dialog; a menu's while it is not loaded), Now Playing's tile, the Emoji &
-// Symbols popover's own (emoji.radius, ADR-0045 OC-3), a menu's for the rest.
+// Symbols popover's (radius.popover, the popovers' role: ADR-0045 OC-3, ADR-0039 rule 2), a menu's for the rest.
 function blurCorner(kind, dialogCorner, tokens) {
     if (dialogs.indexOf(kind) >= 0 && typeof dialogCorner === "number")
         return dialogCorner;
     if (kind === "nowplaying")
         return tokens.quicksettingsRadiusTile;
     if (kind === "emoji")
-        return tokens.emojiRadius;
+        return tokens.radiusPopover;
     return tokens.radiusMenu;
 }
 
