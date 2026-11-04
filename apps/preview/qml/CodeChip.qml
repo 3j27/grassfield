@@ -50,6 +50,7 @@ Item {
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyBodySize
+            font.letterSpacing: Appearance.tracking(Tokens.typographyBodySize)
         }
 
         // Concentric with the capsule: a push button (24 tall, a capsule) inset by the same amount at its end.
