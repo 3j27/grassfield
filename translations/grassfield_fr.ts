@@ -7713,10 +7713,6 @@
         <translation>Apparence</translation>
     </message>
     <message>
-        <source>dark light theme transparency material motion icons tint</source>
-        <translation>sombre clair thème transparence matière animation apparence icônes teinte</translation>
-    </message>
-    <message>
         <source>Wallpaper</source>
         <translation>Fond d’écran</translation>
     </message>
@@ -7803,6 +7799,10 @@
     <message>
         <source>vision physical motor zoom display motion keyboard</source>
         <translation>vue physique motricité zoom affichage mouvement clavier</translation>
+    </message>
+    <message>
+        <source>dark light theme transparency material motion icons tint terminal</source>
+        <translation>sombre clair thème transparence matière animation apparence icônes teinte terminal développement</translation>
     </message>
     <message>
         <source>dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins</source>
