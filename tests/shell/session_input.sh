@@ -148,7 +148,7 @@ elseif case == "keyboard-file" then
   local f = io.open(d .. "/cfg/keyboard.lua", "w")
   f:write('return { repeat_rate = 15, repeat_delay = 600, kb_layout = "us,fr", kb_variant = ",bepo", numlock_by_default = false }\n'); f:close()
   f = io.open(d .. "/home/.config/hypr/input.lua", "w"); f:write('hl.config({ input = { repeat_delay = 333 } })\n'); f:close()
-  dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
+  local m = dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
   say("keyboard rate", tostring(flat("repeat_rate")), "delay-user-wins", tostring(flat("repeat_delay")), "layout", tostring(flat("kb_layout")),
       "variant", tostring(flat("kb_variant")), "options", tostring(flat("kb_options")), "numlock", tostring(flat("numlock_by_default")))
   local gi = dofile(repo .. "/config/hypr/grassfield/input.lua")
@@ -313,8 +313,8 @@ check grep -q "^broken 0 true$" <<<"$out"
 check grep -q "^missing 0 true two_finger$" <<<"$out"
 
 out=$(run keyboard-file GRASSFIELD_CONFIG_HOME="$tmp/keyboard-file/cfg" OMARCHY_PATH="$tmp/keyboard-file/omarchy")
-desc="Settings > Keyboard: its file applies after Omarchy (rate 15, two layouts with Ctrl+Space), the user's input.lua still wins (delay 333), numlock is never set"
-check grep -q "^keyboard rate 15 delay-user-wins 333 layout us,fr variant ,bepo options compose:caps,shift:both_capslock_cancel,grp:ctrl_space_toggle numlock nil$" <<<"$out"
+desc="Settings > Keyboard: its file applies after Omarchy (rate 15, two layouts, the options stay Omarchy's), the user's input.lua still wins (delay 333), numlock is never set"
+check grep -q "^keyboard rate 15 delay-user-wins 333 layout us,fr variant ,bepo options compose:caps numlock nil$" <<<"$out"
 desc="Settings > Keyboard: one layout gets no switch and an empty variant; 0 turns repeat off"
 check grep -q "^one-layout 0 de \[\] nil$" <<<"$out"
 desc="Settings > Keyboard: mistyped or out-of-range entries, more than four layouts and a bad variant are left out"
@@ -328,7 +328,7 @@ desc="Settings > Keyboard: the file as Settings writes it"
 check grep -q "^generated 15 600 us,fr \[,bepo\]$" <<<"$out"
 check grep -q "^missing nil$" <<<"$out"
 desc="Settings > Keyboard: a Latin layout always leads (U.S. before a lone non-Latin one, else the first Latin one moves first, at most four)"
-check grep -q "^non-latin-alone us,ru \[,\] compose:caps,shift:both_capslock_cancel,grp:ctrl_space_toggle$" <<<"$out"
+check grep -q "^non-latin-alone us,ru \[,\] nil$" <<<"$out"
 check grep -q "^latin-moves-first fr,ru \[bepo,phonetic\]$" <<<"$out"
 check grep -q "^four-non-latin us,ru,ua,by \[,,,\]$" <<<"$out"
 check grep -q "^latin-kept de,ru \[,\]$" <<<"$out"

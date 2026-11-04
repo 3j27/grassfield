@@ -314,6 +314,9 @@ Scope {
             // Screen sharing (ADR-0035 D-6, step 7b): while an app shares the screen through the portal (xdph's streams). Never
             // optional: a privacy indicator does not give way when the status area is crowded.
             readonly property bool showScreenShare: SharePicker.sharing
+            // The Input menu (macOS: shown as soon as there are two input sources, Settings > Keyboard > Input Sources can hide
+            // it): the source in use, FR or US.
+            readonly property bool showInput: InputSource.available && Settings.keyboardShowInputMenu
             // Crowding (macOS: status items that would collide with the menus are hidden): the status area gets the width
             // between the application menus and the right inset; optional items (third-party, Now Playing, Search) give way
             // leftmost first, never the system items, Quick Settings or the clock (StatusLogic.hiddenItems). Implicit widths
@@ -364,7 +367,7 @@ Scope {
                     list.push({key: "nowplaying", width: statusIconWidth, optional: true});
                 if (showScreenShare)
                     list.push({key: "screenshare", width: statusIconWidth, optional: false});
-                list.push({key: "system", width: (showFocus ? dndButton.implicitWidth : 0) + (Settings.menubarShowWifi ? networkButton.implicitWidth : 0) + (Settings.menubarShowSound ? volumeButton.implicitWidth : 0) + (showBattery ? batteryButton.implicitWidth : 0), optional: false});
+                list.push({key: "system", width: (showFocus ? dndButton.implicitWidth : 0) + (showInput ? inputButton.implicitWidth : 0) + (Settings.menubarShowWifi ? networkButton.implicitWidth : 0) + (Settings.menubarShowSound ? volumeButton.implicitWidth : 0) + (showBattery ? batteryButton.implicitWidth : 0), optional: false});
                 if (Settings.menubarShowSearch)
                     list.push({key: "search", width: statusIconWidth, optional: true});
                 list.push({key: "core", width: ccButton.implicitWidth + clockPadding + clockWidth, optional: false});
@@ -471,6 +474,12 @@ Scope {
                     Qt.callLater(Popups.close);
             }
 
+            // The input sources went down to one (Settings, or the keyboard list changed): the open Input menu would list one.
+            onShowInputChanged: {
+                if (!showInput && isOpen("input"))
+                    Qt.callLater(Popups.close);
+            }
+
             // The last share ended: its open menu would list nothing.
             onShowScreenShareChanged: {
                 if (!showScreenShare && isOpen("screenshare"))
@@ -483,7 +492,7 @@ Scope {
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
-            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying", "screenshare"]
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying", "screenshare", "input"]
             readonly property bool tracking: Popups.active && Popups.screenName === (win.screen ? win.screen.name : "") && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
@@ -587,7 +596,7 @@ Scope {
             function openFirstStatus(): void {
                 const all = win.navEntries();
                 for (let i = 0; i < all.length; i++) {
-                    if (["network", "volume", "battery", "controlcenter", "nowplaying", "screenshare", "tray"].indexOf(all[i].kind) >= 0) {
+                    if (["input", "network", "volume", "battery", "controlcenter", "nowplaying", "screenshare", "tray"].indexOf(all[i].kind) >= 0) {
                         win.openEntry(all[i]);
                         return;
                     }
@@ -785,6 +794,10 @@ Scope {
                 case "screenshare":
                     if (win.showScreenShare)
                         openFor("screenshare", screenShareButton, "right", {});
+                    break;
+                case "input":
+                    if (win.showInput)
+                        openFor("input", inputButton, "right", {});
                     break;
                 }
             }
@@ -1193,6 +1206,32 @@ Scope {
                                 heavy: true
                                 color: win.barText
                                 name: "moon"
+                            }
+                        }
+
+                        // Input menu: the input source in use; its menu lists the sources and Open Keyboard Settings….
+                        BarButton {
+                            id: inputButton
+                            menuKind: "input"
+                            objectName: "menubar-input"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: win.showInput
+                            accessibleName: qsTr("Input source: %1").arg(InputSource.shortLabel)
+                            active: win.isOpen("input")
+                            onActivated: win.popup("input")
+                            opensMenu: true
+                            onEntered: win.hoverSwitch("input")
+
+                            Text {
+                                textFormat: Text.PlainText
+                                text: InputSource.shortLabel
+                                color: win.barText
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyMenuSize
+                                font.weight: Tokens.typographyMenuWeight
                             }
                         }
 

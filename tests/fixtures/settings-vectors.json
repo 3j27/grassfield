@@ -96,6 +96,8 @@
     {"name": "shortcut style mac", "path": "keyboard.shortcutStyle", "stored": "mac", "read": "mac", "valid": true},
     {"name": "shortcut style unknown is the default", "path": "keyboard.shortcutStyle", "stored": "windows", "default": true, "valid": false},
     {"name": "shortcut style of the wrong type is the default", "path": "keyboard.shortcutStyle", "stored": 1, "default": true, "valid": false},
+    {"name": "input menu off", "path": "keyboard.showInputMenu", "stored": false, "read": false, "valid": true},
+    {"name": "input menu of the wrong type is the default", "path": "keyboard.showInputMenu", "stored": "no", "default": true, "valid": false},
     {"name": "formats locale", "path": "region.formats", "stored": "fr_CH", "read": "fr_CH", "valid": true},
     {"name": "formats locale with a script", "path": "region.formats", "stored": "sr_Latn_RS", "read": "sr_Latn_RS", "valid": true},
     {"name": "formats with an encoding is the default", "path": "region.formats", "stored": "fr_CH.UTF-8", "default": true, "valid": false},

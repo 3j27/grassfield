@@ -5,7 +5,7 @@
 // Unit-tested in tests/unit/tst_popupkinds.qml, which also holds this list to the Overlay's.
 
 const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "nowplaying", "volume", "network", "battery",
-    "controlcenter", "dock", "dockstack", "forcequit", "confirm", "appabout", "notice", "tiling", "tilingSuggest", "sharePicker", "screenshare"];
+    "controlcenter", "dock", "dockstack", "forcequit", "confirm", "appabout", "notice", "tiling", "tilingSuggest", "sharePicker", "screenshare", "input"];
 
 function known(kind) {
     return kinds.indexOf(kind) >= 0;

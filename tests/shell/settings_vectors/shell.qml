@@ -100,6 +100,7 @@ ShellRoot {
             "accent.color": "accentColor",
             "accent.highlight": "accentHighlight",
             "keyboard.shortcutStyle": "keyboardShortcutStyle",
+            "keyboard.showInputMenu": "keyboardShowInputMenu",
             "region.formats": "regionFormats",
             "region.firstDayOfWeek": "regionFirstDayOfWeek",
             "icons.mode": "iconMode",

@@ -48,7 +48,7 @@ TestCase {
     function test_whichSurfacesKeepTheLook() {
         const keeps = (holders, kind) => KeyWindowFile.keepsLook(holders, kind, PopupKinds.kinds, PopupKinds.dialogs);
         for (const kind of ["app", "appfile", "appwindow", "appbridge", "system", "tray", "controlcenter", "volume", "network",
-                            "battery", "nowplaying", "dock", "dockstack", "tiling", "tilingSuggest", "screenshare"])
+                            "battery", "nowplaying", "dock", "dockstack", "tiling", "tilingSuggest", "screenshare", "input"])
             verify(keeps(["popup"], kind), kind);
         for (const kind of PopupKinds.dialogs)
             verify(!keeps(["popup"], kind), kind + ": a window of its own");

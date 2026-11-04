@@ -657,6 +657,11 @@
           ],
           "description": "How menus show keyboard shortcuts: \"mac\" with the macOS symbols (\u2303 \u2325 \u21e7 \u2318, \u2318 for Super), \"pc\" as text (Ctrl+Shift+Q). \"automatic\" (default) picks mac on Apple hardware (firmware vendor \"Apple Inc.\") or with an Apple keyboard attached, pc otherwise (owner decision 2026-10-26, ADR-0024).",
           "default": "automatic"
+        },
+        "showInputMenu": {
+          "type": "boolean",
+          "description": "Show the Input menu (the input source in use, FR or US) in the menu bar (Settings > Keyboard > Input Sources). The menu only exists with two input sources or more, as on macOS, where it is on by default from two. Default true.",
+          "default": true
         }
       }
     },
