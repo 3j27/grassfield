@@ -569,7 +569,7 @@ answer reaches the application and the frontend's permission store keeps "yes" o
   frame at the top left, the title in bold, the message under it, capsule buttons of one width); moving the shell's Dialog into
   the library would change the shell's alerts in a portal step (a later step that needs the alert in a third process does that,
   with its review). A window of its own, opaque like the panels and every application window (ADR-0002), with every window's
-  radius (20, ADR-0024 C-1: a window rule cannot go past `decoration.rounding`, so the shell's 24 is not available to a window;
+  radius (20 then, 17 since ADR-0024's note of 2026-11-04, C-1: a window rule cannot go past `decoration.rounding`, so the shell's 24 is not available to a window;
   `Hyprland --verify-config` refuses it); the application's icon from its desktop entry, the frontend's symbolic icon for an
   application it cannot name, drawn in the text colour (its theme's grey was 1.2:1 on the dark window; A2 asserts 3:1). Two
   buttons that do not fit side by side (French: "Ne pas autoriser" and "Autoriser") stack at the row's width, the default button

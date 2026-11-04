@@ -10,9 +10,10 @@
 #   1 foot A (a third-party window), active, pointer away: the three lights at their centres (+-0.75 px), 14 px across
 #     (+-1), no glyph; the bar GF_TB_HEIGHT rows tall, its last row the one-point hairline in the rule's colour (titlebar.rule*
 #     over the bar, ADR-0039 step 21), flush with the window's left edge and the surface (no gap); its
-#     top corners rounded like the window, radius 20 (ADR-0024: one radius for every window; inset of the first fill pixels
-#     on the corner's diagonal 5-7 px; a square corner gives 0-1; measured on Hyprland 0.56.2: 4 at radius 12, 8 at radius
-#     26, so about 6 at 20); the lights coloured; bar and
+#     top corners rounded like the window, decoration.rounding (17, ADR-0024 C-1: one radius for every window; the inset of
+#     the first fill pixels on the corner's diagonal within 1 px of the drawn corner's 45-degree point, int(rounding x
+#     rounding_power / 2 x scale) x (1 - 2^(-1/power)): 5 at 17, scale 1; a square corner gives 0-1; measured on Hyprland
+#     0.56.2: 4 at rounding 12, 6 at 20, 8 at 26); the lights coloured; bar and
 #     content join square (no pixel of the content's cut top corners differs from the content next to them)
 #   2 pointer in the gap between A's close and minimize lights (no light under the cursor image): glyphs on all three
 #     lights (the whole group, macOS); pointer away again: no glyph
@@ -25,7 +26,7 @@
 #     chrome (ADR-0015, tag grassfield-client-chrome): no plugin bar above it (0 rows of the bar colour), its own lights at
 #     their own geometry (centres 26 px from the surface's top-left, 23 px apart, 14 px across, coloured while active)
 #     and glyphs on all three while the pointer is between two of them (macOS); the window's corner radius as before;
-#     radius 20 (the global default; corner inset 5-7 px), square join, glyphs with the pointer between its minimize
+#     decoration.rounding (the global default; the same corner inset), square join, glyphs with the pointer between its minimize
 #     and zoom lights
 # Without grassfield-compositor (C2: nested-up.sh --no-plugin, or scripts/nestctl plugin unload): no titlebar; only the
 # radii are measured, at the surface's own corners (the Lua config alone sets them).
@@ -89,6 +90,15 @@ if ((plugin)); then
   done
 fi
 rim_px() { if ((plugin)) && [[ $look == dark ]]; then echo 1; else echo 0; fi; }
+# The window's corner (config/hypr/grassfield/looknfeel.lua): Hyprland 0.56.2 draws CWindow::rounding() = rounding x
+# rounding_power / 2 pt, cut to whole device pixels (scale 1 here), as a superellipse whose 45-degree point lies
+# radius x (1 - 2^(-1/power)) from both edges. The first fill pixel on the diagonal is expected within 1 px of it.
+lnf=$root/config/hypr/grassfield/looknfeel.lua
+rounding=$(sed -n 's/^    rounding = \([0-9.]*\),.*/\1/p' "$lnf" | head -n 1)
+rounding_power=$(sed -n 's/^    rounding_power = \([0-9.]*\),.*/\1/p' "$lnf" | head -n 1)
+[[ -n $rounding && -n $rounding_power ]] || { echo "chrome: rounding not found in $lnf" >&2; exit 2; }
+corner_at=$(awk -v r="$rounding" -v p="$rounding_power" 'BEGIN { printf "%d", int(r * p / 2) * (1 - 2 ^ (-1 / p)) + 0.5 }')
+corner_lo=$((corner_at - 1)) corner_hi=$((corner_at + 1))
 set_appearance() { # <dark|light>: rewrite the dev settings file, wait for the shell's push to the plugin
   local base=$root/config/defaults/grassfield.json n
   look=$1
@@ -290,7 +300,7 @@ if ((plugin)); then
   check_bar "A"
   check_junction "A"
 fi
-check_corner "A (third-party)" 5 7 20
+check_corner "A (third-party)" "$corner_lo" "$corner_hi" "$rounding"
 
 if ((plugin)); then
   # 2 hover in the gap between A's close and minimize lights (the cursor image covers no light)
@@ -391,7 +401,7 @@ if [[ -x $settings ]]; then
     # The corner on the app's own top edge (its toolbar colour, measured with no plugin bar): the measurement above looks
     # for the plugin bar, absent by design here, and finds no corner (integrator run 2026-10-24: diagonal inset -1).
     measure_app settings "$sx" "$sy" "$sw"
-    check_corner "Settings (org.grassfield.*)" 5 7 20
+    check_corner "Settings (org.grassfield.*)" "$corner_lo" "$corner_hi" "$rounding"
     check_app_lights "Settings (its own lights)" "$sx" "$sy"
     check_grey "Settings (active): its own lights coloured" 1
     # Between the minimize and zoom lights. The app draws the glyphs itself, from the pointer events it gets: up to three

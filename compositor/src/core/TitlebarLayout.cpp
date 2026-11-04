@@ -236,6 +236,15 @@ namespace gf::titlebar {
         return CornerPatch{.valid = true, .left = left, .right = right};
     }
 
+    int windowCornerPx(float rounding, float scale) {
+        // Hyprland's float product, then the int conversion it does (toward zero); bounded so the conversion is defined.
+        constexpr float MAX_PX = 1048576.F; // 2^20 device pixels, far past any output
+        const float     px     = rounding * scale;
+        if (!(px > 0.F)) // also NaN
+            return 0;
+        return static_cast<int>(std::min(px, MAX_PX));
+    }
+
     double maxTitleWidth(double barWidth, const Metrics& m) {
         // Symmetric margins keep the title centered on the whole bar, like the reference layout.
         const double margin = buttonsRightEdge(m) + m.titlePadding;

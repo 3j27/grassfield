@@ -4,6 +4,7 @@
 // (/usr/include/hyprland/src/render/shaders/border.glsl.inc and rounding.glsl.inc, the border as renderBorder sets it up):
 // a geometry change that breaks the rim on the corner arcs, or lets it out of the window's shape, fails here.
 
+#include "core/TitlebarLayout.hpp"
 #include "core/WindowRim.hpp"
 
 #include <gtest/gtest.h>
@@ -24,9 +25,9 @@ namespace {
     using gf::rim::Ring;
 
     constexpr double kPower = 2.6; // decoration.rounding_power (config/hypr/grassfield/looknfeel.lua)
-    // The window's radius as Hyprland 0.56.2 draws it: CWindow::rounding() is decoration.rounding (20) x rounding_power / 2
-    // ("perceived roundness", read from the binary), 26 pt; the plugin reads it from the window (w->rounding()).
-    constexpr double kRounding = 20.0 * kPower / 2.0;
+    // The window's radius as Hyprland 0.56.2 draws it: CWindow::rounding() is decoration.rounding (17) x rounding_power / 2
+    // ("perceived roundness", read from the binary), 22.1 pt; the plugin reads it from the window (w->rounding()).
+    constexpr float kRounding = 17.F * static_cast<float>(kPower) / 2.F;
     constexpr std::array<float, 4> kScales{1.F, 1.25F, 1.5F, 2.F};
 
     // rounding.glsl: SMOOTHING_CONSTANT and GLSL's smoothstep(0, 1, x).
@@ -39,9 +40,10 @@ namespace {
         return std::pow(std::pow(std::max(x, 0.0), kPower) + std::pow(std::max(y, 0.0), kPower), 1.0 / kPower);
     }
 
-    // The window's rounding radius in device pixels as Hyprland gives it to its shaders (an int: rounding * scale).
+    // The window's rounding radius in device pixels as Hyprland gives it to its shaders (an int: rounding * scale, cut), as
+    // the plugin computes it (core/TitlebarLayout.hpp).
     int roundingPx(float scale) {
-        return static_cast<int>(kRounding * scale);
+        return gf::titlebar::windowCornerPx(kRounding, scale);
     }
 
     // border.glsl getBorder(): the ring's coverage at the device pixel (ix, iy), its centre at (ix + 0.5, iy + 0.5), for the
@@ -273,16 +275,16 @@ TEST(WindowRim, TheRingIsTheFramesFirstDevicePixelsWithTheWindowsCorner) {
         EXPECT_DOUBLE_EQ(r.inner.y - t, frame.y);
         EXPECT_DOUBLE_EQ(r.inner.w + (2.0 * t), frame.w);
         EXPECT_DOUBLE_EQ(r.inner.h + (2.0 * t), frame.h);
-        EXPECT_EQ(r.outerRound, roundingPx(s)) << "the outer arc is the window's corner (26 pt: rounding 20 at power 2.6)";
+        EXPECT_EQ(r.outerRound, roundingPx(s)) << "the outer arc is the window's corner (22.1 pt: rounding 17 at power 2.6)";
         EXPECT_EQ(r.round + t, r.outerRound) << "the inner arc is concentric";
     }
-    // At 1.25: 32 px corners (32.5 cut to an int, as Hyprland does), one device pixel; at 2: 52 px, two.
+    // At 1.25: 27 px corners (27.6 cut to an int, as Hyprland does), one device pixel; at 2: 44 px, two.
     const Ring a = gf::rim::ring(gf::rim::snap(kSurface, 1.25), roundingPx(1.25F), 1, 1.25F);
-    EXPECT_EQ(a.outerRound, 32);
-    EXPECT_EQ(a.round, 31);
+    EXPECT_EQ(a.outerRound, 27);
+    EXPECT_EQ(a.round, 26);
     const Ring b = gf::rim::ring(gf::rim::snap(kSurface, 2), roundingPx(2.F), 1, 2.F);
-    EXPECT_EQ(b.outerRound, 52);
-    EXPECT_EQ(b.round, 50);
+    EXPECT_EQ(b.outerRound, 44);
+    EXPECT_EQ(b.round, 42);
 }
 
 TEST(WindowRim, ASquareWindowGetsASquareRing) {
@@ -354,7 +356,7 @@ TEST(WindowRim, ItNeverLeavesTheWindowsRoundedShape) {
 }
 
 TEST(WindowRim, ItIsContinuousRoundTheCornerArcsAtTheWindowsRounding) {
-    // macOS 27 keeps the rim continuous round the 20-pt corners; Hyprland's inner glow faded there (34 or less against 62 on
+    // macOS 27 keeps the rim continuous round the window's corners; Hyprland's inner glow faded there (34 or less against 62 on
     // the straight edges, ADR-0024 note 2026-11-03). The ring's light per unit of arc length, in 10-degree sectors of the
     // top-left corner (the corner's centre at the radius from both sides), against the straight sides' (the width): within
     // 25 % in every sector, at every scale.

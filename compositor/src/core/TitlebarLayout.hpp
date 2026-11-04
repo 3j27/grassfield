@@ -109,6 +109,17 @@ namespace gf::titlebar {
     // the texture (the mapping would be a guess).
     CornerPatch contentCornerPatch(const Rect& bar, double rounding, const Rect& texture);
 
+    // ---- The window's corner in device pixels ----
+    // Hyprland 0.56.2 hands its shaders the window's corner radius as an int: CWindow::rounding() (decoration.rounding x
+    // rounding_power / 2, in points) times the output's scale, cut toward zero (the surface pass's `rounding` and the
+    // border's `round` are ints). Measured on GF-REF at 1.25: rounding 16, 17, 18 and 20 give 26, 27, 29 and 32 px corners
+    // (20.8 x 1.25 = 26, 22.1 x 1.25 = 27.6, 23.4 x 1.25 = 29.25, 26 x 1.25 = 32.5). Whatever the plugin draws on the
+    // window's corner (the bar's top corners, the dark rim, the tiling preview) takes this same radius, so its arc lies on
+    // the surface's and the border's: a radius rounded to the nearest pixel instead (33 for 32.5) gave the bar's corner a
+    // radius one device pixel larger than the edge round it. `rounding` and `scale` are the floats Hyprland multiplies; 0
+    // for no rounding, a negative product or NaN; at most 2^20.
+    int windowCornerPx(float rounding, float scale);
+
     struct TitlePlacement {
         bool   visible  = false;
         double x        = 0; // left edge of the text

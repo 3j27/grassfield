@@ -56,8 +56,14 @@ if grep -v "^ *--" "$rules" | grep 'suppress_event = "maximize"' | grep -v 'gf-n
 else
   check "S2: no other rule touches the maximize suppression" 0
 fi
-grep -q 'name = "gf-client-chrome-info-rounding".*xdg_tag = "^info\$".*rounding = 20' "$rules"
-check "windows of role info get the one window radius 20 (S3, ADR-0024)" $?
+# One radius for every window (ADR-0024 C-1): the info windows' rule and the third-party rule set decoration.rounding's.
+radius=$(sed -n 's/^    rounding = \([0-9][0-9]*\),.*/\1/p' "$root/config/hypr/grassfield/looknfeel.lua" | head -n 1)
+[[ -n $radius ]]
+check "decoration.rounding is set (${radius:-none})" $?
+grep -q "name = \"gf-client-chrome-info-rounding\".*xdg_tag = \"^info\\\$\".*rounding = $radius })" "$rules"
+check "windows of role info get the one window radius ${radius:-?} (S3, ADR-0024)" $?
+grep -q "name = \"gf-third-party-rounding\".*rounding = $radius })" "$rules"
+check "third-party windows get the one window radius ${radius:-?} (ADR-0024 C-1)" $?
 if grep -v "^ *--" "$rules" | grep "decorate *= *false" | grep -v "gf-glance" | grep -q .; then
   check "no rule but Glance's uses decorate = false (it drops the border and the shadow)" 1
 else

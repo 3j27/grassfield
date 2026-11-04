@@ -230,7 +230,8 @@ TestCase {
         compare(at.x, inset, "inset from the window's left edge");
         compare(at.y, inset, "inset from the window's top edge: the panel runs the window's full height");
         compare(at.y + fill.height, viewer.contentItem.height - inset, "inset from the window's bottom edge");
-        compare(fill.radius, Tokens.windowSidebarPanelRadius, "rounded as the panel token says");
+        compare(fill.radius, Math.round(Tokens.windowSidebarPanelRadius * fill.pixelRatio) / fill.pixelRatio,
+                "rounded as the panel token says, on whole device pixels");
         viewer.sidebarOpen = false;
     }
 
@@ -359,11 +360,17 @@ TestCase {
     }
 
     // The tokens behind every app's floating sidebar panel, measured on the macOS 26 System Settings capture (2 px/pt): an
-    // 8-pt inset, an 18-pt corner concentric with the 26-pt window corner, and a calm fill 6 levels under the window.
+    // 8-pt inset and a calm fill 6 levels under the window; the corner concentric with the window's (ADR-0024 note
+    // 2026-11-04: Hyprland's rounding 17 at power 2.6 measures 16.7 pt circle-equivalent at 45 degrees), 16.7 less the inset.
     function test_theSidebarPanelTokens() {
+        const windowCorner = 16.7;
         compare(Tokens.windowSidebarPanelInset, 8);
-        compare(Tokens.windowSidebarPanelRadius, 18);
-        compare(Tokens.windowSidebarPanelRadius, 26 - Tokens.windowSidebarPanelInset, "concentric with the window corner");
+        fuzzyCompare(Tokens.windowSidebarPanelRadius, 8.7, 1e-9);
+        fuzzyCompare(Tokens.windowSidebarPanelRadius, windowCorner - Tokens.windowSidebarPanelInset, 1e-9,
+                     "concentric with the window corner");
+        // On whole device pixels at the owner's 1.25: 11 px, within half a device pixel of the concentric 10.875.
+        compare(Math.round(Tokens.windowSidebarPanelRadius * 1.25), 11);
+        verify(Math.abs(11 - (windowCorner - Tokens.windowSidebarPanelInset) * 1.25) <= 0.5, "parallel to the window's curve at 1.25");
         // The rim is 1 pt and the shadow soft and light, as measured (ss-004-005): 242 at the edge on a 252 ground.
         compare(Tokens.windowSidebarPanelRimWidth, 1);
         compare(Tokens.windowSidebarPanelShadowBlur, 12);
