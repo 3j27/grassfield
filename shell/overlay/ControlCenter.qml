@@ -6,6 +6,7 @@ import qs.platform
 import qs.services
 import qs.overlay.controlcenter
 import "controlcenter/Model.js" as Model
+import "../services/BrightnessLogic.js" as BrightnessLogic
 
 // Quick Settings (spec controlcenter.md; internal name Control Center): floating glass modules on a
 // 4-column grid, the macOS model. Every module is its own frosted surface (no shared panel): the
@@ -23,6 +24,9 @@ FocusScope {
     property bool devNote: false
     // Text of the note capsule: "dev: not applied" for the dev guard, or why Airplane Mode used its fallback.
     property string noteText: qsTr("dev: not applied")
+    // What the Display slider drives (ADR-0045 OC-4; macOS Control Center's Display is the built-in display's, else the main
+    // display's): the backlight, else the main display when it answers DDC/CI ({kind: "ddc", output}), else nothing (hidden).
+    readonly property var brightnessTarget: BrightnessLogic.sliderTarget(Brightness.outputNames, Brightness.available, Brightness.ddc, MainDisplay.screenName)
 
     readonly property real cell: Tokens.quicksettingsCell
     readonly property real gap: Tokens.quicksettingsGap
@@ -318,7 +322,7 @@ FocusScope {
 
             Module {
                 id: display
-                visible: Brightness.available
+                visible: root.brightnessTarget.kind !== "none"
                 cols: 4
                 radius: Tokens.quicksettingsRadiusSlider
                 height: Tokens.quicksettingsSliderModuleHeight
@@ -372,10 +376,13 @@ FocusScope {
                         width: parent.width - displayIcon.width - displayIconMax.width - 2 * parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         accessibleName: qsTr("Display brightness")
-                        value: Brightness.level
+                        value: root.brightnessTarget.kind === "ddc" ? Math.max(0, Brightness.outputLevel(root.brightnessTarget.output)) : Brightness.level
                         onMoved: v => {
+                            // An external display takes the last value of a drag (one DDC/CI command at a time).
+                            const target = root.brightnessTarget;
+                            const taken = target.kind === "ddc" ? Brightness.setOutputLevel(target.output, v) : Brightness.setLevel(v);
                             // A refused change (dev guard, no device) snaps the slider back to the real value.
-                            if (!Brightness.setLevel(v)) {
+                            if (!taken) {
                                 displaySlider.reset();
                                 if (Brightness.devSession)
                                     root.showDevNote();

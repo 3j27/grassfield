@@ -6,6 +6,7 @@ import Quickshell.Io
 import Grassfield.Ui
 import qs.platform
 import qs.services
+import "../services/BrightnessLogic.js" as BrightnessLogic
 
 // On-screen display state (volume, brightness, keyboard backlight and input source). Spec: docs/specs/osd.md.
 //
@@ -20,6 +21,11 @@ Singleton {
     property bool shown: false
     // kind "inputsource": the name of the keyboard layout now active (macOS input source HUD): the pill shows it instead of a bar.
     property string label: ""
+    // The output whose brightness the pill shows ("" for the active display): a brightness change shows on the display that
+    // changed (ADR-0045 OC-4), everything else on the active display.
+    property string output: ""
+    // Where the pill shows: `output` while it is connected, else the active display (Compositor.activeScreenName).
+    readonly property string screenName: root.output !== "" && Quickshell.screens.some(s => s.name === root.output) ? root.output : Compositor.activeScreenName
 
     readonly property string iconName: kind === "keyboard" || kind === "inputsource" ? "keyboard" : kind === "brightness" ? "sun" : (muted || level <= 0 ? "volume-mute" : level < 0.34 ? "volume-1" : level < 0.67 ? "volume-2" : "volume-3")
 
@@ -35,11 +41,24 @@ Singleton {
         // NaN or infinite levels (bad IPC input, sensor glitch) are ignored; the rest is clamped.
         if (!isFinite(osdLevel))
             return;
+        showOn("", osdKind, osdLevel, osdMuted);
+    }
+
+    // The same on display `name` ("" for the active display), set before the pill shows so it never shows elsewhere first.
+    function showOn(name: string, osdKind: string, osdLevel: real, osdMuted: bool): void {
+        if (!isFinite(osdLevel))
+            return;
+        output = name;
         kind = osdKind === "brightness" || osdKind === "keyboard" ? osdKind : "volume";
         level = Math.max(0, Math.min(1, osdLevel));
         muted = osdMuted;
         shown = true;
         hideTimer.restart();
+    }
+
+    // A display's brightness, on that display (`name`; "" for the active display).
+    function showBrightnessOf(name: string, osdLevel: real): void {
+        showOn(name, "brightness", osdLevel, false);
     }
 
     // The layout changed (InputSource: only a real change of a keyboard that had another layout, so nothing with a single layout).
@@ -50,6 +69,7 @@ Singleton {
         label = name;
         level = 0;
         muted = false;
+        output = "";
         shown = true;
         hideTimer.restart();
     }
@@ -59,9 +79,10 @@ Singleton {
             showValue("volume", Audio.volume, Audio.muted);
     }
 
+    // The backlight's level, on the built-in display (the active display when none is connected: an all-in-one's panel).
     function showBrightness(): void {
         if (Brightness.available)
-            showValue("brightness", Brightness.level, false);
+            showBrightnessOf(BrightnessLogic.builtIn(Quickshell.screens.map(s => s.name)), Brightness.level);
     }
 
     function showKeyboard(): void {
@@ -95,13 +116,23 @@ Singleton {
         Audio.keyStep(direction);
     }
 
+    // The brightness keys act on the active display (ADR-0045 OC-4, BrightnessLogic.keyTarget): an external display that
+    // answers DDC/CI steps by 5 points through Omarchy's command, the built-in panel (or a display that cannot be changed, which
+    // leaves the keys to the built-in panel as macOS does) through the backlight; the OSD shows that display's level on it.
     function brightnessStep(direction: string): void {
-        if (!Brightness.available) {
-            console.info("osd: no backlight device; brightness", direction, "ignored");
-            return;
-        }
         if (direction !== "up" && direction !== "down") {
             console.warn("osd: unknown brightness command", direction);
+            return;
+        }
+        const target = BrightnessLogic.keyTarget(Compositor.activeScreenName, Quickshell.screens.map(s => s.name), Brightness.available, Brightness.ddc);
+        if (target.kind === "ddc") {
+            const level = Brightness.stepOutput(target.output, direction);
+            if (level >= 0)
+                showBrightnessOf(target.output, level);
+            return;
+        }
+        if (target.kind !== "backlight") {
+            console.info("osd: no backlight device and", Compositor.activeScreenName || "no display", "has no DDC/CI; brightness", direction, "ignored");
             return;
         }
         // In a dev session adjust() only logs; the OSD still shows the current level.
@@ -158,6 +189,13 @@ Singleton {
         function onValueChanged(): void {
             if (Brightness.loaded && root.armed && root.hardwareDrives)
                 root.showBrightness();
+        }
+
+        // An external display's command answered: a pill showing that display follows its level (the key showed the level
+        // expected; the display may have stopped at 1 % or stepped by 1 % near the bottom, as Omarchy's command does).
+        function onOutputLevelChanged(name: string): void {
+            if (root.shown && root.kind === "brightness" && root.output === name && Brightness.outputAnswers(name))
+                root.level = Brightness.outputLevel(name);
         }
     }
 
