@@ -796,22 +796,33 @@ a mutation). Both layers cover the output, so a capture is black while either sh
   suspends), so a computer never slept by itself. Now `IdleModel.AUTO_SLEEP_SECONDS` (60 s) after this module turned the
   displays off for lack of input (either monitor above) the computer sleeps, through `systemctl --no-ask-password suspend` (logind, never an authorization prompt behind the lock; an
   application's sleep block inhibitor refuses it, and the lock before sleep runs as for any sleep):
-  - on battery always (macOS); on the power adapter or without a battery only when `energy.preventSleep` is false
-    ("Prevent automatic sleeping [on power adapter] when the display is off"). Default true, and anything but an exact
-    false reads as true (`IdleModel.sleepPrevented`): a value that cannot be read gives back the old behaviour (no sleep by
-    itself), never a sleep; an unknown power source (UPower down) reads as the power adapter;
+  - only when `energy.preventSleep` is false, on battery and on the power adapter alike ("Prevent automatic sleeping when
+    the display is off"; integrator decision 2026-11-04: macOS always sleeps on battery, but Grassfield and Omarchy never
+    suspended a computer by itself and the owner runs long builds and agents on battery). Default true, and anything but an
+    exact false reads as true (`IdleModel.sleepPrevented`): a value that cannot be read gives back the old behaviour (no
+    sleep by itself), never a sleep;
   - only while the displays are off by this module, no input and no Wayland idle inhibitor for the delay (a third
     `IdleMonitor`, `respectInhibitors: true`, enabled only then, with a monotonic `Timer` for the delay itself), and no
-    ScreenSaver cookie held (`IdleModel.autoSleepArmed`); at most one request per display-off period, so a refused suspend
-    waits for input instead of looping;
-  - only while Grassfield's lock holds (`IdleModel.autoSleepAction`: `suspend` when locked and holding, `lock` when unlocked,
-    `wait` while a lock is being acquired). An unlocked session (Require password after the display turns off later than
-    the sleep, or Never) is locked first (`Lock.lock("sleep")`, which lights the displays until the lock holds), and the
-    next due time suspends: Grassfield never puts an unlocked or unconfirmed session to sleep, even with a degraded sleep
-    inhibitor;
-  - sleep only: no lock decision reads `energy.preventSleep` (`timings`, `idleArmed`, `inactiveOffArmed`,
-    `requireAfterDisplayOffMs`, `displaysOff` do not take it; `tst_idlemodel` `test_lockIndependentOfSleep`). The
-    displays still turn off and the session still locks as Lock Screen says, whatever the switch says;
+    ScreenSaver cookie held (`IdleModel.autoSleepArmed`);
+  - only in the LOCKED state with the lock secure (`IdleModel.autoSleepAction(Lock.currentState(),
+    Lock.currentlySecure())`, both read afresh: `suspend` in LOCKED and secure, `lock` in exactly UNLOCKED, `wait` in
+    LOCKING, AUTHENTICATING, RELEASING, LOCKED but not verified yet, or an unknown state), read once more right before
+    `systemctl` runs (review of 95dab794: `Lock.holding` included AUTHENTICATING and RELEASING and skipped the verification,
+    so a fingerprint success just before the due time could start a suspend during the release fade; `tst_idlemodel`
+    `test_noSuspendDuringTheReleaseFade`). A change of the lock's state or of its secure flag decides again. An unlocked
+    session (Require password after the display turns off later than the sleep, or Never) is locked first
+    (`Lock.lock("sleep")`, which lights the displays until the lock holds), and the next due time suspends: Grassfield never
+    puts an unlocked, unconfirmed or opening session to sleep, even with a degraded sleep inhibitor;
+  - a request that did not end in a sleep (logind refused it: a download's sleep block inhibitor; a refused lock; a wake
+    without input) is asked again every `IdleModel.AUTO_SLEEP_RETRY_MS` (5 minutes, monotonic, so the time asleep does not
+    count) while the displays stay off (review of 95dab794: a laptop otherwise stayed awake all night once the download
+    ended); never a tight loop, and input (the displays come on) stops it (`test_autoSleepRetry`);
+  - the idle lock, the display-off lock and the displays' power-off never read `energy.preventSleep` (`timings`,
+    `idleArmed`, `inactiveOffArmed`, `requireAfterDisplayOffMs`, `displaysOff` do not take it; `test_lockIndependentOfSleep`).
+    The one lock the setting can lead to is the lock before an automatic sleep on a session that is not locked yet, which
+    only ever adds a lock: never removes, delays or skips one (`test_autoSleepOnlyAddsLocks`: the automatic sleep's code
+    calls `Lock.lock("sleep")` and two read-only getters, nothing else on Lock). The displays still turn off and the session
+    still locks as Lock Screen says, whatever the switch says;
   - never in the nested dev session (`RunMode.dev`): a due suspend is counted (`idle status` `autoSleepSuppressed`) and
     logged, never run; `idle devAutoSleep <1..600>` shortens the delay for a nested test.
   Real suspend NOT VERIFIED (L2†, owner).
