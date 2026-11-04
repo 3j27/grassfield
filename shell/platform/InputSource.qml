@@ -136,8 +136,11 @@ QtObject {
             sources = list;
             if (list.length === 0)
                 activeIndex = -1;
-            else if (activeIndex < 0 || activeIndex >= list.length)
-                activeIndex = Logic.activeIndex(list, names, layoutName, -1);
+            else {
+                // The name the keyboard reports now: the last event's name is stale after a reload (no event follows it).
+                const active = Logic.parseActive(text);
+                activeIndex = Logic.activeIndex(list, names, active !== "" ? active : layoutName, activeIndex);
+            }
         });
     }
 

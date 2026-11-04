@@ -133,6 +133,17 @@ TestCase {
         compare(InputSource.parseDevices(undefined), []);
     }
 
+    function test_devicesGiveTheActiveKeymapOfThatKeyboard() {
+        const reply = JSON.stringify({keyboards: [
+            {name: "kbd-a", layout: "us", variant: "", active_keymap: "English (US)", main: false},
+            {name: "kbd-b", layout: "us,fr", variant: ",", active_keymap: "French", main: true}]});
+        compare(InputSource.parseActive(reply), "French");
+        compare(InputSource.parseActive(JSON.stringify({keyboards: [{name: "k", layout: "us", active_keymap: "error"}]})), "");
+        compare(InputSource.parseActive(JSON.stringify({keyboards: [{name: "k", layout: "us"}]})), "");
+        compare(InputSource.parseActive("not json"), "");
+        compare(InputSource.parseActive(undefined), "");
+    }
+
     function test_namesAndLabels() {
         const names = InputSource.parseNames(baseLst);
         compare(names.fr, "French");

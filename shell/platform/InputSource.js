@@ -84,16 +84,27 @@ function sources(layout, variant) {
 
 // The sources the typed keyboards of `hyprctl devices -j` carry: the main one's, else the first one's (every keyboard has the
 // same list unless one was given its own). [] for anything that is not that reply.
-function parseDevices(text) {
+function chosenKeyboard(text) {
     let json;
     try {
         json = JSON.parse(String(text));
     } catch (e) {
-        return [];
+        return null;
     }
     const keyboards = json && Array.isArray(json.keyboards) ? json.keyboards.filter(k => k && typeof k.name === "string" && !UNTYPED.test(k.name) && typeof k.layout === "string") : [];
-    const chosen = keyboards.find(k => k.main === true) || keyboards[0];
+    return keyboards.find(k => k.main === true) || keyboards[0] || null;
+}
+
+function parseDevices(text) {
+    const chosen = chosenKeyboard(text);
     return chosen ? sources(chosen.layout, chosen.variant) : [];
+}
+
+// The name of the layout that keyboard has in use now ("French", xkb's name), "" for none: after the configuration was read
+// again no `activelayout` event says it.
+function parseActive(text) {
+    const chosen = chosenKeyboard(text);
+    return chosen && typeof chosen.active_keymap === "string" && named(chosen.active_keymap) ? chosen.active_keymap : "";
 }
 
 // xkb's base.lst: {"fr": "French", "fr:bepo": "French (Bepo)"}, the English names of the layouts and variants.
