@@ -4,11 +4,14 @@
 #   settings   Match Appearance off runs nothing; on, the theme of the appearance asked for (the defaults, a chosen one; a name
 #              the schema refuses, a slash in it, reads as the default)
 #   current    the theme already Omarchy's (any spelling omarchy-theme-current gives it) runs nothing
-#   env        omarchy-theme-set gets no HYPRLAND_INSTANCE_SIGNATURE (its `hyprctl reload` reaches nothing), no
-#              DCONF_PROFILE, an OMARCHY_PATH (the packaged tree when unset), the stand-ins first in PATH then Omarchy's bin
-#              directory (a caller's PATH that put Omarchy's bin first is put back in that order; empty and relative entries
-#              are dropped), so its omarchy-shell calls reach the stand-in, never Omarchy's; stdin is /dev/null and it leads a
-#              process session of its own
+#   env        omarchy-theme-set gets no HYPRLAND_INSTANCE_SIGNATURE, no DCONF_PROFILE, no SUDO_ASKPASS, an OMARCHY_PATH (the
+#              packaged tree when unset); its PATH starts with the run's private stand-ins (pkexec, hyprctl), then the
+#              omarchy-shims, then Omarchy's bin directory (a caller's PATH that put Omarchy's bin first is put back in that
+#              order; empty and relative entries are dropped): its `pkexec x` gets 127 and its `hyprctl reload` 1, the system's
+#              (fake) pkexec and hyprctl are never reached, its omarchy-shell calls reach the stand-in, never Omarchy's; stdin
+#              is /dev/null and it leads a process session of its own
+#   stubs      the private folder is made afresh each run (0700, the user's); a link there, or a folder of another owner
+#              (checked when this runs as root), runs nothing, exit 1
 #   failure    omarchy-theme-set's exit and its last line are reported, exit 1
 #   missing    no Omarchy commands: nothing runs, exit 0; no stand-ins: nothing runs, exit 1
 #   guard      a dev session without the stand-in variable, and a real session (GRASSFIELD_SESSION=1) that sets it, run nothing
@@ -50,12 +53,19 @@ cat >"$tmp/omarchy/bin/omarchy-theme-set" <<'SH'
   echo "dconf=${DCONF_PROFILE-unset}"
   echo "path=$PATH"
   echo "omarchy=${OMARCHY_PATH-unset}"
+  echo "askpass=${SUDO_ASKPASS-unset}"
   echo "shell=$(command -v omarchy-shell)"
+  echo "pkexec=$(command -v pkexec)"
+  echo "hyprctl=$(command -v hyprctl)"
   if [[ -t 0 ]]; then echo "stdin=tty"; else echo "stdin=$(wc -c)"; fi
   [[ $(cut -d' ' -f6 /proc/$$/stat) == "$$" ]] && echo "leader=yes" || echo "leader=no"
 } >>"$LOG"
 omarchy-shell shell applyTheme x >/dev/null 2>&1 || true
-hyprctl reload >/dev/null 2>&1 || true
+# As omarchy-theme-set-browser-policy and omarchy-restart-hyprctl call them.
+pkexec x 2>/dev/null
+echo "pkexec-rc=$?" >>"$LOG"
+hyprctl reload >/dev/null 2>&1
+echo "hyprctl-rc=$?" >>"$LOG"
 if [[ -n ${FAIL_WITH:-} ]]; then
   echo "Theme '$1' does not exist"
   exit "$FAIL_WITH"
@@ -77,10 +87,14 @@ echo "stand-in $*" >>"$LOG"
 exit 1
 SH
 printf '#!/bin/sh\nexit 0\n' >"$tmp/shims/omarchy-restart-shell"
+# The system's pkexec and hyprctl, as found later in PATH: they must never be reached.
 cat >"$tmp/fake/hyprctl" <<'SH'
 #!/bin/sh
-echo "hyprctl $* his=${HYPRLAND_INSTANCE_SIGNATURE-unset}" >>"$LOG"
-[ -n "${HYPRLAND_INSTANCE_SIGNATURE-}" ] || exit 1
+echo "real hyprctl $* his=${HYPRLAND_INSTANCE_SIGNATURE-unset}" >>"$LOG"
+SH
+cat >"$tmp/fake/pkexec" <<'SH'
+#!/bin/sh
+echo "real pkexec $*" >>"$LOG"
 SH
 chmod +x "$tmp"/omarchy/bin/* "$tmp"/shims/* "$tmp"/fake/*
 chmod 700 "$tmp/run"
@@ -100,8 +114,8 @@ run() { # mode [VAR=value...]: the helper in a dev session with the stand-ins; s
   put "$tmp/log" ""
   out=$(env -i PATH="$tmp/omarchy/bin::.:/usr/bin:/bin:$tmp/fake" HOME="$tmp/home" TMPDIR="$tmp/t" XDG_RUNTIME_DIR="$tmp/run" \
     GRASSFIELD_CONFIG_HOME="$tmp/cfg" OMARCHY_PATH="$tmp/omarchy" HYPRLAND_INSTANCE_SIGNATURE=grassfield-instance \
-    DCONF_PROFILE=/usr/share/grassfield/dconf/profile GRASSFIELD_DEV=1 GRASSFIELD_TERMINAL_THEME_SHIMS="$tmp/shims" \
-    LOG="$tmp/log" STATE="$tmp/state" "$@" "${as_user[@]}" "$helper" "$mode" 2>&1 </dev/null)
+    DCONF_PROFILE=/usr/share/grassfield/dconf/profile SUDO_ASKPASS=/usr/bin/true GRASSFIELD_DEV=1 \
+    GRASSFIELD_TERMINAL_THEME_SHIMS="$tmp/shims" LOG="$tmp/log" STATE="$tmp/state" "$@" "${as_user[@]}" "$helper" "$mode" 2>&1 </dev/null)
   rc=$?
 }
 called() { grep -c '^args=' "$tmp/log"; }
@@ -157,17 +171,53 @@ rm -f "$tmp/state"
 run dark
 expect "no HYPRLAND_INSTANCE_SIGNATURE" "$(field his)" "unset"
 expect "no DCONF_PROFILE" "$(field dconf)" "unset"
-expect "PATH: the stand-ins, Omarchy's bin, then the rest (absolute entries only)" "$(field path)" "$tmp/shims:$tmp/omarchy/bin:/usr/bin:/bin:$tmp/fake"
-expect "omarchy-shell resolves to the stand-in" "$(field shell)" "$tmp/shims/omarchy-shell"
+expect "no SUDO_ASKPASS" "$(field askpass)" "unset"
+stubs=$tmp/run/grassfield/terminal-theme-bin
+expect "PATH: the run's stand-ins, the omarchy-shims, Omarchy's bin, then the rest (absolute entries only)" "$(field path)" \
+  "$stubs:$tmp/shims:$tmp/omarchy/bin:/usr/bin:/bin:$tmp/fake"
+expect "pkexec resolves to the run's stand-in" "$(field pkexec)" "$stubs/pkexec"
+expect "hyprctl resolves to the run's stand-in" "$(field hyprctl)" "$stubs/hyprctl"
+expect "  'pkexec x' fails as if pkexec were absent" "$(field pkexec-rc)" "127"
+expect "  'hyprctl reload' fails" "$(field hyprctl-rc)" "1"
+grep -q '^real pkexec' "$tmp/log" && fail "the system's pkexec was reached" || pass "the system's pkexec was never reached"
+grep -q '^real hyprctl' "$tmp/log" && fail "the system's hyprctl was reached" || pass "the system's hyprctl was never reached"
+expect "the stand-in folder is the user's alone (0700)" "$(stat -c '%a %u' "$stubs")" "700 $(((EUID == 0)) && echo 65534 || id -u)"
+expect "omarchy-shell resolves to the omarchy-shims stand-in" "$(field shell)" "$tmp/shims/omarchy-shell"
 grep -q '^stand-in shell applyTheme x' "$tmp/log" && pass "its shell call reached the stand-in" || fail "the stand-in was not called: $(cat "$tmp/log")"
 grep -q '^omarchy-shell ' "$tmp/log" && fail "Omarchy's own omarchy-shell was reached" || pass "Omarchy's own omarchy-shell was never reached"
-expect "hyprctl reload saw no instance" "$(sed -n 's/^hyprctl reload //p' "$tmp/log")" "his=unset"
 expect "stdin is /dev/null" "$(field stdin)" "0"
 expect "omarchy-theme-set leads a session of its own" "$(field leader)" "yes"
 expect "OMARCHY_PATH passed on" "$(field omarchy)" "$tmp/omarchy"
 rm -f "$tmp/state"
 run dark OMARCHY_PATH=
 expect "no OMARCHY_PATH: Omarchy's packaged tree, as omarchy.lua finds it" "$(field omarchy)" "/usr/share/omarchy"
+
+echo "== stubs"
+rm -f "$tmp/state"
+put "$stubs/sudo" "#!/bin/sh"
+run dark
+expect "the folder is made afresh: a file left there is gone" "$(ls "$stubs" | tr '\n' ' ')" "hyprctl pkexec "
+rm -rf "$stubs"
+mkdir -p "$tmp/elsewhere"
+ln -s "$tmp/elsewhere" "$stubs"
+((EUID == 0)) && chown -h 65534:65534 "$stubs" "$tmp/elsewhere"
+rm -f "$tmp/state"
+run dark
+expect "a link in its place: exit 1" "$rc" 1
+expect "  says so" "$out" "refused: $stubs is not a private folder of this user (a link, or another owner)"
+expect "  runs nothing" "$(called)" 0
+expect "  and writes nothing where it points" "$(ls -A "$tmp/elsewhere" | wc -l)" "0"
+rm -f "$stubs"
+if ((EUID == 0)); then
+  mkdir "$stubs"
+  run dark
+  expect "a folder of another owner in its place: exit 1" "$rc" 1
+  expect "  says so" "$out" "refused: $stubs is not a private folder of this user (a link, or another owner)"
+  expect "  runs nothing" "$(called)" 0
+  rm -rf "$stubs"
+else
+  echo "  SKIP a folder of another owner (making one needs root)"
+fi
 
 echo "== failure"
 rm -f "$tmp/state"
