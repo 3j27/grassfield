@@ -45,6 +45,28 @@ not_turned_off() { [[ $(fl_cfg '.energy.preventSleep') != false ]]; }
 fl_check "grassfield.json does not turn it off (the default applies)" not_turned_off
 vs_sleep 1.5
 fl_shot energy-light >/dev/null
+# The switch reaches the shell: Settings writes grassfield.json, the nested shell's idle module reads it (idle status, a dev
+# hook). The displays are on, so nothing is armed; the dev shell never suspends anyway.
+idle_field() { vs_ipc idle status 2>/dev/null | jq -r "$1" 2>/dev/null; }
+cfg_prevent_is() { [[ $(fl_cfg '.energy.preventSleep') == "$1" ]]; }
+idle_is() { [[ $(idle_field "$1") == "$2" ]]; }
+fl_check "Prevent automatic sleeping is turned off in Settings" a11y_find "$pid" 'check box' '^Prevent automatic sleeping when the display is off$' --press --wait 5
+fl_check_wait "Settings writes energy.preventSleep false to grassfield.json" 8 cfg_prevent_is false
+fl_check_wait "the shell's idle module follows it (sleepPrevented false)" 8 idle_is .sleepPrevented false
+fl_check "nothing is armed while the displays are on (autoSleepArmed false, none suppressed)" idle_is '[.autoSleepArmed, .autoSleepSuppressed] | @csv' 'false,0'
+fl_check "turned back on in Settings" a11y_find "$pid" 'check box' '^Prevent automatic sleeping when the display is off$' --press --wait 5
+fl_check_wait "Settings writes energy.preventSleep true" 8 cfg_prevent_is true
+# On the power adapter (or without a battery) the switch decides; on battery it does not apply (macOS).
+on_battery=false
+for s in /sys/class/power_supply/*; do
+  [[ $(cat "$s/type" 2>/dev/null) == Mains ]] || continue
+  [[ $(cat "$s/online" 2>/dev/null) == 0 ]] && on_battery=true
+done
+if [[ $on_battery == false ]]; then
+  fl_check_wait "the shell's idle module follows it (sleepPrevented true on the power adapter)" 8 idle_is .sleepPrevented true
+else
+  fl_note "on battery: sleepPrevented stays false whatever the switch says (macOS); now $(idle_field .sleepPrevented)"
+fi
 fl_close_windows "$class"
 fl_check_wait "the Settings window is closed" 10 no_settings
 
