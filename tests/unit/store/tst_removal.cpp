@@ -54,6 +54,27 @@ TEST(Removal, SharedVectors)
     }
 }
 
+// ADR-0044 D2: the apps Omarchy preinstalls and itself offers to remove are on its lists but not the system's; the rest of the
+// lists stays. D3: the session's runtime is protected by name, whatever the lists say.
+TEST(Removal, OptionalPreinstallsAndTheRuntime)
+{
+    DenyList deny;
+    deny.omarchy = {QStringLiteral("libreoffice-fresh"), QStringLiteral("obs-studio"), QStringLiteral("mpv"), QStringLiteral("chromium")};
+    deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("kdenlive")};
+    const RemovalFacts app{true, true, true, true};
+    EXPECT_EQ(removal(QStringLiteral("libreoffice-fresh"), app, deny), Removal::Removable);
+    EXPECT_EQ(removal(QStringLiteral("obs-studio"), app, deny), Removal::Removable);
+    EXPECT_EQ(removal(QStringLiteral("kdenlive"), app, deny), Removal::PartOfSystem) << "HoldPkg still keeps it";
+    EXPECT_EQ(removal(QStringLiteral("mpv"), app, deny), Removal::PartOfOmarchy);
+    EXPECT_EQ(removal(QStringLiteral("chromium"), app, deny), Removal::PartOfOmarchy);
+    for (const char *name : {"hyprland", "quickshell", "networkmanager", "mesa", "qt6-base", "qt6-tools", "pipewire", "pipewire-pulse",
+                             "wireplumber", "xdg-desktop-portal-hyprland", "sddm", "uwsm", "gnome-keyring"})
+        EXPECT_EQ(removal(QString::fromLatin1(name), app, deny), Removal::PartOfSystem) << name;
+    // Not prefixes of them by accident.
+    EXPECT_EQ(removal(QStringLiteral("qt5-base"), app, deny), Removal::Removable);
+    EXPECT_EQ(removal(QStringLiteral("mesa-utils"), app, deny), Removal::Removable);
+}
+
 TEST(Removal, PackageList)
 {
     const QSet<QString> names = parsePackageList("# Omarchy core package list\n\naether\nalsa-utils  # sound\n  btop chromium\n#gone\n");

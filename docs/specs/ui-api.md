@@ -74,6 +74,7 @@ add RimmedCapsule
 add SidebarPanel
 add TileGlyph
 add SoftwareUpdateLogic
+add UninstallLogic
 add DevicePicture
 add KeyFocus
 add MenuHeader

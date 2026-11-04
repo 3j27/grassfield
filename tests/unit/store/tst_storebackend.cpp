@@ -1099,6 +1099,19 @@ TEST(StoreBackend, Updates)
     EXPECT_EQ(backend.actions(QStringLiteral("org.gimp.GIMP")).value(QStringLiteral("update")).toString(), QStringLiteral("none"))
         << "a repository app updates with the system, never on its own";
 
+    // The launcher's and Files' question (ADR-0044 D1): the installed apps by application entry, "" blocking nothing.
+    const QVariantMap byEntry = backend.removalByEntry();
+    ASSERT_TRUE(byEntry.contains(QStringLiteral("org.example.Notes.desktop"))) << "an installed Flatpak is listed by its entry";
+    const QVariantMap notes = byEntry.value(QStringLiteral("org.example.Notes.desktop")).toMap();
+    EXPECT_EQ(notes.value(QStringLiteral("app")).toString(), QStringLiteral("org.example.Notes"));
+    EXPECT_EQ(notes.value(QStringLiteral("block")).toString(), backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("uninstall")).toString())
+        << "the same answer as the product page's menu";
+    EXPECT_FALSE(byEntry.contains(QStringLiteral("org.example.Paint.desktop"))) << "an app that is not installed is not listed";
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("org.example.Notes")), QStringLiteral("org.example.Notes")) << "with or without .desktop";
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("org.example.Notes.desktop")), QStringLiteral("org.example.Notes"));
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("../etc/passwd")), QString());
+    EXPECT_EQ(backend.appForEntry(QStringLiteral("nothing.desktop")), QString());
+
     // Its plan: Flathub's newer metadata reaches the home folder, which the installed one does not.
     backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
     ASSERT_TRUE(waitFor([&] { return plans.size() == 1; }));
