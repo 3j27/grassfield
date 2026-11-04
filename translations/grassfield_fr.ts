@@ -1781,6 +1781,10 @@
         <translation>Saisissez votre mot de passe pour l’autoriser.</translation>
     </message>
     <message>
+        <source>Follow the instruction below, or wait for the password field.</source>
+        <translation>Suivez l’instruction ci-dessous ou attendez le champ du mot de passe.</translation>
+    </message>
+    <message>
         <source>Action: %1</source>
         <translation>Action&#xa0;: %1</translation>
     </message>

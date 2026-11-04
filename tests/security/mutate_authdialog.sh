@@ -90,6 +90,12 @@ check "K1 activation keys bypass the guard" $BT \
         event.accepted = true;"
 check "D1 Allow stays enabled while the answer is checked" shell/security/polkit/AuthDialog.qml \
   "                enabled: root.model.canSubmit" "                enabled: true"
+# ADR-0045 OC-6 (security review): while PAM awaits a device and asks nothing, the field takes no key; the prompt gives it back.
+check "D2 the field takes keys while PAM awaits a device" shell/security/polkit/AuthDialog.qml \
+  "                enabled: root.inputEnabled && !root.model.awaitingDevice" "                enabled: root.inputEnabled"
+check "D3 the prompt does not give the field the keys back" shell/security/polkit/AuthDialog.qml \
+  "            if (!root.model.awaitingDevice)
+                root.focusField();" ""
 check "M1 the model answers twice (no canSubmit check)" shell/security/polkit/AuthDialogModel.qml \
   "if (!active || !canSubmit || password.length === 0) {" "if (!active || password.length === 0) {"
 # The field's busy check alone is backed by the model's canSubmit (defence in depth, by design): only both together send twice.

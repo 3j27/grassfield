@@ -49,6 +49,11 @@ QtObject {
     // An answer was sent and polkit has not asked again yet.
     readonly property bool submitted: priv.submitted
     readonly property bool canSubmit: responseRequired && !priv.submitted
+    // PAM said something and asks nothing (ADR-0045 OC-6: pam_fprintd's "Place your finger…", pam_u2f's "Please touch the FIDO
+    // authenticator."): a device is awaited, the password field waits. Only while a message is shown, never for a bare
+    // !responseRequired: between two prompts, or before pam_unix's first, a fast typist's first keys must not be dropped (a
+    // password typed short is a wrong one, and pam_faillock counts it).
+    readonly property bool awaitingDevice: !!flow && !responseRequired && !priv.submitted && plainLine(flow.supplementaryMessage, maxDetailLength) !== ""
     // The user answered the request in the sheet (sent a password or cancelled it) and polkit has not asked again since: a
     // request that ends now ends on the user's answer, not under the user's typing (AuthAgent lingers only for the latter;
     // security counter-review of f9e24e1, LOW-1). Set by submit() and cancel(), cleared when polkit asks again (a failure, a

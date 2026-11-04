@@ -57,6 +57,12 @@ FocusScope {
             shakeAnimation.restart();
             root.focusField();
         }
+
+        // PAM stopped awaiting the device (its password prompt came, or the request ended): the field takes the keys again.
+        function onAwaitingDeviceChanged(): void {
+            if (!root.model.awaitingDevice)
+                root.focusField();
+        }
     }
 
     Material {
@@ -204,7 +210,9 @@ FocusScope {
         Text {
             width: parent.width
             textFormat: Text.PlainText
-            text: qsTr("Enter your password to allow this.")
+            // While PAM awaits a device, its own instruction is the feedback line under the field (never replaced here, so
+            // pam_faillock's notice stays readable too).
+            text: root.model.awaitingDevice ? qsTr("Follow the instruction below, or wait for the password field.") : qsTr("Enter your password to allow this.")
             horizontalAlignment: Text.AlignHCenter
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
@@ -357,7 +365,9 @@ FocusScope {
 
             PasswordField {
                 id: field
-                enabled: root.inputEnabled
+                // Not while PAM awaits a device and asks nothing (AuthDialogModel.awaitingDevice: a fingerprint, a security
+                // key): a password typed then would go nowhere. It takes the focus back once PAM asks (onAwaitingDeviceChanged).
+                enabled: root.inputEnabled && !root.model.awaitingDevice
                 x: 0
                 width: parent.width
                 height: parent.height
