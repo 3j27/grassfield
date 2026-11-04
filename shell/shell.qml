@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Grassfield.I18n
 import Grassfield.Ui
+import qs.capture
 import qs.desktop
 import qs.dock
 import qs.lib
@@ -541,14 +542,22 @@ ShellRoot {
     SwitcherWindow {
         controller: switcher
     }
+    // The capture toolbar (Shift-Super-5, ADR-0045 OC-1) and the countdown of its timer.
+    Capture {
+        id: captureSurface
+        // The session lock owns the screen and the keyboard: the toolbar closes and does not open.
+        locked: Lock.lockState !== "unlocked"
+    }
 
-    // Opening Overview, Apps, Search or the app switcher closes the others: the keyboard follows the visible top surface.
+    // Opening Overview, Apps, Search, the app switcher or the capture toolbar closes the others: the keyboard follows the visible
+    // top surface.
     ExclusiveSurfaces {
         surfaces: [
             {target: overviewSurface, close: () => overviewSurface.requestCloseForOther()},
             {target: appsSurface, close: () => appsSurface.hide()},
             {target: searchSurface, close: () => searchSurface.hide()},
-            {target: switcher, close: () => switcher.cancel()}
+            {target: switcher, close: () => switcher.cancel()},
+            {target: captureSurface, close: () => captureSurface.hide()}
         ]
     }
 

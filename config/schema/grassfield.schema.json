@@ -842,6 +842,60 @@
         }
       }
     },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The capture toolbar (Shift-Super-5, ADR-0045 OC-1; macOS 27's screenshot toolbar): the mode chosen last and its Options menu. The toolbar writes these keys itself; no Settings pane shows them (as macOS).",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "window",
+            "selection",
+            "recordScreen",
+            "recordSelection"
+          ],
+          "default": "selection",
+          "description": "The mode the toolbar opens in (the one chosen last): Capture Entire Screen, Capture Selected Window, Capture Selected Portion, Record Entire Screen, Record Selected Portion."
+        },
+        "saveTo": {
+          "type": "string",
+          "enum": [
+            "desktop",
+            "documents",
+            "clipboard",
+            "preview"
+          ],
+          "default": "desktop",
+          "description": "Options > Save to: the Desktop, the Documents folder, the clipboard only (screenshots; a recording then goes to the Desktop), or Preview (the file is kept on the Desktop and opened in Preview)."
+        },
+        "timer": {
+          "type": "string",
+          "enum": [
+            "none",
+            "5",
+            "10"
+          ],
+          "default": "none",
+          "description": "Options > Timer: a countdown of 5 or 10 seconds before the capture or the recording starts."
+        },
+        "microphone": {
+          "type": "string",
+          "enum": [
+            "none",
+            "default"
+          ],
+          "default": "none",
+          "description": "Options > Microphone (recordings): none, or the default input. The desktop's own sound is never recorded (macOS)."
+        },
+        "showPointer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Options > Show Mouse Pointer: the pointer is drawn in screenshots and recordings."
+        }
+      }
+    },
     "search": {
       "type": "object",
       "additionalProperties": false,

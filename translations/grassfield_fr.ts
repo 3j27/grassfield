@@ -2245,6 +2245,10 @@
         <translation>L</translation>
     </message>
     <message>
+        <source>5</source>
+        <translation>5</translation>
+    </message>
+    <message>
         <source>Left Mouse Button</source>
         <translation>Bouton gauche de la souris</translation>
     </message>
@@ -2415,6 +2419,10 @@
     <message>
         <source>Next input source</source>
         <translation>Méthode de saisie suivante</translation>
+    </message>
+    <message>
+        <source>Screenshot and recording options</source>
+        <translation>Options de capture d’écran et d’enregistrement</translation>
     </message>
     <message>
         <source>Turn Dock hiding on or off</source>
@@ -3354,6 +3362,97 @@
     <message>
         <source>Calendar, %1</source>
         <translation>Calendrier, %1</translation>
+    </message>
+</context>
+<context>
+    <name>CaptureToolbar</name>
+    <message>
+        <source>Save to</source>
+        <translation>Enregistrer dans</translation>
+    </message>
+    <message>
+        <source>Desktop</source>
+        <translation>Bureau</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Clipboard</source>
+        <translation>Presse-papiers</translation>
+    </message>
+    <message>
+        <source>Preview</source>
+        <translation>Visionneuse</translation>
+    </message>
+    <message>
+        <source>Timer</source>
+        <translation>Minuteur</translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation>Aucun</translation>
+    </message>
+    <message>
+        <source>5 Seconds</source>
+        <translation>5 secondes</translation>
+    </message>
+    <message>
+        <source>10 Seconds</source>
+        <translation>10 secondes</translation>
+    </message>
+    <message>
+        <source>Microphone</source>
+        <translation>Microphone</translation>
+    </message>
+    <message>
+        <source>Default Input</source>
+        <translation>Entrée par défaut</translation>
+    </message>
+    <message>
+        <source>Options</source>
+        <translation>Options</translation>
+    </message>
+    <message>
+        <source>Show Mouse Pointer</source>
+        <translation>Afficher le pointeur de la souris</translation>
+    </message>
+    <message>
+        <source>Capture Entire Screen</source>
+        <translation>Capturer l’écran entier</translation>
+    </message>
+    <message>
+        <source>Capture Selected Window</source>
+        <translation>Capturer la fenêtre sélectionnée</translation>
+    </message>
+    <message>
+        <source>Capture Selected Portion</source>
+        <translation>Capturer la partie sélectionnée</translation>
+    </message>
+    <message>
+        <source>Record Entire Screen</source>
+        <translation>Enregistrer l’écran entier</translation>
+    </message>
+    <message>
+        <source>Record Selected Portion</source>
+        <translation>Enregistrer la partie sélectionnée</translation>
+    </message>
+    <message>
+        <source>Screenshot</source>
+        <translation>Capture d’écran</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Record</source>
+        <translation>Enregistrer</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation>Capturer</translation>
     </message>
 </context>
 <context>
@@ -8517,6 +8616,10 @@
     <message>
         <source>Window</source>
         <translation>Fenêtre</translation>
+    </message>
+    <message>
+        <source>Stop Screen Recording, %1</source>
+        <translation>Arrêter l’enregistrement de l’écran, %1</translation>
     </message>
     <message>
         <source>Screen Sharing</source>

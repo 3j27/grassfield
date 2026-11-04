@@ -24,6 +24,8 @@ const NAMES = {
     "code:44": QT_TRANSLATE_NOOP("Bindings", "J"), "code:45": QT_TRANSLATE_NOOP("Bindings", "K"),
     // The L key of the tiling popover, by keycode likewise.
     "code:46": QT_TRANSLATE_NOOP("Bindings", "L"),
+    // The 5 key of the capture toolbar (Shift-Super-5), by keycode likewise.
+    "code:14": QT_TRANSLATE_NOOP("Bindings", "5"),
     "mouse:272": QT_TRANSLATE_NOOP("Bindings", "Left Mouse Button"),
     "mouse:273": QT_TRANSLATE_NOOP("Bindings", "Right Mouse Button")
 };
@@ -79,6 +81,7 @@ const DESCRIPTIONS = [
     QT_TRANSLATE_NOOP("Bindings", "Next input source"),
     QT_TRANSLATE_NOOP("Bindings", "Apps"),
     "Notification Center",
+    QT_TRANSLATE_NOOP("Bindings", "Screenshot and recording options"),
     QT_TRANSLATE_NOOP("Bindings", "Lock screen"),
     QT_TRANSLATE_NOOP("Bindings", "Force Quit Applications"),
     QT_TRANSLATE_NOOP("Bindings", "Focus the menu bar"),

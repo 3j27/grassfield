@@ -3764,6 +3764,36 @@ QtObject {
     readonly property string captureBorder: "#FFFFFFE6"
     // the outline's width in pixels, a hairline (ADR-0035 D-10, step 8)
     readonly property int captureBorderWidth: 1
+    // estimate: the capture toolbar's floating bar (Shift-Super-5), one row of 32-pt buttons inside an 8-pt inset, as macOS 27's screenshot toolbar; its ends are round (a capsule of the macOS 26 glass); no measured value yet [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarHeight: 48
+    // estimate: the inset of the toolbar's buttons from its edge, so that a 32-pt capsule button sits concentric in the 48-pt capsule (radius 24 less the inset 8 is the button's 16) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarPadding: 8
+    // estimate: a mode button of the toolbar (Capture Entire Screen ... Record Selected Portion), wider than tall as macOS draws them, its selected state a capsule [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarButtonWidth: 40
+    // estimate: the toolbar's buttons (the modes, Close, Options) are 32 tall, capsules concentric with the bar [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarButtonHeight: 32
+    // estimate: the mode glyphs of the toolbar, a little larger than a window toolbar's 18 (control.toolIconSize): macOS 27 draws the capture modes' symbols large [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarIconSize: 20
+    // estimate: the gap between two buttons of one group of the toolbar (the three capture modes, the two recording modes) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarButtonSpacing: 2
+    // estimate: the room on each side of a separator between the toolbar's groups (Close | capture | record | Options and the action) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarSeparatorGap: 6
+    // estimate: the side padding of the toolbar's Options button (its label and chevron) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarTextPadding: 12
+    // estimate: the chevron after Options, the size of a pop-up button's chevron [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarChevronSize: 10
+    // estimate: the gap between Options and its chevron [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarChevronGap: 4
+    // estimate: the toolbar floats this far above the Dock's band (or the bottom edge of a display without the Dock), centred, as macOS places it over the Dock [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarBottomGap: 24
+    // estimate: the Close glyph of the toolbar, a cross in a circle at the left end [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarCloseIconSize: 18
+    // estimate: the timer's countdown, a square glass plate centred on what is captured (the display, the window or the area), as macOS shows the seconds left [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureCountdownSize: 112
+    // estimate: the countdown plate's corner, the alerts' radius (radius.alert) on a plate of that size [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureCountdownRadius: 26
+    // estimate: the seconds left, large digits on the countdown plate [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureCountdownTextSize: 64
 
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4

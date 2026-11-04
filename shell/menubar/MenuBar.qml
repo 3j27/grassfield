@@ -314,6 +314,9 @@ Scope {
             // Screen sharing (ADR-0035 D-6, step 7b): while an app shares the screen through the portal (xdph's streams). Never
             // optional: a privacy indicator does not give way when the status area is crowded.
             readonly property bool showScreenShare: SharePicker.sharing
+            // A screen recording runs (ADR-0045 OC-1, grassfield-capture's state through CaptureState): its stop item with the
+            // elapsed time. Never optional either: the screen being recorded, and how to stop it, always show.
+            readonly property bool showRecording: CaptureState.recording
             // The Input menu (macOS: shown as soon as there are two input sources, Settings > Keyboard > Input Sources can hide
             // it): the source in use, FR or US.
             readonly property bool showInput: InputSource.available && Settings.keyboardShowInputMenu
@@ -365,6 +368,8 @@ Scope {
                     list.push({key: "tray" + i, width: statusIconWidth, optional: true});
                 if (showNowPlaying)
                     list.push({key: "nowplaying", width: statusIconWidth, optional: true});
+                if (showRecording)
+                    list.push({key: "recording", width: recordingButton.implicitWidth, optional: false});
                 if (showScreenShare)
                     list.push({key: "screenshare", width: statusIconWidth, optional: false});
                 list.push({key: "system", width: (showFocus ? dndButton.implicitWidth : 0) + (showInput ? inputButton.implicitWidth : 0) + (Settings.menubarShowWifi ? networkButton.implicitWidth : 0) + (Settings.menubarShowSound ? volumeButton.implicitWidth : 0) + (showBattery ? batteryButton.implicitWidth : 0), optional: false});
@@ -1139,6 +1144,38 @@ Scope {
                                 tint: win.barTint
                                 shadowed: !win.showBackground
                                 shadowColor: win.barShadow
+                            }
+                        }
+
+                        // Screen recording (ADR-0045 OC-1): while grassfield-capture records, the stop glyph and the elapsed
+                        // time; a click stops the recording (the helper's stop, as Ctrl-Super-Esc). Not a menu.
+                        BarButton {
+                            id: recordingButton
+                            objectName: "menubar-recording"
+                            tint: win.barTint
+                            shadowed: !win.showBackground
+                            shadowColor: win.barShadow
+                            padding: Tokens.menubarStatusItemPadding
+                            visible: win.showRecording
+                            accessibleName: qsTr("Stop Screen Recording, %1").arg(CaptureState.elapsedText)
+                            onActivated: CaptureState.stop()
+
+                            Icon {
+                                size: Tokens.menubarIconSize
+                                heavy: true
+                                color: win.barText
+                                name: "record-stop"
+                            }
+
+                            Text {
+                                textFormat: Text.PlainText
+                                text: CaptureState.elapsedText
+                                color: win.barText
+                                font.family: Appearance.fontFamily
+                                font.pixelSize: Tokens.typographyMenuSize
+                                font.weight: Tokens.typographyMenuWeight
+                                // Tabular figures: the item keeps its width while the seconds change.
+                                font.features: {"tnum": 1}
                             }
                         }
 
