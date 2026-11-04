@@ -27,7 +27,8 @@
 #                without input (idle status displayOff, Hyprland dpmsStatus) and on again on pointer motion
 #   auto-sleep   automatic sleep: energy.preventSleep false in the dev config and `idle devAutoSleep 2`: 2 s after the
 #                displays went off on the lock screen one sleep comes due and the dev session suppresses it (counted, never
-#                run); with it true (power adapter) none comes due; locked throughout. Leaves energy.preventSleep true
+#                run), the 5-minute retry armed; with it true none comes due (battery or power adapter); locked
+#                throughout. Leaves energy.preventSleep true
 #   cleanup      close the foot windows (the session stays locked)
 # The fixture steps read GF-REF only (headless: it always draws). privacy also reads WAYLAND-1, the nested window on the
 # owner's screen, which gives grim a frame only while the owner's compositor draws it: without one it is reported
@@ -558,10 +559,10 @@ displays_off_again() {
 
 # Automatic sleep (2026-11-04, Settings > Energy / Battery > Options…): locked with the displays off for 2 s without input
 # (`idle devAutoSleep 2`), a computer whose sleep is not prevented would suspend; the dev session never does: it counts the
-# due suspend (`autoSleepSuppressed`) instead. With energy.preventSleep on, on the power adapter, nothing is due. The session
-# stays locked either way. On battery the switch does not apply (macOS): that half is reported, not failed.
+# due suspend (`autoSleepSuppressed`) instead, and the retry timer (5 min) is armed. With energy.preventSleep on, nothing is
+# due, on battery as on the power adapter (integrator decision 2026-11-04). The session stays locked either way.
 step_auto_sleep() {
-  local before after prevented
+  local before after
   echo "idle devAutoSleep 2 -> $(ipc idle devAutoSleep 2)"
   set_prevent_sleep false || { fail "auto-sleep: the dev config could not be written"; return; }
   for _ in $(seq 1 20); do [[ $(idle_field '.sleepPrevented') == false ]] && break; sleep 0.25; done
@@ -577,26 +578,25 @@ step_auto_sleep() {
   [[ $after =~ ^[0-9]+$ && $before =~ ^[0-9]+$ ]] && ((after == before + 1)) \
     && pass "auto-sleep: one automatic sleep came due 2 s after the displays went off, and the dev session suppressed it ($before -> $after)" \
     || fail "auto-sleep: autoSleepSuppressed $before -> $after ($(ipc idle status))"
+  [[ $(idle_field '.autoSleepRetrying') == true ]] && pass "auto-sleep: the retry timer is armed while the displays stay off" \
+    || fail "auto-sleep: no retry armed ($(ipc idle status))"
   sleep 3
-  [[ $(idle_field '.autoSleepSuppressed') == "$after" ]] && pass "auto-sleep: at most one request per display-off period" \
+  [[ $(idle_field '.autoSleepSuppressed') == "$after" ]] && pass "auto-sleep: no second request within the retry interval (5 min): no tight loop" \
     || fail "auto-sleep: requested again without input ($(idle_field '.autoSleepSuppressed'))"
   compositor_locked && pass "auto-sleep: still locked (LOCK on every monitor)" || fail "auto-sleep: Hyprland no longer reports LOCK"
   set_prevent_sleep true || { fail "auto-sleep: the dev config could not be written"; return; }
-  for _ in $(seq 1 20); do [[ $(idle_field '.autoSleepArmed') == false || $(idle_field '.sleepPrevented') == true ]] && break; sleep 0.25; done
-  prevented=$(idle_field '.sleepPrevented')
+  for _ in $(seq 1 20); do [[ $(idle_field '.sleepPrevented') == true ]] && break; sleep 0.25; done
+  [[ $(idle_field '.sleepPrevented') == true ]] && pass "auto-sleep: energy.preventSleep true reaches the idle module, whatever the power source" \
+    || fail "auto-sleep: sleepPrevented $(idle_field '.sleepPrevented') after writing true"
   before=$(idle_field '.autoSleepSuppressed')
   displays_off_again || fail "auto-sleep: the displays did not go off with prevent-sleep on ($(ipc idle status))"
   sleep 4
   after=$(idle_field '.autoSleepSuppressed')
-  if [[ $prevented == true ]]; then
-    [[ $after == "$before" && $(idle_field '.autoSleepArmed') == false ]] \
-      && pass "auto-sleep: prevent-sleep on (power adapter): the displays are off, the session locked, and no sleep comes due" \
-      || fail "auto-sleep: prevent-sleep on, yet autoSleepSuppressed $before -> $after ($(ipc idle status))"
-    [[ $(idle_field '.displayOff') == true ]] && pass "auto-sleep: prevent-sleep keeps the displays' own power-off" \
-      || fail "auto-sleep: displays not off with prevent-sleep on"
-  else
-    echo "INFO auto-sleep: this machine runs on battery (UPower): the switch does not apply there (macOS), the sleep came due anyway ($before -> $after)"
-  fi
+  [[ $after == "$before" && $(idle_field '.autoSleepArmed') == false && $(idle_field '.autoSleepRetrying') == false ]] \
+    && pass "auto-sleep: prevent-sleep on: the displays are off, the session locked, and no sleep comes due" \
+    || fail "auto-sleep: prevent-sleep on, yet autoSleepSuppressed $before -> $after ($(ipc idle status))"
+  [[ $(idle_field '.displayOff') == true ]] && pass "auto-sleep: prevent-sleep keeps the displays' own power-off" \
+    || fail "auto-sleep: displays not off with prevent-sleep on"
   compositor_locked && pass "auto-sleep: still locked with prevent-sleep on" || fail "auto-sleep: Hyprland no longer reports LOCK"
   echo "idle devAutoSleep 60 -> $(ipc idle devAutoSleep 60)"
 }

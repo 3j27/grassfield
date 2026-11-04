@@ -88,21 +88,33 @@ function displaysOff(lockedIdle, inactiveOff, locked, holding) {
 }
 
 // ---- Automatic sleep (macOS 27 Energy and Battery > Options: the computer sleeps once the displays are off for
-// inactivity, unless "Prevent automatic sleeping ... when the display is off" is on). Sleep only: nothing here is read by a
-// lock decision above (timings, idleArmed, inactiveOffArmed, requireAfterDisplayOffMs, displaysOff take no part of it), and
-// the computer is only put to sleep by Grassfield while its own lock holds. ----
+// inactivity, unless "Prevent automatic sleeping when the display is off" is on). The idle lock, the display-off lock and
+// the lock screen's display power-off above never read it (timings, idleArmed, inactiveOffArmed, requireAfterDisplayOffMs,
+// displaysOff take no part of it). The one lock it can cause is autoSleepAction's "lock": a lock requested before a sleep
+// on a session that is not locked yet, which only ever adds a lock (never removes, delays or skips one). The computer is
+// only put to sleep by Grassfield while its own lock is confirmed and in the LOCKED state. ----
 
 // Seconds the displays stay off without input before the computer sleeps (macOS sleeps about a minute after the display).
 var AUTO_SLEEP_SECONDS = 60;
 
-// Automatic sleep is prevented: on battery never (macOS: a portable on battery always sleeps after the display), else
-// unless energy.preventSleep is exactly false. The value arrives read through the contract (a boolean, default true);
-// anything else, an unknown power source included, keeps the computer awake: Grassfield never put a computer to sleep by
-// itself before this setting, so a value that cannot be read gives back that behaviour, never another.
-function sleepPrevented(preventSleep, onBattery) {
-    if (onBattery === true)
-        return false;
+// A request that did not put the computer to sleep (logind refused it: an application's sleep block inhibitor, a download)
+// or a wake without input is tried again this often while the displays stay off: never a tight loop. A monotonic Timer, so
+// the time asleep does not count.
+var AUTO_SLEEP_RETRY_MS = 300000;
+
+// Automatic sleep is prevented unless energy.preventSleep is exactly false, on battery and on the power adapter alike
+// (integrator decision 2026-11-04: Grassfield and Omarchy never suspended a computer by itself, the owner runs long builds
+// and agents on battery too, and asked for a way to PREVENT sleep; macOS has no switch for battery). The value arrives read
+// through the contract (a boolean, default true); anything else keeps the computer awake: a value that cannot be read gives
+// back the behaviour from before the setting, never a sleep.
+function sleepPrevented(preventSleep) {
     return preventSleep !== false;
+}
+
+// The retry Timer runs: the monitor is armed (displays off for lack of input, not prevented, no ScreenSaver cookie) and a
+// lock or a suspend was already asked for in this display-off period. Exact values only.
+function autoSleepRetryArmed(armed, asked) {
+    return armed === true && asked === true;
 }
 
 // The automatic sleep monitor is armed: this module turned the displays off for lack of input (the unlocked display-off
@@ -112,15 +124,17 @@ function autoSleepArmed(displaysOff, prevented, busInhibited) {
     return displaysOff === true && prevented === false && busInhibited !== true;
 }
 
-// What a due automatic sleep does: "suspend" once Grassfield's lock holds (the session is locked and the compositor
-// confirmed it), "lock" when the session is not locked (the lock first; the sleep waits for the next due time, after the
-// lock holds), "wait" while a lock is being acquired. Never "suspend" on an unlocked or unconfirmed session: Grassfield
-// never puts an unlocked session to sleep (the lock before sleep, SleepInhibitor, would also lock it, but only while its
-// logind delay inhibitor is held).
-function autoSleepAction(locked, holding) {
-    if (locked === true && holding === true)
+// What a due automatic sleep does, from the lock's state machine state (LockMachine.js, read afresh: Lock.currentState())
+// and Lock.currentlySecure() (confirmed by the compositor and verified): "suspend" only in LOCKED with the lock secure;
+// "lock" only when the session is exactly UNLOCKED (the lock first; the sleep waits for the next due time, after it holds);
+// "wait" in every other case: LOCKING, AUTHENTICATING (a password or a fingerprint being checked), RELEASING (the unlock's
+// fade: a fingerprint success just before the due time must not start a sleep), LOCKED but not secure yet, or a state it
+// does not know. Never "suspend" on an unlocked, unconfirmed or opening session (review of 95dab794: `holding` alone
+// includes AUTHENTICATING and RELEASING and skips the verification).
+function autoSleepAction(state, secure) {
+    if (state === "locked" && secure === true)
         return "suspend";
-    if (locked !== true)
+    if (state === "unlocked")
         return "lock";
     return "wait";
 }
