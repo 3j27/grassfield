@@ -138,6 +138,12 @@ have "omarchy-weather-location still has --set and --clear and the file settings
 for f in battlenet davinci-resolve geforce moonlight retroarch steam telegram pip webcam-overlay; do
   have "app rules default/hypr/apps/$f.lua exist (config/hypr/grassfield/apps.lua ports them)" test -r "$omarchy/default/hypr/apps/$f.lua"
 done
+# Settings' setups (ADR-0045 OC-0.4, OC-5 to OC-10): the exact commands of systemguard.cpp's launch allowlist and read-only checks.
+for c in omarchy-setup-security-fingerprint omarchy-remove-security-fingerprint omarchy-setup-security-fido2 omarchy-remove-security-fido2 omarchy-setup-security-sshd omarchy-drive-password omarchy-hibernation-setup omarchy-hibernation-remove omarchy-hibernation-available omarchy-voxtype-install omarchy-voxtype-remove omarchy-voxtype-model omarchy-hw-fingerprint omarchy-network-qr; do
+  have "command $c exists (Settings: Fingerprint & Security Key, Sharing, Disk Encryption, Hibernation, Dictation, Share Network)" test -x "$omarchy/bin/$c"
+done
+have "omarchy-setup-security-sshd still writes the hardening file Settings reads (10-omarchy-hardening.conf)" has_grep '10-omarchy-hardening.conf' "$omarchy/bin/omarchy-setup-security-sshd"
+have "omarchy-network-qr still has --meta (Share Network reads its meta line and matrix)" has_grep '--meta' "$omarchy/bin/omarchy-network-qr"
 for pkg in gpu-screen-recorder tesseract zbarimg ddcutil localsend wtype wl-copy curl; do
   command -v "$pkg" >/dev/null 2>&1 && info "$pkg installed (ADR-0045)" || info "$pkg not installed: the ADR-0045 feature that uses it is hidden"
 done

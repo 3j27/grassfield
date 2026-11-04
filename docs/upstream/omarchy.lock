@@ -73,3 +73,12 @@ ec361a3965b9e21d3f74a3c2b3199f1ff8a9284261abeaa6b836d21866745d5f bin/omarchy-men
 04ed40efeb36840d585d422deb44823f4eaf879944e7bf1ba6e828f14eaed4cb bin/omarchy-weather-location shell/widgets/Weather.js,shell/widgets/WeatherSampler.qml
 66d2aa5e81bfe12b1b1b53b499a09968bc9ad660d066bc60af9b18102e836d17 shell/plugins/panels/weather/Model.js shell/widgets/Weather.js
 3a5b1345741f699e426ac08a2e4548a8bc0e0c4c82a54600402f716c20736de5 shell/plugins/panels/weather/Panel.qml shell/widgets/Weather.js,shell/widgets/WeatherSampler.qml
+# ADR-0045 Settings setups (OC-5 to OC-10): the Omarchy scripts whose markers, files and output Settings reads (the PAM lines,
+# /etc/fido2/fido2, the SSH hardening file, the resume configuration, the Wi-Fi QR matrix) and the dictation binding's source.
+619b82eeea233061bdadea83566d91c065e231830c3333a41960a5a6221b96e0 bin/omarchy-network-qr apps/settings/qml/NetworkQr.js
+f6725c68ccb6011c2e76af877d4c05784255a6dfead04f1af8a3f23a7fdd1b87 bin/omarchy-setup-security-fingerprint apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+0dd2e2c8bd76613c861a7a3f136cdcd7018a07b45805e207e3c0933d0820a955 bin/omarchy-setup-security-fido2 apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+19112707651481a7c6266e9efb6832dea508530cf8b6e53e12f74583fee5ef57 bin/omarchy-setup-security-sshd apps/settings/qml/Setups.js
+c05881585232eed72a629e7a5faf1d738f1eaeba165d45cc8a7b28885f5f54ac bin/omarchy-hibernation-setup apps/settings/qml/Setups.js,apps/settings/qml/BatteryPage.qml
+a269d40d4c4745b1982571b5f818e0ffcef847101db11535eafad7ff6dad4d64 bin/omarchy-hibernation-available apps/settings/qml/Setups.js,apps/settings/qml/BatteryPage.qml
+ff39dcab7a834082abc12a5563c3b37ce434a39a1969a1ecb2f025553b69c446 default/hypr/bindings/voxtype.lua config/hypr/grassfield/bindings.lua
