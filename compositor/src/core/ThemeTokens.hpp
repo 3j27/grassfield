@@ -89,8 +89,8 @@ namespace gf::theme::tokens {
     inline constexpr int kWindowItemsInset = 8;
     // the floating sidebar panel's distance from the window's left, top and bottom edges, and the gutter between it and the content: macOS 26 System Settings panel at x 16, y 16, bottom 1785 of 1801 px at 2 px/pt = 8 pt (ss-004-005, measured 2026-11-03; Finder 8-9 px at 1.07) [ref: ADR-0024 amendment 2026-11-03]
     inline constexpr int kWindowSidebarPanelInset = 8;
-    // the floating sidebar panel's corner, concentric with the 26-pt window corner at the 8-pt inset (26 - 8 = 18); circle fit on the capture's corner edge points 18 to 19 (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md]
-    inline constexpr int kWindowSidebarPanelRadius = 18;
+    // the floating sidebar panel's corner (a circle), concentric with the window's: the window's corner measures 16.7 pt circle-equivalent at 45 degrees (Hyprland rounding 17 at power 2.6, ADR-0024 note 2026-11-04), less the 8-pt inset (16.7 - 8); SidebarPanel draws it on whole device pixels (11 px at 1.25, 9 at 1, 17 at 2), so the panel's curve runs parallel to the window's; macOS 26 drew 18 to 19 in its 26-pt window (ss-004-005 at 2 px/pt, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03 and note 2026-11-04; docs/audits/refinement-2026-11-02.md]
+    inline constexpr double kWindowSidebarPanelRadius = 8.7;
     // the light rim that lights the floating sidebar panel, 1 pt wide (2 px at 2x), snapped to whole device pixels: pure white (255) on the 249 panel in the light appearance, so the knob colour at full opacity (ss-004-005, measured 2026-11-03) [ref: ADR-0024 amendment 2026-11-03]
     inline constexpr double kWindowSidebarPanelRimOpacity = 1.0;
     // estimate: the same rim in the dark appearance, the knob colour at the toolbar's inner-rim 0.08 (no dark capture of the panel) [ref: ADR-0024 amendment 2026-11-03]

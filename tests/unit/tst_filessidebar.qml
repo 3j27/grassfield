@@ -191,7 +191,8 @@ TestCase {
         compare(panel.x, inset);
         compare(panel.y, inset);
         compare(panel.height, sidebar.height - 2 * inset);
-        compare(panel.radius, Tokens.windowSidebarPanelRadius);
+        // The panel token on whole device pixels (SidebarPanel), concentric with the window's corner.
+        compare(panel.radius, Math.round(Tokens.windowSidebarPanelRadius * panel.pixelRatio) / panel.pixelRatio);
         verify(list.y >= panel.y + Tokens.spacingSm, "the first row starts inside the panel, not on its edge: " + list.y);
         verify(list.x >= panel.x, "inside the panel's left edge");
         verify(list.y + list.height <= panel.y + panel.height, "inside the panel's bottom edge");

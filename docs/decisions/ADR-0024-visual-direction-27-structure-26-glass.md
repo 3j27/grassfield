@@ -169,7 +169,7 @@ Finder capture getting-started gs-010-011 at 1.0748 px/pt), 2026-11-03:
 | Trait | Value | Token |
 |---|---|---|
 | Panel inset from the window's left, top, bottom edges | 8 pt (x 16, y 16 px; bottom 1785 of 1801 px); Finder 8-9 px | `window.sidebarPanelInset` 8 |
-| Panel corner | 18 to 19 pt, concentric with the 26-pt window corner (26 - 8 = 18) | `window.sidebarPanelRadius` 18 |
+| Panel corner | 18 to 19 pt, concentric with the 26-pt window corner (26 - 8 = 18). Ours since the note of 2026-11-04: concentric with our window's measured corner, 16.7 pt circle-equivalent less the inset, on whole device pixels (11 px at 1.25) | `window.sidebarPanelRadius` 8.7 (was 18) |
 | Panel width (Settings) | 215 pt, so a slot of 8 + 215 = 223 pt | `settings.sidebarWidth` 223 |
 | Panel fill | 249 against the 252 content ground (the window edge is 255): 6 levels under the window; the dark appearance keeps its own 6 (no dark capture: estimate) | `color.light.sidebarFill` #F7F6F3 (was #EEECE7, 15 under); `color.dark.sidebarFill` unchanged #25231F |
 | Rim | 1 pt (2 px at 2x), pure white (255) on the panel's edge, drawn as whole device pixels (1 px at 1.25) with its far edges snapped down, so it never splits between two pixels | `window.sidebarPanelRimWidth` 1, `window.sidebarPanelRimOpacity` 1.0 (dark: 0.08, estimate) |
@@ -415,7 +415,13 @@ its outline: one device pixel at 1.25 (0.8 pt; macOS 27 draws half a point at 2x
 4.81–4.82 (16.4–16.5) in its dark capture; before, 6.16–6.37 (21.0–21.7). One rounding cannot match both appearances
 while the border's outer arc is Hyprland's; the light value, the one C-1 was measured on, decides.
 
-**Open: the floating sidebar panel** (`window.sidebarPanelRadius` 18, amendment of 2026-11-03) was set concentric with
-"the 26-pt window corner" (26 − 8). Concentric with the corner measured here, at the 8-pt inset, it would be about 9
-(16.7 − 8 at the 45-degree point). Not changed in this step: a visible change of an owner-validated surface, left to the
-integrator.
+**The floating sidebar panel follows** (the integrator's request on this branch). `window.sidebarPanelRadius` was 18,
+concentric with "the 26-pt window corner" (26 − 8): macOS 26's window, not ours, whose corner measured 19.8 before and 16.7
+now. Concentric at the 8-pt inset, the panel's circle is the window's circle-equivalent less the inset, 16.7 − 8 = 8.7 pt
+(at the 45-degree point the two curves are then 8 pt apart along the diagonal, as along the sides). `SidebarPanel` (a
+`Rectangle`, circular corners) draws it on whole device pixels, as the inset is (10 px at 1.25): 11 px at 1.25 (8.8 pt,
+within 0.13 px of the concentric 10.875), 9 at 1, 13 at 1.5, 17 at 2; its rim and shadow take the same radius. Checked in
+nested at 1.25 on 8x crops of the top-left corners of Settings, Files and Preview, light and dark: along the corner's
+diagonal the window's edge is at 5.7 px and the panel's rim at 13 px, 10.3 px apart against the 10 px of the straight
+sides (with 18 they were about 15 px apart); in the dark appearance the window's rim and the panel's rim stay 6 device
+pixels of window apart, never touching.

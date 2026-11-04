@@ -17,7 +17,9 @@ Rectangle {
     // The rim, a whole number of device pixels (1 pt: 1 px at 1.25), so it never splits between two pixels.
     readonly property real rimWidth: Math.max(1, Math.round(Tokens.windowSidebarPanelRimWidth * root.pixelRatio)) / root.pixelRatio
 
-    radius: Tokens.windowSidebarPanelRadius
+    // A circle concentric with the window's corner (16.7 pt circle-equivalent less the inset, ADR-0024 note 2026-11-04), on
+    // whole device pixels as the inset is: 11 px at 1.25 (8.8 pt), so the panel's curve runs parallel to the window's.
+    radius: Math.round(Tokens.windowSidebarPanelRadius * root.pixelRatio) / root.pixelRatio
     color: Appearance.colors.sidebarFill
 
     // Under the panel (z -1), reaching the content beside it.
