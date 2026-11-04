@@ -188,6 +188,15 @@ function M.keyboard(path)
   return out
 end
 
+-- How many layouts the Settings file gives (0: none); bindings.lua uses it when omarchy.lua is not in the session (dev.lua).
+function M.layout_count(path)
+  local layout = M.keyboard(path).kb_layout
+  if not layout then return 0 end
+  local n = 0
+  for _ in (layout .. ","):gmatch("([^,]*),") do n = n + 1 end
+  return n
+end
+
 -- The user's saved values over the defaults; invalid or unknown entries are ignored (the default stays).
 function M.settings(path)
   local out = {}

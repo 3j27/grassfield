@@ -158,6 +158,10 @@ elseif case == "keyboard-file" then
   local function put(body) local w = io.open(d .. "/k.lua", "w"); w:write(body); w:close(); return gi.keyboard(d .. "/k.lua") end
   local k = put('return { repeat_rate = 0, kb_layout = "de" }')
   say("one-layout", tostring(k.repeat_rate), k.kb_layout, "[" .. tostring(k.kb_variant) .. "]", tostring(k.kb_options))
+  put('return { kb_layout = "fr,us" }')
+  local two = gi.layout_count(d .. "/k.lua")
+  put('return { kb_layout = "de" }')
+  say("layout-count", two, gi.layout_count(d .. "/k.lua"), gi.layout_count(d .. "/missing.lua"))
   k = put('return { repeat_rate = 1.5, repeat_delay = 50, kb_layout = "us,FR", kb_variant = "x" }')
   say("invalid", tostring(next(k)))
   k = put('return { kb_layout = "us,fr,de,es,it" }')
@@ -321,6 +325,7 @@ desc="Settings > Keyboard: its file applies after Omarchy (rate 15, two layouts,
 check grep -q "^keyboard rate 15 delay-user-wins 333 layout us,fr variant ,bepo options compose:caps numlock nil$" <<<"$out"
 desc="Input sources: omarchy.lua counts the layouts the session ends up with (1 from Omarchy, 2 from Settings), restores hl.config, and no grp: option is set"
 check grep -q "^layouts 2 hl.config-restored true$" <<<"$out"
+check grep -q "^layout-count 2 1 0$" <<<"$out"
 desc="Settings > Keyboard: one layout gets no switch and an empty variant; 0 turns repeat off"
 check grep -q "^one-layout 0 de \[\] nil$" <<<"$out"
 desc="Settings > Keyboard: mistyped or out-of-range entries, more than four layouts and a bad variant are left out"

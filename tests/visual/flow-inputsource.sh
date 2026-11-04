@@ -8,8 +8,10 @@
 #      is in the bar; every keyboard of `devices` changes its active keymap on each chord (printed before and after);
 #   4. keyboard.lua with one layout again: the binds disappear on the reload.
 # Captures: $VS_SHOTS/flow-inputsource-*.png (the Input menu, Settings > Keyboard).
-# Run as a BARE command (starts a nested session when none is up; optional language):  tests/visual/flow-inputsource.sh [fr]
+# Run as a BARE command on a FRESH nested session (a session left by an earlier flow dropped the injected chords once; run
+# scripts/dev/nested-down.sh first), optional language:  tests/visual/flow-inputsource.sh [fr]
 VISUAL_LANG=${1:-en}
+export GRASSFIELD_REF_SCALE=1.25  # the owner's panel (nested-up.sh --ref-scale 1.25); a session already up keeps its own scale
 source "$(dirname "$0")/flow-lib.sh"
 fl_start inputsource
 
@@ -20,17 +22,18 @@ ctrl_alt_space() { bound space 12; }
 no_binds() { ! ctrl_space && ! ctrl_alt_space; }
 both_binds() { ctrl_space && ctrl_alt_space; }
 devices() { "$VS_ROOT/scripts/nestctl" devices -j | jq -r '.keyboards[] | "\(.name)\t\(.layout)\tactive=\(.active_keymap)"'; }
-typed() { "$VS_ROOT/scripts/nestctl" devices -j | jq -r '.keyboards[] | select(.name | test("^(power|sleep|lid|video)") | not) | .active_keymap' | sort -u | paste -sd,; }
+typed() { "$VS_ROOT/scripts/nestctl" devices -j | jq -r '.keyboards[] | select(.name | test("^(power|sleep|lid|video|hl-virtual-keyboard)") | not) | .active_keymap' | sort -u | paste -sd,; }
 active_workspace() { "$VS_ROOT/scripts/nestctl" activeworkspace -j | jq -r .id; }
 
 echo "NOTE: uptime: $(uptime)"
 
-# 1. injection on a control: Ctrl+Right is the Next Space bind of Grassfield
+# 1. injection on a control: Ctrl+3 is the "Switch to Space 3" bind of Grassfield (a key the compositor answers whatever the
+#    layout; Ctrl+arrows need a Space on the same output, which the nested session may not have)
 before=$(active_workspace)
-fl_chord Control_L Right
+fl_chord Control_L 3
 after=$(active_workspace)
-fl_check "injection works: Control_L+Right moved the Space ($before -> $after)" test "$before" != "$after"
-fl_chord Control_L Left
+fl_check "injection works: Control_L+3 switched to Space 3 ($before -> $after)" test "$after" = 3
+fl_chord Control_L 2
 
 # 2. one layout (the session's own): nothing bound
 fl_check "one layout: Ctrl+Space and Ctrl+Option+Space are not bound ($(devices | head -n 3 | paste -sd';'))" no_binds
@@ -39,6 +42,11 @@ fl_check "one layout: Ctrl+Space and Ctrl+Option+Space are not bound ($(devices 
 printf 'return {\n  kb_layout = "fr,us",\n  kb_variant = ",",\n}\n' > "$keyfile"
 fl_check_wait "the configuration is read again: both binds appear" 30 both_binds
 vs_sleep 2
+# A second, virtual keyboard (vkbd, its own keymap) stays attached while the chords run: `devices` lists it next to the
+# session's keyboard, which is what an xkb group option could not follow.
+"$VS_ROOT/tests/tools/vkbd/vkbd.sh" sleep 60000 >/dev/null 2>&1 &
+hold=$!
+vs_sleep 1.5
 echo "---- keyboards before:"; devices
 start=$(typed)
 fl_note "active keymap(s) of the typed keyboards before: $start"
@@ -56,6 +64,8 @@ fl_chord Control_L space
 vs_sleep 0.6
 three=$(typed)
 fl_check "Ctrl+Space again selects the previous source (two sources: back to $one)" test "$three" = "$one"
+
+kill "$hold" 2>/dev/null
 
 # The Input menu: the sources in the shell's language, the one in use checked
 fl_wait 15 bash -c '[[ $("$1" menubar openKind 2>/dev/null) != "refused" ]]' _ "$VS_ROOT/tests/visual/ipc.sh"

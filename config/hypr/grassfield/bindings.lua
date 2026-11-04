@@ -156,7 +156,10 @@ end
 -- reloads, which parses this file again: the keys appear and disappear with that reload. omarchy.lua counts the layouts.
 -- (Omarchy binds no CTRL+SPACE nor CTRL+ALT+SPACE; its SPACE binds all hold SUPER.)
 local omarchy_state = package.loaded["grassfield.omarchy"]
-if type(omarchy_state) == "table" and (omarchy_state.layouts or 0) >= 2 then
+local layouts = type(omarchy_state) == "table" and omarchy_state.layouts or 0
+local gi = package.loaded["grassfield.input"]
+if layouts == 0 and type(gi) == "table" and gi.layout_count then layouts = gi.layout_count() end  -- dev.lua has no omarchy.lua
+if layouts >= 2 then
   bind("CTRL + SPACE", "Previous input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all prev"))
   bind("CTRL + ALT + SPACE", "Next input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"))
 end
