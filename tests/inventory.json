@@ -640,6 +640,7 @@
  {"path": "tests/visual/degraded-notice.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/appear-once.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/desktop-menus.sh", "layer": "visual", "runner": "bare"},
+ {"path": "tests/visual/desktop-menu-displays.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-backdrop.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/dock-drag-interrupt.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/dock-drag-stress.sh", "layer": "nested", "runner": "bare"},
