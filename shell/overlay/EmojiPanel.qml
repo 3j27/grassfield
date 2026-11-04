@@ -111,6 +111,8 @@ FocusScope {
         y: Tokens.emojiPadding
         width: root.width - 2 * Tokens.emojiPadding
         focus: true
+        // macOS 27 keeps the app's window key under the picker and draws no ring round its field (the caret shows the focus).
+        focusRing: false
         enabled: Emoji.state !== "missing"
         Accessible.name: qsTr("Search")
         onTextChanged: root.setQuery(text)
@@ -195,12 +197,13 @@ FocusScope {
                         Accessible.selected: cell.selected
                         Accessible.onPressAction: Emoji.choose(cell.modelData)
 
-                        // The keyboard selection in the accent; the pointer's square neutral.
+                        // The keyboard selection in the menus' selection role (MenuItem's fill, never the text highlight
+                        // colour the user may set apart); the pointer's square neutral.
                         Rectangle {
                             anchors.fill: parent
                             anchors.margins: Tokens.emojiCellInset
                             radius: Tokens.emojiCellRadius
-                            color: cell.selected ? Appearance.highlight : cellMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
+                            color: cell.selected ? Appearance.colors.selection : cellMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                         }
 
                         Text {
@@ -208,7 +211,7 @@ FocusScope {
                             textFormat: Text.PlainText
                             text: cell.modelData
                             // A glyph drawn as text (a symbol without colour) takes the text colour of its square.
-                            color: cell.selected ? Appearance.highlightText : Appearance.colors.text
+                            color: cell.selected ? Appearance.colors.selectionText : Appearance.colors.text
                             font.family: Appearance.fontFamily
                             font.pixelSize: Tokens.emojiGlyphSize
                             Accessible.ignored: true
