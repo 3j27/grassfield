@@ -180,6 +180,10 @@ bind("CTRL + UP", "Overview", shell("overview", "toggle"))
 bind("SUPER + CTRL + Q", "Lock screen", shell("lock", "lock"))
 -- The lid switch is bound once, in system.lua (real session only): /usr/lib/grassfield/grassfield-lid calls `lock lid`.
 bind("SUPER + N", "Notification Center", shell("notifications", "toggleCenter"))
+-- The capture toolbar (macOS Shift-Command-5; ADR-0045 OC-1): a shell surface, so it opens in the nested session too, where it
+-- runs no capture (shell/services/CaptureState.qml). Bound by keycode (digits need Shift on some layouts). The screenshot keys
+-- and the stop key are system.lua's (real session only).
+bind("SUPER + SHIFT + code:14", "Screenshot and recording options", shell("capture", "toggle"))
 bind("SUPER + ALT + ESCAPE", "Force Quit Applications", shell("menubar", "panel forcequit ''"))
 
 -- Keyboard access to the menu bar and the Dock (gate A1), like Ctrl+F2 / Ctrl+F3.

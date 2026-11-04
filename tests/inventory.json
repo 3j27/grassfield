@@ -71,6 +71,8 @@
  {"path": "tests/unit/tst_controlsmisc.qml", "layer": "headless"},
  {"path": "tests/unit/tst_controlstext.qml", "layer": "headless"},
  {"path": "tests/unit/tst_capabilities.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_capturemodel.qml", "layer": "headless"},
+ {"path": "tests/unit/tst_capturefile.qml", "layer": "headless"},
  {"path": "tests/unit/tst_ccmodel.qml", "layer": "headless"},
  {"path": "tests/unit/tst_colorwell.qml", "layer": "headless"},
  {"path": "tests/unit/tst_contrast.qml", "layer": "headless"},
