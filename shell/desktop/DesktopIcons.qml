@@ -13,7 +13,7 @@ import "KeyboardFocus.js" as Focus
 // below the Bottom-layer widgets surface (which is never touched from here). The surface takes the
 // whole screen so that a click on empty desktop can start a rubber band and focus the desktop; the
 // widgets live in a higher layer and keep their own input. Nothing animates or repaints on a timer.
-// Primary screen: the first one, or the output named by GRASSFIELD_DESKTOP_SCREEN (dev only).
+// Primary screen: the main display (MainDisplay, ADR-0044), or the output named by GRASSFIELD_DESKTOP_SCREEN (dev only).
 //
 // Keyboard focus (ADR-0012, KeyboardFocus.js): the desktop is click-to-focus. Keyboard interactivity is None
 // until a press on the desktop, then OnDemand; it goes back to None when the pointer leaves the surface or the
@@ -22,7 +22,7 @@ import "KeyboardFocus.js" as Focus
 // kicker and the drop on pointer leave go away and the desktop keeps the keyboard until another click (macOS Finder);
 // the file keys are enabled. Live: the capability can be withdrawn (plugin unload) at any time.
 Variants {
-    model: Quickshell.screens.filter(s => s.name === (Mode.devValue("DESKTOP_SCREEN") || Quickshell.screens[0].name))
+    model: Quickshell.screens.filter(s => s.name === (Mode.devValue("DESKTOP_SCREEN") || MainDisplay.screenName))
 
     // qmllint disable uncreatable-type
     PanelWindow {

@@ -300,7 +300,7 @@ Not verified: transparency 0.6, Reduce Motion, two outputs, the fr strings on sc
   clear model (hover x on a card, group x growing into Clear All, Show Less, slide-out) was verified with `scripts/dev/pointer.sh` on the
   nested private bus (2026-10-19); the nested compositor draws few frames while idle, so the slide-out can look frozen in a capture taken
   right after the click (it finishes on the next frames; a pointer nudge drives them).
-- Banners appear on the active display only; the Notification Center opens on the active display too (SUPER+N, IPC), the first screen only when the compositor reports no focus.
+- Banners appear on the main display (`MainDisplay.screenName`, ADR-0044: Settings > Displays > Use as, else the built-in panel, else the first screen; macOS puts them there too), not on the focused one; the Notification Center opens on the active display too (SUPER+N, IPC), the first screen only when the compositor reports no focus.
 
 ## Per-app previews (ADR-0004, C-NOTIF-2; owner decision 2026-10-23: follow macOS)
 macOS keeps one "Show previews" default (Always, When Unlocked, Never) and lets every app override it. Grassfield does the same; the earlier decision that the single global key was the whole requirement is superseded, and the global key stays as the default.

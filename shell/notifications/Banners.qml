@@ -18,7 +18,8 @@ PanelWindow {
     // qmllint enable uncreatable-type
     id: win
 
-    readonly property string targetName: Compositor.activeScreenName
+    // The banners show on the main display (macOS: notifications appear on the display that holds the menu bar and Dock, ADR-0044).
+    readonly property string targetName: MainDisplay.screenName !== "" ? MainDisplay.screenName : Compositor.activeScreenName
     readonly property var targetScreen: {
         for (const s of Quickshell.screens) {
             if (s.name === targetName)

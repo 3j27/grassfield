@@ -122,6 +122,8 @@ Singleton {
     readonly property string screenSaverFolder: store.screenSaverFolder
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
+    // The remembered choices of the main display (ui/Grassfield/Ui/MainDisplay.js); platform/MainDisplay.qml resolves them.
+    readonly property var displaysMain: store.displaysMain
     readonly property bool menubarShowBackground: store.menubarShowBackground
     readonly property string menubarAutoHide: store.menubarAutoHide
     readonly property bool menubarShowNowPlaying: store.menubarShowNowPlaying

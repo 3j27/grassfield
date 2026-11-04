@@ -5,6 +5,7 @@ singleton Popups 1.0 Popups.qml
 singleton Power 1.0 Power.qml
 singleton DayPhase 1.0 DayPhase.qml
 singleton Ground 1.0 Ground.qml
+singleton MainDisplay 1.0 MainDisplay.qml
 singleton Journal 1.0 Journal.qml
 singleton Entrance 1.0 Entrance.qml
 singleton Trash 1.0 Trash.qml

@@ -79,7 +79,19 @@ Scope {
     // pointer resting on it for Tokens.dockRevealDwell makes that output the Dock's (`moveDockTo`). It starts on the focused output.
     property string chosenScreen: ""
     // Development sessions name their primary output (GRASSFIELD_DESKTOP_SCREEN, as the desktop icons do); the Dock starts there.
-    readonly property string startHint: Mode.devValue("DESKTOP_SCREEN")
+    // Otherwise the Dock starts on the main display (macOS: Displays > Use as > Main display holds the Dock, ADR-0044), and
+    // moves there when the main display changes (a choice in Settings, the main display unplugged or plugged back); from then on
+    // the pointer reaching another output's Dock edge moves it, as before.
+    readonly property string startHint: Mode.devValue("DESKTOP_SCREEN") || MainDisplay.screenName
+
+    Connections {
+        target: MainDisplay
+
+        function onScreenNameChanged(): void {
+            if (root.settled && MainDisplay.screenName !== "")
+                root.moveDockTo(MainDisplay.screenName);
+        }
+    }
     readonly property var screenNames: Quickshell.screens.map(s => s.name)
     readonly property string dockScreen: Geometry.dockScreen(chosenScreen, screenNames, Compositor.focusedScreenName, startHint)
 
