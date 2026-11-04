@@ -19,7 +19,23 @@ const QSet<QString> &fixedSystem()
         QStringLiteral("grub"),         QStringLiteral("efibootmgr"), QStringLiteral("refind"),
         QStringLiteral("syslinux"),     QStringLiteral("snapper"),    QStringLiteral("btrfs-progs"),
         QStringLiteral("cryptsetup"),   QStringLiteral("lvm2"),       QStringLiteral("plymouth"),
-        QStringLiteral("archlinux-keyring"), QStringLiteral("intel-ucode"), QStringLiteral("amd-ucode")};
+        QStringLiteral("archlinux-keyring"), QStringLiteral("intel-ucode"), QStringLiteral("amd-ucode"),
+        // The session's runtime (ADR-0044 D3); its prefixes are in protection().
+        QStringLiteral("hyprland"),     QStringLiteral("quickshell"), QStringLiteral("networkmanager"),
+        QStringLiteral("mesa"),         QStringLiteral("wireplumber"), QStringLiteral("sddm"),
+        QStringLiteral("uwsm"),         QStringLiteral("gnome-keyring")};
+    return names;
+}
+
+// The apps Omarchy installs on every machine and itself offers to remove (omarchy-remove-preinstalls; ADR-0044 D2): they are
+// on its lists but are not the system's. Held to the helper's list by tests/integration/store_helper.sh.
+const QSet<QString> &preinstalledApps()
+{
+    static const QSet<QString> names{
+        QStringLiteral("aether"),       QStringLiteral("cliamp"),     QStringLiteral("libreoffice-fresh"), QStringLiteral("xournalpp"),
+        QStringLiteral("pinta"),        QStringLiteral("obsidian"),   QStringLiteral("obs-studio"),        QStringLiteral("kdenlive"),
+        QStringLiteral("moonlight-qt"), QStringLiteral("lazydocker"), QStringLiteral("omacut"),            QStringLiteral("omacalc"),
+        QStringLiteral("omawrite")};
     return names;
 }
 
@@ -53,8 +69,11 @@ Protection protection(const QString &name, const DenyList &deny)
         return Protection::Omarchy;
     if (fixedSystem().contains(name) || hasPrefix(name, QLatin1StringView("linux")) || hasPrefix(name, QLatin1StringView("systemd"))
         || hasPrefix(name, QLatin1StringView("limine")) || hasPrefix(name, QLatin1StringView("pacman"))
-        || name.endsWith(QLatin1String("-firmware")) || name.contains(QLatin1String("-firmware-")) || deny.holdPkg.contains(name))
+        || hasPrefix(name, QLatin1StringView("qt6")) || hasPrefix(name, QLatin1StringView("pipewire"))
+        || hasPrefix(name, QLatin1StringView("xdg-desktop-portal")) || name.endsWith(QLatin1String("-firmware")) || name.contains(QLatin1String("-firmware-")) || deny.holdPkg.contains(name))
         return Protection::System;
+    if (preinstalledApps().contains(name))
+        return Protection::None; // on Omarchy's lists, but the user may remove it (HoldPkg, above, still keeps it)
     if (deny.omarchy.contains(name))
         return Protection::Omarchy;
     return Protection::None;

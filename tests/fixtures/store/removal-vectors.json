@@ -5,9 +5,18 @@
   "chromium",
   "gs-omarchy-app",
   "alacritty",
-  "linux"
+  "linux",
+  "aether",
+  "libreoffice-fresh",
+  "obs-studio",
+  "moonlight-qt",
+  "omacalc",
+  "kdenlive",
+  "cliamp",
+  "mpv"
  ],
  "holdPkg": [
+  "kdenlive",
   "pacman",
   "glibc",
   "gs-held"
@@ -367,6 +376,90 @@
   },
   {
    "name": "xfirmware",
+   "protection": "none"
+  },
+  {
+   "name": "aether",
+   "protection": "none"
+  },
+  {
+   "name": "libreoffice-fresh",
+   "protection": "none"
+  },
+  {
+   "name": "obs-studio",
+   "protection": "none"
+  },
+  {
+   "name": "moonlight-qt",
+   "protection": "none"
+  },
+  {
+   "name": "omacalc",
+   "protection": "none"
+  },
+  {
+   "name": "cliamp",
+   "protection": "none"
+  },
+  {
+   "name": "kdenlive",
+   "protection": "system"
+  },
+  {
+   "name": "mpv",
+   "protection": "omarchy"
+  },
+  {
+   "name": "hyprland",
+   "protection": "system"
+  },
+  {
+   "name": "quickshell",
+   "protection": "system"
+  },
+  {
+   "name": "networkmanager",
+   "protection": "system"
+  },
+  {
+   "name": "mesa",
+   "protection": "system"
+  },
+  {
+   "name": "wireplumber",
+   "protection": "system"
+  },
+  {
+   "name": "qt6-tools",
+   "protection": "system"
+  },
+  {
+   "name": "qt6-base",
+   "protection": "system"
+  },
+  {
+   "name": "pipewire-pulse",
+   "protection": "system"
+  },
+  {
+   "name": "xdg-desktop-portal-gtk",
+   "protection": "system"
+  },
+  {
+   "name": "mesa-utils",
+   "protection": "none"
+  },
+  {
+   "name": "qt5-base",
+   "protection": "none"
+  },
+  {
+   "name": "networkmanager-openvpn",
+   "protection": "none"
+  },
+  {
+   "name": "hyprlandish",
    "protection": "none"
   }
  ]
