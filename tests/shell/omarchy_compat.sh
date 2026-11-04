@@ -26,6 +26,9 @@ if [[ -d /usr/share/omarchy/default/hypr ]]; then
   cp -rL /usr/share/omarchy/default "$copy/default"
   mkdir -p "$copy/bin"
   for f in /usr/share/omarchy/bin/omarchy-*; do cp -L "$f" "$copy/bin/" 2>/dev/null || true; done
+  # ADR-0045: the emoji list and the two default terminal themes (directories only) are checked too.
+  mkdir -p "$copy/shell/plugins/emojis" "$copy/themes/catppuccin-latte" "$copy/themes/tokyo-night"
+  cp -L /usr/share/omarchy/shell/plugins/emojis/emojis.json "$copy/shell/plugins/emojis/" 2>/dev/null || true
   run_copy() { OMARCHY_PATH=$copy "$script"; }
   status=0; out=$(run_copy) || status=$?
   desc="the copy of the installed tree passes (the fixture is faithful)"
@@ -42,6 +45,18 @@ if [[ -d /usr/share/omarchy/default/hypr ]]; then
   desc="a missing command (omarchy-hook) fails the check by name"
   check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: command omarchy-hook" <<<"$1"' _ "$out" "$status"
   cp -L /usr/share/omarchy/bin/omarchy-hook "$copy/bin/"
+
+  mv "$copy/shell/plugins/emojis/emojis.json" "$copy/emojis.json.away"
+  status=0; out=$(run_copy) || status=$?
+  desc="a missing emoji list (Emoji & Symbols, ADR-0045 OC-3) fails the check by name"
+  check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: Emoji list .*emojis.json" <<<"$1"' _ "$out" "$status"
+  mv "$copy/emojis.json.away" "$copy/shell/plugins/emojis/emojis.json"
+
+  sed -i 's/^hyprctl reload/hyprctl dispatch forcerendererreload/' "$copy/bin/omarchy-restart-hyprctl"
+  status=0; out=$(run_copy) || status=$?
+  desc="omarchy-restart-hyprctl reaching the compositor another way (the terminal theme helper's stand-in) fails the check"
+  check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: omarchy-restart-hyprctl still reloads" <<<"$1"' _ "$out" "$status"
+  cp -L /usr/share/omarchy/bin/omarchy-restart-hyprctl "$copy/bin/"
 
   sed -i 's/omarchy-restart-shell/omarchy-renamed-shell/' "$copy/bin/omarchy-update-restart"
   status=0; out=$(run_copy) || status=$?

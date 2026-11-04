@@ -8,8 +8,9 @@
 // Derived from Omarchy v4.0.6, Copyright (c) David Heinemeier Hansson, MIT License (upstream LICENSE, basecamp/omarchy@237f1b4;
 // notice shipped as packaging/licenses/omarchy-MIT.txt): the location file's format and its reading follow
 // bin/omarchy-weather-location and shell/plugins/panels/weather/Model.js (parseLocationFile, wttrLocationQuery,
-// localeUsesImperial); the request is the one of that panel (`curl ... https://wttr.in/<query>?format=j1`). Nothing else of
-// it is used: the panel's Open-Meteo forecast and geocoding are not (OC-14 names wttr.in only).
+// localeUsesImperial); the request is the one of that panel, shell/plugins/panels/weather/Panel.qml
+// (`curl ... https://wttr.in/<query>?format=j1`). Nothing else of it is used: the panel's Open-Meteo forecast and geocoding
+// are not (OC-14 names wttr.in only).
 
 const BASE_URL = "https://wttr.in";
 const LOCATION_COMMAND = "omarchy-weather-location";

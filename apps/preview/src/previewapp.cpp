@@ -518,6 +518,8 @@ void PreviewApp::cancelRecognition(int request)
     process->deleteLater();
 }
 
+// A concealed copy (a QR code's content) carries the password manager's secret marker, as Omarchy 4.0.6's omarchy-capture-qr
+// copies with `wl-copy --sensitive` (pinned in docs/upstream/omarchy.lock): clipboard history does not record it.
 void PreviewApp::copyText(const QString &text, bool concealed) const
 {
     if (text.isEmpty())

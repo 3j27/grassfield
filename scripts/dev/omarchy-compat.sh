@@ -110,6 +110,38 @@ else
   info "Hyprland Lua stubs $stubs not found (API names not checked)"
 fi
 
+# --- Omarchy capabilities used by the session (ADR-0045; docs/compat.md rows) -------------------------------------------
+# Every one degrades gracefully when missing, but a rename or a changed contract would silently switch a feature off: fail.
+for c in omarchy-menu-emoji-insert omarchy-brightness-display-ddc omarchy-theme-set omarchy-theme-current omarchy-theme-list omarchy-menu-share omarchy-weather-location; do
+  have "command $c exists (ADR-0045: Emoji & Symbols, DDC brightness, terminal themes, LocalSend, Weather)" test -x "$omarchy/bin/$c"
+done
+emojis=$omarchy/shell/plugins/emojis/emojis.json
+have "Emoji list $emojis is a JSON array of {e, k} whose group-first glyphs come in Unicode order (Emoji & Symbols' categories)" \
+  python3 -I -c 'import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+glyphs = [d.get("e") for d in data if isinstance(d, dict)]
+firsts = ["\U0001F600", "\U0001F44B", "\U0001F435", "\U0001F347", "\U0001F30D", "\U0001F383", "\U0001F453", "\U0001F3E7", "\U0001F3C1"]
+at = [glyphs.index(g) if g in glyphs else -1 for g in firsts]
+sys.exit(0 if isinstance(data, list) and all(isinstance(d.get("k"), str) for d in data) and at[0] == 0 and at == sorted(at) and -1 not in at else 1)' "$emojis"
+have "omarchy-menu-emoji-insert still copies with wl-copy --sensitive and pastes with Shift+Insert" bash -c 'grep -q "wl-copy.*--sensitive" "$1" && grep -q "shift -k Insert" "$1"' _ "$omarchy/bin/omarchy-menu-emoji-insert"
+have "omarchy-brightness-display-ddc still takes <monitor> [+N%|N%-|N%] (Brightness.qml, Settings > Displays)" has_grep '<monitor> \[+N%|N%-|N%\]' "$omarchy/bin/omarchy-brightness-display-ddc"
+for th in catppuccin-latte tokyo-night; do
+  have "theme $th exists (a default of terminal.lightTheme/darkTheme)" test -d "$omarchy/themes/$th"
+done
+have "omarchy-restart-hyprctl still reloads through hyprctl by name (grassfield-terminal-theme's private stand-in catches it)" has_grep '^hyprctl reload' "$omarchy/bin/omarchy-restart-hyprctl"
+have "omarchy-theme-set-browser-policy still reaches pkexec by name (grassfield-terminal-theme's private stand-in refuses it)" has_grep 'exec pkexec ' "$omarchy/bin/omarchy-theme-set-browser-policy"
+have "omarchy-theme-set calls no omarchy-restart-shell, qs, quickshell or systemctl (nothing may restart grassfield-shell)" \
+  bash -c '! grep -Eq "(^|[^-[:alnum:]])(omarchy-restart-shell|qs|quickshell|systemctl)( |$)" "$1"' _ "$omarchy/bin/omarchy-theme-set"
+have "omarchy-menu-share still sends with 'localsend --headless send' (Files: Send with LocalSend…)" has_grep 'localsend --headless send' "$omarchy/bin/omarchy-menu-share"
+have "omarchy-weather-location still has --set and --clear and the file settings/weather.json (the Weather widget)" \
+  bash -c 'grep -q -- "--set)" "$1" && grep -q -- "--clear)" "$1" && grep -q "settings/weather.json" "$1"' _ "$omarchy/bin/omarchy-weather-location"
+for f in battlenet davinci-resolve geforce moonlight retroarch steam telegram pip webcam-overlay; do
+  have "app rules default/hypr/apps/$f.lua exist (config/hypr/grassfield/apps.lua ports them)" test -r "$omarchy/default/hypr/apps/$f.lua"
+done
+for pkg in gpu-screen-recorder tesseract zbarimg ddcutil localsend wtype wl-copy curl; do
+  command -v "$pkg" >/dev/null 2>&1 && info "$pkg installed (ADR-0045)" || info "$pkg not installed: the ADR-0045 feature that uses it is hidden"
+done
+
 # --- Versions (information only; docs/compat.md records the last verified set) ---------------------------------------
 if command -v pacman >/dev/null; then
   for p in omarchy omarchy-settings hyprland quickshell qt6-base uwsm sddm; do

@@ -13,8 +13,9 @@ import "Weather.js" as WeatherLogic
 //   - Where: Omarchy's saved location, $HOME/.local/state/omarchy/settings/weather.json, read directly as JSON (the file of
 //     omarchy-weather-location, shared with the Omarchy session); none saved: wttr.in's own place for the IP address, as
 //     Omarchy does. Read when the first widget shows, before every fetch and whenever it changes (a FileView watch).
-//   - What: wttr.in's j1 report, one run of `curl` (an argument vector, https only, Tokens.widgetWeatherFetchSeconds and
-//     widgetWeatherMaxBytes; Weather.fetchArgs), parsed by Weather.parseReport. Only the parsed values are kept.
+//   - What: wttr.in's j1 report as Omarchy's shell/plugins/panels/weather/Panel.qml asks it, one run of `curl` (an
+//     argument vector, https only, Tokens.widgetWeatherFetchSeconds and widgetWeatherMaxBytes; Weather.fetchArgs), parsed
+//     by Weather.parseReport. Only the parsed values are kept.
 //   - When: only while a placed Weather widget is shown (`users` > 0: a desktop widget not covered, a Notifications one
 //     while the panel is open; never a gallery preview): at once if nothing is known, then every 30 minutes
 //     (widgetWeatherRefreshMs); after a failure 2 min later, doubling up to 30 (Weather.nextDelay). Nothing starts while the

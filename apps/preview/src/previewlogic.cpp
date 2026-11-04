@@ -211,6 +211,9 @@ bool isSystemPath(const QString &canonical)
     return false;
 }
 
+// The tools' options follow Omarchy 4.0.6 (basecamp/omarchy@237f1b4, MIT, Copyright (c) David Heinemeier Hansson; pinned in
+// docs/upstream/omarchy.lock): omarchy-capture-text's tesseract `--oem 1 --dpi 300`, omarchy-capture-qr's zbarimg
+// `-q -Sdisable -Sqrcode.enable` reading standard input (QR only: other symbologies false-positive on screen content).
 Recognition recognitionCommand(const QString &tool, const QString &languages)
 {
     Recognition out;

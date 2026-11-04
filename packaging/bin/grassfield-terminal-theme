@@ -22,10 +22,10 @@
 #   - no HYPRLAND_INSTANCE_SIGNATURE either (defence in depth: a hyprctl found another way reaches no compositor), and no
 #     SUDO_ASKPASS (the chain's sudo is `sudo -n -l -l`, then `sudo` only after that listing showed a NOPASSWD grant; no -A
 #     anywhere, and with stdin /dev/null sudo has no terminal to ask on);
-#   - no DCONF_PROFILE: its gsettings writes (colour scheme, GTK theme, icon theme) go to the user's dconf database through
-#     dconf's default profile, as in the Omarchy session; under Grassfield's profile (ADR-0017, same writable database) the
-#     icon theme is locked and that write would fail. Grassfield's own look does not come from those keys: GTK apps here
-#     read Grassfield's portal (ADR-0035 D-8) and the icon theme stays locked;
+#   - no DCONF_PROFILE: its gsettings writes (omarchy-theme-set-gnome: colour scheme, GTK theme, icon theme) go to the
+#     user's dconf database through dconf's default profile, as in the Omarchy session; under Grassfield's profile
+#     (ADR-0017, same writable database) the icon theme is locked and that write would fail. Grassfield's own look does not
+#     come from those keys: GTK apps here read Grassfield's portal (ADR-0035 D-8) and the icon theme stays locked;
 #   - Grassfield's stand-ins for Omarchy's shell (/usr/lib/grassfield/omarchy-shims: omarchy-shell, omarchy-restart-shell)
 #     next in PATH, then Omarchy's bin directory (so that a login shell, which omarchy-theme-set starts for its app hooks,
 #     never puts that directory before the stand-ins), then the rest of PATH (absolute entries only). Its calls to Omarchy's

@@ -2,7 +2,10 @@
 -- floating-first session (ADR-0002) with Grassfield's own placement (placement.lua), stacking (stacking.lua) and title bars
 -- (windows.lua, the compositor plugin). The Grassfield session does not load Omarchy's window rules (its tiling, opacity and
 -- tag rules would fight Grassfield's look), so each rule kept is written here, copied from the Omarchy 4.0.6 file it cites
--- (basecamp/omarchy@237f1b4, MIT, Copyright (c) David Heinemeier Hansson; pinned in docs/upstream/omarchy.lock):
+-- (basecamp/omarchy@237f1b4, MIT, Copyright (c) David Heinemeier Hansson; pinned in docs/upstream/omarchy.lock:
+-- default/hypr/apps/battlenet.lua, default/hypr/apps/davinci-resolve.lua, default/hypr/apps/geforce.lua,
+-- default/hypr/apps/moonlight.lua, default/hypr/apps/retroarch.lua, default/hypr/apps/steam.lua,
+-- default/hypr/apps/telegram.lua, default/hypr/apps/pip.lua, default/hypr/apps/webcam-overlay.lua):
 -- its match unchanged, and only the effects that still make sense. tests/shell/app_rules.sh holds every rule to the effects
 -- the cited Omarchy file gives that match (nothing invented, nothing changed) and refuses the effects listed as not ported.
 --
