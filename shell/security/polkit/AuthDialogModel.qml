@@ -45,8 +45,10 @@ QtObject {
     readonly property string prompt: flow ? cleanPrompt(plainLine(flow.inputPrompt, maxDetailLength)) : ""
     // Polkit/PAM feedback, or our own message after a failed attempt. While a device is awaited (awaitingDevice) the line is
     // PAM's own (the device's instruction, or pam_faillock's notice), never the previous round's "Incorrect password": the
-    // intro says to follow the instruction below (counter-review of ADR-0045, LOW-2). Once a prompt comes, our message is
-    // back if the failure is still the latest news.
+    // intro says to follow the instruction below (counter-review of ADR-0045, LOW-2). Once a prompt comes, our own message
+    // comes back whenever a failure set it (priv.error is cleared only by submit, cancel or a new flow): a PAM notice that
+    // came after the failure (pam_faillock's "account is locked", only from a stack whose preauth is not silent: Omarchy's
+    // is) is then replaced by it. Open item, final counter-review LOW-A (see docs/specs/security.md).
     readonly property string feedback: awaitingDevice ? plainLine(flow.supplementaryMessage, maxDetailLength)
                                                       : priv.error !== "" ? priv.error : (flow ? plainLine(flow.supplementaryMessage, maxDetailLength) : "")
     readonly property bool feedbackIsError: awaitingDevice ? flow.supplementaryIsError === true

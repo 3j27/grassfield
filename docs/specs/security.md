@@ -878,7 +878,11 @@ own line is the feedback under the field; when the prompt comes the field takes 
 → `focusField`, which still respects `inputEnabled` and AuthAgent's key sink). A bare "nothing asked" never disables the
 field: keys typed before `pam_unix`'s first prompt are kept, so a fast typist's password is not cut short (a short one is a
 wrong one, which pam_faillock counts). The last line is never cleared when the prompt arrives: pam_faillock's "account is
-locked" notice comes the same way and stays readable. While a device is awaited the feedback line is PAM's own line, never
+locked" notice comes the same way and stays readable, except after a failed attempt of the same request, where our own
+"Incorrect password. Try again." comes back with the prompt and replaces it (open, final counter-review of ADR-0045 LOW-A,
+older than this change: clearing `priv.error` when PAM sends a new non-empty message would keep the notice, once Quickshell
+0.3.x's AuthFlow is confirmed not to set `supplementaryMessage` itself on a failure; stock Omarchy sets pam_faillock's
+preauth `silent`, so no notice is sent there). While a device is awaited the feedback line is PAM's own line, never
 the previous round's "Incorrect password. Try again." (that message comes back with the next prompt; counter-review, LOW-2).
 Cancel works throughout; nothing is ever answered on its own. Unit-tested (`tst_authdialogmodel`
 test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing, test_aLockedAccountNoticeStaysUnderThePrompt,
