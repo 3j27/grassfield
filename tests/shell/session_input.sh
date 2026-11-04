@@ -54,7 +54,6 @@ hl = setmetatable({
   monitor = function() end,
 }, { __index = function(_, k) return function() end end })
 hl.dsp = proxy("dsp")
-real_config = hl.config
 package.path = repo .. "/config/hypr/?.lua;" .. package.path
 
 local function flat(key)  -- the last value set for input.<key> by any hl.config call
@@ -94,7 +93,6 @@ if case == "omarchy-input" then
   end
   say("grassfield-input-keyboard-keys", #bad, "added-configs", #log.config - before)
   say("layout-after", tostring(flat("kb_layout")), "order", tostring(flat("kb_variant")))
-  say("layouts-one", m.layouts)
 elseif case == "pointer-order" then
   -- GF-066: Grassfield's pointer defaults and the Settings file go in BEFORE the user's input.lua, which wins.
   local d = os.getenv("TMPCASE")
@@ -151,17 +149,12 @@ elseif case == "keyboard-file" then
   f:write('return { repeat_rate = 15, repeat_delay = 600, kb_layout = "us,fr", kb_variant = ",bepo", numlock_by_default = false }\n'); f:close()
   f = io.open(d .. "/home/.config/hypr/input.lua", "w"); f:write('hl.config({ input = { repeat_delay = 333 } })\n'); f:close()
   local m = dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
-  say("layouts", m.layouts, "hl.config-restored", tostring(hl.config == real_config))
   say("keyboard rate", tostring(flat("repeat_rate")), "delay-user-wins", tostring(flat("repeat_delay")), "layout", tostring(flat("kb_layout")),
       "variant", tostring(flat("kb_variant")), "options", tostring(flat("kb_options")), "numlock", tostring(flat("numlock_by_default")))
   local gi = dofile(repo .. "/config/hypr/grassfield/input.lua")
   local function put(body) local w = io.open(d .. "/k.lua", "w"); w:write(body); w:close(); return gi.keyboard(d .. "/k.lua") end
   local k = put('return { repeat_rate = 0, kb_layout = "de" }')
   say("one-layout", tostring(k.repeat_rate), k.kb_layout, "[" .. tostring(k.kb_variant) .. "]", tostring(k.kb_options))
-  put('return { kb_layout = "fr,us" }')
-  local two = gi.layout_count(d .. "/k.lua")
-  put('return { kb_layout = "de" }')
-  say("layout-count", two, gi.layout_count(d .. "/k.lua"), gi.layout_count(d .. "/missing.lua"))
   k = put('return { repeat_rate = 1.5, repeat_delay = 50, kb_layout = "us,FR", kb_variant = "x" }')
   say("invalid", tostring(next(k)))
   k = put('return { kb_layout = "us,fr,de,es,it" }')
@@ -296,7 +289,6 @@ check grep -q "^layout fr variant user-variant options compose:caps$" <<<"$out"
 desc="Grassfield's input.lua sets no keyboard key (layout, options, repeat, numlock stay the system's)"
 check grep -q "^grassfield-input-keyboard-keys 0 added-configs 1$" <<<"$out"
 check grep -q "^layout-after fr " <<<"$out"
-check grep -q "^layouts-one 1$" <<<"$out"
 
 out=$(run pointer-order OMARCHY_PATH="$tmp/pointer-order/omarchy" GRASSFIELD_CONFIG_HOME="$tmp/pointer-order/cfg")
 desc="GF-066: Grassfield's pointer defaults were applied by the include, before the user's input.lua"
@@ -323,9 +315,6 @@ check grep -q "^missing 0 true two_finger$" <<<"$out"
 out=$(run keyboard-file GRASSFIELD_CONFIG_HOME="$tmp/keyboard-file/cfg" OMARCHY_PATH="$tmp/keyboard-file/omarchy")
 desc="Settings > Keyboard: its file applies after Omarchy (rate 15, two layouts, the options stay Omarchy's), the user's input.lua still wins (delay 333), numlock is never set"
 check grep -q "^keyboard rate 15 delay-user-wins 333 layout us,fr variant ,bepo options compose:caps numlock nil$" <<<"$out"
-desc="Input sources: omarchy.lua counts the layouts the session ends up with (1 from Omarchy, 2 from Settings), restores hl.config, and no grp: option is set"
-check grep -q "^layouts 2 hl.config-restored true$" <<<"$out"
-check grep -q "^layout-count 2 1 0$" <<<"$out"
 desc="Settings > Keyboard: one layout gets no switch and an empty variant; 0 turns repeat off"
 check grep -q "^one-layout 0 de \[\] nil$" <<<"$out"
 desc="Settings > Keyboard: mistyped or out-of-range entries, more than four layouts and a bad variant are left out"

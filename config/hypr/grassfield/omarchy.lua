@@ -6,15 +6,13 @@
 --   monitors the user's monitors.lua loaded (or does not exist)
 --   input    "omarchy" (default.hypr.input: layout from /etc/vconsole.conf, compose:caps, repeat rate, numlock) or
 --            "fallback" (the same defaults reproduced below because that module could not be loaded)
---   layouts  how many xkb layouts the session ends up with (the last kb_layout any input.lua set, the user's included),
---            0 when unknown; bindings.lua binds the input-source keys only from 2
 --   input_applied  Grassfield's pointer defaults went in before the user's input.lua (else session.lua applies them)
 --   problems list of one-line descriptions of every step that failed (logged, and one notification at start)
 --
 -- Capability check, not a version check: /usr/share/omarchy/version is a stale upstream file (docs/compat.md). What
 -- matters is whether the modules named below exist; scripts/dev/omarchy-compat.sh checks the same list.
 
-local M = { ok = false, reason = nil, monitors = true, input = "none", layouts = 0, input_applied = false, problems = {} }
+local M = { ok = false, reason = nil, monitors = true, input = "none", input_applied = false, problems = {} }
 
 local omarchy_path = os.getenv("OMARCHY_PATH") or "/usr/share/omarchy"
 local home = os.getenv("HOME") or ""
@@ -75,20 +73,6 @@ if not ok then
   return M
 end
 M.ok = true
-
--- Count the layouts of the last kb_layout any hl.config call sets from here to the end of this file (Hyprland has no getter).
-local real_config = hl.config
-local function count_layouts(t)
-  if type(t) == "table" and type(t.input) == "table" and type(t.input.kb_layout) == "string" then
-    local n = 0
-    for _ in (t.input.kb_layout .. ","):gmatch("([^,]*),") do n = n + 1 end
-    M.layouts = n
-  end
-end
-hl.config = function(t, ...)
-  pcall(count_layouts, t)
-  return real_config(t, ...)
-end
 
 -- The system keyboard defaults, as the Omarchy session gets them. Grassfield's own input.lua follows (below, before the
 -- user's input.lua) and only sets pointer-related keys, so layout, options, repeat and numlock stay as set here.
@@ -152,5 +136,4 @@ if exists(home .. "/.config/hypr/input.lua") then
   if not uok then problem("input.lua: " .. tostring(uerr)) end
 end
 
-hl.config = real_config
 return M

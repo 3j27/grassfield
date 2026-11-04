@@ -91,21 +91,21 @@ LUA
 
 cat >"$tmp/sources.lua" <<'LUA'
 -- Input sources: bindings.lua reads the layout count omarchy.lua left in package.loaded, once per parse.
-local repo, layouts = arg[1], tonumber(arg[2])
-local binds = {}
+local repo, kb_layout = arg[1], arg[2]
+local binds, locks = {}, {}
 local function proxy(path)
   return setmetatable({}, { __index = function(_, k) return proxy(path .. "." .. k) end,
                             __call = function(_, ...) return { dsp = path, args = { ... } } end })
 end
 hl = setmetatable({
-  bind = function(keys, d) binds[keys] = d end,
+  bind = function(keys, d, opts) binds[keys] = d; locks[keys] = opts and opts.locked end,
   get_layers = function() return {} end,
+  get_config = function(key) if key == "input.kb_layout" then return kb_layout end end,
 }, { __index = function() return function() end end })
 hl.dsp = proxy("dsp")
-if layouts >= 0 then package.loaded["grassfield.omarchy"] = { layouts = layouts } end
 dofile(repo .. "/config/hypr/grassfield/bindings.lua")
 local function cmd(keys) return binds[keys] and binds[keys].args[1] or "unbound" end
-print(layouts .. " " .. cmd("CTRL + SPACE") .. " | " .. cmd("CTRL + ALT + SPACE"))
+print(kb_layout .. " " .. cmd("CTRL + SPACE") .. " | " .. cmd("CTRL + ALT + SPACE") .. " locked " .. tostring(locks["CTRL + SPACE"]) .. " " .. tostring(locks["CTRL + ALT + SPACE"]))
 LUA
 
 out=$(env -i PATH="$PATH" lua "$tmp/run.lua" "$root")
@@ -132,11 +132,11 @@ check bash -c 'f="$1/config/hypr/grassfield/bindings.lua"; for k in "SUPER + F3"
 desc="WezTerm (class org.wezfurlong.wezterm) is a terminal that keeps its Alt+arrows, with the other terminals of Omarchy's list"
 check bash -c 'for c in alacritty kitty com.mitchellh.ghostty foot org.codeberg.dnkl.foot wezterm org.wezfurlong.wezterm; do grep -q "TERMINAL_CLASSES = {.*\"$c\"" "$1/config/hypr/grassfield/forwarding.lua" || exit 1; done' _ "$root"
 
-desc="Input sources: with two layouts Ctrl+Space selects the previous and Ctrl+Option+Space the next one on ALL keyboards"
-check grep -q "^2 hyprctl switchxkblayout all prev | hyprctl switchxkblayout all next$" <<<"$(env -i PATH="$PATH" lua "$tmp/sources.lua" "$root" 2)"
-desc="Input sources: with one layout or an unknown count Ctrl+Space stays free for the applications"
-check grep -q "^1 unbound | unbound$" <<<"$(env -i PATH="$PATH" lua "$tmp/sources.lua" "$root" 1)"
-check grep -q "^-1 unbound | unbound$" <<<"$(env -i PATH="$PATH" lua "$tmp/sources.lua" "$root" -1)"
+desc="Input sources: with two layouts Ctrl+Space selects the previous and Ctrl+Option+Space the next one on ALL keyboards, and both are locked (they work at the lock screen)"
+check grep -q "^fr,us hyprctl switchxkblayout all prev | hyprctl switchxkblayout all next locked true true$" <<<"$(env -i PATH="$PATH" lua "$tmp/sources.lua" "$root" fr,us)"
+desc="Input sources: with one layout, none or an unreadable value Ctrl+Space stays free for the applications"
+check grep -q "^us unbound | unbound locked nil nil$" <<<"$(env -i PATH="$PATH" lua "$tmp/sources.lua" "$root" us)"
+check grep -q "^ unbound | unbound locked nil nil$" <<<"$(env -i PATH="$PATH" lua "$tmp/sources.lua" "$root" "")"
 desc="Input sources: no xkb group option is set anywhere in config/"
 check bash -c '! grep -rq "grp:ctrl_space_toggle" "$1/config"' _ "$root"
 
