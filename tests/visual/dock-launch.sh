@@ -43,13 +43,10 @@ cleanup() {
   (( was_running )) || "$VS_ROOT/scripts/dev/nested-down.sh" >/dev/null 2>&1 || true
   return 0
 }
-# dock.clickMinimizes in this tree's settings (.dev/config), which the shell follows live; the cleanup puts the default back.
-click_min() { # true|false
-  local cfg=$VS_DEV/config/grassfield.json
-  jq --argjson v "$1" '.dock.clickMinimizes = $v' "$cfg" > "$cfg.new" && mv "$cfg.new" "$cfg" || return 1
-  sleep 2
-}
-trap 'click_min true >/dev/null 2>&1; cleanup' EXIT
+# dock.clickMinimizes: the value found is put back on exit (the parts below set it).
+click_min_before=$(vs_click_min_get)
+click_min() { vs_click_min_set "$1"; }
+trap 'vs_click_min_set "$click_min_before" >/dev/null 2>&1; cleanup' EXIT
 trap 'exit 130' INT TERM
 
 parts=("$@")
@@ -361,12 +358,17 @@ if want clickmin; then
   [[ $(active_class) == gfLB && $(gfLB_min) -eq 0 ]]; RC=$?
   check "clickmin: a click on an app that is not frontmost brings it forward (active: $(active_class), minimized: $(gfLB_min))" $RC
   vs_capture clickmin-1-frontmost >/dev/null 2>&1 || true
+  x0=$x
+  y0=$y
   dock_click "$x" "$y"
   sleep 2.5
+  read -r x y <<<"$(tile_xy gfLB)"
+  [[ $x == "$x0" && $y == "$y0" ]]; RC=$?
+  check "clickmin: the minimize adds no tile, the app's tile stays at $x0 $y0 (now $x $y)" $RC
   [[ $(gfLB_min) -eq 2 ]]; RC=$?
   check "clickmin: a click on the frontmost app minimizes both its windows (minimized: $(gfLB_min))" $RC
   vs_capture clickmin-2-minimized >/dev/null 2>&1 || true
-  dock_click "$x" "$y"
+  dock_click "$x0" "$y0"
   sleep 2.5
   [[ $(gfLB_min) -eq 0 && $(active_class) == gfLB ]]; RC=$?
   check "clickmin: a click with every window minimized restores both, gfLB focused (minimized: $(gfLB_min), active: $(active_class))" $RC

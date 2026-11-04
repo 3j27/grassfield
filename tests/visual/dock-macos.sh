@@ -17,6 +17,10 @@ active() { "$VS_ROOT/scripts/nestctl" activewindow -j | jq -r '.title // ""'; }
 tile_index() { vs_ipc dock tiles | jq -r --arg k "$1" 'index($k)'; }
 
 vs_session >/dev/null
+# This script asserts the macOS click (dock.clickMinimizes off); the value found is put back on exit.
+click_min_before=$(vs_click_min_get)
+trap 'vs_click_min_set "$click_min_before" >/dev/null 2>&1' EXIT
+vs_click_min_set false
 vs_reset >/dev/null
 vs_foot dmo-one 70x16 >/dev/null
 vs_wait_clients 1 >/dev/null || true
@@ -32,7 +36,8 @@ before=$(active)
 vs_ipc dock click "$foot" >/dev/null
 vs_sleep 1
 after=$(active)
-check "active-click: a click on the active app's tile keeps '$before' active (now '$after')" test "$after" = "$before"
+minimized_now=$("$VS_ROOT/scripts/nestctl" clients -j | jq '[.[] | select(.class == "foot" and .workspace.name == "special:minimized")] | length')
+check "active-click: a click on the active app's tile keeps '$before' active (now '$after') and minimizes nothing (minimized: $minimized_now)" test "$after" = "$before" -a "$minimized_now" = 0
 
 # menu captures, dark then light
 for appearance in dark light; do
