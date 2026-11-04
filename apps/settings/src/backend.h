@@ -149,6 +149,9 @@ public:
     // counts (ADR-0019); tst_backend holds both without running anything.
     static QString updateCheckerProgram();
     static QString updateFixture();
+    // The canned `power.state` answer busQuery gives in a dev session (GRASSFIELD_POWER_FIXTURE, "" otherwise): the visual tests
+    // show Battery, or Energy, whatever battery the machine has (tests/visual/energy-pane.sh). Inert outside a dev session.
+    static QString powerFixture();
     // Wi-Fi and Bluetooth over D-Bus (systembus.h): NetworkManager and BlueZ on the system bus, on a worker thread each, the
     // answer as finished(tag, ok, json) (failed(tag, reason) first when it did not work). `what`: "wifi.state" or "bt.state"
     // (read-only, also in a dev session); for General "host.state", "time.state", "time.zones", "locale.state" (system bus) and
