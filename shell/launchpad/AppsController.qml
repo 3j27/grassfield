@@ -259,7 +259,8 @@ Scope {
     property var removableMap: ({})
     // The item the alert asks about, null when there is none.
     property var pendingDelete: null
-    readonly property string storeProgram: "grassfield-store"
+    // A dev session runs the tree's own build (apps/store/build-direct.sh), a real one the installed Store.
+    readonly property string storeProgram: Mode.dev ? (Mode.devValue("STORE_CMD") || Quickshell.shellPath("../.dev/build/grassfield-store")) : "grassfield-store"
 
     function removableItem(item: var): bool {
         return !!item && UninstallLogic.removable(removableMap, item.id);
@@ -305,7 +306,10 @@ Scope {
 
         command: [root.storeProgram, "--removable"]
         stdout: StdioCollector {
-            onStreamFinished: root.removableMap = UninstallLogic.parse(text)
+            onStreamFinished: {
+                if (text.trim() !== "")
+                    root.removableMap = UninstallLogic.parse(text);
+            }
         }
     }
 
@@ -365,6 +369,30 @@ Scope {
             root.hide();
         }
 
+        // Test hooks (dev session only): the icons jiggle as after a long press, and the Store's answer is given instead of
+        // asked (`removable '<json>'`, UninstallLogic.parse's format), so a nested capture needs no pacman.
+        function edit(): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            root.editing = true; // no Store run: the answer is the one `removable` gave
+            return "ok";
+        }
+
+        function removable(json: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            root.removableMap = UninstallLogic.parse(json);
+            return String(Object.keys(root.removableMap).length);
+        }
+
+        // What the delete badge's click does: the alert for that app, when it is removable (dev session only).
+        function ask(id: string): string {
+            if (!VisualFixtures.dev)
+                return "refused";
+            root.requestDelete(root.itemById[id]);
+            return root.pendingDelete ? "asked" : "not removable";
+        }
+
         // Test hook (dev session only, VisualFixtures.dev, SEC-04: it returns the typed query): JSON {open, query,
         // category, chips, zone, selected, selectedId, keyNav, total, cols, panel: {x, y, w, h}, visible: [id]}.
         function status(): string {
@@ -384,7 +412,10 @@ Scope {
                 total: root.items.length,
                 cols: root.grid.cols,
                 panel: root.panel,
-                visible: vis
+                visible: vis,
+                editing: root.editing,
+                pendingDelete: root.pendingDelete ? root.pendingDelete.id : "",
+                removable: Object.keys(root.removableMap).length
             });
         }
     }

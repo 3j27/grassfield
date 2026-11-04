@@ -1106,6 +1106,15 @@ constexpr int kRemovableFreshSeconds = 60;
 
 void FilesApp::loadRemovableApplications()
 {
+    // Dev plumbing (honoured only in a dev session, runmode.h): the Store's answer as given, for captures without pacman.
+    const QString given = grassfield::apps::runmode::devValue("FILES_REMOVABLE_JSON");
+    if (!given.isEmpty()) {
+        if (given != m_removableText) {
+            m_removableText = given;
+            emit removableTextChanged();
+        }
+        return;
+    }
     if (m_removableProcess || (m_removableAt.isValid() && m_removableAt.secsTo(QDateTime::currentDateTime()) < kRemovableFreshSeconds))
         return;
     const QString program = storeProgram();
