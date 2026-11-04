@@ -5,7 +5,8 @@
 // report reduced to what the widget shows, a WWO weather code's condition (a key the widget translates, a symbol of
 // branding/icons/symbolic), the temperature unit of the formats, and when to fetch again. WeatherSampler.qml runs them.
 //
-// Derived from Omarchy v4.0.6 (MIT, basecamp/omarchy@237f1b4): the location file's format and its reading follow
+// Derived from Omarchy v4.0.6, Copyright (c) David Heinemeier Hansson, MIT License (upstream LICENSE, basecamp/omarchy@237f1b4;
+// notice shipped as packaging/licenses/omarchy-MIT.txt): the location file's format and its reading follow
 // bin/omarchy-weather-location and shell/plugins/panels/weather/Model.js (parseLocationFile, wttrLocationQuery,
 // localeUsesImperial); the request is the one of that panel (`curl ... https://wttr.in/<query>?format=j1`). Nothing else of
 // it is used: the panel's Open-Meteo forecast and geocoding are not (OC-14 names wttr.in only).
