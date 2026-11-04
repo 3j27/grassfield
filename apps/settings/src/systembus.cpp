@@ -504,7 +504,7 @@ QString rootLuksDevice(BusCaller &bus, QString *error, QString *device)
 // said plainly; any other failure as the service gave it.
 QString passphraseFailure(const QString &error)
 {
-    if (error.contains(QLatin1String("No key available"), Qt::CaseInsensitive))
+    if (error.contains(QLatin1String("No key available"), Qt::CaseInsensitive)) // i18n-ignore: libblockdev's message, matched
         return QCoreApplication::translate("SystemBus", "the current password is not correct");
     return fail(error);
 }
@@ -1266,7 +1266,7 @@ QString enrollFinger(BusCaller &bus, const QString &finger, const std::function<
         idle.start();
         while (true) {
             if (stopped && stopped()) {
-                result = QStringLiteral("enroll-stopped");
+                result = QStringLiteral("enroll-stopped"); // i18n-ignore: a status code the page words (Fingerprint.js)
                 break;
             }
             if (idle.elapsed() > idleMs) {

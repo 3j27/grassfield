@@ -20,7 +20,7 @@ Sheet {
             "fingerprint-setup": {title: qsTr("Set Up Fingerprint"),
                 message: qsTr("Omarchy installs the fingerprint reader's driver, enrols your right index finger and turns fingerprint on for the lock screen, administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.")},
             "fingerprint-remove": {title: qsTr("Remove Fingerprint Setup"),
-                message: qsTr("Omarchy turns fingerprint off for the lock screen, administrator prompts and sudo, and removes the reader's driver with the enrolled fingers. It runs in a Terminal window and asks for your password there.")},
+                message: qsTr("Omarchy turns fingerprint off for the lock screen, administrator prompts and sudo, and removes the reader's driver. It runs in a Terminal window and asks for your password there.")},
             "fido2-setup": {title: qsTr("Set Up Security Key"),
                 message: qsTr("Omarchy installs the security key tools, registers the key you plug in and touch, and turns it on for administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.")},
             "fido2-remove": {title: qsTr("Remove Security Key"),
