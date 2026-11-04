@@ -43,9 +43,14 @@ QtObject {
     readonly property bool responseRequired: !!flow && flow.isResponseRequired === true
     readonly property bool responseVisible: !!flow && flow.responseVisible === true
     readonly property string prompt: flow ? cleanPrompt(plainLine(flow.inputPrompt, maxDetailLength)) : ""
-    // Polkit/PAM feedback, or our own message after a failed attempt.
-    readonly property string feedback: priv.error !== "" ? priv.error : (flow ? plainLine(flow.supplementaryMessage, maxDetailLength) : "")
-    readonly property bool feedbackIsError: priv.error !== "" || (!!flow && flow.supplementaryIsError === true)
+    // Polkit/PAM feedback, or our own message after a failed attempt. While a device is awaited (awaitingDevice) the line is
+    // PAM's own (the device's instruction, or pam_faillock's notice), never the previous round's "Incorrect password": the
+    // intro says to follow the instruction below (counter-review of ADR-0045, LOW-2). Once a prompt comes, our message is
+    // back if the failure is still the latest news.
+    readonly property string feedback: awaitingDevice ? plainLine(flow.supplementaryMessage, maxDetailLength)
+                                                      : priv.error !== "" ? priv.error : (flow ? plainLine(flow.supplementaryMessage, maxDetailLength) : "")
+    readonly property bool feedbackIsError: awaitingDevice ? flow.supplementaryIsError === true
+                                                           : priv.error !== "" || (!!flow && flow.supplementaryIsError === true)
     // An answer was sent and polkit has not asked again yet.
     readonly property bool submitted: priv.submitted
     readonly property bool canSubmit: responseRequired && !priv.submitted

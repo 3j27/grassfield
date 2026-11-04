@@ -878,8 +878,11 @@ own line is the feedback under the field; when the prompt comes the field takes 
 → `focusField`, which still respects `inputEnabled` and AuthAgent's key sink). A bare "nothing asked" never disables the
 field: keys typed before `pam_unix`'s first prompt are kept, so a fast typist's password is not cut short (a short one is a
 wrong one, which pam_faillock counts). The last line is never cleared when the prompt arrives: pam_faillock's "account is
-locked" notice comes the same way and stays readable. Cancel works throughout; nothing is ever answered on its own. Unit-
-tested (`tst_authdialogmodel` test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing, test_aLockedAccountNoticeStaysUnderThePrompt;
+locked" notice comes the same way and stays readable. While a device is awaited the feedback line is PAM's own line, never
+the previous round's "Incorrect password. Try again." (that message comes back with the next prompt; counter-review, LOW-2).
+Cancel works throughout; nothing is ever answered on its own. Unit-tested (`tst_authdialogmodel`
+test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing, test_aLockedAccountNoticeStaysUnderThePrompt,
+test_theNextRoundsDeviceInstructionIsShownNotTheOldError;
 `tst_authdialog` test_14_awaitingADeviceTheFieldWaits; `mutate_authdialog.sh` D2, D3). The lock screen shows nothing of
 `omarchy-lock-fingerprint`'s conversation (it runs beside the password and unlocks on a match). With a real reader and key:
 NOT VERIFIED here, and the nested security gates L1 to L5 were not run for this change (no nested session in the cloud

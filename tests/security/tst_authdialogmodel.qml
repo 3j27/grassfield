@@ -171,6 +171,24 @@ TestCase {
         verify(!model.awaitingDevice, "no request");
     }
 
+    // A wrong password, then the next round waits for the fingerprint reader: the line under the intro is the device's
+    // instruction, not the stale "Incorrect password" (counter-review of ADR-0045, LOW-2); the prompt brings it back.
+    function test_theNextRoundsDeviceInstructionIsShownNotTheOldError() {
+        flow.isResponseRequired = true;
+        verify(model.submit("wrong"));
+        flow.isResponseRequired = false;
+        flow.authenticationFailed();
+        compare(model.feedback, "Incorrect password. Try again.");
+        flow.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        verify(model.awaitingDevice);
+        compare(model.feedback, "Place your right index finger on the fingerprint reader");
+        verify(!model.feedbackIsError);
+        flow.isResponseRequired = true;
+        verify(!model.awaitingDevice);
+        compare(model.feedback, "Incorrect password. Try again.");
+        verify(model.feedbackIsError);
+    }
+
     // pam_faillock's notice comes as information before the password prompt: it is not replaced when the prompt arrives.
     function test_aLockedAccountNoticeStaysUnderThePrompt() {
         flow.supplementaryMessage = "The account is locked due to 3 failed logins.";
