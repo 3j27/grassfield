@@ -423,6 +423,80 @@ TestCase {
         compare(find(t.win.page, i => i.stop !== undefined && i.visible).Accessible.description, "Waiting for permission…");
     }
 
+    // A hand-over ("--page=uninstall:<entry>", from the launcher or Files, or any D-Bus peer: ADR-0045 D1) only OPENS the Store's own
+    // alert: the Store's name and the packages -Rns takes, Delete, Cancel the default. Nothing is removed until Delete is pressed
+    // here: Return and Escape cancel, and no path of the hand-over calls uninstall.
+    function test_handOverOnlyOpensTheAlert() {
+        const t = make({});
+        const uninstalled = () => t.backend.calls.filter(c => c.startsWith("uninstall:")).length;
+        t.win.openPage("uninstall:photo.desktop");
+        const s = sheet(t);
+        verify(s.visible, "the alert is shown at once, before any plan");
+        verify(!s.confirmEnabled, "Delete waits for the plan");
+        compare(uninstalled(), 0);
+        t.backend.planReady("org.example.Photo", "remove", {refusal: "", packages: [{name: "photolab", version: "3-1", repo: "", size: ""},
+                                                                                   {name: "photolab-data", version: "3-1", repo: "", size: ""}]});
+        compare(s.title, "Delete “Photo Lab”?", "the Store's own name for the app");
+        compare(s.confirmText, "Delete");
+        verify(s.handedOver && s.destructive && s.returnCancels, "Cancel is the default");
+        compare(s.packages.length, 2, "the packages -Rns takes are listed");
+        compare(uninstalled(), 0, "a plan with nothing to ask runs nothing either");
+        keyClick(Qt.Key_Return);
+        verify(!s.visible, "Return cancels");
+        compare(uninstalled(), 0);
+        t.win.openPage("uninstall:photo.desktop");
+        t.backend.planReady("org.example.Photo", "remove", {refusal: "", packages: [{name: "photolab", version: "3-1", repo: "", size: ""}]});
+        verify(s.visible);
+        keyClick(Qt.Key_Escape);
+        verify(!s.visible, "Escape cancels");
+        compare(uninstalled(), 0);
+        t.win.openPage("uninstall:photo.desktop");
+        t.backend.planReady("org.example.Photo", "remove", {refusal: "", packages: [{name: "photolab", version: "3-1", repo: "", size: ""}]});
+        s.cancel();
+        compare(uninstalled(), 0, "Cancel removes nothing");
+        t.win.openPage("uninstall:photo.desktop");
+        t.backend.planReady("org.example.Photo", "remove", {refusal: "", packages: [{name: "photolab", version: "3-1", repo: "", size: ""}]});
+        s.confirm();
+        compare(uninstalled(), 1, "only Delete in the Store removes it");
+        verify(t.backend.calls.indexOf("uninstall:org.example.Photo") >= 0);
+    }
+
+    // An entry the Store does not know, or a refusal: no alert to confirm, nothing runs.
+    function test_handOverOfAnUnknownEntryRunsNothing() {
+        const t = make({});
+        t.win.openPage("uninstall:nothing.desktop");
+        verify(!sheet(t).visible, "no sheet for an app the Store does not know");
+        compare(t.win.transientNotice, "The Store can't uninstall this app.");
+        verify(t.backend.calls.filter(c => c.startsWith("uninstall:")).length === 0);
+        t.win.openPage("uninstall:photo.desktop");
+        t.backend.planReady("org.example.Photo", "remove", {refusal: "protected", packages: [], protected: "glib2"});
+        const s = sheet(t);
+        verify(s.visible, "the refusal is said");
+        compare(s.confirmText, "OK");
+        s.confirm();
+        verify(t.backend.calls.filter(c => c.startsWith("uninstall:")).length === 0, "OK on a refusal removes nothing");
+    }
+
+    // A hand-over's wording never leaks into another operation of the sheet (the product page's Uninstall…, an install, an update).
+    function test_handOverStateDoesNotLeak() {
+        const t = make({startPage: "app:org.example.Photo"});
+        t.win.openPage("uninstall:photo.desktop");
+        const s = sheet(t);
+        verify(s.handedOver);
+        t.win.requestUninstall(t.backend.find("org.example.Photo"));
+        verify(!s.handedOver, "the product page's Uninstall… is its own alert");
+        t.backend.planReady("org.example.Photo", "remove", {refusal: "", packages: [{name: "photolab", version: "3-1", repo: "", size: ""}]});
+        compare(s.title, "Uninstall “Photo Lab”?");
+        compare(s.confirmText, "Uninstall");
+        s.cancel();
+        t.win.openPage("uninstall:photo.desktop");
+        verify(s.handedOver);
+        t.win.requestGet(t.backend.find("org.example.Paint"));
+        verify(!s.handedOver);
+        compare(s.kind, "install");
+        s.cancel();
+    }
+
     // Uninstall… (SR22): in the product page's menu when the Store may remove the app, with the reason otherwise.
     function test_uninstallFromTheProductPage() {
         const t = make({startPage: "app:org.example.Photo"});

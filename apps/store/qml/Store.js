@@ -474,11 +474,3 @@ function unavailableReason(catalog, appData, online) {
         parts.push(qsTr("Arch's app data isn't installed and could not be fetched."));
     return parts.join(" ");
 }
-
-// An uninstall the user already confirmed in the launcher's or Files' alert (ADR-0045 D1) starts without the Store's sheet
-// when the plan has nothing to add: no refusal, nothing protected or depended on, and no package besides the app itself.
-function removalIsQuiet(plan) {
-    if (!plan || plan.refusal !== "")
-        return false;
-    return (plan.packages || []).length <= 1 && (plan.dependents || []).length === 0 && !plan.protected;
-}

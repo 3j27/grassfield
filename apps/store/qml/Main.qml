@@ -145,9 +145,9 @@ Window {
         opSheet.show(Object.assign({}, app, root.backend.app(app.id)), "remove");
     }
 
-    // "--page=uninstall:<application entry>" (ADR-0045 D1): the launcher or Files confirmed the removal in its own alert, the
-    // Store plans it and starts it (the sheet only when the plan says more than the alert did). An entry the Store may not
-    // remove, or does not know, is said in the notice bar; nothing runs.
+    // "--page=uninstall:<application entry>" (ADR-0045 D1): the launcher or Files asks, from another process, so this only OPENS the
+    // Store's own alert (OperationSheet, handedOver): the app by its Store name and icon, the packages -Rns takes, Cancel the
+    // default. Nothing runs until Delete is pressed here. An entry the Store does not know is said in the notice bar.
     function uninstallEntry(entry: string): void {
         const id = root.backend.appForEntry(entry);
         const app = id === "" ? null : root.backend.app(id);
@@ -155,11 +155,7 @@ Window {
             root.transientNotice = qsTr("The Store can't uninstall this app.");
             return;
         }
-        if (root.backend.actions(id).uninstall !== "") {
-            root.requestUninstall(app); // the sheet says why
-            return;
-        }
-        opSheet.showConfirmedRemoval(Object.assign({}, app, root.backend.app(id)));
+        opSheet.show(Object.assign({}, app, root.backend.app(id)), "remove", true);
     }
 
     // A Flatpak's Update, and Update All of the Flatpak group (step 4): the sheet asks only when an update lets an app reach
