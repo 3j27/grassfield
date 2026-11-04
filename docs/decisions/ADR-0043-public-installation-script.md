@@ -172,7 +172,7 @@ the site stays noindex), before the legal review, which stays mandatory before a
 h's "activated after the legal review" (recorded there too). `repository.conf` now carries
 `GRASSFIELD_SIGNING_FINGERPRINT=E4921A382C349308BAA50D2F44C31B5D862EBEFA` and `grassfield-signing-key.asc` holds the owner's
 public key (v4 EdDSA, one primary, no subkey), so `just render-install` renders the real script (sha256
-`c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2`, to be recomputed whenever the template or the conf changes). Rendered files are build output (`build/install/`, ignored
+`c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2`, to be recomputed whenever the template, the conf or `VERSION` changes: all three are inputs of the render, and `VERSION` decides the default channel; the checksum is served from the same host as the script, a known limit: it guards against a damaged download, not a compromised host, until the site and the README carry an independent copy). Rendered files are build output (`build/install/`, ignored
 by the repository) and are not committed.
 
 Bucket keys, so that the documented commands work (the bucket is `grassfield`, objects are served at the base):
@@ -186,6 +186,11 @@ first run of grassfield-packages' publishing job.
 `X.Y.Z` renders `CHANNEL=stable` and `GF_STABLE_EMPTY=0`, anything else is refused. While stable is empty, `--channel stable` (and
 `--dry-run --channel stable`) exits 2 from argument parsing, before the log, root, network or any file is touched, with a message in
 English and French; `--uninstall` is not affected. The first published script is rendered from `1.0.0-rc2`.
+
+**The channel rule on the installed system (ADR-0033 O15b, same decision).** The render-time default above is the script's half.
+The installed half is one rule, applied by Settings, `grassfield-channel-set`, the root helper's `gf_set` and the Store: an installed
+`VERSION` that is a prerelease, or missing, empty, unreadable or malformed, can only follow beta; a plain `X.Y.Z` can follow stable.
+The script ends with `grassfield-channel-set beta` on a prerelease, which the rule always allows.
 
 ## Consequences
 - `just render-install` refuses a conf with the `.invalid` host or an empty fingerprint, by design. It succeeds since 2026-11-04 (h).

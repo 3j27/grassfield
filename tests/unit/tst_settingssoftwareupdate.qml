@@ -374,9 +374,9 @@ TestCase {
         compare(t.backend.launches, []);
     }
 
-    // U13: Set Up… runs `grassfield-channel-set stable`, through the polkit dialog: the wait, then the refusal in one line.
+    // U13: Set Up… runs `grassfield-channel-set stable` on a plain version (beta on a prerelease or an unreadable one: test_setUpOnAPrereleaseBuildChoosesBeta), through the polkit dialog.
     function test_setUpWaitsForPermissionAndSaysWhyNot() {
-        const t = make(answer("not-set-up"), {channel: "off"});
+        const t = make(answer("not-set-up"), {channel: "off", files: {"/usr/share/grassfield/VERSION": "1.0.0\n"}});
         verify(row(t.page, "Grassfield updates are not set up"));
         const setUp = button(t.page, "Set Up…");
         verify(setUp);
@@ -407,6 +407,27 @@ TestCase {
         compare(plain.updates.defaultChannel, "stable");
         button(plain.page, "Set Up…").clicked();
         compare(plain.backend.actions[0].argv[1], "stable");
+    }
+
+    // The channel rule (ADR-0033 O15b): while the installed version is a prerelease, or cannot be read, the picker's Off would
+    // follow the empty stable channel: it is disabled and the sheet says why. A plain version enables it.
+    function test_betaStaysOnWithABetaVersionInstalled() {
+        const texts = ["1.0.0-rc2\n", "1.1.0-beta1", "", "unknown", "1.0"];
+        for (const v of texts) {
+            const files = v === "" ? {} : {"/usr/share/grassfield/VERSION": v};
+            const t = make(available(), {channel: "beta", files: files});
+            const sheet = createTemporaryObject(sheetComp, testCase, {updates: t.updates, store: t.store, topic: "beta"});
+            sheet.open();
+            const menu = shown(sheet, i => i.accessibleName === "Beta updates" && i.picked !== undefined);
+            verify(!menu.enabled, "Off disabled for VERSION '" + v + "'");
+            verify(shown(sheet, i => i.footnote === "Beta updates stay on while a beta version of Grassfield is installed. You can turn them off once the release is installed."), "the footnote for '" + v + "'");
+            verify(shown(sheet, i => i.text === "Turn Off Grassfield Updates…" && i.push === true).enabled, "Turn Off stays available");
+        }
+        const plain = make(available(), {channel: "beta", files: {"/usr/share/grassfield/VERSION": "1.0.0\n"}});
+        const plainSheet = createTemporaryObject(sheetComp, testCase, {updates: plain.updates, store: plain.store, topic: "beta"});
+        plainSheet.open();
+        verify(shown(plainSheet, i => i.accessibleName === "Beta updates" && i.picked !== undefined).enabled, "Off enabled on a plain version");
+        verify(!shown(plainSheet, i => i.footnote !== undefined && i.footnote.indexOf("Beta updates stay on") === 0));
     }
 
     // Refusals: a build without its key or host hides Set Up… and says so.
@@ -452,7 +473,8 @@ TestCase {
 
     // U12: Beta Updates shows the channel grassfield-channel-set prints; the sheet's menu runs the switch.
     function test_betaUpdates() {
-        const t = make(available(), {channel: "beta"});
+        // A plain version is installed: Off is available (a prerelease locks it, test_betaStaysOnWithABetaVersionInstalled).
+        const t = make(available(), {channel: "beta", files: {"/usr/share/grassfield/VERSION": "1.0.0\n"}});
         compare(t.backend.queries[0], {argv: ["/usr/lib/grassfield/grassfield-channel-set"], tag: "update.channel"});
         compare(row(t.page, "Beta Updates").valueText, "Grassfield Beta");
         const info = [];

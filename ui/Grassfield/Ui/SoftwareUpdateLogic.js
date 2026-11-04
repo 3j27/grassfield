@@ -316,11 +316,19 @@ function buildReady(repositoryConf) {
     return m !== null && m[1] !== "invalid" && !/\.invalid$/.test(m[1]);
 }
 
-// The channel Set Up… chooses (owner decision of 2026-11-04, the macOS model: a prerelease build enrolls in the beta updates).
-// `versionText` is /usr/share/grassfield/VERSION: X.Y.Z-betaN or X.Y.Z-rcN gives "beta", a plain X.Y.Z or anything unreadable
-// gives "stable". A stable set up on a build that only the beta channel carries would point at an empty channel (ADR-0033 a2).
+// The channel rule (ADR-0033 O15b, owner decision of 2026-11-04, the macOS model: a prerelease build enrolls in the beta
+// updates, and "you can turn off beta updates once the release is installed"). `versionText` is /usr/share/grassfield/VERSION.
+// Only an installed plain X.Y.Z can follow stable; a -betaN or -rcN version, and a missing, empty or malformed one, can only
+// follow beta (beta carries every release, stable carries nothing until a plain version is published, and a stable set up on
+// an empty channel would block every update after two failed checks, a2). grassfield-channel-set and its root helper apply
+// the same rule.
+function stableAllowed(versionText) {
+    return /^\d+\.\d+\.\d+$/.test(String(versionText || "").trim());
+}
+
+// The channel Set Up… chooses: stable on a plain version, beta otherwise.
 function defaultChannel(versionText) {
-    return /^\d+\.\d+\.\d+-(beta|rc)\d+$/.test(String(versionText || "").trim()) ? "beta" : "stable";
+    return stableAllowed(versionText) ? "stable" : "beta";
 }
 
 // The release notes in the session's language (U6): [{version, date, text}], newest first as the checker lists them; French

@@ -74,14 +74,22 @@ bool buildHasKey(const QByteArray &repositoryConf)
     return !fingerprint.isEmpty();
 }
 
-Channel buildChannel(const QByteArray &repositoryConf)
+QString releaseChannelOf(const QByteArray &versionText)
 {
-    return defaultChannel(buildHasKey(repositoryConf) ? buildBase(repositoryConf) : QString());
+    // The rule of ADR-0033 O15b: only an installed plain X.Y.Z can follow stable. A prerelease (-betaN, -rcN), and a version
+    // that is missing, empty, unreadable or malformed, follows beta (stable is empty until a plain version is published).
+    static const QRegularExpression plain(QStringLiteral("^[0-9]+\\.[0-9]+\\.[0-9]+$"));
+    return plain.match(QString::fromUtf8(versionText.trimmed())).hasMatch() ? QStringLiteral("stable") : QStringLiteral("beta");
 }
 
-Channel defaultChannel(const QString &buildBase)
+Channel buildChannel(const QByteArray &repositoryConf, const QByteArray &versionText)
 {
-    return Channel{QStringLiteral("stable"), cleanBase(buildBase)};
+    return defaultChannel(buildHasKey(repositoryConf) ? buildBase(repositoryConf) : QString(), releaseChannelOf(versionText));
+}
+
+Channel defaultChannel(const QString &buildBase, const QString &name)
+{
+    return Channel{name, cleanBase(buildBase)};
 }
 
 bool fetchable(const Channel &channel)

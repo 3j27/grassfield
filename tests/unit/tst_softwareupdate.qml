@@ -291,10 +291,17 @@ TestCase {
         compare(Logic.defaultChannel("1.0.0-rc2\n"), "beta");
         compare(Logic.defaultChannel("1.1.0-beta3"), "beta");
         compare(Logic.defaultChannel("1.0.0"), "stable");
-        compare(Logic.defaultChannel(""), "stable");
-        compare(Logic.defaultChannel(undefined), "stable");
-        compare(Logic.defaultChannel("1.0.0-rc"), "stable", "not a version the build writes");
-        compare(Logic.defaultChannel("1.0.0.rc2"), "stable");
+        // Missing, empty, unreadable or malformed: only beta is safe (ADR-0033 O15b).
+        compare(Logic.defaultChannel(""), "beta");
+        compare(Logic.defaultChannel(undefined), "beta");
+        compare(Logic.defaultChannel("1.0.0-rc"), "beta", "not a version the build writes");
+        compare(Logic.defaultChannel("1.0.0.rc2"), "beta");
+        compare(Logic.defaultChannel("unknown"), "beta");
+        compare(Logic.defaultChannel("1.0.0\n1.0.0"), "beta");
+        verify(Logic.stableAllowed("1.0.0\n"));
+        verify(Logic.stableAllowed("  2.10.3 "));
+        for (const v of ["1.0.0-rc2", "1.1.0-beta3", "", undefined, null, "1.0", "x"])
+            verify(!Logic.stableAllowed(v), "no stable for " + v);
     }
 
     function test_aBuildWithoutKeyOrHostCannotSetUp() {

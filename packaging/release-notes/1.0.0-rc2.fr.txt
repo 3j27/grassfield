@@ -1,2 +1,3 @@
-Premiere version signee, depuis packages.grassfield.site, sur le canal beta.
-Les coins des fenetres suivent un seul rayon mesure, avec un liseret sombre et des retouches depuis 1.0.0-rc1.
+Première version signée, publiée depuis packages.grassfield.site, sur le canal bêta.
+Les coins des fenêtres suivent un seul rayon mesuré, avec un liseré sombre et des retouches depuis 1.0.0-rc1.
+Les mises à jour bêta restent activées tant qu’une version bêta est installée ; vous pourrez les désactiver une fois la version finale installée.

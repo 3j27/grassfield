@@ -24,6 +24,7 @@ GF_CONF=/etc/pacman.d/grassfield.conf
 GF_INCLUDE="Include = $GF_CONF"
 GF_DATA=/usr/share/grassfield/pacman
 GF_KEYRING=/usr/share/grassfield/pacman-keyring
+GF_VERSION_FILE=/usr/share/grassfield/VERSION
 
 gf_fail() {
   echo "${GF_PROG:-grassfield-channel}: $*" >&2
@@ -266,9 +267,24 @@ gf_delete_keys() {
   ((failed == 0)) || gf_fail "a Grassfield key is still in pacman's keyring"
 }
 
+# The channel rule (ADR-0033 O15b, owner decision of 2026-11-04, the macOS model): an installed VERSION that is a prerelease
+# (-betaN, -rcN), or missing, empty, unreadable or malformed, can only follow beta; beta carries every release, a plain version
+# goes to stable and to beta when it is newer. Once a plain X.Y.Z is installed, stable is available. Strict: the whole file,
+# trimmed, must be X.Y.Z (one line).
+gf_stable_allowed() {
+  local v
+  [[ -f "$GF_VERSION_FILE" && -r "$GF_VERSION_FILE" ]] || return 1
+  v=$(<"$GF_VERSION_FILE") || return 1
+  v=${v#"${v%%[![:space:]]*}"}
+  v=${v%"${v##*[![:space:]]}"}
+  [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
 # set stable|beta (U16 order): trust, populate, the file, the lines, the synced files.
 gf_set() {
   gf_require_build
+  [[ $1 != stable ]] || gf_stable_allowed ||
+    gf_fail "beta updates stay on while a beta version of Grassfield is installed (stable has no release yet): you can turn them off once the release is installed"
   gf_heal
   gf_bootstrap
   gf_populate

@@ -75,8 +75,29 @@ TEST(Channel, TheBuildsKeyGatesTheFetch)
     EXPECT_FALSE(buildHasKey(QByteArray()));
     EXPECT_FALSE(buildHasKey("# GRASSFIELD_SIGNING_FINGERPRINT=0123\n"));
     EXPECT_TRUE(buildHasKey(keyed));
-    EXPECT_FALSE(fetchable(buildChannel(shipped)));      // base, no key: nothing is requested, the Store has nothing to show
-    EXPECT_FALSE(fetchable(buildChannel(QByteArray())));
-    EXPECT_TRUE(fetchable(buildChannel(keyed)));
-    EXPECT_EQ(buildChannel(keyed).base, QUrl(QStringLiteral("https://packages.grassfield.site")));
+    EXPECT_FALSE(fetchable(buildChannel(shipped, "1.0.0")));      // base, no key: nothing is requested, the Store has nothing to show
+    EXPECT_FALSE(fetchable(buildChannel(QByteArray(), QByteArray())));
+    EXPECT_TRUE(fetchable(buildChannel(keyed, "1.0.0")));
+    EXPECT_EQ(buildChannel(keyed, "1.0.0").base, QUrl(QStringLiteral("https://packages.grassfield.site")));
+}
+
+// ADR-0033 O15b: a build not set up follows the channel its VERSION allows. Only a plain X.Y.Z follows stable; a prerelease, and a
+// missing, empty or malformed VERSION, follow beta (stable is empty until a plain version is published).
+TEST(Channel, TheInstalledVersionDecidesTheDefaultChannel)
+{
+    EXPECT_EQ(releaseChannelOf("1.0.0\n"), QStringLiteral("stable"));
+    EXPECT_EQ(releaseChannelOf("12.34.56"), QStringLiteral("stable"));
+    EXPECT_EQ(releaseChannelOf("1.0.0-rc2\n"), QStringLiteral("beta"));
+    EXPECT_EQ(releaseChannelOf("1.1.0-beta3"), QStringLiteral("beta"));
+    EXPECT_EQ(releaseChannelOf(QByteArray()), QStringLiteral("beta"));
+    EXPECT_EQ(releaseChannelOf("\n"), QStringLiteral("beta"));
+    EXPECT_EQ(releaseChannelOf("unknown"), QStringLiteral("beta"));
+    EXPECT_EQ(releaseChannelOf("1.0"), QStringLiteral("beta"));
+    EXPECT_EQ(releaseChannelOf("1.0.0.1"), QStringLiteral("beta"));
+    EXPECT_EQ(releaseChannelOf("1.0.0\n1.0.0"), QStringLiteral("beta"));
+    const QByteArray keyed("GRASSFIELD_REPO_BASE=https://packages.grassfield.site\nGRASSFIELD_SIGNING_FINGERPRINT=0123456789ABCDEF0123456789ABCDEF01234567\n");
+    EXPECT_EQ(buildChannel(keyed, "1.0.0-rc2").name, QStringLiteral("beta"));
+    EXPECT_EQ(buildChannel(keyed, QByteArray()).name, QStringLiteral("beta"));
+    EXPECT_EQ(buildChannel(keyed, "1.0.0").name, QStringLiteral("stable"));
+    EXPECT_EQ(catalogUrl(buildChannel(keyed, "1.0.0-rc2")), QUrl(QStringLiteral("https://packages.grassfield.site/beta/x86_64/grassfield-catalog.v1.json")));
 }

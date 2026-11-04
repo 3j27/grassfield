@@ -116,6 +116,7 @@
  {"path": "tests/unit/tst_displayname.qml", "layer": "headless"},
  {"path": "tests/shell/display_names.sh", "layer": "logic"},
  {"path": "tests/shell/history_quarantine.sh", "layer": "logic"},
+ {"path": "tests/shell/channel_set_rule.sh", "layer": "logic"},
  {"path": "tests/shell/public_install.sh", "layer": "logic"},
  {"path": "tests/shell/display_unplug_nested.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/shell/focus_return_stages_nested.sh", "layer": "nested", "runner": "bare"},

@@ -15,6 +15,8 @@ Sheet {
     required property var store
 
     readonly property var view: root.updates.view
+    // A beta version is installed (or the version cannot be read): "Off" would follow the empty stable channel, so it is unavailable.
+    readonly property bool betaLocked: root.setUp && root.updates.channel === "beta" && !root.updates.stableAllowed
     readonly property bool setUp: root.updates.channel === "stable" || root.updates.channel === "beta"
     readonly property var notes: SoftwareUpdateLogic.notesFor(root.view.grassfield, Qt.uiLanguage !== "" ? Qt.uiLanguage : Qt.locale().name)
 
@@ -32,7 +34,7 @@ Sheet {
     message: {
         switch (root.topic) {
         case "beta":
-            return qsTr("Grassfield Beta gets the next version of Grassfield before its release. Leaving the beta keeps the beta version until a newer stable version comes out: an older version is never installed.");
+            return qsTr("Grassfield Beta gets the next version of Grassfield before its release. You can turn beta updates off once the release is installed; the version you have is kept until a newer stable version comes out, and an older version is never installed.");
         case "notes":
             return root.notes.length === 0 ? qsTr("Release notes are not available.") : "";
         case "others":
@@ -64,7 +66,8 @@ Sheet {
 
     SettingsGroup {
         visible: root.topic === "beta"
-        footnote: root.updates.channel !== "off" && root.updates.channel !== "" ? qsTr("Turning them off removes Grassfield's package repository from the system; nothing installed is removed.") : ""
+        footnote: root.betaLocked ? qsTr("Beta updates stay on while a beta version of Grassfield is installed. You can turn them off once the release is installed.")
+            : root.updates.channel !== "off" && root.updates.channel !== "" ? qsTr("Turning them off removes Grassfield's package repository from the system; nothing installed is removed.") : ""
 
         SettingsRow {
             title: qsTr("Beta updates")
@@ -73,7 +76,7 @@ Sheet {
             ComboBox {
                 inline: true
                 accessibleName: qsTr("Beta updates")
-                enabled: root.setUp && !root.updates.waitingForPermission
+                enabled: root.setUp && !root.updates.waitingForPermission && !root.betaLocked
                 model: [{id: "stable", text: qsTr("Off")}, {id: "beta", text: qsTr("Grassfield Beta")}]
                 // The value follows /etc/pacman.d/grassfield.conf (watched): it changes when the change is made (U12).
                 value: root.updates.channel === "beta" ? "beta" : "stable"

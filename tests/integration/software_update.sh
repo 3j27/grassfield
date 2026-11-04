@@ -198,6 +198,7 @@ mk_desktop() { # pkgver repository.conf
   cp /src/packaging/pacman/{grassfield-channel-helper,grassfield-channel-scriptlet,grassfield-channel.sh,org.grassfield.packages.policy,pre-refresh-pacman} \
     /src/packaging/bin/{grassfield-channel-set,grassfield-update-check} "$W"/gen/* "$d/files/"
   cp /src/packaging/arch/grassfield-desktop.install "$d/"
+  echo 1.0.0 >"$d/files/VERSION" # a plain version: stable is allowed (ADR-0033 O15b); the rule's cases below change the installed file
   cat >"$d/PKGBUILD" <<EOF
 pkgname=grassfield-desktop
 pkgver=$v
@@ -216,6 +217,7 @@ package() {
   install -Dm644 "\$f/org.grassfield.packages.policy" "\$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
   install -Dm644 -t "\$pkgdir/usr/share/grassfield/pacman/" "\$f/repository.conf" "\$f/grassfield-stable.conf" "\$f/grassfield-beta.conf" "\$f/grassfield-signing-key.asc"
   install -Dm755 "\$f/pre-refresh-pacman" "\$pkgdir/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman"
+  install -Dm644 "\$f/VERSION" "\$pkgdir/usr/share/grassfield/VERSION"
 }
 EOF
   chown -R builder: "$d"
@@ -347,6 +349,20 @@ sed -i "s|^GRASSFIELD_REPO_BASE=.*|GRASSFIELD_REPO_BASE=https://packages.grassfi
 out=$(chset alice stable 2>&1); rc=$?
 expect "a build whose base is the .invalid placeholder: refused 'no package repository in this build'" test "$rc:$(grep -c 'no package repository in this build' <<<"$out")" == 1:1
 rm -rf /usr/share/grassfield/pacman && cp -a "$W/pacman.real" /usr/share/grassfield/pacman
+# The channel rule (ADR-0033 O15b): stable is refused by the user's command and by the root helper, called directly, while the
+# installed VERSION is a prerelease, missing or malformed; beta is not (tests/shell/channel_set_rule.sh covers the cases).
+cp /usr/share/grassfield/VERSION "$W/VERSION.bak"
+for v in 1.0.0-rc2 junk; do
+  echo "$v" >/usr/share/grassfield/VERSION
+  out=$(chset alice stable 2>&1); rc=$?
+  expect "VERSION $v: grassfield-channel-set stable refused 'beta updates stay on'" test "$rc:$(grep -c 'beta updates stay on' <<<"$out")" == 1:1
+  out=$("$H" set stable 2>&1); rc=$?
+  expect "VERSION $v: the root helper refuses stable itself" test "$rc:$(grep -c 'beta updates stay on' <<<"$out")" == 1:1
+done
+rm -f /usr/share/grassfield/VERSION
+out=$("$H" set stable 2>&1); rc=$?
+expect "no VERSION: the root helper refuses stable" test "$rc:$(grep -c 'beta updates stay on' <<<"$out")" == 1:1
+cp "$W/VERSION.bak" /usr/share/grassfield/VERSION
 out=$(as alice sudo grassfield-channel-set stable 2>&1); rc=$?
 expect "grassfield-channel-set as root -> refused 'run it as your user'" test "$rc:$(grep -c 'run it as your user' <<<"$out")" == 1:1
 out=$(chset bob beta 2>&1); rc=$?

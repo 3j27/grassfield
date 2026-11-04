@@ -12869,8 +12869,12 @@
         <translation>Mises à jour automatiques</translation>
     </message>
     <message>
-        <source>Grassfield Beta gets the next version of Grassfield before its release. Leaving the beta keeps the beta version until a newer stable version comes out: an older version is never installed.</source>
-        <translation>Grassfield bêta reçoit la prochaine version de Grassfield avant sa sortie. Quitter la bêta conserve la version bêta jusqu’à la sortie d’une version stable plus récente&#xa0;: une version plus ancienne n’est jamais installée.</translation>
+        <source>Grassfield Beta gets the next version of Grassfield before its release. You can turn beta updates off once the release is installed; the version you have is kept until a newer stable version comes out, and an older version is never installed.</source>
+        <translation>Grassfield bêta reçoit la prochaine version de Grassfield avant sa sortie. Vous pourrez désactiver les mises à jour bêta une fois la version finale installée&#xa0;; la version que vous avez est conservée jusqu’à la sortie d’une version stable plus récente, et une version plus ancienne n’est jamais installée.</translation>
+    </message>
+    <message>
+        <source>Beta updates stay on while a beta version of Grassfield is installed. You can turn them off once the release is installed.</source>
+        <translation>Les mises à jour bêta restent activées tant qu’une version bêta de Grassfield est installée. Vous pourrez les désactiver une fois la version finale installée.</translation>
     </message>
     <message>
         <source>Release notes are not available.</source>

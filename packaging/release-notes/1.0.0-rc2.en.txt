@@ -1,2 +1,3 @@
 First signed build, from packages.grassfield.site, on the beta channel.
 Window corners follow one measured radius, with a dark rim and smaller refinements since 1.0.0-rc1.
+Beta updates stay on while a beta version is installed; you can turn them off once the release is installed.
