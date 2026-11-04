@@ -210,6 +210,50 @@ TEST(PreviewLogic, SystemPathsRefused)
     EXPECT_EQ(a.errors.size(), 2);
 }
 
+// Select Text in Images (ADR-0045 OC-2): three fixed commands, the image always on the standard input, the languages only
+// as plain traineddata names.
+TEST(PreviewLogic, RecognitionCommandsAreAllowlisted)
+{
+    const Recognition list = recognitionCommand(QStringLiteral("languages"), QString());
+    EXPECT_EQ(list.program, QStringLiteral("tesseract"));
+    EXPECT_EQ(list.arguments, QStringList{QStringLiteral("--list-langs")});
+    EXPECT_FALSE(list.image);
+
+    const Recognition text = recognitionCommand(QStringLiteral("text"), QStringLiteral("fra+eng"));
+    EXPECT_EQ(text.program, QStringLiteral("tesseract"));
+    EXPECT_TRUE(text.image);
+    EXPECT_EQ(text.arguments.first(), QStringLiteral("stdin"));
+    EXPECT_EQ(text.arguments.last(), QStringLiteral("tsv"));
+    EXPECT_EQ(text.arguments.at(text.arguments.indexOf(QStringLiteral("-l")) + 1), QStringLiteral("fra+eng"));
+    EXPECT_EQ(recognitionCommand(QStringLiteral("text"), QStringLiteral("chi_sim")).program, QStringLiteral("tesseract"));
+    for (const char *refused : {"", "fra+", "+eng", "../x", "script/Latin", "fra eng", "-c", "a+b+c+d+e",
+                                "abcdefghijklmnopqrstuvwxyzabcdefg"})
+        EXPECT_TRUE(recognitionCommand(QStringLiteral("text"), QString::fromLatin1(refused)).program.isEmpty()) << refused;
+
+    const Recognition qr = recognitionCommand(QStringLiteral("qr"), QString());
+    EXPECT_EQ(qr.program, QStringLiteral("zbarimg"));
+    EXPECT_TRUE(qr.image);
+    EXPECT_TRUE(qr.arguments.contains(QStringLiteral("-Sdisable")));
+    EXPECT_TRUE(qr.arguments.contains(QStringLiteral("-Sqrcode.enable")));
+    EXPECT_EQ(qr.arguments.last(), QStringLiteral("-"));
+
+    for (const char *refused : {"", "sh", "tesseract", "zbarimg", "TEXT"})
+        EXPECT_TRUE(recognitionCommand(QString::fromLatin1(refused), QStringLiteral("eng")).program.isEmpty()) << refused;
+}
+
+TEST(PreviewLogic, OnlyCleanWebLinksOpen)
+{
+    EXPECT_TRUE(isOpenableLink(QStringLiteral("https://example.org/a?b=c#d")));
+    EXPECT_TRUE(isOpenableLink(QStringLiteral("http://example.org")));
+    EXPECT_TRUE(isOpenableLink(QStringLiteral("HTTPS://EXAMPLE.ORG/MENU")));
+    for (const char *refused : {"", "file:///etc/passwd", "javascript:alert(1)", "otpauth://totp/a?secret=X", "https://",
+                                "https://bank.example@other.example/", "https://example.org/a b", "-https://example.org",
+                                "https://example.org/\x7f", "ftp://example.org"})
+        EXPECT_FALSE(isOpenableLink(QString::fromLatin1(refused))) << refused;
+    EXPECT_FALSE(isOpenableLink(QStringLiteral("https://example.org/") + QString(QChar(0x202E)) + QStringLiteral("gpj.exe")));
+    EXPECT_FALSE(isOpenableLink(QStringLiteral("https://example.org/") + QString(2100, QLatin1Char('a'))));
+}
+
 namespace {
 QStringList names(const QStringList &paths)
 {

@@ -108,6 +108,9 @@
     "formats": "auto",
     "firstDayOfWeek": "auto"
   },
+  "preview": {
+    "textInImages": true
+  },
   "icons": {
     "mode": "default",
     "tint": "accent",

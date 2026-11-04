@@ -166,12 +166,14 @@ ShellRoot {
     }
 
     // Contract keys the shell's SettingsStore does not read at all: an app reads them (apps/store/qml/Main.qml,
-    // SettingsWindow.qml), with its own tests. They are the only keys exempt from "has a reader here" and from the
-    // every-key-is-its-default check; a key listed here that this test also reads is a failure (the list never goes stale).
+    // SettingsWindow.qml; apps/preview/src/previewapp.cpp readAppearance), with its own tests. They are the only keys exempt
+    // from "has a reader here" and from the every-key-is-its-default check; a key listed here that this test also reads is a
+    // failure (the list never goes stale).
     readonly property var appOnly: ({
             "store.sources.aur": "apps/store",
             "store.sources.flathub": "apps/store",
-            "store.screenshots": "apps/store"
+            "store.screenshots": "apps/store",
+            "preview.textInImages": "apps/preview"
         })
 
     function readerValue(store: var, path: string): var {

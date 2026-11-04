@@ -47,6 +47,29 @@ bool looksBinary(const QByteArray &sample);
 // Canonical (symlink-resolved) path under /proc, /sys or /dev: never previewed.
 bool isSystemPath(const QString &canonical);
 
+// Select Text in Images (ADR-0045 OC-2, docs/specs/preview.md P13). One recognition runs one allowlisted tool, found on the
+// PATH at use time, with fixed arguments, never through a shell; the image reaches it on its standard input as a grey PGM
+// that Preview decoded itself (EXIF orientation applied, at most kRecognitionMaxSide per side), never as a path: the tool
+// never parses the file, and the boxes it answers are in the pixels Preview shows.
+constexpr int kRecognitionMaxSide = 8192;                 // px per side of the picture handed to the tools
+constexpr int kRecognitionTimeoutMs = 60000;              // a tool still running then is killed
+constexpr qint64 kRecognitionOutputMax = 4 * 1024 * 1024; // bytes of standard output; more is a failure
+struct Recognition {
+    QString program;       // empty: the request is refused
+    QStringList arguments;
+    bool image = false;    // the tool reads the image on its standard input
+};
+// "languages": `tesseract --list-langs`. "text": tesseract's TSV word boxes (Omarchy's omarchy-capture-text options --oem 1
+// and --dpi 300, a whole page's segmentation --psm 3) in `languages`, tesseract's -l value: one to four language names
+// ([A-Za-z0-9_], at most 32 characters each) joined by '+'. "qr": zbarimg with QR codes only (omarchy-capture-qr's -q
+// -Sdisable -Sqrcode.enable: the other symbologies false-positive on screen content), each code as "QR-Code:<data>".
+// Anything else is refused.
+Recognition recognitionCommand(const QString &tool, const QString &languages);
+// A link a QR code chip may hand to xdg-open: one http or https URL (valid in strict mode, with a host, without user
+// information, at most 2048 characters, no space, control or format character, not starting with '-'). The same rule as
+// the chip's (apps/preview/qml/TextInImages.js isLink).
+bool isOpenableLink(const QString &link);
+
 // Command line: accepted local paths (at most kMaxFiles, regular files only, duplicates removed) and
 // one message per rejected argument.
 struct Arguments {

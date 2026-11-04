@@ -68,6 +68,37 @@ Item {
         when: loader.item !== null
     }
 
+    // Select Text in Images (ADR-0045 OC-2): the text and the QR codes of a still image (one frame, not animated), read
+    // while preview.textInImages is on; the image view shows them.
+    ImageText {
+        id: imageText
+        backend: root.backend
+        fileIndex: root.fileIndex
+        url: root.info.ok === true && root.info.kind === "image" && root.info.animated !== true && (root.info.frames ?? 1) === 1 ? String(root.info.url ?? "") : ""
+        active: root.backend.textInImages === true
+    }
+
+    Binding {
+        target: loader.item
+        property: "backend"
+        value: root.backend
+        when: loader.item !== null && root.info.kind === "image"
+    }
+
+    Binding {
+        target: loader.item
+        property: "textPage"
+        value: imageText.page
+        when: loader.item !== null && root.info.kind === "image"
+    }
+
+    Binding {
+        target: loader.item
+        property: "codes"
+        value: imageText.codes
+        when: loader.item !== null && root.info.kind === "image"
+    }
+
     Binding {
         target: loader.item
         property: "searchText"
