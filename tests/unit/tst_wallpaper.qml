@@ -978,8 +978,8 @@ TestCase {
         verify(/\{label: root\.entry\.author \? root\.authorLabel : root\.creditLabel, value: root\.entry\.author \|\| root\.entry\.credit \|\| ""/.test(card));
         verify(/\{label: root\.changesLabel, value: root\.entry\.modified === true \? root\.changesText : ""/.test(card));
         const icons = read("shell/desktop/IconsView.qml");
-        verify(/aboutWallpaper: WallpaperState\.aboutEntry\(root\.screen\.name\) !== null/.test(icons), "the menu item for either attribution");
-        verify(/AttributionCard \{\s*entry: WallpaperState\.aboutEntry\(root\.screen\.name\)/.test(icons), "the card shows the same entry");
+        verify(/aboutWallpaper: root\.screen !== null && WallpaperState\.aboutEntry\(root\.screen\.name\) !== null/.test(icons), "the menu item for either attribution");
+        verify(/AttributionCard \{\s*entry: \(root\.screen && WallpaperState\.aboutEntry\(root\.screen\.name\)\)/.test(icons), "the card shows the same entry");
         const state = read("shell/services/WallpaperState.qml");
         verify(/WallpaperConfig\.aboutEntryOf\(outputs\[output\], online, photos, Qt\.locale\(\)\.name\)/.test(state));
         verify(/onLoaded: root\.photos = WallpaperConfig\.parsePhotos\(text\(\), root\.photosDir\)/.test(state), "the list read as Settings reads it");

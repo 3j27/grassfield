@@ -69,6 +69,8 @@ FocusScope {
     // Widgets of this screen are never overlapped: slots under a widget tile are not available to
     // icons (widgets win; the icons move to the next free slot).
     readonly property var widgetRects: {
+        if (!screen) // the display was just unplugged; its surface is going away
+            return [];
         const g = Widgets.gridFor(screen);
         const out = [];
         for (const e of Widgets.desktop) {
@@ -767,7 +769,7 @@ FocusScope {
                 kind: root.menuKind
                 showKeyHints: root.fileKeyActions
                 itemsHere: root.iconsHere
-                aboutWallpaper: WallpaperState.aboutEntry(root.screen.name) !== null
+                aboutWallpaper: root.screen !== null && WallpaperState.aboutEntry(root.screen.name) !== null
                 count: root.selectedNames.length
                 singleName: root.selectedNames.length === 1 ? root.selectedNames[0] : ""
                 pasteCount: root.files.clipboardPaths.length
@@ -824,7 +826,7 @@ FocusScope {
             id: aboutLoader
             active: root.aboutOpen
             sourceComponent: AttributionCard {
-                entry: WallpaperState.aboutEntry(root.screen.name) || ({})
+                entry: (root.screen && WallpaperState.aboutEntry(root.screen.name)) || ({})
                 onCloseRequested: root.closeAbout("esc")
             }
             onLoaded: (item as Item).forceActiveFocus()
