@@ -75,6 +75,39 @@ TestCase {
         verify(!ring.visible);
     }
 
+    // The FocusRing inside an item's subtree (the one child with a shapeRadius), null for none.
+    function ringIn(item) {
+        for (const child of item.children) {
+            if (child.shapeRadius !== undefined)
+                return child;
+            const inner = ringIn(child);
+            if (inner)
+                return inner;
+        }
+        return null;
+    }
+
+    // SearchField.focusRing (ADR-0045 OC-3, docs/specs/ui-api.md "Property changes"): on by default, the ring shows with the
+    // focus; off (Emoji & Symbols' field, macOS 27's picker shows none), the field keeps the focus and the caret but no ring.
+    function test_searchFieldFocusRingOptOut() {
+        const ring = ringIn(search.background);
+        verify(ring !== null, "SearchField draws a FocusRing");
+        compare(search.focusRing, true, "on by default: the existing fields keep their ring");
+        search.forceActiveFocus();
+        verify(search.activeFocus);
+        verify(ring.visible);
+        compare(ring.border.width, Tokens.controlFocusOutline);
+        search.focusRing = false;
+        verify(!ring.visible, "no ring while focused when opted out");
+        verify(search.activeFocus, "the field keeps the focus");
+        keyClick("x");
+        compare(search.text, "x", "and still types");
+        search.focusRing = true;
+        verify(ring.visible, "back on: the ring shows again");
+        field.forceActiveFocus();
+        verify(!ring.visible, "never without the focus");
+    }
+
     function test_fieldHonoursIncreaseContrast() {
         Appearance.increaseContrast = false;
         compare((field.background as Rectangle).border.width, 0);
