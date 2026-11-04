@@ -35,8 +35,7 @@ shot_of() { # NAME OUTPUT
 # Index of a namespace among the background-level layers of an output (stacking order, bottom first), "" when absent.
 layer_index() { # OUTPUT NAMESPACE
   nest layers -j | jq -r --arg o "$1" --arg ns "$2" '
-    [ .. | objects | select(has("levels")) | select((.name? // "") == $o) | .levels["0"] // [] ] | first // []
-    | to_entries | map(select(.value.namespace == $ns)) | first | .key // ""' 2>/dev/null
+    (.[$o].levels["0"] // []) | to_entries | map(select(.value.namespace == $ns)) | first | .key // ""' 2>/dev/null
 }
 
 vs_session >/dev/null
