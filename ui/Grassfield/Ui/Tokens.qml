@@ -1134,6 +1134,33 @@ QtObject {
     // estimate: the first-use prompt's margins inside the results panel (CB-6, macOS 26.0 capture W-36) [ref: docs/specs/clipboard.md; ADR-0034]
     readonly property int searchClipPromptPadding: 24
 
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): nine glyphs to a row [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiColumns: 9
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the popover's inner margin round the search field, the grid and the category bar [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiPadding: 10
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the popover's height; its width is the columns of cells plus the padding (344) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiHeight: 380
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the popover's corner, rounder than a menu's 12 as macOS 26/27 popovers are; the blur region takes it (PopupKinds.blurCorner) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiRadius: 18
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the pitch of the glyph grid, rows and columns [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiCellSize: 36
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): an emoji's size in its cell [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiGlyphSize: Math.round(26 * Appearance.textScale)
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the selection square inside its cell (a 32-pt square at the 36 pitch) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiCellInset: 2
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the corner of the selection square; the popover's 18 less its 10 inset, concentric [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiCellRadius: 8
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): a section title row (Recently Used, Smileys & People, ...), caption size in the secondary colour [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiHeaderHeight: 24
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): between the search field and the grid [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiSearchGap: 8
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the category bar under the grid, its buttons centred in it [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiBarHeight: 36
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): a category button of the bar (its hover and selected square) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiBarButtonSize: 28
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): a category's glyph (clock, face, paw, cup, ball, car, light bulb, number sign, flag) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiBarGlyphSize: 16
+
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockTopMargin: 64
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)

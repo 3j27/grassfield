@@ -417,4 +417,13 @@ TestCase {
         compare(Logic.omarchyPath("/opt/omarchy/"), "/opt/omarchy");
         compare(Logic.omarchyPath("/opt/x\ny"), "/usr/share/omarchy");
     }
+
+    // ---- Wiring ----
+
+    function test_ctrlSuperSpaceTogglesThePanel() {
+        const bindings = read("config/hypr/grassfield/bindings.lua");
+        verify(bindings.indexOf("bind(\"SUPER + CTRL + SPACE\", \"Emoji & Symbols\", shell(\"emoji\", \"toggle\"))") >= 0);
+        verify(read("apps/settings/qml/Bindings.js").indexOf("QT_TRANSLATE_NOOP(\"Bindings\", \"Emoji & Symbols\")") >= 0,
+               "the binding's description is translated in Settings > Keyboard");
+    }
 }

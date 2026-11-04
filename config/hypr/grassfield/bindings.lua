@@ -174,6 +174,9 @@ bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 bind("SUPER + SPACE", "Search", shell("search", "toggle"))
 -- The clipboard history in Search (ADR-0034, docs/specs/clipboard.md CB-5): opens Search in its Clipboard view; again closes it.
 bind("SUPER + CTRL + V", "Clipboard history", shell("search", "clipboard"))
+-- Emoji & Symbols (macOS Control-Command-Space; ADR-0045 OC-3, docs/specs/clipboard.md ES-1): the panel at the pointer; again
+-- closes it. The shell refuses it while the session is locked.
+bind("SUPER + CTRL + SPACE", "Emoji & Symbols", shell("emoji", "toggle"))
 -- Apps (the dedicated Apps / Launchpad media key; plain F4 stays with the applications, docs/specs/apps.md A11).
 bind("XF86LaunchA", "Apps", shell("apps", "toggle"))
 bind("CTRL + UP", "Overview", shell("overview", "toggle"))
