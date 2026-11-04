@@ -19,6 +19,8 @@ keyfile=$VS_DEV/config/keyboard.lua
 bound() { "$VS_ROOT/scripts/nestctl" binds -j | jq -e --arg k "$1" --argjson m "$2" 'any(.[]; (.key | ascii_downcase) == "space" and .modmask == $m)' >/dev/null; }
 ctrl_space() { bound space 4; }       # modmask: shift 1, ctrl 4, alt 8
 ctrl_alt_space() { bound space 12; }
+locked_binds() { "$VS_ROOT/scripts/nestctl" binds -j | jq -e '[.[] | select((.key | ascii_downcase) == "space" and (.modmask == 4 or .modmask == 12))] | length == 2 and all(.locked)' >/dev/null; }
+show_binds() { "$VS_ROOT/scripts/nestctl" binds -j | jq -c '.[] | select((.key | ascii_downcase) == "space" and (.modmask == 4 or .modmask == 12)) | {description, modmask, key, locked}'; }
 no_binds() { ! ctrl_space && ! ctrl_alt_space; }
 both_binds() { ctrl_space && ctrl_alt_space; }
 devices() { "$VS_ROOT/scripts/nestctl" devices -j | jq -r '.keyboards[] | "\(.name)\t\(.layout)\tactive=\(.active_keymap)"'; }
@@ -42,6 +44,8 @@ fl_check "one layout: Ctrl+Space and Ctrl+Option+Space are not bound ($(devices 
 printf 'return {\n  kb_layout = "fr,us",\n  kb_variant = ",",\n}\n' > "$keyfile"
 fl_check_wait "the configuration is read again: both binds appear" 30 both_binds
 vs_sleep 2
+echo "---- nestctl binds -j (Ctrl+Space, Ctrl+Option+Space):"; show_binds
+fl_check "both binds are locked (they also work at the lock screen)" locked_binds
 # A second, virtual keyboard (vkbd, its own keymap) stays attached while the chords run: `devices` lists it next to the
 # session's keyboard, which is what an xkb group option could not follow.
 "$VS_ROOT/tests/tools/vkbd/vkbd.sh" sleep 60000 >/dev/null 2>&1 &
