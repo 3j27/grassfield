@@ -1,6 +1,8 @@
 import QtQuick
 import QtTest
 import "../../shell/desktop/IconsLogic.js" as Logic
+import "../../shell/desktop/DesktopSurfaces.js" as Surfaces
+import "../../shell/services/DesktopHolders.js" as Holders
 
 // Desktop icons logic: grid placement (top-right, column-first), moves, navigation, rename
 // validation, positions persistence and pruning, URI lists, launcher parsing, folder resolution.
@@ -29,6 +31,64 @@ TestCase {
         compare(Logic.uniqueName(nfc, [nfd, "R\u00e9sum\u00e9 2.txt"]), "R\u00e9sum\u00e9 3.txt");
         compare(Logic.uniqueName("other.txt", [nfc]), "other.txt");
         compare(Logic.copyName(nfd, [nfc.replace(".txt", " copy.txt")], false), "Re\u0301sume\u0301 copy 2.txt");
+    }
+
+    // Desktop icons always snap to the grid (macOS Sort By > Snap to Grid, on at first start here with no way to turn it
+    // off): a drop at any pixel lands on a whole cell, and an occupied cell gives the nearest free one.
+    function test_dropSnapsToTheNearestFreeCell() {
+        const w = 1000, cw = 100, ch = 100, cols = 10, rows = 5;
+        for (const [x, y] of [[3, 3], [431, 277], [999, 499], [512.5, 150.2]]) {
+            const s = Logic.slotAt(x, y, w, cw, ch, cols, rows);
+            verify(Number.isInteger(s.col) && Number.isInteger(s.row), "whole cell for " + x + "," + y);
+            verify(s.col >= 0 && s.col < cols && s.row >= 0 && s.row < rows);
+        }
+        // Dropped a little off the cell: the same cell wins.
+        compare(Logic.slotAt(620, 110, w, cw, ch, cols, rows), Logic.slotAt(650, 140, w, cw, ch, cols, rows));
+        // The wanted cell is taken: the nearest free cell, never the same one.
+        const taken = {};
+        taken[Logic.key(4, 2)] = true;
+        const spot = Logic.nearestFree(taken, {col: 4, row: 2}, cols, rows);
+        verify(spot !== null && !(spot.col === 4 && spot.row === 2));
+        compare(Math.abs(spot.col - 4) + Math.abs(spot.row - 2), 1);
+    }
+
+    // Which screens carry what: every screen has the desktop surface, the icons are on one (the named one, else the first).
+    function test_iconsAreOnOneScreen() {
+        compare(Surfaces.iconsScreen("", ["A", "B"]), "A");
+        compare(Surfaces.iconsScreen("B", ["A", "B"]), "B");
+        compare(Surfaces.iconsScreen("", []), "");
+        compare(Surfaces.iconsScreen("", null), "");
+        // A screen the shell cannot name yet is never the one, whatever is asked.
+        compare(Surfaces.iconsHere("", Surfaces.iconsScreen("", [""]), true), false);
+        const names = ["A", "B", "C"];
+        const main = Surfaces.iconsScreen("", names);
+        compare(names.filter(n => Surfaces.iconsHere(n, main, true)), ["A"]);
+        // Show Desktop Items off: the surface stays (the menu), no screen shows icons.
+        compare(names.filter(n => Surfaces.iconsHere(n, main, false)), []);
+        compare(Surfaces.iconsHere("A", main, undefined), false);
+        // A display plugged in later is not the icons' screen, and the first one going away moves the choice.
+        compare(Surfaces.iconsHere("D", main, true), false);
+        compare(Surfaces.iconsScreen("", ["B", "C"]), "B");
+    }
+
+    // Several desktop surfaces report the keyboard: a focus-out on A does not clear B whose menu is open.
+    function test_holdsKeyboardIsPerSurface() {
+        let h = {};
+        compare(Holders.any(h), false);
+        h = Holders.updated(h, "A", true);
+        h = Holders.updated(h, "B", true); // B: menuOpened
+        compare(Holders.any(h), true);
+        h = Holders.updated(h, "A", false); // A: focus out
+        compare(Holders.any(h), true, "B still holds it");
+        h = Holders.updated(h, "A", false);
+        compare(Holders.any(h), true, "a second release of A changes nothing");
+        h = Holders.updated(h, "B", false);
+        compare(Holders.any(h), false);
+        // An output removed while holding gives its share back.
+        h = Holders.updated(Holders.updated({}, "A", true), "A", false);
+        compare(Holders.any(h), false);
+        compare(Holders.any(null), false);
+        compare(Holders.any(Holders.updated(undefined, "A", true)), true);
     }
 
     function test_gridSize() {

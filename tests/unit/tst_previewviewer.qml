@@ -70,6 +70,41 @@ TestCase {
         globalMenu: false
     }
 
+    // A video opened in the Preview window (from Files or a double-click): it plays as soon as it is loaded, as in Quick Look.
+    QtObject {
+        id: videoBackend
+        property var files: [{name: "clip.mp4", path: "/x/clip.mp4", url: "file:///x/clip.mp4", kind: "video"}]
+        property var errors: []
+        property bool glance: false
+        property bool browsing: false
+        property int startIndex: 0
+        property bool dark: false
+        property bool reduceMotion: true
+        property bool increaseContrast: false
+        property real textScale: 1
+        property string accentColor: "multicolor"
+        property string accentHighlight: "pink"
+        property string shortcutStyle: "pc"
+        property string titlebarDoubleClick: "zoom"
+        property bool canMinimize: true
+        function inspect(i) {
+            return {ok: true, kind: "video", name: files[i].name, url: files[i].url, size: "1 MB", type: "MPEG-4 video", modified: "today", folder: "/x"};
+        }
+    }
+
+    Viewer {
+        id: videoViewer
+        backend: videoBackend
+        globalMenu: false
+    }
+
+    function test_aVideoOpenedInPreviewAutoplays() {
+        tryVerify(() => videoViewer.view !== null && videoViewer.view !== undefined);
+        verify(videoViewer.view.autoplay, "autoplay reaches the media view");
+        // The play/pause control is still there and still the view's own.
+        verify(typeof videoViewer.view.togglePlay === "function");
+    }
+
     // A PDF in a window of its own: the page tools.
     QtObject {
         id: pdfBackend

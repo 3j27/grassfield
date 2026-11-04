@@ -9,8 +9,14 @@ FocusScope {
 
     property var info: ({})
     property int fileIndex: 0
-    // Start playing as soon as the media is loaded (Glance).
+    // Start playing as soon as the media is loaded (Glance, and a file opened in the Preview window).
     property bool autoplay: false
+    // The same rule whichever comes last, the media or the setting (the property is bound after the viewer is created).
+    function startIfAutoplay(): void {
+        if (root.autoplay && player.mediaStatus === MediaPlayer.LoadedMedia && player.playbackState === MediaPlayer.StoppedState && player.position === 0)
+            player.play();
+    }
+    onAutoplayChanged: root.startIfAutoplay()
 
     readonly property bool canZoom: false
     readonly property bool canRotate: false
@@ -56,8 +62,7 @@ FocusScope {
         videoOutput: video
         audioOutput: AudioOutput {
         }
-        onMediaStatusChanged: if (mediaStatus === MediaPlayer.LoadedMedia && root.autoplay)
-            play()
+        onMediaStatusChanged: root.startIfAutoplay()
         onErrorOccurred: (error, errorString) => root.failure = errorString
     }
 
