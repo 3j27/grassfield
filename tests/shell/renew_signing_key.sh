@@ -49,6 +49,8 @@ if has --import; then
   need_pass
   file=${*: -1}
   grep -q STUB-SECRET-KEY-MATERIAL "$file" || { echo "gpg: no secret key in file" >&2; exit 2; }
+  # secbroken: the exported SECRET file (not the input) imports without a usable secret key.
+  if [[ $mode == secbroken && $(basename "$file") != SECRET-input.asc ]]; then : >"$H/imported-public"; exit 0; fi
   read -r _ f e <<<"$(grep STUB-SECRET-KEY-MATERIAL "$file" | head -n 1)"
   echo "$f" >"$H/fpr"
   echo "$e" >"$H/exp"
@@ -149,7 +151,7 @@ run() { # run NAME MODE INPUT [args...]
   [[ -z ${RUN_NOXDG:-} ]] || xdg="NOXDG=1"
   mkdir -p "$d/home" "$d/t" "$d/tt" "$d/s"
   env -i PATH="$stubs:$PATH" HOME="$d/home" TMPDIR="$d/tt" "$xdg" LANG=C STUB_DIR="$d/s" STUB_PASS="$PASSPHRASE" STUB_MODE="$mode" STUB_OLDEXP="$OLDEXP" \
-    bash "${SCRIPT:-$script}" "$@" <<<"$input" >"$d/stdout" 2>"$d/stderr"
+    bash "${SCRIPT:-$script}" --fingerprint "$FPR" "$@" <<<"$input" >"$d/stdout" 2>"$d/stderr"
   echo $? >"$d/rc"
 }
 rc() { cat "$tmp/$1/rc"; }
@@ -167,6 +169,8 @@ env -i PATH="$PATH" bash "$script" --help >"$tmp/help" 2>&1
 check "--help: exit 0, both languages, SIGKILL cleanup line" bash -c "grep -q '^Usage:' '$tmp/help' && grep -q '^Utilisation' '$tmp/help' && grep -q 'SIGKILL' '$tmp/help' && grep -q 'kill all; gpgconf' '$tmp/help'"
 env -i PATH="$PATH" bash "$script" >/dev/null 2>&1
 check "no --secret: exit 2" test $? -eq 2
+env -i PATH="$PATH" bash "$script" --secret "$secretfile" >/dev/null 2>&1
+check "no --fingerprint: exit 2 (it is required)" test $? -eq 2
 
 # 1. A good renewal.
 run ok ok "$PASSPHRASE" --secret "$secretfile" --fingerprint "${FPR,,}" --output "$tmp/ok/out"
@@ -187,6 +191,9 @@ check "success: no core dump allowed" test "$(cat "$tmp/ok/s/ulimit")" == 0
 check "success: ~/.gnupg was not created" test ! -e "$tmp/ok/home/.gnupg"
 check "success: the test signature came from a fresh home holding only the new SECRET file, checked with gpgv" \
   bash -c "grep -q '^gpg .*--import $out/SECRET-grassfield-signing-key.asc' '$tmp/ok/s/calls.log' && grep -q '^gpgv ' '$tmp/ok/s/calls.log'"
+check "success: the README orders the steps: copies checked, then the secret, then the public key, then delete last" \
+  bash -c "r='$out/README.txt'; a=\$(grep -n '^ 1. Replace the two offline copies' \"\$r\" | cut -d: -f1); b=\$(grep -n '^ 2. Replace GRASSFIELD_SIGNING_KEY' \"\$r\" | cut -d: -f1); c=\$(grep -n '^ 3. Send ONLY' \"\$r\" | cut -d: -f1); d=\$(grep -n '^ 4. LAST: delete this folder AND the copy' \"\$r\" | cut -d: -f1); test -n \"\$a\" -a \"\$a\" -lt \"\$b\" -a \"\$b\" -lt \"\$c\" -a \"\$c\" -lt \"\$d\""
+check "success: the README warns about logout and ~/.gnupg" bash -c "grep -q 'DO NOT LOG OUT OR REBOOT' '$out/README.txt' && grep -q 'Never import the key into ~/.gnupg' '$out/README.txt'"
 check "success: no secret on stdout or stderr" no_leak ok
 check "success: the passphrase is on no command line" bash -c "! grep -q '$PASSPHRASE' '$tmp/ok/s/calls.log'"
 
@@ -221,6 +228,7 @@ checks=(
   "fprchange:fingerprint changed"
   "badsig:gpgv rejects"
   "sigother:not by the primary key"
+  "secbroken:test signature failed"
 )
 for c in "${checks[@]}"; do
   m=${c%%:*} msg=${c#*:}
@@ -232,14 +240,14 @@ done
 
 # 4. SIGINT while gpg works, then a second one during the cleanup.
 status=$(env -i PATH="$stubs:$PATH" HOME="$tmp/sig/home" TMPDIR="$tmp/sig/tt" XDG_RUNTIME_DIR="$tmp/sig/t" LANG=C STUB_DIR="$tmp/sig/s" STUB_PASS="$PASSPHRASE" STUB_MODE=hang_set \
-  python3 -I - "$script" "$secretfile" "$tmp/sig/out" "$tmp/sig/s/started" "$PASSPHRASE" <<'PY'
+  python3 -I - "$script" "$secretfile" "$tmp/sig/out" "$tmp/sig/s/started" "$PASSPHRASE" "$FPR" <<'PY'
 import os, signal, subprocess, sys, time
 script, secret, out, started, passphrase = sys.argv[1:6]
 for d in ("home", "t", "tt", "s"):
     os.makedirs(os.path.join(os.path.dirname(out), d), exist_ok=True)
 def default_signals():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-p = subprocess.Popen(["bash", script, "--secret", secret, "--output", out], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+p = subprocess.Popen(["bash", script, "--secret", secret, "--fingerprint", sys.argv[6], "--output", out], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True, preexec_fn=default_signals)
 p.stdin.write((passphrase + "\n").encode())
 p.stdin.close()
@@ -276,6 +284,7 @@ mutant() { # mutant NAME 'sed expression' MODE 'ok|message'
 }
 mutant olderexpiry 's/\[\[ -z \$oldexp || \$newexp -gt \$oldexp \]\]/true/' noextend "not later than the old one"
 mutant localuser 's/--local-user "\$fpr!" //' ok ok
+mutant freshhome 's/^gpgv_ --detach-sign/gpgs --detach-sign/' secbroken "test signature failed"
 mutant secexpiry 's/\[\[ \$secexp == "\$newexp" \]\]/true/' secold "does not carry the new expiry"
 
 echo

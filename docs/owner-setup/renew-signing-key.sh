@@ -25,8 +25,8 @@ die() { if ((fr)); then printf 'Erreur : %s\n' "$2" >&2; else printf 'Error: %s\
 
 usage() {
   cat <<'EOF'
-Usage: renew-signing-key.sh --secret FILE [--fingerprint HEX] [--expire 2y] [--output DIR] [--help]
-Utilisation : renew-signing-key.sh --secret FICHIER [--fingerprint HEX] [--expire 2y] [--output DOSSIER] [--help]
+Usage: renew-signing-key.sh --secret FILE --fingerprint HEX [--expire 2y] [--output DIR] [--help]
+Utilisation : renew-signing-key.sh --secret FICHIER --fingerprint HEX [--expire 2y] [--output DOSSIER] [--help]
 
   Extends the expiry of the signing key held in FILE (the offline copy of SECRET-grassfield-signing-key.asc) and writes, to DIR
   (default $XDG_RUNTIME_DIR/grassfield-signing-key-renewed-YYYYMMDD, tmpfs; created 0700; never overwritten):
@@ -38,7 +38,7 @@ Utilisation : renew-signing-key.sh --secret FICHIER [--fingerprint HEX] [--expir
     expiry.txt                         the new expiry date and the renewal deadline / la nouvelle expiration et l'echeance
     README.txt                         next steps / la suite
 
-  --fingerprint HEX   refuse unless the key in FILE has this primary fingerprint (the one pinned in repository.conf)
+  --fingerprint HEX   REQUIRED: refuse unless the key in FILE has this primary fingerprint (the one pinned in repository.conf)
   --expire 2y         the new validity counted from today (default 2y)
   The revocation certificate made at creation stays valid: it is not remade.
   You type the passphrase once (nothing is shown). ~/.gnupg is never touched.
@@ -68,11 +68,11 @@ while (($#)); do
   esac
   shift
 done
-[[ -n $secret ]] || { usage >&2; exit 2; }
+[[ -n $secret && -n $want ]] || { usage >&2; exit 2; }
 [[ -f $secret && -r $secret ]] || die "$secret is not a readable file" "$secret n'est pas un fichier lisible"
 [[ $expire =~ ^[0-9]+[dwmy]$ ]] || die "--expire is a number and d, w, m or y (for example 2y)" "--expire est un nombre suivi de d, w, m ou y (par exemple 2y)"
 want=$(tr -d '[:space:]' <<<"$want" | tr a-f A-F)
-[[ -z $want || $want =~ ^[0-9A-F]{40}$ ]] || die "--fingerprint is 40 hexadecimal digits" "--fingerprint fait 40 chiffres hexadecimaux"
+[[ $want =~ ^[0-9A-F]{40}$ ]] || die "--fingerprint is 40 hexadecimal digits" "--fingerprint fait 40 chiffres hexadecimaux"
 if [[ -z $out ]]; then
   [[ -n ${XDG_RUNTIME_DIR:-} && -d $XDG_RUNTIME_DIR && -w $XDG_RUNTIME_DIR ]] \
     || die "no \$XDG_RUNTIME_DIR (a tmpfs folder); pass --output FOLDER explicitly" \
@@ -154,7 +154,7 @@ nssb=$(awk -F: '$1 == "ssb"' <<<"$before" | wc -l)
 [[ $nssb -eq 0 ]] || fail_step "unexpected secret subkey in the file" "sous-cle secrete inattendue dans le fichier"
 fpr=$(fpr_of <<<"$before")
 [[ $fpr =~ ^[0-9A-F]{40}$ ]] || fail_step "could not read the key's fingerprint" "empreinte de la cle illisible"
-[[ -z $want || $fpr == "$want" ]] || fail_step "the key in the file has fingerprint $fpr, not the expected $want" \
+[[ $fpr == "$want" ]] || fail_step "the key in the file has fingerprint $fpr, not the expected $want" \
   "la cle du fichier a l'empreinte $fpr, pas l'empreinte attendue $want"
 oldexp=$(awk -F: '$1 == "sec" { print $7; exit }' <<<"$before")
 
@@ -236,24 +236,30 @@ NEXT RENEWAL DEADLINE / PROCHAINE ECHEANCE : $deadline (extended key in grassfie
 Reminder expected from / rappel attendu des : $reminder
 
 EN - Next steps (ADR-0033 b.9; guide: docs/owner-setup/hosting-and-key.md, section Renewal)
- 1. Send ONLY grassfield-signing-key.asc (the extended public key) to the integrator, who puts it in grassfield-keyring (and
+ DO NOT LOG OUT OR REBOOT until step 1 is done and checked: this folder is on tmpfs. Never import the key into ~/.gnupg.
+ 1. Replace the two offline copies of SECRET-grassfield-signing-key.asc (and the public key and expiry.txt) with the files of
+    this folder, and check each copy with cmp. The revocation certificate is unchanged: keep it.
+ 2. Replace GRASSFIELD_SIGNING_KEY in publish-stable and publish-beta (gpg refuses to sign once the key has expired, and CI
+    needs the extended secret key).
+ 3. Send ONLY grassfield-signing-key.asc (the extended public key) to the integrator, who puts it in grassfield-keyring (and
     packaging/pacman/) and ships it NOW: it must reach every client before the old expiry date, at least six months ahead.
     The fingerprint did not change, so repository.conf does not change.
- 2. Replace the secret copies: GRASSFIELD_SIGNING_KEY in publish-stable and publish-beta (the old secret key's signatures
-    still verify, but gpg refuses to sign once the key has expired, and CI needs the extended secret key); and the two offline
-    copies of SECRET-grassfield-signing-key.asc. The revocation certificate is unchanged: keep it.
- 3. Then delete this folder ("rm -rf" on tmpfs is enough; logging out clears tmpfs). Do not rely on shred on btrfs.
- 4. Never send the SECRET file or the passphrase. If this script was killed with SIGKILL, run its --help cleanup line.
+ 4. LAST: delete this folder AND the copy of the SECRET file you placed in \$XDG_RUNTIME_DIR as this script's input
+    ("rm -rf" on tmpfs is enough; do not rely on shred on btrfs).
+ 5. Never send the SECRET file or the passphrase. If this script was killed with SIGKILL, run its --help cleanup line.
 
 FR - La suite (ADR-0033 b.9 ; guide : docs/owner-setup/hosting-and-key.md, section Renewal)
- 1. Envoyez UNIQUEMENT grassfield-signing-key.asc (la cle publique prolongee) a l'integrateur, qui la met dans grassfield-keyring
+ NE VOUS DECONNECTEZ PAS ET NE REDEMARREZ PAS avant la fin de l'etape 1 : ce dossier est en tmpfs. N'importez jamais la cle dans ~/.gnupg.
+ 1. Remplacez les deux copies hors ligne de SECRET-grassfield-signing-key.asc (et la cle publique et expiry.txt) par les
+    fichiers de ce dossier, et verifiez chaque copie avec cmp. Le certificat de revocation est inchange : gardez-le.
+ 2. Remplacez GRASSFIELD_SIGNING_KEY dans publish-stable et publish-beta (gpg refuse de signer avec une cle expiree, et la CI
+    a besoin de la cle secrete prolongee).
+ 3. Envoyez UNIQUEMENT grassfield-signing-key.asc (la cle publique prolongee) a l'integrateur, qui la met dans grassfield-keyring
     (et packaging/pacman/) et la livre MAINTENANT : elle doit atteindre tous les clients avant l'ancienne expiration, six mois
     avant au moins. L'empreinte n'a pas change : repository.conf non plus.
- 2. Remplacez les copies secretes : GRASSFIELD_SIGNING_KEY dans publish-stable et publish-beta (gpg refuse de signer avec une
-    cle expiree, et la CI a besoin de la cle secrete prolongee) ; et les deux copies hors ligne de SECRET-grassfield-signing-key.asc.
-    Le certificat de revocation est inchange : gardez-le.
- 3. Supprimez ensuite ce dossier (« rm -rf » suffit en tmpfs). Ne comptez pas sur shred sous btrfs.
- 4. N'envoyez jamais le fichier SECRET ni la phrase secrete. Apres un SIGKILL, voir la ligne de nettoyage de --help.
+ 4. EN DERNIER : supprimez ce dossier ET la copie du fichier SECRET placee dans \$XDG_RUNTIME_DIR comme entree de ce script
+    (« rm -rf » suffit en tmpfs ; ne comptez pas sur shred sous btrfs).
+ 5. N'envoyez jamais le fichier SECRET ni la phrase secrete. Apres un SIGKILL, voir la ligne de nettoyage de --help.
 EOF
 chmod 0644 "$out/README.txt"
 

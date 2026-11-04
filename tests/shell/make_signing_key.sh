@@ -201,6 +201,11 @@ check "success: the README has the fingerprint, both languages, the expiry, the 
   bash -c "grep -q '$FPR' '$out/README.txt' && grep -q '^EN - ' '$out/README.txt' && grep -q '^FR - ' '$out/README.txt' && grep -q 'EXPIRES / EXPIRE LE : 2028-10-24' '$out/README.txt' && grep -q 'DEADLINE.*2028-04-24' '$out/README.txt' && grep -q 'Reminder expected from.*2028-01-24' '$out/README.txt'"
 check "success: the README explains un-guarding, offline copies and the SIGKILL cleanup" \
   bash -c "grep -q \"sed 's/^://'\" '$out/README.txt' && grep -q 'two offline media' '$out/README.txt' && grep -q 'gpgconf --homedir' '$out/README.txt' && grep -q 'shred on btrfs' '$out/README.txt'"
+check "success: the README orders the steps: copy all five and check, then the secrets, then the public key, then delete LAST" \
+  bash -c "r='$out/README.txt'; a=\$(grep -n '^ 1. Copy ALL FIVE files' \"\$r\" | cut -d: -f1); b=\$(grep -n '^ 2. Add SECRET-grassfield' \"\$r\" | cut -d: -f1); c=\$(grep -n '^ 3. Send ONLY' \"\$r\" | cut -d: -f1); d=\$(grep -n '^ 4. LAST: delete this folder' \"\$r\" | cut -d: -f1); test -n \"\$a\" -a \"\$a\" -lt \"\$b\" -a \"\$b\" -lt \"\$c\" -a \"\$c\" -lt \"\$d\" && grep -q 'with cmp' \"\$r\""
+check "success: the README warns: no logout or reboot, never ~/.gnupg, never re-run to recover" \
+  bash -c "grep -q 'DO NOT LOG OUT OR REBOOT UNTIL THE OFFLINE COPIES ARE CHECKED' '$out/README.txt' && grep -q 'Never import this key into ~/.gnupg' '$out/README.txt' && grep -q 'makes a DIFFERENT key' '$out/README.txt' && grep -q 'NE VOUS DECONNECTEZ PAS' '$out/README.txt'"
+check "--help carries the same warning" bash -c "grep -q 'DO NOT LOG OUT OR REBOOT' '$tmp/help' && grep -q 'ALL' '$tmp/help' && grep -q 'only LAST remove' '$tmp/help'"
 check "success: Ed25519, sign only, 2 years, the Grassfield UID" bash -c "grep -q -- 'ed25519 sign 2y' '$tmp/ok/s/genargs' && grep -q 'Grassfield Packages <packages@grassfield.site>' '$tmp/ok/s/genargs'"
 check "success: the temporary homes are removed and their agents stopped" agent_stopped ok
 check "success: the temporary folder was under XDG_RUNTIME_DIR and is gone" bash -c "grep -q '$tmp/ok/t/grassfield-key' '$tmp/ok/s/homes' && test -z \"\$(ls -A '$tmp/ok/t')\""

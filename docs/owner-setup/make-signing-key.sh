@@ -48,11 +48,14 @@ Utilisation : make-signing-key.sh [--output DOSSIER] [--help]
   Cle : Ed25519, cle primaire de signature seule, expire dans 2 ans. La phrase secrete est saisie deux fois
   (12 caracteres au moins ; rien ne s'affiche). ~/.gnupg n'est jamais touche.
 
-  Without --output the folder is on tmpfs: copy the SECRET file and the revocation certificate to two offline media, then
-  remove the folder (or log out: tmpfs is emptied). Do not rely on shred on btrfs. With --output ~/... a secret may land on
+  Without --output the folder is on tmpfs, which a logout or reboot erases: DO NOT LOG OUT OR REBOOT until you have copied ALL
+  FIVE files to two offline media and checked each copy with cmp. Then set the GitHub secrets, send the integrator the
+  public key and fingerprint.txt, and only LAST remove the folder. Never import the key into ~/.gnupg; never re-run the
+  script to "recover" (it makes a different key). Do not rely on shred on btrfs. With --output ~/... a secret may land on
   the btrfs disk (copy-on-write: deleted files can survive): you are warned.
-  Sans --output le dossier est en tmpfs : copiez le fichier SECRET et le certificat sur deux supports hors ligne, puis
-  supprimez le dossier (ou deconnectez-vous). Ne comptez pas sur shred sous btrfs.
+  Sans --output le dossier est en tmpfs, que la deconnexion ou le redemarrage efface : NE VOUS DECONNECTEZ PAS avant d'avoir
+  copie les CINQ fichiers sur deux supports hors ligne et verifie chaque copie avec cmp. Puis les secrets GitHub, l'envoi
+  de la cle publique, et EN DERNIER la suppression du dossier. Ne relancez jamais le script pour "recuperer".
 
   If the script is killed with SIGKILL (kill -9), a crash or a power cut, it cannot clean up. It leaves: the temporary
   folder (keys protected by your passphrase), a gpg-agent that may still hold the passphrase in memory, and perhaps a
@@ -254,30 +257,36 @@ RENEWAL DEADLINE / ECHEANCE DE RENOUVELLEMENT : $deadline (the extended key must
   la cle prolongee doit etre dans grassfield-keyring a cette date). Reminder expected from / rappel attendu des : $reminder.
 Renew with docs/owner-setup/renew-signing-key.sh (ADR-0033 b.9). After the expiry date every client's update fails.
 
-EN - Next steps (full guide: docs/owner-setup/hosting-and-key.md, sections e to g)
- 1. This folder is on $fstype ($([[ $fstype == tmpfs || $fstype == ramfs ]] && echo "memory: nothing is on the disk" || echo "NOT tmpfs: a secret here may survive its deletion")). Do not rely on shred on btrfs.
- 2. Copy SECRET-grassfield-signing-key.asc and revocation-certificate.asc to two offline media. Then delete this folder
-    ("rm -rf" on tmpfs is enough; logging out also clears tmpfs). Keep the media offline: whoever has the revocation
-    certificate can revoke the key.
- 3. Add SECRET-grassfield-signing-key.asc and its passphrase to the protected environments publish-stable and publish-beta of
+DO NOT LOG OUT OR REBOOT UNTIL THE OFFLINE COPIES ARE CHECKED (step 1). / NE VOUS DECONNECTEZ PAS ET NE REDEMARREZ PAS AVANT
+D'AVOIR VERIFIE LES COPIES HORS LIGNE (etape 1). This folder is on $fstype ($([[ $fstype == tmpfs || $fstype == ramfs ]] && echo "memory: a logout or reboot erases it" || echo "NOT tmpfs: a secret here may survive its deletion")).
+Never import this key into ~/.gnupg. Never re-run the script to "recover" a lost folder: it makes a DIFFERENT key.
+N'importez jamais cette cle dans ~/.gnupg. Ne relancez jamais le script pour "recuperer" : il cree une AUTRE cle.
+
+EN - Next steps, in this order, in one sitting (full guide: docs/owner-setup/hosting-and-key.md)
+ 1. Copy ALL FIVE files of this folder to two offline media (two separate USB keys, kept in two places) and check each copy
+    with cmp against the original. Only then go on. Whoever has the revocation certificate can revoke the key.
+ 2. Add SECRET-grassfield-signing-key.asc and its passphrase to the protected environments publish-stable and publish-beta of
     grassfieldhq/grassfield-packages as GRASSFIELD_SIGNING_KEY and GRASSFIELD_SIGNING_PASSPHRASE (gh secret set ... --env ...).
- 4. Send ONLY grassfield-signing-key.asc and fingerprint.txt to the integrator. Never send the SECRET file, the revocation
+    GitHub secrets cannot be read back: if the offline copies are lost, the key is lost.
+ 3. Send ONLY grassfield-signing-key.asc and fingerprint.txt to the integrator. Never send the SECRET file, the revocation
     certificate or the passphrase.
+ 4. LAST: delete this folder ("rm -rf" on tmpfs is enough; do not rely on shred on btrfs).
  5. The revocation certificate is GUARDED: its first line starts with a colon, so it cannot be used by accident. Only when
     the key must really be revoked: sed 's/^://' revocation-certificate.asc > use.asc, then import use.asc into a gpg home
     and publish it (ADR-0033 b.5).
  6. If this script was killed with SIGKILL it left the temporary folder and perhaps a gpg-agent. Clean up with:
     for d in "\${XDG_RUNTIME_DIR:-/tmp}"/grassfield-key.*; do gpgconf --homedir "\$d/gnupg" --kill all; gpgconf --homedir "\$d/verify/home" --kill all; rm -rf "\$d"; done
 
-FR - La suite (guide complet : docs/owner-setup/hosting-and-key.md, sections e a g)
- 1. Ce dossier est sur $fstype. Ne comptez pas sur shred sous btrfs.
- 2. Copiez SECRET-grassfield-signing-key.asc et revocation-certificate.asc sur deux supports hors ligne. Supprimez ensuite ce
-    dossier (« rm -rf » suffit en tmpfs ; la deconnexion vide aussi le tmpfs). Gardez les supports hors ligne : qui possede le
-    certificat de revocation peut revoquer la cle.
- 3. Ajoutez SECRET-grassfield-signing-key.asc et sa phrase secrete aux environnements proteges publish-stable et publish-beta de
+FR - La suite, dans cet ordre, en une seule fois (guide complet : docs/owner-setup/hosting-and-key.md)
+ 1. Copiez les CINQ fichiers de ce dossier sur deux supports hors ligne (deux cles USB, rangees a deux endroits) et verifiez
+    chaque copie avec cmp contre l'original. Ensuite seulement, continuez. Qui possede le certificat de revocation peut
+    revoquer la cle.
+ 2. Ajoutez SECRET-grassfield-signing-key.asc et sa phrase secrete aux environnements proteges publish-stable et publish-beta de
     grassfieldhq/grassfield-packages sous GRASSFIELD_SIGNING_KEY et GRASSFIELD_SIGNING_PASSPHRASE (gh secret set ... --env ...).
- 4. Envoyez UNIQUEMENT grassfield-signing-key.asc et fingerprint.txt a l'integrateur. N'envoyez jamais le fichier SECRET, le
+    Les secrets GitHub ne se relisent pas : sans les copies hors ligne, la cle est perdue.
+ 3. Envoyez UNIQUEMENT grassfield-signing-key.asc et fingerprint.txt a l'integrateur. N'envoyez jamais le fichier SECRET, le
     certificat de revocation ni la phrase secrete.
+ 4. EN DERNIER : supprimez ce dossier (« rm -rf » suffit en tmpfs ; ne comptez pas sur shred sous btrfs).
  5. Le certificat de revocation est PROTEGE : sa premiere ligne commence par deux-points, il ne peut pas servir par erreur.
     Seulement si la cle doit vraiment etre revoquee : sed 's/^://' revocation-certificate.asc > use.asc, puis importez use.asc
     et publiez-le (ADR-0033 b.5).
