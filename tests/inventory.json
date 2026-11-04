@@ -674,6 +674,7 @@
  {"path": "tests/visual/flow-quicksettings.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/flow-search.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/flow-settings.sh", "layer": "nested", "runner": "bare"},
+ {"path": "tests/visual/flow-inputsource.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/flow-widgets.sh", "layer": "nested", "runner": "bare"},
  {"path": "tests/visual/flow-capture-defects.sh", "layer": "visual", "runner": "bare"},
  {"path": "tests/visual/folder-colours-desktop.sh", "layer": "visual", "runner": "bare"},
