@@ -201,8 +201,8 @@ user accounts, editing shortcuts. Wallpaper is a v1 section since ADR-0016 (loca
      `Backend.regionLocales`: `region.formats`, the language's own region stores "auto"), First day of week ("Automatic
      (Sunday)" or a day: `region.firstDayOfWeek`), Date format and Number format (read-only: the region's). The shell
      applies the formats at once (`Translator.formats`, docs/specs/i18n.md) and the first day in the Calendar widget. Not
-     built: more than one preferred language, other calendars, temperature and measurement units (nothing in Grassfield
-     shows one), custom date and number formats, per-app languages. Last row of the formats group, macOS's Live Text
+     built: more than one preferred language, other calendars, temperature and measurement units (the Weather
+     widget takes °F or °C from the formats' locale, ADR-0045 OC-14), custom date and number formats, per-app languages. Last row of the formats group, macOS's Live Text
      (ADR-0045 OC-2): "Select Text in Images" with the subtitle "Select text in images to copy it or take action." and a
      switch (`preview.textInImages`, default on), which Preview and Glance read with their appearance (docs/specs/preview.md
      P13: tesseract and zbarimg when installed; without them the switch still shows and the viewer just finds nothing).

@@ -10,7 +10,8 @@ import "General.js" as General
 // language, and the group says that changing it needs a newer Omarchy (General.languageNote).
 // The formats are Grassfield's keys (region.formats, region.firstDayOfWeek): the shell formats its dates, times and numbers
 // with them at once (Translator.formats). Not built (docs/specs/settings.md): more than one preferred language, calendars
-// other than the Gregorian one, temperature and measurement units (nothing in Grassfield shows one), per-app languages.
+// other than the Gregorian one, temperature and measurement units (the Weather widget, ADR-0045 OC-14, takes °F or °C from
+// the formats' locale), per-app languages.
 SettingsPage {
     id: root
 
