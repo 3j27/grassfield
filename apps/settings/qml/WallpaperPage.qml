@@ -598,9 +598,25 @@ SettingsPage {
             root.displayId = "all";
     }
 
+    // The display another surface asks for (the desktop's Change Wallpaper…: `grassfield-settings --section=wallpaper --display=<output
+    // name>`, or its stable id `s:<model>|<serial>`): the pane opens on it. "" asks for nothing. An unknown one is ignored.
+    property string requestedDisplay: ""
+
+    function applyRequest(): void {
+        if (root.requestedDisplay === "")
+            return;
+        root.refreshDisplays();
+        const d = root.displays.find(x => x.name === root.requestedDisplay || x.key === root.requestedDisplay);
+        if (d)
+            root.displayId = d.key;
+    }
+
+    onRequestedDisplayChanged: root.applyRequest()
+
     Component.onCompleted: {
         root.backend.watch(root.backend.wallpaperStatusFile);
         root.refreshDisplays();
+        root.applyRequest();
         root.loadStatus();
         root.loadRecents();
         root.refreshPictures();
@@ -613,6 +629,55 @@ SettingsPage {
     // background, each title placed from the previous row (WallpaperSection), not with the page's group gap.
     Column {
         width: parent.width
+
+        // ---- which display the pane is for (ADR-0016 section 8, ADR-0044 D-5): at the top, with more than one output ----
+        // "All Displays" (one wallpaper everywhere, the default) or one display with a wallpaper of its own. Every row and
+        // tile below reads and writes the chosen display's entry of `wallpaper.outputs`.
+        Item {
+            id: displayPicker
+            visible: root.displays.length > 1
+            width: parent.width
+            height: visible ? pickerRow.height + pickerCaption.height + Tokens.spacingSm : 0
+
+            Row {
+                id: pickerRow
+                spacing: Tokens.spacingSm
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: qsTr("Display")
+                    color: Appearance.colors.text
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyBodySize
+                    font.weight: Font.DemiBold
+                }
+
+                ComboBox {
+                    inline: true
+                    anchors.verticalCenter: parent.verticalCenter
+                    accessibleName: qsTr("Display")
+                    model: [{id: "all", text: qsTr("All Displays")}].concat(root.displays.map(d => ({id: d.key, text: d.label})))
+                    value: root.displayId
+                    onPicked: id => root.displayId = id
+                }
+            }
+
+            Text {
+                id: pickerCaption
+                anchors.top: pickerRow.bottom
+                anchors.topMargin: Tokens.spacingXs
+                width: parent.width
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                text: root.currentDisplay === null ? qsTr("The same wallpaper on every display. Choose a display to give it a wallpaper of its own.") : (root.overridden ? qsTr("This display has a wallpaper of its own.") : qsTr("This display follows All Displays."))
+                color: Appearance.colors.textSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.typographyCaptionSize
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
+            }
+        }
 
         // ---- the current wallpaper ----
         Item {
@@ -690,22 +755,6 @@ SettingsPage {
                 x: preview.x + Tokens.settingsWallpaperGroupX
                 y: Tokens.settingsWallpaperHeaderTop
                 width: header.width + header.outset - x
-
-                // Which display the options are for: All Displays, or one display with a wallpaper of its own (ADR-0016
-                // section 8; shown with more than one output).
-                SettingsRow {
-                    visible: root.displays.length > 1
-                    title: qsTr("Display")
-                    subtitle: root.currentDisplay === null ? "" : (root.overridden ? qsTr("This display has a wallpaper of its own.") : qsTr("This display follows All Displays."))
-
-                    ComboBox {
-                        inline: true
-                        accessibleName: qsTr("Display")
-                        model: [{id: "all", text: qsTr("All Displays")}].concat(root.displays.map(d => ({id: d.key, text: d.label})))
-                        value: root.displayId
-                        onPicked: id => root.displayId = id
-                    }
-                }
 
                 // The wallpaper's name (and what the shell says about it), with how it fills the screen, or its colour.
                 SettingsRow {

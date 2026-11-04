@@ -43,14 +43,20 @@ int main(int argc, char *argv[])
 
     // --section=<id> opens that section first (screenshots, tests); unknown ids fall back to Appearance.
     // --about opens the About This Computer window (AboutWindow.qml, ADR-0040 ID-19; the shell's Grassfield menu).
+    // --display=<output name> (with --section=wallpaper): that pane opens on that display ("wallpaper@<output>" to the instance).
     QString startSection;
+    QString startDisplay;
     bool about = false;
     for (const QString &arg : app.arguments().mid(1)) {
         if (arg.startsWith(QLatin1String("--section=")))
             startSection = arg.mid(10);
+        else if (arg.startsWith(QLatin1String("--display=")))
+            startDisplay = arg.mid(10);
         else if (arg == QLatin1String("--about"))
             about = true;
     }
+    if (!startSection.isEmpty() && !startDisplay.isEmpty())
+        startSection += QLatin1Char('@') + startDisplay;
     // One Settings per user (settingsinstance.h): a second launch hands its request and its activation token to the running
     // one and leaves, however late that one answers (still starting); without a session bus it runs itself.
     using grassfield::settings::SettingsInstance;

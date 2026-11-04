@@ -51,10 +51,11 @@ public:
     static QString objectPath() { return QStringLiteral("/org/grassfield/Settings"); }
     static QString interfaceName() { return QStringLiteral("org.grassfield.Settings"); }
 
-    // A section id as the sidebar names them ("wifi", "software-update"); anything else is "" (the window as it is).
+    // A section id as the sidebar names them ("wifi", "software-update"); anything else is "" (the window as it is). It may end
+    // in "@<output name>" ("wallpaper@DP-2": Wallpaper preselected on that display; `--section=wallpaper --display=DP-2`).
     static QString cleanSection(const QString &section)
     {
-        static const QRegularExpression id(QRegularExpression::anchoredPattern(QStringLiteral("[a-z][a-z0-9-]{0,39}")));
+        static const QRegularExpression id(QRegularExpression::anchoredPattern(QStringLiteral("[a-z][a-z0-9-]{0,39}(@[A-Za-z0-9._:-]{1,64})?")));
         return id.match(section).hasMatch() ? section : QString();
     }
 

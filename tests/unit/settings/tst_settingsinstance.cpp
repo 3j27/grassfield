@@ -181,6 +181,12 @@ TEST(SettingsInstance, WhatALaunchHandsOverIsCleaned)
     EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("wifi")), QStringLiteral("wifi"));
     EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("privacy-location")), QStringLiteral("privacy-location"));
     EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("software-update")), QStringLiteral("software-update"));
+    EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("wallpaper@DP-2")), QStringLiteral("wallpaper@DP-2"));
+    EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("wallpaper@HDMI-A-1")), QStringLiteral("wallpaper@HDMI-A-1"));
+    EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("wallpaper@")), QString());
+    EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("wallpaper@a b")), QString());
+    EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("wallpaper@../x")), QString());
+    EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("wallpaper@") + QString(65, QLatin1Char('a'))), QString());
     EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("Bad Section!")), QString());
     EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("../wifi")), QString());
     EXPECT_EQ(SettingsInstance::cleanSection(QStringLiteral("1wifi")), QString());

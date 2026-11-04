@@ -15,6 +15,8 @@ SettingsPage {
 
     required property var backend
     required property var system
+    // The settings store (ConfigStore): `displays.main`, the main display's choice (ADR-0044).
+    required property var store
 
     // Main.qml opens the sheets and hands the answers back (keep, revert, arrange).
     signal keepRequested(int until)
@@ -51,7 +53,26 @@ SettingsPage {
     // would move the knob back under the pointer; the next one follows.
     property var backlight: null
 
+    // ---- the main display (ADR-0044) ----
+    // The outputs as the shell identifies them: Qt's screens give the model and serial the shell's ShellScreen has too.
+    property var screens: []
+    readonly property var connected: root.monitors.map(m => {
+        const s = root.screens.find(x => x.name === m.name);
+        return {name: m.name, model: s && s.model ? s.model : "", serial: s && s.serial ? s.serial : ""};
+    })
+    readonly property var mainEntries: root.store.value("displays.main")
+    readonly property string mainName: DisplayRole.resolve(root.mainEntries, root.connected).name
+    readonly property bool isMain: root.monitor !== null && root.monitor.name === root.mainName
+
+    // Make the display `name` the main display of the connected set (macOS: Use as > Main display).
+    function makeMain(name: string): void {
+        const d = root.connected.find(x => x.name === name);
+        if (d)
+            root.store.set("displays.main", DisplayRole.withMain(root.mainEntries, root.connected, DisplayRole.identity(d)));
+    }
+
     function refresh(): void {
+        root.screens = root.backend.screens();
         const path = root.backend.displaysStateFile;
         const r = path !== "" ? root.backend.readText(path) : {ok: false};
         root.displayState = r.ok ? Displays.parseState(r.text) : null;
@@ -245,6 +266,26 @@ SettingsPage {
     SettingsGroup {
         visible: root.monitor !== null
         footnote: root.monitor !== null && !root.nameable ? qsTr("This display has no name Grassfield can keep its settings under.") : root.notice
+
+        // macOS: "Use as" on each display with several connected. The main display holds the Dock, the desktop icons and the
+        // notifications; it stays main until another display is made main (so it offers no "Extended display"). Mirroring is not
+        // offered.
+        SettingsRow {
+            visible: root.monitors.length > 1
+            title: qsTr("Use as")
+            subtitle: root.isMain ? qsTr("Holds the Dock, the desktop icons and the notifications.") : ""
+
+            ComboBox {
+                inline: true
+                accessibleName: qsTr("Use as")
+                model: root.isMain ? [{id: "main", text: qsTr("Main display")}] : [{id: "extended", text: qsTr("Extended display")}, {id: "main", text: qsTr("Main display")}]
+                value: root.isMain ? "main" : "extended"
+                onPicked: id => {
+                    if (id === "main" && root.monitor)
+                        root.makeMain(root.monitor.name);
+                }
+            }
+        }
 
         SettingsRow {
             visible: root.rates.length > 1
