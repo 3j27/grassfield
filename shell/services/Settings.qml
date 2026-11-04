@@ -122,6 +122,12 @@ Singleton {
     readonly property int screenSaverIdleMinutes: store.screenSaverIdleMinutes
     readonly property string screenSaverKind: store.screenSaverKind
     readonly property string screenSaverFolder: store.screenSaverFolder
+    // The capture toolbar's mode and Options menu (ADR-0045 OC-1); the toolbar writes them through setCaptureOption.
+    readonly property string captureMode: store.captureMode
+    readonly property string captureSaveTo: store.captureSaveTo
+    readonly property string captureTimer: store.captureTimer
+    readonly property string captureMicrophone: store.captureMicrophone
+    readonly property bool captureShowPointer: store.captureShowPointer
 
     readonly property bool desktopShowIcons: store.desktopShowIcons
     // The remembered choices of the main display (ui/Grassfield/Ui/DisplayRole.js); services/MainDisplay.qml resolves them.
@@ -258,6 +264,11 @@ Singleton {
 
     function setNotificationsPreviews(value: string): void {
         store.setNotificationsPreviews(value);
+    }
+
+    // key: mode | saveTo | timer | microphone | showPointer (capture.*); an invalid value is refused.
+    function setCaptureOption(key: string, value: var): void {
+        store.setCaptureOption(key, value);
     }
 
     Timer {

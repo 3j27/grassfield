@@ -318,6 +318,13 @@ Scope {
     readonly property int screenSaverIdleMinutes: read("screensaver.idleMinutes")
     readonly property string screenSaverKind: read("screensaver.kind")
     readonly property string screenSaverFolder: read("screensaver.folder")
+    // The capture toolbar (Shift-Super-5, ADR-0045 OC-1): the mode chosen last and its Options menu (Save to, Timer, Microphone,
+    // Show Mouse Pointer). The toolbar writes them; no Settings pane shows them.
+    readonly property string captureMode: read("capture.mode")
+    readonly property string captureSaveTo: read("capture.saveTo")
+    readonly property string captureTimer: read("capture.timer")
+    readonly property string captureMicrophone: read("capture.microphone")
+    readonly property bool captureShowPointer: read("capture.showPointer")
 
     readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
     readonly property string hotCornerTopRight: read("hotCorners.topRight")
@@ -483,6 +490,14 @@ Scope {
 
     function setNotificationsPreviews(value: string): void {
         change("notifications.previews", ["always", "unlocked", "never"].indexOf(value) >= 0 ? value : "unlocked");
+    }
+
+    // The capture toolbar's mode and options (capture.*): a value outside the schema's list is refused, the key left as it is.
+    function setCaptureOption(key: string, value: var): void {
+        const path = "capture." + key;
+        if (SettingsContract.RULES[path] === undefined || SettingsContract.validate(path, value) !== "")
+            return;
+        change(path, value);
     }
 
     // Keys the shell changed since its last write: dotted path -> value. Only these are merged into

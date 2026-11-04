@@ -73,6 +73,11 @@ Design system shared by the shell and (later) native apps: tokens, frosted mater
 | `icons.mode` | `"default"` \| `"dark"` \| `"clear"` \| `"tinted"` | `"default"` | `Appearance.iconMode` (ADR-0014; the ADR names it `appearance.iconMode`, see Icon appearance modes) |
 | `icons.tint` | `"accent"` or `"#rrggbb"` | `"accent"` | `Appearance.iconTintSetting`, resolved to `Appearance.iconTint` |
 | `icons.folderColor` | `"theme"` \| `"accent"` \| `"#rrggbb"` | `"theme"` | `Appearance.folderColorSetting`, resolved to `Appearance.folderTint` (see Folder colours) |
+| `capture.mode` | `"screen"` \| `"window"` \| `"selection"` \| `"recordScreen"` \| `"recordSelection"` | `"selection"` | The capture toolbar (Shift-Super-5, ADR-0045 OC-1, `shell/capture`): the mode it opens in, the one chosen last; written by the toolbar, no Settings pane (macOS) |
+| `capture.saveTo` | `"desktop"` \| `"documents"` \| `"clipboard"` \| `"preview"` | `"desktop"` | The toolbar's Options > Save to (a recording never goes to the clipboard: the Desktop then) |
+| `capture.timer` | `"none"` \| `"5"` \| `"10"` | `"none"` | The toolbar's Options > Timer (a countdown before the capture or the recording) |
+| `capture.microphone` | `"none"` \| `"default"` | `"none"` | The toolbar's Options > Microphone (recordings; the default input, never the desktop's sound) |
+| `capture.showPointer` | bool | false | The toolbar's Options > Show Mouse Pointer |
 
 Location: `$GRASSFIELD_CONFIG_HOME/grassfield.json` (dev) else `$XDG_CONFIG_HOME/grassfield/grassfield.json`. The file is created on the first UI change (Quick Settings, Dock menu); setters clamp values, write atomically after 150 ms and the file is watched for external edits. The watch is Quickshell's `FileView` (inotify; unaffected by `QS_DISABLE_FILE_WATCHER`, which only turns off config hot-reload) and cannot start inside a directory that does not exist, so the store creates the config directory first and only then gives the `FileView` its path (real session 2026-10-20: on a fresh account the Settings app created the directory after the shell started and nothing applied until a restart). Every key is applied within about 1 s of an external atomic write; `tests/shell/settings_apply.sh` checks it with the real unit environment.
 

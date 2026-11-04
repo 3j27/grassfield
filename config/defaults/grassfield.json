@@ -118,6 +118,13 @@
     "outlineColor": "#ffffff",
     "fillColor": "#000000"
   },
+  "capture": {
+    "mode": "selection",
+    "saveTo": "desktop",
+    "timer": "none",
+    "microphone": "none",
+    "showPointer": false
+  },
   "search": {
     "showApps": true,
     "showDocuments": true,
