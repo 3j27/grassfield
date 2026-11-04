@@ -8,7 +8,8 @@ import "General.js" as General
 // Charging with their (i) sheets, and the level of the last 24 hours or 10 days. UPower over D-Bus (`power.state`, read-only;
 // the charge limit through UPower's own polkit action, ADR-0030). Low Power Mode keeps Omarchy's model: a power profile
 // remembered for the power adapter and one for the battery (read from Omarchy's state files, set with
-// omarchy-powerprofiles-set, the source in use last). Every change goes through SystemService, so never in a dev session.
+// omarchy-powerprofiles-set, the source in use last). Options… opens the sleep option (PowerOptionsSheet: energy.preventSleep).
+// Every change goes through SystemService, so never in a dev session.
 SettingsPage {
     id: root
 
@@ -17,6 +18,8 @@ SettingsPage {
 
     // Main.qml opens the (i) sheets and hands the charge limit back (setLimit).
     signal infoRequested(string topic, var power)
+    // Options… (macOS 27): Main.qml opens PowerOptionsSheet (Prevent automatic sleeping on power adapter when the display is off).
+    signal optionsRequested
 
     title: qsTr("Battery")
 
@@ -244,6 +247,23 @@ SettingsPage {
                 timeLabels: root.chart.labels
                 dateText: root.chart.date
             }
+        }
+    }
+
+    // The push button under the groups, right-aligned (macOS 27: Options… and ?).
+    Item {
+        visible: root.power !== null && root.power.present
+        width: parent ? parent.width : implicitWidth
+        height: Tokens.settingsPushRowGap - Tokens.settingsGroupGap + optionsButton.height
+
+        Button {
+            id: optionsButton
+            push: true
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            text: qsTr("Options…")
+            Accessible.name: qsTr("Battery options")
+            onClicked: root.optionsRequested()
         }
     }
 

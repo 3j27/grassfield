@@ -2106,6 +2106,14 @@
         <translation>Niveau de la batterie</translation>
     </message>
     <message>
+        <source>Options…</source>
+        <translation>Options…</translation>
+    </message>
+    <message>
+        <source>Battery options</source>
+        <translation>Options de la batterie</translation>
+    </message>
+    <message>
         <source>The battery cannot be read: UPower did not answer.</source>
         <translation>La batterie ne peut pas être lue&#xa0;: UPower n’a pas répondu.</translation>
     </message>
@@ -4506,6 +4514,41 @@
     <message>
         <source>Quit</source>
         <translation>Quitter</translation>
+    </message>
+</context>
+<context>
+    <name>EnergyPage</name>
+    <message>
+        <source>Energy</source>
+        <translation>Énergie</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Low Power</source>
+        <translation>Économie d’énergie</translation>
+    </message>
+    <message>
+        <source>High Power</source>
+        <translation>Haute puissance</translation>
+    </message>
+    <message>
+        <source>Energy modes are not available: power-profiles-daemon is not running.</source>
+        <translation>Les modes d’énergie ne sont pas disponibles&#xa0;: power-profiles-daemon n’est pas en cours d’exécution.</translation>
+    </message>
+    <message>
+        <source>The display turns off and the session locks as set in Lock Screen, whether or not the computer sleeps.</source>
+        <translation>L’écran s’éteint et la session se verrouille selon les réglages d’Écran verrouillé, que l’ordinateur suspende son activité ou non.</translation>
+    </message>
+    <message>
+        <source>Energy Mode</source>
+        <translation>Mode d’énergie</translation>
+    </message>
+    <message>
+        <source>Prevent automatic sleeping when the display is off</source>
+        <translation>Empêcher la suspension d’activité automatique lorsque l’écran est éteint</translation>
     </message>
 </context>
 <context>
@@ -7706,6 +7749,14 @@
         <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
     </message>
     <message>
+        <source>Energy</source>
+        <translation>Énergie</translation>
+    </message>
+    <message>
+        <source>energy power mode low power high power performance sleep prevent automatic sleeping display off</source>
+        <translation>énergie alimentation mode économie haute puissance performance veille suspension empêcher automatique écran éteint</translation>
+    </message>
+    <message>
         <source>about software update storage date time language region login items startup</source>
         <translation>informations mise à jour logiciels stockage date heure langue région ouverture éléments démarrage</translation>
     </message>
@@ -9485,6 +9536,25 @@
     <message>
         <source>The application had already quit.</source>
         <translation>L’application s’était déjà fermée.</translation>
+    </message>
+</context>
+<context>
+    <name>PowerOptionsSheet</name>
+    <message>
+        <source>Options</source>
+        <translation>Options</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>On battery the computer sleeps once the display has been off for a minute. The display turns off and the session locks as set in Lock Screen.</source>
+        <translation>Sur batterie, l’ordinateur suspend son activité une minute après l’extinction de l’écran. L’écran s’éteint et la session se verrouille selon les réglages d’Écran verrouillé.</translation>
+    </message>
+    <message>
+        <source>Prevent automatic sleeping on power adapter when the display is off</source>
+        <translation>Empêcher la suspension d’activité automatique sur adaptateur secteur lorsque l’écran est éteint</translation>
     </message>
 </context>
 <context>
