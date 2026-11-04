@@ -61,15 +61,40 @@ QSet<QString> parsePackageList(const QByteArray &text)
     return out;
 }
 
+QSet<QString> parseOptionalDeps(const QByteArray &pacmanQi)
+{
+    QSet<QString> out;
+    bool inOptional = false;
+    for (const QByteArray &raw : pacmanQi.split('\n')) {
+        QString line = QString::fromUtf8(raw);
+        if (!line.isEmpty() && !line.at(0).isSpace()) {
+            // A field line ("Name            : x"): "Optional Deps" opens the block, any other field closes it.
+            const int colon = line.indexOf(QLatin1Char(':'));
+            inOptional = colon > 0 && line.left(colon).trimmed() == QLatin1String("Optional Deps");
+            if (!inOptional)
+                continue;
+            line = line.mid(colon + 1);
+        } else if (!inOptional) {
+            continue;
+        }
+        line = line.trimmed();
+        static const QRegularExpression name(QStringLiteral("^([a-z0-9@_+][a-z0-9@._+-]*)"));
+        const QRegularExpressionMatch m = name.match(line);
+        if (m.hasMatch() && line != QLatin1String("None"))
+            out.insert(m.captured(1));
+    }
+    return out;
+}
+
 Protection protection(const QString &name, const DenyList &deny)
 {
-    if (hasPrefix(name, QLatin1StringView("grassfield")))
+    if (hasPrefix(name, QLatin1StringView("grassfield")) || deny.grassfieldOptional.contains(name))
         return Protection::Grassfield;
     if (hasPrefix(name, QLatin1StringView("omarchy")) || hasPrefix(name, QLatin1StringView("yay")))
         return Protection::Omarchy;
     if (fixedSystem().contains(name) || hasPrefix(name, QLatin1StringView("linux")) || hasPrefix(name, QLatin1StringView("systemd"))
         || hasPrefix(name, QLatin1StringView("limine")) || hasPrefix(name, QLatin1StringView("pacman"))
-        || hasPrefix(name, QLatin1StringView("qt6")) || hasPrefix(name, QLatin1StringView("pipewire"))
+        || hasPrefix(name, QLatin1StringView("pipewire"))
         || hasPrefix(name, QLatin1StringView("xdg-desktop-portal")) || name.endsWith(QLatin1String("-firmware")) || name.contains(QLatin1String("-firmware-")) || deny.holdPkg.contains(name))
         return Protection::System;
     if (preinstalledApps().contains(name))

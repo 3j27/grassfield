@@ -214,6 +214,23 @@ DenyList readDenyList()
         deny.holdPkg = parsePackageList(hold.out);
     if (deny.holdPkg.isEmpty())
         deny.holdPkg = {QStringLiteral("pacman"), QStringLiteral("glibc")};
+    // What Grassfield's own packages list as optional dependencies (ADR-0045 D3): pacman -Qi of the installed grassfield-*.
+    // Unreadable: nothing is removable (the lists are cleared, as when Omarchy's cannot be read).
+    const ChildResult installed = runChild(env::pacman(), {QStringLiteral("-Qq")});
+    QStringList own;
+    for (const QByteArray &line : installed.out.split('\n')) {
+        const QString name = QString::fromUtf8(line).trimmed();
+        if (installed.ok() && isPackageName(name) && (name == QLatin1String("grassfield") || name.startsWith(QLatin1String("grassfield-"))))
+            own.append(name);
+    }
+    if (!own.isEmpty()) {
+        own.sort();
+        const ChildResult qi = runChild(env::pacman(), QStringList{QStringLiteral("-Qi"), QStringLiteral("--")} + own);
+        if (qi.ok())
+            deny.grassfieldOptional = parseOptionalDeps(qi.out);
+        else
+            deny.omarchy.clear();
+    }
     return deny;
 }
 
@@ -1941,7 +1958,7 @@ QVariantMap StoreBackend::actions(const QString &id) const
             {QStringLiteral("update"), a->installed ? update : QStringLiteral("none")}};
 }
 
-QVariantMap StoreBackend::removalByEntry() const
+QVariantMap StoreBackend::removalByEntry(bool withPlans) const
 {
     QVariantMap out;
     if (!m_snapshot)
@@ -1956,7 +1973,18 @@ QVariantMap StoreBackend::removalByEntry() const
         if (!a.installed || (a.source != CatalogSource::Kind::Repo && a.source != CatalogSource::Kind::Flatpak))
             continue;
         const QString name = view::summary(a, m_language).value(QStringLiteral("name")).toString();
-        const QString block = uninstallBlock(a);
+        QString block = uninstallBlock(a);
+        // The badge must never lead to a refusal (ADR-0045 D3): a package whose -Rs plan hits a dependency or a protected package
+        // is "not removable" before it is offered. The launcher's one-shot asks for this (a pacman run each); the pages do not.
+        if (withPlans && block.isEmpty() && a.source == CatalogSource::Kind::Repo) {
+            const RemovePlan plan = checkRemove({a.package}, s.deny, planTools(), false);
+            if (plan.refusal == Refusal::Dependency)
+                block = QStringLiteral("dependency");
+            else if (plan.refusal == Refusal::Protected)
+                block = QStringLiteral("protected");
+            else if (plan.refusal == Refusal::Failed)
+                block = QStringLiteral("plan");
+        }
         QStringList ids = a.source == CatalogSource::Kind::Repo ? s.entries.value(a.package) : QStringList{};
         if (!a.desktopId.isEmpty())
             ids.prepend(a.desktopId);

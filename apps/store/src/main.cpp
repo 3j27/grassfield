@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
         QObject::connect(&backend, &grassfield::store::StoreBackend::loadingChanged, &app, [&backend, &app] {
             if (backend.loading())
                 return;
-            const QJsonObject doc{{QStringLiteral("version"), 1}, {QStringLiteral("entries"), QJsonObject::fromVariantMap(backend.removalByEntry())}};
+            const QJsonObject doc{{QStringLiteral("version"), 1}, {QStringLiteral("entries"), QJsonObject::fromVariantMap(backend.removalByEntry(true))}};
             const QByteArray text = QJsonDocument(doc).toJson(QJsonDocument::Compact) + '\n';
             fwrite(text.constData(), 1, static_cast<size_t>(text.size()), stdout);
             fflush(stdout);

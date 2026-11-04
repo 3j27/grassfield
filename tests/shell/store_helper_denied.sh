@@ -19,7 +19,8 @@ sed -n '/^denied() {/,/^}/p' "$helper" >"$work/denied.sh"
 out=$(python3 -I - "$work/denied.sh" "$root/tests/fixtures/store/removal-vectors.json" 2>&1 <<'PY'
 import json, subprocess, sys
 fn, vec = sys.argv[1], json.load(open(sys.argv[2]))
-script = "declare -A omarchy=() hold=()\n"
+script = "declare -A omarchy=() hold=() gfopt=()\n"
+script += "".join("gfopt[%s]=1\n" % n for n in vec["gfOptional"])
 script += "".join("omarchy[%s]=1\n" % n for n in vec["omarchyLists"])
 script += "".join("hold[%s]=1\n" % n for n in vec["holdPkg"])
 script += open(fn).read()
@@ -44,13 +45,37 @@ cpp_names=$(sed -n '/preinstalledApps()/,/^}/p' "$root/apps/store/src/removal.cp
 [[ -n $helper_names && $helper_names == "$cpp_names" ]] && ok "helper and removal.cpp name the same $(echo "$helper_names" | wc -l) preinstalled apps" ||
   bad "preinstalled apps differ: helper [$(echo $helper_names)] C++ [$(echo $cpp_names)]"
 
+# What Grassfield's packages list as optional dependencies (ADR-0045 D3), with a stand-in pacman answering as pacman -Qq and -Qi do.
+sed -n '/^gf_optional_names() {/,/^}/p' "$helper" >"$work/gfopt.sh"
+[[ -s $work/gfopt.sh ]] && ok "gf_optional_names() found in the helper" || bad "gf_optional_names() not found"
+got=$(bash -c '
+pacman() {
+  case $1 in
+    -Qq) printf "%s\n" grassfield-desktop grassfield-store grassfield-compositor grassfieldish kio ;;
+    -Qi) shift; [[ $1 == -- ]] && shift
+         [[ $* == "grassfield-desktop grassfield-store grassfield-compositor" ]] || exit 3
+         printf "%s\n" "Name            : grassfield-desktop" "Depends On      : qt6-base" \
+           "Optional Deps   : kio-extras: network places [installed]" "                  perl" "Required By     : None" "" \
+           "Name            : grassfield-compositor" "Optional Deps   : cmake: rebuild" "                  ninja>=1.11: faster" "Optional For    : None" "" \
+           "Name            : grassfield-store" "Optional Deps   : None" ;;
+  esac
+}
+'"$(cat "$work/gfopt.sh")"'
+gf_optional_names | sort | tr "\n" " "')
+[[ $got == "cmake kio-extras ninja perl " ]] && ok "the optional dependencies of grassfield-* only (exact names, 'None' left out): $got" || bad "gf_optional_names gave [$got]"
+# pacman -Qi failing: the function fails, and the helper stops with exit 6 (nothing removable).
+bash -c '
+pacman() { case $1 in -Qq) echo grassfield-desktop ;; -Qi) exit 1 ;; esac; }
+'"$(cat "$work/gfopt.sh")"'
+gf_optional_names' && bad "a failing pacman -Qi must fail the function" || ok "a failing pacman -Qi fails closed"
+
 # Omarchy's own removal list (omarchy-remove-preinstalls), when this machine has it: every desktop package it drops is allowed.
 list=/usr/share/omarchy/bin/omarchy-remove-preinstalls
 if [[ -r $list ]]; then
   want=$(sed -n '/omarchy-pkg-drop/,/^fi/p' "$list" | grep -v 'omarchy-pkg-drop' | tr -d '\\' | grep -v '^fi' | tr -s ' ' '\n' | sed '/^$/d' | sort)
   missing=""
   for n in $want; do
-    script="declare -A omarchy=() hold=(); omarchy[$n]=1; $(cat "$work/denied.sh"); denied $n && echo DENIED"
+    script="declare -A omarchy=() hold=() gfopt=(); omarchy[$n]=1; $(cat "$work/denied.sh"); denied $n && echo DENIED"
     [[ $(bash -c "$script") == DENIED ]] && missing="$missing $n"
   done
   [[ -z $missing ]] && ok "every package omarchy-remove-preinstalls drops is allowed ($(echo $want | wc -w))" ||

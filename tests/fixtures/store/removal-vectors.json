@@ -13,7 +13,12 @@
   "omacalc",
   "kdenlive",
   "cliamp",
-  "mpv"
+  "mpv",
+  "qt6-base"
+ ],
+ "gfOptional": [
+  "kio-extras",
+  "cmake"
  ],
  "holdPkg": [
   "kdenlive",
@@ -432,11 +437,27 @@
   },
   {
    "name": "qt6-tools",
-   "protection": "system"
+   "protection": "none"
+  },
+  {
+   "name": "qt6-speech",
+   "protection": "none"
   },
   {
    "name": "qt6-base",
-   "protection": "system"
+   "protection": "omarchy"
+  },
+  {
+   "name": "kio-extras",
+   "protection": "grassfield"
+  },
+  {
+   "name": "cmake",
+   "protection": "grassfield"
+  },
+  {
+   "name": "cmake-gui",
+   "protection": "none"
   },
   {
    "name": "pipewire-pulse",

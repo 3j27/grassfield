@@ -220,7 +220,9 @@ public:
     Q_INVOKABLE QVariantMap actions(const QString &id) const;
     // The installed apps by application entry, for the launcher and Files (ADR-0045 D1): {"<desktop id>.desktop": {app, name,
     // block}}, block "" when "Uninstall…" is offered (uninstallBlock). An app the Store's model does not know is not listed.
-    Q_INVOKABLE QVariantMap removalByEntry() const;
+    // `withPlans` also runs each removable repository app's -Rs plan (a pacman run each) and says "dependency", "protected" or "plan"
+    // for one that would be refused: `--removable` asks, so that a delete badge never ends in a refusal.
+    Q_INVOKABLE QVariantMap removalByEntry(bool withPlans = false) const;
     // The app an application entry ("x" or "x.desktop") belongs to, as `actions` takes it: "" when the Store does not know it.
     Q_INVOKABLE QString appForEntry(const QString &desktopId) const;
     // The sheet's default button: the operation joins the queue, with the plan made last for this app (false when there is
