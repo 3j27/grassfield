@@ -82,3 +82,4 @@ f6725c68ccb6011c2e76af877d4c05784255a6dfead04f1af8a3f23a7fdd1b87 bin/omarchy-set
 c05881585232eed72a629e7a5faf1d738f1eaeba165d45cc8a7b28885f5f54ac bin/omarchy-hibernation-setup apps/settings/qml/Setups.js,apps/settings/qml/BatteryPage.qml
 a269d40d4c4745b1982571b5f818e0ffcef847101db11535eafad7ff6dad4d64 bin/omarchy-hibernation-available apps/settings/qml/Setups.js,apps/settings/qml/BatteryPage.qml
 ff39dcab7a834082abc12a5563c3b37ce434a39a1969a1ecb2f025553b69c446 default/hypr/bindings/voxtype.lua config/hypr/grassfield/bindings.lua
+ef90929ad5a88a43d36b03be023aa342efd09b2c3a8bde7775929a7a4ea07107 bin/omarchy-hw-fingerprint apps/settings/src/systemguard.cpp,apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
