@@ -865,6 +865,26 @@ included (`AuthAgent.queuePresent`), so a secret sheet never shows over it. A po
 sheets' bound of 8. The agent's window rules are unchanged (`tests/security/authagent_flows.sh`, `lock_surfaces.sh`);
 `tests/security/secret_sheets.sh` runs both agents and the queue together with real keys.
 
+**A device before the password (ADR-0045 OC-6, security review of the Settings setups, 2026-11-04).** Once Omarchy's
+fingerprint or security key setup ran, `/etc/pam.d/polkit-1` starts with `pam_fprintd` (behind Omarchy's lid-closed gate) or
+`pam_u2f` (`cue`), each `sufficient`, before `pam_unix`. polkit-agent-helper-1 then sends the module's lines as information
+or error (`AuthFlow.supplementaryMessage`, `supplementaryIsError`: "Place your right index finger on the fingerprint
+reader", "Failed to match fingerprint", "Please touch the FIDO authenticator.") and asks nothing until the module gives up
+(a match ends the request: polkit allows; a timeout, too many failed matches, no reader or a closed lid lead to `pam_unix`'s
+password prompt). While PAM has said something and asks nothing (`AuthDialogModel.awaitingDevice`: a flow, no response
+required, no answer sent, a non-empty message), the sheet's password field takes no key (`enabled: inputEnabled &&
+!awaitingDevice`), the line above it says "Follow the instruction below, or wait for the password field.", and the module's
+own line is the feedback under the field; when the prompt comes the field takes the keyboard back (`onAwaitingDeviceChanged`
+→ `focusField`, which still respects `inputEnabled` and AuthAgent's key sink). A bare "nothing asked" never disables the
+field: keys typed before `pam_unix`'s first prompt are kept, so a fast typist's password is not cut short (a short one is a
+wrong one, which pam_faillock counts). The last line is never cleared when the prompt arrives: pam_faillock's "account is
+locked" notice comes the same way and stays readable. Cancel works throughout; nothing is ever answered on its own. Unit-
+tested (`tst_authdialogmodel` test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing, test_aLockedAccountNoticeStaysUnderThePrompt;
+`tst_authdialog` test_14_awaitingADeviceTheFieldWaits; `mutate_authdialog.sh` D2, D3). The lock screen shows nothing of
+`omarchy-lock-fingerprint`'s conversation (it runs beside the password and unlocks on a match). With a real reader and key:
+NOT VERIFIED here, and the nested security gates L1 to L5 were not run for this change (no nested session in the cloud
+session that made it).
+
 ## L5 polkit (owner, real session)
 Never `pkexec` a real program for this test; `pkcheck` only asks polkit whether this terminal's shell may run the action
 and runs nothing as root. In a terminal of the Grassfield session:

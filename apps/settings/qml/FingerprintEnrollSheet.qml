@@ -91,13 +91,16 @@ Sheet {
     }
 
     // Cancel, Esc: fprintd stops at its next quarter-second wait and releases the reader.
+    // Whatever closes the sheet stops fprintd's enrolment, also one this sheet thinks over (its job may outlive what the sheet
+    // saw; a no-op when none runs): a reader left claimed would enrol whoever touches it next as the owner (security review of
+    // ADR-0045, M-1). Main.qml cancels the sheet when the window closes.
     onCanceled: {
-        if (root.running)
-            root.backend.stopEnroll();
+        root.backend.stopEnroll();
         root.enrolment = null;
         root.ended();
     }
     onAccepted: {
+        root.backend.stopEnroll();
         root.enrolment = null;
         root.ended();
     }

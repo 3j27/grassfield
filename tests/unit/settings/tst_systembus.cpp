@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QMap>
+#include <QTemporaryFile>
 
 #include <algorithm>
 #include <functional>
@@ -1114,8 +1115,9 @@ TEST(SystemBusNetwork, StateListsEthernetAndWifiWithTheirAddressesAndTheVpns)
     EXPECT_EQ(r.json["firewall"].toObject()["name"].toString(), QStringLiteral("firewalld"));
     EXPECT_TRUE(r.json["firewall"].toObject()["active"].toBool());
     for (const Call &c : f.bus.calls) {
-        if (c.service == QLatin1String("org.freedesktop.systemd1"))
+        if (c.service == QLatin1String("org.freedesktop.systemd1")) {
             EXPECT_EQ(c.iface, QStringLiteral("org.freedesktop.DBus.Properties")) << qPrintable(c.member);
+        }
     }
     EXPECT_EQ(eth["state"].toString(), QStringLiteral("disconnected"));
     EXPECT_FALSE(eth.contains(QStringLiteral("ip4"))); // no addresses read for a device that is not connected
@@ -1716,21 +1718,25 @@ TEST(SystemBusSharing, RemoteLoginIsSshdsUnitFileStateAndActiveState)
 
 TEST(SystemBusSharing, TheSwitchEnablesAndStartsSshdOnlyAndStopsItTheOtherWay)
 {
+    // Omarchy's setup has run: its hardening file is there (a file of the test in its place).
+    QTemporaryFile marker;
+    ASSERT_TRUE(marker.open());
+    const QString setUp = marker.fileName();
     SharingFixture f;
-    EXPECT_EQ(runAction(f.bus, {{"op", "ssh.enable"}, {"on", true}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "ssh.enable"}, {"on", true}}, {}, setUp), QString());
     EXPECT_EQ(f.bus.members(), (QStringList{QStringLiteral("Manager.EnableUnitFiles"), QStringLiteral("Manager.StartUnit")}));
     EXPECT_EQ(f.bus.calls[0].args, (QVariantList{QStringList{QStringLiteral("sshd.service")}, false, false}));
     EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringLiteral("sshd.service"), QStringLiteral("replace")}));
     EXPECT_EQ(f.bus.calls[1].timeoutMs, 120000);
     f.bus.calls.clear();
-    EXPECT_EQ(runAction(f.bus, {{"op", "ssh.enable"}, {"on", false}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "ssh.enable"}, {"on", false}}, {}, setUp), QString());
     EXPECT_EQ(f.bus.members(), (QStringList{QStringLiteral("Manager.StopUnit"), QStringLiteral("Manager.DisableUnitFiles")}));
     EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringList{QStringLiteral("sshd.service")}, false}));
     EXPECT_TRUE(privilegedAction({{"op", "ssh.enable"}}));
     // A refused first call stops there, with polkit's reason.
     FakeBus refused;
     refused.handler = [](const Call &) { return err(QStringLiteral("org.freedesktop.DBus.Error.InteractiveAuthorizationRequired: no")); };
-    EXPECT_FALSE(runAction(refused, {{"op", "ssh.enable"}, {"on", true}}).isEmpty());
+    EXPECT_FALSE(runAction(refused, {{"op", "ssh.enable"}, {"on", true}}, {}, setUp).isEmpty());
     EXPECT_EQ(refused.members(), QStringList{QStringLiteral("Manager.EnableUnitFiles")});
     // The page names no unit and sends no other value.
     f.bus.calls.clear();
@@ -1738,9 +1744,24 @@ TEST(SystemBusSharing, TheSwitchEnablesAndStartsSshdOnlyAndStopsItTheOtherWay)
                                                      {{"op", "ssh.enable"}},
                                                      {{"op", "ssh.enable"}, {"on", true}, {"unit", "getty@tty1.service"}}}) {
         EXPECT_FALSE(validAction(op));
-        EXPECT_EQ(runAction(f.bus, op), QStringLiteral("invalid request"));
+        EXPECT_EQ(runAction(f.bus, op, {}, setUp), QStringLiteral("invalid request"));
     }
     EXPECT_TRUE(f.bus.calls.isEmpty());
+}
+
+// Defence in depth (security review of ADR-0045, L-4): turning Remote Login on before Omarchy's setup ran (no hardening file:
+// no key authorized, Omarchy's firewall closed) is refused before any call; turning it off is not.
+TEST(SystemBusSharing, OnBeforeOmarchysSetupIsRefusedOffIsNot)
+{
+    SharingFixture f;
+    const QString missing = QStringLiteral("/nonexistent/gf-test/10-omarchy-hardening.conf");
+    EXPECT_EQ(runAction(f.bus, {{"op", "ssh.enable"}, {"on", true}}, {}, missing), QStringLiteral("Omarchy's SSH setup has not run"));
+    EXPECT_TRUE(f.bus.calls.isEmpty());
+    // A folder in its place is no setup either; the default is Omarchy's own path.
+    EXPECT_EQ(runAction(f.bus, {{"op", "ssh.enable"}, {"on", true}}, {}, QStringLiteral("/")), QStringLiteral("Omarchy's SSH setup has not run"));
+    EXPECT_TRUE(f.bus.calls.isEmpty());
+    EXPECT_EQ(runAction(f.bus, {{"op", "ssh.enable"}, {"on", false}}, {}, missing), QString());
+    EXPECT_EQ(f.bus.members(), (QStringList{QStringLiteral("Manager.StopUnit"), QStringLiteral("Manager.DisableUnitFiles")}));
 }
 
 TEST(SystemBusDisk, TheRootFileSystemsLuksDeviceIsFoundThroughUDisks2)
@@ -1780,6 +1801,10 @@ TEST(SystemBusDisk, ThePasswordChangeGoesToThatDeviceOnlyWithBothPassphrases)
     DiskFixture wrong;
     wrong.passphraseError = QStringLiteral("org.freedesktop.UDisks2.Error.Failed: Error changing passphrase on device /dev/nvme0n1p2: Failed to unlock: No key available with this passphrase");
     EXPECT_EQ(runAction(wrong.bus, {{"op", "disk.passphrase"}, {"old", QStringLiteral("x")}, {"new", QStringLiteral("y")}}), QStringLiteral("the current password is not correct"));
+    // No answer in time is not a refusal: the password may have changed (security review of ADR-0045, L-1).
+    DiskFixture late;
+    late.passphraseError = QStringLiteral("org.freedesktop.DBus.Error.NoReply: Did not receive a reply.");
+    EXPECT_EQ(runAction(late.bus, {{"op", "disk.passphrase"}, {"old", QStringLiteral("x")}, {"new", QStringLiteral("y")}}), QStringLiteral("the disk did not answer in time"));
     // Not encrypted: nothing is asked of UDisks2 but its objects.
     DiskFixture plain;
     plain.encrypted = false;
@@ -1859,6 +1884,16 @@ TEST(SystemBusFingerprint, StoppingOrSilenceEndsItAndARefusalReleasesWhatWasClai
     FprintFixture quiet;
     EXPECT_EQ(enrollFinger(quiet.bus, QStringLiteral("right-thumb"), {}, [] { return false; }, 5), QStringLiteral("timed out"));
     EXPECT_EQ(quiet.bus.members().mid(4), (QStringList{QStringLiteral("Device.EnrollStop"), QStringLiteral("Device.Release")}));
+    // Touches that keep coming (someone else's) do not keep it going past its overall limit (security review of ADR-0045, L-5).
+    FprintFixture busyReader;
+    for (int i = 0; i < 50; ++i)
+        busyReader.bus.scripted.append({QStringLiteral("enroll-retry-scan"), false});
+    int statuses = 0;
+    EXPECT_EQ(enrollFinger(busyReader.bus, QStringLiteral("right-thumb"), [&statuses](const QString &) { ++statuses; }, [] { return false; }, 60000, 1),
+              QStringLiteral("timed out"));
+    EXPECT_GT(statuses, 0);
+    EXPECT_EQ(busyReader.bus.members().mid(busyReader.bus.members().size() - 2),
+              (QStringList{QStringLiteral("Device.EnrollStop"), QStringLiteral("Device.Release")}));
     // polkit refused EnrollStart: no EnrollStop (nothing started), the claim released.
     FprintFixture refused;
     refused.startError = QStringLiteral("net.reactivated.Fprint.Error.PermissionDenied: Not Authorized: net.reactivated.fprint.device.enroll");
@@ -1914,8 +1949,9 @@ TEST(SystemBusGuard, ADevSessionReadsSharingDiskAndFingersButChangesNothing)
     EXPECT_FALSE(enrollFinger(devP, QStringLiteral("right-index-finger"), {}, {}, 60000).isEmpty());
     for (FakeBus *bus : {&s.bus, &d.bus, &p.bus}) {
         for (const Call &c : bus->calls) {
-            if (!c.member.startsWith(QLatin1String("listen:")))
+            if (!c.member.startsWith(QLatin1String("listen:"))) {
                 EXPECT_TRUE(isReadOnlyCall(c.service, c.iface, c.member, c.args)) << c.member.toStdString();
+            }
         }
     }
     const QString props = QStringLiteral("org.freedesktop.DBus.Properties");

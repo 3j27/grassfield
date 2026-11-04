@@ -28,7 +28,8 @@ SettingsPage {
     property bool hardened: false
     // The switch's action under way.
     readonly property bool busy: (root.backend.pendingActions ?? {})["sharing.act"] !== undefined
-    readonly property bool on: root.sharing !== null && root.sharing.enabled
+    // On when sshd starts with the computer or runs now (Setups.remoteLoginOn).
+    readonly property bool on: Setups.remoteLoginOn(root.sharing)
     readonly property string sshLine: Setups.sshCommand(root.backend.userName, root.host)
 
     function refresh(): void {
@@ -79,7 +80,8 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Remote Login")
             glyph: "remote-desktop"
-            subtitle: root.on && root.sharing.active === false ? qsTr("On, but the SSH server is not running.") : ""
+            subtitle: !root.on ? "" : !root.sharing.active ? qsTr("On, but the SSH server is not running.")
+                : !root.sharing.enabled ? qsTr("Running, but not started with the computer.") : ""
 
             Toggle {
                 accessibleName: qsTr("Remote Login")

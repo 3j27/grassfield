@@ -1781,6 +1781,10 @@
         <translation>Saisissez votre mot de passe pour l’autoriser.</translation>
     </message>
     <message>
+        <source>Follow the instruction below, or wait for the password field.</source>
+        <translation>Suivez l’instruction ci-dessous ou attendez le champ du mot de passe.</translation>
+    </message>
+    <message>
         <source>Action: %1</source>
         <translation>Action&#xa0;: %1</translation>
     </message>
@@ -4396,6 +4400,15 @@
         <translation>Le mot de passe ne peut pas être modifié pour l’instant.</translation>
     </message>
     <message>
+        <source>%1 (%2)</source>
+        <comment>keyboard layout, console keymap</comment>
+        <translation>%1 (%2)</translation>
+    </message>
+    <message>
+        <source>The disk didn&apos;t answer in time. The password may have changed: try the new one first.</source>
+        <translation>Le disque n’a pas répondu à temps. Le mot de passe a peut-être été modifié&#xa0;: essayez d’abord le nouveau.</translation>
+    </message>
+    <message>
         <source>The password was not changed: %1.</source>
         <translation>Le mot de passe n’a pas été modifié&#xa0;: %1.</translation>
     </message>
@@ -4418,6 +4431,14 @@
     <message>
         <source>Verify the new password</source>
         <translation>Confirmer le nouveau mot de passe</translation>
+    </message>
+    <message>
+        <source>When the computer starts, this password is typed with the start-up keyboard layout, %1, not with %2, the one in use now: choose a password that types the same with both.</source>
+        <translation>Au démarrage de l’ordinateur, ce mot de passe se tape avec la disposition de clavier de démarrage, %1, et non avec %2, celle utilisée maintenant&#xa0;: choisissez un mot de passe qui se tape de la même façon avec les deux.</translation>
+    </message>
+    <message>
+        <source>When the computer starts, this password is typed with the start-up keyboard layout, %1.</source>
+        <translation>Au démarrage de l’ordinateur, ce mot de passe se tape avec la disposition de clavier de démarrage, %1.</translation>
     </message>
     <message>
         <source>The new passwords do not match.</source>
@@ -13215,6 +13236,10 @@
         <source>On, but the SSH server is not running.</source>
         <translation>Activée, mais le serveur SSH ne fonctionne pas.</translation>
     </message>
+    <message>
+        <source>Running, but not started with the computer.</source>
+        <translation>En fonctionnement, mais non démarrée avec l’ordinateur.</translation>
+    </message>
 </context>
 <context>
     <name>Sheet</name>
@@ -14781,6 +14806,10 @@
         <translation>Délai dépassé</translation>
     </message>
     <message>
+        <source>the disk did not answer in time</source>
+        <translation>le disque n’a pas répondu à temps</translation>
+    </message>
+    <message>
         <source>the answer file cannot be read</source>
         <translation>le fichier de réponse est illisible</translation>
     </message>
@@ -14883,6 +14912,10 @@
     <message>
         <source>that network does not take a password</source>
         <translation>Ce réseau ne prend pas de mot de passe</translation>
+    </message>
+    <message>
+        <source>Omarchy&apos;s SSH setup has not run</source>
+        <translation>la configuration SSH d’Omarchy n’a pas été faite</translation>
     </message>
     <message>
         <source>the start-up disk is not encrypted</source>

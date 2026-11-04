@@ -143,6 +143,44 @@ TestCase {
         compare(flow.submits, 2);
     }
 
+    // ADR-0045 OC-6 (security review): PAM said something and asks nothing (pam_fprintd's "Place your finger…", pam_u2f's
+    // "Please touch…"): a device is awaited; the password field waits. Never for a bare "nothing asked" (keys typed before
+    // pam_unix's first prompt must not be dropped), never once the answer was sent.
+    function test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing() {
+        verify(!model.awaitingDevice, "nothing said, nothing asked: the field keeps the keys");
+        flow.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        verify(model.awaitingDevice);
+        verify(!model.canSubmit);
+        compare(model.feedback, "Place your right index finger on the fingerprint reader");
+        flow.supplementaryMessage = " \n\t";
+        verify(!model.awaitingDevice, "a message of blanks is no message");
+        flow.supplementaryMessage = "Failed to match fingerprint";
+        flow.supplementaryIsError = true;
+        verify(model.awaitingDevice);
+        // The password prompt comes: no longer awaiting, and the device's last line stays readable.
+        flow.isResponseRequired = true;
+        verify(!model.awaitingDevice);
+        verify(model.canSubmit);
+        compare(model.feedback, "Failed to match fingerprint");
+        // Sent: never awaiting again until polkit asks or fails, whatever PAM then says.
+        verify(model.submit("pw"));
+        flow.isResponseRequired = false;
+        flow.supplementaryMessage = "Please touch the FIDO authenticator.";
+        verify(!model.awaitingDevice, "after the answer was sent");
+        model.flow = null;
+        verify(!model.awaitingDevice, "no request");
+    }
+
+    // pam_faillock's notice comes as information before the password prompt: it is not replaced when the prompt arrives.
+    function test_aLockedAccountNoticeStaysUnderThePrompt() {
+        flow.supplementaryMessage = "The account is locked due to 3 failed logins.";
+        verify(model.awaitingDevice);
+        flow.isResponseRequired = true;
+        verify(!model.awaitingDevice);
+        compare(model.feedback, "The account is locked due to 3 failed logins.");
+        verify(!model.feedbackIsError);
+    }
+
     // Untrusted strings are flattened to one capped plain line (R12 review).
     function test_untrustedTextIsOneCappedLine() {
         compare(model.plainLine("a\nb\r\n\tc\u0007d\u009be", 100), "a b c d e");

@@ -45,11 +45,17 @@ TestCase {
             signal finished(string tag, bool ok, string output)
             signal failed(string tag, string reason)
             signal fileChanged(string path)
-            // ADR-0045: a command on PATH (none here) and Omarchy's read-only checks (recorded nowhere: no answer comes).
+            // ADR-0045: a command on PATH (`commands`), Omarchy's read-only checks (recorded nowhere: no answer comes) and the
+            // fingerprint enrolment's stop (counted).
+            property var commands: []
+            property int stops: 0
             function hasCommand(name: string): bool {
-                return false;
+                return commands.indexOf(name) >= 0;
             }
             function readOnlyQuery(argv: var, tag: string): void {
+            }
+            function stopEnroll(): void {
+                stops++;
             }
             function readText(path: string): var {
                 return {exists: files[path] !== undefined, ok: files[path] !== undefined, text: files[path] ?? ""};
@@ -343,6 +349,60 @@ TestCase {
         saver.lockScreenRequested();
         verify(!saver.shown);
         compare(t.win.selectedId, "lock");
+    }
+
+    // The window closed (src/main.cpp only hides it; the app may live on with About This Computer): a fingerprint enrolment is
+    // stopped, the disk password's fields are emptied, the Wi-Fi code is dropped (security review of ADR-0045, M-1).
+    function test_closingEndsWhatTheSheetsHold() {
+        const t = make(testCase.touchpad);
+        t.backend.devSession = false;
+        const enroll = sheet(t.win, "ended");
+        enroll.openFor("right-index-finger", 3);
+        verify(t.backend.actions.some(op => op.op === "fprint.enroll"), "the enrolment started");
+        verify(enroll.running);
+        const disk = sheet(t.win, "openSheet");
+        disk.openSheet();
+        const fields = [];
+        const collect = item => {
+            if (item.echoMode !== undefined && item.placeholderText !== undefined && item.visible)
+                fields.push(item);
+            for (let i = 0; i < (item.children || []).length; i++)
+                collect(item.children[i]);
+        };
+        collect(disk);
+        compare(fields.length, 3);
+        fields[0].text = "old secret";
+        fields[1].text = "new secret";
+        const share = sheet(t.win, "cells");
+        share.code = {size: 29, rows: []};
+        share.open();
+        const before = t.backend.stops;
+        t.win.close();
+        verify(!t.win.visible);
+        verify(t.backend.stops > before, "fprintd is told to stop");
+        verify(!enroll.shown);
+        compare(enroll.enrolment, null);
+        compare(fields.map(f => f.text), ["", "", ""], "the disk password's fields are empty");
+        verify(!disk.shown);
+        compare(share.code, null, "the Wi-Fi code is dropped");
+        // Shown again: nothing comes back.
+        t.win.show();
+        disk.openSheet();
+        compare(fields.map(f => f.text), ["", "", ""]);
+    }
+
+    // A dev session's Wi-Fi pane shows the owner's real network: no Share Network… there (security review of ADR-0045, M-2).
+    function test_noWifiCodeInADevSession() {
+        const t = make(testCase.touchpad);
+        t.backend.commands = ["omarchy-network-qr"];
+        const details = sheet(t.win, "shareRequested");
+        details.openFor({key: "x", hex: "4E", ssid: "N", label: "N", strength: 50, security: "WPA2", secured: true, enterprise: false, active: true, valid: true}, null);
+        verify(!details.canShare, "dev session");
+        details.close();
+        t.backend.devSession = false;
+        details.openFor({key: "x", hex: "4E", ssid: "N", label: "N", strength: 50, security: "WPA2", secured: true, enterprise: false, active: true, valid: true}, null);
+        verify(details.canShare, "a real session where Omarchy's command is installed");
+        details.close();
     }
 
     // Every sheet of the window is in `sheets`, and each one gives the keyboard focus back to what had it when it appeared.

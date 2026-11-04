@@ -559,7 +559,15 @@ TEST(QueryGuard, OmarchysChecksAndTheBlockDevicesAreExact)
 {
     EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-hw-fingerprint")}));
     EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-hibernation-available")}));
-    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
+    // Share Network's QR code encodes the Wi-Fi password: never a read-only query (a dev session runs those), a private one,
+    // exactly with --meta (security review of ADR-0045, M-2).
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
+    EXPECT_TRUE(isPrivateQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("omarchy-network-qr")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
     EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-hw-fingerprint"), QStringLiteral("--help")}));
     EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-hibernation-available"), QStringLiteral("x")}));

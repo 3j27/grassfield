@@ -96,6 +96,46 @@ TestCase {
         return null;
     }
 
+    function findField(item) {
+        if (item.placeholder !== undefined && item.reveal !== undefined && item.busy !== undefined)
+            return item;
+        for (let i = 0; i < item.children.length; i++) {
+            const found = findField(item.children[i]);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    // ADR-0045 OC-6 (security review): while PAM awaits a device and asks nothing (pam_fprintd, pam_u2f), the field takes no
+    // keys and the intro says so; PAM's own line stays the feedback; when the prompt comes the field takes the focus back.
+    // Restores the mock as it found it (the tests share it).
+    function test_14_awaitingADeviceTheFieldWaits() {
+        const field = findField(dialog);
+        verify(field !== null);
+        flowMock.isResponseRequired = false;
+        flowMock.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        verify(dialogModel.awaitingDevice);
+        verify(!field.enabled, "no keys go to a field nobody asked for");
+        verify(findText(dialog, "Follow the instruction below, or wait for the password field.") !== null);
+        verify(findText(dialog, "Place your right index finger on the fingerprint reader") !== null);
+        verify(findText(dialog, "Enter your password to allow this.") === null);
+        const sent = flowMock.submitted.length;
+        keyClick(Qt.Key_P);
+        keyClick(Qt.Key_Return);
+        compare(flowMock.submitted.length, sent, "nothing sent while PAM asks nothing");
+        // The keyboard went elsewhere meanwhile (outside the sheet): the prompt brings it back to the field.
+        forwarder.forceActiveFocus();
+        verify(!field.activeFocus);
+        flowMock.isResponseRequired = true;
+        verify(!dialogModel.awaitingDevice);
+        verify(field.enabled);
+        tryVerify(() => field.activeFocus, 1000, "the field takes the keys back when PAM asks");
+        verify(findText(dialog, "Enter your password to allow this.") !== null);
+        verify(findText(dialog, "Place your right index finger on the fingerprint reader") !== null, "PAM's last line is not cleared");
+        flowMock.supplementaryMessage = "";
+    }
+
     function test_1_rendering() {
         waitForRendering(dialog);
         const title = findText(dialog, "/usr/bin/true");

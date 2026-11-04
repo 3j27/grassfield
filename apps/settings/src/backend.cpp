@@ -44,7 +44,10 @@ constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for t
 constexpr int kUpdateCheckMs = 200000;   // the checker stops itself after 180 s (SIGTERM, then SIGKILL 5 s later): U1
 // fprintd's enrolment (ADR-0045 OC-0.7): it ends itself after a minute without a status from the reader (the person left), and
 // the job gets room for Claim and EnrollStart, which may each wait for the polkit dialog (120 s), and for a slow enrolment.
+// It also ends 300 s after EnrollStart answered whatever the reader sends (someone else's touches cannot keep it going), well
+// before the job's own limit, so a job the jobs gave up on has always ended by itself (security review of ADR-0045, L-5).
 constexpr int kEnrollIdleMs = 60000;
+constexpr int kEnrollTotalMs = 300000;
 constexpr int kEnrollJobMs = 600000;
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
@@ -234,9 +237,12 @@ void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs, 
 
 void Backend::readOnlyQuery(const QStringList &argv, const QString &tag, int timeoutMs, bool shared)
 {
-    if (!grassfield::settings::isReadOnlyQuery(argv)) {
+    // A query whose answer is a secret (systemguard.h isPrivateQuery: Share Network's QR code) runs in a real session only.
+    if (!grassfield::settings::isReadOnlyQuery(argv) && (m_dev || !grassfield::settings::isPrivateQuery(argv))) {
         if (!argv.isEmpty())
-            qWarning().noquote() << "refused a read-only query that is not one:" << argv.first();
+            qWarning().noquote() << (m_dev && grassfield::settings::isPrivateQuery(argv) ? "dev guard: refused a query that answers with a secret:"
+                                                                                         : "refused a read-only query that is not one:")
+                                 << argv.first();
         emit finished(tag, false, QString());
         return;
     }
@@ -467,6 +473,9 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
     // the functor that emits it runs on this thread and only while the jobs live (busjobs.h poster); the job keeps no pointer
     // it would follow. The sheet closed or the window going ends it between two waits (stopEnroll).
     if (op.value(QStringLiteral("op")).toString() == QLatin1String("fprint.enroll")) {
+        // An older enrolment that may still run (its job timed out for the jobs, not for itself) stops first: no stop flag is
+        // ever left without a way to set it (security review of ADR-0045, L-5).
+        stopEnroll();
         const auto stop = std::make_shared<std::atomic<bool>>(false);
         m_enrollStop = stop;
         const BusJobs::Post post = m_bus->jobs.poster();
@@ -474,7 +483,7 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
         const auto emitProgress = [this, tag](const QString &status) { emit progress(tag, status); };
         runBus(tag, [finger, stop, post, emitProgress](BusCaller &bus, QString *) {
             return enrollFinger(bus, finger, [post, emitProgress](const QString &status) { post([emitProgress, status] { emitProgress(status); }); },
-                                [stop] { return stop->load(); }, kEnrollIdleMs);
+                                [stop] { return stop->load(); }, kEnrollIdleMs, kEnrollTotalMs);
         }, kEnrollJobMs, false, true);
         return true;
     }

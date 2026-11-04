@@ -9,6 +9,7 @@
 #include <QDBusObjectPath>
 #include <QDBusVariant>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QMap>
 #include <QRegularExpression>
@@ -506,6 +507,10 @@ QString passphraseFailure(const QString &error)
 {
     if (error.contains(QLatin1String("No key available"), Qt::CaseInsensitive)) // i18n-ignore: libblockdev's message, matched
         return QCoreApplication::translate("SystemBus", "the current password is not correct");
+    // No answer in time is not a refusal: UDisks2 may have changed it meanwhile (security review of ADR-0045, L-1). The sheet
+    // words this reason on its own (DiskPasswordSheet.qml), never as "not changed".
+    if (fail(error) == QCoreApplication::translate("SystemBus", "timed out"))
+        return QCoreApplication::translate("SystemBus", "the disk did not answer in time");
     return fail(error);
 }
 } // namespace
@@ -1243,7 +1248,7 @@ StateResult fingerprintState(BusCaller &bus)
 }
 
 QString enrollFinger(BusCaller &bus, const QString &finger, const std::function<void(const QString &)> &progress, const std::function<bool()> &stopped,
-                     int idleMs)
+                     int idleMs, int totalMs)
 {
     if (!isFingerName(finger))
         return QCoreApplication::translate("SystemBus", "invalid request");
@@ -1264,12 +1269,14 @@ QString enrollFinger(BusCaller &bus, const QString &finger, const std::function<
     } else {
         QElapsedTimer idle;
         idle.start();
+        QElapsedTimer total;
+        total.start();
         while (true) {
             if (stopped && stopped()) {
                 result = QStringLiteral("enroll-stopped"); // i18n-ignore: a status code the page words (Fingerprint.js)
                 break;
             }
-            if (idle.elapsed() > idleMs) {
+            if (idle.elapsed() > idleMs || total.elapsed() > totalMs) {
                 result = QCoreApplication::translate("SystemBus", "timed out");
                 break;
             }
@@ -1466,7 +1473,7 @@ QString joinWithPassphrase(BusCaller &bus, const QString &devicePath, const QByt
 }
 } // namespace
 
-QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs)
+QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownDirs, const QString &sshSetUpFile)
 {
     if (!validAction(op))
         return QCoreApplication::translate("SystemBus", "invalid request");
@@ -1537,6 +1544,10 @@ QString runAction(BusCaller &bus, const QVariantMap &op, const QStringList &ownD
     if (name == QLatin1String("ssh.enable")) {
         const QStringList units{kSshdUnit};
         if (op.value(QStringLiteral("on")).toBool()) {
+            // Only once Omarchy's own setup has run (the page asks it first; security review of ADR-0045, L-4): before it, no key
+            // is authorized and Omarchy's firewall denies incoming connections.
+            if (!QFileInfo(sshSetUpFile).isFile())
+                return QCoreApplication::translate("SystemBus", "Omarchy's SSH setup has not run");
             const BusReply enable = bus.call(kSystemd, kSystemdPath, kSystemdManager, QStringLiteral("EnableUnitFiles"), {units, false, false}, kPrivilegedMs);
             if (!enable.ok)
                 return fail(enable.error);
