@@ -325,6 +325,41 @@ QString formatSize(qint64 bytes, const QLocale &locale)
     return tr(units[unit]).arg(trimmedNumber(rounded, decimals, locale));
 }
 
+QString copyTitle(const QString &verb, const QString &firstItem, int count, const QString &destination)
+{
+    if (verb.isEmpty() || (firstItem.isEmpty() && count <= 0))
+        return {};
+    const QString what = count > 1 ? tr("%1 items").arg(count) : QStringLiteral("“%1”").arg(displayName(firstItem));
+    if (destination.isEmpty())
+        return tr("%1 %2").arg(verb, what);
+    return tr("%1 %2 to “%3”").arg(verb, what, displayName(destination));
+}
+
+QString remainingText(qulonglong seconds)
+{
+    return seconds < 2     ? tr("About 1 second")
+           : seconds < 60  ? tr("About %1 seconds").arg(seconds)
+           : seconds < 120 ? tr("About 1 minute")
+                           : tr("About %1 minutes").arg(seconds / 60 + 1);
+}
+
+QString copyDetail(qulonglong processed, qulonglong total, qulonglong bytesPerSecond, int percent)
+{
+    if (total == 0)
+        return percent > 0 ? QString() : tr("Preparing…");
+    QString detail = tr("%1 of %2").arg(formatSize(qint64(processed)), formatSize(qint64(total)));
+    if (bytesPerSecond > 0 && total > processed)
+        detail += QStringLiteral(" – ") + remainingText((total - processed) / bytesPerSecond);
+    return detail;
+}
+
+int copyPercent(qulonglong processed, qulonglong total, int percent)
+{
+    if (total > 0)
+        return int(qMin<qulonglong>(100, processed * 100 / total));
+    return percent > 0 ? qMin(percent, 100) : -1;
+}
+
 QString formatDate(const QDateTime &when, const QDateTime &now, const QLocale &locale)
 {
     if (!when.isValid())

@@ -500,3 +500,65 @@ TEST(PanelFilter, Globs)
     EXPECT_TRUE(matches("?.txt", "\U0001F600.txt"));
     EXPECT_FALSE(matches("", "a"));
 }
+
+// The Copy window's lines (FP-68, Finder-Copy). The title names what the user asked for, not the file KIO copies now.
+TEST(FileLogicCopyWindow, TheTitleNamesTheItemsAskedForAndTheFolderTheyGoTo)
+{
+    EXPECT_EQ(copyTitle("Copying", "a.txt", 1, "Docs").toStdString(), "Copying “a.txt” to “Docs”");
+    EXPECT_EQ(copyTitle("Moving", "a.txt", 12, "Docs").toStdString(), "Moving 12 items to “Docs”");
+    EXPECT_EQ(copyTitle("Copying", "a.txt", 0, "Docs").toStdString(), "Copying “a.txt” to “Docs”") << "an unknown count names the item";
+    EXPECT_EQ(copyTitle("Copying", "a.txt", 1, "").toStdString(), "Copying “a.txt”") << "no destination, no \"to\"";
+    EXPECT_EQ(copyTitle("Copying", "", 3, "").toStdString(), "Copying 3 items");
+}
+
+TEST(FileLogicCopyWindow, NoVerbOrNothingToNameLeavesTheActivityText)
+{
+    EXPECT_TRUE(copyTitle("", "a.txt", 1, "Docs").isEmpty()) << "KIO has not described the job yet";
+    EXPECT_TRUE(copyTitle("Copying", "", 0, "Docs").isEmpty());
+}
+
+TEST(FileLogicCopyWindow, ANameThatLooksLikeMarkupOrReversesTextIsWrittenOut)
+{
+    // Names go through displayName (GF-105): a right-to-left override is written out, a line break shown as a symbol.
+    const QString title = copyTitle("Copying", QStringLiteral("a‮txt.exe"), 1, QStringLiteral("D\nocs"));
+    EXPECT_FALSE(title.contains(QChar(0x202e)));
+    EXPECT_FALSE(title.contains(QLatin1Char('\n')));
+}
+
+TEST(FileLogicCopyWindow, TheTimeLeftIsRoundedLikeTheFinder)
+{
+    EXPECT_EQ(remainingText(0).toStdString(), "About 1 second");
+    EXPECT_EQ(remainingText(1).toStdString(), "About 1 second");
+    EXPECT_EQ(remainingText(2).toStdString(), "About 2 seconds");
+    EXPECT_EQ(remainingText(59).toStdString(), "About 59 seconds");
+    EXPECT_EQ(remainingText(60).toStdString(), "About 1 minute");
+    EXPECT_EQ(remainingText(119).toStdString(), "About 1 minute");
+    EXPECT_EQ(remainingText(120).toStdString(), "About 3 minutes");
+    EXPECT_EQ(remainingText(600).toStdString(), "About 11 minutes");
+}
+
+TEST(FileLogicCopyWindow, TheDetailLineShowsTheBytesAndTheTimeLeft)
+{
+    EXPECT_EQ(copyDetail(41900000, 111600000, 6970000, 37).toStdString(), "41.9 MB of 112 MB – About 10 seconds");
+    EXPECT_EQ(copyDetail(41900000, 111600000, 0, 37).toStdString(), "41.9 MB of 112 MB") << "no estimate while the speed is unknown";
+    EXPECT_EQ(copyDetail(111600000, 111600000, 6970000, 100).toStdString(), "112 MB of 112 MB") << "nothing left, nothing to wait for";
+}
+
+TEST(FileLogicCopyWindow, AJobThatTellsNoAmountYetIsPreparing)
+{
+    // KIO looks through every folder to copy before it knows the total: the window shows that, not an empty line and bar.
+    EXPECT_EQ(copyDetail(0, 0, 0, -1).toStdString(), "Preparing…");
+    EXPECT_EQ(copyDetail(0, 0, 0, 0).toStdString(), "Preparing…");
+    EXPECT_TRUE(copyDetail(0, 0, 0, 40).isEmpty()) << "a job that only counts shows its bar";
+}
+
+TEST(FileLogicCopyWindow, TheBarFollowsTheBytesThenTheJobsOwnPercent)
+{
+    EXPECT_EQ(copyPercent(50, 200, -1), 25);
+    EXPECT_EQ(copyPercent(300, 200, -1), 100) << "never past full";
+    EXPECT_EQ(copyPercent(0, 200, 90), 0) << "the bytes win when the total is known";
+    EXPECT_EQ(copyPercent(0, 0, 40), 40);
+    EXPECT_EQ(copyPercent(0, 0, 400), 100);
+    EXPECT_EQ(copyPercent(0, 0, 0), -1) << "no amount: the bar sweeps";
+    EXPECT_EQ(copyPercent(0, 0, -1), -1);
+}

@@ -1221,7 +1221,8 @@ void FilesApp::paste(const QUrl &destination, QObject *folder)
             endStyleMoves(pending);
         });
     }
-    track(job, countText(cut ? tr("Moving 1 item…") : tr("Copying 1 item…"), cut ? tr("Moving %1 items…") : tr("Copying %1 items…"), urls.size()));
+    track(job, countText(cut ? tr("Moving 1 item…") : tr("Copying 1 item…"), cut ? tr("Moving %1 items…") : tr("Copying %1 items…"), urls.size()),
+          cut ? tr("Moving") : tr("Copying"), urls, destination);
 }
 
 void FilesApp::trash(const QList<QUrl> &urls)
@@ -1819,23 +1820,11 @@ void FilesApp::publishJobs()
     std::sort(rows.begin(), rows.end(), [](const JobProgress &a, const JobProgress &b) { return a.id < b.id; });
     for (const JobProgress &p : std::as_const(rows)) {
         // Finder-Copy: "Copying “name” to “Desktop”", then "41.9 MB of 111.6 MB – About 10 seconds".
-        QString title = p.activity;
-        if (!p.verb.isEmpty() && !p.item.isEmpty())
-            title = p.destination.isEmpty() ? tr("%1 “%2”").arg(p.verb, FileLogic::displayName(p.item))
-                                            : tr("%1 “%2” to “%3”").arg(p.verb, FileLogic::displayName(p.item), FileLogic::displayName(p.destination));
-        QString detail;
-        if (p.total > 0) {
-            detail = tr("%1 of %2").arg(formatSize(qint64(p.processed)), formatSize(qint64(p.total)));
-            if (p.speed > 0 && p.total > p.processed) {
-                const qulonglong seconds = (p.total - p.processed) / p.speed;
-                detail += QStringLiteral(" – ")
-                          + (seconds < 2    ? tr("About 1 second")
-                             : seconds < 60 ? tr("About %1 seconds").arg(seconds)
-                             : seconds < 120 ? tr("About 1 minute")
-                                             : tr("About %1 minutes").arg(seconds / 60 + 1));
-            }
-        }
-        const int percent = p.total > 0 ? int(qMin<qulonglong>(100, p.processed * 100 / p.total)) : p.percent;
+        QString title = FileLogic::copyTitle(p.verb, p.item, p.count, p.destination);
+        if (title.isEmpty())
+            title = p.activity;
+        const QString detail = FileLogic::copyDetail(p.processed, p.total, p.speed, p.percent);
+        const int percent = FileLogic::copyPercent(p.processed, p.total, p.percent);
         list.append(QVariantMap{{QStringLiteral("id"), int(p.id)}, {QStringLiteral("title"), title}, {QStringLiteral("detail"), detail}, {QStringLiteral("percent"), percent}});
     }
     if (list == m_jobList)
@@ -1865,7 +1854,7 @@ void FilesApp::moveHere(const QUrl &destination, QObject *folder)
     KIO::CopyJob *job = KIO::move(urls, destination, KIO::HideProgressInfo);
     attachDelegate(job);
     KIO::FileUndoManager::self()->recordCopyJob(job);
-    track(job, countText(tr("Moving 1 item…"), tr("Moving %1 items…"), urls.size()));
+    track(job, countText(tr("Moving 1 item…"), tr("Moving %1 items…"), urls.size()), tr("Moving"), urls, destination);
     QPointer<QObject> target = folder;
     connect(job, &KIO::CopyJob::copyingDone, this, [target](KIO::Job *, const QUrl &, const QUrl &to, const QDateTime &, bool, bool) {
         if (auto *f = asFolder(target))
@@ -2115,7 +2104,8 @@ void FilesApp::drop(const QList<QUrl> &urls, const QUrl &destination, QObject *f
             endStyleMoves(pending);
         });
     }
-    track(job, countText(copy ? tr("Copying 1 item…") : tr("Moving 1 item…"), copy ? tr("Copying %1 items…") : tr("Moving %1 items…"), sources.size()));
+    track(job, countText(copy ? tr("Copying 1 item…") : tr("Moving 1 item…"), copy ? tr("Copying %1 items…") : tr("Moving %1 items…"), sources.size()),
+          copy ? tr("Copying") : tr("Moving"), sources, dest);
 }
 
 void FilesApp::undo()
@@ -3029,7 +3019,7 @@ void FilesApp::publishKnownTags()
     m_places->setTags(m_knownTags);
 }
 
-void FilesApp::track(KJob *job, const QString &activity)
+void FilesApp::track(KJob *job, const QString &activity, const QString &verb, const QList<QUrl> &sources, const QUrl &destination)
 {
     m_jobs.append(job);
     m_activity = activity;
@@ -3038,16 +3028,27 @@ void FilesApp::track(KJob *job, const QString &activity)
     JobProgress progress;
     progress.id = m_nextJobId++;
     progress.activity = activity;
+    // The Copy window names what the user asked for and where it goes; KIO's own item and destination change with every
+    // file of a folder ("Copying “faaabgd” to “big”" while it copies the folder “big” to “Docs”).
+    progress.count = int(sources.size());
+    if (!sources.isEmpty() && !verb.isEmpty()) {
+        progress.verb = verb;
+        progress.item = sources.first().fileName();
+        progress.destination = destination.adjusted(QUrl::StripTrailingSlash).fileName();
+    }
     m_progress.insert(job, progress);
     m_progressTimer.start();
     connect(job, &KJob::description, this, [this, job](KJob *, const QString &title, const QPair<QString, QString> &source, const QPair<QString, QString> &destination) {
         auto it = m_progress.find(job);
         if (it == m_progress.end())
             return;
-        it->verb = title;
-        it->item = QUrl(source.second).fileName();
-        const QUrl to(destination.second);
-        it->destination = to.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).fileName();
+        // A job that was given its words keeps them (KIO's change with each step: "Creating directory", each file).
+        if (it->count == 0) {
+            it->verb = title;
+            it->item = QUrl(source.second).fileName();
+            const QUrl to(destination.second);
+            it->destination = to.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).fileName();
+        }
         if (!m_progressTimer.isActive())
             m_progressTimer.start();
     });
