@@ -131,4 +131,4 @@ writes settle (`settings.inputReloadMs`), it asks Hyprland to read its configura
 a display trial. A choice then applies at once, as on a Mac. No countdown is needed: a pointer or keyboard setting cannot
 leave the screen unusable. Keyboard choices stay in the order GF-066 set for the pointer: after Omarchy's defaults, before
 the user's own `input.lua`, which still wins. `keyboard.lua` holds only the keys the user changed. With two layouts or more,
-`input.lua` adds xkb's `grp:ctrl_space_toggle` (Ctrl+Space, as on a Mac) to Omarchy's own options.
+`input.lua` sets no xkb group option (amended 2026-11-04): `bindings.lua` binds Ctrl+Space (previous input source) and Ctrl+Option+Space (next) for every keyboard from two layouts on.

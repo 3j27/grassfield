@@ -149,6 +149,24 @@ for space = 1, 9 do
   bind("CTRL + code:" .. tostring(space + 9), "Switch to Space " .. space, hl.dsp.focus({ workspace = tostring(space) }))
 end
 
+-- Input sources (macOS: Ctrl+Space selects the previous input source, Ctrl+Option+Space the next one). Hyprland 0.56 has no Lua
+-- dispatcher for it (only `hyprctl switchxkblayout`), and an xkb group option would switch only the keyboard being typed on,
+-- so both go through hyprctl with "all": every keyboard follows. Bound from two layouts only: with one, Ctrl+Space stays with
+-- the applications (completion in an editor), as on a Mac with a single input source. Settings > Keyboard writes the layouts and
+-- reloads, which parses this file again: the keys appear and disappear with that reload (the count is the kb_layout this parse
+-- has reached, read with hl.get_config: the layout of Omarchy, Settings or the user's own input.lua). They are `locked`: the
+-- password of the lock screen must be typeable in either layout (the old xkb option worked there too).
+-- (Omarchy binds no CTRL+SPACE nor CTRL+ALT+SPACE; its SPACE binds all hold SUPER.)
+local kb_layout = hl.get_config("input.kb_layout")
+local layouts = 0
+if type(kb_layout) == "string" and kb_layout ~= "" then
+  for _ in (kb_layout .. ","):gmatch("([^,]*),") do layouts = layouts + 1 end
+end
+if layouts >= 2 then
+  bind("CTRL + SPACE", "Previous input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all prev"), { locked = true })
+  bind("CTRL + ALT + SPACE", "Next input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"), { locked = true })
+end
+
 -- Apps
 bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 

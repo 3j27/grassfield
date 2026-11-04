@@ -2385,6 +2385,14 @@
         <translation>Historique du presse-papiers</translation>
     </message>
     <message>
+        <source>Previous input source</source>
+        <translation>Méthode de saisie précédente</translation>
+    </message>
+    <message>
+        <source>Next input source</source>
+        <translation>Méthode de saisie suivante</translation>
+    </message>
+    <message>
         <source>Turn Dock hiding on or off</source>
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
@@ -6827,6 +6835,17 @@
     </message>
 </context>
 <context>
+    <name>InputMenu</name>
+    <message>
+        <source>Input menu</source>
+        <translation>Menu de saisie</translation>
+    </message>
+    <message>
+        <source>Open Keyboard Settings…</source>
+        <translation>Ouvrir les réglages du clavier…</translation>
+    </message>
+</context>
+<context>
     <name>InputSourcesSheet</name>
     <message>
         <source>Input Sources</source>
@@ -6984,6 +7003,14 @@
     <message>
         <source>Edit…</source>
         <translation>Modifier…</translation>
+    </message>
+    <message>
+        <source>Show Input menu in menu bar</source>
+        <translation>Afficher le menu de saisie dans la barre des menus</translation>
+    </message>
+    <message>
+        <source>The menu appears once there are two input sources.</source>
+        <translation>Le menu apparaît dès qu’il y a deux méthodes de saisie.</translation>
     </message>
 </context>
 <context>
@@ -8292,6 +8319,10 @@
         <translation>Ne pas déranger est activé</translation>
     </message>
     <message>
+        <source>Input source: %1</source>
+        <translation>Méthode de saisie&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>Network: %1</source>
         <translation>Réseau&#xa0;: %1</translation>
     </message>
@@ -9436,6 +9467,14 @@
     <message>
         <source>The volume could not be ejected.</source>
         <translation>Le volume n’a pas pu être éjecté.</translation>
+    </message>
+    <message>
+        <source>Volume</source>
+        <translation>Volume</translation>
+    </message>
+    <message>
+        <source>%1 Volume</source>
+        <translation>Volume de %1</translation>
     </message>
 </context>
 <context>

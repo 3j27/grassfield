@@ -35,12 +35,19 @@ QtObject {
         const event = Logic.parse(data);
         if (!event)
             return;
+        // A virtual keyboard (own keymap) is not an input source either: its events change nothing, as in the device list.
+        if (Logic.untyped(event.keyboard))
+            return;
         const next = Logic.step(memory, event);
         memory = next.state;
         // A keyboard without layout names (a virtual one with its own keymap) is not an input source: nothing changes.
         if (!Logic.named(event.layout))
             return;
         layoutName = event.layout;
+        if (sources.length > 0)
+            activeIndex = Logic.activeIndex(sources, names, event.layout, activeIndex);
+        else
+            refresh();
         if (next.show)
             announce(event.layout);
     }
@@ -97,6 +104,173 @@ QtObject {
         }
     }
 
+    // ---- The input sources (the Input menu of the menu bar) ----------------------------------------------------------------
+    // The sources Hyprland holds, [{layout, variant}], and the position of the one in use (-1 until the first event names it).
+    // Read from the request socket (`j/devices`) at start, when the configuration is read again and when a layout event
+    // arrives while the list is empty (a keyboard plugged in later); never polled. Without a compositor (no request socket)
+    // the list stays empty and the Input menu is not shown.
+    property var sources: []
+    property var names: ({})
+    property int activeIndex: -1
+    readonly property bool available: Logic.menuShown(sources.length, true)
+    readonly property string shortLabel: activeIndex >= 0 && activeIndex < sources.length ? Logic.label(sources[activeIndex], sources) : ""
+
+    // xkb's description of each source in the shell's language, {"fr": "Français", "us": "Anglais (États-Unis)"}; empty for English
+    // and until layout-names.py has answered. DISPLAY ONLY: activeIndex matches Hyprland's English names (`names`).
+    property var menuNames: ({})
+    property bool menuStale: false
+
+    function nameOf(source: var): string {
+        return menuNames[Logic.sourceKey(source)] ?? Logic.sourceName(source, names);
+    }
+
+    // Asks layout-names.py for every source name in one run (a second helper next to the HUD's: the HUD asks one name at a time).
+    function translateMenu(): void {
+        const language = Translator.language;
+        if (!Logic.needsLookup(language) || sources.length === 0 || Object.keys(names).length === 0) {
+            menuNames = {};
+            return;
+        }
+        if (menuLookup.running) {
+            menuStale = true;
+            return;
+        }
+        menuLookup.language = language;
+        menuLookup.asked = sources;
+        menuLookup.command = ["python3", "-I", Quickshell.shellPath("platform/layout-names.py"), language].concat(sources.map(s => Logic.sourceName(s, names)));
+        menuLookup.running = true;
+    }
+
+    onSourcesChanged: translateMenu()
+    onNamesChanged: translateMenu()
+
+    property Connections languageWatch: Connections {
+        target: Translator
+
+        function onLanguageChanged(): void {
+            root.translateMenu();
+        }
+    }
+
+    property Process menuLookup: Process {
+        property string language: ""
+        property var asked: []
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (root.menuLookup.language === Translator.language)
+                    root.menuNames = Logic.parseTranslations(text, root.menuLookup.asked, root.names);
+            }
+        }
+        // Quickshell's qmltypes name QProcess::ExitStatus without exporting it (metadata quirk).
+        // qmllint disable signal-handler-parameters
+        onExited: exitCode => {
+            // qmllint enable signal-handler-parameters
+            if (root.menuStale) {
+                root.menuStale = false;
+                root.translateMenu();
+            }
+        }
+    }
+
+    // Makes the source at `index` the one in use on every keyboard (Hyprland: `switchxkblayout all`, a request, not a dispatcher).
+    function select(index: int): void {
+        const request = Logic.switchSource(sources, index);
+        if (request === null)
+            return;
+        activeIndex = index;
+        send(request, null);
+    }
+
+    // The previous or next source (macOS: Control-Space and Control-Option-Space), around the list.
+    function stepSource(by: int): void {
+        select(Logic.stepIndex(activeIndex < 0 ? 0 : activeIndex, sources.length, by));
+    }
+
+    function refresh(): void {
+        send("j/devices", text => {
+            const list = Logic.parseDevices(text);
+            sources = list;
+            if (list.length === 0)
+                activeIndex = -1;
+            else {
+                // The name the keyboard reports now: the last event's name is stale after a reload (no event follows it).
+                const active = Logic.parseActive(text);
+                activeIndex = Logic.activeIndex(list, names, active !== "" ? active : layoutName, activeIndex);
+            }
+        });
+    }
+
+    // One connection per request (as SessionConfig's): the request, then the reply until Hyprland closes the connection;
+    // `done(text)` gets it (null: nothing to read).
+    function send(request: string, done: var): void {
+        const path = Hyprland.requestSocketPath || "";
+        if (path === "") {
+            console.info("grassfield-shell: input sources: no Hyprland request socket (" + request + ")");
+            return;
+        }
+        requestSocket.createObject(root, {"path": path, "request": request, "done": done});
+    }
+
+    property Component requestSocket: Component {
+        Socket {
+            id: sock
+
+            property string request: ""
+            property var done: null
+            property string reply: ""
+            property bool judged: false
+
+            function finish(): void {
+                if (sock.judged)
+                    return;
+                sock.judged = true;
+                sock.answerTimeout.stop();
+                sock.connected = false;
+                if (sock.done)
+                    sock.done(sock.reply);
+                Qt.callLater(() => sock.destroy());
+            }
+
+            parser: SplitParser {
+                splitMarker: ""
+                onRead: data => sock.reply += data
+            }
+            onConnectedChanged: {
+                if (connected) {
+                    write(sock.request);
+                    flush();
+                    sock.answerTimeout.start();
+                } else {
+                    sock.finish();
+                }
+            }
+
+            readonly property Timer answerTimeout: Timer {
+                interval: root.helperTimeoutMs
+                onTriggered: sock.finish()
+            }
+
+            // Judged after Quickshell's error handler has returned (closing from inside the signal crashes Quickshell 0.3.2).
+            Component.onCompleted: {
+                sock.error.connect(() => Qt.callLater(sock.finish));
+                sock.connected = true;
+            }
+        }
+    }
+
+    property FileView namesFile: FileView {
+        path: "/usr/share/X11/xkb/rules/base.lst"
+        printErrors: false
+        onLoaded: root.names = Logic.parseNames(text())
+    }
+
+    property Timer startRefresh: Timer {
+        interval: 1
+        running: true
+        onTriggered: root.refresh()
+    }
+
     property Process lookup: Process {
         stdout: StdioCollector {
             onStreamFinished: root.answered(text)
@@ -144,6 +318,11 @@ QtObject {
         function onRawEvent(event: HyprlandEvent): void {
             if (event.name === "activelayout")
                 root.feed(event.data);
+            // The configuration was read again (Settings changed the sources): the list and the position are asked again.
+            else if (event.name === "configreloaded") {
+                root.activeIndex = -1;
+                root.refresh();
+            }
         }
     }
 }

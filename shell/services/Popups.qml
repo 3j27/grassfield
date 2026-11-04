@@ -11,7 +11,7 @@ import Quickshell.Io
 //
 // kind: "" or one of PopupKinds.kinds: "system" | "app" | "appfile" | "appwindow" | "appbridge" | "tray" | "nowplaying" | "volume"
 //       | "network" | "battery" | "controlcenter" | "dock" | "dockstack" | "forcequit" | "confirm" | "appabout" | "notice" | "tiling"
-//       | "tilingSuggest" | "sharePicker" | "screenshare"; open() refuses any other kind.
+//       | "tilingSuggest" | "sharePicker" | "screenshare" | "input"; open() refuses any other kind.
 Singleton {
     id: root
 
