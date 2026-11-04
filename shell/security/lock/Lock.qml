@@ -309,10 +309,13 @@ Singleton {
     // never on a single answer, which may be stale (tests/security/reload_order checks the callers).
     function relock(why: string): void {
         console.warn("grassfield-lock: the session is unlocked although this shell holds a lock (taken over and released by another client; " + why + "); taking a fresh lock");
+        // lockLost() first: `holding` ends before the inherited-lock suspicion is cleared, so no "no takeover suspected;
+        // ownership check every 1000 ms" line is logged for the lock being replaced (it read as the cause of a slow
+        // re-lock in the integrator's run of 2026-11-04, when the 100 ms check had been in force throughout).
+        controller.lockLost();
         unlockedAnswers = 0;
         verified = false;
         inheritedLock = false;
-        controller.lockLost();
         sessionLock.locked = false;
         engage();
     }

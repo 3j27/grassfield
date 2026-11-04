@@ -23,6 +23,7 @@
 ],
 "ignore": [
  {"path": "tests/security/pam_audit.sh", "reason": "helper sourced by reload_locked.sh"},
+ {"path": "tests/security/nested_ready.sh", "reason": "helper sourced by reload_locked.sh and lock_privacy.sh (the nested session is ready: GF-REF and a lock state from the shell; tested by nested_ready_unit.sh)"},
  {"path": "tests/visual/online-lib.sh", "reason": "helper sourced by the online wallpaper visual scripts"},
  {"path": "tests/visual/a11y-lib.sh", "reason": "helper sourced by visual scripts: an AT-SPI bus on the nested private bus and a11y_find"},
  {"path": "tests/visual/lib.sh", "reason": "helper sourced by the visual scripts"},
@@ -529,6 +530,7 @@
  {"path": "tests/shell/icon_svg_qt.sh", "layer": "logic"},
  {"path": "tests/shell/launch_keys.sh", "layer": "logic"},
  {"path": "tests/security/foreign_locker_guard.sh", "layer": "logic"},
+ {"path": "tests/security/nested_ready_unit.sh", "layer": "logic"},
  {"path": "tests/shell/shell_failures.sh", "layer": "logic"},
  {"path": "tests/shell/shell_version.sh", "layer": "headless"},
  {"path": "tests/shell/icons_compose.sh", "layer": "data"},
