@@ -1,0 +1,233 @@
+#!/usr/bin/python3 -I
+# Terminal and developer apps follow the appearance (ADR-0045 OC-11; docs/specs/settings.md, Appearance > Terminal and
+# Developer Apps).
+#
+#   grassfield-terminal-theme light|dark
+#
+# Applies the Omarchy theme chosen for that appearance (terminal.lightTheme / terminal.darkTheme of grassfield.json, as
+# `omarchy-theme-list` names them) with Omarchy's own `omarchy-theme-set`, when terminal.matchAppearance is on. Omarchy's
+# terminals (Alacritty, Ghostty, Kitty, foot), tmux, btop, Helix, Neovim, VS Code and the other tools its theme reaches then
+# take it, in both sessions: Omarchy's theme is shared, so the Omarchy session gets the same theme and that theme's wallpaper.
+# Run by the shell (shell/services/TerminalTheme.qml) at each change of the effective appearance and once at login; a person
+# may run it too. One status line on stdout says what happened (the shell writes it to the journal).
+#
+# omarchy-theme-set is written for the Omarchy session. It runs here in an environment that keeps it out of the Grassfield
+# session (every side effect and what happens to it: ADR-0045 OC-11 "Implementation note"):
+#   - no HYPRLAND_INSTANCE_SIGNATURE: its `hyprctl reload` (omarchy-restart-hyprctl) reaches no compositor, so Grassfield's
+#     Hyprland is not reloaded (a reload resets what the shell set at run time);
+#   - no DCONF_PROFILE: its gsettings writes (colour scheme, GTK theme, icon theme) go to the user's dconf database through
+#     dconf's default profile, as in the Omarchy session; under Grassfield's profile (ADR-0017, same writable database) the
+#     icon theme is locked and that write would fail. Grassfield's own look does not come from those keys: GTK apps here
+#     read Grassfield's portal (ADR-0035 D-8) and the icon theme stays locked;
+#   - Grassfield's stand-ins for Omarchy's shell (/usr/lib/grassfield/omarchy-shims: omarchy-shell, omarchy-restart-shell)
+#     first in PATH, then Omarchy's bin directory (so that a login shell, which omarchy-theme-set starts for its app hooks,
+#     never puts that directory before the stand-ins), then the rest of PATH (absolute entries only). Its calls to Omarchy's
+#     shell (applyTheme, themeTransition, the theme picker's preload) are refused by the stand-in; nothing restarts or
+#     signals grassfield-shell. Without the stand-ins nothing runs;
+#   - stdin is /dev/null and it runs in a process session of its own; its output goes to a private temporary file (its last
+#     line is quoted when it fails).
+# Nothing runs when the theme is already Omarchy's (`omarchy-theme-current`), when another run holds the lock
+# ($XDG_RUNTIME_DIR/grassfield/terminal-theme.lock: this one waits for it, at most LOCK_WAIT seconds), or as root. Missing
+# Omarchy commands: nothing runs, exit 0.
+# Exit 0 applied or nothing to do; 1 refused or failed; 2 usage.
+#
+# Dev plumbing (ADR-0019, honoured only in a dev session: GRASSFIELD_DEV exactly "1" and GRASSFIELD_SESSION not "1"):
+# GRASSFIELD_TERMINAL_THEME_SHIMS, the stand-ins' directory in place of /usr/lib/grassfield/omarchy-shims
+# (tests/shell/terminal_theme.sh). In a dev session nothing runs without it: the owner's Omarchy theme is not a nested
+# session's to change. GRASSFIELD_CONFIG_HOME is honoured always, as by the shell (shell/lib/RunMode.js configDir).
+# Standard library only.
+import fcntl
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+SHIMS = "/usr/lib/grassfield/omarchy-shims"
+# The stand-ins that must come first: the two commands of Omarchy's that reach its shell (packaging/shims).
+STAND_INS = ("omarchy-shell", "omarchy-restart-shell")
+# terminal.lightTheme / terminal.darkTheme in config/schema/grassfield.schema.json (pattern and defaults).
+THEME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._+-]{0,62}")
+DEFAULTS = {"light": "Catppuccin Latte", "dark": "Tokyo Night"}
+# Removed from omarchy-theme-set's environment (see the header).
+UNSET = ("HYPRLAND_INSTANCE_SIGNATURE", "DCONF_PROFILE")
+LOCK_WAIT = 120
+# omarchy-theme-set may install a VS Code extension from the network; past this it is stopped.
+RUN_LIMIT = 600
+QUERY_LIMIT = 10
+
+
+def say(line):
+    try:
+        print(line, flush=True)
+    except OSError:
+        pass  # the caller went away (a shell restart): the run itself is done
+
+
+def dev_session():
+    return os.environ.get("GRASSFIELD_DEV") == "1" and os.environ.get("GRASSFIELD_SESSION") != "1"
+
+
+def config_dir():
+    """shell/lib/RunMode.js configDir: GRASSFIELD_CONFIG_HOME, else $XDG_CONFIG_HOME/grassfield, else ~/.config/grassfield."""
+    if os.environ.get("GRASSFIELD_CONFIG_HOME"):
+        return os.environ["GRASSFIELD_CONFIG_HOME"]
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.environ.get("HOME", ""), ".config")
+    return os.path.join(base, "grassfield")
+
+
+def read_settings(path):
+    """The parsed grassfield.json, {} when it is missing, unreadable, not JSON or not an object (every key at its default)."""
+    try:
+        with open(path, "rb") as f:
+            data = json.loads(f.read(1 << 20))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def setting(data, path, default, valid):
+    """A dotted key as the settings contract reads it (SettingsContract.read): the default when absent or invalid."""
+    node = data
+    for part in path.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return default
+        node = node[part]
+    return node if valid(node) else default
+
+
+def theme_key(name):
+    """The directory name omarchy-theme-set makes of a theme name ("Tokyo Night" -> "tokyo-night")."""
+    return re.sub(r"<[^>]+>", "", name).strip().lower().replace(" ", "-")
+
+
+def clean_path(shims):
+    omarchy_bin = os.path.join(os.environ.get("OMARCHY_PATH") or "/usr/share/omarchy", "bin")
+    parts = [shims]
+    if os.path.isdir(omarchy_bin):
+        parts.append(omarchy_bin)
+    for entry in (os.environ.get("PATH") or "/usr/local/bin:/usr/bin").split(":"):
+        if entry.startswith("/") and entry not in parts and entry != SHIMS:
+            parts.append(entry)
+    return ":".join(parts)
+
+
+def theme_env(path):
+    env = {k: v for k, v in os.environ.items() if k not in UNSET}
+    env["PATH"] = path
+    return env
+
+
+def lock(runtime):
+    """The run lock's descriptor (held until exit), or None when another run kept it for LOCK_WAIT seconds."""
+    folder = os.path.join(runtime, "grassfield")
+    os.makedirs(folder, mode=0o700, exist_ok=True)
+    fd = os.open(os.path.join(folder, "terminal-theme.lock"), os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+    deadline = time.monotonic() + LOCK_WAIT
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                os.close(fd)
+                return None
+            time.sleep(0.2)
+
+
+def current_theme(command, env):
+    try:
+        r = subprocess.run([command], stdin=subprocess.DEVNULL, capture_output=True, env=env, timeout=QUERY_LIMIT, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    lines = r.stdout.decode("utf-8", "replace").strip().splitlines()
+    return lines[0].strip() if r.returncode == 0 and lines else ""
+
+
+def last_line(f):
+    f.seek(0, os.SEEK_END)
+    f.seek(max(0, f.tell() - 4096))
+    lines = [l.strip() for l in f.read().decode("utf-8", "replace").splitlines() if l.strip()]
+    line = re.sub(r"[\x00-\x1f\x7f]", " ", lines[-1]) if lines else "no output"
+    return line[:200]
+
+
+def apply(command, theme, env):
+    """(exit code, last output line) of omarchy-theme-set <theme>."""
+    with tempfile.TemporaryFile() as out:
+        try:
+            proc = subprocess.Popen([command, theme], stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT, env=env,
+                                    start_new_session=True)
+        except OSError as e:
+            return 127, str(e)
+        try:
+            code = proc.wait(timeout=RUN_LIMIT)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            return 124, "omarchy-theme-set did not finish in %d minutes" % (RUN_LIMIT // 60)
+        return code, last_line(out)
+
+
+def main(argv):
+    if len(argv) != 2 or argv[1] not in DEFAULTS:
+        print("usage: grassfield-terminal-theme light|dark", file=sys.stderr)
+        return 2
+    mode = argv[1]
+    if os.geteuid() == 0:
+        say("refused: run it as the desktop user, not as root")
+        return 1
+    shims = SHIMS
+    if dev_session():
+        shims = os.environ.get("GRASSFIELD_TERMINAL_THEME_SHIMS", "")
+        if not shims:
+            say("refused: a dev session changes no Omarchy theme (GRASSFIELD_TERMINAL_THEME_SHIMS is the test stand-in)")
+            return 1
+
+    data = read_settings(os.path.join(config_dir(), "grassfield.json"))
+    if not setting(data, "terminal.matchAppearance", False, lambda v: isinstance(v, bool)):
+        say("skipped: Match Appearance is off")
+        return 0
+    theme = setting(data, "terminal.%sTheme" % mode, DEFAULTS[mode], lambda v: isinstance(v, str) and THEME.fullmatch(v) is not None)
+
+    if not all(os.path.isfile(os.path.join(shims, n)) and os.access(os.path.join(shims, n), os.X_OK) for n in STAND_INS):
+        say("refused: Grassfield's stand-ins for Omarchy's shell are not installed in " + shims)
+        return 1
+    path = clean_path(shims)
+    theme_set = shutil.which("omarchy-theme-set", path=path)
+    theme_current = shutil.which("omarchy-theme-current", path=path)
+    if not theme_set or not theme_current:
+        say("skipped: Omarchy's theme commands are not installed")
+        return 0
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not runtime.startswith("/") or not os.path.isdir(runtime):
+        say("refused: XDG_RUNTIME_DIR is not set")
+        return 1
+
+    env = theme_env(path)
+    fd = lock(runtime)
+    if fd is None:
+        say("failed: another run did not end within %d seconds" % LOCK_WAIT)
+        return 1
+    current = current_theme(theme_current, env)
+    if current and theme_key(current) == theme_key(theme):
+        say("skipped: %s is already Omarchy's theme" % theme)
+        return 0
+    code, line = apply(theme_set, theme, env)
+    os.close(fd)
+    if code != 0:
+        say("failed: %s (omarchy-theme-set exit %d)" % (line, code))
+        return 1
+    say("applied %s (%s)" % (theme, mode))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
