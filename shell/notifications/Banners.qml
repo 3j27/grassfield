@@ -29,7 +29,7 @@ PanelWindow {
     }
     readonly property int pad: Tokens.spacingLg
     // Space taken by the OSD pill (plus its gap) while it is on this screen.
-    readonly property real osdOffset: Osd.shown && targetScreen !== null && targetScreen.name === Compositor.activeScreenName ? Tokens.osdHeight + Tokens.osdGap : 0
+    readonly property real osdOffset: Osd.shown && targetScreen !== null && targetScreen.name === Osd.screenName ? Tokens.osdHeight + Tokens.osdGap : 0
 
     function itemFor(index: int): var {
         const loader = stack.itemAt(index) as Loader;
