@@ -1,17 +1,46 @@
 #!/usr/bin/python3 -I
-# Grassfield's screenshots (ADR-0035 D-10, step 8; owner decision Q4: re-wired now, saved to the Desktop, the capture toolbar
-# later). Bound by config/hypr/grassfield/system.lua (real session only): `grassfield-capture screen` (Shift-Cmd-3: every
-# display, one picture each, as macOS saves them) and `grassfield-capture selection` (Shift-Cmd-4, Shift-Cmd-5 and Print: a
-# crosshair over the live screen; a drag picks an area, a click without a drag picks the window under the pointer, else the
-# display, Esc cancels; a second press while the crosshair shows cancels it, as Omarchy's capture did). grim takes the
-# picture, slurp draws the crosshair in Grassfield's colours (capture.* in ui/tokens/tokens.json, mirrored below;
-# tests/shell/capture.sh holds them equal). Each file is named as on macOS ("Screenshot 2026-10-31 at 14.05.12.png", the
-# next display's " (2)", translated) on the Desktop; the focused display's picture (or the selection) is copied to the
-# clipboard, and a Grassfield notice shows it with "Open in Preview" (Preview is Grassfield's viewer, org.grassfield.Preview),
-# which opens every picture of that capture. Nothing names an Omarchy shortcut; no tensaku. Standard library only; strings
-# through tr() (gate I1: scripts/dev/check-i18n.py).
+# Grassfield's screenshots and screen recordings (ADR-0035 D-10, step 8; ADR-0045 OC-1). Bound by
+# config/hypr/grassfield/system.lua (real session only): `grassfield-capture screen` (Shift-Cmd-3: every display, one picture
+# each, as macOS saves them) and `grassfield-capture selection` (Shift-Cmd-4 and Print: a crosshair over the live screen; a drag
+# picks an area, a click without a drag picks the window under the pointer, else the display, Esc cancels; a second press while
+# the crosshair shows cancels it, as Omarchy's capture did). grim takes the picture, slurp draws the crosshair in Grassfield's
+# colours (capture.* in ui/tokens/tokens.json, mirrored below; tests/shell/capture.sh holds them equal). Each file is named as
+# on macOS ("Screenshot 2026-10-31 at 14.05.12.png", the next display's " (2)", translated) on the Desktop; the focused
+# display's picture (or the selection) is copied to the clipboard, and a Grassfield notice shows it with "Open in Preview"
+# (Preview is Grassfield's viewer, org.grassfield.Preview), which opens every picture of that capture. Nothing names an Omarchy
+# shortcut; no tensaku. Standard library only; strings through tr() (gate I1: scripts/dev/check-i18n.py).
+#
+# The capture toolbar (Shift-Cmd-5, shell/capture) runs the same modes with its options, and a window mode:
+#   grassfield-capture screen|window|selection [--save desktop|documents|clipboard|preview] [--timer 0|5|10] [--pointer]
+# `window` is the crosshair restricted to the windows (slurp -r): a click picks the window drawn on top there. --save: the
+# Desktop (the default, as above), the Documents folder (copied too), the clipboard only (no file, no notice, as macOS), or
+# Preview (the picture is kept on the Desktop, since Preview cannot save a document, and opened in Preview at once, no notice).
+# --timer: a countdown after the choice and before the picture; --pointer: grim draws the pointer (-c).
+#   grassfield-capture record screen|selection [--save desktop|documents|preview] [--timer 0|5|10] [--pointer] [--mic]
+#                             [--output NAME]
+# records with gpu-screen-recorder (an Omarchy base package) and Omarchy's backend arguments (omarchy-capture-screenrecording:
+# `-w <display> -s <size>` for a whole display, `-w WxH+X+Y` in logical coordinates for an area, `-k auto -f 60 -fm cfr
+# -fallback-cpu-encoding yes`, the microphone as `-a default_input -ac aac`; never the desktop's sound, as macOS). `screen`
+# records the display the toolbar is on (--output) or the focused one; `selection` the crosshair's choice (a whole display is
+# recorded as that display). The movie is written to a hidden file of this helper's in the destination and then takes its
+# name, "Screen Recording 2026-11-04 at 14.05.12.mp4" (the start time, translated), never replacing a file; a notice "Screen
+# Recording" with "Open" (Preview plays it) follows. A recording with --save clipboard is not offered (a movie is not copied):
+# it goes to the Desktop. While a recording or a countdown runs this helper holds a lock and keeps its state in a private file,
+# $XDG_RUNTIME_DIR/grassfield/capture-state.json (0600, by rename, in the 0700 folder of the capture notice), which the shell
+# watches (its countdown and the menu bar's stop item):
+#   {"v": 1, "phase": "idle" | "selecting" | "countdown" | "recording", "kind": "shot" | "recording", "pid", "start",
+#    "until" (ms since the epoch, countdown), "rect" {x, y, w, h} and "output" (where the capture is), "recorder",
+#    "recorderStart" and "started" (ms, recording)}
+#   grassfield-capture stop
+# ends what that state names (the menu bar's stop item, Ctrl-Cmd-Esc, the session locking): SIGINT to the recorder this helper
+# started (gpu-screen-recorder saves its file on SIGINT), recognised by its pid, its start time and its parent (this helper's
+# pid and start time), never by name; during a choice or a countdown, SIGINT to that helper, which then captures nothing. A
+# recorder still running STOP_SECONDS later is killed (Omarchy kills it after 5 s). Nothing starts while the session is
+# locked: Hyprland runs none of these keys under the lock, and the shell refuses the toolbar then and stops a recording when
+# the session locks.
 import contextlib
 import datetime
+import fcntl
 import json
 import os
 import re
@@ -45,19 +74,52 @@ WAIT_SECONDS = 120
 BANNER_GONE_SECONDS = 0.5
 PREVIEW = "org.grassfield.Preview.desktop"
 PREVIEW_ICON = "org.grassfield.Preview"
+# The toolbar's options (shell/capture/CaptureModel.js builds the same argv).
+MODES = ("screen", "window", "selection")
+RECORD_MODES = ("screen", "selection")
+SAVE_TO = ("desktop", "documents", "clipboard", "preview")
+TIMERS = ("0", "5", "10")
+# The shell hides its countdown when the time is up, and Hyprland drops the countdown's layer at once (no_anim,
+# config/hypr/grassfield/windows.lua); the picture (or the recording) waits this long after, as for the last notice.
+COUNTDOWN_GONE_SECONDS = 0.5
+# A recorder still running this long after its SIGINT is killed (its file may then be cut short).
+STOP_SECONDS = 10
+# gpu-screen-recorder's arguments, as omarchy-capture-screenrecording (v4.0.6) gives them; Omarchy records a display at its
+# own size up to 4K, at 4K above.
+RECORDER = ["-k", "auto", "-f", "60", "-fm", "cfr", "-fallback-cpu-encoding", "yes"]
+RECORDER_MAX = (3840, 2160)
+OUTPUT_NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
 
 TITLE = "Screenshot"
 NAME = "Screenshot %(date)s at %(time)s"
 BODY = "Saved to the Desktop and copied."
+BODY_DOCUMENTS = "Saved to Documents and copied."
 OPEN = "Open in Preview"
+REC_TITLE = "Screen Recording"
+REC_NAME = "Screen Recording %(date)s at %(time)s"
+REC_DESKTOP = "Saved to the Desktop."
+REC_DOCUMENTS = "Saved to Documents."
+REC_FAILED = "The screen recording could not be saved."
+REC_OPEN = "Open"
 CATALOG = {
     "fr": {
         TITLE: "Capture d’écran",
         NAME: "Capture d’écran %(date)s à %(time)s",
         BODY: "Enregistrée sur le Bureau et copiée.",
+        BODY_DOCUMENTS: "Enregistrée dans Documents et copiée.",
         OPEN: "Ouvrir dans la Visionneuse",
+        REC_TITLE: "Enregistrement de l’écran",
+        REC_NAME: "Enregistrement de l’écran %(date)s à %(time)s",
+        REC_DESKTOP: "Enregistré sur le Bureau.",
+        REC_DOCUMENTS: "Enregistré dans Documents.",
+        REC_FAILED: "L’enregistrement de l’écran n’a pas pu être sauvegardé.",
+        REC_OPEN: "Ouvrir",
     },
 }
+
+
+class Cancelled(Exception):
+    """A choice or a countdown ended by `stop` (SIGINT) or the session ending (SIGTERM): nothing is captured."""
 
 
 def tr(text):
@@ -194,14 +256,14 @@ def geometry_text(r):
     return "%d,%d %dx%d" % (r["x"], r["y"], r["w"], r["h"])
 
 
-def desktop():
-    # The user's Desktop as the shell finds it (shell/desktop/DesktopFiles.qml): xdg-user-dir, else ~/Desktop; never the home
-    # folder itself or the root.
+def user_dir(key, fallback):
+    # One of the user's folders as the shell finds the Desktop (shell/desktop/DesktopFiles.qml): xdg-user-dir's answer for
+    # `key` (DESKTOP, DOCUMENTS), else ~/<fallback>; never the home folder itself or the root.
     home = os.path.expanduser("~")
-    r = run(["xdg-user-dir", "DESKTOP"])
+    r = run(["xdg-user-dir", key])
     path = os.fsdecode(r.stdout).strip() if r is not None and r.returncode == 0 else ""
     if not path or not os.path.isabs(path) or os.path.realpath(path) in ("/", os.path.realpath(home)):
-        path = os.path.join(home, "Desktop")
+        path = os.path.join(home, fallback)
     try:
         os.makedirs(path, exist_ok=True)
     except OSError:
@@ -209,51 +271,73 @@ def desktop():
     return path
 
 
-def save(folder, stem, grim):
-    # grim writes a hidden file of this helper's in the folder (made here, O_EXCL), which then takes the first free name:
-    # "<stem>.png", then " (2)" and on, linked so that no other file is ever replaced; the Desktop never shows a picture
-    # being written. Returns the path, or None (nothing left behind).
-    tmp = None
+def desktop():
+    return user_dir("DESKTOP", "Desktop")
+
+
+def destination(save):
+    # Where a capture's file goes: Documents, else the Desktop (the Desktop for Preview too, and for a recording asked for the
+    # clipboard).
+    return user_dir("DOCUMENTS", "Documents") if save == "documents" else desktop()
+
+
+def reserve(folder, prefix, ext):
+    # A hidden file of this helper's in the folder (made here, O_EXCL, never a link): what grim or the recorder writes before
+    # the file takes its name, so that the folder never shows a picture or a movie being written. None when it cannot be made.
     for _ in range(10):
-        candidate = os.path.join(folder, ".grassfield-capture-%s.png" % os.urandom(8).hex())
+        candidate = os.path.join(folder, ".%s-%s%s" % (prefix, os.urandom(8).hex(), ext))
         try:
             os.close(os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644))
-            tmp = candidate
-            break
+            return candidate
         except FileExistsError:
             continue
         except OSError:
             return None
+    return None
+
+
+def publish(folder, stem, ext, tmp):
+    # The hidden file takes the first free name: "<stem><ext>", then " (2)" and on, linked so that no other file is ever
+    # replaced. Returns the path, or None. The hidden file stays (the caller removes it).
+    for n in range(1, 100):
+        path = os.path.join(folder, stem + (ext if n == 1 else " (%d)%s" % (n, ext)))
+        try:
+            os.link(tmp, path)
+            return path
+        except FileExistsError:
+            continue
+        except OSError:
+            # A file system without hard links (a Desktop on FAT): a new file of that name, then a copy; a copy that
+            # fails (a full disk) leaves no file behind.
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+            except FileExistsError:
+                continue
+            except OSError:
+                return None
+            try:
+                with os.fdopen(fd, "wb") as out, open(tmp, "rb") as src:
+                    shutil.copyfileobj(src, out)
+            except BaseException:
+                # A full disk, or a signal (SIGTERM is SystemExit here): no partial file stays.
+                with contextlib.suppress(OSError):
+                    os.unlink(path)
+                raise
+            return path
+    return None
+
+
+def save_picture(folder, stem, grim):
+    # grim writes a hidden file of this helper's in the folder, which then takes the first free name (publish). Returns the
+    # path, or None (nothing left behind).
+    tmp = reserve(folder, "grassfield-capture", ".png")
     if tmp is None:
         return None
     try:
         r = run(grim + [tmp], timeout=30)
         if r is None or r.returncode != 0 or os.path.getsize(tmp) == 0:
             return None
-        for n in range(1, 100):
-            path = os.path.join(folder, stem + (".png" if n == 1 else " (%d).png" % n))
-            try:
-                os.link(tmp, path)
-                return path
-            except FileExistsError:
-                continue
-            except OSError:
-                # A file system without hard links (a Desktop on FAT): a new file of that name, then a copy; a copy that
-                # fails (a full disk) leaves no file behind.
-                try:
-                    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
-                except FileExistsError:
-                    continue
-                try:
-                    with os.fdopen(fd, "wb") as out, open(tmp, "rb") as src:
-                        shutil.copyfileobj(src, out)
-                except BaseException:
-                    # A full disk, or a signal (SIGTERM is SystemExit here): no partial picture stays.
-                    with contextlib.suppress(OSError):
-                        os.unlink(path)
-                    raise
-                return path
-        return None
+        return publish(folder, stem, ".png", tmp)
     except OSError:
         return None
     finally:
@@ -263,30 +347,40 @@ def save(folder, stem, grim):
             pass
 
 
-def selecting():
+def selecting(argv):
     # This helper's slurp running (its exact command line, Grassfield's colours): a second press cancels the crosshair; any
     # other slurp of the user's (a portal's, a script's) is left alone.
-    line = " ".join(SLURP)
+    line = " ".join(argv)
     if not re.fullmatch(r"[A-Za-z0-9# -]+", line):
         return False
     r = run(["pkill", "-u", str(os.getuid()), "-f", "-x", line])
     return r is not None and r.returncode == 0
 
 
-def choose(monitors):
+def crosshair(windows_only):
+    # slurp as this helper runs it: the window mode restricts the choice to the boxes it is given (the windows).
+    return SLURP + ["-r"] if windows_only else SLURP
+
+
+def choose(monitors, windows_only=False):
     wins = windows(monitors)
     screens = [rect for _, rect in displays(monitors)]
-    boxes = [e["rect"] for e in wins] + screens
-    r = run(SLURP, timeout=3600, input="".join(geometry_text(b) + "\n" for b in boxes).encode())
+    boxes = [e["rect"] for e in wins] + ([] if windows_only else screens)
+    r = run(crosshair(windows_only), timeout=3600, input="".join(geometry_text(b) + "\n" for b in boxes).encode())
     if r is None or r.returncode != 0:
         return None  # Esc, or cancelled by a second press
     sel = parse_geometry(r.stdout.decode("utf-8", "replace"))
-    return snapped(topmost(wins, sel), wins, screens) if sel else None
+    if sel is None:
+        return None
+    if windows_only:
+        # Only a window: slurp answered one of the boxes, and the window drawn on top under the pointer is taken.
+        picked = topmost(wins, sel)
+        return picked if any(e["rect"] == picked for e in wins) else None
+    return snapped(topmost(wins, sel), wins, screens)
 
 
-def notice_file():
-    # $XDG_RUNTIME_DIR/grassfield/capture-notice: the pid and start time of the notify-send showing the last capture's
-    # notice. The folder is the user's own (0700, not a link), as the share picker's.
+def runtime_folder():
+    # $XDG_RUNTIME_DIR/grassfield: the user's own (0700, not a link), as the share picker's; None when it cannot be had.
     runtime = os.environ.get("XDG_RUNTIME_DIR", "")
     if not os.path.isabs(runtime):
         return None
@@ -298,16 +392,123 @@ def notice_file():
         return None
     if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
         return None
-    return os.path.join(folder, "capture-notice")
+    return folder
+
+
+def notice_file():
+    # $XDG_RUNTIME_DIR/grassfield/capture-notice: the pid and start time of the notify-send showing the last capture's
+    # notice.
+    folder = runtime_folder()
+    return os.path.join(folder, "capture-notice") if folder else None
+
+
+def stat_fields(pid):
+    # The fields of /proc/<pid>/stat after the command name in parentheses (field 3 is the first), or None.
+    try:
+        with open("/proc/%d/stat" % pid, "rb") as f:
+            return f.read().rpartition(b")")[2].split()
+    except OSError:
+        return None
 
 
 def started(pid):
-    # A process's start time (field 22 of /proc/<pid>/stat, after the command name in parentheses), or None.
+    # A process's start time (field 22 of /proc/<pid>/stat), or None.
     try:
-        with open("/proc/%d/stat" % pid, "rb") as f:
-            return int(f.read().rpartition(b")")[2].split()[19])
-    except (OSError, ValueError, IndexError):
+        return int(stat_fields(pid)[19])
+    except (TypeError, ValueError, IndexError):
         return None
+
+
+def parent(pid):
+    # A process's parent (field 4 of /proc/<pid>/stat), or None.
+    try:
+        return int(stat_fields(pid)[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def own(pid, start):
+    # The process `pid` is still the one recorded (its start time) and this user's.
+    try:
+        return start is not None and started(pid) == start and os.stat("/proc/%d" % pid).st_uid == os.getuid()
+    except OSError:
+        return False
+
+
+# ---- the capture state (the toolbar's countdown and recording, read by the shell) ----
+
+def state_path():
+    folder = runtime_folder()
+    return os.path.join(folder, "capture-state.json") if folder else None
+
+
+def write_state(state):
+    # By rename: the shell never reads half a file. A state that cannot be written is left as it was (the shell then shows
+    # nothing of this capture).
+    path = state_path()
+    if path is None:
+        return
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(dict({"v": 1}, **state)) + "\n")
+        os.replace(tmp, path)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+
+
+def read_state():
+    path = state_path()
+    if path is None:
+        return {}
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd) as f:
+            state = json.loads(f.read(4096))
+    except (OSError, ValueError):
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
+def take_lock():
+    # The capture lock (one recording or countdown at a time): held, as an open file, until this helper ends. None when another
+    # helper holds it, or without a private runtime folder.
+    folder = runtime_folder()
+    if folder is None:
+        return None
+    try:
+        fd = os.open(os.path.join(folder, "capture-lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def me():
+    pid = os.getpid()
+    return {"pid": pid, "start": started(pid)}
+
+
+def countdown(seconds, rect, output, kind, lock):
+    # The timer: the shell shows the seconds left over `rect` while the state says so (only with the lock: without it another
+    # capture owns the state, and this countdown runs unseen). Interrupted by SIGINT or SIGTERM (Cancelled).
+    until = time.time() + seconds
+    if lock is not None:
+        write_state(dict(me(), phase="countdown", kind=kind, until=int(until * 1000), rect=rect, output=output))
+    while True:
+        left = until - time.time()
+        if left <= 0:
+            break
+        time.sleep(min(left, 0.25))
+    if lock is not None and kind == "shot":
+        write_state({"phase": "idle"})
+    time.sleep(COUNTDOWN_GONE_SECONDS)
 
 
 def close_previous():
@@ -353,17 +554,20 @@ def remember(pid):
         pass
 
 
-def notify(paths):
-    # The notice with the picture; a click or its button opens the capture's pictures in Preview. It is the shell's ordinary
-    # banner (its own time on screen, then the Notification Center); this helper waits for the click at most WAIT_SECONDS,
-    # then asks notify-send to close the notice (SIGINT: notify-send closes the one it showed), since its button would do
-    # nothing once this helper has ended.
-    argv = ["notify-send", "-a", tr(TITLE), "-i", PREVIEW_ICON, "-h", "string:image-path:" + paths[0], "-p", "-w",
-            "-A", "default=" + tr(OPEN), "-A", "open=" + tr(OPEN), "--", tr(TITLE), tr(BODY)]
+def notify(paths, title_key=TITLE, body_key=BODY, label_key=OPEN, picture=True):
+    # The notice with the picture (a recording's shows Preview's icon); a click or its button opens the capture's files in
+    # Preview. It is the shell's ordinary banner (its own time on screen, then the Notification Center); this helper waits for
+    # the click at most WAIT_SECONDS, then asks notify-send to close the notice (SIGINT: notify-send closes the one it
+    # showed), since its button would do nothing once this helper has ended. No path: a notice without a button.
+    hints = ["-h", "string:image-path:" + paths[0]] if paths and picture else []
+    actions = ["-A", "default=" + tr(label_key), "-A", "open=" + tr(label_key)] if paths else []
+    argv = (["notify-send", "-a", tr(title_key), "-i", PREVIEW_ICON] + hints + ["-p", "-w"] + actions
+            + ["--", tr(title_key), tr(body_key)])
     if not shutil.which("notify-send"):
+        image = "{'image-path': <%s>}" % json.dumps(paths[0]) if paths and picture else "@a{sv} {}"
         run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications", "--object-path",
-             "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.Notify", tr(TITLE), "0", PREVIEW_ICON,
-             tr(TITLE), tr(BODY), "[]", "{'image-path': <%s>}" % json.dumps(paths[0]), "-1"], timeout=10)
+             "/org/freedesktop/Notifications", "--method", "org.freedesktop.Notifications.Notify", tr(title_key), "0",
+             PREVIEW_ICON, tr(title_key), tr(body_key), "[]", image, "-1"], timeout=10)
         return
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -407,45 +611,311 @@ def open_with(desktop_id, paths):
     run(["systemd-run", "--user", "--collect", "--quiet", "--"] + app, timeout=30)
 
 
-def main():
-    mode = sys.argv[1] if len(sys.argv) == 2 else ""
-    if mode not in ("screen", "selection"):
-        sys.stderr.write("usage: grassfield-capture screen|selection\n")
-        return 2
-    # A signal (the session ending) still runs the clean-up of save(): no hidden file is left on the Desktop.
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+def copy_png(data):
+    # wl-copy stays behind to serve the clipboard: none of its output is waited for.
+    try:
+        subprocess.run(["wl-copy", "--type", "image/png"], input=data, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def shot(opts):
+    # A screenshot: the screen (every display), a window or a selection, then the toolbar's timer, then the picture.
+    mode, save = opts["mode"], opts["save"]
+    pointer = ["-c"] if opts["pointer"] else []
     monitors = hyprctl("monitors")
-    if mode == "selection":
-        if selecting():
-            return 0
-        ready = close_previous()  # the crosshair shows at once; the picture waits for the last notice to be gone
-        sel = choose(monitors)
-        if sel is None:
-            return 0
-        shots = [["grim", "-g", geometry_text(sel)]]
-    else:
-        shots = [["grim", "-o", name] for name, _ in displays(monitors)]
+    if mode == "screen":
+        screens = displays(monitors)
+        shots = [["grim", "-o", name] + pointer for name, _ in screens]
         if not shots:
             return 1
         ready = close_previous()
+        area, output = screens[0][1], screens[0][0]
+    else:
+        if selecting(crosshair(mode == "window")):
+            return 0
+        ready = close_previous()  # the crosshair shows at once; the picture waits for the last notice to be gone
+        sel = choose(monitors, mode == "window")
+        if sel is None:
+            return 0
+        shots = [["grim", "-g", geometry_text(sel)] + pointer]
+        area, output = sel, ""
+    if opts["timer"]:
+        lock = take_lock()
+        try:
+            countdown(opts["timer"], area, output, "shot", lock)
+        except BaseException:
+            if lock is not None:
+                write_state({"phase": "idle"})
+            raise
+        finally:
+            if lock is not None:
+                os.close(lock)
     time.sleep(max(0.0, ready - time.monotonic()))
-    folder = desktop()
+    if save == "clipboard":
+        # The clipboard only (macOS: no file, no thumbnail): the focused display's picture, or the choice.
+        r = run(shots[0] + ["-"], timeout=30)
+        if r is None or r.returncode != 0 or not r.stdout:
+            return 1
+        copy_png(r.stdout)
+        return 0
+    folder = destination(save)
     if folder is None:
         return 1
     now = datetime.datetime.now()
     stem = tr(NAME) % {"date": now.strftime("%Y-%m-%d"), "time": now.strftime("%H.%M.%S")}
-    paths = [p for p in (save(folder, stem, grim) for grim in shots) if p]
+    paths = [p for p in (save_picture(folder, stem, grim) for grim in shots) if p]
     if not paths:
         return 1
-    # wl-copy stays behind to serve the clipboard: none of its output is waited for.
+    if save == "preview":
+        open_with(PREVIEW, paths)
+        return 0
     try:
         with open(paths[0], "rb") as f:
-            subprocess.run(["wl-copy", "--type", "image/png"], stdin=f, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           timeout=10)
-    except (OSError, subprocess.SubprocessError):
+            copy_png(f.read())
+    except OSError:
         pass
-    notify(paths)
+    notify(paths, TITLE, BODY_DOCUMENTS if save == "documents" else BODY, OPEN)
     return 0
+
+
+# The recorder this helper started, and whether a signal came while it was being started (record()).
+RECORDING = {"proc": None, "starting": False, "pending": False}
+
+
+def on_record_signal(signum, frame):
+    # While the recorder runs, SIGINT (stop, through this helper) and SIGTERM (the session ending) are passed on to it as
+    # SIGINT: it saves its file and ends, and this helper names the file. Before, the choice or the countdown ends (Cancelled).
+    proc = RECORDING["proc"]
+    if proc is not None:
+        with contextlib.suppress(OSError):
+            proc.send_signal(signal.SIGINT)
+    elif RECORDING["starting"]:
+        RECORDING["pending"] = True
+    else:
+        raise Cancelled()
+
+
+def recorder_size(monitors, name):
+    # Omarchy's default_resolution: a display is recorded at its own size ("0x0") up to 4K, at 4K above (Omarchy reads the
+    # focused display; this reads the one recorded).
+    for m in monitors or []:
+        if isinstance(m, dict) and m.get("name") == name:
+            try:
+                if int(m["width"]) > RECORDER_MAX[0] or int(m["height"]) > RECORDER_MAX[1]:
+                    return "%dx%d" % RECORDER_MAX
+            except (KeyError, TypeError, ValueError):
+                pass
+    return "0x0"
+
+
+def recorder_argv(target, monitors, opts, out):
+    # gpu-screen-recorder's command line: a whole display by name (with its size), an area as WxH+X+Y in the compositor's
+    # logical coordinates, as slurp gives them (the recorder scales to the display's pixels itself, as Omarchy notes).
+    kind, value = target
+    argv = ["gpu-screen-recorder", "-w", value]
+    if kind == "monitor":
+        argv += ["-s", recorder_size(monitors, value)]
+    argv += RECORDER + ["-cursor", "yes" if opts["pointer"] else "no", "-o", out]
+    if opts["mic"]:
+        argv += ["-a", "default_input", "-ac", "aac"]
+    return argv
+
+
+def record_target(sel, screens):
+    # A choice that is a whole display records that display (Omarchy's --match-monitor), anything else that area.
+    whole = [name for name, rect in screens if rect == sel]
+    if whole:
+        return ("monitor", whole[0]), whole[0]
+    return ("region", "%dx%d+%d+%d" % (sel["w"], sel["h"], sel["x"], sel["y"])), ""
+
+
+def record(opts):
+    if not shutil.which("gpu-screen-recorder"):
+        sys.stderr.write("grassfield-capture: gpu-screen-recorder is not installed\n")
+        return 3
+    lock = take_lock()
+    if lock is None:
+        sys.stderr.write("grassfield-capture: a recording or a countdown is already running\n")
+        return 1
+    signal.signal(signal.SIGINT, on_record_signal)
+    signal.signal(signal.SIGTERM, on_record_signal)
+    monitors = hyprctl("monitors")
+    screens = displays(monitors)
+    tmp = None
+    try:
+        if opts["mode"] == "screen":
+            named = [s for s in screens if s[0] == opts["output"]] or screens[:1]
+            if not named:
+                return 1
+            target, rect, output = ("monitor", named[0][0]), named[0][1], named[0][0]
+            ready = close_previous()
+        else:
+            write_state(dict(me(), phase="selecting", kind="recording"))
+            ready = close_previous()
+            rect = choose(monitors)
+            if rect is None:
+                return 0
+            target, output = record_target(rect, screens)
+        if opts["timer"]:
+            countdown(opts["timer"], rect, output, "recording", lock)
+        time.sleep(max(0.0, ready - time.monotonic()))
+        folder = destination(opts["save"])
+        tmp = reserve(folder, "grassfield-recording", ".mp4") if folder else None
+        if tmp is None:
+            return 1
+        argv = recorder_argv(target, monitors, opts, tmp)
+        begun = datetime.datetime.now()
+        RECORDING["starting"] = True
+        try:
+            RECORDING["proc"] = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                                 stderr=subprocess.DEVNULL)
+        except OSError:
+            return 1
+        finally:
+            RECORDING["starting"] = False
+    except Cancelled:
+        return 0
+    finally:
+        if RECORDING["proc"] is None:
+            write_state({"phase": "idle"})
+            if tmp is not None:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp)
+    proc = RECORDING["proc"]
+    write_state(dict(me(), phase="recording", kind="recording", recorder=proc.pid, recorderStart=started(proc.pid),
+                     started=int(time.time() * 1000), rect=rect, output=output))
+    if RECORDING["pending"]:
+        on_record_signal(signal.SIGINT, None)
+    proc.wait()
+    write_state({"phase": "idle"})
+    os.close(lock)
+    # From here the notice's wait ends with the session, as a screenshot's does.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    path = None
+    try:
+        if os.path.getsize(tmp) > 0:
+            stem = tr(REC_NAME) % {"date": begun.strftime("%Y-%m-%d"), "time": begun.strftime("%H.%M.%S")}
+            path = publish(os.path.dirname(tmp), stem, ".mp4", tmp)
+    except OSError:
+        path = None
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+    if path is None:
+        notify([], REC_TITLE, REC_FAILED, REC_OPEN)
+        return 1
+    if opts["save"] == "preview":
+        open_with(PREVIEW, [path])
+        return 0
+    notify([path], REC_TITLE, REC_DOCUMENTS if opts["save"] == "documents" else REC_DESKTOP, REC_OPEN, picture=False)
+    return 0
+
+
+def stop():
+    # Ends what the state names: the recording (SIGINT to its recorder), or a choice or a countdown (SIGINT to its helper).
+    # Exit 0 when something was told to end, 1 otherwise.
+    state = read_state()
+    phase = state.get("phase")
+    if phase not in ("selecting", "countdown", "recording"):
+        return 1
+    lock = take_lock()
+    if lock is not None:
+        # Nobody holds the lock: the helper that wrote this state is gone (killed); the state is left over.
+        write_state({"phase": "idle"})
+        os.close(lock)
+        return 1
+    pid, start = state.get("pid"), state.get("start")
+    if type(pid) is not int or pid <= 1 or not own(pid, start):
+        return 1
+    target, since = pid, start
+    if phase == "recording":
+        target, since = state.get("recorder"), state.get("recorderStart")
+        # The recorder this helper started: its own child, as it started (never a process found by its name).
+        if type(target) is not int or target <= 1 or not own(target, since) or parent(target) != pid:
+            return 1
+    try:
+        handle = os.pidfd_open(target)
+    except OSError:
+        return 1
+    try:
+        # Held by the pidfd now: still the same process (a pid reused between the check and the pidfd would differ here).
+        if not own(target, since):
+            return 1
+        signal.pidfd_send_signal(handle, signal.SIGINT)
+        if not select.select([handle], [], [], STOP_SECONDS)[0] and phase == "recording":
+            signal.pidfd_send_signal(handle, signal.SIGKILL)
+    except OSError:
+        return 1
+    finally:
+        os.close(handle)
+    return 0
+
+
+def parse(args):
+    # The command line as a dict, or None (usage). Each option once, each value from its list.
+    if args == ["stop"]:
+        return {"action": "stop"}
+    action = "shot"
+    if args[:1] == ["record"]:
+        action, args = "record", args[1:]
+    if not args or args[0] not in (RECORD_MODES if action == "record" else MODES):
+        return None
+    out = {"action": action, "mode": args[0], "save": "desktop", "timer": 0, "pointer": False, "mic": False, "output": ""}
+    seen, i = set(), 1
+    while i < len(args):
+        option = args[i]
+        if option in seen:
+            return None
+        seen.add(option)
+        if option in ("--save", "--timer", "--output") and i + 1 < len(args):
+            value = args[i + 1]
+            if option == "--save" and value in SAVE_TO:
+                out["save"] = value
+            elif option == "--timer" and value in TIMERS:
+                out["timer"] = int(value)
+            elif option == "--output" and action == "record" and out["mode"] == "screen" and OUTPUT_NAME.fullmatch(value):
+                out["output"] = value
+            else:
+                return None
+            i += 2
+        elif option == "--pointer" or (option == "--mic" and action == "record"):
+            out[option[2:]] = True
+            i += 1
+        else:
+            return None
+    if action == "record" and out["save"] == "clipboard":
+        out["save"] = "desktop"  # a movie is not copied (see above)
+    return out
+
+
+def raise_cancelled(signum, frame):
+    raise Cancelled()
+
+
+def main():
+    opts = parse(sys.argv[1:])
+    if opts is None:
+        sys.stderr.write("usage: grassfield-capture screen|window|selection [--save desktop|documents|clipboard|preview]"
+                         " [--timer 0|5|10] [--pointer]\n"
+                         "       grassfield-capture record screen|selection [--save desktop|documents|preview]"
+                         " [--timer 0|5|10] [--pointer] [--mic] [--output NAME]\n"
+                         "       grassfield-capture stop\n")
+        return 2
+    if opts["action"] == "stop":
+        return stop()
+    if opts["action"] == "record":
+        return record(opts)
+    # A signal (the session ending) still runs the clean-up of save_picture(): no hidden file is left on the Desktop. SIGINT
+    # (stop, during the toolbar's countdown) ends the capture without a picture.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    signal.signal(signal.SIGINT, raise_cancelled)
+    try:
+        return shot(opts)
+    except Cancelled:
+        return 0
 
 
 if __name__ == "__main__":
