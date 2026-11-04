@@ -538,6 +538,10 @@ Window {
         enabled: panel.keysLive
         onActivated: panel.goToFolder("")
     }
+    HistoryButtons {
+        tab: panel.tab
+        live: panel.keysLive && panel.expanded
+    }
     Shortcut {
         sequences: ["Ctrl+[", "Alt+Left"]
         enabled: panel.keysLive && panel.expanded

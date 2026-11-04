@@ -389,6 +389,11 @@ Window {
         onActivated: win.selectTab(win.currentIndex - 1)
         onActivatedAmbiguously: activated()
     }
+    // A mouse's side buttons and XF86Back / XF86Forward: Back and Forward over every view and the sidebar.
+    HistoryButtons {
+        tab: win.tab
+        live: !win.childIsKey
+    }
     Shortcut {
         sequences: ["Ctrl+[", "Alt+Left"]
         enabled: !win.childIsKey
