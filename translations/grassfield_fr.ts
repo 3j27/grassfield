@@ -2381,6 +2381,14 @@
         <translation>Historique du presse-papiers</translation>
     </message>
     <message>
+        <source>Previous input source</source>
+        <translation>Méthode de saisie précédente</translation>
+    </message>
+    <message>
+        <source>Next input source</source>
+        <translation>Méthode de saisie suivante</translation>
+    </message>
+    <message>
         <source>Turn Dock hiding on or off</source>
         <translation>Activer ou désactiver le masquage du Dock</translation>
     </message>
