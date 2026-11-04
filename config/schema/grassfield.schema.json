@@ -676,6 +676,36 @@
         }
       }
     },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Terminal and developer apps (Settings > Appearance > Terminal and Developer Apps, ADR-0045 OC-11): Omarchy's theme, which its terminals, editors and developer tools follow, changed with the effective appearance. ADR-0045 names these keys `appearance.terminal*`; a nested `appearance` object cannot exist in contract version 1, where `appearance` is a string (the same reason as `accent`).",
+      "properties": {
+        "matchAppearance": {
+          "type": "boolean",
+          "description": "Match Appearance: when the effective appearance changes (Light, Dark, Auto at its hours) and once at login, the shell runs `grassfield-terminal-theme light|dark`, which applies `lightTheme` or `darkTheme` with Omarchy's `omarchy-theme-set`. The Omarchy session shares that theme and its wallpaper. Default false.",
+          "default": false
+        },
+        "lightTheme": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,62}$",
+          "description": "The Omarchy theme of the light appearance, as `omarchy-theme-list` names it (\"Catppuccin Latte\"). A theme that is no longer installed is left alone (omarchy-theme-set refuses it). Default \"Catppuccin Latte\" (a light theme of Omarchy 4.0.6).",
+          "default": "Catppuccin Latte",
+          "x-grassfield": {
+            "rule": "plainText"
+          }
+        },
+        "darkTheme": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,62}$",
+          "description": "The Omarchy theme of the dark appearance, as `omarchy-theme-list` names it. Default \"Tokyo Night\" (Omarchy's own default theme).",
+          "default": "Tokyo Night",
+          "x-grassfield": {
+            "rule": "plainText"
+          }
+        }
+      }
+    },
     "keyboard": {
       "type": "object",
       "additionalProperties": false,
