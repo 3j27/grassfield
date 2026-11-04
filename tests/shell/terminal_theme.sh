@@ -4,10 +4,11 @@
 #   settings   Match Appearance off runs nothing; on, the theme of the appearance asked for (the defaults, a chosen one; a name
 #              the schema refuses, a slash in it, reads as the default)
 #   current    the theme already Omarchy's (any spelling omarchy-theme-current gives it) runs nothing
-#   env        omarchy-theme-set gets no HYPRLAND_INSTANCE_SIGNATURE (its `hyprctl reload` reaches nothing) and no
-#              DCONF_PROFILE, the stand-ins first in PATH then Omarchy's bin directory (a caller's PATH that put Omarchy's bin
-#              first is put back in that order; empty and relative entries are dropped), so its omarchy-shell calls reach the
-#              stand-in, never Omarchy's; stdin is /dev/null and it leads a process session of its own
+#   env        omarchy-theme-set gets no HYPRLAND_INSTANCE_SIGNATURE (its `hyprctl reload` reaches nothing), no
+#              DCONF_PROFILE, an OMARCHY_PATH (the packaged tree when unset), the stand-ins first in PATH then Omarchy's bin
+#              directory (a caller's PATH that put Omarchy's bin first is put back in that order; empty and relative entries
+#              are dropped), so its omarchy-shell calls reach the stand-in, never Omarchy's; stdin is /dev/null and it leads a
+#              process session of its own
 #   failure    omarchy-theme-set's exit and its last line are reported, exit 1
 #   missing    no Omarchy commands: nothing runs, exit 0; no stand-ins: nothing runs, exit 1
 #   guard      a dev session without the stand-in variable, and a real session (GRASSFIELD_SESSION=1) that sets it, run nothing
@@ -48,6 +49,7 @@ cat >"$tmp/omarchy/bin/omarchy-theme-set" <<'SH'
   echo "his=${HYPRLAND_INSTANCE_SIGNATURE-unset}"
   echo "dconf=${DCONF_PROFILE-unset}"
   echo "path=$PATH"
+  echo "omarchy=${OMARCHY_PATH-unset}"
   echo "shell=$(command -v omarchy-shell)"
   if [[ -t 0 ]]; then echo "stdin=tty"; else echo "stdin=$(wc -c)"; fi
   [[ $(cut -d' ' -f6 /proc/$$/stat) == "$$" ]] && echo "leader=yes" || echo "leader=no"
@@ -162,6 +164,10 @@ grep -q '^omarchy-shell ' "$tmp/log" && fail "Omarchy's own omarchy-shell was re
 expect "hyprctl reload saw no instance" "$(sed -n 's/^hyprctl reload //p' "$tmp/log")" "his=unset"
 expect "stdin is /dev/null" "$(field stdin)" "0"
 expect "omarchy-theme-set leads a session of its own" "$(field leader)" "yes"
+expect "OMARCHY_PATH passed on" "$(field omarchy)" "$tmp/omarchy"
+rm -f "$tmp/state"
+run dark OMARCHY_PATH=
+expect "no OMARCHY_PATH: Omarchy's packaged tree, as omarchy.lua finds it" "$(field omarchy)" "/usr/share/omarchy"
 
 echo "== failure"
 rm -f "$tmp/state"

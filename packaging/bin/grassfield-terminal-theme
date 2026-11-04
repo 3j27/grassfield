@@ -24,6 +24,8 @@
 #     never puts that directory before the stand-ins), then the rest of PATH (absolute entries only). Its calls to Omarchy's
 #     shell (applyTheme, themeTransition, the theme picker's preload) are refused by the stand-in; nothing restarts or
 #     signals grassfield-shell. Without the stand-ins nothing runs;
+#   - OMARCHY_PATH as the session gives it, else /usr/share/omarchy (as omarchy.lua finds Omarchy; omarchy-theme-set reads
+#     its themes from there);
 #   - stdin is /dev/null and it runs in a process session of its own; its output goes to a private temporary file (its last
 #     line is quoted when it fails).
 # Nothing runs when the theme is already Omarchy's (`omarchy-theme-current`), when another run holds the lock
@@ -104,8 +106,13 @@ def theme_key(name):
     return re.sub(r"<[^>]+>", "", name).strip().lower().replace(" ", "-")
 
 
+def omarchy_path():
+    """Omarchy's tree, as config/hypr/grassfield/omarchy.lua finds it (omarchy-theme-set reads its themes from there)."""
+    return os.environ.get("OMARCHY_PATH") or "/usr/share/omarchy"
+
+
 def clean_path(shims):
-    omarchy_bin = os.path.join(os.environ.get("OMARCHY_PATH") or "/usr/share/omarchy", "bin")
+    omarchy_bin = os.path.join(omarchy_path(), "bin")
     parts = [shims]
     if os.path.isdir(omarchy_bin):
         parts.append(omarchy_bin)
@@ -118,6 +125,7 @@ def clean_path(shims):
 def theme_env(path):
     env = {k: v for k, v in os.environ.items() if k not in UNSET}
     env["PATH"] = path
+    env["OMARCHY_PATH"] = omarchy_path()
     return env
 
 
