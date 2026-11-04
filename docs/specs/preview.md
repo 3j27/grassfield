@@ -7,6 +7,10 @@
 - Quick Look is a small floating panel that shows the selected file at once: Space opens it, Space or Esc closes it,
   the arrow keys move between the selected files, a button hands the file to the full viewer.
 
+- Live Text (Settings > General > Language & Region): over the text of a picture the pointer is an I-beam; a drag selects
+  words in reading order across lines, a double click selects a word, a click clears the selection; Command-C and the
+  context menu's "Copy Text" copy it, "Select All Text" selects all of it; the selection is drawn in the text highlight
+  colour. A QR code gives a data detector button at the bottom right of the picture (a link opens in the browser).
 - A file manager window (Finder) shows the opened image at once, and the arrow keys then walk the other files of its
   folder in the order of the Finder window. The opened file is always part of that walk at its sorted position, even
   when it is hidden; unreadable neighbours are skipped; an unreadable opened file shows an error in its place.
@@ -76,7 +80,7 @@ single instance.
    with a notice; PNG headers are sniffed so that a huge image gets the right message; the file is never opened for
    writing and never executed; no network access; text is `PlainText`.
 10. P10 Global menu (T1, master-prompt 5.7, ADR-0008): the viewer (not a Glance) exports File (Close Window), Edit
-    (Copy and Select All of a text file, Find…, Find Next Ctrl+G, Find Previous Ctrl+Shift+G), View (Show/Hide
+    (Copy and Select All of a text file or of the text of an image (P13), Find…, Find Next Ctrl+G, Find Previous Ctrl+Shift+G), View (Show/Hide
     Sidebar, Actual Size, Zoom to Fit, Zoom In, Zoom Out), Go (pages, previous/next file) and Tools (Rotate Left/Right)
     through DBusMenu (`qml/GlobalMenu.qml`) when `com.canonical.AppMenu.Registrar` is on the session bus at start
     (`apps/globalmenu.h`); otherwise nothing is created and the bar keeps T0. The toolbar stays. The file view is
@@ -102,11 +106,56 @@ single instance.
     stderr. Measured offscreen (software renderer, machine at load 10 of 8 cores), time to the first frame: 1,000
     images 404-648 ms, 5,000 images 513-708 ms, 20,000 images 313-645 ms (no dependence on the folder size); the list
     is ready after about 0.6-1.0 s, 1.1-1.7 s and 2.8-4.3 s.
+13. P13 Select Text in Images (ADR-0045 OC-2; macOS: Live Text; setting `preview.textInImages`, default on, Settings >
+    General > Language & Region "Select Text in Images"). The viewer and the Glance (one image view, `ImageView.qml`) read
+    the text and the QR codes of a still image (one frame, not animated) when the setting is on:
+    - Reading (`ImageText.qml`, one per window, held by `Content.qml`): once the view has rested on an image for 300 ms
+      (the arrow keys held through a folder start nothing), `PreviewApp.recognize` runs zbarimg and tesseract in the
+      background; a new image or the setting going off cancels what still runs (`cancelRecognition`); a run per image
+      shown, nothing stored. The languages are asked once per window (`tesseract --list-langs`): the traineddata of the
+      session's language (`Qt.locale().name`, "fr_FR" → `fra`, Chinese by script) then English, among the installed
+      ones ("fra+eng"); none of them installed: no text (one journal line).
+    - The backend (`src/previewapp.cpp`, `src/previewlogic.cpp` `recognitionCommand`): three allowlisted commands, each
+      program looked up on the PATH at use time, an argument vector (never a shell): `tesseract --list-langs`;
+      `tesseract stdin stdout --oem 1 --psm 3 --dpi 300 -l <langs> tsv` (Omarchy's `omarchy-capture-text` options, a whole
+      page's segmentation instead of its one block); `zbarimg -q -Sdisable -Sqrcode.enable -` (Omarchy's
+      `omarchy-capture-qr`: QR codes only, the other symbologies false-positive on screen content). `<langs>` is one to
+      four `[A-Za-z0-9_]` names joined by `+`. The image is the file of the list (an absolute path to a regular file,
+      not under /proc, /sys or /dev, an image by type), decoded by Qt in a worker thread with the viewer's caps, EXIF
+      orientation applied, scaled down to 8192 px per side, flattened on white and handed to the tool on its standard
+      input as a grey PGM: the tools never parse the file (zbarimg's ImageMagick coders, tesseract's "list of images"
+      reading of a text file), and the boxes are in the pixels Preview shows. Each run is killed after 60 s or 4 MiB of
+      output; the answer is `recognized(request, tool, exitCode, output)` (-1: not started, killed, crashed, not decoded).
+      A missing tool: `recognize` returns 0, no overlay, no chip, no message on screen, one journal line per tool
+      ("grassfield-preview: tesseract is not installed: no text selection in images").
+    - Text (`TextInImages.js`, `TextLayer.qml`): tesseract's TSV words (level 5) grouped into lines in its reading order
+      (block, paragraph, line); a word below confidence 30 and a line averaging below 50 are dropped (the grain of a
+      photograph). The layer lies on the picture with its size, centre and quarter turns, so the zoom and the rotation
+      need no mapping. Over a line (its box, 20 % of its height above and below) the pointer is an I-beam; a press on a
+      word and a drag select whole words from the anchor to the word nearest the pointer (the nearest line by distance,
+      then its nearest word), across lines in reading order; a double click selects the word; a click clears the
+      selection; a press elsewhere clears it and pans as before (the double click of Zoom to Fit stays off the text). The
+      highlight is one box per line from its first to its last selected word, the text highlight colour
+      (`Appearance.highlight`, Settings > Appearance) at `preview.textSelectionOpacity`, radius
+      `preview.textSelectionRadius`, `preview.textSelectionOutset` past the ink boxes. Copy (Ctrl+C, Super+C as
+      forwarded, Edit > Copy, the context menu's "Copy Text") puts the words on the clipboard, a space within a line and a
+      line break between lines and paragraphs; Ctrl+A, Edit > Select All and "Select All Text" select every word. The
+      context menu (right button over a picture that has text) is the app windows' `MenuPopup`.
+    - QR codes (`CodeChip.qml`): each code (at most 4, duplicates dropped; a code's own line breaks kept) gives a glass
+      capsule (`toolbar.capsule` tall, the play control's material) at the bottom right of the view, a glyph, a label and
+      a 24-pt push button concentric with it. An http(s) link without user information, space, control or format
+      character (at most 2048 characters) names its host and "Open Link" hands it to `xdg-open` through
+      `PreviewApp.openLink`, which checks it again (`isOpenableLink`, strict URL) and refuses in a dev session (ADR-0019);
+      any other code is labelled "QR Code" (numbered when there are several) and never shown, since it may be a Wi-Fi
+      password or a one-time-password secret: "Copy" puts it on the clipboard with the password-manager hint
+      (`x-kde-passwordManagerHint`, as Omarchy's `wl-copy --sensitive`), so the clipboard history (ADR-0034) skips it.
 
 ## Acceptance criteria
 | ID | Test | Level |
 |---|---|---|
-| P1 URL validation, P9 size caps, P5 caps, routing by type, P11 browse list (hidden/unreadable opened file, unreadable siblings, symlinks, a file that disappears, cancel) | `tests/unit/preview/tst_previewlogic.cpp` (gtest, 21 tests, run by `scripts/dev/test.sh`) | L0 |
+| P1 URL validation, P9 size caps, P5 caps, routing by type, P11 browse list (hidden/unreadable opened file, unreadable siblings, symlinks, a file that disappears, cancel), P13 commands and links | `tests/unit/preview/tst_previewlogic.cpp` (gtest, 24 tests, run by `scripts/dev/test.sh`) | L0 |
+| P13 languages, TSV, hit testing, selection and copied text, links, QR codes; one reading per image, cancel, missing tools; the layer on the picture, drag, I-beam, context menu, chips | `tests/unit/tst_previewtextinimages.qml` | L0 |
+| P13 the Settings row | `tests/unit/tst_settingslanguage.qml` | L0 |
 | P11-P12 viewer state, list arriving after the opened file | `tests/unit/tst_previewviewer.qml`, `tests/unit/tst_previewlisting.qml` | L0 |
 | P11 browsing with the arrows, rotate/zoom, sidebar, info, Glance arrows | `tests/visual/preview-browse.sh` (nested, standalone) | L1 |
 | lint | `scripts/dev/qmllint.sh` (covers `apps/**`) and `check-textformat.py` | L0 |
@@ -116,10 +165,14 @@ single instance.
 | P7 sizing | nested GF-REF 1920x1080 (`scripts/nestctl clients`): 1200x800 PNG 1134x796, PDF 620x796, text 720x560, video 800x520 | L1 |
 | P10 | `tests/integration/global_menus.sh` T1c: menus in the bar, Go > Next File and File > Close Window clicked with the pointer; phase B (no registrar): T0, clean log | L1 |
 | Encrypted PDF, HEIC, real audio output, compositor titlebar skip (`decorate = false`) | not testable here (no encrypted sample, no HEIC plugin, plugin not loaded in nested) | L2 (owner) |
+| P13 with the real tools: a screenshot and a photo (EXIF-rotated) with text, French and English traineddata, a QR link and a QR Wi-Fi code, Ctrl+C and Super+C pasted elsewhere, the clipboard history skipping the QR copy, Glance, tesseract or zbar removed | nested screenshots on the owner's machine (not run yet) | L1 |
 
 ## Interfaces / contracts
 - Desktop entry `org.grassfield.Preview.desktop`: `Exec=grassfield-preview %U`, MIME types of the common image, PDF,
   text, video and audio formats. Glance has no desktop entry.
+- Settings: `preview.textInImages` (boolean, default true; read with the appearance from `grassfield.json`, watched).
+- Commands (P13, looked up at use time, optional): `tesseract` with its traineddata (`tesseract-data-eng`, and the
+  session language's), `zbarimg` (`zbar`); `xdg-open` for a QR code's link.
 - Environment: `GRASSFIELD_PREVIEW_QML` (dev QML dir), `GRASSFIELD_PREVIEW_CMD` (callers: program and arguments of
   the dev build; `--glance` in it is ignored), `GRASSFIELD_CONFIG_HOME` (appearance file), `QT_QUICK_CONTROLS_STYLE`
   (default Basic, for QtPdf's views).
@@ -128,7 +181,8 @@ single instance.
 ## Dependencies (verified 2026-10-17)
 Qt 6.11.2 (Core, Gui, Qml, Quick; runtime QML modules QtQuick.Pdf from `qt6-webengine`, QtMultimedia from
 `qt6-multimedia`, image plugins from `qt6-imageformats`/`qt6-svg`), gtest (tests only). No new package in the repo
-environment. Build: `apps/preview/build-direct.sh` (g++), `CMakeLists.txt` for the package (not built here, cmake
+environment. P13 uses `tesseract`, `tesseract-data-eng` and `zbar`, Omarchy base packages (`install/omarchy-base.packages`
+of v4.0.6), at run time only and only when installed (no package dependency of Grassfield). Build: `apps/preview/build-direct.sh` (g++), `CMakeLists.txt` for the package (not built here, cmake
 is not installed).
 
 ## Known limitations
@@ -141,3 +195,17 @@ is not installed).
   take the keyboard focus (layer-shell on-demand focus): Space on the desktop closes it; click it before using
   the arrow keys.
 - libtiff prints "foo: Not a TIFF or MDI file" to stderr while Qt probes multi-page TIFF; harmless.
+- Select Text in Images (P13) reads still images only: not a page of a multi-page TIFF, not an animated GIF or WebP, not
+  a PDF (a PDF's own text is selectable through QtPdf; a scanned PDF has none), not a video frame.
+- Its accuracy is tesseract's: screenshots of plain UI text read well, photographs, handwriting, stylised or very small
+  text and text at an angle less so (the boxes are axis-aligned, a word at an angle gets a box around it); words below
+  the confidence floor are left out, so a part of a line can be missing. Only the installed traineddata are used: the
+  session's language and English (Omarchy installs `tesseract-data-eng` only; French needs `tesseract-data-fra`), no
+  automatic detection of other languages or scripts. Images larger than 8192 px per side are read scaled down.
+- Not built from macOS Live Text: the Live Text button that highlights every text of the picture, data detectors in the
+  text (dates, addresses, phone numbers), Look Up, Translate and Share in the context menu, triple click (line), the
+  selection scrolling the view when a drag reaches its edge, and Live Text in video and in Quick Look's other kinds. A
+  QR code's chip has no target-app icon (the browser's), and its glass is the window's opaque material (the play
+  control's): the blur of the picture behind it waits for ADR-0024 phase 3.
+- A QR code's link does not open from a dev session (ADR-0019 guard), and only http and https links open; any other code
+  is copied, never shown.
