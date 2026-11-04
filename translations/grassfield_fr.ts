@@ -9413,6 +9413,14 @@
         <source>The volume could not be ejected.</source>
         <translation>Le volume n’a pas pu être éjecté.</translation>
     </message>
+    <message>
+        <source>Volume</source>
+        <translation>Volume</translation>
+    </message>
+    <message>
+        <source>%1 Volume</source>
+        <translation>Volume de %1</translation>
+    </message>
 </context>
 <context>
     <name>PointerPreview</name>
