@@ -132,6 +132,8 @@ Scope {
 
     function hide(): void {
         open = false;
+        editing = false;
+        pendingDelete = null;
         viewFirst = -1;
         viewLast = -1;
     }
@@ -247,8 +249,69 @@ Scope {
         Apps.launch(rec.entry);
     }
 
+    // ---- deleting apps (ADR-0044; macOS Launchpad's jiggle, x and alert) ------------------------
+    // The Store decides what may be removed and removes it: `grassfield-store --removable` answers once (read when the icons
+    // first jiggle), `grassfield-store --page=uninstall:<entry>` asks it to remove after the alert. Nothing is removed here.
+
+    // True while the icons jiggle (a press held on an icon, or Option): removable apps show the delete badge.
+    property bool editing: false
+    // {entry: {app, name, block}} from the Store's answer; {} until it came (no badge: fail closed).
+    property var removableMap: ({})
+    // The item the alert asks about, null when there is none.
+    property var pendingDelete: null
+    readonly property string storeProgram: "grassfield-store"
+
+    function removableItem(item: var): bool {
+        return !!item && UninstallLogic.removable(removableMap, item.id);
+    }
+
+    function startEditing(): void {
+        if (editing)
+            return;
+        editing = true;
+        if (!scanRemovable.running)
+            scanRemovable.running = true;
+    }
+
+    function stopEditing(): void {
+        editing = false;
+        pendingDelete = null;
+    }
+
+    // The badge, or Delete… in the context menu: the alert comes first.
+    function requestDelete(item: var): void {
+        if (removableItem(item))
+            pendingDelete = item;
+    }
+
+    function cancelDelete(): void {
+        pendingDelete = null;
+    }
+
+    // Delete in the alert: the Store plans and removes it (its sheet only when the plan says more than the alert did).
+    function confirmDelete(): void {
+        const item = pendingDelete;
+        const args = item ? UninstallLogic.storeArguments(item.id) : null;
+        pendingDelete = null;
+        if (!args || !removableItem(item))
+            return;
+        stopEditing();
+        hide();
+        Quickshell.execDetached([storeProgram].concat(args));
+    }
+
+    Process {
+        id: scanRemovable
+
+        command: [root.storeProgram, "--removable"]
+        stdout: StdioCollector {
+            onStreamFinished: root.removableMap = UninstallLogic.parse(text)
+        }
+    }
+
     function activate(item: var): void {
-        if (item)
+        // While the icons jiggle nothing launches (macOS).
+        if (item && !editing)
             launch(item.rec);
     }
 

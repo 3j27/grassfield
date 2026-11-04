@@ -2863,6 +2863,16 @@ QtObject {
     readonly property int launcherScrollbarWidth: 4
     // estimate: overlay scroll indicator, fill colour at this opacity [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property real launcherScrollbarOpacity: 0.5
+    // estimate: the icons' rocking while apps can be deleted, degrees each side (macOS Launchpad, ADR-0044)
+    readonly property real launcherJiggleAngle: 2.2
+    // estimate: one rocking cycle in ms (macOS Launchpad, ADR-0044)
+    readonly property int launcherJigglePeriod: 190
+    // estimate: the delete badge (x) on a jiggling icon, about 22 pt (macOS Launchpad, ADR-0044)
+    readonly property int launcherDeleteBadgeSize: 22
+    // estimate: the badge's cross relative to its size (ADR-0044)
+    readonly property real launcherDeleteBadgeGlyphScale: 0.62
+    // estimate: how long a press holds before the icons jiggle, ms (macOS: a long press, ADR-0044)
+    readonly property int launcherHoldDelay: 650
     // estimate: time the scroll indicator stays after the last scroll [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]
     readonly property int launcherScrollbarIdleMs: 800
     // estimate: shortest scroll indicator, in indicator widths [ref: docs/testing/f1-reference-gaps.md § Apps launcher; docs/specs/search.md]

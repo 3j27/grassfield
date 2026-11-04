@@ -16,7 +16,26 @@ Item {
     // True while the keyboard (or a search) owns the selection ring on this cell.
     property bool selected: false
 
+    // Deleting apps (ADR-0044): while `editing` the icon jiggles (an icon of `position`, each with its own phase); `removable`
+    // shows the delete badge, whose click asks for the alert; a press held on the icon asks the owner to start editing.
+    property bool editing: false
+    property bool removable: false
+    property int position: 0
+
     signal activated
+    signal deleteRequested
+    signal holdStarted
+
+    // The jiggle's clock, 0..1 over one period; it runs only while the icon jiggles and motion is not reduced.
+    property real jiggleClock: 0
+    readonly property bool jiggling: editing && !Appearance.reduceMotion
+    NumberAnimation on jiggleClock {
+        running: root.jiggling
+        from: 0
+        to: 1
+        duration: Tokens.launcherJigglePeriod
+        loops: Animation.Infinite
+    }
 
     readonly property real labelHeight: Tokens.launcherLabelSize * Tokens.launcherLabelLineHeight * Tokens.launcherLabelLines
     readonly property real iconTop: (cellH - Tokens.launcherIconSize - Tokens.launcherLabelGap - labelHeight) / 2
@@ -60,6 +79,35 @@ Item {
         size: Tokens.launcherIconSize
         source: ThemeIcons.appIcon(root.info.rec.icon, "application-x-executable")
         asynchronous: true
+        rotation: root.jiggling ? UninstallLogic.jiggleAngle(root.jiggleClock * Tokens.launcherJigglePeriod, root.position, Tokens.launcherJiggleAngle, Tokens.launcherJigglePeriod) : 0
+    }
+
+    // The delete badge of an app the Store may remove: top-left of the icon, above the hover highlight.
+    Rectangle {
+        id: badge
+
+        visible: root.editing && root.removable
+        x: (root.cellW - Tokens.launcherIconSize) / 2 - width / 2
+        y: root.iconTop - height / 2
+        width: Tokens.launcherDeleteBadgeSize
+        height: width
+        radius: width / 2
+        color: Appearance.colors.destructive
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Delete “%1”").arg(root.info.name)
+        Accessible.onPressAction: root.deleteRequested()
+
+        Icon {
+            anchors.centerIn: parent
+            name: "close-glyph"
+            size: Math.round(badge.width * Tokens.launcherDeleteBadgeGlyphScale)
+            color: Appearance.colors.destructiveText
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.deleteRequested()
+        }
     }
 
     Text {
@@ -86,7 +134,18 @@ Item {
         id: area
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
-        onClicked: root.activated()
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        // While the icons jiggle a click launches nothing (macOS); a press held on an icon, or the right button, starts it.
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton)
+                root.holdStarted();
+            else if (!root.editing)
+                root.activated();
+        }
+        onPressAndHold: mouse => {
+            if (mouse.button === Qt.LeftButton && !root.editing)
+                root.holdStarted();
+        }
+        pressAndHoldInterval: Tokens.launcherHoldDelay
     }
 }

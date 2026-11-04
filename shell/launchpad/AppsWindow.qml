@@ -217,7 +217,18 @@ Variants {
                 const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
                 const pageRows = Model.visibleRows(grid.height, c.grid.cellH);
                 switch (event.key) {
+                case Qt.Key_Alt:
+                    // Option makes the icons jiggle (macOS Launchpad); again, or Esc, ends it.
+                    if (c.editing)
+                        c.stopEditing();
+                    else
+                        c.startEditing();
+                    return;
                 case Qt.Key_Escape:
+                    if (c.editing) {
+                        c.stopEditing();
+                        return;
+                    }
                     if (field.text !== "")
                         field.text = "";
                     else
@@ -298,6 +309,31 @@ Variants {
                 } else if (event.key === Qt.Key_Backspace && field.text !== "") {
                     focusZone("search");
                     field.text = field.text.slice(0, -1);
+                }
+            }
+
+            // "Delete “App”?" (ADR-0044): the alert over the panel; Delete asks the Store, which plans and removes.
+            Sheet {
+                id: deleteAlert
+
+                title: UninstallLogic.alertTitle(root.controller.pendingDelete ? root.controller.pendingDelete.name : "")
+                message: UninstallLogic.alertText()
+                confirmText: UninstallLogic.deleteLabel()
+                cancelText: UninstallLogic.cancelLabel()
+                destructive: true
+                returnCancels: true
+                onAccepted: root.controller.confirmDelete()
+                onCanceled: root.controller.cancelDelete()
+            }
+
+            Connections {
+                target: root.controller
+
+                function onPendingDeleteChanged(): void {
+                    if (root.controller.pendingDelete)
+                        deleteAlert.open();
+                    else if (deleteAlert.visible)
+                        deleteAlert.close();
                 }
             }
 
@@ -504,6 +540,10 @@ Variants {
                         selectedIndex: root.controller.selected
                         ringVisible: root.controller.keyNav || root.controller.searching
                         onActivated: item => root.controller.activate(item)
+                        editing: root.controller.editing
+                        removable: item => root.controller.removableItem(item)
+                        onDeleteRequested: item => root.controller.requestDelete(item)
+                        onHoldStarted: root.controller.startEditing()
                         onContentYChanged: host.updateView()
                         // The indicator shows while the user scrolls (it lingers after the movement) and when the keyboard
                         // scrolls; not when a filter or an opening resets the view.
