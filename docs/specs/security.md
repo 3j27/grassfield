@@ -835,8 +835,12 @@ Store owns `org.grassfield.Store` (`.Dev` and a digest of the state directory in
 /org/grassfield/Store, one scriptable method `Open(s page, s token)`: a second launch hands it its `--page` (printable, at most
 512 characters) and its xdg-activation token (printable ASCII, at most 256) and leaves. The window checks the page again
 (Main.qml's openPage: a section, a category, an app, a search, Installed, Updates, or `type:<type>` for a well-formed media
-type); anything else keeps the page shown. It opens a page and brings the window forward, nothing else: no plan, no
-install, no removal, no update (each still needs its own button and, for the system's packages, the helper's password).
+type, or `uninstall:<application entry>`); anything else keeps the page shown. It opens a page and brings the window forward,
+nothing else: no plan, no install, no removal, no update (each still needs its own button and, for the system's packages, the
+helper's password). `uninstall:<entry>` (the launcher's delete badge, Files' Move to Trash; ADR-0045 D1) is the same: it only
+OPENS the Store's own confirmation, "Delete “App”?" with the app's Store name, icon and the packages `-Rns` takes, Cancel the
+default; no path of a hand-over calls `uninstall`, so any session-bus peer, a Flatpak included, can ask and nothing is removed
+until the user presses Delete in the Store (tst_storeoperations test_handOverOnlyOpensTheAlert).
 
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,

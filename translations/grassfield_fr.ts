@@ -9052,6 +9052,10 @@
         <translation>Obtenir Flatpak&#xa0;?</translation>
     </message>
     <message>
+        <source>Delete “%1”?</source>
+        <translation>Supprimer « %1 » ?</translation>
+    </message>
+    <message>
         <source>“%1” can&apos;t be installed from the AUR</source>
         <translation>«&#xa0;%1&#xa0;» ne peut pas être installée depuis l’AUR</translation>
     </message>
@@ -9194,6 +9198,10 @@
     <message>
         <source>Install from the AUR</source>
         <translation>Installer depuis l&apos;AUR</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
     </message>
     <message>
         <source>OK</source>
@@ -14369,6 +14377,10 @@
         <translation>Installée avec une autre app.</translation>
     </message>
     <message>
+        <source>Removing it would also remove part of the system.</source>
+        <translation>Sa suppression retirerait aussi une partie du système.</translation>
+    </message>
+    <message>
         <source>The Store can&apos;t remove this app.</source>
         <translation>Le Store ne peut pas supprimer cette app.</translation>
     </message>
@@ -14379,22 +14391,6 @@
     <message>
         <source>The Store can&apos;t remove this app now.</source>
         <translation>Le Store ne peut pas supprimer cette app maintenant.</translation>
-    </message>
-    <message>
-        <source>Delete “%1”?</source>
-        <translation>Supprimer « %1 » ?</translation>
-    </message>
-    <message>
-        <source>The app is removed from this computer. Its documents and settings in your home folder are kept.</source>
-        <translation>L’app est supprimée de cet ordinateur. Ses documents et ses réglages dans votre dossier personnel sont conservés.</translation>
-    </message>
-    <message>
-        <source>Delete</source>
-        <translation>Supprimer</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation>Annuler</translation>
     </message>
 </context>
 <context>

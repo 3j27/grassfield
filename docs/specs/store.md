@@ -204,7 +204,10 @@ Get, Open, Uninstall (step 3; the paths of ADR-0037 b, owner ST4)
   with `omarchy-launch-webapp <url>` (its entry's file name has spaces, which uwsm refuses, S14); the Store stays open. In a
   dev session only fixture apps open (ADR-0011 dev open policy).
 - SR22. "Uninstall…" (« Désinstaller… »): in the product page's "…" menu, in Installed, and in the context menu of an installed
-  app's item (Open, Show in Store, Uninstall…). Installed's web apps that our catalog does not list (Omarchy's own, the
+  app's item (Open, Show in Store, Uninstall…). The launcher's delete badge and Files' Move to Trash on an application hand the
+  app over (`--page=uninstall:<entry>`, ADR-0045): the Store opens its own alert "Delete “App”?" (its name, its icon, the
+  packages the plan takes, Cancel the default) and removes nothing until Delete is pressed in it; a hand-over never runs an
+  operation by itself. Installed's web apps that our catalog does not list (Omarchy's own, the
   user's) open and uninstall too (SD15). Its sheet lists what goes: the packages (the plan of `pacman -Rns`, asked as `pacman -Rs --print` by the user,
   S10; for an AUR package the same plan, removed through Omarchy's `omarchy-pkg-drop` in a Terminal window that asks for
   the password), or the setup's removal recipe (named, in a Terminal window that asks for the password), the user data it deletes
