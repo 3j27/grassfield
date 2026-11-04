@@ -30,7 +30,7 @@ Window {
             accessibility: "blue", desktop: "black", menubar: "graphite", search: "blue", notifications: "red", focus: "purple", lock: "black",
             mouse: "graphite", trackpad: "graphite", printers: "graphite", keyboard: "graphite", general: "graphite", about: "graphite", storage: "graphite",
             "software-update": "graphite",
-            datetime: "blue", language: "blue", login: "graphite", privacy: "blue",
+            datetime: "blue", language: "blue", login: "graphite", privacy: "blue", fingerprint: "red", sharing: "graphite",
             "accessibility-zoom": "graphite", "accessibility-display": "blue", "accessibility-motion": "green", "accessibility-keyboard": "graphite",
             "privacy-location": "blue", "privacy-background": "graphite", "privacy-camera": "graphite", "privacy-remote-desktop": "blue",
             "privacy-screen-sharing": "purple"
@@ -71,6 +71,8 @@ Window {
         {id: "focus", group: 3, title: qsTr("Focus"), icon: "moon", keywords: qsTr("do not disturb silence quiet banners")},
         {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
         {id: "privacy", group: 4, title: qsTr("Privacy & Security"), icon: "hand", keywords: qsTr("privacy permissions location camera background screen sharing remote desktop apps flatpak portal")},
+        // ADR-0045 OC-6: in the place of macOS 27's Touch ID & Password.
+        {id: "fingerprint", group: 4, title: qsTr("Fingerprint & Security Key"), icon: "fingerprint", keywords: qsTr("fingerprint reader enrol finger security key fido2 sudo administrator unlock password")},
         {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
         {id: "mouse", group: 5, title: qsTr("Mouse"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural wheel bluetooth")},
         {id: "trackpad", group: 5, title: qsTr("Trackpad"), icon: "trackpad", keywords: qsTr("touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch")},
@@ -81,6 +83,7 @@ Window {
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
         {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
         {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")},
+        {id: "sharing", parent: "general", title: qsTr("Sharing"), icon: "remote-desktop", keywords: qsTr("sharing remote login ssh server")},
         {id: "dnd", parent: "focus", title: qsTr("Do Not Disturb"), icon: "moon", keywords: qsTr("focus silence quiet banners notifications")},
         {id: "accessibility-zoom", parent: "accessibility", title: qsTr("Zoom"), icon: "zoom-in", keywords: qsTr("accessibility magnify magnifier zoom level larger screen")},
         {id: "accessibility-display", parent: "accessibility", title: qsTr("Display"), icon: "display", keywords: qsTr("accessibility contrast transparency text size larger pointer cursor size mouse large color colour outline fill")},
@@ -780,6 +783,8 @@ Window {
                     return lockPage;
                 case "privacy":
                     return privacyPage;
+                case "fingerprint":
+                    return fingerprintPage;
                 case "privacy-location":
                 case "privacy-background":
                 case "privacy-camera":
@@ -808,6 +813,8 @@ Window {
                     return languagePage;
                 case "login":
                     return loginItemsPage;
+                case "sharing":
+                    return sharingPage;
                 }
                 return appearancePage;
             }
@@ -849,6 +856,7 @@ Window {
             backend: root.backend
             system: sys
             onInfoRequested: (topic, power) => batteryInfo.openFor(topic, power)
+            onSetupRequested: id => terminalSetup.openFor(id)
         }
     }
 
@@ -871,6 +879,18 @@ Window {
     NetworkDetailsSheet {
         id: networkDetails
         onForgetRequested: net => forgetNetwork.openFor(net)
+        onShareRequested: net => shareNetwork.openFor(net)
+        // Share Network… where Omarchy's omarchy-network-qr is installed, looked for when the sheet opens (ADR-0045 OC-10).
+        onShownChanged: {
+            if (networkDetails.shown)
+                networkDetails.canShare = root.backend.hasCommand("omarchy-network-qr");
+        }
+    }
+
+    // Wi-Fi > Details > Share Network…: the current network's QR code (ADR-0045 OC-10).
+    ShareNetworkSheet {
+        id: shareNetwork
+        backend: root.backend
     }
 
     ForgetNetworkSheet {
@@ -1064,7 +1084,60 @@ Window {
             backend: root.backend
             system: sys
             onOpen: id => root.select(id)
+            onDiskPasswordRequested: diskPassword.openSheet()
+            onSetupRequested: id => terminalSetup.openFor(id)
         }
+    }
+
+    // Privacy & Security > Disk Encryption > Change Password… through UDisks2 (ADR-0045 OC-8).
+    DiskPasswordSheet {
+        id: diskPassword
+        system: sys
+        backend: root.backend
+    }
+
+    // Fingerprint & Security Key (ADR-0045 OC-6): the pane, the enrolment sheet and the deletion's confirmation.
+    Component {
+        id: fingerprintPage
+        FingerprintPage {
+            backend: root.backend
+            system: sys
+            onSetupRequested: id => terminalSetup.openFor(id)
+            onEnrollRequested: (finger, stages) => fingerprintEnroll.openFor(finger, stages)
+            onDeleteRequested: finger => deleteFingerprint.openFor(finger)
+        }
+    }
+
+    FingerprintEnrollSheet {
+        id: fingerprintEnroll
+        backend: root.backend
+        system: sys
+        onEnded: (page.item as FingerprintPage)?.refresh()
+    }
+
+    // Delete…: asked first, as macOS asks before it deletes a fingerprint.
+    Sheet {
+        id: deleteFingerprint
+        property string finger: ""
+        title: qsTr("Delete the fingerprint “%1”?").arg(fingerprintEnroll.fingerText(deleteFingerprint.finger))
+        message: qsTr("This finger will no longer unlock this computer, approve administrator prompts or run sudo.")
+        confirmText: qsTr("Delete")
+        destructive: true
+
+        function openFor(finger: string): void {
+            deleteFingerprint.finger = finger;
+            deleteFingerprint.open();
+        }
+
+        onAccepted: sys.act("delete fingerprint", {op: "fprint.delete", finger: deleteFingerprint.finger}, "fprint.act")
+    }
+
+    // The setups only Omarchy's terminal can do, behind the sheet that says why (ADR-0045 OC-0.4, OC-0.7): Keyboard's
+    // Dictation, Battery's Hibernation, Privacy & Security's disk password without UDisks2, Fingerprint & Security Key, Sharing's
+    // first Remote Login.
+    TerminalSetupSheet {
+        id: terminalSetup
+        system: sys
     }
 
     // A category of Privacy & Security: the section id names its key in the permission state (Privacy.js).
@@ -1137,6 +1210,7 @@ Window {
             store: cfg
             onShortcutsRequested: list => keyboardShortcuts.openWith(list, root.backend.bindingsFile)
             onSourcesRequested: (sources, layouts) => inputSources.openWith(sources, layouts)
+            onSetupRequested: id => terminalSetup.openFor(id)
         }
     }
 
@@ -1264,6 +1338,16 @@ Window {
         }
     }
 
+    // General > Sharing: Remote Login (ADR-0045 OC-7).
+    Component {
+        id: sharingPage
+        SharingPage {
+            backend: root.backend
+            system: sys
+            onSetupRequested: id => terminalSetup.openFor(id)
+        }
+    }
+
     // Login Items > +: a sheet over the whole window; the page writes the choice.
     AppPickerSheet {
         id: appPicker
@@ -1352,7 +1436,8 @@ Window {
     readonly property list<Item> sheets: [batteryInfo, wifiPassword, networkDetails, forgetNetwork, bluetoothDevice, forgetDevice,
         displayKeep, displayArrange, printerSheet, removePrinter, addPrinter, keyboardShortcuts, inputSources, layoutPicker,
         volumesSheet, appPicker, timeSheet, clockSheet, deleteSearchHistory, clearClipboardHistory, screenSaverSheet,
-        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet, finishSheet]
+        lockMessageSheet, batteryOptionsSheet, screenCornersSheet, updateSheet, logOutSheet, restartSheet, finishSheet, shareNetwork,
+        diskPassword, fingerprintEnroll, deleteFingerprint, terminalSetup]
 
     Instantiator {
         model: root.sheets

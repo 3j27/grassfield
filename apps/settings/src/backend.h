@@ -54,6 +54,8 @@ class Backend : public QObject
     Q_PROPERTY(QString homeDir READ homeDir CONSTANT)
     // XDG_STATE_HOME (else ~/.local/state): Battery reads Omarchy's remembered power profiles there (read-only).
     Q_PROPERTY(QString stateDir READ stateDir CONSTANT)
+    // The account's login name ($USER, else the home folder's name): Sharing > Remote Login's "ssh <user>@<host>" (ADR-0045).
+    Q_PROPERTY(QString userName READ userName CONSTANT)
     // Language & Region: Omarchy's language command is installed (found on PATH, not run; Omarchy 4.0.4 has none).
     Q_PROPERTY(bool omarchyLanguage READ omarchyLanguage CONSTANT)
     // Software Update (ADR-0033 d; docs/specs/updates.md U10): the shell's software-update.json (runmode.h stateDir), read
@@ -100,6 +102,11 @@ public:
     {
         const QString xdg = qEnvironmentVariable("XDG_STATE_HOME");
         return QDir::cleanPath(xdg.startsWith(QLatin1Char('/')) ? xdg : homeDir() + QStringLiteral("/.local/state"));
+    }
+    QString userName() const
+    {
+        const QString user = qEnvironmentVariable("USER");
+        return user.isEmpty() ? QDir(homeDir()).dirName() : user;
     }
     bool omarchyLanguage() const;
     QString softwareUpdateFile() const;

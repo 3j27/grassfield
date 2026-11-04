@@ -2196,6 +2196,22 @@ QtObject {
     readonly property int settingsPrinterStatusBaseline: 38
     // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsPushRowHeight: 44
+    // estimate: one module of Share Network's QR code, 4 px, so a version 4 code with its quiet zone (41 modules) is 164 px, read by a phone's camera at arm's length (ADR-0045 OC-10)
+    readonly property int settingsQrModule: 4
+    // a QR code's dark modules are black on white whatever the appearance: phone cameras read light-on-dark codes poorly (ADR-0045 OC-10)
+    readonly property string settingsQrDark: "#000000"
+    // a QR code's light modules and quiet zone are white whatever the appearance (ADR-0045 OC-10)
+    readonly property string settingsQrLight: "#ffffff"
+    // estimate: the white card of Share Network's QR code, the corner of the wallpaper preview's picture (ADR-0045 OC-10)
+    readonly property int settingsQrRadius: 6
+    // estimate: how long omarchy-network-qr may take (three nmcli reads and qrencode) before the sheet says it timed out (ADR-0045 OC-10)
+    readonly property int settingsQrQueryMs: 15000
+    // estimate: the fingerprint enrolment sheet's ring around the fingerprint glyph, as large as the sheet's picture of macOS 27's enrolment (ADR-0045 OC-0.7)
+    readonly property int settingsEnrollRingSize: 112
+    // estimate: the fingerprint glyph inside the enrolment ring (ADR-0045 OC-0.7)
+    readonly property int settingsEnrollGlyphSize: 64
+    // estimate: the enrolment ring's stroke, heavier than the download ring's so each accepted touch reads at a glance (ADR-0045 OC-0.7)
+    readonly property int settingsEnrollRingStroke: 6
 
     // estimate: how long a reload of the session configuration waits for pacman's database lock to go before it goes ahead anyway, under a display trial's 15 s so the trial's countdown is not what ends the wait (ADR-0041 step 2b, I-2's residual) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
     readonly property int sessionConfigLockWaitMs: 10000
