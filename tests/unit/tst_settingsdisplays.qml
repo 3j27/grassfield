@@ -58,7 +58,9 @@ TestCase {
                 actions.push(argv);
                 return true;
             }
+            property var queries: []
             function query(argv: var, tag: string): void {
+                queries.push({argv: argv, tag: tag});
             }
         }
     }
@@ -344,6 +346,106 @@ TestCase {
         t.page.refresh();
         compare(t.page.backlight.level, 0.8);
         compare(slider.shown, 0.8);
+    }
+
+    // ADR-0045 OC-4: an external display's brightness over DDC/CI, Omarchy's command; the connector alone reads it.
+    function test_ddcCommands() {
+        compare(System.ddcBrightnessQuery("DP-1"), ["omarchy-brightness-display-ddc", "DP-1"]);
+        compare(System.ddcBrightnessQuery("HDMI-A-1"), ["omarchy-brightness-display-ddc", "HDMI-A-1"]);
+        compare(System.setDdcBrightness("DP-1", 0.456), ["omarchy-brightness-display-ddc", "DP-1", "46%"]);
+        compare(System.setDdcBrightness("DP-1", 1.4), ["omarchy-brightness-display-ddc", "DP-1", "100%"]);
+        compare(System.setDdcBrightness("DP-1", -1), ["omarchy-brightness-display-ddc", "DP-1", "0%"]);
+        for (const bad of ["", "-x", "DP-", "DP1", "DP-1 ", "../DP-1", "DP-1;rm", "eDP-1", "LVDS-1", undefined])
+            compare(System.ddcBrightnessQuery(bad), null, JSON.stringify(bad));
+        compare(System.setDdcBrightness("-d", 0.5), null);
+        compare(System.setDdcBrightness("DP-1", NaN), null);
+        compare(System.parseDdcLevel("40\n"), 0.4);
+        compare(System.parseDdcLevel("100"), 1);
+        compare(System.parseDdcLevel("0"), 0);
+        for (const bad of ["", "101", "40%", "-1", "4.5", "abc", "40\n41"])
+            compare(System.parseDdcLevel(bad), -1, JSON.stringify(bad));
+    }
+
+    // The external display's row is the built-in one's (LevelRow): shown once the display answered, nothing before or without an
+    // answer (macOS shows no slider for a display it cannot control); a drag sends one command at a time, the last value once the
+    // running one answered; then the level is read again. The built-in panel is never asked over DDC/CI.
+    function test_page_ddcBrightness() {
+        const t = makePage(false, [panelIpc, externalIpc]);
+        compare(t.page.monitorName, "eDP-1");
+        compare(t.backend.queries.length, 0, "the built-in panel is not asked");
+        verify(t.page.hasBrightness, "the backlight's row");
+        t.page.selected = "DP-1";
+        compare(t.backend.queries.length, 1);
+        compare(t.backend.queries[0].argv, ["omarchy-brightness-display-ddc", "DP-1"]);
+        compare(t.backend.queries[0].tag, "display.ddc@DP-1");
+        verify(!t.page.hasBrightness, "no row before the display answered");
+        // The page's own refresh never asks again (each read is i2c traffic).
+        t.page.refresh();
+        t.page.refresh();
+        compare(t.backend.queries.length, 1);
+        // An answer for another display, or a display that does not answer: still no row.
+        t.backend.finished("display.ddc@HDMI-A-1", true, "70\n");
+        verify(!t.page.hasBrightness);
+        t.backend.finished("display.ddc@DP-1", false, "");
+        verify(!t.page.hasBrightness);
+        t.backend.finished("display.ddc@DP-1", true, "40\n");
+        verify(t.page.hasBrightness);
+        compare(t.page.ddc, {output: "DP-1", level: 0.4});
+        const row = find(t.page, i => i.title === "Brightness" && i.busy !== undefined);
+        verify(row);
+        verify(row.oneAtATime);
+        compare(row.value, 0.4);
+        const slider = find(row, i => i.moved !== undefined && i.local !== undefined);
+        verify(slider);
+        slider.local = 0.6;
+        slider.moved(0.6);
+        compare(t.backend.actions, [["omarchy-brightness-display-ddc", "DP-1", "60%"]]);
+        verify(row.running);
+        // More of the drag while it runs: nothing more is started, whatever the throttle says.
+        slider.local = 0.7;
+        slider.moved(0.7);
+        slider.local = 0.85;
+        slider.moved(0.85);
+        wait(Tokens.settingsVolumeApplyMs * 2);
+        compare(t.backend.actions.length, 1, "one command at a time");
+        // A reading taken meanwhile does not move the knob.
+        t.backend.finished("display.ddc@DP-1", true, "40\n");
+        compare(t.page.ddc.level, 0.4);
+        compare(slider.shown, 0.85);
+        // The running one answers: only the last value goes.
+        t.backend.finished("display.brightness", true, "60\n");
+        compare(t.backend.actions.length, 2);
+        compare(t.backend.actions[1], ["omarchy-brightness-display-ddc", "DP-1", "85%"]);
+        t.backend.finished("display.brightness", true, "85\n");
+        tryVerify(() => !row.busy);
+        // The drag ended: the display's level is read again.
+        compare(t.backend.queries.length, 2);
+        compare(t.backend.queries[1].argv, ["omarchy-brightness-display-ddc", "DP-1"]);
+        t.backend.finished("display.ddc@DP-1", true, "85\n");
+        compare(t.page.ddc.level, 0.85);
+        // Back to the built-in panel: its backlight, no DDC/CI row.
+        t.page.selected = "eDP-1";
+        compare(t.page.ddc, null);
+        verify(!row.oneAtATime);
+        compare(row.value, 0.5);
+        compare(t.backend.queries.length, 2);
+    }
+
+    // A dev session takes no DDC/CI write either (SystemService's guard; the Backend's guard refuses the read there).
+    function test_page_ddcBrightnessDev() {
+        const t = makePage(true, [externalIpc]);
+        compare(t.backend.queries.length, 1);
+        t.backend.finished("display.ddc@DP-1", true, "40\n");
+        verify(t.page.hasBrightness);
+        compare(t.service.act("brightness", System.setDdcBrightness("DP-1", 0.3), "display.brightness"), false);
+        compare(t.backend.actions.length, 0);
+        const row = find(t.page, i => i.title === "Brightness" && i.busy !== undefined);
+        const slider = find(row, i => i.moved !== undefined && i.local !== undefined);
+        slider.local = 0.9;
+        slider.moved(0.9);
+        compare(t.backend.actions.length, 0);
+        verify(!row.running);
+        verify(t.service.suppressedNote);
     }
 
     // The choice in use keeps its accent ring; the keyboard's focus is a ring of its own outside it.

@@ -262,6 +262,37 @@ TEST(ActionGuard, BrightnessTakesOneBacklightAndAPercentage)
     EXPECT_FALSE(isReadOnlyQuery(cmd("intel_backlight", "50%")));
 }
 
+// Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command with one connector and one whole
+// percentage. Its read (the connector alone) is not a query of the dev guard: a dev session never asks the owner's displays.
+TEST(ActionGuard, DdcBrightnessTakesOneConnectorAndAPercentage)
+{
+    const QString d = QStringLiteral("omarchy-brightness-display-ddc");
+    const auto cmd = [&](const char *output, const char *value) {
+        return QStringList{d, QString::fromLatin1(output), QString::fromLatin1(value)};
+    };
+    EXPECT_TRUE(isActionProgram(d));
+    for (const char *ok : {"0%", "1%", "50%", "100%"})
+        EXPECT_TRUE(isAllowedAction(cmd("DP-1", ok))) << ok;
+    for (const char *ok : {"HDMI-A-1", "DP-10", "DVI-D-2", "eDP-1", "Unknown-1"})
+        EXPECT_TRUE(isAllowedAction(cmd(ok, "40%"))) << ok;
+    // The keys' steps (the shell's only), raw values, malformed percentages.
+    for (const char *no : {"+5%", "5%-", "101%", "050%", "50", "-5%", "50 %", "%", "50%\n", ""})
+        EXPECT_FALSE(isAllowedAction(cmd("DP-1", no))) << no;
+    // A name that is an option, a path, not a connector.
+    for (const char *no : {"", "-x", "--help", "DP-", "DP1", "1-DP", "DP-1 ", "DP-1\n", "../DP-1", "DP/1", "DP-1;rm", "D P-1", "DP-12345"})
+        EXPECT_FALSE(isAllowedAction(cmd(no, "50%"))) << no;
+    EXPECT_FALSE(isConnectorName(QStringLiteral("A").repeated(25) + QStringLiteral("-1")));
+    EXPECT_TRUE(isConnectorName(QStringLiteral("HDMI-A-1")));
+    EXPECT_FALSE(isAllowedAction({d}));
+    EXPECT_FALSE(isAllowedAction({d, QStringLiteral("DP-1")}));
+    EXPECT_FALSE(isAllowedAction({d, QStringLiteral("DP-1"), QStringLiteral("50%"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/omarchy-brightness-display-ddc"), QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("omarchy-brightness-display"), QStringLiteral("--monitor"), QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("ddcutil"), QStringLiteral("setvcp"), QStringLiteral("10"), QStringLiteral("50")}));
+    EXPECT_FALSE(isReadOnlyQuery({d, QStringLiteral("DP-1")}));
+    EXPECT_FALSE(isReadOnlyQuery(cmd("DP-1", "50%")));
+}
+
 // Printers (ADR-0030): the CUPS reads are exact; the user's defaults are the only lpoptions actions.
 TEST(PrinterGuard, TheReadsAreExactAndChangeNothing)
 {

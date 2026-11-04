@@ -9,7 +9,8 @@ import "System.js" as System
 // built-in panel, Refresh rate and Rotation, and Arrange… with several displays. The displays come from the state the shell
 // publishes (ADR-0031: this app never talks to Hyprland). A change is a trial: the page writes the trial file, the shell applies
 // it and takes it back after 15 seconds unless the sheet's Keep came first (Keep writes displays.conf, which the session reads
-// at every start). Brightness goes through SystemService (`brightnessctl`, never in a dev session).
+// at every start). Brightness goes through SystemService (`brightnessctl`, never in a dev session); an external display's
+// over DDC/CI (ADR-0045 OC-4) is Omarchy's `omarchy-brightness-display-ddc`, shown only when the display answers it.
 SettingsPage {
     id: root
 
@@ -52,6 +53,29 @@ SettingsPage {
     // The backlight as last read. A drag in progress keeps its own value (as Sound's volume does): the reading taken meanwhile
     // would move the knob back under the pointer; the next one follows.
     property var backlight: null
+    // The selected external display's brightness over DDC/CI ({output, level}), or null while it has not answered: no slider and
+    // no message (macOS shows none for a display it cannot control). Read when the display is selected and after a drag, never
+    // on the page's refresh (each read is i2c traffic to the display; DDC/CI has no change event).
+    property var ddc: null
+    readonly property bool builtIn: root.monitor !== null && Displays.isBuiltIn(root.monitor)
+    // The selected display's name: `monitor` is a new object at every reading of the state, its name changes only with the
+    // selection (or a replug).
+    readonly property string monitorName: root.monitor !== null ? root.monitor.name : ""
+    // The Brightness row is shown: the built-in panel with a backlight, or an external display that answered.
+    readonly property bool hasBrightness: root.monitor !== null
+        && (root.builtIn ? root.backlight !== null : root.ddc !== null && root.ddc.output === root.monitor.name)
+
+    // Ask the selected external display its level (the answer comes back tagged with its name).
+    function readDdc(): void {
+        const name = root.builtIn ? "" : root.monitorName;
+        if (root.ddc !== null && root.ddc.output !== name)
+            root.ddc = null;
+        const argv = System.ddcBrightnessQuery(name);
+        if (argv !== null)
+            root.system.query(argv, "display.ddc@" + name);
+    }
+
+    onMonitorNameChanged: root.readDdc()
 
     // ---- the main display (ADR-0044) ----
     // The outputs as the shell identifies them: Hyprland's make, model and serial from the state the shell publishes (Qt's
@@ -171,6 +195,29 @@ SettingsPage {
             if (path === root.backend.displaysStateFile)
                 root.refresh();
         }
+
+        // The DDC/CI level of the display named in the tag; a display that did not answer has none. A drag in progress keeps
+        // its own value.
+        function onFinished(tag: string, ok: bool, output: string): void {
+            if (!tag.startsWith("display.ddc@") || brightness.busy)
+                return;
+            const name = tag.slice("display.ddc@".length);
+            if (root.builtIn || root.monitorName !== name)
+                return;
+            const level = ok ? System.parseDdcLevel(output) : -1;
+            root.ddc = level >= 0 ? {output: name, level: level} : null;
+        }
+    }
+
+    // A drag on an external display ended (its last write answered): read the level the display took (the command keeps it
+    // within 1..100).
+    Connections {
+        target: brightness
+
+        function onBusyChanged(): void {
+            if (!brightness.busy && !root.builtIn)
+                root.readDdc();
+        }
     }
 
     Timer {
@@ -239,8 +286,10 @@ SettingsPage {
         }
     }
 
+    // The same row for the built-in panel (its backlight) and for an external display that answers DDC/CI (one command at a
+    // time: a DDC write takes 50 to 200 ms; the last value of a drag is sent).
     SettingsGroup {
-        visible: root.monitor !== null && root.backlight !== null && Displays.isBuiltIn(root.monitor)
+        visible: root.hasBrightness
 
         LevelRow {
             id: brightness
@@ -252,10 +301,12 @@ SettingsPage {
             highGlyphSize: Tokens.settingsBrightnessHighGlyphSize
             sliderX: Tokens.settingsBrightnessSliderX
             sliderWidth: Tokens.settingsBrightnessSliderWidth
-            value: root.backlight ? root.backlight.level : 0
+            value: root.builtIn ? (root.backlight ? root.backlight.level : 0) : (root.ddc ? root.ddc.level : 0)
             what: "brightness"
             tag: "display.brightness"
-            command: v => System.setBrightness(root.backlight ? root.backlight.device : "", v)
+            oneAtATime: !root.builtIn
+            command: v => root.builtIn ? System.setBrightness(root.backlight ? root.backlight.device : "", v)
+                : System.setDdcBrightness(root.ddc ? root.ddc.output : "", v)
         }
     }
 

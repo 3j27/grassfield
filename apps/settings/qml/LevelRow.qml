@@ -24,10 +24,15 @@ SettingsRow {
     property real highGlyphSize: Tokens.settingsSliderRowGlyphSize
     property real sliderX: Tokens.settingsSliderRowSliderX
     property real sliderWidth: Tokens.settingsSliderRowSliderWidth
+    // One command at a time (an external display over DDC/CI, whose writes take 50 to 200 ms: ADR-0045 OC-4): the next value
+    // waits for the answer of the one running, and only the last value moved to is sent then.
+    property bool oneAtATime: false
 
     // A drag is being applied: the page keeps its older reading out of the slider meanwhile.
-    readonly property bool busy: !isNaN(root.pending) || throttle.running
+    readonly property bool busy: !isNaN(root.pending) || throttle.running || root.running
     property real pending: NaN
+    // A command of this row runs (oneAtATime).
+    property bool running: false
     // Below the separator.
     readonly property real contentTop: root.Positioner.index > 0 ? 1 : 0
     readonly property real center: root.contentTop + Tokens.settingsSliderRowCenter
@@ -36,11 +41,31 @@ SettingsRow {
     labelsOffset: Tokens.settingsSliderRowTitleOffset
 
     function flush(): void {
+        // The running command's answer sends what waits.
+        if (root.running)
+            return;
         const v = root.pending;
-        root.pending = NaN;
-        if (!root.command || !root.system.act(root.what, root.command(v), root.tag))
-            slider.local = NaN;
+        // The throttle first, so the row stays busy from one write to the next (the page never sees a drag end in between); a
+        // command of its own before the write, so an answer that came at once is not missed.
         throttle.start();
+        root.running = root.oneAtATime;
+        root.pending = NaN;
+        if (!root.command || !root.system.act(root.what, root.command(v), root.tag)) {
+            root.running = false;
+            slider.local = NaN;
+        }
+    }
+
+    Connections {
+        target: root.system ? root.system.backend : null
+
+        function onFinished(tag: string, ok: bool, output: string): void {
+            if (tag !== root.tag || !root.running)
+                return;
+            root.running = false;
+            if (!isNaN(root.pending))
+                root.flush();
+        }
     }
 
     Icon {
