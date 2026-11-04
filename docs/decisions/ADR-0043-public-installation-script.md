@@ -166,8 +166,34 @@ and a signed `[grassfield]` repository built with a throwaway key, `render.py` r
 | IN7 | Languages | EN + FR · EN | EN + FR | **EN + FR** |
 | IN8 | Where the checksum is published | host, README, site | all three | **host, README and site** |
 
+### h. Activation (owner decision of 2026-11-04)
+The owner decided to publish the repository at `https://packages.grassfield.site` now, **unannounced** (no link from the site,
+the site stays noindex), before the legal review, which stays mandatory before any public announcement. This amends ADR-0033
+h's "activated after the legal review" (recorded there too). `repository.conf` now carries
+`GRASSFIELD_SIGNING_FINGERPRINT=E4921A382C349308BAA50D2F44C31B5D862EBEFA` and `grassfield-signing-key.asc` holds the owner's
+public key (v4 EdDSA, one primary, no subkey), so `just render-install` renders the real script (sha256
+`c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2`, to be recomputed whenever the template, the conf or `VERSION` changes: all three are inputs of the render, and `VERSION` decides the default channel; the checksum is served from the same host as the script, a known limit: it guards against a damaged download, not a compromised host, until the site and the README carry an independent copy). Rendered files are build output (`build/install/`, ignored
+by the repository) and are not committed.
+
+Bucket keys, so that the documented commands work (the bucket is `grassfield`, objects are served at the base):
+`install/grassfield-install.sh` and `install/grassfield-install.sh.sha256` (both `Cache-Control: no-cache`), and
+`grassfield-signing-key.asc` at the root (the script's host-file fallback, `$GF_BASE/grassfield-signing-key.asc`). The owner
+uploads them with `wrangler r2 object put` (commands in `docs/owner-setup/hosting-and-key.md`); the packages arrive with the
+first run of grassfield-packages' publishing job.
+
+**Installer default channel (owner decision O15b of 2026-11-04, ADR-0033).** `render.py` takes the default channel from `VERSION`
+(`--version-file`, default the repository's): `X.Y.Z-betaN` / `X.Y.Z-rcN` renders `CHANNEL=beta` and `GF_STABLE_EMPTY=1`, a plain
+`X.Y.Z` renders `CHANNEL=stable` and `GF_STABLE_EMPTY=0`, anything else is refused. While stable is empty, `--channel stable` (and
+`--dry-run --channel stable`) exits 2 from argument parsing, before the log, root, network or any file is touched, with a message in
+English and French; `--uninstall` is not affected. The first published script is rendered from `1.0.0-rc2`.
+
+**The channel rule on the installed system (ADR-0033 O15b, same decision).** The render-time default above is the script's half.
+The installed half is one rule, applied by Settings, `grassfield-channel-set`, the root helper's `gf_set` and the Store: an installed
+`VERSION` that is a prerelease, or missing, empty, unreadable or malformed, can only follow beta; a plain `X.Y.Z` can follow stable.
+The script ends with `grassfield-channel-set beta` on a prerelease, which the rule always allows.
+
 ## Consequences
-- `just render-install` fails today by design (placeholder host, empty fingerprint): the first release needs O8 and O11.
+- `just render-install` refuses a conf with the `.invalid` host or an empty fingerprint, by design. It succeeds since 2026-11-04 (h).
 - A source build (`makepkg -si`, the owner's flow) is unaffected; the script targets users of the repository.
 - The default install changes the boot screen and rebuilds the boot image (root, minutes): ADR-0042's owner-run guide
   (`docs/owner-setup/login-boot-themes.md`) remains the reference for the fallback and for the manual revert; the owner's

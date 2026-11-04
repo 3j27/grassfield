@@ -186,7 +186,7 @@ SettingsPage {
 
     function runFix(): void {
         if (root.fix === "setup")
-            root.updates.setChannel("stable", "setup");
+            root.updates.setChannel(root.updates.defaultChannel, "setup");
         else if (root.fix === "repair")
             root.updates.setChannel("repair", "repair");
         else if (root.fix === "off")

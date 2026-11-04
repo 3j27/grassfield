@@ -26,11 +26,15 @@ QString buildBase(const QByteArray &repositoryConf);
 // the helper, the update checker and Settings (SoftwareUpdateLogic.buildReady) use. Without it the catalog could not be
 // verified, so the Store asks nothing of the build's host.
 bool buildHasKey(const QByteArray &repositoryConf);
-// The build's base and `stable`.
-Channel defaultChannel(const QString &buildBase);
+// The channel a build follows when none is set up, from the installed VERSION (/usr/share/grassfield/VERSION): `stable` for a
+// plain X.Y.Z, `beta` for a -betaN / -rcN version and for a missing, empty or malformed one (ADR-0033 O15b: stable carries
+// nothing until a plain version is published, and beta carries every release).
+QString releaseChannelOf(const QByteArray &versionText);
+// The build's base and the channel (`stable` by default).
+Channel defaultChannel(const QString &buildBase, const QString &name = QStringLiteral("stable"));
 // The channel of the installed repository.conf: its base when the build names a key (buildHasKey), else no base at all
 // (nothing fetchable, nothing requested).
-Channel buildChannel(const QByteArray &repositoryConf);
+Channel buildChannel(const QByteArray &repositoryConf, const QByteArray &versionText);
 // False while the base is a placeholder (a host under .invalid, ADR-0033 g) or not https.
 bool fetchable(const Channel &channel);
 

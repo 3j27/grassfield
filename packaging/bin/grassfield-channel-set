@@ -2,7 +2,8 @@
 # Grassfield's Software Update channel (ADR-0033 c.3, owner decisions O1 and O4; docs/specs/updates.md U15).
 #
 #   grassfield-channel-set           print the channel: stable, beta, custom, repair or off
-#   grassfield-channel-set stable    set Grassfield updates up, or leave the beta (installs nothing: pacman never downgrades)
+#   grassfield-channel-set stable    set Grassfield updates up, or leave the beta (installs nothing: pacman never downgrades);
+#                                    refused (exit 1) while the installed VERSION is a prerelease, missing or malformed
 #   grassfield-channel-set beta      switch to the beta channel (installs nothing; "Update Now" does)
 #   grassfield-channel-set repair    put [grassfield] back after Omarchy rewrote pacman.conf, or rewrite a custom file
 #   grassfield-channel-set off       turn Grassfield updates off: no [grassfield], no Grassfield key left in pacman
@@ -22,6 +23,7 @@ set -uo pipefail
 
 helper=/usr/lib/grassfield/grassfield-channel-helper
 repository=/usr/share/grassfield/pacman/repository.conf
+version_file=/usr/share/grassfield/VERSION
 pacman_conf=/etc/pacman.conf
 include=/etc/pacman.d/grassfield.conf
 hook=/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman
@@ -76,6 +78,28 @@ state() {
     "$base/beta/\$arch") echo beta ;;
     *) echo custom ;;
   esac
+}
+
+# The channel rule (ADR-0033 O15b, owner decision of 2026-11-04, the macOS model): an installed VERSION that is a prerelease
+# (-betaN, -rcN), or missing, empty, unreadable or malformed, can only follow beta; beta carries every release, a plain version
+# goes to stable and to beta when it is newer. Once a plain X.Y.Z is installed, stable is available. Strict: the whole file,
+# trimmed, must be X.Y.Z (one line).
+stable_allowed() {
+  local v
+  [[ -f "$version_file" && -r "$version_file" ]] || return 1
+  v=$(<"$version_file") || return 1
+  v=${v#"${v%%[![:space:]]*}"}
+  v=${v%"${v##*[![:space:]]}"}
+  [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+# The channel a set up chooses when the caller does not say (and the one repair falls back to).
+fallback_channel() {
+  stable_allowed && echo stable || echo beta
+}
+
+require_stable_allowed() {
+  stable_allowed || fail "beta updates stay on while a beta version of Grassfield is installed (stable has no release yet): you can turn them off once the release is installed"
 }
 
 require_build() {
@@ -151,6 +175,7 @@ case ${1-} in
     ;;
   stable | beta)
     require_build
+    [[ $1 == stable ]] && require_stable_allowed
     require_no_update
     run_helper set "$1"
     link_hook
@@ -164,7 +189,7 @@ case ${1-} in
           run_helper restore
         else
           require_build
-          run_helper set stable
+          run_helper set "$(fallback_channel)"
         fi
         ;;
       custom)
@@ -172,11 +197,11 @@ case ${1-} in
         require_no_update
         case $(primary) in
           */beta/\$arch) run_helper set beta ;;
-          *) run_helper set stable ;;
+          *) run_helper set "$(fallback_channel)" ;;
         esac
         ;;
       stable | beta) echo "grassfield-channel-set: nothing to repair ($current)" ;;
-      *) fail "Grassfield updates are off: grassfield-channel-set stable sets them up" ;;
+      *) fail "Grassfield updates are off: grassfield-channel-set $(fallback_channel) sets them up" ;;
     esac
     link_hook
     ;;

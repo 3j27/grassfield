@@ -125,7 +125,7 @@ conf() { printf 'GRASSFIELD_REPO_BASE=%s\nGRASSFIELD_REPO_MIRRORS=%s\nGRASSFIELD
 gen() { rm -rf "$W/gen" && python3 -I "$G" --conf "$1" --key "$2" --out "$W/gen" 2>>"$W/log"; }
 conf file:///srv/primary file:///srv/mirror file:///srv/old "$K1" >"$W/test.conf"
 conf file:///srv/newhost "" file:///srv/primary "$K1" >"$W/newhost.conf"
-expect "generate.py: the shipped repository.conf (placeholder base, no key) is a valid keyless build" gen /src/packaging/pacman/repository.conf /src/packaging/pacman/grassfield-signing-key.asc
+expect "generate.py: the shipped repository.conf (packages.grassfield.site, the owner's key E4921A38, activated 2026-11-04) is a valid keyed build" gen /src/packaging/pacman/repository.conf /src/packaging/pacman/grassfield-signing-key.asc
 expect "generate.py: the test build (file:// base, mirror, previous base, K1)" gen "$W/test.conf" "$W/k1.asc"
 expect "templates: SigLevel = Required, the primary then the mirror, \$arch kept" bash -c "grep -v '^#' $W/gen/grassfield-beta.conf | tr '\n' '|' | grep -qxF 'SigLevel = Required|Server = file:///srv/primary/beta/\$arch|Server = file:///srv/mirror/beta/\$arch|'"
 conf file:///srv/primary "" "" "$KR" >"$W/bad.conf"
@@ -198,6 +198,7 @@ mk_desktop() { # pkgver repository.conf
   cp /src/packaging/pacman/{grassfield-channel-helper,grassfield-channel-scriptlet,grassfield-channel.sh,org.grassfield.packages.policy,pre-refresh-pacman} \
     /src/packaging/bin/{grassfield-channel-set,grassfield-update-check} "$W"/gen/* "$d/files/"
   cp /src/packaging/arch/grassfield-desktop.install "$d/"
+  echo 1.0.0 >"$d/files/VERSION" # a plain version: stable is allowed (ADR-0033 O15b); the rule's cases below change the installed file
   cat >"$d/PKGBUILD" <<EOF
 pkgname=grassfield-desktop
 pkgver=$v
@@ -216,6 +217,7 @@ package() {
   install -Dm644 "\$f/org.grassfield.packages.policy" "\$pkgdir/usr/share/polkit-1/actions/org.grassfield.packages.policy"
   install -Dm644 -t "\$pkgdir/usr/share/grassfield/pacman/" "\$f/repository.conf" "\$f/grassfield-stable.conf" "\$f/grassfield-beta.conf" "\$f/grassfield-signing-key.asc"
   install -Dm755 "\$f/pre-refresh-pacman" "\$pkgdir/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman"
+  install -Dm644 "\$f/VERSION" "\$pkgdir/usr/share/grassfield/VERSION"
 }
 EOF
   chown -R builder: "$d"
@@ -335,8 +337,11 @@ env BASH_ENV="$W/evil/bashenv" PATH="$W/evil:$PATH" SHELLOPTS=xtrace 'BASH_FUNC_
 expect "BASH_ENV, an exported function and PATH are ignored (no marker written)" bash -c "! ls $W/pwned-* 2>/dev/null"
 cp -a /usr/share/grassfield/pacman "$W/pacman.real"
 gen /src/packaging/pacman/repository.conf /src/packaging/pacman/grassfield-signing-key.asc && cp "$W"/gen/* /usr/share/grassfield/pacman/
+expect "the shipped build names the owner's key (E4921A382C349308BAA50D2F44C31B5D862EBEFA) and the real host" bash -c "grep -qx 'GRASSFIELD_SIGNING_FINGERPRINT=E4921A382C349308BAA50D2F44C31B5D862EBEFA' /usr/share/grassfield/pacman/repository.conf && grep -qx 'GRASSFIELD_REPO_BASE=https://packages.grassfield.site' /usr/share/grassfield/pacman/repository.conf"
+# A build made without a key (the shipped files with the fingerprint blanked) still refuses.
+sed -i "s/^GRASSFIELD_SIGNING_FINGERPRINT=.*/GRASSFIELD_SIGNING_FINGERPRINT=/" /usr/share/grassfield/pacman/repository.conf
 out=$(chset alice stable 2>&1); rc=$?
-expect "the shipped build (no key): grassfield-channel-set stable refused 'no signing key in this build'" test "$rc:$(grep -c 'no signing key in this build' <<<"$out")" == 1:1
+expect "a keyless build: grassfield-channel-set stable refused 'no signing key in this build'" test "$rc:$(grep -c 'no signing key in this build' <<<"$out")" == 1:1
 out=$("$H" set stable 2>&1); rc=$?
 expect "... and the helper itself refuses the same" test "$rc:$(grep -c 'no signing key in this build' <<<"$out")" == 1:1
 sed -i "s/^GRASSFIELD_SIGNING_FINGERPRINT=.*/GRASSFIELD_SIGNING_FINGERPRINT=$K1/" /usr/share/grassfield/pacman/repository.conf
@@ -344,6 +349,20 @@ sed -i "s|^GRASSFIELD_REPO_BASE=.*|GRASSFIELD_REPO_BASE=https://packages.grassfi
 out=$(chset alice stable 2>&1); rc=$?
 expect "a build whose base is the .invalid placeholder: refused 'no package repository in this build'" test "$rc:$(grep -c 'no package repository in this build' <<<"$out")" == 1:1
 rm -rf /usr/share/grassfield/pacman && cp -a "$W/pacman.real" /usr/share/grassfield/pacman
+# The channel rule (ADR-0033 O15b): stable is refused by the user's command and by the root helper, called directly, while the
+# installed VERSION is a prerelease, missing or malformed; beta is not (tests/shell/channel_set_rule.sh covers the cases).
+cp /usr/share/grassfield/VERSION "$W/VERSION.bak"
+for v in 1.0.0-rc2 junk; do
+  echo "$v" >/usr/share/grassfield/VERSION
+  out=$(chset alice stable 2>&1); rc=$?
+  expect "VERSION $v: grassfield-channel-set stable refused 'beta updates stay on'" test "$rc:$(grep -c 'beta updates stay on' <<<"$out")" == 1:1
+  out=$("$H" set stable 2>&1); rc=$?
+  expect "VERSION $v: the root helper refuses stable itself" test "$rc:$(grep -c 'beta updates stay on' <<<"$out")" == 1:1
+done
+rm -f /usr/share/grassfield/VERSION
+out=$("$H" set stable 2>&1); rc=$?
+expect "no VERSION: the root helper refuses stable" test "$rc:$(grep -c 'beta updates stay on' <<<"$out")" == 1:1
+cp "$W/VERSION.bak" /usr/share/grassfield/VERSION
 out=$(as alice sudo grassfield-channel-set stable 2>&1); rc=$?
 expect "grassfield-channel-set as root -> refused 'run it as your user'" test "$rc:$(grep -c 'run it as your user' <<<"$out")" == 1:1
 out=$(chset bob beta 2>&1); rc=$?
