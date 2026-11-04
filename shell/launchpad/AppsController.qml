@@ -249,7 +249,7 @@ Scope {
         Apps.launch(rec.entry);
     }
 
-    // ---- deleting apps (ADR-0044; macOS Launchpad's jiggle, x and alert) ------------------------
+    // ---- deleting apps (ADR-0045; macOS Launchpad's jiggle, x and alert) ------------------------
     // The Store decides what may be removed and removes it: `grassfield-store --removable` answers once (read when the icons
     // first jiggle), `grassfield-store --page=uninstall:<entry>` asks it to remove after the alert. Nothing is removed here.
 

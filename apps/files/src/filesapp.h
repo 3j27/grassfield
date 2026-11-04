@@ -48,7 +48,7 @@ class FilesApp : public QObject
     // step 5c): qml/Main.qml makes each one.
     Q_PROPERTY(QObject *applicationChooser READ applicationChooser CONSTANT)
     // The Store's answer to `grassfield-store --removable` (JSON text, "" until it came): which applications of the Applications
-    // location it may uninstall (ADR-0044). The QML reads it with UninstallLogic.parse and removes nothing itself.
+    // location it may uninstall (ADR-0045). The QML reads it with UninstallLogic.parse and removes nothing itself.
     Q_PROPERTY(QString removableText READ removableText NOTIFY removableTextChanged)
     Q_PROPERTY(QString homePath READ homePath CONSTANT)
     Q_PROPERTY(QList<QUrl> initialUrls READ initialUrls CONSTANT)

@@ -1,4 +1,4 @@
-# ADR-0044 — Uninstalling apps from the launcher and Files (amends ADR-0037 b.1 "What the Store removes")
+# ADR-0045 — Uninstalling apps from the launcher and Files (amends ADR-0037 b.1 "What the Store removes")
 
 Status: Proposed (2026-11-04), applied provisionally on `feat/uninstall-apps`. Cross-module (Store, launcher, Files, the root
 helper's deny list), hence its own ADR. The helper's deny list is root code: the opus security review is required before merge.

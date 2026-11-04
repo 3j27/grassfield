@@ -312,7 +312,7 @@ Variants {
                 }
             }
 
-            // "Delete “App”?" (ADR-0044): the alert over the panel; Delete asks the Store, which plans and removes.
+            // "Delete “App”?" (ADR-0045): the alert over the panel; Delete asks the Store, which plans and removes.
             Sheet {
                 id: deleteAlert
 

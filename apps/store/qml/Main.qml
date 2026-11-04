@@ -145,7 +145,7 @@ Window {
         opSheet.show(Object.assign({}, app, root.backend.app(app.id)), "remove");
     }
 
-    // "--page=uninstall:<application entry>" (ADR-0044 D1): the launcher or Files confirmed the removal in its own alert, the
+    // "--page=uninstall:<application entry>" (ADR-0045 D1): the launcher or Files confirmed the removal in its own alert, the
     // Store plans it and starts it (the sheet only when the plan says more than the alert did). An entry the Store may not
     // remove, or does not know, is said in the notice bar; nothing runs.
     function uninstallEntry(entry: string): void {

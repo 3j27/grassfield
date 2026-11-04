@@ -76,7 +76,7 @@ FocusScope {
     readonly property bool isTrash: String(root.url).startsWith("trash:")
     // The Applications location: read-only, opening starts the application.
     readonly property bool isApplications: String(root.url).startsWith("grassfield-apps:")
-    // Which applications of that location the Store may uninstall (ADR-0044; the Store's `--removable`, read when the
+    // Which applications of that location the Store may uninstall (ADR-0045; the Store's `--removable`, read when the
     // location opens): "Move to Trash" on one of them is its uninstall, after the same alert as the launcher's.
     readonly property var removableApps: UninstallLogic.parse(root.app.removableText)
     onIsApplicationsChanged: {

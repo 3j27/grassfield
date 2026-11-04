@@ -289,7 +289,7 @@ TestCase {
         function launchApplication(target: url): void {
             fakeApp.launched = fakeApp.launched.concat([String(target)]);
         }
-        // The Store's answer to `--removable` (JSON text) and what Files asked it to uninstall (ADR-0044).
+        // The Store's answer to `--removable` (JSON text) and what Files asked it to uninstall (ADR-0045).
         property string removableText: ""
         property int removableLoads: 0
         property var uninstalled: []
@@ -584,7 +584,7 @@ TestCase {
         compare(fakeApp.opened, [String(folder.url)], "the file is opened");
     }
 
-    // Move to Trash on an application (ADR-0044; Finder: moving an app out of Applications uninstalls it): dimmed until the
+    // Move to Trash on an application (ADR-0045; Finder: moving an app out of Applications uninstalls it): dimmed until the
     // Store says it may remove that app, then the alert "Delete “App”?" and, on Delete only, the Store is asked to uninstall.
     function test_applicationsMoveToTrashUninstalls() {
         const files = test.openFiles(false);

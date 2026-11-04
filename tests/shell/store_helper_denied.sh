@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# grassfield-store-helper's deny list without root and without pacman (ADR-0044 D2, D3): its denied() cut out of the file and
+# grassfield-store-helper's deny list without root and without pacman (ADR-0045 D2, D3): its denied() cut out of the file and
 # run on the vectors the Store's C++ rule runs (tests/fixtures/store/removal-vectors.json), the optional preinstalls named
 # in the helper and in apps/store/src/removal.cpp the same, and Omarchy's own removal list (when installed) covered. The
 # helper's other refusals (a name charset, required packages, a running pacman, an unfinished update) need root and a real
@@ -54,7 +54,7 @@ if [[ -r $list ]]; then
     [[ $(bash -c "$script") == DENIED ]] && missing="$missing $n"
   done
   [[ -z $missing ]] && ok "every package omarchy-remove-preinstalls drops is allowed ($(echo $want | wc -w))" ||
-    echo "NOTE: Omarchy's list holds a name the helper keeps:$missing (the list changed upstream: ADR-0044 D2)"
+    echo "NOTE: Omarchy's list holds a name the helper keeps:$missing (the list changed upstream: ADR-0045 D2)"
 else
   echo "SKIP: omarchy-remove-preinstalls is not installed"
 fi

@@ -394,7 +394,7 @@ std::shared_ptr<const Snapshot> buildSnapshot(const JobInput &in, const std::ato
     snap->apps = buildModel(model);
     // Repository apps the user installed that neither our catalog nor Arch's AppStream describe (Omarchy's own repository
     // has no AppStream data: Aether, Cliamp, Omacut…): listed by their package, so that Uninstall… reaches them from the
-    // product page, the launcher and Files (ADR-0044 F1). Only a package installed explicitly that owns an application entry.
+    // product page, the launcher and Files (ADR-0045 F1). Only a package installed explicitly that owns an application entry.
     {
         QSet<QString> listed, ids;
         for (const StoreApp &a : std::as_const(snap->apps)) {

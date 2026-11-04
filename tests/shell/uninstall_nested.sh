@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deleting apps from the Apps panel in the NESTED session (ADR-0044 D6): the icons jiggle, removable apps show the delete badge,
+# Deleting apps from the Apps panel in the NESTED session (ADR-0045 D6): the icons jiggle, removable apps show the delete badge,
 # its click asks "Delete “App”?" and nothing is removed (the alert is cancelled, Delete is never pressed here). Run it bare with a
 # nested session up (scripts/dev/nested-up.sh, --ref-scale 1.25 for the captures); skipped without one. The Store's answer is given
 # through the dev-only IPC hook instead of asked, so no pacman, no Store and no package is involved. Captures in .dev/shots/.

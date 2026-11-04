@@ -20,14 +20,14 @@ const QSet<QString> &fixedSystem()
         QStringLiteral("syslinux"),     QStringLiteral("snapper"),    QStringLiteral("btrfs-progs"),
         QStringLiteral("cryptsetup"),   QStringLiteral("lvm2"),       QStringLiteral("plymouth"),
         QStringLiteral("archlinux-keyring"), QStringLiteral("intel-ucode"), QStringLiteral("amd-ucode"),
-        // The session's runtime (ADR-0044 D3); its prefixes are in protection().
+        // The session's runtime (ADR-0045 D3); its prefixes are in protection().
         QStringLiteral("hyprland"),     QStringLiteral("quickshell"), QStringLiteral("networkmanager"),
         QStringLiteral("mesa"),         QStringLiteral("wireplumber"), QStringLiteral("sddm"),
         QStringLiteral("uwsm"),         QStringLiteral("gnome-keyring")};
     return names;
 }
 
-// The apps Omarchy installs on every machine and itself offers to remove (omarchy-remove-preinstalls; ADR-0044 D2): they are
+// The apps Omarchy installs on every machine and itself offers to remove (omarchy-remove-preinstalls; ADR-0045 D2): they are
 // on its lists but are not the system's. Held to the helper's list by tests/integration/store_helper.sh.
 const QSet<QString> &preinstalledApps()
 {

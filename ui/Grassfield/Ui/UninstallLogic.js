@@ -1,6 +1,6 @@
 .pragma library
 
-// Deleting an app from the launcher and from Files (ADR-0044; macOS: Launchpad's jiggle and its x, Finder's Move to Trash on
+// Deleting an app from the launcher and from Files (ADR-0045; macOS: Launchpad's jiggle and its x, Finder's Move to Trash on
 // an app in Applications): the decisions both share, pure (unit-tested by tests/unit/tst_uninstall.qml). The Store decides what
 // may be removed and removes it (`grassfield-store --removable` answers, `grassfield-store --page=uninstall:<entry>` asks);
 // nothing here runs a command or removes anything.

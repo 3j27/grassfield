@@ -16,7 +16,7 @@ Item {
     // True while the keyboard (or a search) owns the selection ring on this cell.
     property bool selected: false
 
-    // Deleting apps (ADR-0044): while `editing` the icon jiggles (an icon of `position`, each with its own phase); `removable`
+    // Deleting apps (ADR-0045): while `editing` the icon jiggles (an icon of `position`, each with its own phase); `removable`
     // shows the delete badge, whose click asks for the alert; a press held on the icon asks the owner to start editing.
     property bool editing: false
     property bool removable: false

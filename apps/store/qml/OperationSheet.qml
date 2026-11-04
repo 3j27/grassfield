@@ -52,7 +52,7 @@ Sheet {
         root.backend.plan(app.id, kind);
     }
 
-    // An uninstall the launcher or Files already confirmed with its own alert (ADR-0044 D1; "uninstall:<entry>"): the plan is
+    // An uninstall the launcher or Files already confirmed with its own alert (ADR-0045 D1; "uninstall:<entry>"): the plan is
     // made first, and the sheet opens only when the plan says more than the alert did (a refusal, or anything besides the app
     // itself); otherwise the removal starts at once and polkit asks for the password, as on macOS after the alert.
     property bool pendingRemoval: false

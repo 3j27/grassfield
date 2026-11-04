@@ -3,7 +3,7 @@ import QtTest
 import "../../ui/Grassfield/Ui/UninstallLogic.js" as Uninstall
 import "../../apps/store/qml/Store.js" as Store
 
-// Deleting an app from the launcher and Files (ADR-0044): the Store's answer read fail-closed, what is removable and why not,
+// Deleting an app from the launcher and Files (ADR-0045): the Store's answer read fail-closed, what is removable and why not,
 // the alert's words, the arguments handed to the Store, the jiggle, and when the Store asks nothing more after the alert.
 TestCase {
     name: "Uninstall"

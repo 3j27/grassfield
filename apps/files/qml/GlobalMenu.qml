@@ -272,7 +272,7 @@ Platform.MenuBar {
         Platform.MenuItem {
             text: bar.inTrash ? qsTr("Put Back") : qsTr("Move to Trash")
             shortcut: "Ctrl+Backspace"
-            // An application of the Applications location the Store may uninstall (ADR-0044): the same alert as the item menu.
+            // An application of the Applications location the Store may uninstall (ADR-0045): the same alert as the item menu.
             enabled: bar.keysHere && bar.count > 0 && (bar.inTrash || bar.editable || (bar.inApplications && bar.tab !== null && bar.tab.applicationRemovable()))
             onTriggered: bar.tab.trashSelection()
         }
