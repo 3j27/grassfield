@@ -87,8 +87,10 @@ Scope {
         target: MainDisplay
 
         function onScreenNameChanged(): void {
-            if (root.settled && MainDisplay.screenName !== "")
-                root.moveDockTo(MainDisplay.screenName);
+            const r = Geometry.afterMainChange(root.settled, root.chosenScreen, MainDisplay.screenName);
+            root.chosenScreen = r.chosen;
+            if (r.move !== "")
+                root.moveDockTo(r.move);
         }
     }
     readonly property var screenNames: Quickshell.screens.map(s => s.name)

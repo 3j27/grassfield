@@ -63,9 +63,9 @@ SettingsPage {
 
     // Make the display `name` the main display of the connected set (macOS: Use as > Main display).
     function makeMain(name: string): void {
-        const d = root.connected.find(x => x.name === name);
-        if (d)
-            root.store.set("displays.main", DisplayRole.withMain(root.mainEntries, root.connected, DisplayRole.identity(d)));
+        const key = DisplayRole.keyOf(root.connected, name);
+        if (key !== "")
+            root.store.set("displays.main", DisplayRole.withMain(root.mainEntries, root.connected, key));
     }
 
     function refresh(): void {

@@ -404,6 +404,23 @@ TestCase {
         verify(Geometry.settledOn({settings: true, apps: true, screens: names, start: "GF-REF", waited: false}));
     }
 
+    // A focus change latched a fallback output before Hyprland described the outputs; then the main display becomes known while the
+    // Dock is not settled: the latch is dropped (not kept, not ignored) and the first layout latches on the main display.
+    function test_aMainDisplayKnownBeforeTheDockSettlesDropsAFallbackLatch() {
+        const names = ["WAYLAND-1", "GF-REF"];
+        let r = Geometry.afterMainChange(false, "WAYLAND-1", "GF-REF");
+        compare(r.chosen, "");
+        compare(r.move, "");
+        compare(Geometry.settleScreen(r.chosen, names, "WAYLAND-1", "GF-REF"), "GF-REF");
+        // Settled: the Dock moves, its latch stays until then.
+        r = Geometry.afterMainChange(true, "WAYLAND-1", "GF-REF");
+        compare(r.chosen, "WAYLAND-1");
+        compare(r.move, "GF-REF");
+        // No main display: nothing changes either way.
+        compare(Geometry.afterMainChange(false, "WAYLAND-1", "").chosen, "WAYLAND-1");
+        compare(Geometry.afterMainChange(true, "WAYLAND-1", "").move, "");
+    }
+
     function test_theDockStartsOnTheFocusedOutputAndStaysThere() {
         compare(Geometry.latchScreen("", ["DP-1", "DP-2"], "DP-2"), "DP-2");
         // Focus moving on does not move it; an unknown focus latches nothing.

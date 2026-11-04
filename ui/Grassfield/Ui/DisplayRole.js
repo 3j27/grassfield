@@ -49,6 +49,29 @@ function identity(d) {
     return "n:" + name;
 }
 
+// The keys of a set of connected displays, in their order. Two monitors can report the same make, model and serial (placeholder
+// serials such as 0x01010101 are common): the colliding ones take the connector-bound key m:<make>|<model>|<connector>, so that
+// every key in the set is unique (a set with a repeat is not valid, and "Use as > Main display" on the second twin would
+// write nothing).
+function identities(displays) {
+    const list = Array.isArray(displays) ? displays : [];
+    const base = list.map(identity);
+    return base.map((k, i) => {
+        if (base.indexOf(k) === base.lastIndexOf(k))
+            return k;
+        const d = list[i];
+        const str = x => d && typeof d[x] === "string" ? d[x] : "";
+        return "m:" + str("make") + "|" + str("model") + "|" + str("name");
+    });
+}
+
+// The key of the display named `name` among the connected `displays` ("" when there is none by that name).
+function keyOf(displays, name) {
+    const list = Array.isArray(displays) ? displays : [];
+    const i = list.findIndex(d => d && d.name === name);
+    return i < 0 ? "" : identities(list)[i];
+}
+
 // The connected outputs (`names`) with the identity Hyprland gives them (`described`: its monitors answer, objects with name,
 // make, model, serial): {displays: [{name, make, model, serial}], ready}. `ready` is true when every output has been
 // described; an output not described yet has no make, model or serial (its key is its connector, n:<name>).
@@ -72,7 +95,7 @@ function connected(names, described) {
 
 // The sorted keys of the displays: the identity of a set of connected displays.
 function setOf(displays) {
-    const keys = displays.map(identity);
+    const keys = identities(displays);
     keys.sort();
     return keys;
 }
@@ -168,7 +191,7 @@ function resolve(entries, displays) {
     if (list.length === 0)
         return {name: "", key: "", why: "none"};
     const stored = normalize(entries);
-    const keys = list.map(identity);
+    const keys = identities(list);
     const set = setOf(list);
     const find = key => {
         const i = keys.indexOf(key);
@@ -187,7 +210,7 @@ function resolve(entries, displays) {
     }
     const builtin = list.find(isBuiltin);
     if (builtin)
-        return {name: builtin.name, key: identity(builtin), why: "builtin"};
+        return {name: builtin.name, key: keys[list.indexOf(builtin)], why: "builtin"};
     return {name: list[0].name, key: keys[0], why: "first"};
 }
 

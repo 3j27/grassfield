@@ -120,6 +120,28 @@ TestCase {
         compare(DisplayRole.resolve(entries, [panel, desk]).why, "chosen");
     }
 
+    // Two monitors with the same make, model and placeholder serial: the colliding ones take the connector-bound key, the set
+    // stays valid and "Use as > Main display" on the second one is stored and resolved.
+    function test_twinsWithTheSameSerialAreTold() {
+        const a = {name: "DP-1", make: "Acme", model: "M27", serial: "0x01010101"};
+        const b = {name: "DP-2", make: "Acme", model: "M27", serial: "0x01010101"};
+        compare(DisplayRole.identity(a), DisplayRole.identity(b));
+        const keys = DisplayRole.identities([panel, a, b]);
+        compare(keys[0], "s:LG|LGD|123", "a unique key is left alone");
+        compare(keys[1], "m:Acme|M27|DP-1");
+        compare(keys[2], "m:Acme|M27|DP-2");
+        compare(DisplayRole.keyOf([panel, a, b], "DP-2"), "m:Acme|M27|DP-2");
+        compare(DisplayRole.keyOf([panel, a, b], "nope"), "");
+        const entries = DisplayRole.withMain([], [panel, a, b], DisplayRole.keyOf([panel, a, b], "DP-2"));
+        compare(entries.length, 1, "the choice is stored");
+        compare(DisplayRole.problem(entries), "", "and valid");
+        compare(DisplayRole.resolve(entries, [panel, a, b]).name, "DP-2");
+        compare(DisplayRole.resolve(entries, [b, a, panel]).name, "DP-2");
+        // The first twin too.
+        const first = DisplayRole.withMain([], [panel, a, b], DisplayRole.keyOf([panel, a, b], "DP-1"));
+        compare(DisplayRole.resolve(first, [panel, a, b]).name, "DP-1");
+    }
+
     function test_twinsWithoutSerialAreTold() {
         const entries = DisplayRole.withMain([], [twinA, twinB], DisplayRole.identity(twinB));
         compare(DisplayRole.resolve(entries, [twinA, twinB]).name, "DP-3");
