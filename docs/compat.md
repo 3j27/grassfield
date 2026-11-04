@@ -60,8 +60,13 @@ server does not run, on purpose: any program could otherwise name a command), re
 udiskie), Night Shift (`grassfield-nightshift on|off|toggle|status`, hyprsunset; the Control Center switch is shell work),
 screenshots (Super+Shift+3/4/5), lid and clamshell (`grassfield-lid`), graceful Log Out / Restart / Shut Down
 (`grassfield-session-end`), the keyboard defaults, post-boot hooks and the power profile at start.
-Not provided (Omarchy features without a macOS counterpart): Omarchy menu, clipboard history, emoji picker, tmux/herdr key
-menus, screen recording bindings, 1Password lock on lock, first-run provisioning.
+Omarchy capabilities Grassfield uses through Omarchy's own commands, packages and data (ADR-0045; rows in the table below):
+screen recording in the capture toolbar (gpu-screen-recorder), text and QR codes in images (tesseract, zbar), Emoji & Symbols
+(Omarchy's emoji list and insert command), external display brightness (DDC/CI), dictation (voxtype), fingerprint and security
+key, Remote Login, disk encryption password and hibernation setups (Omarchy's scripts in Omarchy's terminal), Wi-Fi sharing
+by QR code, terminal themes that follow the appearance, per-application window rules, LocalSend, weather. Clipboard history
+is Grassfield's own (ADR-0034). Deferred to M6 (ADR-0045 OC-15): factory reset and first-run provisioning.
+Not provided (Omarchy features without a macOS counterpart): Omarchy menu, tmux/herdr key menus, 1Password lock on lock.
 
 ### Updating Omarchy with Grassfield installed
 Run the Omarchy update from the **Omarchy session** (or a TTY): it restarts the Omarchy shell at its end and Omarchy's
