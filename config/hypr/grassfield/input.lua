@@ -26,7 +26,8 @@
 --   kb_layout            "us" or "us,fr"    1 to 4 xkb layouts
 --   kb_variant           ",bepo"            one field per layout, each empty or an xkb variant
 -- A Latin layout always comes first (M.latin_first, Omarchy's guard: the bindings resolve against the first layout).
--- With two layouts or more, Ctrl+Space selects the next one (xkb grp:ctrl_space_toggle, added to Omarchy's own options).
+-- With two layouts or more, bindings.lua binds Ctrl+Space (previous input source) and Ctrl+Option+Space (next) for ALL keyboards;
+-- no xkb group option is set (an xkb group option would switch only the keyboard being typed on).
 -- The shell reads the configuration again when either file changes (shell/platform/SessionConfig.qml), so a choice applies
 -- at once.
 
@@ -42,9 +43,6 @@ M.defaults = {
   gesture_overview = true,
   gesture_apps = true,
 }
-
--- Omarchy's keyboard options (default.hypr.input, and omarchy.lua's fallback), kept when Ctrl+Space is added.
-M.kb_options = "compose:caps,shift:both_capslock_cancel"
 
 local function config_file(name)
   local dev = os.getenv("GRASSFIELD_CONFIG_HOME")
@@ -186,9 +184,6 @@ function M.keyboard(path)
   end
   if out.kb_layout then
     out.kb_layout, out.kb_variant, layouts = M.latin_first(out.kb_layout, out.kb_variant)
-  end
-  if layouts >= 2 then
-    out.kb_options = M.kb_options .. ",grp:ctrl_space_toggle"
   end
   return out
 end

@@ -149,6 +149,18 @@ for space = 1, 9 do
   bind("CTRL + code:" .. tostring(space + 9), "Switch to Space " .. space, hl.dsp.focus({ workspace = tostring(space) }))
 end
 
+-- Input sources (macOS: Ctrl+Space selects the previous input source, Ctrl+Option+Space the next one). Hyprland 0.56 has no Lua
+-- dispatcher for it (only `hyprctl switchxkblayout`), and an xkb group option would switch only the keyboard being typed on,
+-- so both go through hyprctl with "all": every keyboard follows. Bound from two layouts only: with one, Ctrl+Space stays with
+-- the applications (completion in an editor), as on a Mac with a single input source. Settings > Keyboard writes the layouts and
+-- reloads, which parses this file again: the keys appear and disappear with that reload. omarchy.lua counts the layouts.
+-- (Omarchy binds no CTRL+SPACE nor CTRL+ALT+SPACE; its SPACE binds all hold SUPER.)
+local omarchy_state = package.loaded["grassfield.omarchy"]
+if type(omarchy_state) == "table" and (omarchy_state.layouts or 0) >= 2 then
+  bind("CTRL + SPACE", "Previous input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all prev"))
+  bind("CTRL + ALT + SPACE", "Next input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"))
+end
+
 -- Apps
 bind("SUPER + RETURN", "Terminal", hl.dsp.exec_cmd("xdg-terminal-exec"))
 
