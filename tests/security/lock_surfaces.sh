@@ -6,9 +6,10 @@
 #   refusal   each surface's entry point refuses while locked as its first decision: Popups.open, Search.show,
 #             AppsController.show, Overview.show, Notifications.toggleCenter/openWidgetGallery, Dock.enterKeyboardMode,
 #             the four window commands (IPC target "windows"), Switcher.step, the exit cover (ExitCover.cover), Emoji &
-#             Symbols (Emoji.toggle, and Emoji.place once the pointer's answer came);
+#             Symbols (Emoji.toggle, and Emoji.place once the pointer's answer came), the capture toolbar (Capture.show,
+#             and the capture it triggered once the toolbar is gone);
 #   closing   each surface closes when the lock engages (Popups, Search, Apps, Notification Center, Overview, Dock keyboard
-#             mode, Switcher);
+#             mode, Switcher, the capture toolbar);
 #   routes    every IPC action that opens a surface goes through that entry point (search toggle, apps toggle/open,
 #             overview toggle/open, notifications toggleCenter, menubar open/panel, dock keyboard), and the screen corners
 #             call those IPC actions;
@@ -96,6 +97,19 @@ first_decision("shell/overlay/ExitCover.qml", "cover", R, lines=1)
 first_decision("shell/services/Emoji.qml", "toggle", R, lines=8)
 emoji = read("shell/services/Emoji.qml")
 expect("shell/services/Emoji.qml: place() opens nothing once the session locked", re.search(r"if\s*\(SessionState\.locked\)\s*return;[\s\S]*Popups\.open", code(function(emoji, "place") or "")) is not None)
+# ADR-0045 OC-1 (opus security review of e3542510, MINOR-3): the capture toolbar (Shift-Super-5, IPC capture toggle) refuses
+# while locked as its first decision, closes when the lock comes (shell.qml gives it the lock state), and the capture it
+# triggered runs only if the session is still unlocked once the toolbar is gone.
+first_decision("shell/capture/Capture.qml", "show", R, lines=1)
+capture = read("shell/capture/Capture.qml")
+expect("shell.qml gives the capture toolbar the lock state", re.search(r"\bCapture\s*\{\s*id:\s*captureSurface\s*locked:\s*Lock\.lockState\s*!==\s*\"unlocked\"\s*\}", code(shell)) is not None)
+expect("shell/capture/Capture.qml: toggle() opens only through show()", re.search(r"^\s*else\s+show\(\);\s*$", code(function(capture, "toggle") or ""), re.M) is not None
+       and "open = true" not in code(function(capture, "toggle") or ""))
+expect("shell/capture/Capture.qml: the capture runs only if the session is still unlocked when the toolbar is gone",
+       re.search(r"id:\s*launch\b[\s\S]*?onTriggered:\s*\{[^}]*?if\s*\(args\s*&&\s*!SessionState\.locked\)\s*CaptureState\.run\(args\);", code(capture)) is not None
+       and len(re.findall(r"CaptureState\.run\(", code(capture))) == 1)
+expect("shell/capture/Capture.qml: only show() opens the toolbar (one open = true)", len(re.findall(r"\bopen\s*=\s*true\b", code(capture))) == 1
+       and re.search(r"\bopen\s*=\s*true\b", code(function(capture, "show") or "")) is not None)
 toggle = function(read("shell/notifications/Notifications.qml"), "toggleCenter") or ""
 opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
@@ -172,6 +186,7 @@ closes("shell/switcher/Switcher.qml", r"onLockedChanged:.*?if\s*\(locked\)\s*can
 closes("shell/desktop/IconsView.qml", r"target:\s*SessionState.*?onLockedChanged.*?SessionState\.locked.*?root\.closeMenu\(\"outside\"\).*?root\.closeAbout\(\"outside\"\)", "closes its menu and card when the session locks")
 closes("shell/desktop/DesktopWidgets.qml", r"target:\s*SessionState.*?onLockedChanged.*?SessionState\.locked.*?scope\.closeMenu\(\)", "closes the widget menu when the session locks")
 closes("shell/services/Emoji.qml", r"target:\s*SessionState.*?onLockedChanged.*?root\.placing\s*=\s*false;.*?root\.cancelInsert\(\"locked\"\)", "stops placing the panel and drops a waiting insertion when the session locks")
+closes("shell/capture/Capture.qml", r"onLockedChanged:\s*\{\s*if\s*\(locked\)\s*hide\(\);\s*\}", "closes the toolbar when the session locks")
 
 # IPC actions route through the refusing entry points.
 def route(path, target, name, pattern):
@@ -190,6 +205,8 @@ route("shell/menubar/MenuBar.qml", "menubar", "open", r"bar\.popup\(")
 route("shell/menubar/MenuBar.qml", "menubar", "panel", r"Popups\.open\(")
 route("shell/dock/Dock.qml", "dock", "keyboard", r"root\.enterKeyboardMode\(\)")
 route("shell/services/Emoji.qml", "emoji", "toggle", r"root\.toggle\(\)")
+route("shell/capture/Capture.qml", "capture", "toggle", r"root\.toggle\(\)")
+route("shell/capture/Capture.qml", "capture", "open", r"root\.show\(\)")
 search =read("shell/search/Search.qml")
 expect("Search.toggle() opens only through show()", re.search(r"else\s+show\(", code(function(search, "toggle") or "")) is not None)
 expect("Search.toggleClipboard() opens only through show()", re.search(r"if\s*\(!open\)\s*show\(", code(function(search, "toggleClipboard") or "")) is not None
@@ -575,7 +592,7 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
   shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml \
   shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml shell/overlay/ExitCover.qml \
-  shell/services/Emoji.qml; do
+  shell/services/Emoji.qml shell/capture/Capture.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -666,6 +683,11 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml# && !root.waiting && root.requestOpen# && root.requestOpen' \
   'shell/security/polkit/AuthAgent.qml#root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys#root.requestOpen && !root.sinkingKeys' \
   'shell/security/polkit/AuthAgent.qml#(!root.heldByLock || root.userFocused) && !root.sinkingKeys#(!root.heldByLock || root.userFocused)' \
+  'shell/capture/Capture.qml#SessionState.refuses("capture")#false' \
+  'shell/capture/Capture.qml#        if (locked)\n            hide();#        ;' \
+  'shell/capture/Capture.qml#            if (args && !SessionState.locked)#            if (args)' \
+  'shell/capture/Capture.qml#        else\n            show();#        else\n            open = true;' \
+  'shell/shell.qml#        id: captureSurface\n        // The session lock owns the screen and the keyboard: the toolbar closes and does not open.\n        locked: Lock.lockState !== "unlocked"#        id: captureSurface' \
   'shell/security/polkit/AuthDialog.qml#            id: identityList\n            enabled: root.inputEnabled#            id: identityList' \
   'shell/security/polkit/AuthDialog.qml#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).\n                enabled: root.inputEnabled#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).' \
   'shell/security/polkit/AuthAgent.qml#        const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());#        let typing = false;\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());\n        typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);' \
