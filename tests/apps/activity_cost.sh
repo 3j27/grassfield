@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The activity monitor's sampler cost, tab by tab (ADR-0038 d; docs/specs/activity.md AM-P2, acceptance A-P): builds
-# activity-sampler-bench and probe A10 (docs/audits/activity-2026-10-28/sampcost.c), starts the reference fixture of A10 as
+# activity-sampler-bench and probe A10 (tests/tools/sampcost/sampcost.c), starts the reference fixture of A10 as
 # the current user (idle processes with threads and open descriptors, loopback TCP connections), runs A10, measures 101
 # samples of each tab back to back on the sampler's thread clock, runs A10 again, and compares each tab's median with its
 # limit. The fixture is stopped at the end, whatever happens.
@@ -57,7 +57,7 @@ max_load=2 # a run started at this load average or more does not count (step 2b)
 apps/activity/build-direct.sh --bench >/dev/null || { echo "FAIL: building activity-sampler-bench"; exit 1; }
 bench=$root/.dev/build/activity-sampler-bench
 probe=$root/.dev/build/activity-sampcost
-gcc -O2 -o "$probe" docs/audits/activity-2026-10-28/sampcost.c -lpthread || { echo "FAIL: building probe A10"; exit 1; }
+gcc -O2 -o "$probe" tests/tools/sampcost/sampcost.c -lpthread || { echo "FAIL: building probe A10"; exit 1; }
 
 pids=()
 tmp=$(mktemp -d)
