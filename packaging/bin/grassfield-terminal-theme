@@ -192,6 +192,15 @@ def theme_env(path):
     env = {k: v for k, v in os.environ.items() if k not in UNSET}
     env["PATH"] = path
     env["OMARCHY_PATH"] = omarchy_path()
+    # Omarchy 4.5's omarchy-theme-set returns once the terminals changed and leaves the other apps' retints (GTK, editors, the
+    # browser policy) running behind it when it has no terminal for stdin, as here; then they would outlive this run's lock and
+    # its time limit. OMARCHY_THEME_WAIT=1 makes it finish them first, as 4.0.6 always did (4.0.6 ignores the variable).
+    env["OMARCHY_THEME_WAIT"] = "1"
+    # Omarchy 4.5's omarchy-theme-set also starts omarchy-theme-set-herdr-machines under setsid (a session of its own, so past this
+    # run's process-group limit), which can SSH to the machines of `herdr machine list`, this one included, and run an
+    # unsanitised `omarchy theme set` in the live Hyprland session. That script exits at once when OMARCHY_THEME_SYNC_FROM is
+    # non-empty (it is how a mirrored change is kept from being sent on); nothing else reads the variable.
+    env["OMARCHY_THEME_SYNC_FROM"] = "grassfield"
     return env
 
 

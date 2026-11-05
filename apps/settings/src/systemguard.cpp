@@ -429,7 +429,10 @@ bool isLaunch(const QStringList &argv)
                                         QStringLiteral("omarchy-hibernation-setup"),
                                         QStringLiteral("omarchy-hibernation-remove"),
                                         QStringLiteral("omarchy-voxtype-install"),
-                                        QStringLiteral("omarchy-voxtype-remove")};
+                                        QStringLiteral("omarchy-voxtype-remove"),
+                                        // Omarchy 4.5 renamed the two (the old names are gone there; Setups.js picks the installed one).
+                                        QStringLiteral("omarchy-install-dictation-voxtype"),
+                                        QStringLiteral("omarchy-remove-dictation-voxtype")};
     return argv == QStringList{QStringLiteral("/usr/lib/grassfield/grassfield-update-run")}
         || (argv.size() == 2 && argv.at(0) == QLatin1String("omarchy-launch-floating-terminal-with-presentation") && inTerminal.contains(argv.at(1)))
         // Dictation's Language Model… (ADR-0045 OC-5): Omarchy's command opens its floating terminal itself (`voxtype setup model`).

@@ -124,6 +124,8 @@ int actionTimeoutMs(const QStringList &argv, int requested);
 //                                                                       security-fido2, omarchy-setup-security-sshd, omarchy-drive-
 //                                                                       password, omarchy-hibernation-setup, omarchy-hibernation-
 //                                                                       remove, omarchy-voxtype-install, omarchy-voxtype-remove
+//                                                                       (4.0.6) or omarchy-install-dictation-voxtype, omarchy-
+//                                                                       remove-dictation-voxtype (4.5)
 //   omarchy-voxtype-model                                               Keyboard > Dictation > Language Model… (it opens Omarchy's
 //                                                                       floating terminal itself)
 // Exactly these argument vectors, nothing else.
