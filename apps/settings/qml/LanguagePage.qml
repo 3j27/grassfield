@@ -209,7 +209,7 @@ SettingsPage {
         // tesseract and zbarimg when they are installed (preview.textInImages; docs/specs/preview.md P13).
         SettingsRow {
             title: qsTr("Select Text in Images")
-            subtitle: qsTr("Select text in images to copy it or take action.")
+            subtitle: qsTr("Preview and Glance recognise the text and QR codes in images, so you can copy the text or open the link.")
             Toggle {
                 accessibleName: qsTr("Select Text in Images")
                 checked: root.store.value("preview.textInImages")

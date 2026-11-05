@@ -49,6 +49,9 @@ TestCase {
             verify(p.icon !== "");
             verify(SettingsPages.known(p.id));
         }
+        // ADR-0045 panes: the fingerprint and sharing pages are offered too.
+        verify(SettingsPages.known("fingerprint"));
+        verify(SettingsPages.known("sharing"));
         verify(!SettingsPages.known("rm -rf"));
         verify(!SettingsPages.known(""));
     }

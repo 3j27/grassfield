@@ -90,7 +90,7 @@ TestCase {
         verify(page);
         const row = find(page.contentItem, i => i.title === "Select Text in Images");
         verify(row, "the row");
-        compare(row.subtitle, "Select text in images to copy it or take action.", "macOS's explanation under it");
+        compare(row.subtitle, "Preview and Glance recognise the text and QR codes in images, so you can copy the text or open the link.", "what the row does, not its title again");
         const toggle = find(page.contentItem, i => i.accessibleName === "Select Text in Images" && i.checked !== undefined);
         verify(toggle, "its switch");
         verify(toggle.checked, "on by default, as on macOS");

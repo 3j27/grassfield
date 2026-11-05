@@ -3,7 +3,6 @@ import QtQuick
 import Grassfield.Ui
 import "Power.js" as Power
 import "General.js" as General
-import "Setups.js" as Setups
 
 // Battery as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Battery): Low Power Mode, Battery Health and
 // Charging with their (i) sheets, and the level of the last 24 hours or 10 days. UPower over D-Bus (`power.state`, read-only;
@@ -26,18 +25,8 @@ SettingsPage {
 
     title: qsTr("Battery")
 
-    // Setups.hibernationState: "unsupported" (the group is hidden), "off", "on" or "incomplete".
-    property string hibernation: "unsupported"
-    property bool hibernationSetUp: false
-
-    function readHibernation(): void {
-        const supported = root.backend.readText(Setups.FILES.imageSize).exists === true;
-        const installed = root.backend.hasCommand("omarchy-hibernation-setup");
-        const conf = root.backend.readText(Setups.FILES.resumeConf).text;
-        root.hibernation = Setups.hibernationState(supported, installed, conf, root.hibernationSetUp);
-        if (supported && root.backend.hasCommand("omarchy-hibernation-available"))
-            root.backend.readOnlyQuery(Setups.QUERY.hibernation, "power.hibernation");
-    }
+    // Hibernation's state (HibernationGroup).
+    readonly property string hibernation: hibernationGroup.status
 
 
     // The state of the battery for the toolbar, under the pane's title (macOS 27).
@@ -155,11 +144,6 @@ SettingsPage {
             case "power.limit":
                 root.refresh();
                 break;
-            case "power.hibernation":
-                root.hibernationSetUp = ok;
-                root.hibernation = Setups.hibernationState(root.backend.readText(Setups.FILES.imageSize).exists === true,
-                    root.backend.hasCommand("omarchy-hibernation-setup"), root.backend.readText(Setups.FILES.resumeConf).text, ok);
-                break;
             }
         }
     }
@@ -175,7 +159,6 @@ SettingsPage {
         root.refresh();
         root.readProfiles();
         root.system.query(["omarchy-powerprofiles-list"], "power.profiles");
-        root.readHibernation();
     }
 
     SettingsGroup {
@@ -273,26 +256,11 @@ SettingsPage {
         }
     }
 
-    // Hibernation (ADR-0045 OC-9): shown where the kernel can hibernate (/sys/power/image_size) and Omarchy's setup is there;
-    // on when Omarchy's omarchy-hibernation-available says so. Set Up… and Remove… run Omarchy's commands in its terminal
-    // behind a sheet that says why (a swap file, the start-up settings, the start-up files rebuilt). macOS has no Hibernate
-    // item in its menu, nor does Grassfield: the session hibernates when Omarchy's power settings say so.
-    SettingsGroup {
-        visible: root.hibernation !== "unsupported"
-
-        SettingsRow {
-            title: qsTr("Hibernation")
-            subtitle: root.hibernation === "on" ? qsTr("On. When the computer hibernates, the session is saved to the start-up disk and the computer turns off.")
-                : root.hibernation === "incomplete" ? qsTr("Set up, but not available: the swap file is missing or smaller than the memory. Set it up again or remove it.")
-                : qsTr("Off. Hibernation saves the session to the start-up disk and turns the computer off; it needs a swap file as large as the memory.")
-
-            Button {
-                push: true
-                text: root.hibernation === "off" ? qsTr("Set Up…") : qsTr("Remove…")
-                Accessible.name: root.hibernation === "off" ? qsTr("Set up hibernation") : qsTr("Remove hibernation")
-                onClicked: root.setupRequested(root.hibernation === "off" ? "hibernation-setup" : "hibernation-remove")
-            }
-        }
+    // Hibernation (ADR-0045 OC-9): the group Energy shows too.
+    HibernationGroup {
+        id: hibernationGroup
+        backend: root.backend
+        onSetupRequested: id => root.setupRequested(id)
     }
 
     // The push button under the groups, right-aligned (macOS 27: Options… and ?).
@@ -336,10 +304,5 @@ SettingsPage {
 
     DevNote {
         system: root.system
-    }
-
-    // The terminal closed: Settings is active again.
-    ActiveAgain {
-        onReturned: root.readHibernation()
     }
 }

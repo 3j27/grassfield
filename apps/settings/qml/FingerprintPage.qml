@@ -28,7 +28,7 @@ SettingsPage {
     signal enrollRequested(string finger, int stages)
     signal deleteRequested(string finger)
 
-    title: qsTr("Fingerprint & Security Key")
+    title: qsTr("Fingerprint & Key")
 
     // omarchy-hw-fingerprint's answer: true, false, or null while unknown (or without Omarchy's command: no reader shown).
     property var reader: null
@@ -98,7 +98,7 @@ SettingsPage {
     PaneBanner {
         icon: "fingerprint"
         tileColor: "red"
-        title: qsTr("Fingerprint & Security Key")
+        title: qsTr("Fingerprint & Key")
         text: qsTr("Use your fingerprint or a security key instead of your password to unlock this computer, approve administrator prompts and run sudo.")
     }
 

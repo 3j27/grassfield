@@ -57,14 +57,14 @@ Window {
         {id: "bluetooth", group: 1, title: qsTr("Bluetooth"), icon: "bluetooth", keywords: qsTr("devices headphones pair connect")},
         {id: "network", group: 1, title: qsTr("Network"), icon: "globe", keywords: qsTr("ethernet wired ip address router dns firewall")},
         {id: "vpn", group: 1, title: qsTr("VPN"), icon: "vpn", keywords: qsTr("vpn wireguard openvpn tunnel")},
-        {id: "battery", group: 1, title: qsTr("Battery"), icon: "battery", keywords: qsTr("battery power low power mode energy health charging charge limit")},
+        {id: "battery", group: 1, title: qsTr("Battery"), icon: "battery", keywords: qsTr("battery power low power mode energy health charging charge limit hibernation hibernate swap")},
         // A computer without a battery shows Energy in its place (macOS 27): Energy Mode and Prevent automatic sleeping.
-        {id: "energy", group: 1, title: qsTr("Energy"), icon: "bolt", keywords: qsTr("energy power mode low power high power performance sleep prevent automatic sleeping display off")},
+        {id: "energy", group: 1, title: qsTr("Energy"), icon: "bolt", keywords: qsTr("energy power mode low power high power performance sleep prevent automatic sleeping display off hibernation hibernate swap")},
         {id: "general", group: 2, title: qsTr("General"), icon: "gear", keywords: qsTr("about software update storage date time language region login items startup")},
         {id: "accessibility", group: 2, title: qsTr("Accessibility"), icon: "person", keywords: qsTr("vision physical motor zoom display motion keyboard")},
         {id: "appearance", group: 2, title: qsTr("Appearance"), icon: "sun", keywords: qsTr("dark light theme transparency material motion icons tint terminal")},
         {id: "desktop", group: 2, title: qsTr("Desktop & Dock"), icon: "overview", keywords: qsTr("dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins")},
-        {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement")},
+        {id: "displays", group: 2, title: qsTr("Displays"), icon: "display", keywords: qsTr("monitor screen resolution refresh scale arrangement brightness external display ddc")},
         {id: "menubar", group: 2, title: qsTr("Menu Bar"), icon: "control-center", keywords: qsTr("menu bar clock date time seconds 24-hour hide status items battery percentage wifi sound focus now playing background transparent")},
         {id: "search", group: 2, title: qsTr("Search"), icon: "search", keywords: qsTr("search results history calculator conversions documents commands clipboard copy paste")},
         {id: "wallpaper", group: 2, title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
@@ -72,10 +72,10 @@ Window {
         {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
         {id: "focus", group: 3, title: qsTr("Focus"), icon: "moon", keywords: qsTr("do not disturb silence quiet banners")},
         {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
-        {id: "privacy", group: 4, title: qsTr("Privacy & Security"), icon: "hand", keywords: qsTr("privacy permissions location camera background screen sharing remote desktop apps flatpak portal")},
+        {id: "privacy", group: 4, title: qsTr("Privacy & Security"), icon: "hand", keywords: qsTr("privacy permissions location camera background screen sharing remote desktop apps flatpak portal security encryption disk password disk encryption luks")},
         // ADR-0045 OC-6: in the place of macOS 27's Touch ID & Password.
-        {id: "fingerprint", group: 4, title: qsTr("Fingerprint & Security Key"), icon: "fingerprint", keywords: qsTr("fingerprint reader enrol finger security key fido2 sudo administrator unlock password")},
-        {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings")},
+        {id: "fingerprint", group: 4, title: qsTr("Fingerprint & Key"), icon: "fingerprint", keywords: qsTr("fingerprint reader enrol finger security key fido2 sudo administrator unlock password")},
+        {id: "keyboard", group: 5, title: qsTr("Keyboard"), icon: "keyboard", keywords: qsTr("shortcuts keys bindings dictation voice typing speech model voxtype")},
         {id: "mouse", group: 5, title: qsTr("Mouse"), icon: "mouse", keywords: qsTr("pointer tracking speed scrolling natural wheel bluetooth")},
         {id: "trackpad", group: 5, title: qsTr("Trackpad"), icon: "trackpad", keywords: qsTr("touchpad pointer tracking speed scrolling natural tap click secondary right click gestures swipe pinch")},
         {id: "printers", group: 5, title: qsTr("Printers"), icon: "printer", keywords: qsTr("printer printing print queue cups paper size default printer add remove airprint ipp everywhere")},
@@ -84,7 +84,7 @@ Window {
         {id: "storage", parent: "general", title: qsTr("Storage"), icon: "drive", keywords: qsTr("disk space volume free used documents downloads pictures music videos trash")},
         {id: "datetime", parent: "general", title: qsTr("Date & Time"), icon: "clock", keywords: qsTr("clock time zone city automatic network time ntp 24-hour")},
         {id: "login", parent: "general", title: qsTr("Login Items"), icon: "list", keywords: qsTr("login items startup autostart open at login background services")},
-        {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar")},
+        {id: "language", parent: "general", title: qsTr("Language & Region"), icon: "globe", keywords: qsTr("language region formats locale date number first day of week calendar text in images text recognition qr code")},
         {id: "sharing", parent: "general", title: qsTr("Sharing"), icon: "remote-desktop", keywords: qsTr("sharing remote login ssh server")},
         {id: "dnd", parent: "focus", title: qsTr("Do Not Disturb"), icon: "moon", keywords: qsTr("focus silence quiet banners notifications")},
         {id: "accessibility-zoom", parent: "accessibility", title: qsTr("Zoom"), icon: "zoom-in", keywords: qsTr("accessibility magnify magnifier zoom level larger screen")},
@@ -903,6 +903,7 @@ Window {
             backend: root.backend
             system: sys
             store: cfg
+            onSetupRequested: id => terminalSetup.openFor(id)
         }
     }
 

@@ -112,7 +112,7 @@ SettingsPage {
     // sheet that says why. Encryption cannot be turned on in place: the line says so, with no button.
     SettingsGroup {
         visible: root.encryption.known
-        caption: qsTr("Disk Encryption")
+        caption: qsTr("Security")
 
         SettingsRow {
             title: qsTr("Disk Encryption")
