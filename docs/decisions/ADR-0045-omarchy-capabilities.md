@@ -278,8 +278,10 @@ supported versions are the locks of `docs/upstream/` (one per version, chosen by
 until reviewed: the header of `scripts/dev/upstream-drift.sh`); what 4.5.0 changed and what Grassfield did is the table in
 `docs/compat.md` "Omarchy 4.5.0 supported". Three decisions of this amendment:
 - OC-4.5-1 the Grassfield session's portal routing wins over the user's `hyprland-portals.conf` that 4.5.0's migration writes: the
-  frontend starts with the session's routing directory as its configuration home (`env-grassfield`, the frontend's drop-in);
-  a hand-written portals configuration of the user's is not read there. macOS model: one routing, the system's.
+  session's `XDG_CURRENT_DESKTOP` is `Grassfield:Hyprland` and the frontend's drop-in links the user's `grassfield-portals.conf`
+  to it (`grassfield-portal-config`), which the frontend reads before `hyprland-portals.conf`; Omarchy's file is never touched and
+  the frontend's environment is not changed (a first design, another `XDG_CONFIG_HOME` for the frontend, was refused: the apps it
+  launches inherited it). macOS model: one routing, the system's.
 - OC-4.5-2 `owed.service`, Omarchy's video wallpaper daemon, does not run in the Grassfield session (the shell draws the
   wallpaper, video included): one program owns the desktop picture.
 - OC-4.5-3 the dictation backend system of 4.5.0 (`omarchy-dictation*`) is the Settings work's (OC-5); until it lands the
