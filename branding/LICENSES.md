@@ -1,6 +1,6 @@
 # Branding assets — provenance and licenses
 
-Every file in `branding/` is listed here (master-prompt §14). No Apple asset is used, traced or redistributed.
+Every file in `branding/` is listed here (docs/legal/visual-review.md). No Apple asset is used, traced or redistributed.
 License of Grassfield-made assets (symbolic icons, cursors, wallpaper): CC-BY-SA-4.0, decided by the owner on 2026-10-27 (an earlier
 version of this line attributed it to D-9, which concerned the icon pack); source code stays MIT. The Grassfield logo is excluded:
 all rights reserved, the owner's mark. Parts of the artwork were produced with AI assistance under the owner's direction and are

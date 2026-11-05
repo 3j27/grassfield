@@ -38,7 +38,7 @@ Update up on beta; the public install script defaults to beta.
 
 First candidate of 1.0.0, the first version with a changelog. It is the state after the independent audit GF-AUDIT-001
 (verdict RELEASE BLOCKED at 0.4.0-12) and its remediation: the open items and the gates that still need an owner run
-are listed in `docs/audits/final-1.0/15-remediation-plan.md` and `docs/STATE.md`.
+are listed in the maintainers' private remediation plan.
 
 What the candidate is: a desktop session for Omarchy (Hyprland, Quickshell): the shell (menu bar with global menus,
 Dock, Overview, Apps, Search, notifications, Quick Settings, lock, idle, polkit agent), the compositor plugin
