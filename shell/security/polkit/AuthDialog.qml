@@ -58,9 +58,12 @@ FocusScope {
             root.focusField();
         }
 
-        // PAM stopped awaiting the device (its password prompt came, or the request ended): the field takes the keys again.
+        // PAM stopped awaiting the device because its password prompt came: the field takes the focus again (not when the
+        // request ended). Through focusField, so never while the input is disabled (AuthAgent's key sink); and the focus an
+        // item gets in the agent's window reaches the keyboard only when that window holds it, which it does only while the
+        // sheet is shown and not held, or held and clicked past its guard (AuthAgent `takesKeys`; lock_surfaces.sh pins both).
         function onAwaitingDeviceChanged(): void {
-            if (!root.model.awaitingDevice)
+            if (!root.model.awaitingDevice && root.model.responseRequired)
                 root.focusField();
         }
     }

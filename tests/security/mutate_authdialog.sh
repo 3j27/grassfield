@@ -94,7 +94,7 @@ check "D1 Allow stays enabled while the answer is checked" shell/security/polkit
 check "D2 the field takes keys while PAM awaits a device" shell/security/polkit/AuthDialog.qml \
   "                enabled: root.inputEnabled && !root.model.awaitingDevice" "                enabled: root.inputEnabled"
 check "D3 the prompt does not give the field the keys back" shell/security/polkit/AuthDialog.qml \
-  "            if (!root.model.awaitingDevice)
+  "            if (!root.model.awaitingDevice && root.model.responseRequired)
                 root.focusField();" ""
 check "M1 the model answers twice (no canSubmit check)" shell/security/polkit/AuthDialogModel.qml \
   "if (!active || !canSubmit || password.length === 0) {" "if (!active || password.length === 0) {"
