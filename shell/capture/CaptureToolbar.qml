@@ -1,11 +1,14 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.platform
 import qs.services
 import "CaptureModel.js" as Model
+import "../overview/ClientChrome.js" as ClientChrome
+import "../platform/WindowTiling.js" as WindowTiling
 
 // The capture toolbar's window (spec docs/specs/system-dialogs.md "Capture toolbar", ADR-0045 OC-1), one per screen, mapped
 // only on the controller's screen while open. As Search, a full-screen transparent overlay that holds the keyboard (exclusive)
@@ -17,7 +20,7 @@ import "CaptureModel.js" as Model
 // shared primary Button, and Options opens the shared PopupMenu (section headers, check marks) above itself, inside this window.
 // Without gpu-screen-recorder the recordings' group is not shown (OC-0 rule 3).
 // The modes act on this surface as macOS 27's do (the design review of OC-1, H1):
-// - Selected Portion: a frame over the dimmed display (capture.veil around it, capture.border on it, eight handles), opened on
+// - Selected Portion: a frame over the dimmed display (capture.frameVeil around it, capture.border on it, eight handles), opened on
 //   the display's last frame (capture.lastSelection) or centred; a drag on a handle resizes it, inside moves it, outside draws a
 //   new one, with the size readout beside the pointer; Capture/Record and Return act on its geometry.
 // - Selected Window: the window under the pointer is tinted with the accent (every display's surface takes input then); a click
@@ -29,6 +32,14 @@ Variants {
     id: root
 
     required property var controller
+
+    // The display that has held the keyboard since the toolbar opened ("" before the first); see the windows' holdsKeyboard.
+    property string holder: ""
+    readonly property bool isOpen: controller.open
+    onIsOpenChanged: {
+        if (!isOpen)
+            holder = "";
+    }
 
     model: Quickshell.screens
 
@@ -61,10 +72,41 @@ Variants {
         // This display's surface takes input: the toolbar's display, and every display in the modes that take a click anywhere
         // (an Entire Screen mode: the display clicked; Capture Selected Window: the window clicked).
         readonly property bool covered: win.shown || root.controller.coversAll
+        // The display that holds the keyboard. A layer surface with Exclusive keyboard keeps the pointer on its own display in
+        // the compositor: a click on another display never reaches that display's surface. In the modes that take a click on
+        // any display (coversAll) the keyboard therefore follows the pointer's display (the focused monitor), so the display the
+        // pointer is on is always the one that is Exclusive; otherwise it is the toolbar's.
+        readonly property bool wantsKeyboard: win.covered && win.name === (root.controller.coversAll ? Compositor.activeScreenName : root.controller.screenName)
+        // What the surface asks the compositor for. Exclusive keyboard is taken when the layer is mapped: a layer that is already
+        // mapped and changes to Exclusive is not given the focus (Escape and Return reached nothing on the display the pointer
+        // moved to). The hand-over between displays is therefore a new mapping: the old holder drops to None at once, the new
+        // one unmaps, then maps again as Exclusive. `root.holder` names the display that held it since the toolbar opened.
+        property bool holdsKeyboard: false
+        property bool remapping: false
+        onWantsKeyboardChanged: {
+            keyHandover.stop();
+            win.remapping = false;
+            if (!wantsKeyboard) {
+                holdsKeyboard = false;
+                return;
+            }
+            if (root.holder === "" || !win.visible) {
+                holdsKeyboard = true;
+            } else {
+                // Taken over from another display: unmap, then map as Exclusive.
+                holdsKeyboard = false;
+                win.remapping = true;
+                keyHandover.restart();
+            }
+            root.holder = win.name;
+        }
         readonly property bool recordMode: Model.isRecord(root.controller.mode)
         readonly property bool framing: win.shown && (root.controller.mode === "selection" || root.controller.mode === "recordSelection")
         readonly property bool windowMode: win.covered && root.controller.mode === "window"
-        readonly property var bounds: ({w: win.width, h: win.height})
+        // The display's logical size: the window's once mapped, else the screen's (the window is 0x0 when the frame is first made).
+        readonly property var bounds: Model.displayBounds(win.width, win.height, win.modelData ? win.modelData.width : 0, win.modelData ? win.modelData.height : 0)
+        // The output's real scale (the size readout's pixels), not the layer surface's integer ratio.
+        readonly property real outputScale: Compositor.outputScale(win.name)
         // The frame of the Selected Portion modes ({x, y, w, h}, this display's logical coordinates, CaptureModel.js), the part a
         // press took ("" none, a handle, "inside", "outside", "click"), the pointer, and whether a drag is under way.
         property var frame: ({x: 0, y: 0, w: 0, h: 0})
@@ -93,14 +135,20 @@ Variants {
         // The window drawn on top under the point (this display's coordinates), from the platform's window list of the shown
         // Desktop and the order the windows were activated in, clipped to the display; null when none.
         function windowUnder(x: real, y: real): var {
-            const list = Compositor.windowsOn(win.name, Compositor.topologyRevision).map(w => ({
+            const list = Compositor.windowsOn(win.name, Compositor.topologyRevision).map(w => {
+                // The window as it looks: the plugin's titlebar strip lies above the window's own box (none on a window that
+                // draws its own chrome, none without the plugin), and macOS tints and captures the window with its title bar.
+                const away = WindowTiling.splitTitleAway(TilingLink.splits, w.address, Compositor.splitTitlesAway);
+                const band = Capabilities.pluginPresent && !w.fullscreen ? ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.windowTitlebarHeight, away) : 0;
+                return {
                         x: w.x,
-                        y: w.y,
+                        y: w.y - band,
                         w: w.w,
-                        h: w.h,
+                        h: w.h + band,
                         fullscreen: w.fullscreen,
                         stamp: w.toplevel && Compositor.recency.has(w.toplevel) ? Compositor.recency.get(w.toplevel) : 0
-                    }));
+                };
+            });
             const hit = Model.windowAt(list, x, y);
             return hit ? Model.clip(hit, win.bounds) : null;
         }
@@ -183,8 +231,8 @@ Variants {
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
-        // keyboard focus. The other displays' surfaces (input only) never hold it.
-        visible: release.mapped || win.covered
+        // keyboard focus. The other displays' surfaces (input only) hold it while the pointer is on them (holdsKeyboard).
+        visible: (release.mapped || win.covered) && !win.remapping
         anchors {
             top: true
             bottom: true
@@ -194,7 +242,7 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: holdsKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-capture"
         // qmllint disable missing-type
         // The whole display takes input while covered; nothing once closed: the surface stays mapped a moment for the keyboard
@@ -225,9 +273,24 @@ Variants {
             id: passThrough
         }
 
+        Timer {
+            id: keyHandover
+
+            interval: Tokens.focusReturnMenuActionSettleMs
+            onTriggered: {
+                win.holdsKeyboard = win.wantsKeyboard;
+                win.remapping = false;
+            }
+        }
+
         KeyboardRelease {
             id: release
-            shown: win.shown
+            shown: win.holdsKeyboard
+        }
+
+        onHoldsKeyboardChanged: {
+            if (holdsKeyboard)
+                keys.forceActiveFocus();
         }
 
         onShownChanged: {
@@ -325,18 +388,27 @@ Variants {
             onExited: win.hovered = null
         }
 
-        // Capture Selected Window: the window under the pointer, tinted with the accent (macOS 27), its corner the window's.
-        Rectangle {
+        // Capture Selected Window: the window under the pointer, tinted with the accent (macOS 27), its outline the window's own
+        // (Hyprland's superellipse corners, CaptureModel.windowOutline): a circular corner would leave notches at the title bar.
+        Shape {
             visible: win.windowMode && win.hovered !== null
             x: win.hovered ? win.hovered.x : 0
             y: win.hovered ? win.hovered.y : 0
             width: win.hovered ? win.hovered.w : 0
             height: win.hovered ? win.hovered.h : 0
-            radius: Tokens.captureWindowHighlightRadius
-            color: Appearance.withAlpha(Appearance.colors.accent, Tokens.captureWindowHighlightOpacity)
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                fillColor: Appearance.withAlpha(Appearance.colors.accent, Tokens.captureWindowHighlightOpacity)
+                strokeColor: "transparent"
+
+                PathPolyline {
+                    path: win.hovered ? Model.windowOutline(win.hovered.w, win.hovered.h, Tokens.captureWindowHighlightRadius, Tokens.captureWindowHighlightPower, 12).map(q => Qt.point(q.x, q.y)) : []
+                }
+            }
         }
 
-        // The Selected Portion modes: the display dimmed around the frame (capture.veil), the frame's hairline (capture.border)
+        // The Selected Portion modes: the display dimmed around the frame (capture.frameVeil), the frame's hairline (capture.border)
         // and its eight handles.
         Item {
             id: frameLayer
@@ -347,21 +419,21 @@ Variants {
             Rectangle {
                 width: parent.width
                 height: win.frame.y
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
                 y: win.frame.y + win.frame.h
                 width: parent.width
                 height: parent.height - y
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
                 y: win.frame.y
                 width: win.frame.x
                 height: win.frame.h
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
@@ -369,7 +441,7 @@ Variants {
                 y: win.frame.y
                 width: parent.width - x
                 height: win.frame.h
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
@@ -395,7 +467,7 @@ Variants {
                     radius: width / 2
                     color: Model.qtColor(Tokens.captureBorder)
                     border.width: Tokens.captureBorderWidth
-                    border.color: Model.qtColor(Tokens.captureVeil)
+                    border.color: Model.qtColor(Tokens.captureFrameVeil)
                 }
             }
 
@@ -423,7 +495,7 @@ Variants {
 
                     anchors.centerIn: parent
                     textFormat: Text.PlainText
-                    text: Model.readout(win.frame, readout.Screen.devicePixelRatio)
+                    text: Model.readout(win.frame, win.outputScale)
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.captureReadoutTextSize

@@ -21,16 +21,16 @@ PopupMenu {
         const items = [];
         // A widget's own edit item first, as macOS puts "Edit “Weather”": the Weather widget's place (ADR-0045 OC-14), only
         // when Omarchy's omarchy-weather-location is there to save it.
-        if (entry.id === "weather" && WeatherSampler.canEditLocation) {
+        if (entry && entry.id === "weather" && WeatherSampler.canEditLocation) {
             items.push({id: "weather:location", text: qsTr("Edit Location…")});
             items.push({separator: true});
         }
-        const sizes = Registry.sizesOf(entry.id);
+        const sizes = entry ? Registry.sizesOf(entry.id) : [];
         for (let i = 0; i < sizes.length; i++)
             items.push({
                 id: "size:" + sizes[i],
                 text: Registry.sizeLabel(sizes[i]),
-                checked: sizes[i] === entry.size
+                checked: !!entry && sizes[i] === entry.size
             });
         const labels = {left: qsTr("Move Left"), right: qsTr("Move Right"), up: qsTr("Move Up"), down: qsTr("Move Down")};
         const dirs = Object.keys(labels).filter(d => d in moves);

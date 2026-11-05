@@ -177,6 +177,49 @@ TestCase {
         verify(Model.GEOMETRY.test(Model.geometryText({x: 10, y: 20, w: 300, h: 200}, {x: -1920, y: 0})));
     }
 
+    // B1: the toolbar's window is 0x0 when the frame is first made; the frame comes from the screen's own size.
+    function test_frameFromAWindowStillZero() {
+        const b = Model.displayBounds(0, 0, 2304, 1440);
+        compare(b, {w: 2304, h: 1440}, "the screen's size while the window has none");
+        compare(Model.displayBounds(52, 30, 2304, 1440), {w: 2304, h: 1440}, "never the size the window passes through while it maps");
+        compare(Model.displayBounds(1920, 1080, 0, 0), {w: 1920, h: 1080}, "the window's when the screen has none");
+        compare(Model.displayBounds(0, 0, 0, 0), {w: 0, h: 0});
+        const first = Model.selectionFor("", "DP-1", b, 8);
+        compare(first, {x: 576, y: 360, w: 1152, h: 720}, "the first time: centred, not 8x8 at 0,0");
+        const last = Model.selectionFor("DP-1=100,50,916,504", "DP-1", b, 8);
+        compare(last, {x: 100, y: 50, w: 916, h: 504}, "the last selection comes back");
+        // The old order of events: a frame kept while the window is 0x0 must not shrink.
+        compare(Model.clampFrame(first, {w: 0, h: 0}, 8), first, "a display of no size leaves the frame as it is");
+        compare(Model.clampFrame(last, Model.displayBounds(0, 0, 2304, 1440), 8), last);
+    }
+
+    // M1: the readout is the output's real pixels (logical x Hyprland's scale 1.25), never the layer surface's ratio of 2.
+    function test_readoutAtScale125() {
+        compare(Model.readout({x: 0, y: 0, w: 916, h: 504}, 1.25), "1145 × 630");
+        verify(Model.readout({x: 0, y: 0, w: 916, h: 504}, 2) !== "1145 × 630");
+    }
+
+    // The highlight follows the window's own superellipse corner (17 at power 2.6: 22.1 along each edge), clockwise.
+    function test_windowOutline() {
+        const pts = Model.windowOutline(400, 300, 17, 2.6, 12);
+        compare(pts.length, 4 * 13);
+        fuzzyCompare(pts[0].x, 0, 0.001);
+        fuzzyCompare(pts[0].y, 22.1, 0.001);
+        fuzzyCompare(pts[12].x, 22.1, 0.001);
+        fuzzyCompare(pts[12].y, 0, 0.001);
+        fuzzyCompare(pts[13].x, 400 - 22.1, 0.001);
+        fuzzyCompare(pts[13].y, 0, 0.001);
+        fuzzyCompare(pts[26].x, 400, 0.001);
+        fuzzyCompare(pts[39].x, 22.1, 0.001);
+        fuzzyCompare(pts[39].y, 300, 0.001);
+        const mid = pts[6];
+        verify(mid.x > 0 && mid.x < 22.1);
+        verify(Math.abs(mid.x - mid.y) < 0.001);
+        for (const q of pts)
+            verify(q.x >= -0.001 && q.x <= 400.001 && q.y >= -0.001 && q.y <= 300.001);
+        compare(Model.windowOutline(10, 10, 17, 2.6, 4).length, 20, "a small window keeps its corners inside");
+    }
+
     function test_lastSelection() {
         const text = Model.withSelection("", "DP-1", {x: 10, y: 20, w: 300, h: 200});
         compare(text, "DP-1=10,20,300,200");

@@ -49,6 +49,13 @@ Variants {
         property point dragOffset: Qt.point(0, 0)
         // Context menu.
         property var menuEntry: null
+        // The entry the menu was last opened for: the menu's bindings run once more when menuEntry is cleared (the popover
+        // takes its place, a row was chosen) before the Loader lets the menu go; they read this one, never null.
+        property var heldEntry: null
+        onMenuEntryChanged: {
+            if (menuEntry !== null)
+                heldEntry = menuEntry;
+        }
         // The Weather widget's Edit Location… popover (ADR-0045 OC-14), in the menu's window where the menu was.
         property var editEntry: null
         readonly property bool overlayOpen: menuEntry !== null || editEntry !== null
@@ -383,13 +390,13 @@ Variants {
                 id: widgetMenu
 
                 WidgetMenu {
-                    entry: scope.menuEntry
-                    moves: ({
-                            left: Widgets.canStepDesktop(scope.menuEntry.uid, "left", scope.screenName),
-                            right: Widgets.canStepDesktop(scope.menuEntry.uid, "right", scope.screenName),
-                            up: Widgets.canStepDesktop(scope.menuEntry.uid, "up", scope.screenName),
-                            down: Widgets.canStepDesktop(scope.menuEntry.uid, "down", scope.screenName)
-                        })
+                    entry: scope.heldEntry
+                    moves: scope.heldEntry ? ({
+                            left: Widgets.canStepDesktop(scope.heldEntry.uid, "left", scope.screenName),
+                            right: Widgets.canStepDesktop(scope.heldEntry.uid, "right", scope.screenName),
+                            up: Widgets.canStepDesktop(scope.heldEntry.uid, "up", scope.screenName),
+                            down: Widgets.canStepDesktop(scope.heldEntry.uid, "down", scope.screenName)
+                        }) : ({})
                     onChoose: action => scope.applyMenu(action)
                     onCloseRequested: scope.closeMenu()
                     Component.onCompleted: forceActiveFocus()
