@@ -8,7 +8,7 @@ recorded below; the opus reviews are in "Review history". ·
 Date: 2026-10-27 · Decider: owner (every choice in "Owner decisions"), integrator (merge after the opus PASS)
 
 This ADR is the contract between this repository (the desktop, its `PKGBUILD` and the Software Update client) and
-`grassfieldhq/grassfield-packages` (building, signing and, later, serving the repository). Its README and CLAUDE.md cite it
+`grassfieldhq/grassfield-packages` (building, signing and, later, serving the repository). Its README and the project's working rules cite it
 by this number. Behaviour, refusals and limits for users are in `docs/specs/updates.md`. Evidence:
 - the probes quoted as P0 to P13 are `docs/audits/software-update-2026-10-27/adr0033-probes.sh`;
 - those quoted as Q0 to Q8 (the first review's round) are `adr0033-probes-2.sh` in the same folder;

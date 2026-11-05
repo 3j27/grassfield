@@ -146,7 +146,7 @@ log out, type your password at the greeter, and write down what you got.
 ## 5. First-login checklist
 
 Open a terminal first: **SUPER+RETURN** (`xdg-terminal-exec`). Keep it for recovery. Tick each line; note what you saw.
-Gate names are the owner L2 items of `docs/STATE.md` (L3, L5, P1, P3, P5, R2, R3, bindings/gestures).
+Gate names are the owner L2 items of the maintainers' project log (L3, L5, P1, P3, P5, R2, R3, bindings/gestures).
 
 - [ ] Session comes up: menu bar, Dock, wallpaper in under ~10 s. Hyprland runs under `start-hyprland` (its watchdog,
       as in Omarchy's own session entry), so no "started without start-hyprland" banner should show; note it if one does.
@@ -155,7 +155,7 @@ Gate names are the owner L2 items of `docs/STATE.md` (L3, L5, P1, P3, P5, R2, R3
 - [ ] Idle and sleep: wait for the idle lock; then Grassfield menu > Sleep, wake: it must be locked. Closing the lid does the same.
 - [ ] Polkit: run `pkexec true` in the terminal: a Grassfield dialog asks for the password; Cancel and a wrong password fail cleanly.
 - [ ] Bindings: SUPER+SPACE (Search), SUPER+TAB (switcher), CTRL+UP (Overview), CTRL+LEFT/RIGHT (Spaces), CTRL+1..9,
-      CTRL+F2 (focus the menu bar), CTRL+F3 (focus the Dock): both are open real-keyboard checks in `docs/STATE.md`.
+      CTRL+F2 (focus the menu bar), CTRL+F3 (focus the Dock): both are open real-keyboard checks in the maintainers' project log.
 - [ ] Trackpad: 3-finger swipe left/right (Space), up (Overview open), down (close), two-finger natural scroll, tap, two-finger click.
 - [ ] Wi-Fi, Bluetooth, volume, brightness (Control Center and Settings). **These change real system state that survives
       into Omarchy** (NetworkManager radio, Bluetooth power, default audio device via wpctl, brightness). Put them back after.

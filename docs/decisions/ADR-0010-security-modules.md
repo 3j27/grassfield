@@ -151,7 +151,7 @@ applied in step 9 only after the integrator's review and the owner's agreement o
 
 **Scope.** The security modules gain the secret sheets fed by `grassfield-prompter` (ADR-0035 D-9, and D-11 for pairing):
 gcr system prompts, KIO network passwords, NetworkManager secrets, BlueZ pairing. The building blocks are WlSessionLock,
-`PamContext("omarchy-lock-password")`, Quickshell Polkit and these secret sheets, only (CLAUDE.md, Hard rules).
+`PamContext("omarchy-lock-password")`, Quickshell Polkit and these secret sheets, only (the project's working rules, Hard rules).
 
 **Rules** (master-prompt R12, its new bullet):
 - the secret sheets of ADR-0035 belong to these modules: everything this ADR requires of them applies (opus reviewer PASS

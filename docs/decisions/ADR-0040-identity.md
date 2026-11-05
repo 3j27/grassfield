@@ -1035,7 +1035,7 @@ this ADR follows it, and any later pull request of either lane that meets one of
     display-off-only form is not offered; the recommendation, re-checked, stays A.
   - MINOR 2, step 2 could have edited `LockView.qml` under a normal review: step 2 now says "nothing in
     `shell/security`; the lock's output unchanged" (`WallpaperArt` without a parameter keeps today's drawing).
-  - NIT 3, stale line references in `visual-review.md` after the merge: `MenuBar.qml:870`, `STATE.md:120, 233`.
+  - NIT 3, stale line references in `visual-review.md` after the merge: `MenuBar.qml:870`, the maintainers' project log.
   - NIT 4, an interrupted `releasing` needs a new PAM success: said in section 4.
 - **Opus review of 6c310a8 (step 1a, pull request #52; integrator, 2026-10-29): FAIL, one MAJOR, one MINOR, three
   NITs.** The answers table, the conditions and the `DevicePicture` move were confirmed.

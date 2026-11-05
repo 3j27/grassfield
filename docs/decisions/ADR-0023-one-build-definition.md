@@ -32,6 +32,6 @@ entry point onto it.
 ## Consequences
 - Tests: `just test` (all gtest suites), full `just check` (tidy compdb), `just release-check` (bare), `just coverage`,
   qmllint (i18n), nested-up. Risk is medium-high: every gtest suite and the tidy compdb go through the wrappers.
-- The two top-level files are the only structural addition and the reason for this ADR (CLAUDE.md: no new directory or
+- The two top-level files are the only structural addition and the reason for this ADR (the project's working rules: no new directory or
   abstraction without need).
 - Slices (plan §7): D2-1 (top-level CMake and presets, no script changes), D2-2 (wrappers). Wave 7.

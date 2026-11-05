@@ -158,7 +158,7 @@ other toolbar items; only the sidebar's search is the flat field. Side effect: p
 amendment 2026-11-03).
 
 ## Amendment (2026-11-03): floating sidebars from macOS 26
-Owner decision of 2026-11-02 (docs/STATE.md): **the sidebars float**, as the macOS 26 inset panel, replacing §1's "Sidebars"
+Owner decision of 2026-11-02 (the maintainers' project log): **the sidebars float**, as the macOS 26 inset panel, replacing §1's "Sidebars"
 row (edge to edge, flush). Everything else of §1 stands: the window corner, the window edge and shadow stay on macOS 27, and
 the selection, search field and tile values of the old row are kept. Scope: Settings, Files and Preview (the Store's flush
 sidebar follows in its own step; it already takes the calmer fill below).

@@ -3,7 +3,7 @@ Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Pr
 
 ## Context
 
-### Owner decision (2026-10-20, docs/STATE.md:125-126)
+### Owner decision (2026-10-20, the maintainers' project log)
 WhiteSur, the GPL-3.0 macOS-inspired icon theme, becomes the default app icon theme of the Grassfield session as an
 **optional** dependency. Owner statement: it contains no Apple files.
 **That statement was not true of upstream's default install**, and a first guard (pkgrel 5, byte matching of 12 logo
@@ -464,12 +464,12 @@ No owner file, database or bus was touched; every dconf call ran under `env -i` 
   Acknowledgements in Settings > About).
 
 ## Amendment 2026-10-21: WhiteSur dropped; the chain is own icons, Breeze, Adwaita, hicolor
-Status of this amendment: Proposed (applied provisionally). Decider: integrator, recorded in docs/STATE.md. It supersedes
+Status of this amendment: Proposed (applied provisionally). Decider: integrator, recorded in the maintainers' project log. It supersedes
 every WhiteSur decision above (distribution, the split package, the Apple-artwork guard, the Acknowledgements row).
 
 - **What happened.** The filtered WhiteSur package was reviewed four times (the review of merge 7cdbd68, the
   counter-review of de09465, and further passes in the fix series, the last one "counter-review #4 FAIL" in
-  docs/STATE.md). Each pass found more Apple app-icon artwork left after the guard. Filtering a theme whose purpose is to
+  the maintainers' project log). Each pass found more Apple app-icon artwork left after the guard. Filtering a theme whose purpose is to
   imitate macOS does not converge: every pin change needs a new full review by eye. The package was withheld on
   2026-10-21 and is now removed.
 - **New chain.** `grassfield-icons` inherits `breeze,Adwaita,hicolor` after its own (so far nearly empty) directory:
@@ -502,7 +502,7 @@ the locked dconf key, devenv.sh) is unchanged.
   prendra par exemple pour pebble"; "et ce pack d'icons a la fin deviens donc grassfield-icons"; "non on utiliser
   mactaohe, puis pebble, puis les autres mais en suivant les reco que jai fait"; "en fait c'est tout ce pack d'cions que
   mois j'appel grassfield-icons".
-- **What the integrator reported first (docs/STATE.md, 2026-10-23).** Both themes reproduce Apple app icons (Calendar,
+- **What the integrator reported first (the maintainers' project log, 2026-10-23).** Both themes reproduce Apple app icons (Calendar,
   Clock, Maps, Music, Notes, Photos, Weather, Settings, Safari, iCloud, iPhone renders). MacTahoe also contains the Apple
   logo itself and the Finder face. Pebble has no licence file at the pinned commit (its README states GPL-3.0). The owner
   decided with that information: only the Apple logo is removed; the trade-dress risk of the rest is his.

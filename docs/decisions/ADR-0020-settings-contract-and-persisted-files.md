@@ -114,7 +114,7 @@ managed preferences. Preferences live in `~/Library/Preferences`, status and cac
 ## Alternatives rejected
 - Keep hand-synchronised copies with a parity test: seven copies already diverge.
 - Replace out-of-range values by defaults (the Settings app's behaviour): loses user intent; the macOS model clamps.
-- A resident settings daemon: a new service for one file (CLAUDE.md: no new service without need).
+- A resident settings daemon: a new service for one file (the project's working rules: no new service without need).
 - Delete legacy files at migration: breaks downgrade.
 - Refuse a newer file entirely: the user loses all valid keys for no reason.
 
