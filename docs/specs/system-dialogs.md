@@ -1404,19 +1404,20 @@ it; it is saved as "Screen Recording <date> at <time>.mov". macOS records no sys
     `capture.handleSize`, taken in a `capture.handleHitSize` square, the corners first). A drag on a handle resizes the frame
     (past the opposite edge it turns over), inside it moves it, outside it draws a new one; it stays on the display and at
     least `capture.frameMinSize` each way. While dragging, the size readout (W × H of the picture, in pixels: the logical size
-    at the display's scale) shows beside the pointer on a small glass plate (`capture.readout*`). The pointer is a crosshair
+    at the output's real scale: Hyprland's monitor scale, 1.25 gives 1145 × 630 for a 916 × 504 frame, never the layer
+    surface's integer ratio) shows beside the pointer on a small glass plate (`capture.readout*`). The pointer is a crosshair
     outside the frame, a move pointer inside, a resize pointer on a handle. The frame opens on the display's last one
-    (`capture.lastSelection`, per display name, brought back on the display), else a centred frame half the display each way.
+    (`capture.lastSelection`, per display name, brought back on the display), else a centred frame half the display each way (from the screen's own logical size: the toolbar's window is 0x0, then 100x100, while it maps).
     Capture, Record and Return act on its geometry.
   - Capture Selected Window: the window under the pointer is tinted with the accent (`capture.windowHighlightOpacity`, its
     corner the window's own superellipse, `capture.windowHighlightRadius` at `capture.windowHighlightPower`): the window drawn on top there among the shown Desktop's windows of
     the platform's window list (`Compositor.windowsOn`), the most recently activated one, a full-screen window hiding those
     activated before it, clipped to the display. A click captures that window; a click where no window is does nothing; Esc
-    closes. Every display's surface takes the pointer in this mode (input only; the bar and the keyboard stay on the toolbar's
-    display). Grassfield's cursor theme has no camera pointer, so the arrow shows. Return and Capture take the window under the
+    closes. Every display's surface takes the pointer in this mode (input only; the bar stays on the toolbar's display, the keyboard
+    follows the pointer's display: a layer with Exclusive keyboard keeps the pointer on its own display in the compositor). Grassfield's cursor theme has no camera pointer, so the arrow shows. Return and Capture take the window under the
     pointer, else the helper's crosshair (the fallback).
   - Capture and Record Entire Screen: a click on any display captures or records that display (every display's surface takes
-    the pointer); the Capture button still captures every display, Record the toolbar's display.
+    the pointer, the keyboard following the pointer's display as in Capture Selected Window); the Capture button still captures every display, Record the toolbar's display.
   - The geometry goes to the helper as `--geometry "X,Y WxH"` (the compositor's logical coordinates, whole numbers) and the
     display clicked as `--output NAME`; the helper refuses (exit 2, nothing captured) a geometry that is not wholly on one
     enabled display or has no size. Its crosshair stays only as the fallback when the surface has no geometry to give.
