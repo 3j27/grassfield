@@ -19,11 +19,11 @@ Sheet {
 
     readonly property var texts: ({
             "fingerprint-setup": {title: qsTr("Set Up Fingerprint"),
-                message: qsTr("Omarchy installs the fingerprint reader's driver, enrols your right index finger and turns fingerprint on for the lock screen, administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.")},
+                message: qsTr("Omarchy installs the fingerprint reader's driver, enrols your right index finger and turns fingerprint on for the lock screen, administrator prompts and sudo. If administrator prompts use the system's standard rules, Omarchy replaces them with its own, which do not pause after repeated wrong passwords. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.")},
             "fingerprint-remove": {title: qsTr("Remove Fingerprint Setup"),
                 message: qsTr("Omarchy turns fingerprint off for the lock screen, administrator prompts and sudo, and removes the reader's driver. It runs in a Terminal window and asks for your password there.")},
             "fido2-setup": {title: qsTr("Set Up Security Key"),
-                message: qsTr("Omarchy installs the security key tools, registers the key you plug in and touch, and turns it on for administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.")},
+                message: qsTr("Omarchy installs the security key tools, registers the key you plug in and touch, and turns it on for administrator prompts and sudo. If administrator prompts use the system's standard rules, Omarchy replaces them with its own, which do not pause after repeated wrong passwords. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.")},
             "fido2-remove": {title: qsTr("Remove Security Key"),
                 message: qsTr("Omarchy turns the security key off for administrator prompts and sudo, deletes its registration and removes the security key tools. It runs in a Terminal window and asks for your password there.")},
             "sshd-setup": {title: qsTr("Set Up Remote Login"),

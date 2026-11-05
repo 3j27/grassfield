@@ -7,7 +7,8 @@ import Grassfield.Ui
 //
 // Never auto-approve: the only call that answers polkit is submit(), and only with a non-empty
 // password typed by the user while polkit asks for a response. Nothing here calls submit() on
-// its own, and cancel() is always available.
+// its own, and cancel() is always available. The one answer given on its own is a refusal: a
+// request the user cannot answer is cancelled as soon as PAM talks without asking (refusesUnseen).
 QtObject {
     id: root
 
@@ -61,6 +62,39 @@ QtObject {
     // !responseRequired: between two prompts, or before pam_unix's first, a fast typist's first keys must not be dropped (a
     // password typed short is a wrong one, and pam_faillock counts it).
     readonly property bool awaitingDevice: !!flow && !responseRequired && !priv.submitted && plainLine(flow.supplementaryMessage, maxDetailLength) !== ""
+
+    // No device answers a request the user cannot see and answer (ADR-0045 OC-6, security review of e3542510, MAJOR-2; macOS:
+    // a request made while locked is shown after the unlock, never answered by the unlock gesture). Quickshell starts PAM the
+    // moment polkit asks, whether or not a sheet shows the request: AuthFlow's constructor runs polkit-agent-helper-1 (0.3.2
+    // flow.cpp setupSession, polkit_agent_session_initiate), again after each failure, and its API has nothing to defer or
+    // pause it. With pam_fprintd or pam_u2f in /etc/pam.d/polkit-1, a request held behind the lock, the screen saver or
+    // another sheet would hold the reader, and a touch meant for the lock screen (or for the request before) would approve
+    // it. So `request`, the flow Quickshell has open (the agent's own, also while this model is handed none: a secret sheet
+    // came first), is refused (polkit's "cancelled": the requester is told no) as soon as PAM says something without asking
+    // (pamTalks: a device's instruction, or any other line: when in doubt, no), whenever `answerable` is false (the agent's
+    // rule: locked, under the screen saver, waiting, held and not clicked past its guard, its keys on the sink), an answer
+    // sent or not. PAM asking for a password ends nothing: that request waits for the user, its sheet after the unlock.
+    // Defaults fail closed (not answerable); with no request nothing happens. The cancel runs from the event loop, never inside
+    // this binding's own change: Quickshell ends the request inside cancelAuthenticationRequest, which changes what the binding
+    // reads, and QML would report a binding loop and keep a stale value (the next request then unguarded; authagent_flows.d
+    // flows.qml test_27). It runs as soon as control returns to the event loop (Qt.callLater), within the same turn.
+    property var request: null
+    property bool answerable: false
+    readonly property bool refusesUnseen: !answerable && pamTalks(request)
+    onRefusesUnseenChanged: if (refusesUnseen)
+        Qt.callLater(root.refuseUnseen)
+
+    // Still unanswerable and PAM still talking when the event loop gets here: refused.
+    function refuseUnseen(): void {
+        if (refusesUnseen)
+            request.cancelAuthenticationRequest();
+    }
+
+    // PAM said something and asks nothing (Quickshell keeps the last line until another one comes).
+    function pamTalks(f: var): bool {
+        return !!f && f.isResponseRequired !== true && plainLine(f.supplementaryMessage, maxDetailLength) !== "";
+    }
+
     // The user answered the request in the sheet (sent a password or cancelled it) and polkit has not asked again since: a
     // request that ends now ends on the user's answer, not under the user's typing (AuthAgent lingers only for the latter;
     // security counter-review of f9e24e1, LOW-1). Set by submit() and cancel(), cleared when polkit asks again (a failure, a

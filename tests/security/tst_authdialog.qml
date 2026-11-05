@@ -51,6 +51,12 @@ TestCase {
         id: flowMock
     }
 
+    // test_15: a request the sheet is not handed (a secret sheet came first), which the agent still gives the model to guard.
+    Component {
+        id: otherFlowC
+        MockFlow {}
+    }
+
     AuthDialogModel {
         id: dialogModel
         flow: flowMock
@@ -134,6 +140,47 @@ TestCase {
         verify(findText(dialog, "Enter your password to allow this.") !== null);
         verify(findText(dialog, "Place your right index finger on the fingerprint reader") !== null, "PAM's last line is not cleared");
         flowMock.supplementaryMessage = "";
+    }
+
+    // ADR-0045 OC-6 (security review of e3542510, MAJOR-2): no device answers a request the user cannot see and answer. The
+    // request Quickshell has open (AuthDialogModel.request) is refused as soon as PAM talks without asking while the agent
+    // says the user cannot answer it (`answerable` false: locked, screen saver, waiting, held), whether or not the sheet has
+    // it and whatever was sent; a password prompt waits for the user. mutate_authdialog.sh G1 to G5 remove each part of the
+    // guard. Restores the mock as it found it (the tests share it; test_3 counts its cancels and answers).
+    function test_15_aRequestNobodyCanAnswerIsRefusedWhenPamTalks() {
+        const cancels = flowMock.cancels;
+        const answers = flowMock.submitted;
+        verify(!dialogModel.answerable, "fails closed: not answerable until the agent says so");
+        // A request waiting behind another sheet (the sheet has flowMock): its PAM reaches the reader, it is refused.
+        const other = createTemporaryObject(otherFlowC, test, {isResponseRequired: false});
+        dialogModel.request = other;
+        compare(other.cancels, 0, "PAM said nothing yet");
+        other.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        tryCompare(other, "cancels", 1, 1000, "a device would answer a request nobody sees");
+        compare(other.submitted.length, 0);
+        compare(flowMock.cancels, cancels, "the sheet's own request is not touched");
+        // The sheet's request asks for a password (pam_faillock's notice above it) while nobody can answer: it waits.
+        dialogModel.request = flowMock;
+        flowMock.supplementaryMessage = "The account is locked due to 3 failed logins.";
+        wait(1);
+        compare(flowMock.cancels, cancels, "a password prompt waits for the user");
+        // The user can answer: sends a wrong password; pam_unix fails and PAM goes on to the reader in the same round.
+        dialogModel.answerable = true;
+        verify(dialogModel.submit("wrong"));
+        flowMock.isResponseRequired = false;
+        flowMock.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        wait(1);
+        compare(flowMock.cancels, cancels, "the user sees the sheet and may touch the reader");
+        // The lock (or the screen saver, a hold) comes while the reader waits: refused at once, the answer sent no shield.
+        dialogModel.answerable = false;
+        tryCompare(flowMock, "cancels", cancels + 1);
+        compare(flowMock.submitted.length, answers.length + 1, "nothing sent but the user's own answer");
+        dialogModel.request = null;
+        flowMock.supplementaryMessage = "";
+        flowMock.isResponseRequired = true;
+        flowMock.cancels = cancels;
+        flowMock.submitted = answers;
+        verify(!dialogModel.submitted);
     }
 
     function test_1_rendering() {

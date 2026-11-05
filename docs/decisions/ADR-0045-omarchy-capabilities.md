@@ -85,6 +85,13 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   recorder's state is a private file in `$XDG_RUNTIME_DIR/grassfield/` that the shell watches. A notice "Screen recording
   saved" with "Open" (Preview plays it) follows.
 - **Lock**: no capture starts while the session is locked; a recording stops when the session locks.
+- **Known limitation, recordings and hidden windows** (opus security review of e3542510, MINOR-4): gpu-screen-recorder records
+  a display or an area through its KMS backend (Omarchy's script calls `-w <display>` and `-w WxH+X+Y` the "kms backend";
+  `gsr-kms-server` holds `cap_sys_admin`), which reads the framebuffer and skips Hyprland's `no_screen_share` rules (SEC-01).
+  A recording therefore shows password manager windows and the authorization and secret sheets when they are on screen;
+  screenshots keep them black. For the user: keep password managers closed and answer no sheet while the menu bar shows the
+  recording item. The portal backend would honour the rules (follow-up, not done). Details and status (NOT VERIFIED, not run:
+  it would record the live screen): docs/specs/security.md, "Screen-share protection".
 
 ### OC-2 Text and QR codes in images (priority 1)
 - **Preview** (and Glance, which shares its image view) recognises text in a still image with tesseract when it is installed:
@@ -136,6 +143,19 @@ Grassfield has since ADR-0034. Corrected with this ADR.
 - Omarchy's fingerprint setup adds `pam_fprintd` to `/etc/pam.d/polkit-1` and `sudo`: Grassfield's polkit sheet then receives
   fprintd's conversation. How the sheet presents it is a security-module question (R12): checked by the security review; any
   change in `shell/security/` needs the opus reviewer's PASS.
+- **No device answers a request nobody can answer** (opus security review of e3542510, MAJOR-2). Quickshell starts PAM as soon
+  as polkit asks, whether or not the sheet shows the request, and offers no way to defer it; so a request that is locked away,
+  under the screen saver, waiting behind a secret sheet or held and not clicked is refused (polkit "cancelled") the moment PAM
+  talks without asking, before a touch meant for the lock screen or another request can approve it. A password prompt still
+  waits for the user (macOS: shown after the unlock). With a fingerprint stack, a request that arrives held is therefore
+  refused and its app must ask again. Residual: a few milliseconds between the reader starting and the agent hearing it, and
+  Quickshell's leaked replaced request. Details: docs/specs/security.md, "Polkit details".
+- **Known limitation, `pam_faillock`** (opus security review of e3542510, MINOR-5; read in Omarchy 4.0.6's scripts): where
+  `/etc/pam.d/polkit-1` does not exist (this machine: polkit uses the vendor `/usr/lib/pam.d/polkit-1`, `include system-auth`),
+  the fingerprint and security key setups write one with `pam_unix` only, without `system-auth`, so the authorization sheet
+  loses `pam_faillock`'s lockout (sudo and the lock screen keep it), `pam_systemd_home` and `pam_env`; the removal scripts
+  leave that file. Grassfield edits no PAM file (OC-0.4): the setup sheets say so before the terminal opens; the owner's fix is
+  in docs/specs/security.md.
 
 ### OC-7 Remote Login (priority 2)
 - Settings > General > Sharing, a pane with one row: "Remote Login" (switch). On = `omarchy-setup-security-sshd`, off =

@@ -7,8 +7,10 @@
 # counter-review of f9e24e1: nor the rest of a password typed into a request that ends unanswered; the notice that says
 # so while the keys go nowhere). window.qml runs the same agent in FakePanel.qml
 # (make_harness.py --panel): a window made again each time it is shown and given the keyboard only once mapped, as
-# Quickshell's PanelWindow and a compositor do, beside a window underneath (check of c1ca44f). No compositor, no polkit, no
-# PAM.
+# Quickshell's PanelWindow and a compositor do, beside a window underneath (check of c1ca44f). flows.qml test_20 to test_27:
+# a request the user cannot see and answer (locked, saver, held, waiting behind a secret sheet) is refused once PAM talks
+# without asking, as for a fingerprint reader (ADR-0045 OC-6, security review of e3542510, MAJOR-2). No compositor, no
+# polkit, no PAM.
 #
 #   tests/security/authagent_flows.sh              the tests: PASS / FAIL
 #   tests/security/authagent_flows.sh --mutants    also each mutant below, which the tests must catch ("MUTANT <name>: CAUGHT")
@@ -131,6 +133,12 @@ answer-cleared-at-the-end (f9e24e1 LOW-1)#AuthDialogModel.qml#        if (flow)\
 window-unmapped-before-the-sink (f9e24e1 LOW-1)#AuthAgent.qml#        root.sinkingKeys = typing;\n        if (!dialogModel.active)\n            root.requestOpen = false;#        if (!dialogModel.active)\n            root.requestOpen = false;\n        root.sinkingKeys = typing;
 no-ended-notice (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingering#            visible: false
 ended-notice-over-a-sheet (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingering#            visible: root.sinkingKeys
+device-answers-unseen (e3542510 MAJOR-2)#AuthDialogModel.qml#        if (refusesUnseen)\n            request.cancelAuthenticationRequest();#        if (refusesUnseen)\n            console.info("refused");
+refusal-inside-the-binding (e3542510 MAJOR-2, binding loop)#AuthDialogModel.qml#        Qt.callLater(root.refuseUnseen)#        root.refuseUnseen()
+device-answers-behind-lock-and-saver (e3542510 MAJOR-2)#AuthAgent.qml#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys#        answerable: !root.sinkingKeys
+device-answers-a-held-request (e3542510 MAJOR-2)#AuthAgent.qml# && (!root.heldByLock || root.userFocused) && !root.sinkingKeys# && !root.sinkingKeys
+device-answers-a-waiting-request (e3542510 MAJOR-2)#AuthAgent.qml#        request: agent.flow#        request: agent.isActive && !root.waiting ? agent.flow : null
+device-answers-always (e3542510 MAJOR-2)#AuthAgent.qml#        answerable: !SessionState.locked#        answerable: true || !SessionState.locked
 EOF_MUTANTS
 ((status == 0)) && echo "PASS: authagent_flows (and every mutant caught)" || echo "FAIL: authagent_flows mutants"
 exit "$status"
