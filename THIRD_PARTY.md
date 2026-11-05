@@ -233,7 +233,7 @@ Sixteen photographs from Wikimedia Commons (ADR-0040 step 2c; the owner's call o
 `/usr/share/grassfield/wallpapers/photos/` and shown in Settings > Wallpaper > Photographs with their author, source and
 licence. The list is `packaging/arch/wallpaper-photos.json`; the build downloads each original from
 `upload.wikimedia.org`, checks its SHA-1 and changes it as follows: Resized to at most 5120 pixels wide, re-encoded as JPEG (quality 90), metadata removed (packaging/arch/PKGBUILD, apps/wallpaper-tool grassfield-wallpaper-shrink). Each photograph keeps its own
-licence; none of them is under Grassfield's licences. Details and the owner's decisions: `docs/legal/visual-review.md`
+licence; none of them is under Grassfield's licences. Details and the owner's decisions are in the maintainers' private legal review
 E40.
 
 | Photograph | Source (Commons file page) | Credit | Licence |

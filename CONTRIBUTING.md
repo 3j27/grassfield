@@ -89,7 +89,7 @@ These come from the specs (`docs/specs/ui.md`, ADR-0002, ADR-0003, ADR-0024, ADR
   `Grassfield.Ui`, never as literals in QML. `just check-literals` fails on a literal. Every token names its source.
 - **Blur is real.** Use the compositor's background effect or layer rules. Do not fake blur with a screenshot or an image.
 - **No Apple assets, no Apple names.** No Apple icon, font, wallpaper, sound or artwork, traced or copied, and no Apple trademark
-  in a user-visible string. `tests/ci/ui_names.py` checks the strings; `docs/legal/visual-review.md` explains the line. Our own
+  in a user-visible string. `tests/ci/ui_names.py` checks the strings; ADR-0003 explains the line. Our own
   icons are drawn by hand (`branding/LICENSES.md` lists the provenance of every asset).
 - **Every visible string is translatable** (`qsTr()` in QML, `tr()` in C++); English is the source, French the first translation.
   After changing strings run `just i18n-update` and complete the French catalog.

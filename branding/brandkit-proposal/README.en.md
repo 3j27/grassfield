@@ -4,7 +4,7 @@ English translation of [README.md](README.md), the owner's French text, which re
 
 **Status: identity under validation.** Since 31 October 2026 the symbol is "Deux reliefs" (two reliefs), direction B, which the owner chose among the v6 directions; it replaces the blade symbol of 30 October, whose concept is kept as provenance. It is a geometric vector drawing made of filled shapes. It is integrated into the system logo resources; the other elements remain proposals. Visual and legal validation are still to be done before a public launch or a filing.
 
-Open [the brand board](brandboard.html) in a browser. The [v6 directions board](../concepts/grassfield-sommet-v6/board.png) and [its note](../concepts/grassfield-sommet-v6/README.md) are kept, and so is the previous concept ([image](../concepts/grassfields-original-refined/logo.png), [prompt](../concepts/grassfields-original-refined/PROMPT.md)). The SVGs and their transparent PNG exports are in [assets](assets/).
+Open [the brand board](brandboard.html) in a browser. The concept images the mark was chosen from are not part of the public repository. The SVGs and their transparent PNG exports are in [assets](assets/).
 
 ## Idea
 

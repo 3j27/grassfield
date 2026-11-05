@@ -4,7 +4,7 @@ English: [README.en.md](README.en.md).
 
 **Statut : identité en cours de validation.** Depuis le 31 octobre 2026, le symbole est « Deux reliefs », la piste B choisie par le propriétaire parmi les pistes v6 ; il remplace le symbole aux lames du 30 octobre, dont le concept reste conservé comme provenance. C’est un dessin vectoriel géométrique en formes pleines. Il est intégré aux ressources du logo système ; les autres éléments restent proposés. La validation visuelle et juridique reste à faire avant lancement public ou dépôt.
 
-Ouvrir [la planche de marque](brandboard.html) dans un navigateur. La [planche des pistes v6](../concepts/grassfield-sommet-v6/board.png) et [sa note](../concepts/grassfield-sommet-v6/README.md) sont conservées, ainsi que le concept précédent ([image](../concepts/grassfields-original-refined/logo.png), [prompt](../concepts/grassfields-original-refined/PROMPT.md)). Les SVG et leurs exports PNG transparents sont dans [assets](assets/).
+Ouvrir [la planche de marque](brandboard.html) dans un navigateur. Les images de concept dont la marque est issue ne font pas partie du dépôt public. Les SVG et leurs exports PNG transparents sont dans [assets](assets/).
 
 ## Idée
 

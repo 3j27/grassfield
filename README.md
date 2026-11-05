@@ -77,7 +77,7 @@ Wayland session lock held by the compositor, so killing the shell never unlocks 
   amendment); not yet verified on real hardware.
 - Fonts requested by name that are not installed fall back to Liberation Sans, not Inter.
 - Omarchy's own shell (bar, launcher, lock) does not run inside Grassfield, by design.
-- The visual identity is close to macOS and carries trade-dress risk (`docs/legal/visual-review.md`). Not affiliated with Apple, Arch Linux or Omarchy. No Apple assets are used.
+- The visual identity is close to macOS and carries trade-dress risk (ADR-0003, ADR-0024). Not affiliated with Apple, Arch Linux or Omarchy. No Apple assets are used.
 
 ## Development (nested only)
 
