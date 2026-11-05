@@ -1400,7 +1400,7 @@ it; it is saved as "Screen Recording <date> at <time>.mov". macOS records no sys
 - SC8a The modes act on the toolbar's own surface, as macOS 27's do (the design review of OC-1, H1; `CaptureToolbar.qml`, the
   pure decisions in `CaptureModel.js`):
   - Capture and Record Selected Portion: as soon as the mode is chosen a frame shows on the toolbar's display, the rest of the
-    display dimmed (`capture.veil` around it, `capture.border` and `capture.borderWidth` on it), with eight handles (discs of
+    display dimmed (`capture.frameVeil` around it, black at 45 percent: the helper's crosshair keeps `capture.veil`, `capture.border` and `capture.borderWidth` on it), with eight handles (discs of
     `capture.handleSize`, taken in a `capture.handleHitSize` square, the corners first). A drag on a handle resizes the frame
     (past the opposite edge it turns over), inside it moves it, outside it draws a new one; it stays on the display and at
     least `capture.frameMinSize` each way. While dragging, the size readout (W × H of the picture, in pixels: the logical size
@@ -1409,7 +1409,7 @@ it; it is saved as "Screen Recording <date> at <time>.mov". macOS records no sys
     (`capture.lastSelection`, per display name, brought back on the display), else a centred frame half the display each way.
     Capture, Record and Return act on its geometry.
   - Capture Selected Window: the window under the pointer is tinted with the accent (`capture.windowHighlightOpacity`, its
-    corner the window's, `capture.windowHighlightRadius`): the window drawn on top there among the shown Desktop's windows of
+    corner the window's own superellipse, `capture.windowHighlightRadius` at `capture.windowHighlightPower`): the window drawn on top there among the shown Desktop's windows of
     the platform's window list (`Compositor.windowsOn`), the most recently activated one, a full-screen window hiding those
     activated before it, clipped to the display. A click captures that window; a click where no window is does nothing; Esc
     closes. Every display's surface takes the pointer in this mode (input only; the bar and the keyboard stay on the toolbar's

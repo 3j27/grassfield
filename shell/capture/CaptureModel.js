@@ -279,6 +279,29 @@ function withSelection(text, name, r) {
 
 // ---- Capture Selected Window ----
 
+// The outline of a window as Hyprland draws it: a rectangle whose corners are superellipses of `power` that reach
+// `radius` x `power` / 2 along each edge (decoration.rounding and rounding_power), as the points of a closed polygon, clockwise
+// from the top left corner's end on the top edge. A circular corner of the same radius would leave notches.
+function windowOutline(w, h, radius, power, steps) {
+    const p = power > 0 ? power : 2;
+    const n = Math.max(2, Math.round(steps || 12));
+    const e = Math.max(0, Math.min(radius * p / 2, w / 2, h / 2));
+    const pts = [];
+    // Corner centres in drawing order: top left, top right, bottom right, bottom left, with the signs of their curves.
+    const corners = [[e, e, -1, -1], [w - e, e, 1, -1], [w - e, h - e, 1, 1], [e, h - e, -1, 1]];
+    for (let c = 0; c < 4; c++) {
+        const k = corners[c];
+        for (let i = 0; i <= n; i++) {
+            // The quarter turn runs from the edge before the corner to the edge after it.
+            const t = (c % 2 === 0 ? i : (n - i)) / n * Math.PI / 2;
+            const dx = Math.pow(Math.cos(t), 2 / p);
+            const dy = Math.pow(Math.sin(t), 2 / p);
+            pts.push({x: k[0] + k[2] * e * dx, y: k[1] + k[3] * e * dy});
+        }
+    }
+    return pts;
+}
+
 // The window drawn on top at the point (output-relative), among `windows` ({x, y, w, h, fullscreen, stamp}, the shown
 // Desktop's): the most recently activated one there (Grassfield raises the window it activates), a full-screen window hiding the
 // windows activated before it; of equal stamps, the later in the list. null when no window is there.

@@ -198,6 +198,27 @@ TestCase {
         verify(Model.readout({x: 0, y: 0, w: 916, h: 504}, 2) !== "1145 × 630");
     }
 
+    // The highlight follows the window's own superellipse corner (17 at power 2.6: 22.1 along each edge), clockwise.
+    function test_windowOutline() {
+        const pts = Model.windowOutline(400, 300, 17, 2.6, 12);
+        compare(pts.length, 4 * 13);
+        fuzzyCompare(pts[0].x, 0, 0.001);
+        fuzzyCompare(pts[0].y, 22.1, 0.001);
+        fuzzyCompare(pts[12].x, 22.1, 0.001);
+        fuzzyCompare(pts[12].y, 0, 0.001);
+        fuzzyCompare(pts[13].x, 400 - 22.1, 0.001);
+        fuzzyCompare(pts[13].y, 0, 0.001);
+        fuzzyCompare(pts[26].x, 400, 0.001);
+        fuzzyCompare(pts[39].x, 22.1, 0.001);
+        fuzzyCompare(pts[39].y, 300, 0.001);
+        const mid = pts[6];
+        verify(mid.x > 0 && mid.x < 22.1);
+        verify(Math.abs(mid.x - mid.y) < 0.001);
+        for (const q of pts)
+            verify(q.x >= -0.001 && q.x <= 400.001 && q.y >= -0.001 && q.y <= 300.001);
+        compare(Model.windowOutline(10, 10, 17, 2.6, 4).length, 20, "a small window keeps its corners inside");
+    }
+
     function test_lastSelection() {
         const text = Model.withSelection("", "DP-1", {x: 10, y: 20, w: 300, h: 200});
         compare(text, "DP-1=10,20,300,200");

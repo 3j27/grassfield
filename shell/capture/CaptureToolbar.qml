@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
@@ -17,7 +18,7 @@ import "CaptureModel.js" as Model
 // shared primary Button, and Options opens the shared PopupMenu (section headers, check marks) above itself, inside this window.
 // Without gpu-screen-recorder the recordings' group is not shown (OC-0 rule 3).
 // The modes act on this surface as macOS 27's do (the design review of OC-1, H1):
-// - Selected Portion: a frame over the dimmed display (capture.veil around it, capture.border on it, eight handles), opened on
+// - Selected Portion: a frame over the dimmed display (capture.frameVeil around it, capture.border on it, eight handles), opened on
 //   the display's last frame (capture.lastSelection) or centred; a drag on a handle resizes it, inside moves it, outside draws a
 //   new one, with the size readout beside the pointer; Capture/Record and Return act on its geometry.
 // - Selected Window: the window under the pointer is tinted with the accent (every display's surface takes input then); a click
@@ -328,18 +329,27 @@ Variants {
             onExited: win.hovered = null
         }
 
-        // Capture Selected Window: the window under the pointer, tinted with the accent (macOS 27), its corner the window's.
-        Rectangle {
+        // Capture Selected Window: the window under the pointer, tinted with the accent (macOS 27), its outline the window's own
+        // (Hyprland's superellipse corners, CaptureModel.windowOutline): a circular corner would leave notches at the title bar.
+        Shape {
             visible: win.windowMode && win.hovered !== null
             x: win.hovered ? win.hovered.x : 0
             y: win.hovered ? win.hovered.y : 0
             width: win.hovered ? win.hovered.w : 0
             height: win.hovered ? win.hovered.h : 0
-            radius: Tokens.captureWindowHighlightRadius
-            color: Appearance.withAlpha(Appearance.colors.accent, Tokens.captureWindowHighlightOpacity)
+            preferredRendererType: Shape.CurveRenderer
+
+            ShapePath {
+                fillColor: Appearance.withAlpha(Appearance.colors.accent, Tokens.captureWindowHighlightOpacity)
+                strokeColor: "transparent"
+
+                PathPolyline {
+                    path: win.hovered ? Model.windowOutline(win.hovered.w, win.hovered.h, Tokens.captureWindowHighlightRadius, Tokens.captureWindowHighlightPower, 12).map(q => Qt.point(q.x, q.y)) : []
+                }
+            }
         }
 
-        // The Selected Portion modes: the display dimmed around the frame (capture.veil), the frame's hairline (capture.border)
+        // The Selected Portion modes: the display dimmed around the frame (capture.frameVeil), the frame's hairline (capture.border)
         // and its eight handles.
         Item {
             id: frameLayer
@@ -350,21 +360,21 @@ Variants {
             Rectangle {
                 width: parent.width
                 height: win.frame.y
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
                 y: win.frame.y + win.frame.h
                 width: parent.width
                 height: parent.height - y
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
                 y: win.frame.y
                 width: win.frame.x
                 height: win.frame.h
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
@@ -372,7 +382,7 @@ Variants {
                 y: win.frame.y
                 width: parent.width - x
                 height: win.frame.h
-                color: Model.qtColor(Tokens.captureVeil)
+                color: Model.qtColor(Tokens.captureFrameVeil)
             }
 
             Rectangle {
@@ -398,7 +408,7 @@ Variants {
                     radius: width / 2
                     color: Model.qtColor(Tokens.captureBorder)
                     border.width: Tokens.captureBorderWidth
-                    border.color: Model.qtColor(Tokens.captureVeil)
+                    border.color: Model.qtColor(Tokens.captureFrameVeil)
                 }
             }
 
