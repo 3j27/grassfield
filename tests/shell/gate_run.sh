@@ -140,4 +140,19 @@ GATE_RUNS_DIR="$tmp/r2" GATE_STAMP=20261023T131600Z bash "$tmp/repo/scripts/dev/
 GATE_RUNS_DIR="$tmp/r2" GATE_STAMP=20261023T131700Z bash "$tmp/repo/scripts/dev/gate-run.sh" demo-stray -- "$tmp/measures.sh" >/dev/null 2>&1
 desc="a clean tree is 'clean'; a tree with only an untracked file is dirty"
 check bash -c 'grep -q "^- commit: [0-9a-f]* (clean) on" "$1/r2/20261023T131600Z-demo-clean.md" && grep -q "^- commit: [0-9a-f]* (dirty: " "$1/r2/20261023T131700Z-demo-stray.md"' _ "$tmp"
+
+# Reports and archives hold no absolute path of this machine: repository-relative inside the repository, "~" for the home folder.
+mkdir -p "$tmp/home/.dev"
+printf '#!/usr/bin/env bash\necho "PASS: path $PWD $HOME/x"\n' >"$tmp/pathy.sh"
+chmod +x "$tmp/pathy.sh"
+HOME="$tmp/home" GATE_RUNS_DIR="$tmp/home/.dev/runs" GATE_ARCHIVE_DIR="$tmp/home/archive" GATE_STAMP=20261023T140000Z bash "$gr" demo-path -- "$tmp/pathy.sh" >/dev/null 2>&1
+HOME="$tmp/home" GATE_RUNS_DIR="$tmp/home/.dev/runs" GATE_ARCHIVE_DIR="$tmp/home/archive" bash "$gr" --archive >/dev/null 2>&1
+desc="an archived report and log name no absolute home path (the log is written as ~/...)"
+check bash -c '! grep -rF -- "$1" "$2/home/archive" && grep -qx -- "- log: ~/.dev/runs/20261023T140000Z-demo-path.log" "$2/home/archive/20261023T140000Z-demo-path.md" && grep -qF -- "path " "$2/home/archive/20261023T140000Z-demo-path.log"' _ "$tmp/home" "$tmp"
+mkdir -p "$root/.dev/gate-runs-test"
+GATE_RUNS_DIR="$root/.dev/gate-runs-test" GATE_ARCHIVE_DIR="$tmp/arch2" GATE_STAMP=20261023T140100Z bash "$gr" demo-rel -- "$tmp/gate.sh" 0 >/dev/null 2>&1
+GATE_RUNS_DIR="$root/.dev/gate-runs-test" GATE_ARCHIVE_DIR="$tmp/arch2" bash "$gr" --archive >/dev/null 2>&1
+desc="inside the repository the log path is repository-relative, in the report and in its archive"
+check bash -c 'grep -qx -- "- log: .dev/gate-runs-test/20261023T140100Z-demo-rel.log" "$1/.dev/gate-runs-test/20261023T140100Z-demo-rel.md" && grep -qx -- "- log: .dev/gate-runs-test/20261023T140100Z-demo-rel.log" "$2/arch2/20261023T140100Z-demo-rel.md" && [ -f "$2/arch2/20261023T140100Z-demo-rel.log" ]' _ "$root" "$tmp"
+rm -rf "$root/.dev/gate-runs-test"
 exit "$fail"
