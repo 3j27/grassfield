@@ -1,0 +1,4 @@
+Grassfield now runs on Omarchy 4.5 as well as 4.0.6: you can update Omarchy and Grassfield together.
+The lock screen paces fingerprint attempts as Omarchy 4.5 does and never tries while the displays are off.
+Dictation uses Omarchy 4.5's dictation commands when they are installed.
+File pickers and other system dialogs keep Grassfield's look after Omarchy 4.5's update.

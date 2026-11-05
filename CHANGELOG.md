@@ -4,6 +4,14 @@ All notable changes of Grassfield Desktop. The version of every package, library
 file at the repository root (`scripts/dev/check-version.sh`, part of `just check`, keeps the consumers equal to it).
 Format: one section per version, newest first.
 
+## 1.0.0-rc5 (release candidate, 2026-11-05)
+
+Omarchy 4.5.0 support, beside 4.0.6: the lock's fingerprint pacing (Omarchy 4.5's backoff, no attempt with the displays
+off, a 20 s reach timeout), Software Update's keyring refresh and kernel restart rule, the portal routing kept against 4.5's
+hyprland-portals.conf (the session is Grassfield:Hyprland and links its own grassfield-portals.conf), owed.service kept out of
+the Grassfield session, Dictation on 4.5's commands, hibernation's disk check, the herdr theme sync stopped, and a drift
+lock per Omarchy version.
+
 ## 1.0.0-rc4 (release candidate, 2026-11-05)
 
 Omarchy's capabilities in the Grassfield session (ADR-0045): the screenshot and recording toolbar (Super+Shift+5), text and

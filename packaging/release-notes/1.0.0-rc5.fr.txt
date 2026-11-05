@@ -1,0 +1,4 @@
+Grassfield fonctionne désormais sur Omarchy 4.5 comme sur 4.0.6 : vous pouvez mettre à jour Omarchy et Grassfield ensemble.
+L’écran de verrouillage espace les essais d’empreinte comme Omarchy 4.5 et n’essaie jamais quand les écrans sont éteints.
+La Dictée utilise les commandes de dictée d’Omarchy 4.5 quand elles sont installées.
+Les sélecteurs de fichiers et les autres dialogues système gardent l’apparence de Grassfield après la mise à jour d’Omarchy 4.5.
