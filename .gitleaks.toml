@@ -1,0 +1,31 @@
+# Gate S1 (`just check-secrets`): the default gitleaks rules, plus allowlists for known false positives. They are by path
+# and rule, not by commit id, so they survive a rewritten history. Each file below holds made-up or public values only.
+# A new real secret in one of these files would be missed by the named rule: keep the list short and the files fake.
+title = "Grassfield"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Made-up xdg-desktop-portal restore tokens, D-Bus fixtures and test UUIDs in the Settings tests"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^tests/unit/tst_settingsprivacy\.qml$''',
+  '''^tests/unit/settings/tst_systembus\.cpp$''',
+  '''^tests/integration/settings_dbus\.sh$''',
+]
+
+[[allowlists]]
+description = "Omarchy's public package-signing key fingerprint, held in a variable named *_KEY"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^packaging/pacman/grassfield-update-helper$''',
+  '''^scripts/gates/rc-toolkit\.sh$''',
+]
+
+[[allowlists]]
+description = "The stub signing tool prints an armored-key header around STUB-SECRET-KEY-MATERIAL; there is no key"
+targetRules = ["private-key"]
+paths = [
+  '''^tests/shell/make_signing_key\.sh$''',
+]
