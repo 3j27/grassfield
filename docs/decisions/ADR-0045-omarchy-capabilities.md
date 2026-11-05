@@ -92,6 +92,9 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   screenshots keep them black. For the user: keep password managers closed and answer no sheet while the menu bar shows the
   recording item. The portal backend would honour the rules (follow-up, not done). Details and status (NOT VERIFIED, not run:
   it would record the live screen): docs/specs/security.md, "Screen-share protection".
+- **Keyboard and security sheets** (opus re-review, MINOR): the toolbar never maps itself as Exclusive while a polkit or secret
+  sheet is open (no hand-over between displays, no opening with the keyboard), so the rest of a password typed into the sheet
+  never reaches it; it takes the keyboard again once the sheet is gone (docs/specs/security.md, "Polkit details").
 
 ### OC-2 Text and QR codes in images (priority 1)
 - **Preview** (and Glance, which shares its image view) recognises text in a still image with tesseract when it is installed:

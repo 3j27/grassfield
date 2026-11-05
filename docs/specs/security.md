@@ -917,6 +917,17 @@ included (`AuthAgent.queuePresent`), so a secret sheet never shows over it. A po
 sheets' bound of 8. The agent's window rules are unchanged (`tests/security/authagent_flows.sh`, `lock_surfaces.sh`);
 `tests/security/secret_sheets.sh` runs both agents and the queue together with real keys.
 
+**The capture toolbar never takes the keyboard from a sheet (opus re-review of the ADR-0045 security fixes, MINOR).** The
+capture toolbar (ADR-0045 OC-1) is an Overlay layer with Exclusive keyboard, handed between displays by mapping the new
+holder again (a layer mapped as Exclusive takes the keyboard; one turned Exclusive while mapped does not). Over an open
+polkit or secret sheet such a mapping would take the keyboard from the sheet and send the rest of a password to the toolbar.
+While `SessionState.authorizing` (the polkit sheet or a secret sheet is open, shell.qml's Binding) the toolbar makes nothing
+Exclusive: no hand-over, no remapping, and a toolbar opened then maps without the keyboard; a hand-over under way when a
+sheet opens maps without it; once the sheet is gone the display that wants the keyboard maps again as Exclusive
+(`CaptureToolbar.qml` `sheetOpen`, `followKeyboard`). `lock_surfaces.sh` pins it with mutations (QML with PanelWindow cannot
+run offscreen). Residual: the key sink's linger after a request ended under the user's typing is not `authorizing`, so a
+hand-over in those 3 s at most may take the keyboard from the sink. Nested: NOT VERIFIED.
+
 **A device before the password (ADR-0045 OC-6, security review of the Settings setups, 2026-11-04).** Once Omarchy's
 fingerprint or security key setup ran, `/etc/pam.d/polkit-1` starts with `pam_fprintd` (behind Omarchy's lid-closed gate) or
 `pam_u2f` (`cue`), each `sufficient`, before `pam_unix`. polkit-agent-helper-1 then sends the module's lines as information

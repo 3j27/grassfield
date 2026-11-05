@@ -110,6 +110,22 @@ expect("shell/capture/Capture.qml: the capture runs only if the session is still
        and len(re.findall(r"CaptureState\.run\(", code(capture))) == 1)
 expect("shell/capture/Capture.qml: only show() opens the toolbar (one open = true)", len(re.findall(r"\bopen\s*=\s*true\b", code(capture))) == 1
        and re.search(r"\bopen\s*=\s*true\b", code(function(capture, "show") or "")) is not None)
+# Opus re-review of the ADR-0045 security fixes (MINOR): the toolbar's per-display keyboard hand-over maps a surface as
+# Exclusive, which takes the keyboard from a polkit or secret sheet open over it. While SessionState.authorizing nothing is
+# made Exclusive: the toolbar asks for the keyboard only through holdsKeyboard, which is set true in followKeyboard after the
+# sheet check and by the hand-over Timer only without a sheet; a sheet opening stops a hand-over under way.
+toolbar = code(read("shell/capture/CaptureToolbar.qml"))
+follow = code(function(toolbar, "followKeyboard") or "")
+expect("shell/capture/CaptureToolbar.qml: no keyboard hand-over and no Exclusive mapping while a security sheet is open",
+       re.search(r"readonly property bool sheetOpen:\s*SessionState\.authorizing\s*\n", toolbar) is not None
+       and len(re.findall(r"WlrKeyboardFocus\.Exclusive", toolbar)) == 1
+       and re.search(r"keyboardFocus:\s*holdsKeyboard\s*\?\s*WlrKeyboardFocus\.Exclusive\s*:\s*WlrKeyboardFocus\.None", toolbar) is not None
+       and len(re.findall(r"\bholdsKeyboard\s*=\s*(?!=)", toolbar)) == 6
+       and len(re.findall(r"\bholdsKeyboard\s*=\s*true\b", toolbar)) == 1
+       and re.search(r"if\s*\(win\.sheetOpen\)\s*\{\s*win\.holdsKeyboard\s*=\s*false;\s*return;\s*\}[\s\S]*win\.holdsKeyboard\s*=\s*true;", follow) is not None
+       and re.search(r"onTriggered:\s*\{\s*win\.holdsKeyboard\s*=\s*win\.wantsKeyboard\s*&&\s*!win\.sheetOpen;", toolbar) is not None
+       and re.search(r"onSheetOpenChanged:\s*\{\s*if\s*\(sheetOpen\)\s*\{\s*keyHandover\.stop\(\);\s*if\s*\(win\.remapping\)\s*\{\s*win\.remapping\s*=\s*false;\s*win\.holdsKeyboard\s*=\s*false;\s*\}\s*\}\s*else\s*\{\s*win\.followKeyboard\(true\);\s*\}", toolbar) is not None
+       and re.search(r"onWantsKeyboardChanged:\s*win\.followKeyboard\(false\)", toolbar) is not None)
 toggle = function(read("shell/notifications/Notifications.qml"), "toggleCenter") or ""
 opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
@@ -605,7 +621,7 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
   shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml \
   shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml shell/overlay/ExitCover.qml \
-  shell/services/Emoji.qml shell/capture/Capture.qml; do
+  shell/services/Emoji.qml shell/capture/Capture.qml shell/capture/CaptureToolbar.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -703,6 +719,10 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthDialogModel.qml#before.isCompleted !== true)#true)' \
   'shell/security/polkit/AuthDialogModel.qml#liveReplaced().some(f => pamTalks(f))#false' \
   'shell/capture/Capture.qml#SessionState.refuses("capture")#false' \
+  'shell/capture/CaptureToolbar.qml#            if (win.sheetOpen) {\n                win.holdsKeyboard = false;\n                return;\n            }\n#' \
+  'shell/capture/CaptureToolbar.qml#                win.holdsKeyboard = win.wantsKeyboard && !win.sheetOpen;#                win.holdsKeyboard = win.wantsKeyboard;' \
+  'shell/capture/CaptureToolbar.qml#                keyHandover.stop();\n                if (win.remapping) {#                if (win.remapping) {' \
+  'shell/capture/CaptureToolbar.qml#readonly property bool sheetOpen: SessionState.authorizing#readonly property bool sheetOpen: false' \
   'shell/capture/Capture.qml#        if (locked)\n            hide();#        ;' \
   'shell/capture/Capture.qml#            if (args && !SessionState.locked)#            if (args)' \
   'shell/capture/Capture.qml#        else\n            show();#        else\n            open = true;' \

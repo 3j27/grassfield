@@ -81,20 +81,46 @@ Variants {
         // mapped and changes to Exclusive is not given the focus (Escape and Return reached nothing on the display the pointer
         // moved to). The hand-over between displays is therefore a new mapping: the old holder drops to None at once, the new
         // one unmaps, then maps again as Exclusive. `root.holder` names the display that held it since the toolbar opened.
+        // While a security sheet is open (the polkit sheet or a secret sheet: SessionState.authorizing) nothing here is mapped as
+        // Exclusive, neither a hand-over nor the toolbar opening: the surface mapped last with Exclusive takes the keyboard, so the
+        // rest of a password typed into the sheet would reach the toolbar (opus re-review of the ADR-0045 security fixes, MINOR).
+        // The hand-over waits for the sheet to go, and then always maps again (a mapped layer turned Exclusive gets no focus).
         property bool holdsKeyboard: false
         property bool remapping: false
-        onWantsKeyboardChanged: {
+        onWantsKeyboardChanged: win.followKeyboard(false)
+        readonly property bool sheetOpen: SessionState.authorizing
+        onSheetOpenChanged: {
+            if (sheetOpen) {
+                // A hand-over under way stays unmapped no longer, and maps without the keyboard (keyHandover checks too).
+                keyHandover.stop();
+                if (win.remapping) {
+                    win.remapping = false;
+                    win.holdsKeyboard = false;
+                }
+            } else {
+                win.followKeyboard(true);
+            }
+        }
+
+        // `afterSheet`: a security sheet just went; a display that wants the keyboard and was kept from it takes it now.
+        function followKeyboard(afterSheet: bool): void {
             keyHandover.stop();
             win.remapping = false;
-            if (!wantsKeyboard) {
-                holdsKeyboard = false;
+            if (!win.wantsKeyboard) {
+                win.holdsKeyboard = false;
                 return;
             }
-            if (root.holder === "" || !win.visible) {
-                holdsKeyboard = true;
+            if (win.sheetOpen) {
+                win.holdsKeyboard = false;
+                return;
+            }
+            if (afterSheet && win.holdsKeyboard)
+                return;
+            if (!afterSheet && (root.holder === "" || !win.visible)) {
+                win.holdsKeyboard = true;
             } else {
-                // Taken over from another display: unmap, then map as Exclusive.
-                holdsKeyboard = false;
+                // Taken over from another display, or after a sheet: unmap, then map as Exclusive.
+                win.holdsKeyboard = false;
                 win.remapping = true;
                 keyHandover.restart();
             }
@@ -278,7 +304,7 @@ Variants {
 
             interval: Tokens.focusReturnMenuActionSettleMs
             onTriggered: {
-                win.holdsKeyboard = win.wantsKeyboard;
+                win.holdsKeyboard = win.wantsKeyboard && !win.sheetOpen;
                 win.remapping = false;
             }
         }
