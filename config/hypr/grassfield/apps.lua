@@ -41,7 +41,9 @@
 local M = { rules = {}, failed = {} }
 
 -- Each entry: the Omarchy file (default/hypr/apps/<source>) and the rule as hl.window_rule takes it; `omarchy_match` and
--- `narrowed` (not passed to Hyprland) record a match narrowed from Omarchy's and why.
+-- `narrowed` (not passed to Hyprland) record a match narrowed from Omarchy's and why; `since` (not passed either) names the
+-- Omarchy version whose file first has the rule: an older file (4.0.6 is the minimum) lacks it, and the rule is applied all the
+-- same; `gone` the version whose file no longer has it (its match was widened there: a `since` rule takes over).
 local RULES = {
   -- battlenet.lua: the installer draws Blizzard's own frame; the window manager adds none (no title bar, border, blur or
   -- shadow). The launcher keeps its own size.
@@ -53,8 +55,14 @@ local RULES = {
   { source = "davinci-resolve.lua", name = "gf-app-resolve-focus",
     match = { class = ".*[Rr]esolve.*" },
     stay_focused = true },
-  { source = "davinci-resolve.lua", name = "gf-app-resolve-main-focus",
+  { source = "davinci-resolve.lua", name = "gf-app-resolve-main-focus", gone = "4.5",
     match = { class = ".*[Rr]esolve.*", title = "^(DaVinci Resolve( Studio)? - .+|Project Manager)$" },
+    stay_focused = false },
+  -- Omarchy 4.5 adds three more windows of Resolve to that list (Preferences, Find Directory and the Voiceover panel, which
+  -- Resolve titles "Dialog"). Omarchy 4.0.6 has none of them: `since` says so, and the rule is applied on both (the windows of
+  -- those titles are Resolve's own dialogs either way).
+  { source = "davinci-resolve.lua", name = "gf-app-resolve-dialog-focus", since = "4.5",
+    match = { class = ".*[Rr]esolve.*", title = "^(DaVinci Resolve( Studio)? - .+|Project Manager|Preferences|Find Directory|Dialog)$" },
     stay_focused = false },
   -- geforce.lua, moonlight.lua, retroarch.lua, steam.lua: a full-screen game or stream keeps the screen awake.
   { source = "geforce.lua", name = "gf-app-geforce-now-idle",
@@ -111,7 +119,7 @@ local RULES = {
 for _, entry in ipairs(RULES) do
   local rule = {}
   for key, value in pairs(entry) do
-    if key ~= "source" and key ~= "omarchy_match" and key ~= "narrowed" then
+    if key ~= "source" and key ~= "omarchy_match" and key ~= "narrowed" and key ~= "since" and key ~= "gone" then
       rule[key] = value
     end
   end

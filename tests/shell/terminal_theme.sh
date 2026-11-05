@@ -72,6 +72,7 @@ cat >"$tmp/omarchy/bin/omarchy-theme-set" <<'SH'
   echo "path=$PATH"
   echo "omarchy=${OMARCHY_PATH-unset}"
   echo "askpass=${SUDO_ASKPASS-unset}"
+  echo "wait=${OMARCHY_THEME_WAIT-unset}"
   echo "shell=$(command -v omarchy-shell)"
   echo "pkexec=$(command -v pkexec)"
   echo "hyprctl=$(command -v hyprctl)"
@@ -84,6 +85,10 @@ pkexec x 2>/dev/null
 echo "pkexec-rc=$?" >>"$LOG"
 hyprctl reload >/dev/null 2>&1
 echo "hyprctl-rc=$?" >>"$LOG"
+# Omarchy 4.5's omarchy-restart-hyprctl, with no instance signature, reaches the running Hyprland with `--instance 0`: the
+# stand-in is first in PATH all the same.
+hyprctl --instance 0 reload >/dev/null 2>&1
+echo "hyprctl45-rc=$?" >>"$LOG"
 # A run that never ends: a background child that ignores SIGTERM, and the script ignoring it too.
 if [[ -n ${SLOW:-} ]]; then
   sh -c 'trap "" TERM; echo $$ >"$CHILD"; while :; do sleep 1; done' &
@@ -240,6 +245,9 @@ expect "pkexec resolves to the run's stand-in" "$(field pkexec)" "$stubs/pkexec"
 expect "hyprctl resolves to the run's stand-in" "$(field hyprctl)" "$stubs/hyprctl"
 expect "  'pkexec x' fails as if pkexec were absent" "$(field pkexec-rc)" "127"
 expect "  'hyprctl reload' fails" "$(field hyprctl-rc)" "1"
+expect "  and so does Omarchy 4.5's 'hyprctl --instance 0 reload'" "$(field hyprctl45-rc)" "1"
+expect "OMARCHY_THEME_WAIT=1: Omarchy 4.5 retints the other apps before it returns (it detaches them with no terminal; 4.0.6 ignores it)" \
+  "$(field wait)" "1"
 grep -q '^real pkexec' "$tmp/log" && fail "the system's pkexec was reached" || pass "the system's pkexec was never reached"
 grep -q '^real hyprctl' "$tmp/log" && fail "the system's hyprctl was reached" || pass "the system's hyprctl was never reached"
 expect "the stand-in folder is the user's alone (0700)" "$(stat -c '%a %u' "$stubs")" "700 $(((EUID == 0)) && echo 65534 || id -u)"

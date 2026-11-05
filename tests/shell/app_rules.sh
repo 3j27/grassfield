@@ -78,12 +78,12 @@ print("applied " .. #applied)
 print("failed " .. #M.failed)
 for i, e in ipairs(M.rules) do
   local given = applied[i] or {}
-  local meta = { source = true, name = true, match = true, omarchy_match = true, narrowed = true }
+  local meta = { source = true, name = true, match = true, omarchy_match = true, narrowed = true, since = true, gone = true }
   for k in pairs(meta) do
     if k ~= "name" and k ~= "match" and given[k] ~= nil then error(e.name .. ": " .. k .. " reached Hyprland") end
   end
   print(e.source .. "\t" .. e.name .. "\t" .. pairs_of(e.omarchy_match or e.match, {}) .. "\t" .. pairs_of(e, meta)
-    .. "\t" .. (e.narrowed or "-") .. "\t" .. pairs_of(given.match or {}, {}))
+    .. "\t" .. (e.narrowed or "-") .. "\t" .. pairs_of(given.match or {}, {}) .. "\t" .. (e.since and ("since " .. e.since) or e.gone and ("gone " .. e.gone) or "-"))
 end
 LUA
 out=$(cd "$tmp" && lua "$tmp/run.lua" "$rules" 2>&1)
@@ -120,7 +120,7 @@ def fields(text):
 
 
 for line in open(listing, encoding="utf-8"):
-    source, name, omarchy, effects, narrowed, given = line.rstrip("\n").split("\t")
+    source, name, omarchy, effects, narrowed, given, since = line.rstrip("\n").split("\t")
     o, g = fields(omarchy), fields(given)
     if narrowed == "-":
         if o != g:
@@ -199,6 +199,7 @@ def calls(text):
 bad = 0
 for line in open(listing, encoding="utf-8"):
     source, name, match, effects = line.rstrip("\n").split("\t")[:4]
+    since = line.rstrip("\n").split("\t")[6]
     path = os.path.join(apps, source)
     if not os.path.isfile(path):
         print("  %s: %s is not an Omarchy file" % (name, source))
@@ -218,6 +219,9 @@ for line in open(listing, encoding="utf-8"):
         return all(("%s=%s" % (k, re.sub(r"\s+", "", v))) in first for k, v in m) and first.count("=") == len(m)
 
     hits = [c for c in found if same_match(c)]
+    if not hits and since != "-":
+        print("  %s: not in this Omarchy's %s (%s: a version this tree may predate or follow)" % (name, source, since))
+        continue
     if not hits:
         print("  %s: no o.window call of %s has the match %s" % (name, source, match))
         bad = 1

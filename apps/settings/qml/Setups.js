@@ -27,16 +27,25 @@ var TERMINAL = {
     "dictation-remove": "omarchy-voxtype-remove"
 };
 
+// Omarchy 4.5 renamed the two dictation commands (omarchy-install-dictation-voxtype, omarchy-remove-dictation-voxtype: the old
+// names are gone there); 4.0.6 has only the old ones. launchArgv takes the new name only where it is installed, else the id's name
+// in TERMINAL: both pairs are fixed names of systemguard.cpp's inTerminal list, never composed from anything else.
+var TERMINAL_45 = {
+    "dictation-setup": "omarchy-install-dictation-voxtype",
+    "dictation-remove": "omarchy-remove-dictation-voxtype"
+};
+
 // Dictation's Language Model…: Omarchy's command opens its floating terminal itself (`voxtype setup model`, whose model picker
 // is interactive); wrapped in the launcher it would open two terminals.
 var MODEL = ["omarchy-voxtype-model"];
 
-// The argument vector Settings launches for a setup id, null for anything else.
-function launchArgv(id) {
+// The argument vector Settings launches for a setup id, null for anything else. has(name) says whether an Omarchy command is
+// installed (Backend.hasCommand); without it the 4.0.6 name is used.
+function launchArgv(id, has) {
     if (id === "dictation-model")
         return MODEL.slice();
     if (Object.prototype.hasOwnProperty.call(TERMINAL, id))
-        return [LAUNCHER, TERMINAL[id]];
+        return [LAUNCHER, (has && Object.prototype.hasOwnProperty.call(TERMINAL_45, id) && has(TERMINAL_45[id])) ? TERMINAL_45[id] : TERMINAL[id]];
     return null;
 }
 
@@ -60,6 +69,9 @@ var FILES = {
     sshdHardening: "/etc/ssh/sshd_config.d/10-omarchy-hardening.conf",
     // The kernel can hibernate (omarchy-hibernation-available's and -setup's first test).
     imageSize: "/sys/power/image_size",
+    // The sleep states the kernel offers; Omarchy 4.5's omarchy-hibernation-available (and 4.0.6's kernel) leave "disk" out of it
+    // when a hibernate would be refused (lockdown, nohibernate, secretmem, a CXL device).
+    sleepStates: "/sys/power/state",
     // omarchy-hibernation-setup's marker, which -remove tests: the resume hook.
     resumeConf: "/etc/mkinitcpio.conf.d/omarchy_resume.conf"
 };
@@ -211,8 +223,12 @@ function layoutDiffers(startup, current) {
 // "unsupported" (the kernel cannot hibernate, or Omarchy's setup is not there), "off", "on" (Omarchy's
 // omarchy-hibernation-available said yes) or "incomplete" (Omarchy's resume hook is there, but the swap is too small or
 // missing: available said no).
-function hibernationState(imageSizeExists, setupInstalled, resumeConfText, available) {
+// sleepStates is the text of /sys/power/state, or null/undefined when it cannot be read (then it says nothing); a readable list
+// without "disk" means the kernel refuses to hibernate whatever Omarchy sets up (Omarchy 4.5's available says no then too).
+function hibernationState(imageSizeExists, setupInstalled, resumeConfText, available, sleepStates) {
     if (!imageSizeExists || !setupInstalled)
+        return "unsupported";
+    if (typeof sleepStates === "string" && sleepStates.trim() !== "" && sleepStates.trim().split(/\s+/).indexOf("disk") < 0)
         return "unsupported";
     if (available === true)
         return "on";

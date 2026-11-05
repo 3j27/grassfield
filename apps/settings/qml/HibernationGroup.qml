@@ -20,11 +20,17 @@ SettingsGroup {
     property string status: "unsupported"
     property bool setUp: false
 
+    // /sys/power/state, null when it cannot be read (an older fixture, a kernel without it: it then says nothing).
+    function sleepStates(): var {
+        const r = root.backend.readText(Setups.FILES.sleepStates);
+        return r.exists === true && r.ok === true ? r.text : null;
+    }
+
     function read(): void {
         const supported = root.backend.readText(Setups.FILES.imageSize).exists === true;
         const installed = root.backend.hasCommand("omarchy-hibernation-setup");
         const conf = root.backend.readText(Setups.FILES.resumeConf).text;
-        root.status = Setups.hibernationState(supported, installed, conf, root.setUp);
+        root.status = Setups.hibernationState(supported, installed, conf, root.setUp, root.sleepStates());
         if (supported && root.backend.hasCommand("omarchy-hibernation-available"))
             root.backend.readOnlyQuery(Setups.QUERY.hibernation, "power.hibernation");
     }
@@ -39,7 +45,7 @@ SettingsGroup {
                 return;
             root.setUp = ok;
             root.status = Setups.hibernationState(root.backend.readText(Setups.FILES.imageSize).exists === true,
-                root.backend.hasCommand("omarchy-hibernation-setup"), root.backend.readText(Setups.FILES.resumeConf).text, ok);
+                root.backend.hasCommand("omarchy-hibernation-setup"), root.backend.readText(Setups.FILES.resumeConf).text, ok, root.sleepStates());
         }
     }
 

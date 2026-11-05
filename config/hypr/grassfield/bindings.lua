@@ -167,8 +167,10 @@ if layouts >= 2 then
   bind("CTRL + ALT + SPACE", "Next input source", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"), { locked = true })
 end
 
--- Dictation (ADR-0045 OC-5, Settings > Keyboard > Dictation): Ctrl-Super-X starts and stops Omarchy's voxtype, the command of
--- Omarchy's own binding (default/hypr/bindings/voxtype.lua: `voxtype record toggle`); its push-to-talk on plain F9 is not
+-- Dictation (ADR-0045 OC-5, Settings > Keyboard > Dictation): Ctrl-Super-X starts and stops Omarchy's voxtype. Omarchy 4.0.6's own
+-- binding (default/hypr/bindings/voxtype.lua) runs `voxtype record toggle`; 4.5 removed that file and toggles the configured
+-- backend (`omarchy-dictation toggle`, Alt-Space). The key follows both: where `omarchy-default-dictation` names a backend (4.5)
+-- it runs `omarchy-dictation toggle`, else (4.0.6, or 4.5 with no backend chosen) `voxtype record toggle`. Its push-to-talk on plain F9 is not
 -- bound, the function keys stay the applications'. The key exists only where voxtype is installed when this file is read
 -- (Omarchy's voxtype install and removal both read the configuration again: `hyprctl reload`), and never in a dev session (the
 -- owner's voxtype daemon would type into the owner's session). The switch, keyboard.dictation of grassfield.json, is read when
@@ -198,7 +200,8 @@ if not dev_session and command_present("voxtype") then
   if not file:find("%c") then
     local q = "'" .. file:gsub("'", "'\\''") .. "'"
     bind("SUPER + CTRL + X", "Start or stop dictation", hl.dsp.exec_cmd("[ -f " .. q .. " ] && timeout 2 grep -Eq '\"dictation\"[[:space:]]*:[[:space:]]*true' -- "
-      .. q .. " && exec voxtype record toggle"))
+      .. q .. " && { if command -v omarchy-dictation >/dev/null 2>&1 && omarchy-default-dictation >/dev/null 2>&1; then"
+      .. " exec omarchy-dictation toggle; else exec voxtype record toggle; fi; }"))
   end
 end
 

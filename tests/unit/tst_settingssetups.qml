@@ -56,6 +56,21 @@ TestCase {
             verify(guard.indexOf("QStringLiteral(\"" + Setups.TERMINAL[id] + "\")") >= 0, id + ": in systemguard.cpp's inTerminal list");
         }
         compare(Setups.launchArgv("dictation-model"), ["omarchy-voxtype-model"]);
+        // Omarchy 4.5 renamed install and remove: the installed name is picked, the 4.0.6 one otherwise (and both are the guard's).
+        const L = "omarchy-launch-floating-terminal-with-presentation";
+        const has45 = c => c === "omarchy-install-dictation-voxtype" || c === "omarchy-remove-dictation-voxtype";
+        const has406 = c => c === "omarchy-voxtype-install" || c === "omarchy-voxtype-remove";
+        compare(Setups.launchArgv("dictation-setup", has45), [L, "omarchy-install-dictation-voxtype"]);
+        compare(Setups.launchArgv("dictation-remove", has45), [L, "omarchy-remove-dictation-voxtype"]);
+        compare(Setups.launchArgv("dictation-setup", has406), [L, "omarchy-voxtype-install"]);
+        compare(Setups.launchArgv("dictation-remove", has406), [L, "omarchy-voxtype-remove"]);
+        compare(Setups.launchArgv("dictation-setup", c => false), [L, "omarchy-voxtype-install"]);
+        compare(Setups.launchArgv("dictation-setup"), [L, "omarchy-voxtype-install"]);
+        compare(Setups.launchArgv("fido2-setup", has45), [L, "omarchy-setup-security-fido2"], "only the dictation pair has a 4.5 name");
+        for (const id in Setups.TERMINAL_45)
+            verify(guard.indexOf("QStringLiteral(\"" + Setups.TERMINAL_45[id] + "\")") >= 0, id + ": 4.5 name in systemguard.cpp");
+        const bindings = readRepo("config/hypr/grassfield/bindings.lua");
+        verify(bindings.indexOf("omarchy-dictation toggle") >= 0 && bindings.indexOf("voxtype record toggle") >= 0, "key: 4.5 backend, else voxtype");
         verify(guard.indexOf("QStringList{QStringLiteral(\"omarchy-voxtype-model\")}") >= 0);
         compare(Setups.launchArgv("sshd-remove"), null, "Remote Login's switch is systemd's: Omarchy's removal is never launched");
         compare(Setups.launchArgv("constructor"), null);
@@ -138,6 +153,14 @@ TestCase {
         compare(Setups.hibernationState(true, true, "HOOKS+=(resume)\n", true), "on");
         compare(Setups.hibernationState(true, true, "HOOKS+=(resume)\n", false), "incomplete");
         compare(Setups.hibernationState(true, true, "# HOOKS+=(resume)\n", false), "off");
+        // Omarchy 4.5: the kernel's sleep states without "disk" (lockdown, nohibernate...) mean it refuses; unreadable says nothing.
+        compare(Setups.hibernationState(true, true, "", false, "freeze mem\n"), "unsupported");
+        compare(Setups.hibernationState(true, true, "HOOKS+=(resume)\n", false, "freeze mem\n"), "unsupported");
+        compare(Setups.hibernationState(true, true, "", false, "freeze mem disk\n"), "off");
+        compare(Setups.hibernationState(true, true, "HOOKS+=(resume)\n", true, "freeze mem disk\n"), "on");
+        compare(Setups.hibernationState(true, true, "", false, null), "off");
+        compare(Setups.hibernationState(true, true, "", false, ""), "off");
+        compare(Setups.hibernationState(true, true, "", false, "diskette\n"), "unsupported", "a word, not a substring");
     }
 
     // Omarchy's PAM edits, as its setups write them (the clamshell gate first, then the module).
@@ -394,6 +417,23 @@ TestCase {
         // Cancel launches nothing; an unknown id opens nothing.
         sheet.openFor("dictation-model");
         sheet.cancel();
+        // Dictation's install: the 4.0.6 name here (only it is installed), Omarchy 4.5's where that one is.
+        sheet.openFor("dictation-setup");
+        compare(sheet.missing, "");
+        sheet.confirm();
+        compare(s.backend.launches[1].argv, ["omarchy-launch-floating-terminal-with-presentation", "omarchy-voxtype-install"]);
+        s.backend.commands = ["omarchy-launch-floating-terminal-with-presentation", "omarchy-install-dictation-voxtype",
+            "omarchy-remove-dictation-voxtype"];
+        sheet.openFor("dictation-setup");
+        compare(sheet.missing, "");
+        sheet.confirm();
+        compare(s.backend.launches[2].argv, ["omarchy-launch-floating-terminal-with-presentation", "omarchy-install-dictation-voxtype"]);
+        sheet.openFor("dictation-remove");
+        sheet.confirm();
+        compare(s.backend.launches[3].argv, ["omarchy-launch-floating-terminal-with-presentation", "omarchy-remove-dictation-voxtype"]);
+        s.backend.commands = ["omarchy-launch-floating-terminal-with-presentation", "omarchy-hibernation-setup", "omarchy-voxtype-model",
+            "omarchy-voxtype-install"];
+        s.backend.launches.length = 1;
         compare(s.backend.launches.length, 1);
         sheet.openFor("bogus");
         verify(!sheet.shown);
@@ -522,6 +562,12 @@ TestCase {
         s.backend.files = {"/sys/power/image_size": "1\n", "/etc/mkinitcpio.conf.d/omarchy_resume.conf": "HOOKS+=(resume)\n"};
         s.backend.finished("power.hibernation", false, "");
         compare(page.hibernation, "incomplete");
+        // The kernel's sleep states without "disk": no group (Omarchy 4.5's available says no whatever is set up).
+        const refused = service(false, {"/sys/power/image_size": "1\n", "/sys/power/state": "freeze mem\n"});
+        const noDisk = createTemporaryObject(batteryComp, testCase, {backend: refused.backend, system: refused.system});
+        compare(noDisk.hibernation, "unsupported");
+        const offered = service(false, {"/sys/power/image_size": "1\n", "/sys/power/state": "freeze mem disk\n"});
+        compare(createTemporaryObject(batteryComp, testCase, {backend: offered.backend, system: offered.system}).hibernation, "off");
         // No image_size: no group.
         const n = service(false, {});
         const none = createTemporaryObject(batteryComp, testCase, {backend: n.backend, system: n.system});
