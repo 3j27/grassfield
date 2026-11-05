@@ -3798,6 +3798,8 @@ QtObject {
 
     // the light dimming slurp lays over the screen while the crosshair shows, and the fill of the boxes a click can pick (the same, so the veil is even; the box under the pointer takes the selection's fill and border), read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
     readonly property string captureVeil: "#0000002E"
+    // the dimming of the display around the toolbar's selection frame (Capture Selected Portion, Record Selected Portion): black at 45 percent, as macOS 27 darkens the outside of the area visibly; clear on a dark wallpaper (the frame's hairline and the picture inside stay bright) and on a light one; the helper's crosshair keeps capture.veil [ref: docs/specs/system-dialogs.md § Capture toolbar]; estimate, no measured value yet
+    readonly property string captureFrameVeil: "#00000073"
     // the fill of the area being dragged, a light veil as the system's selection rectangle (ADR-0035 D-10, step 8); estimate
     readonly property string captureSelection: "#FFFFFF24"
     // the outline of the area being dragged, a near-white hairline (ADR-0035 D-10, step 8); estimate
@@ -3854,6 +3856,8 @@ QtObject {
     readonly property real captureWindowHighlightOpacity: 0.3
     // the window highlight's corner follows the window's own: Hyprland rounding 17 at power 2.6, measured 16.7 (ADR-0024 section 1, Window corners) [ref: docs/specs/system-dialogs.md § Capture toolbar]
     readonly property int captureWindowHighlightRadius: 17
+    // the window highlight's corner is the window's own superellipse: Hyprland draws a corner of rounding x power / 2 points at decoration.rounding_power 2.6 (config/hypr/grassfield/looknfeel.lua), so a circular radius leaves notches at the title bar [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property real captureWindowHighlightPower: 2.6
 
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4

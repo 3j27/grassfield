@@ -30,6 +30,17 @@ T.ToolButton {
     // What the tooltip under the button says while the pointer rests on it: an icon-only button names itself (macOS; ADR-0039
     // step 14). A host that shows its own tooltip for the button sets "".
     property string tooltip: root.text === "" ? root.accessibleName : ""
+    // A press dismisses the tooltip until the pointer leaves (macOS): a button that opens a menu would otherwise keep its tooltip
+    // on top of the menu, the pointer still resting on it.
+    property bool tipDismissed: false
+    onDownChanged: {
+        if (root.down)
+            root.tipDismissed = true;
+    }
+    onHoveredChanged: {
+        if (!root.hovered)
+            root.tipDismissed = false;
+    }
 
     // Not key: a toolbar's glyphs dim, as macOS 27 (ADR-0039 step 17); disabled and not key dim together.
     readonly property bool windowInactive: root.Window.window !== null && !Appearance.looksKey(root.Window.window, root.Window.active)
@@ -142,6 +153,6 @@ T.ToolButton {
         x: Math.max(0, Math.min(tip.host.width - tip.width, tip.place.x - tip.width / 2))
         y: tip.place.y
         text: root.tooltip
-        shown: root.tooltip !== "" && root.hovered && !root.down && root.visible
+        shown: root.tooltip !== "" && root.hovered && !root.down && !root.tipDismissed && root.visible
     }
 }
