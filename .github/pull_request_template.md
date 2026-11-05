@@ -11,7 +11,7 @@
 - [ ] Nested or visual tests that this change touches (name them):
 - [ ] New test files are listed in `tests/inventory.json`
 - [ ] Visible strings use `qsTr()` / `tr()`; `just i18n-update` run if strings changed
-- [ ] Commits follow Conventional Commits; external contributors: every commit has `Signed-off-by` (`git commit -s`)
+- [ ] Commits follow Conventional Commits
 
 ## Screenshots (user-interface changes)
 

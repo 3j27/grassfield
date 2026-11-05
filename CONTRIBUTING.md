@@ -121,8 +121,6 @@ Grassfield's code is MIT (`LICENSE`, ADR-0005). By submitting a contribution you
 outbound) and confirm you have the right to do so. Artwork under `branding/` is CC-BY-SA-4.0 except the Grassfield logo
 (`branding/LICENSES.md`); third-party material and its licences are listed in `THIRD_PARTY.md`.
 
-**Sign-off (DCO).** External contributors add a `Signed-off-by: Your Name <you@example.com>` line to every commit
-(`git commit -s`), which certifies the [Developer Certificate of Origin 1.1](https://developercertificate.org/): you wrote the
-change or have the right to submit it under the project's licence. There is no copyright assignment and no CLA. Maintainers' own
-commits are exempt. Do not submit anything copied from Apple software, from a theme or icon pack with an incompatible licence, or
-generated output whose terms you have not read.
+Grassfield uses plain inbound = outbound licensing: there is no CLA, no copyright assignment and no sign-off line. Do not submit
+anything copied from Apple software, from a theme or icon pack with an incompatible licence, or generated output whose terms you
+have not read.

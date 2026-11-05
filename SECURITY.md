@@ -36,10 +36,10 @@ stable channel yet. Update (Settings > Software Update, or `pacman -Syu`) before
 
 ## What to expect
 
-- We acknowledge a report within **TODO: owner to fill in (days)**.
-- We give a first assessment within **TODO: owner to fill in (days)**.
-- We aim to fix a confirmed issue in scope within **TODO: owner to fill in (days)**, by severity, and to publish an advisory with
-  credit to the reporter unless you prefer to stay anonymous.
-- We ask for coordinated disclosure: please give us that time before you publish.
+Grassfield is a small project and this is best effort: we read every report, answer as soon as we can, and fix confirmed issues in
+scope as quickly as the severity and our time allow. We do not promise a response time. We credit the reporter in the advisory
+unless you prefer to stay anonymous, and we ask for coordinated disclosure: please give us a reasonable time to fix the issue
+before you publish.
 
-Until the timelines above are filled in, none is promised. This is a small project; we will answer as fast as we can.
+If GitHub's private reporting is unavailable to you, write to chapdel.kamga2@gmail.com with the word "security" in the subject and
+no technical details in the first message; we will arrange a private channel.

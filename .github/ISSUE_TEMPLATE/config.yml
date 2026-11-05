@@ -5,4 +5,4 @@ contact_links:
     about: Never in a public issue. Read SECURITY.md and use "Report a vulnerability" in the Security tab.
   - name: Questions and ideas
     url: https://github.com/grassfieldhq/grassfield/discussions
-    about: Usage questions and open-ended ideas go to Discussions (once the owner enables them on the repository).
+    about: Usage questions and open-ended ideas go to Discussions.
