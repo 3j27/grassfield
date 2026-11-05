@@ -392,6 +392,37 @@ TestCase {
         }
     }
 
+    // Opus review of 59a576f1, MINOR 1: an attempt still unreached after 20 s ends (a claim that never prompts) and is a miss,
+    // so the backoff paces the next one; 20 s is above the fast-end window and below the 25 s D-Bus method timeout of the claim.
+    function test_fingerprintReachTimeout() {
+        compare(Machine.FINGERPRINT_REACH_TIMEOUT_MS, 20000);
+        verify(Machine.FINGERPRINT_REACH_TIMEOUT_MS > Machine.FINGERPRINT_FAST_END_MS);
+        verify(Machine.FINGERPRINT_REACH_TIMEOUT_MS < 25000, "ends before the D-Bus claim timeout");
+        // A timed-out attempt never reached the reader: it is a miss whatever the fast-end window says.
+        compare(Machine.fingerprintMisses(0, false, false), 1);
+        compare(Machine.fingerprintMisses(0, false, true), 1);
+        // Claims that keep timing out reach the cap: one attempt per 20 s + 40 s at most.
+        let misses = 0;
+        for (let i = 0; i < 10; i++)
+            misses = Machine.fingerprintMisses(misses, false, false);
+        compare(Machine.fingerprintRetryMs(misses), Machine.FINGERPRINT_RETRY_CAP_MS);
+    }
+
+    // Opus review of 59a576f1, MINOR 2: a resume offers the reader again only to a lock (any lock state), with the PAM file,
+    // and not after MaxTries; a resume while unlocked leaves no pass for the next lock (one attempt with the displays off).
+    function test_fingerprintOfferedOnResume() {
+        const lockStates = ["locking", "locked", "authenticating", "releasing"];
+        for (let i = 0; i < lockStates.length; i++)
+            verify(Machine.fingerprintOfferedOnResume(true, false, lockStates[i]), lockStates[i]);
+        verify(!Machine.fingerprintOfferedOnResume(true, false, "unlocked"), "a resume while unlocked offers nothing");
+        verify(!Machine.fingerprintOfferedOnResume(false, false, "locked"), "no fingerprint PAM file");
+        verify(!Machine.fingerprintOfferedOnResume(true, true, "locked"), "MaxTries spent the reader");
+        verify(!Machine.fingerprintOfferedOnResume("yes", false, "locked"), "only true means the file exists");
+        const junk = [undefined, null, "", "LOCKED", "open", 3, {}];
+        for (let i = 0; i < junk.length; i++)
+            verify(!Machine.fingerprintOfferedOnResume(true, false, junk[i]), "unknown state " + String(junk[i]));
+    }
+
     // D-4: the lid locks unless a physical external display is active (clamshell, macOS); unreadable input locks.
     function test_lidShouldLock() {
         verify(Machine.lidShouldLock(["eDP-1"]));

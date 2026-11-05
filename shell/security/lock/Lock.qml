@@ -12,8 +12,9 @@ pragma Singleton
 // docs/specs/security.md "Upstream base". Reviewed again against Omarchy v4.5.0
 // (basecamp/omarchy@ac2690cd7be4f47e4a255f5e2e78d904d436b068): the fingerprint pacing of its Service.qml and
 // shell/plugins/lock/FingerprintModel.js is adapted, in part, below (startFingerprint() to fingerprintAfterResume()) and in
-// ../LockMachine.js (its constants and backoff): attempts that do not reach the reader back off, none starts while the
-// displays are off, and a resume from sleep offers the reader again; docs/specs/security.md "Fingerprint pacing".
+// ../LockMachine.js (its constants and backoff): attempts that do not reach the reader back off (one still unreached after
+// 20 s ends), none starts while the displays are off, and a resume from sleep offers the reader again to a lock;
+// docs/specs/security.md "Fingerprint pacing".
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland // layering-exception: ADR-0021 security
@@ -396,6 +397,7 @@ Singleton {
         retryTimer.stop();
         fingerprintRetry.stop();
         fingerprintFastEnd.stop();
+        fingerprintReach.stop();
         root.fingerprintOpen = false;
         root.fingerprintMisses = 0;
         root.fingerprintSpent = false;
@@ -546,8 +548,20 @@ Singleton {
         fingerprintFastEnd.stop();
         root.fingerprintReached = false;
         root.fingerprintOpen = true;
+        // Bounds a claim that never prompts (fingerprintReachTimedOut); stopped once the reader is reached or the attempt ends.
+        fingerprintReach.restart();
         if (!fingerprintPam.start())
             root.fingerprintEnded();
+    }
+
+    // The open attempt has not reached the reader within Machine.FINGERPRINT_REACH_TIMEOUT_MS (a claim that never prompts):
+    // it ends (abort: never a success) and counts as a miss, so the backoff paces the next one.
+    function fingerprintReachTimedOut(): void {
+        if (!root.fingerprintOpen || root.fingerprintReached)
+            return;
+        if (fingerprintPam.active)
+            fingerprintPam.abort();
+        root.fingerprintEnded();
     }
 
     // The open attempt ended without a match and without MaxTries (a timeout without a finger, a device error, a start that
@@ -559,6 +573,7 @@ Singleton {
         const before = root.fingerprintMisses;
         root.fingerprintMisses = Machine.fingerprintMisses(before, root.fingerprintReached, fingerprintFastEnd.running);
         fingerprintFastEnd.stop();
+        fingerprintReach.stop();
         if (root.fingerprintMisses === Machine.FINGERPRINT_UNAVAILABLE_AFTER)
             console.warn("grassfield-lock: the fingerprint reader was not reached " + root.fingerprintMisses + " times in a row; it is offered less often (at most every " + Machine.FINGERPRINT_RETRY_CAP_MS / 1000 + " s); the password still unlocks");
         else if (root.fingerprintMisses === 0 && before >= Machine.FINGERPRINT_UNAVAILABLE_AFTER)
@@ -570,13 +585,15 @@ Singleton {
     // After a sleep (SleepInhibitor.afterResume): fprintd may have been restarted (Omarchy 4.5's fprintd-resume hook) or its
     // claim may be stale, so an attempt open across the sleep is dropped (abort: never a success), the misses before the sleep
     // are forgotten, and the reader is offered again after the usual gap, once even with the displays still reported off.
-    // Not after MaxTries (fingerprintSpent stays).
+    // Not after MaxTries (fingerprintSpent stays), and not while unlocked: no pass is left for the next lock
+    // (Machine.fingerprintOfferedOnResume).
     function fingerprintAfterResume(): void {
         root.fingerprintMisses = 0;
-        if (!fingerprintFile.available || root.fingerprintSpent)
+        if (!Machine.fingerprintOfferedOnResume(fingerprintFile.available, root.fingerprintSpent, controller.lockState))
             return;
         root.fingerprintOpen = false;
         fingerprintFastEnd.stop();
+        fingerprintReach.stop();
         if (fingerprintPam.active)
             fingerprintPam.abort();
         root.fingerprintResumePass = true;
@@ -764,6 +781,7 @@ Singleton {
         onPamMessage: {
             if (root.fingerprintOpen && !root.fingerprintReached && !fingerprintPam.messageIsError) {
                 root.fingerprintReached = true;
+                fingerprintReach.stop();
                 fingerprintFastEnd.restart();
             }
         }
@@ -771,12 +789,14 @@ Singleton {
             if (result === PamResult.Success) {
                 root.fingerprintOpen = false;
                 fingerprintFastEnd.stop();
+                fingerprintReach.stop();
                 controller.fingerprintSucceeded();
             } else if (result === PamResult.MaxTries) {
                 // Wrong fingers: the password is needed (see fingerprintSpent).
                 root.fingerprintOpen = false;
                 root.fingerprintSpent = true;
                 fingerprintFastEnd.stop();
+                fingerprintReach.stop();
             } else {
                 root.fingerprintEnded();
             }
@@ -796,6 +816,14 @@ Singleton {
     Timer {
         id: fingerprintFastEnd
         interval: Machine.FINGERPRINT_FAST_END_MS
+    }
+
+    // Runs from the start of each fingerprint attempt until the reader is reached or the attempt ends: an attempt still
+    // unreached when it fires ends as a miss (fingerprintReachTimedOut). A Timer (monotonic), never the wall clock.
+    Timer {
+        id: fingerprintReach
+        interval: Machine.FINGERPRINT_REACH_TIMEOUT_MS
+        onTriggered: root.fingerprintReachTimedOut()
     }
 
     Timer {

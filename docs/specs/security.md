@@ -738,9 +738,9 @@ every fork works with both):
     display power-off is Idle's 30 s monitor). Not ported: the fprintd probe (`fprintd-list` at start and after a failed
     start, `FingerprintModel.classifyProbe`): a process the security singleton would start, beyond its building blocks; the
     backoff does its job here (no enrolment, no daemon or no reader: one attempt every 40 s at most) beside SEC8's PAM file
-    test, and Grassfield has no fingerprint indicator for it to feed. Not ported either: the 20 s reach timeout (pam_fprintd's
-    30 s and the D-Bus method timeout bound every attempt; the resume drops one orphaned by a daemon restart), the input
-    nudge (a wake offers the reader at once), the wall-clock sleep detection (no wall clock in shell/security: logind's
+    test, and Grassfield has no fingerprint indicator for it to feed. The 20 s reach timeout is ported too (opus review of
+    59a576f1, MINOR 1: without it a claim that never prompts kept the lock's fingerprint until a resume or an unlock). Not
+    ported: the input nudge (a wake offers the reader at once), the wall-clock sleep detection (no wall clock in shell/security: logind's
     PrepareForSleep through `SleepInhibitor.afterResume`), retries after MaxTries (Grassfield keeps the reader off until
     LOCKED anew: the password after repeated wrong fingers, the macOS model), and the "fingerprint unavailable" notice on the
     lock screen (a UI addition, proposed separately).
@@ -794,23 +794,35 @@ backoff in `LockMachine.js`):
   idle exit, so a daemon whose claim wedged can exit and come back clean. Before: an attempt every second for as long as the
   lock lasted, which kept fprintd busy all night with no enrolled finger, no reader or a wedged claim. The journal says once
   when three misses in a row are reached and once when the reader answers again.
+- Reach timeout (opus review of 59a576f1, MINOR 1): an attempt that has not reached the reader 20 s after it started
+  (`LockMachine.FINGERPRINT_REACH_TIMEOUT_MS`, the `fingerprintReach` Timer: shorter than the 25 s D-Bus method timeout of
+  pam_fprintd's claim, longer than a slow device open) is aborted (never a success) and counts as a miss
+  (`fingerprintReachTimedOut`). Without it, a claim that never prompts held the lock's fingerprint until a resume or an
+  unlock (the password still worked).
 - Displays off (Idle's `displayOff`, mirrored in `Lock.displaysOff`): no new attempt, so the reader is not held awake all
   night; an attempt already running ends under pam_fprintd's own timeout. The displays coming back on (input on the lock
   screen) offer the reader at once.
 - Resume (logind's PrepareForSleep(false): `SleepInhibitor.afterResume` → `Lock.resumed()`): the misses are forgotten, an
   attempt open across the sleep is aborted (fprintd may have been restarted by Omarchy 4.5's resume hook, or its claim be
   stale; an abort never unlocks), and the reader is offered again after 1 s, once even with the displays still reported off
-  (the panel may light without input).
+  (the panel may light without input). Only to a lock (`LockMachine.fingerprintOfferedOnResume`: the PAM file, not after
+  MaxTries, a lock state): a resume while unlocked leaves no pass behind, so the next lock never starts an attempt with the
+  displays off (opus review of 59a576f1, MINOR 2); the unlock also clears it.
 - MaxTries (pam_fprintd's wrong fingers): the reader stays off until the lock is LOCKED anew (a password attempt that
   failed, a new lock) or the session unlocks; neither a wake nor a resume brings it back (as before the pacing: the
   password is needed, the macOS model).
 - Timers only (no wall clock in shell/security); the sleep is logind's signal, where Omarchy looks for wall-clock gaps.
 Polkit: with the reader free more often (displays off, the longer gaps), a request that arrives while locked reaches it
 sooner; the rule "No device answers a request the user cannot see and answer" refuses it as soon as its PAM talks, as
-before (fail closed). Tests: `tst_lockmachine.qml` test_fingerprintMisses, test_fingerprintRetryMs (four mutants of the
-helpers caught); `lock_surfaces.sh` "fingerprint" checks (the one unlock path, the start guard, one settle per attempt, the
-reader reached only on a line that is not an error, nothing of the conversation read but that or logged, the pacing never
-unlocks, the pause and the wake, the resume, MaxTries, the reset on unlock), with 17 mutations. NOT VERIFIED: a real reader
+before (fail closed). The other way round (opus review of 59a576f1): any process of the user can ask polkit again and again
+while the session is locked; each request's pam_fprintd takes the reader, so the lock's attempts in between fail to claim it
+(misses) and its fingerprint backs off to one attempt every 40 s. That denies the fingerprint only: the password still
+unlocks, nothing is approved (each request is refused as soon as its PAM talks), and a resume or an unlock resets the
+misses. Tests: `tst_lockmachine.qml` test_fingerprintMisses, test_fingerprintRetryMs, test_fingerprintReachTimeout,
+test_fingerprintOfferedOnResume (eight mutants of the helpers caught); `lock_surfaces.sh` "fingerprint" checks (the one
+unlock path, the start guard, one settle per attempt, the reach timeout, the reader reached only on a line that is not an
+error, nothing of the conversation read but that or logged, the pacing never unlocks, the pause and the wake, the resume to
+a lock only, MaxTries, the reset on unlock), with 25 mutations. NOT VERIFIED: a real reader
 (the development machine has neither `/etc/pam.d/omarchy-lock-fingerprint` nor fprintd), a real 4.5 session, a suspend and
 resume with a reader; `Lock.qml` cannot run offscreen (WlSessionLock), and the nested gates were not run for this change.
 

@@ -84,6 +84,11 @@ var FINGERPRINT_FAST_END_MS = 2000;
 var FINGERPRINT_RETRY_CAP_MS = 40000;
 // Misses in a row after which the journal says, once, that the reader is not answering.
 var FINGERPRINT_UNAVAILABLE_AFTER = 3;
+// An attempt that has not reached the reader this long after it started ends (aborted: never a success) and counts as a
+// miss: a claim that never prompts (fprintd stuck before the reader) would otherwise hold the lock's fingerprint until a
+// resume or an unlock. Shorter than the 25 s D-Bus method timeout of pam_fprintd's claim, longer than a slow device open
+// (Omarchy v4.5.0 REACH_TIMEOUT_MS; opus review of 59a576f1, MINOR 1).
+var FINGERPRINT_REACH_TIMEOUT_MS = 20000;
 
 // Misses in a row after an attempt ended: none once the reader was reached and the attempt did not end fast; one more
 // otherwise (no instruction from pam_fprintd, a start that failed, an end within FINGERPRINT_FAST_END_MS). A value that is
@@ -102,6 +107,14 @@ function fingerprintRetryMs(misses) {
         return FINGERPRINT_RETRY_MS;
     var doublings = Math.min(Math.floor(misses), 16) - 1;
     return Math.min(FINGERPRINT_RETRY_MS * Math.pow(2, doublings), FINGERPRINT_RETRY_CAP_MS);
+}
+
+// A resume from sleep offers the reader again (once even with the displays reported off) only to a lock: the fingerprint
+// PAM file exists, MaxTries has not spent the reader, and the state is a lock state (locking, locked, authenticating,
+// releasing). A resume while unlocked leaves nothing behind for the next lock (opus review of 59a576f1, MINOR 2).
+function fingerprintOfferedOnResume(fileAvailable, spent, lockState) {
+    return fileAvailable === true && spent !== true && typeof lockState === "string" && STATES.indexOf(lockState) !== -1
+        && isLocked(lockState);
 }
 
 // Lid closed (Hyprland switch binding `switch:on:Lid Switch` in config/hypr/grassfield/system.lua, which runs
