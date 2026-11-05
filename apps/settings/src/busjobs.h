@@ -45,6 +45,12 @@ public:
 
     void start(Job job, Done done, int timeoutMs);
 
+    // A function a job may call from its own thread, as often as it likes, to run `f` on the thread that made the BusJobs, in the
+    // order posted (fprintd's enrolment statuses, ADR-0045 OC-0.7). Like `done`, `f` never runs after ~BusJobs: what it
+    // captures of the owner stays valid while it can run.
+    using Post = std::function<void(std::function<void()>)>;
+    Post poster() const;
+
     // The exit code the default abandon path leaves with (the result of the application's exec()).
     static void setExitCode(int code);
 

@@ -547,3 +547,38 @@ function setBrightness(device, level) {
         return null;
     return ["brightnessctl", "-q", "-d", device, "set", Math.round(Math.max(0, Math.min(1, level)) * 100) + "%"];
 }
+
+// Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command, as the shell runs it
+// (shell/services/BrightnessLogic.js). `output` is a Hyprland connector name ("DP-1", "HDMI-A-1": a letter, letters and
+// hyphens, "-" and a number; systemguard.cpp isConnectorName takes the same rule).
+function validConnector(output) {
+    return typeof output === "string" && /^[A-Za-z][A-Za-z-]{0,23}-[0-9]{1,4}$/.test(output) && !/^(eDP|LVDS|DSI)-/.test(output);
+}
+
+// Both run bounded by coreutils' timeout, as the shell does (BrightnessLogic.BOUND): the command is a bash script whose ddcutil
+// is a child, which the Backend's own time limit (a kill of the script alone) would leave on the bus while the slider's next
+// write starts. timeout ends the command's whole process group (TERM after 12 s, KILL 2 s later), so a run is over within 14 s,
+// before the Backend's wait: an action's 15 s (Backend.act), and DDC_WAIT_MS for the read (security review, LOW 3).
+var DDC_BOUND = ["timeout", "-k", "2", "12"];
+var DDC_WAIT_MS = 15000;
+
+// Its level: the command with the connector alone prints it (0 to 100) and exits 0, or exits 1 when the display does not answer.
+// Not a read-only query of the dev guard (systemguard.cpp): a dev session never asks the owner's displays, so it shows no slider.
+function ddcBrightnessQuery(output) {
+    return validConnector(output) ? DDC_BOUND.concat(["omarchy-brightness-display-ddc", output]) : null;
+}
+
+// Its answer: the level 0..1, or -1 when it is not one (the display did not answer).
+function parseDdcLevel(text) {
+    const t = typeof text === "string" ? text.trim() : "";
+    if (!/^[0-9]{1,3}$/.test(t) || parseInt(t, 10) > 100)
+        return -1;
+    return parseInt(t, 10) / 100;
+}
+
+// Set it: a whole percentage (the command keeps it within 1..100).
+function setDdcBrightness(output, level) {
+    if (!validConnector(output) || typeof level !== "number" || isNaN(level))
+        return null;
+    return DDC_BOUND.concat(["omarchy-brightness-display-ddc", output, Math.round(Math.max(0, Math.min(1, level)) * 100) + "%"]);
+}

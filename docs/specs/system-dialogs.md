@@ -1347,15 +1347,20 @@ Other… opens the Choose Application panel. No progress window opens for Undo.
   own widget handler behaves the same way.
 
 
-## 10. Screenshots (inventory O1, O2, P8; ADR-0035 D-10, owner decision Q4; built in step 8)
+## 10. Screenshots and screen recording (inventory O1, O2, P8; ADR-0035 D-10, owner decision Q4; built in step 8; the toolbar and recording: ADR-0045 OC-1)
 
 ### macOS reference behavior
 Shift-Cmd-3 captures the screen, and Shift-Cmd-4 a selection: a drag captures an area, and the window mode captures a window.
-The picture is saved to the Desktop as "Screenshot <date> at <time>.png". Shift-Cmd-5 opens the capture toolbar. Grassfield
-gives the toolbar its own chantier; until then it does the selection (8-1).
+The picture is saved to the Desktop as "Screenshot <date> at <time>.png". Shift-Cmd-5 opens the capture toolbar (macOS 27):
+a floating bar centred near the bottom of the screen, over the Dock, with Close, then Capture Entire Screen, Capture Selected
+Window and Capture Selected Portion, then Record Entire Screen and Record Selected Portion, then Options and the Capture or
+Record button. Options holds Save to (Desktop, Documents, Clipboard, Mail, Messages, Preview, Other Location), Timer (None, 5
+Seconds, 10 Seconds), Microphone (recordings: None and the inputs) and Show Mouse Pointer, and the toolbar remembers them. Esc
+closes it, Return captures. A recording shows a stop button in the menu bar until Control-Command-Esc or that button stops
+it; it is saved as "Screen Recording <date> at <time>.mov". macOS records no system audio.
 
 ### Functional requirements
-- SC1 Shift-Cmd-3 captures every display, one picture each, as macOS does (8-4). Shift-Cmd-4, Shift-Cmd-5 and Print capture a
+- SC1 Shift-Cmd-3 captures every display, one picture each, as macOS does (8-4). Shift-Cmd-4 and Print capture a
   selection: a crosshair over the live screen in Grassfield's colours (`capture.*`: an even veil; the window or display
   under the pointer outlined).
   - A drag captures that area.
@@ -1368,8 +1373,107 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
 - SC4 A notice shows the picture, as the shell's ordinary banner (then in the Notification Center). A click or its "Open in
   Preview" button opens the capture's pictures in Grassfield's Preview for 2 minutes; then the notice goes. The next capture
   closes it first, so no picture shows the notice of the one before.
-- SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session binds the keys; the nested session never
-  captures the owner's screen.
+- SC5 No Omarchy command or shortcut is named, and no tensaku. Only the real session runs the capture keys and the stop key;
+  the nested session never captures the owner's screen (the toolbar opens there, and runs no helper unless a dev session
+  names one, `GRASSFIELD_CAPTURE_HELPER`, ADR-0019).
+
+### Capture toolbar
+- SC6 Shift-Super-5 (`config/hypr/grassfield/bindings.lua`, the shell's `capture toggle`) opens the toolbar on the focused
+  display; again, it closes. It is a shell layer surface (`grassfield-capture`, `shell/capture/CaptureToolbar.qml`) over the
+  whole display that holds the keyboard (exclusive, as Search) and swallows the clicks around the bar; opening it closes
+  Overview, Apps, Search and the app switcher (ExclusiveSurfaces) and an open menu; the key focus returns to the window that
+  had it when it closes. It never opens while the session is locked (`SessionState.refuses("capture")`) and closes when the
+  session locks.
+- SC7 Layout (macOS 27): a floating bar of the macOS 26 glass (the menus' class, `capture.toolbarHeight` 48 with round ends,
+  `capture.toolbarPadding` 8 inside), centred `capture.toolbarBottomGap` above the Dock's band (or the display's bottom edge):
+  Close (`xmark-circle-fill`: a grey filled disc, the secondary text colour, with the cross knocked out) | Capture Entire
+  Screen, Capture Selected Window, Capture Selected Portion | Record Entire Screen, Record Selected Portion | Options and its
+  chevron, then the action, Capture or Record (the shared `Button`, primary capsule, as tall as the bar's other controls,
+  `capture.toolbarButtonHeight` 32). The mode buttons are the shared `ToolButton` (capsules
+  `capture.toolbarButtonWidth` x `capture.toolbarButtonHeight`, own glyphs `capture-screen`, `capture-window`,
+  `capture-selection`, `record-screen`, `record-selection`), one checked at a time with the neutral selection on glass; each
+  names itself in a tooltip; groups are split by the toolbar hairline (`toolbar.dividerHeight`, the menus' separator colour).
+  Hover, pressed and disabled are the shared controls'; Increase Contrast outlines them and frosts the glass; Reduce
+  Transparency makes it opaque; the bar does not move (Reduce Motion has nothing to change).
+- SC8 Keys: Esc closes (an open Options menu first), Return and Enter run the action, Left and Right choose the previous or
+  next mode. A click on a mode chooses it; the mode is kept (`capture.mode`) and the toolbar opens in it next time.
+- SC8a The modes act on the toolbar's own surface, as macOS 27's do (the design review of OC-1, H1; `CaptureToolbar.qml`, the
+  pure decisions in `CaptureModel.js`):
+  - Capture and Record Selected Portion: as soon as the mode is chosen a frame shows on the toolbar's display, the rest of the
+    display dimmed (`capture.frameVeil` around it, black at 45 percent: the helper's crosshair keeps `capture.veil`, `capture.border` and `capture.borderWidth` on it), with eight handles (discs of
+    `capture.handleSize`, taken in a `capture.handleHitSize` square, the corners first). A drag on a handle resizes the frame
+    (past the opposite edge it turns over), inside it moves it, outside it draws a new one; it stays on the display and at
+    least `capture.frameMinSize` each way. While dragging, the size readout (W × H of the picture, in pixels: the logical size
+    at the output's real scale: Hyprland's monitor scale, 1.25 gives 1145 × 630 for a 916 × 504 frame, never the layer
+    surface's integer ratio) shows beside the pointer on a small glass plate (`capture.readout*`). The pointer is a crosshair
+    outside the frame, a move pointer inside, a resize pointer on a handle. The frame opens on the display's last one
+    (`capture.lastSelection`, per display name, brought back on the display), else a centred frame half the display each way (from the screen's own logical size: the toolbar's window is 0x0, then 100x100, while it maps).
+    Capture, Record and Return act on its geometry.
+  - Capture Selected Window: the window under the pointer is tinted with the accent (`capture.windowHighlightOpacity`, its
+    corner the window's own superellipse, `capture.windowHighlightRadius` at `capture.windowHighlightPower`): the window drawn on top there among the shown Desktop's windows of
+    the platform's window list (`Compositor.windowsOn`), the most recently activated one, a full-screen window hiding those
+    activated before it, clipped to the display. A click captures that window; a click where no window is does nothing; Esc
+    closes. Every display's surface takes the pointer in this mode (input only; the bar stays on the toolbar's display, the keyboard
+    follows the pointer's display: a layer with Exclusive keyboard keeps the pointer on its own display in the compositor). Grassfield's cursor theme has no camera pointer, so the arrow shows. Return and Capture take the window under the
+    pointer, else the helper's crosshair (the fallback).
+  - Capture and Record Entire Screen: a click on any display captures or records that display (every display's surface takes
+    the pointer, the keyboard following the pointer's display as in Capture Selected Window); the Capture button still captures every display, Record the toolbar's display.
+  - The geometry goes to the helper as `--geometry "X,Y WxH"` (the compositor's logical coordinates, whole numbers) and the
+    display clicked as `--output NAME`; the helper refuses (exit 2, nothing captured) a geometry that is not wholly on one
+    enabled display or has no size. Its crosshair stays only as the fallback when the surface has no geometry to give.
+- SC9 Options (the shared `PopupMenu` with section headers and check marks, opened above the button, inside the toolbar's
+  surface): Save to (Desktop, Documents, Clipboard, Preview; a recording mode lists Desktop, Documents and Preview), Timer
+  (None, 5 Seconds, 10 Seconds), Microphone in a recording mode (None, and the default input by its name), Show Mouse Pointer.
+  A choice is saved at once (`capture.saveTo`, `capture.timer`, `capture.microphone`, `capture.showPointer`).
+- SC10 The action hides the toolbar first, then (once its surface has given the keyboard back and gone,
+  `focusReturn.releaseHoldMs` and a moment for the window's focus to return) runs `grassfield-capture` with the mode and the
+  options (`shell/capture/CaptureModel.js` helperArgs): `screen [--output <the display clicked>] | window --geometry <the
+  window> | selection --geometry <the frame>` with `--save`, `--timer`, `--pointer`; `record screen --output <the display
+  clicked, else the toolbar's> | record selection --geometry <the frame>` with `--mic` too. Without a geometry the window mode
+  is the helper's crosshair over the windows only (slurp -r). In a real session the helper runs in its own
+  scope (uwsm-app, as the Dock starts apps), never in the shell's unit (its CPU and memory limits, its restarts).
+- SC11 Save to: the Desktop (copied to the clipboard too, the notice); Documents (xdg-user-dir's, never the home folder;
+  copied; the notice says Documents); Clipboard (the focused display's picture or the choice, copied as PNG; no file and no
+  notice, as macOS); Preview (opened in Preview at once, no notice; the file is kept on the Desktop, since Preview cannot
+  save a document).
+- SC12 Timer: after the choice (the window clicked, the area dragged), the helper counts down; the shell shows the seconds
+  left on a glass plate (`capture.countdownSize`, the menus' class, `grassfield-capture-countdown`, no keyboard, clicks pass
+  through) centred on what will be captured, and drops it when the time is up; the picture or the recording waits half a
+  second more, so the plate is in none (Hyprland draws the plate's layer without a fade, `windows.lua`). Ctrl-Super-Esc or
+  the session locking cancels a countdown: nothing is captured.
+
+### Screen recording
+- SC13 Record Entire Screen records the display clicked, else the toolbar's display; Record Selected Portion the toolbar's
+  frame (a frame that is a whole display is recorded as that display, an area as `WxH+X+Y`), with gpu-screen-recorder and the
+  backend arguments of Omarchy's `omarchy-capture-screenrecording` (pinned): `-w <display> -s <its size, 4K at most>` or
+  `-w WxH+X+Y`, `-k auto -f 60 -fm cfr -fallback-cpu-encoding yes`, `-cursor yes|no` (Show Mouse Pointer), and the
+  microphone as `-a default_input -ac aac` when chosen. The desktop's sound is never recorded (macOS).
+- SC14 The movie is written to a hidden file of the helper's in the destination (the Desktop, Documents; the clipboard is not
+  offered and means the Desktop) and then takes the name "Screen Recording <date> at <time>.mp4" (the start time,
+  « Enregistrement de l’écran … à … » in French), never replacing a file; a notice "Screen Recording", "Saved to the Desktop."
+  (or Documents) with "Open" follows, whose click plays it in Preview; with Save to Preview it opens in Preview at once. A
+  recorder that writes nothing leaves no file and a notice says the recording could not be saved.
+- SC15 While it records, the menu bar shows a stop item at the left of the system items (`record-stop` and the elapsed time,
+  m:ss, then h:mm:ss; never hidden when the bar is crowded, as a privacy indicator); a click stops the recording, and so does
+  Ctrl-Super-Esc (`config/hypr/grassfield/system.lua`, `grassfield-capture stop`).
+- SC15a Nothing is captured or recorded behind the lock (the security review of OC-1, MEDIUM), by three independent paths:
+  - the shell stops the helper whenever the session is locked and the helper's state is not idle (`CaptureFile.stopNeeded`),
+    on either change: the lock coming while a capture runs, and a capture becoming active while locked (a recording whose
+    helper was slow to start after Record, a shell restarted under the lock that reads the state late), and asks again every
+    2 s while that stays true; a recording writes its state ("starting") the moment its helper begins, before anything slow;
+  - the helper reads the lock itself (`session_locked`): the shell's crash-recovery marker
+    (`$XDG_RUNTIME_DIR/grassfield-lock-<instance>`, "locked" from the moment a lock is asked for until the unlock, also while the
+    shell restarts; the reader the omarchy-shell stand-in uses) and Hyprland's displays blocked by "LOCK"; it refuses to start
+    the recorder, and to take a picture, when either says locked (at its start and again just before the recorder or grim);
+  - while recording, the helper reads the marker every 0.5 s and ends the recording itself (SIGINT to its recorder, the movie
+    saved) when the session locks, with or without a shell.
+- SC16 `stop` reads the helper's private state (`$XDG_RUNTIME_DIR/grassfield/capture-state.json`, 0600 in the 0700 folder,
+  written by rename; the shell watches it: `shell/services/CaptureState.qml`) and sends SIGINT to the recorder that helper
+  started, recognised by its pid, its start time and its parent (the helper, by its own pid and start time), held by a pidfd;
+  never a process found by its name. A recorder still running 10 s later is killed. A state whose helper is gone (nobody
+  holds the capture lock) is set back to idle. One recording or countdown runs at a time (the lock); a second is refused.
+- SC17 Without gpu-screen-recorder (an Omarchy base package) the two Record buttons and their group are not shown, and the
+  helper refuses `record` (exit 3) without running anything.
 
 ### Acceptance criteria
 - A-SC1 (L0) `tests/shell/capture.sh`, with fakes that answer as the real tools do (slurp 1.5.0: the smallest box for a
@@ -1386,14 +1490,74 @@ gives the toolbar its own chantier; until then it does the selection (8-1).
   notice's arguments; a click opening Preview 40 times out of 40, its button, no click, the bounded wait (notify-send
   closing its notice), gdbus without notify-send (a PATH of the fakes only, so the machine's own notify-send is never
   reached); Preview through `uwsm-app`; failures leave no file.
-- A-SC2 (L0) `tests/shell/session_services.sh`: the four bindings call `grassfield-capture`, never `omarchy-capture`.
+- A-SC2 (L0) `tests/shell/session_services.sh`: Shift-Super-3, Shift-Super-4 and Print call `grassfield-capture`, never
+  `omarchy-capture`; Shift-Super-5 opens the shell's toolbar; Ctrl-Super-Esc runs `grassfield-capture stop`.
 - A-SC3 (L2, owner) in the real session: Shift-Cmd-3 and Shift-Cmd-4 with a drag and a click on a window; the file on the
   Desktop and in the clipboard; the notice and Preview.
+- A-SC4 (L0) `tests/shell/capture.sh` (`capture.d/options.py`, ADR-0045 OC-1): the toolbar's argv only (anything else is the
+  usage, nothing run); the window mode (slurp -r over the windows only; a click outside every window, Esc); the pointer;
+  Save to Documents (and xdg-user-dir answering the home folder), Clipboard (no file, no notice), Preview (opened at once);
+  the timer's state (countdown, until, where, private), the picture after it and the plate's half second, a stop during it;
+  a recording of a display (Omarchy's arguments, the hidden file, the state naming the helper's child), of a display above
+  4K, with the microphone and the pointer into Documents, of an area, of a display clicked; a second recording refused; stop
+  (SIGINT, the movie named, no hidden file), SIGTERM to the helper while recording (saved), a recorder ignoring SIGINT
+  (killed), failing (no file, the notice), missing (exit 3, nothing run); SIGTERM during the countdown; stop never
+  signalling a process named like the recorder whose start time or parent differs, nor a left-over state; the names and
+  notices in French. The toolbar's geometry (H1): `--geometry` in slurp's form only (whole numbers, a positive size; 14
+  malformed forms refused, nothing run), wholly on one display (across two, past an edge, left of every display, below one:
+  refused, only Hyprland's displays read), for a frame and a window clicked (no crosshair), for a recording's frame (an area,
+  a whole display by name); `--output` of a display clicked (that display only; one that is not there: nothing). The lock: the
+  shell's marker saying locked refuses a recording and a picture; Hyprland's LOCK does too; the marker written during a
+  recording ends it (SIGINT, the movie saved) without any shell; during a recording's countdown nothing is recorded; a
+  recording's state says "starting" before the helper reads Hyprland's displays.
+- A-SC5 (L0) `tests/unit/tst_capturemodel.qml` and `tst_capturefile.qml`: the modes and their order, the mode the toolbar
+  opens in, the arrows, the helper's argv for every mode and option (with a geometry and a display clicked), the Options
+  menu's rows and checks per mode, a choice as the setting it changes; the frame's default, clamp, handles and their hit
+  test, resize (turning over, the minimum, the display's edges), move, a new frame drawn, the readout in pixels, the
+  geometry text, the remembered frames (per display, 16 at most, within the settings contract's pattern), the window under
+  the pointer (activation order, full screen), the clip to the display, the capture.* colours as QML reads them; the state
+  file's path (dev and session), its reading (every malformed field refused, "starting"), the seconds left, the elapsed time,
+  where the countdown plate goes, and the stop under the lock in both orders (a state that appears after the lock is stopped).
+- A-SC6 (L1, nested, NOT VERIFIED in the cloud session that built it) the toolbar on the focused display, its glass, states
+  and the Options menu above it; Esc, Return, the arrows; refused while locked; the frame (veil, handles, resize, move, draw,
+  readout, reopened on the last frame), the window highlight and its click, a click on each of two displays; the countdown
+  plate with a fake helper (`GRASSFIELD_CAPTURE_HELPER`) writing a countdown state; the menu bar's stop item with a recording
+  state, and its stop when the session locks after the state appeared.
+- A-SC7 (L2, owner) in the real session: every mode and option once, a recording of a display and of an area with and
+  without the microphone, its stop from the menu bar, from Ctrl-Super-Esc and by locking; the files, the notices, Preview.
 
 ### Known limitations
 A picture over 8 MiB shows Preview's icon in the notice, not the picture (8-3). A click on a window captures the window's
 own box, without Grassfield's title bar; a click on the title bar itself captures the window behind it or the display
 (8-5). Without notify-send (libnotify is optional), the last capture's notice is not closed before the next. While the crosshair shows, slurp outlines the smallest box under the pointer,
 which can be a window behind a larger one; the picture is the window drawn on top under the pointer, as Hyprland draws them. The notification settings list the helper under its translated
-name ("Screenshot", « Capture d’écran »), so a change of language starts it over. Recording, the floating thumbnail and
-the toolbar's options are the later chantier's.
+name ("Screenshot", « Capture d’écran »), so a change of language starts it over.
+
+The capture toolbar and recording (ADR-0045 OC-1) differ from macOS 27 here:
+- The frame of the Selected Portion modes is drawn on the toolbar's display only (to frame another display, open the toolbar
+  there); the readout shows only while dragging; the handles, the veil, the readout and the highlight are estimates of macOS
+  27's (`capture.*`), not measurements.
+- Capture Selected Window captures the window's box as it is on screen (whatever covers it, without its shadow and without
+  Grassfield's title bar where the plugin draws one): macOS captures the window alone with its shadow. "On top" is the most
+  recently activated window, not Hyprland's stacking order (the shell's window list has no stacking): a window raised without
+  being activated, or a pinned one, may lose to another. A window's geometry is the window data the shell last read (read again
+  when the toolbar opens and when the mode is chosen): a window that moved meanwhile is tinted where it was. There is no camera
+  pointer (none in Grassfield's cursor theme): the arrow shows.
+- In the Entire Screen modes nothing marks the display under the pointer before the click.
+- No floating thumbnail after a capture (the notice stands for it); no Mail, Messages or Other Location in Save to; no
+  Remember Last Selection and no Show Floating Thumbnail options; the microphone list holds the default input only.
+- Save to Preview keeps the file on the Desktop (Preview cannot save a document); macOS keeps it unsaved in Preview.
+- Recordings are MP4 (gpu-screen-recorder's container, as Omarchy's), not MOV; no system audio (as macOS); no mouse clicks
+  shown. gpu-screen-recorder's `-cursor` option and its exit on SIGINT are taken from its documented behaviour and Omarchy's
+  use, not run in the cloud session that built this (no recorder there): NOT VERIFIED until the owner's session.
+- Show Mouse Pointer off: on a GPU where Hyprland draws the pointer in software, grim's picture holds the pointer all the
+  same (Omarchy's screenshot forces hardware cursors around grim; Grassfield's helper changes no compositor setting).
+- Esc does not cancel the countdown (the plate takes no keyboard, so that the window being captured stays the key window);
+  Ctrl-Super-Esc does. The countdown is not shown while another recording runs (one state at a time); the timer still runs.
+- Under the lock, a picture or a recording is refused by the helper only from the moment the shell's marker says "locked" or
+  Hyprland reports the lock; between the lock key and the marker's write (the shell writes it synchronously when the lock is
+  asked for) a capture that was already past its last check can still be taken. While recording, the session locking is seen
+  within 0.5 s (the marker's poll) or at once by the shell, whichever comes first: up to that the recording runs on.
+- The glyphs, the bar's height and padding and the countdown plate are estimates (`capture.*`
+  tokens), not measurements of macOS 27; NOT VERIFIED on screen (no nested capture was taken by the cloud session that built
+  them).

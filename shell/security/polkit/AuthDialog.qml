@@ -57,6 +57,15 @@ FocusScope {
             shakeAnimation.restart();
             root.focusField();
         }
+
+        // PAM stopped awaiting the device because its password prompt came: the field takes the focus again (not when the
+        // request ended). Through focusField, so never while the input is disabled (AuthAgent's key sink); and the focus an
+        // item gets in the agent's window reaches the keyboard only when that window holds it, which it does only while the
+        // sheet is shown and not held, or held and clicked past its guard (AuthAgent `takesKeys`; lock_surfaces.sh pins both).
+        function onAwaitingDeviceChanged(): void {
+            if (!root.model.awaitingDevice && root.model.responseRequired)
+                root.focusField();
+        }
     }
 
     Material {
@@ -204,7 +213,9 @@ FocusScope {
         Text {
             width: parent.width
             textFormat: Text.PlainText
-            text: qsTr("Enter your password to allow this.")
+            // While PAM awaits a device, its own instruction is the feedback line under the field (never replaced here, so
+            // pam_faillock's notice stays readable too).
+            text: root.model.awaitingDevice ? qsTr("Follow the instruction below, or wait for the password field.") : qsTr("Enter your password to allow this.")
             horizontalAlignment: Text.AlignHCenter
             color: Appearance.colors.textSecondary
             font.family: Appearance.fontFamily
@@ -357,7 +368,9 @@ FocusScope {
 
             PasswordField {
                 id: field
-                enabled: root.inputEnabled
+                // Not while PAM awaits a device and asks nothing (AuthDialogModel.awaitingDevice: a fingerprint, a security
+                // key): a password typed then would go nowhere. It takes the focus back once PAM asks (onAwaitingDeviceChanged).
+                enabled: root.inputEnabled && !root.model.awaitingDevice
                 x: 0
                 width: parent.width
                 height: parent.height

@@ -21,6 +21,8 @@ const PAGES = [
     {id: "focus", icon: "moon"},
     {id: "lock", icon: "lock"},
     {id: "privacy", icon: "hand"},
+    {id: "fingerprint", icon: "fingerprint"},
+    {id: "sharing", icon: "remote-desktop"},
     {id: "mouse", icon: "mouse"},
     {id: "trackpad", icon: "trackpad"},
     {id: "printers", icon: "printer"},

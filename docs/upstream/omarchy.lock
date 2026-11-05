@@ -47,3 +47,39 @@ d72930596e608ef47004fbf444b2088b5b9a3bf94e4fdfa26b2507eadcedad99 bin/omarchy-upd
 0c14cb7853174d5289172496e22c1bd444b20c00c1aefd589e1faa3ae6941abe bin/omarchy-migrate packaging/pacman/grassfield-update-helper,packaging/bin/grassfield-update-run
 edc8148e37bf0b43957f59f8aba7d3c6bfaf8b40d43f0199ba7bf05ae5c908a5 bin/omarchy-update-mise packaging/bin/grassfield-update-run
 fa72062dc1aedb99f4e33fcbde98a2d21b7d3ff058fb8148080396c23bcd740d bin/omarchy-update-aur-pkgs packaging/bin/grassfield-update-run
+# ADR-0045 (Omarchy capabilities, 2026-11-04): the Omarchy commands, rules and data Grassfield code follows (arguments,
+# output contracts, rules copied by match) or relies on for safety (grassfield-terminal-theme: the steps of omarchy-theme-set it
+# keeps out of the Grassfield session). A change here is read and ported or rejected in the derived file, then re-pinned.
+6d70541c44a82fde5a44d712f348df35f8372c080436433916694738627c4c66 bin/omarchy-capture-screenrecording packaging/bin/grassfield-capture
+4572f2e6508d9fc71dc63a0d845d987cb6cf3ee0ebe6a99bee6324e0b979e11c bin/omarchy-capture-text apps/preview/src/previewlogic.cpp
+04eb56f006c03f0861eae3be8e3d29584f297960c53dbc4d8c2b85acd54ea965 bin/omarchy-capture-qr apps/preview/src/previewlogic.cpp,apps/preview/src/previewapp.cpp
+92e8c4b576cca6075ef4d2a54fe9d693b706a576f53be8a467ac7b725d159a80 bin/omarchy-menu-emoji-insert shell/services/emoji-insert.sh,shell/services/Emoji.qml
+808af7df5e536a2f5703356fe3457932b6f0c1c9c2c09e3245ac5f8c899c95b4 bin/omarchy-brightness-display-ddc shell/services/BrightnessLogic.js,shell/services/Brightness.qml,apps/settings/qml/System.js,apps/settings/src/systemguard.cpp
+587908cfeb5c99fa7746fd4616eeef593ba278de0e153dc77918caa72bd18930 bin/omarchy-brightness-display shell/services/BrightnessLogic.js
+2356e6e19656fcc67aa345fc46352a310945e54146706c039bf92a7bd3b3fb5a bin/omarchy-theme-set packaging/bin/grassfield-terminal-theme
+fc0484cd85aa4d3a8c84685022f4b33ccfd86cfdf9fa27e0013fc8ca99994d64 bin/omarchy-restart-hyprctl packaging/bin/grassfield-terminal-theme
+644aefa2176223e606c36552dd4c047be6ca8ded6635de90f298a3a086b89180 bin/omarchy-theme-set-browser-policy packaging/bin/grassfield-terminal-theme
+942bb8fd260387a39ef664c3b172d1fe1baff265a2592a26d8efe118f35a19aa bin/omarchy-theme-set-gnome packaging/bin/grassfield-terminal-theme
+00b2868e563b8a18311d35295b3c8c70dacd76f338b0401dcd08350540536b1e default/hypr/apps/battlenet.lua config/hypr/grassfield/apps.lua
+e2409d80ef7e88455326e50f853d60bb18b2cf909b5820066bf46d538aaeedd7 default/hypr/apps/davinci-resolve.lua config/hypr/grassfield/apps.lua
+d9eebb75de9898a71bdcaeba09b2dcd1e81bd0eba1eccb9c28f562704d81bffd default/hypr/apps/geforce.lua config/hypr/grassfield/apps.lua
+459cbba410e8d3498a1b9e68a779f036f6c39783e7f9dd4f456574abe4de6cae default/hypr/apps/moonlight.lua config/hypr/grassfield/apps.lua
+fb6601901ea568c3dee927086071ed0d83f1625944f0390032ff908ccf7552e4 default/hypr/apps/retroarch.lua config/hypr/grassfield/apps.lua
+e0bb890ad2828ca2006e7a803ca01301094f90f18882598f5dc5fd2f55f62151 default/hypr/apps/steam.lua config/hypr/grassfield/apps.lua
+7b7cb0be84a5b73b31c6e1004d5082c6ed5e91d3ae74931cf45b13731e4fa698 default/hypr/apps/telegram.lua config/hypr/grassfield/apps.lua
+35cbbbc740da2044c2bd1602151d458dbee44f183c947fa48d3d71d3301f73c8 default/hypr/apps/pip.lua config/hypr/grassfield/apps.lua
+451b88808740c9d2e151a57ac0d256c0965c0c48045bd8a7544cb1f192060b1e default/hypr/apps/webcam-overlay.lua config/hypr/grassfield/apps.lua
+ec361a3965b9e21d3f74a3c2b3199f1ff8a9284261abeaa6b836d21866745d5f bin/omarchy-menu-share apps/files/qml/ShareLogic.js,apps/files/src/filesapp.cpp
+04ed40efeb36840d585d422deb44823f4eaf879944e7bf1ba6e828f14eaed4cb bin/omarchy-weather-location shell/widgets/Weather.js,shell/widgets/WeatherSampler.qml
+66d2aa5e81bfe12b1b1b53b499a09968bc9ad660d066bc60af9b18102e836d17 shell/plugins/panels/weather/Model.js shell/widgets/Weather.js
+3a5b1345741f699e426ac08a2e4548a8bc0e0c4c82a54600402f716c20736de5 shell/plugins/panels/weather/Panel.qml shell/widgets/Weather.js,shell/widgets/WeatherSampler.qml
+# ADR-0045 Settings setups (OC-5 to OC-10): the Omarchy scripts whose markers, files and output Settings reads (the PAM lines,
+# /etc/fido2/fido2, the SSH hardening file, the resume configuration, the Wi-Fi QR matrix) and the dictation binding's source.
+619b82eeea233061bdadea83566d91c065e231830c3333a41960a5a6221b96e0 bin/omarchy-network-qr apps/settings/qml/NetworkQr.js
+f6725c68ccb6011c2e76af877d4c05784255a6dfead04f1af8a3f23a7fdd1b87 bin/omarchy-setup-security-fingerprint apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+0dd2e2c8bd76613c861a7a3f136cdcd7018a07b45805e207e3c0933d0820a955 bin/omarchy-setup-security-fido2 apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+19112707651481a7c6266e9efb6832dea508530cf8b6e53e12f74583fee5ef57 bin/omarchy-setup-security-sshd apps/settings/qml/Setups.js
+c05881585232eed72a629e7a5faf1d738f1eaeba165d45cc8a7b28885f5f54ac bin/omarchy-hibernation-setup apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
+a269d40d4c4745b1982571b5f818e0ffcef847101db11535eafad7ff6dad4d64 bin/omarchy-hibernation-available apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
+ff39dcab7a834082abc12a5563c3b37ce434a39a1969a1ecb2f025553b69c446 default/hypr/bindings/voxtype.lua config/hypr/grassfield/bindings.lua
+ef90929ad5a88a43d36b03be023aa342efd09b2c3a8bde7775929a7a4ea07107 bin/omarchy-hw-fingerprint apps/settings/src/systemguard.cpp,apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml

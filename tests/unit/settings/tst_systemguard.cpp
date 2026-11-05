@@ -262,6 +262,58 @@ TEST(ActionGuard, BrightnessTakesOneBacklightAndAPercentage)
     EXPECT_FALSE(isReadOnlyQuery(cmd("intel_backlight", "50%")));
 }
 
+// Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command with one connector and one whole
+// percentage, bounded by coreutils' timeout, which ends its whole process group (ddcutil included) within 14 s, before the
+// action's 15 s (security review, LOW 3): exactly `timeout -k 2 12 omarchy-brightness-display-ddc <connector> <N>%`. The bare
+// command and timeout around anything else are refused. Its read (the connector alone) is not a query of the dev guard: a dev
+// session never asks the owner's displays.
+TEST(ActionGuard, DdcBrightnessTakesOneConnectorAndAPercentage)
+{
+    const QString t = QStringLiteral("timeout");
+    const QString d = QStringLiteral("omarchy-brightness-display-ddc");
+    const auto bounded = [&](std::initializer_list<const char *> rest) {
+        QStringList out{t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), d};
+        for (const char *a : rest)
+            out << QString::fromLatin1(a);
+        return out;
+    };
+    const auto cmd = [&](const char *output, const char *value) { return bounded({output, value}); };
+    EXPECT_TRUE(isActionProgram(t));
+    EXPECT_FALSE(isActionProgram(d));
+    for (const char *ok : {"0%", "1%", "50%", "100%"})
+        EXPECT_TRUE(isAllowedAction(cmd("DP-1", ok))) << ok;
+    for (const char *ok : {"HDMI-A-1", "DP-10", "DVI-D-2", "eDP-1", "Unknown-1"})
+        EXPECT_TRUE(isAllowedAction(cmd(ok, "40%"))) << ok;
+    // The keys' steps (the shell's only), raw values, malformed percentages.
+    for (const char *no : {"+5%", "5%-", "101%", "050%", "50", "-5%", "50 %", "%", "50%\n", ""})
+        EXPECT_FALSE(isAllowedAction(cmd("DP-1", no))) << no;
+    // A name that is an option, a path, not a connector.
+    for (const char *no : {"", "-x", "--help", "DP-", "DP1", "1-DP", "DP-1 ", "DP-1\n", "../DP-1", "DP/1", "DP-1;rm", "D P-1", "DP-12345"})
+        EXPECT_FALSE(isAllowedAction(cmd(no, "50%"))) << no;
+    EXPECT_FALSE(isConnectorName(QStringLiteral("A").repeated(25) + QStringLiteral("-1")));
+    EXPECT_TRUE(isConnectorName(QStringLiteral("HDMI-A-1")));
+    // The bare command (its ddcutil could outlive the action's time limit), another bound, timeout around anything else.
+    EXPECT_FALSE(isAllowedAction({d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("60"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("9"), QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-s"), QStringLiteral("KILL"), QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("/usr/bin/omarchy-brightness-display-ddc"), QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("ddcutil"), QStringLiteral("setvcp"), QStringLiteral("10")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("x")}));
+    EXPECT_FALSE(isAllowedAction({t, QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), QStringLiteral("rm"), QStringLiteral("-rf"), QStringLiteral("x")}));
+    EXPECT_FALSE(isAllowedAction({t}));
+    EXPECT_FALSE(isAllowedAction(bounded({})));
+    EXPECT_FALSE(isAllowedAction(bounded({"DP-1"})));
+    EXPECT_FALSE(isAllowedAction(bounded({"DP-1", "50%", "50%"})));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/timeout"), QStringLiteral("-k"), QStringLiteral("2"), QStringLiteral("12"), d, QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("omarchy-brightness-display"), QStringLiteral("--monitor"), QStringLiteral("DP-1"), QStringLiteral("50%")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("ddcutil"), QStringLiteral("setvcp"), QStringLiteral("10"), QStringLiteral("50")}));
+    EXPECT_FALSE(isReadOnlyQuery(bounded({"DP-1"})));
+    EXPECT_FALSE(isReadOnlyQuery({d, QStringLiteral("DP-1")}));
+    EXPECT_FALSE(isReadOnlyQuery(cmd("DP-1", "50%")));
+}
+
 // Printers (ADR-0030): the CUPS reads are exact; the user's defaults are the only lpoptions actions.
 TEST(PrinterGuard, TheReadsAreExactAndChangeNothing)
 {
@@ -397,6 +449,19 @@ TEST(ActionGuard, PowerProfilesTakeASourceAndAProfileOnly)
     EXPECT_FALSE(isReadOnlyQuery({set, QStringLiteral("ac"), QStringLiteral("balanced")}));
 }
 
+// Appearance > Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme names are a query with no argument; applying a
+// theme is never one (the shell's grassfield-terminal-theme does it, not Settings).
+TEST(QueryGuard, OmarchyThemeListOnly)
+{
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-theme-list")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-theme-list"), QStringLiteral("--all")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("/usr/bin/omarchy-theme-list")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-theme-set"), QStringLiteral("Tokyo Night")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-theme-current")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("omarchy-theme-set"), QStringLiteral("Tokyo Night")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("omarchy-theme-set"), QStringLiteral("Tokyo Night")}));
+}
+
 TEST(ActionGuard, OmarchyLanguageMayWaitForItsPrompt)
 {
     // It may ask for a password: one at a time per tag (Backend::act, InFlight); wpctl and xdg-open never do.
@@ -486,6 +551,70 @@ TEST(LaunchGuard, OnlyUpdateNowAndTheSessionEnd)
     // A launch is no action, an action no launch: each door has its own list.
     EXPECT_FALSE(isAllowedAction({launcher, QStringLiteral("omarchy-update")}));
     EXPECT_FALSE(isLaunch({QStringLiteral("/usr/lib/grassfield/grassfield-channel-set"), QStringLiteral("beta")}));
+}
+
+// ADR-0045 (OC-6, OC-8, OC-9, OC-10): Omarchy's read-only checks with no argument, the QR code with --meta alone, lsblk with
+// its one column list; none of them takes a value from the page.
+TEST(QueryGuard, OmarchysChecksAndTheBlockDevicesAreExact)
+{
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-hw-fingerprint")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("omarchy-hibernation-available")}));
+    // Share Network's QR code encodes the Wi-Fi password: never a read-only query (a dev session runs those), a private one,
+    // exactly with --meta (security review of ADR-0045, M-2).
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
+    EXPECT_TRUE(isPrivateQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("omarchy-network-qr")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isPrivateQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")}));
+    EXPECT_TRUE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-hw-fingerprint"), QStringLiteral("--help")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-hibernation-available"), QStringLiteral("x")}));
+    // An interface named by the page, the bare matrix, or anything after --meta: not a query.
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("wlan0")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS"), QStringLiteral("/dev/sda")}));
+    EXPECT_FALSE(isReadOnlyQuery({QStringLiteral("lsblk"), QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,UUID")}));
+    // The setups and the scripts that change something are never queries, and never actions either.
+    for (const char *no : {"omarchy-hibernation-setup", "omarchy-drive-password", "omarchy-drive-info", "omarchy-voxtype-status", "omarchy-pkg-present",
+                           "omarchy-setup-security-sshd", "omarchy-launch-floating-terminal-with-presentation"}) {
+        EXPECT_FALSE(isReadOnlyQuery({QString::fromLatin1(no)})) << no;
+        EXPECT_FALSE(isAllowedAction({QString::fromLatin1(no)})) << no;
+    }
+}
+
+// ADR-0045 OC-0.4 and OC-0.7: each setup no system service offers is Omarchy's command alone in Omarchy's floating terminal,
+// as Omarchy's own menu starts it; Language Model… is Omarchy's command, which opens that terminal itself.
+TEST(LaunchGuard, OmarchysSetupsInItsTerminalExactly)
+{
+    const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
+    for (const char *command : {"omarchy-setup-security-fingerprint", "omarchy-remove-security-fingerprint", "omarchy-setup-security-fido2",
+                                "omarchy-remove-security-fido2", "omarchy-setup-security-sshd", "omarchy-drive-password", "omarchy-hibernation-setup",
+                                "omarchy-hibernation-remove", "omarchy-voxtype-install", "omarchy-voxtype-remove"}) {
+        const QString c = QString::fromLatin1(command);
+        EXPECT_TRUE(isLaunch({launcher, c})) << command;
+        // Never with an argument, never outside the terminal, never as an action or a query.
+        EXPECT_FALSE(isLaunch({launcher, c, QStringLiteral("--force")})) << command;
+        EXPECT_FALSE(isLaunch({launcher, c + QStringLiteral(" --force")})) << command;
+        EXPECT_FALSE(isLaunch({c})) << command;
+        EXPECT_FALSE(isAllowedAction({launcher, c})) << command;
+        EXPECT_FALSE(isReadOnlyQuery({launcher, c})) << command;
+    }
+    EXPECT_TRUE(isLaunch({QStringLiteral("omarchy-voxtype-model")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-voxtype-model")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("omarchy-voxtype-model"), QStringLiteral("x")}));
+    // Remote Login's switch is systemd's (systembus.h ssh.enable); Omarchy's removal of the server, a hibernation setup with
+    // --force, the voxtype configuration and a password change for another user are not Settings' to start.
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-remove-security-sshd")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-hibernation-setup --force")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("omarchy-voxtype-config")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("passwd")}));
+    EXPECT_FALSE(isLaunch({launcher, QStringLiteral("voxtype setup model")}));
+    EXPECT_FALSE(isLaunch({QStringLiteral("/usr/bin/omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-drive-password")}));
 }
 
 TEST(ActionGuard, XdgOpenOnlyOpensOneCleanHttpsLink)

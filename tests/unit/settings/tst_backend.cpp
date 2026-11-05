@@ -245,6 +245,41 @@ TEST_F(BackendTest, AReadOnlyQueryTakesOnlyTheAllowListInARealSession)
     EXPECT_EQ(runs(QStringLiteral("gf-fake-query")), 1);
 }
 
+// Share Network's QR code (ADR-0045 OC-10) encodes the Wi-Fi password: readOnlyQuery runs it in a real session only, a dev
+// session (whose Wi-Fi pane reads the owner's real NetworkManager) never (security review of ADR-0045, M-2), and run() never.
+TEST_F(BackendTest, TheWifiCodeRunsInARealSessionOnly)
+{
+    writeRecorder(QStringLiteral("omarchy-network-qr"), "meta");
+    const QStringList code{QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")};
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    backend.readOnlyQuery(code, QStringLiteral("wifi.qr"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("wifi.qr")) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(QStringLiteral("wifi.qr")));
+    EXPECT_EQ(backend.run(code), QString());
+    backend.readOnlyQuery({QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta"), QStringLiteral("wlan0")}, QStringLiteral("stray"));
+    EXPECT_EQ(seen.finished.value(QStringLiteral("stray")), 1);
+    EXPECT_FALSE(seen.ok.value(QStringLiteral("stray")));
+    spinUntil([] { return false; }, 300);
+    EXPECT_EQ(recorded(QStringLiteral("omarchy-network-qr")).size(), 1);
+
+    EnvGuard env{"GRASSFIELD_DEV", "GRASSFIELD_SESSION"};
+    qputenv("GRASSFIELD_DEV", "1");
+    qunsetenv("GRASSFIELD_SESSION");
+    Backend dev;
+    Answers devSeen;
+    devSeen.listen(dev);
+    dev.readOnlyQuery(code, QStringLiteral("wifi.qr"));
+    EXPECT_EQ(devSeen.finished.value(QStringLiteral("wifi.qr")), 1); // refused at once
+    EXPECT_FALSE(devSeen.ok.value(QStringLiteral("wifi.qr")));
+    dev.query(code, QStringLiteral("wifi.qr.plain"));
+    EXPECT_EQ(devSeen.finished.value(QStringLiteral("wifi.qr.plain")), 1);
+    EXPECT_FALSE(devSeen.ok.value(QStringLiteral("wifi.qr.plain")));
+    spinUntil([] { return false; }, 300);
+    EXPECT_EQ(recorded(QStringLiteral("omarchy-network-qr")).size(), 1) << "nothing more ran in the dev session";
+}
+
 // ---- actions: one per tag while it may wait for a password ----
 
 // Language & Region shown again while Omarchy's prompt is up (omarchy-language may wait for pkexec) cannot start a second
@@ -360,6 +395,41 @@ TEST_F(BackendTest, UpdateNowStartsOmarchysLauncherDetached)
     EXPECT_EQ(devSeen.suppressed, (QStringList{QStringLiteral("update now"), QStringLiteral("update now")}));
     spinUntil([] { return false; }, 300);
     EXPECT_EQ(recorded(launcher).size(), 1);
+}
+
+// ADR-0045 OC-0.4: a setup no system service offers opens Omarchy's terminal with Omarchy's command alone; the pane's sheet
+// explains first. Any other command in that terminal is refused.
+TEST_F(BackendTest, OmarchysSetupsStartInItsTerminalAndNothingElseDoes)
+{
+    const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
+    writeRecorder(launcher, "");
+    writeRecorder(QStringLiteral("omarchy-voxtype-model"), "");
+    Backend backend;
+    EXPECT_TRUE(backend.launch(QStringLiteral("hibernation setup"), {launcher, QStringLiteral("omarchy-hibernation-setup")}));
+    EXPECT_TRUE(backend.launch(QStringLiteral("dictation model"), {QStringLiteral("omarchy-voxtype-model")}));
+    EXPECT_FALSE(backend.launch(QStringLiteral("hibernation setup"), {launcher, QStringLiteral("omarchy-hibernation-setup"), QStringLiteral("--force")}));
+    EXPECT_FALSE(backend.launch(QStringLiteral("remote login"), {launcher, QStringLiteral("omarchy-remove-security-sshd")}));
+    ASSERT_TRUE(spinUntil([&] { return !recorded(launcher).isEmpty() && !recorded(QStringLiteral("omarchy-voxtype-model")).isEmpty(); }));
+    spinUntil([] { return false; }, 200);
+    ASSERT_EQ(recorded(launcher).size(), 1);
+    EXPECT_TRUE(recorded(launcher).at(0).startsWith(QStringLiteral("omarchy-hibernation-setup|")));
+}
+
+// ADR-0045 OC-0.3: a pane asks whether a plain command is on PATH (nothing runs); a path, a relative name or an option is no
+// command name.
+TEST_F(BackendTest, ACommandIsLookedUpByItsPlainNameOnly)
+{
+    writeRecorder(QStringLiteral("voxtype"), "");
+    Backend backend;
+    EXPECT_TRUE(backend.hasCommand(QStringLiteral("voxtype")));
+    EXPECT_FALSE(backend.hasCommand(QStringLiteral("fprintd-enroll")));
+    EXPECT_FALSE(backend.hasCommand(scratch(QStringLiteral("voxtype"))));
+    EXPECT_FALSE(backend.hasCommand(QStringLiteral("../voxtype")));
+    EXPECT_FALSE(backend.hasCommand(QStringLiteral("-voxtype")));
+    EXPECT_FALSE(backend.hasCommand(QString()));
+    EXPECT_FALSE(backend.hasCommand(QString(65, QLatin1Char('v'))));
+    spinUntil([] { return false; }, 100);
+    EXPECT_TRUE(recorded(QStringLiteral("voxtype")).isEmpty()) << "a look-up runs nothing";
 }
 
 // Update Now's runner keeps its state in the session's runtime folder; without one there is no file to read.

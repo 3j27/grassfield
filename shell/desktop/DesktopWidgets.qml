@@ -49,9 +49,20 @@ Variants {
         property point dragOffset: Qt.point(0, 0)
         // Context menu.
         property var menuEntry: null
-        // Key focus returns to the window active when the menu opened (FocusReturn); one name per screen.
+        // The entry the menu was last opened for: the menu's bindings run once more when menuEntry is cleared (the popover
+        // takes its place, a row was chosen) before the Loader lets the menu go; they read this one, never null.
+        property var heldEntry: null
         onMenuEntryChanged: {
             if (menuEntry !== null)
+                heldEntry = menuEntry;
+        }
+        // The Weather widget's Edit Location… popover (ADR-0045 OC-14), in the menu's window where the menu was.
+        property var editEntry: null
+        readonly property bool overlayOpen: menuEntry !== null || editEntry !== null
+        // Key focus returns to the window active when the menu opened (FocusReturn); one name per screen. The menu giving
+        // way to the popover keeps it.
+        onOverlayOpenChanged: {
+            if (overlayOpen)
                 FocusReturn.opened("widgets-menu-" + screenName);
             else
                 FocusReturn.closed("widgets-menu-" + screenName, true);
@@ -91,6 +102,7 @@ Variants {
 
         function closeMenu(): void {
             menuEntry = null;
+            editEntry = null;
         }
 
         // The session locks: the widget menu (an Overlay layer with the keyboard) closes; none opens while locked
@@ -106,6 +118,12 @@ Variants {
 
         function applyMenu(action: string): void {
             const entry = menuEntry;
+            if (entry && action === "weather:location") {
+                // The popover takes the menu's place; the window keeps the keyboard (set before the menu goes).
+                editEntry = entry;
+                menuEntry = null;
+                return;
+            }
             menuEntry = null;
             if (!entry)
                 return;
@@ -307,8 +325,9 @@ Variants {
             }
         }
 
-        // Context menu: an Overlay window that takes the keyboard while it is open (a Bottom layer
-        // cannot), so arrows, Return and Esc work; clicking anywhere else dismisses it.
+        // Context menu (and the Weather widget's Edit Location… popover in its place): an Overlay window that takes the
+        // keyboard while it is open (a Bottom layer cannot), so arrows, typing, Return and Esc work; clicking anywhere else
+        // dismisses it.
         // qmllint disable uncreatable-type
         PanelWindow {
             // qmllint enable uncreatable-type
@@ -327,20 +346,21 @@ Variants {
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: scope.menuEntry !== null ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: scope.overlayOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
             WlrLayershell.namespace: "grassfield-widgets-menu"
             // The whole surface takes input while the menu is open; nothing once it closed: it stays mapped a moment for
             // the keyboard release, and a click then belongs to the window under it.
             // qmllint disable missing-type
-            mask: scope.menuEntry !== null ? null : menuPassThrough
+            mask: scope.overlayOpen ? null : menuPassThrough
             // The menu is frosted like every menu: its own blur region while it is open.
-            BackgroundEffect.blurRegion: scope.menuEntry !== null && Appearance.effectiveTransparency > 0 ? menuBlur : null
+            BackgroundEffect.blurRegion: scope.overlayOpen && Appearance.effectiveTransparency > 0 ? menuBlur : null
             // qmllint enable missing-type
 
             Region {
                 id: menuBlur
                 item: menuLoader
-                radius: Tokens.radiusMenu
+                // The widget menu's corner, or Edit Location…'s, a popover (radius.popover).
+                radius: scope.editEntry !== null ? Tokens.radiusPopover : Tokens.radiusMenu
             }
 
             Region {
@@ -349,7 +369,7 @@ Variants {
 
             KeyboardRelease {
                 id: menuRelease
-                shown: scope.menuEntry !== null
+                shown: scope.overlayOpen
             }
 
             MouseArea {
@@ -360,19 +380,34 @@ Variants {
 
             Loader {
                 id: menuLoader
-                active: scope.menuEntry !== null
+                active: scope.overlayOpen
                 x: Math.max(Tokens.spacingSm, Math.min(scope.menuAt.x, menuWin.width - width - Tokens.spacingSm))
                 y: Math.max(Tokens.spacingSm, Math.min(scope.menuAt.y, menuWin.height - height - Tokens.spacingSm))
-                sourceComponent: WidgetMenu {
-                    entry: scope.menuEntry
-                    moves: ({
-                            left: Widgets.canStepDesktop(scope.menuEntry.uid, "left", scope.screenName),
-                            right: Widgets.canStepDesktop(scope.menuEntry.uid, "right", scope.screenName),
-                            up: Widgets.canStepDesktop(scope.menuEntry.uid, "up", scope.screenName),
-                            down: Widgets.canStepDesktop(scope.menuEntry.uid, "down", scope.screenName)
-                        })
+                sourceComponent: scope.editEntry !== null ? locationEditor : widgetMenu
+            }
+
+            Component {
+                id: widgetMenu
+
+                WidgetMenu {
+                    entry: scope.heldEntry
+                    moves: scope.heldEntry ? ({
+                            left: Widgets.canStepDesktop(scope.heldEntry.uid, "left", scope.screenName),
+                            right: Widgets.canStepDesktop(scope.heldEntry.uid, "right", scope.screenName),
+                            up: Widgets.canStepDesktop(scope.heldEntry.uid, "up", scope.screenName),
+                            down: Widgets.canStepDesktop(scope.heldEntry.uid, "down", scope.screenName)
+                        }) : ({})
                     onChoose: action => scope.applyMenu(action)
                     onCloseRequested: scope.closeMenu()
+                    Component.onCompleted: forceActiveFocus()
+                }
+            }
+
+            Component {
+                id: locationEditor
+
+                LocationEditor {
+                    onClosed: scope.closeMenu()
                     Component.onCompleted: forceActiveFocus()
                 }
             }

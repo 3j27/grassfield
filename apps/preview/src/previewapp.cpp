@@ -6,7 +6,10 @@
 #include "chromecaps.h"
 #include "autoappearance.h"
 
+#include <QBuffer>
+#include <QClipboard>
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QMutexLocker>
 #include <QDir>
 #include <QFile>
@@ -15,8 +18,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QMimeData>
 #include <QMimeDatabase>
+#include <QPainter>
 #include <QProcess>
+#include <QStandardPaths>
+
+#include <memory>
 
 namespace {
 
@@ -37,6 +45,35 @@ QSize displaySize(const QImageReader &reader)
     if (size.isValid() && (reader.transformation() & QImageIOHandler::TransformationRotate90))
         size.transpose();
     return size;
+}
+
+// The picture a recognition hands to its tool (preview::recognitionCommand): the first frame decoded by Qt with the caps of
+// the viewer, EXIF orientation applied (the boxes are then in the pixels Preview shows), scaled down to
+// preview::kRecognitionMaxSide, flattened on white (a transparent pixel's colour is often black, under black text), grey,
+// as a binary PGM, which tesseract (leptonica) and zbarimg read on their standard input. Empty when it cannot be decoded.
+QByteArray recognitionImage(const QString &path)
+{
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    const QSize native = displaySize(reader);
+    if (native.isValid() && !preview::imageSizeAllowed(native))
+        return {};
+    QImage image = reader.read();
+    if (image.isNull() || !preview::imageSizeAllowed(image.size()))
+        return {};
+    if (image.width() > preview::kRecognitionMaxSide || image.height() > preview::kRecognitionMaxSide)
+        image = image.scaled(preview::kRecognitionMaxSide, preview::kRecognitionMaxSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    QImage flat(image.size(), QImage::Format_RGB32);
+    flat.fill(Qt::white);
+    {
+        QPainter painter(&flat);
+        painter.drawImage(0, 0, image);
+    }
+    QByteArray out;
+    QBuffer buffer(&out);
+    if (!buffer.open(QIODevice::WriteOnly) || !flat.convertToFormat(QImage::Format_Grayscale8).save(&buffer, "pgm"))
+        return {};
+    return out;
 }
 
 QVariantList filesFor(const QStringList &paths)
@@ -105,6 +142,20 @@ PreviewApp::PreviewApp(const QStringList &paths, const QStringList &errors, bool
 PreviewApp::~PreviewApp()
 {
     cancelBrowse();
+    // No recognition answers once the backend goes: the tools are killed, the decoders joined (each finishes its one image).
+    m_decoding.clear();
+    for (QProcess *process : std::as_const(m_tools)) {
+        process->disconnect(this);
+        process->kill();
+        process->waitForFinished(1000);
+        delete process;
+    }
+    m_tools.clear();
+    for (QThread *decoder : std::as_const(m_decoders)) {
+        decoder->wait();
+        delete decoder;
+    }
+    m_decoders.clear();
 }
 
 QString PreviewApp::pathAt(int index) const
@@ -168,6 +219,7 @@ void PreviewApp::readAppearance()
     QString highlight = QStringLiteral("automatic");
     QString doubleClick = QStringLiteral("zoom");
     QString shortcutSetting;
+    bool selectText = true;
     QFile f(configFile());
     if (f.open(QIODevice::ReadOnly) && f.size() < 1024 * 1024) {
         const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
@@ -193,11 +245,15 @@ void PreviewApp::readAppearance()
                         QStringLiteral("yellow"), QStringLiteral("green"), QStringLiteral("graphite")}.contains(h))
             highlight = h;
         shortcutSetting = root.value(QStringLiteral("keyboard")).toObject().value(QStringLiteral("shortcutStyle")).toString();
+        // Select Text in Images: only an explicit false turns it off (a missing or malformed value is the default, on).
+        selectText = root.value(QStringLiteral("preview")).toObject().value(QStringLiteral("textInImages")).toBool(true);
     }
     const QString shortcuts = grassfield::apps::shortcutStyle(shortcutSetting, m_macDevice);
     const bool canMinimize = grassfield::apps::minimizeAvailableInFile();
     if (dark != m_dark || reduce != m_reduceMotion || contrast != m_increaseContrast || scale != m_textScale || accent != m_accentColor
-        || highlight != m_accentHighlight || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize || shortcuts != m_shortcutStyle) {
+        || highlight != m_accentHighlight || doubleClick != m_titlebarDoubleClick || canMinimize != m_canMinimize || shortcuts != m_shortcutStyle
+        || selectText != m_textInImages) {
+        m_textInImages = selectText;
         m_accentHighlight = highlight;
         m_shortcutStyle = shortcuts;
         m_canMinimize = canMinimize;
@@ -354,6 +410,132 @@ void PreviewApp::openInPreview(int current) const
             args << QStringLiteral("--start") << QString::number(current);
     }
     grassfield::apps::startApplication(program, args + QStringList{QStringLiteral("--")} + files);
+}
+
+int PreviewApp::recognize(const QString &tool, int index, const QString &languages)
+{
+    const preview::Recognition command = preview::recognitionCommand(tool, languages);
+    if (command.program.isEmpty())
+        return 0;
+    // Looked up at use time (ADR-0045 OC-0.3): tesseract and zbar are Omarchy base packages, either may be removed.
+    const QString program = QStandardPaths::findExecutable(command.program);
+    if (program.isEmpty()) {
+        if (!m_missingTools.contains(command.program)) {
+            m_missingTools.insert(command.program);
+            qInfo("grassfield-preview: %s is not installed: no %s in images", qPrintable(command.program),
+                  command.program == QLatin1String("zbarimg") ? "QR codes" : "text selection");
+        }
+        return 0;
+    }
+    preview::Recognition found = command;
+    found.program = program;
+    if (!command.image) {
+        const int request = ++m_lastRequest;
+        startTool(request, tool, found, {});
+        return request;
+    }
+    // Only an image of the list, as a regular local file (it may have changed since the list was made).
+    const QString path = pathAt(index);
+    const QFileInfo info(path);
+    if (path.isEmpty() || !info.isAbsolute() || !info.isFile() || preview::isSystemPath(info.canonicalFilePath())
+        || preview::classify(path) != preview::Kind::Image)
+        return 0;
+    const int request = ++m_lastRequest;
+    m_decoding.insert(request);
+    // Decoding a large photograph takes a moment: never on the GUI thread. The answer is applied there, unless the request
+    // was cancelled meanwhile (or the backend went: the destructor joins this thread first).
+    QThread *decoder = QThread::create([this, request, tool, found, path] {
+        const QByteArray image = recognitionImage(path);
+        QMetaObject::invokeMethod(this, [this, request, tool, found, image] {
+            if (!m_decoding.remove(request))
+                return;
+            if (image.isEmpty())
+                emit recognized(request, tool, -1, QString());
+            else
+                startTool(request, tool, found, image);
+        }, Qt::QueuedConnection);
+    });
+    m_decoders.append(decoder);
+    connect(decoder, &QThread::finished, this, [this, decoder] {
+        m_decoders.removeOne(decoder);
+        decoder->deleteLater();
+    });
+    decoder->start();
+    return request;
+}
+
+void PreviewApp::startTool(int request, const QString &tool, const preview::Recognition &command, const QByteArray &image)
+{
+    auto *process = new QProcess(this);
+    m_tools.insert(request, process);
+    process->setProgram(command.program);
+    process->setArguments(command.arguments);
+    process->setStandardErrorFile(QProcess::nullDevice());
+    if (!command.image)
+        process->setStandardInputFile(QProcess::nullDevice());
+    auto output = std::make_shared<QByteArray>();
+    // Answers once: the first of the end, a failure to start, the output cap and the timeout; the process is then dropped.
+    const auto answer = [this, request, tool, process, output](int exitCode) {
+        if (m_tools.value(request) != process)
+            return;
+        m_tools.remove(request);
+        process->disconnect(this);
+        if (process->state() != QProcess::NotRunning)
+            process->kill();
+        process->deleteLater();
+        emit recognized(request, tool, exitCode, exitCode == -1 ? QString() : QString::fromUtf8(*output));
+    };
+    connect(process, &QProcess::readyReadStandardOutput, this, [process, output, answer] {
+        *output += process->readAllStandardOutput();
+        if (output->size() > preview::kRecognitionOutputMax)
+            answer(-1);
+    });
+    connect(process, &QProcess::finished, this, [process, output, answer](int code, QProcess::ExitStatus status) {
+        *output += process->readAllStandardOutput();
+        answer(status == QProcess::NormalExit && output->size() <= preview::kRecognitionOutputMax ? code : -1);
+    });
+    connect(process, &QProcess::errorOccurred, this, [answer](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            answer(-1);
+    });
+    QTimer::singleShot(preview::kRecognitionTimeoutMs, process, [answer] { answer(-1); });
+    process->start();
+    // Unless it already failed to start (answered above): the picture, then the end of the input.
+    if (command.image && m_tools.value(request) == process) {
+        process->write(image);
+        process->closeWriteChannel();
+    }
+}
+
+void PreviewApp::cancelRecognition(int request)
+{
+    m_decoding.remove(request);
+    QProcess *process = m_tools.take(request);
+    if (!process)
+        return;
+    process->disconnect(this);
+    process->kill();
+    process->deleteLater();
+}
+
+// A concealed copy (a QR code's content) carries the password manager's secret marker, as Omarchy 4.0.6's omarchy-capture-qr
+// copies with `wl-copy --sensitive` (pinned in docs/upstream/omarchy.lock): clipboard history does not record it.
+void PreviewApp::copyText(const QString &text, bool concealed) const
+{
+    if (text.isEmpty())
+        return;
+    auto *data = new QMimeData;
+    data->setText(text);
+    if (concealed)
+        data->setData(QStringLiteral("x-kde-passwordManagerHint"), QByteArrayLiteral("secret"));
+    QGuiApplication::clipboard()->setMimeData(data);
+}
+
+bool PreviewApp::openLink(const QString &link) const
+{
+    if (!preview::isOpenableLink(link) || grassfield::apps::runmode::dev())
+        return false;
+    return grassfield::apps::startApplication(QStringLiteral("xdg-open"), {link});
 }
 
 PreviewImageProvider::PreviewImageProvider(const PreviewApp *app)

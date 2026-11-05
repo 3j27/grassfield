@@ -1,18 +1,42 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TerminalThemes.js" as TerminalThemes
 
 // Settings > Appearance as macOS 27 lays it out (docs/audits/settings-parity-2026-10-26.md § Appearance): Light / Dark / Auto
 // thumbnails and the glass (Transparency: a preview over the Grassfield artwork and a slider from clear to tinted); Theme:
 // the accent colours and the text highlight colour; the icon style (and its tint colour when Tinted) and the folder colour.
-// Last, Grassfield's own glass effects (material.profile). Reduce Transparency and Reduce Motion are in Accessibility >
-// Display, as on macOS.
+// Then Grassfield's own glass effects (material.profile), and Terminal and Developer Apps (ADR-0045 OC-11: Omarchy's theme
+// follows the appearance; the shell applies it, services/TerminalTheme.qml). Reduce Transparency and Reduce Motion are in
+// Accessibility > Display, as on macOS.
 SettingsPage {
     id: root
 
     required property var store
+    // The machine door (SystemService) and its Backend, for the read-only `omarchy-theme-list`; without them (a test of the
+    // page alone) the Terminal and Developer Apps group stays hidden.
+    property var system: null
+    property var backend: null
+    // Omarchy's theme names (TerminalThemes.parse); empty while unread, and when Omarchy's command is missing (the group is
+    // hidden then, ADR-0045 OC-0.3).
+    property var terminalThemes: []
 
     title: qsTr("Appearance")
+
+    Component.onCompleted: {
+        if (root.system !== null)
+            root.system.query(["omarchy-theme-list"], "appearance.themes");
+    }
+
+    Connections {
+        target: root.backend
+        enabled: root.backend !== null
+
+        function onFinished(tag: string, ok: bool, output: string): void {
+            if (tag === "appearance.themes")
+                root.terminalThemes = ok ? TerminalThemes.parse(output, n => SettingsContract.validate("terminal.lightTheme", n) === "") : [];
+        }
+    }
 
     readonly property var colorNames: ({
             // The default (stored as "multicolor"): the brand green, named after the product (ADR-0040 step 1c, IQ-B3 A).
@@ -234,6 +258,51 @@ SettingsPage {
                 model: [{id: "full", text: qsTr("Full")}, {id: "balanced", text: qsTr("Balanced")}, {id: "reduced", text: qsTr("Reduced")}]
                 value: root.store.value("material.profile")
                 onPicked: id => root.store.set("material.profile", id)
+            }
+        }
+    }
+
+    // ADR-0045 OC-11: the rows, switch and pop-ups of every other Settings group (OC-0.7: nothing of Omarchy's own UI). The theme
+    // pop-ups follow the switch (dimmed while it is off, as macOS dims the rows a switch governs). Omarchy's theme is the
+    // Omarchy session's too: the footnote says so.
+    SettingsGroup {
+        visible: root.terminalThemes.length > 0
+        caption: qsTr("Terminal and Developer Apps")
+        footnote: qsTr("The Omarchy session uses the same theme and its wallpaper.")
+
+        SettingsRow {
+            title: qsTr("Match Appearance")
+
+            Toggle {
+                accessibleName: qsTr("Match Appearance")
+                checked: root.store.value("terminal.matchAppearance") === true
+                onToggled: c => root.store.set("terminal.matchAppearance", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Light Theme")
+
+            ComboBox {
+                inline: true
+                enabled: root.store.value("terminal.matchAppearance") === true
+                accessibleName: qsTr("Light Theme")
+                model: TerminalThemes.choices(root.terminalThemes, root.store.value("terminal.lightTheme"))
+                value: root.store.value("terminal.lightTheme")
+                onPicked: id => root.store.set("terminal.lightTheme", id)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Dark Theme")
+
+            ComboBox {
+                inline: true
+                enabled: root.store.value("terminal.matchAppearance") === true
+                accessibleName: qsTr("Dark Theme")
+                model: TerminalThemes.choices(root.terminalThemes, root.store.value("terminal.darkTheme"))
+                value: root.store.value("terminal.darkTheme")
+                onPicked: id => root.store.set("terminal.darkTheme", id)
             }
         }
     }

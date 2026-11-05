@@ -84,3 +84,10 @@ add ProgressRing
 add MenuPopup
 add TimeOfDay
 ```
+
+## Property changes of public types
+Properties added to a public type (not machine-checked: the block above tracks types). Append-only, one line each.
+
+- 2026-11-04 `SearchField.focusRing` (bool, default `true`): `false` draws no 3-px focus ring while the field has the focus,
+  for a popover over a window that stays key (Emoji & Symbols, ADR-0045 OC-3). Existing users unchanged. Test:
+  `tests/unit/tst_controlstext.qml` `test_searchFieldFocusRingOptOut`.

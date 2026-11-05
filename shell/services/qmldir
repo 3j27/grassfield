@@ -16,6 +16,7 @@ singleton Rfkill 1.0 Rfkill.qml
 singleton Battery 1.0 Battery.qml
 singleton SessionState 1.0 SessionState.qml
 singleton NightShift 1.0 NightShift.qml
+singleton TerminalTheme 1.0 TerminalTheme.qml
 singleton Brightness 1.0 Brightness.qml
 singleton BluetoothState 1.0 BluetoothState.qml
 singleton Media 1.0 Media.qml
@@ -40,3 +41,5 @@ singleton SharePicker 1.0 SharePicker.qml
 singleton SoftwareUpdate 1.0 SoftwareUpdate.qml
 singleton ActivityLink 1.0 ActivityLink.qml
 singleton KeyWindow 1.0 KeyWindow.qml
+singleton Emoji 1.0 Emoji.qml
+singleton CaptureState 1.0 CaptureState.qml

@@ -31,6 +31,8 @@ QtObject {
             return Qt.resolvedUrl("builtin/nowplaying/NowPlaying.qml");
         case "system":
             return Qt.resolvedUrl("builtin/system/System.qml");
+        case "weather":
+            return Qt.resolvedUrl("builtin/weather/Weather.qml");
         }
         return "";
     }
@@ -51,8 +53,20 @@ QtObject {
             return qsTranslate("Registry", "Now Playing");
         case "system":
             return qsTranslate("Registry", "System");
+        case "weather":
+            return qsTranslate("Registry", "Weather");
         }
         return id;
+    }
+
+    // The gallery's line under a widget's name, for a widget whose data comes from outside this computer; "" otherwise.
+    function description(id: string): string {
+        switch (id) {
+        case "weather":
+            // ADR-0045 OC-14: the gallery says where the weather comes from, and where the place comes from.
+            return qsTranslate("Registry", "Weather from wttr.in, for the place saved in Omarchy, or else the place wttr.in finds from your IP address.");
+        }
+        return "";
     }
 
     function sizeLabel(size: string): string {

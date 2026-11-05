@@ -245,6 +245,8 @@ QtObject {
     readonly property int radiusMenuBar: 0
     // F1 gap 5: menu radius 12 +-1.5 (reference 2x captures) [ref: docs/testing/f1-reference-gaps.md § Window chrome, Dock, Menus and popovers; docs/specs/ui.md]
     readonly property int radiusMenu: 12
+    // estimate of macOS 26/27 popovers (rounder than a menu's 12): the Emoji & Symbols popover and the Weather widget's Edit Location popover, one radius for the role (ADR-0039 rule 2; design review of ADR-0045, M2); no capture of either in design/reference yet, F1 pending [ref: docs/specs/clipboard.md § Emoji & Symbols; docs/specs/widgets.md]
+    readonly property int radiusPopover: 18
     // a Settings group, its rows' rings and the boxes that sit with the groups (banners, the hero, a sheet's list well): macOS 27 measures 11.9 at the 45-degree point (Desktop & Dock's groups, 512 Pixels release capture); its own role, no longer the menus' radius (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
     readonly property int radiusGroup: 12
     // a cover art's corner in Now Playing (Control Center's module and the widget): macOS 27's Control Center measures 10.2 at the 45-degree point on its 40-pt artwork; the widget's is concentric with its tile (widget.radius 26 less its 16 padding); was radius.control 6 (ADR-0039 step 13, G5) [ref: docs/audits/design-polish-2026-10-29.md § 3.11 Radius roles]
@@ -933,6 +935,8 @@ QtObject {
     readonly property int autoAppearanceDarkToHour: 7
     // ms between two evaluations of the schedule while Auto is selected (minute resolution) [ref: docs/specs/controlcenter.md § Auto appearance; docs/specs/settings.md]
     readonly property int autoAppearanceRecheckInterval: 60000
+    // estimate: ms the effective appearance and the Terminal and Developer Apps settings stay unchanged before Omarchy's theme follows them (Light, Dark, Auto clicked in a row run one theme change, for the last; ADR-0045 OC-11) [ref: docs/specs/settings.md § Functional requirements]
+    readonly property int autoAppearanceTerminalSettleMs: 1500
 
     // docs/specs/notifications.md: about 344 pt
     readonly property int notificationBannerWidth: 344
@@ -1133,6 +1137,31 @@ QtObject {
     readonly property int searchClipPreviewTextSize: Math.round(14 * Appearance.textScale)
     // estimate: the first-use prompt's margins inside the results panel (CB-6, macOS 26.0 capture W-36) [ref: docs/specs/clipboard.md; ADR-0034]
     readonly property int searchClipPromptPadding: 24
+
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): nine glyphs to a row [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiColumns: 9
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the popover's inner margin round the search field, the grid and the category bar [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiPadding: 10
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the popover's height; its width is the columns of cells plus the padding (344) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiHeight: 380
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the pitch of the glyph grid, rows and columns [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiCellSize: 36
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): an emoji's size in its cell [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiGlyphSize: Math.round(26 * Appearance.textScale)
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the selection square inside its cell (a 32-pt square at the 36 pitch) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiCellInset: 2
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the corner of the selection square; the popover's 18 less its 10 inset, concentric [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiCellRadius: 8
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): a section title row (Recently Used, Smileys & People, ...), caption size in the secondary colour [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiHeaderHeight: 24
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): between the search field and the grid [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiSearchGap: 8
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): the category bar under the grid, its buttons centred in it [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiBarHeight: 36
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): a category button of the bar (its hover and selected square) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiBarButtonSize: 28
+    // estimate of macOS 27's compact Character Viewer popover (Control-Command-Space; no capture of it in design/reference yet, F1 pending): a category's glyph (clock, face, paw, cup, ball, car, light bulb, number sign, flag) [ref: docs/specs/clipboard.md § Emoji & Symbols]
+    readonly property int emojiBarGlyphSize: 16
 
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit)
     readonly property int lockTopMargin: 64
@@ -2196,6 +2225,22 @@ QtObject {
     readonly property int settingsPrinterStatusBaseline: 38
     // a row whose control is a push button (Keyboard Shortcuts…, Input Sources' Edit…), 44 tall [ref: docs/audits/settings-parity-2026-10-26.md § Keyboard]
     readonly property int settingsPushRowHeight: 44
+    // estimate: one module of Share Network's QR code, 4 px, so a version 4 code with its quiet zone (41 modules) is 164 px, read by a phone's camera at arm's length (ADR-0045 OC-10)
+    readonly property int settingsQrModule: 4
+    // a QR code's dark modules are black on white whatever the appearance: phone cameras read light-on-dark codes poorly (ADR-0045 OC-10)
+    readonly property string settingsQrDark: "#000000"
+    // a QR code's light modules and quiet zone are white whatever the appearance (ADR-0045 OC-10)
+    readonly property string settingsQrLight: "#ffffff"
+    // estimate: the white card of Share Network's QR code, the corner of the wallpaper preview's picture (ADR-0045 OC-10)
+    readonly property int settingsQrRadius: 6
+    // estimate: how long omarchy-network-qr may take (three nmcli reads and qrencode) before the sheet says it timed out (ADR-0045 OC-10)
+    readonly property int settingsQrQueryMs: 15000
+    // estimate: the fingerprint enrolment sheet's ring around the fingerprint glyph, as large as the sheet's picture of macOS 27's enrolment (ADR-0045 OC-0.7)
+    readonly property int settingsEnrollRingSize: 112
+    // estimate: the fingerprint glyph inside the enrolment ring (ADR-0045 OC-0.7)
+    readonly property int settingsEnrollGlyphSize: 64
+    // estimate: the enrolment ring's stroke, heavier than the download ring's so each accepted touch reads at a glance (ADR-0045 OC-0.7)
+    readonly property int settingsEnrollRingStroke: 6
 
     // estimate: how long a reload of the session configuration waits for pacman's database lock to go before it goes ahead anyway, under a display trial's 15 s so the trial's countdown is not what ends the wait (ADR-0041 step 2b, I-2's residual) [ref: docs/decisions/ADR-0041-stability.md § Step 2b as built, second slice]
     readonly property int sessionConfigLockWaitMs: 10000
@@ -2250,6 +2295,42 @@ QtObject {
     readonly property int widgetSurfacePad: 40
     // estimate: widgets v1, cap of placements per list in widgets.json [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetMaxEntries: 64
+    // estimate: the Weather widget's current temperature, the large light figure under the place (macOS 27 Weather widget, small and medium; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherTempSize: 42
+    // estimate: the weight of the Weather widget's large temperature, lighter than the text under it as macOS 27 draws it (Inter Display Light) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherTempWeight: 300
+    // estimate (design review of ADR-0045 OC-14): the top of the Weather widget's day sky, clear and partly cloudy (macOS 27 draws the weather's sky behind the widget); color.dark.text holds 5.5:1 on it (A2, tests/visual/test_contrast_tokens.py, backdrop weather-sky) [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyDayTop: "#2A64AD"
+    // estimate (design review of ADR-0045 OC-14): the bottom of the day sky; the review's #3A78C2 left color.dark.text at 4.16:1, darkened to 4.92:1 (A2, backdrop weather-sky) [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyDayBottom: "#326CB2"
+    // estimate (design review of ADR-0045 OC-14): the top of the Weather widget's night sky (after sunset and before sunrise at the place); 15.8:1 for color.dark.text [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyNightTop: "#0F1B33"
+    // estimate (design review of ADR-0045 OC-14): the bottom of the night sky; 10.5:1 for color.dark.text [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyNightBottom: "#233A5E"
+    // estimate (design review of ADR-0045 OC-14): the top of the Weather widget's grey sky, by day under clouds, fog, rain, snow or storms, and the neutral sky of an unavailable report; 6.4:1 for color.dark.text [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyCloudyTop: "#4F5B66"
+    // estimate (design review of ADR-0045 OC-14): the bottom of the grey sky; the review's #66717C left color.dark.text at 4.58:1, darkened to 5.15:1 for a margin (A2, backdrop weather-sky) [ref: docs/specs/widgets.md]
+    readonly property string widgetWeatherSkyCloudyBottom: "#5E6974"
+    // estimate: the Weather widget's condition symbol above the condition text (macOS 27 Weather widget; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherSymbolSize: 18
+    // estimate: a symbol of the medium Weather widget's row of hours, between the hour and the temperature (macOS 27 Weather widget; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherHourSymbolSize: 20
+    // estimate: the location arrow after the place when the location is found from the IP address (macOS: after My Location's place) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherArrowSize: 11
+    // macOS 27 Weather widget (medium): Now and the next five forecast columns [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherHours: 6
+    // ADR-0045 OC-14: the weather is fetched again every 30 minutes while a Weather widget is placed and shown [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherRefreshMs: 1800000
+    // estimate: the first retry after a failed fetch (2 min), doubled after each further failure up to weatherRefreshMs [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherRetryMs: 120000
+    // estimate: curl's --max-time for one wttr.in request (Omarchy's weather panel gives it 10 s); the shell stops a run that outlives twice that [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherFetchSeconds: 10
+    // estimate: the largest wttr.in answer read (a j1 report is about 50 KB): curl's --max-filesize and the parser's cap [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherMaxBytes: 1048576
+    // estimate: the longest place name Edit Location… takes [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherLocationMaxChars: 100
+    // estimate: Edit Location…'s popover, a field and two buttons (macOS 27 widget editing popover; no reference capture) [ref: docs/decisions/ADR-0045-omarchy-capabilities.md OC-14; docs/specs/widgets.md]
+    readonly property int widgetWeatherEditorWidth: 280
     // estimate: widgets v1, widgets.json larger than this is rejected [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/widgets.md]
     readonly property int widgetMaxFileBytes: 262144
 
@@ -2808,6 +2889,14 @@ QtObject {
     readonly property string previewPaperInk: "#4C4A46"
     // estimate: time one image stays in a slideshow [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property int previewSlideshowInterval: 3000
+    // estimate (no capture): Select Text in Images, the text highlight colour over the words of a picture, translucent as macOS Live Text's selection so that the text stays readable under it [ref: docs/specs/preview.md]
+    readonly property real previewTextSelectionOpacity: 0.4
+    // estimate (no capture): Select Text in Images, the corner of a selected line's highlight, macOS Live Text's softly rounded boxes [ref: docs/specs/preview.md]
+    readonly property int previewTextSelectionRadius: 4
+    // estimate (no capture): Select Text in Images, the highlight reaches this far past the ink boxes tesseract gives, so that it covers the letters as macOS Live Text's does [ref: docs/specs/preview.md]
+    readonly property int previewTextSelectionOutset: 2
+    // estimate (no capture): Select Text in Images, the widest host name a QR code chip shows before eliding it in the middle [ref: docs/specs/preview.md]
+    readonly property int previewCodeChipLabelWidth: 220
 
     // F1 reference (docs/testing/f1-reference-gaps.md, Apps launcher): panel 844 +-1 pt wide (2x capture)
     readonly property int launcherPanelWidth: 844
@@ -3709,12 +3798,66 @@ QtObject {
 
     // the light dimming slurp lays over the screen while the crosshair shows, and the fill of the boxes a click can pick (the same, so the veil is even; the box under the pointer takes the selection's fill and border), read by packaging/bin/grassfield-capture (ADR-0035 D-10, step 8); an estimate of the system's capture crosshair, which barely dims the screen; no measured value yet
     readonly property string captureVeil: "#0000002E"
+    // the dimming of the display around the toolbar's selection frame (Capture Selected Portion, Record Selected Portion): black at 45 percent, as macOS 27 darkens the outside of the area visibly; clear on a dark wallpaper (the frame's hairline and the picture inside stay bright) and on a light one; the helper's crosshair keeps capture.veil [ref: docs/specs/system-dialogs.md § Capture toolbar]; estimate, no measured value yet
+    readonly property string captureFrameVeil: "#00000073"
     // the fill of the area being dragged, a light veil as the system's selection rectangle (ADR-0035 D-10, step 8); estimate
     readonly property string captureSelection: "#FFFFFF24"
     // the outline of the area being dragged, a near-white hairline (ADR-0035 D-10, step 8); estimate
     readonly property string captureBorder: "#FFFFFFE6"
     // the outline's width in pixels, a hairline (ADR-0035 D-10, step 8)
     readonly property int captureBorderWidth: 1
+    // estimate: the capture toolbar's floating bar (Shift-Super-5), one row of 32-pt buttons inside an 8-pt inset, as macOS 27's screenshot toolbar; its ends are round (a capsule of the macOS 26 glass); no measured value yet [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarHeight: 48
+    // estimate: the inset of the toolbar's buttons from its edge, so that a 32-pt capsule button sits concentric in the 48-pt capsule (radius 24 less the inset 8 is the button's 16) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarPadding: 8
+    // estimate: a mode button of the toolbar (Capture Entire Screen ... Record Selected Portion), wider than tall as macOS draws them, its selected state a capsule [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarButtonWidth: 40
+    // estimate: the toolbar's buttons (the modes, Close, Options) are 32 tall, capsules concentric with the bar [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarButtonHeight: 32
+    // estimate: the mode glyphs of the toolbar, a little larger than a window toolbar's 18 (control.toolIconSize): macOS 27 draws the capture modes' symbols large [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarIconSize: 20
+    // estimate: the gap between two buttons of one group of the toolbar (the three capture modes, the two recording modes) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarButtonSpacing: 2
+    // estimate: the room on each side of a separator between the toolbar's groups (Close | capture | record | Options and the action) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarSeparatorGap: 6
+    // estimate: the side padding of the toolbar's Options button (its label and chevron) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarTextPadding: 12
+    // estimate: the chevron after Options, the size of a pop-up button's chevron [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarChevronSize: 10
+    // estimate: the gap between Options and its chevron [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarChevronGap: 4
+    // estimate: the toolbar floats this far above the Dock's band (or the bottom edge of a display without the Dock), centred, as macOS places it over the Dock [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarBottomGap: 24
+    // estimate: the Close glyph of the toolbar, a cross in a circle at the left end [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureToolbarCloseIconSize: 18
+    // estimate: the timer's countdown, a square glass plate centred on what is captured (the display, the window or the area), as macOS shows the seconds left [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureCountdownSize: 112
+    // estimate: the countdown plate's corner, the alerts' radius (radius.alert) on a plate of that size [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureCountdownRadius: 26
+    // estimate: the seconds left, large digits on the countdown plate [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureCountdownTextSize: 64
+    // estimate: the smallest frame of the Selected Portion modes, each way (logical px): a drag or a handle never makes it thinner, so it stays a frame with handles [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureFrameMinSize: 8
+    // estimate: a handle of the selection frame, a small disc at each corner and in the middle of each edge, in the frame's colour with a veil-coloured rim, as macOS 27 draws its eight handles [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureHandleSize: 8
+    // estimate: the square a press takes a handle in, wider than the drawn disc so that it is easy to catch, as macOS's handles are [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureHandleHitSize: 22
+    // estimate: the size readout (W x H in pixels) next to the pointer while the frame is drawn, moved or resized, the caption size [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutTextSize: 11
+    // estimate: the readout's side padding on its small glass plate [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutPaddingX: 6
+    // estimate: the readout's top and bottom padding [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutPaddingY: 3
+    // estimate: the readout plate's corner, a small capsule-like plate [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutRadius: 6
+    // estimate: the readout sits this far right of and below the pointer, as macOS shows the dimensions beside the crosshair [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureReadoutOffset: 14
+    // estimate: Capture Selected Window lays the accent colour at this opacity over the window under the pointer, as macOS 27 tints the window it will capture [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property real captureWindowHighlightOpacity: 0.3
+    // the window highlight's corner follows the window's own: Hyprland rounding 17 at power 2.6, measured 16.7 (ADR-0024 section 1, Window corners) [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property int captureWindowHighlightRadius: 17
+    // the window highlight's corner is the window's own superellipse: Hyprland draws a corner of rounding x power / 2 points at decoration.rounding_power 2.6 (config/hypr/grassfield/looknfeel.lua), so a circular radius leaves notches at the title bar [ref: docs/specs/system-dialogs.md § Capture toolbar]
+    readonly property real captureWindowHighlightPower: 2.6
 
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4

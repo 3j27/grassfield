@@ -6,14 +6,17 @@
 
 const CONTRACT = "widgets/1";
 const SIZES = ["small", "medium", "large"];
-const PERMISSIONS = ["media", "battery", "system"];
+// "weather": the Weather widget reads the shell's WeatherSampler (wttr.in's report for Omarchy's saved place, ADR-0045 OC-14):
+// the one network read a widget gets, made by the shell on one fixed host, never by the widget.
+const PERMISSIONS = ["media", "battery", "system", "weather"];
 
 const MANIFESTS = [
     {id: "clock", name: "Clock", version: "1.0.0", sizes: ["small", "medium", "large"], contract: CONTRACT, permissions: []},
     {id: "calendar", name: "Calendar", version: "1.0.0", sizes: ["small", "medium", "large"], contract: CONTRACT, permissions: []},
     {id: "battery", name: "Battery", version: "1.0.0", sizes: ["small", "medium"], contract: CONTRACT, permissions: ["battery"]},
     {id: "nowplaying", name: "Now Playing", version: "1.0.0", sizes: ["small", "medium"], contract: CONTRACT, permissions: ["media"]},
-    {id: "system", name: "System", version: "1.0.0", sizes: ["small", "medium"], contract: CONTRACT, permissions: ["system"]}
+    {id: "system", name: "System", version: "1.0.0", sizes: ["small", "medium"], contract: CONTRACT, permissions: ["system"]},
+    {id: "weather", name: "Weather", version: "1.0.0", sizes: ["small", "medium"], contract: CONTRACT, permissions: ["weather"]}
 ];
 
 // "" when the manifest is valid, otherwise the first problem found.
@@ -39,7 +42,8 @@ function validateManifest(m) {
     if (!Array.isArray(m.permissions))
         return "permissions is not a list";
     for (let i = 0; i < m.permissions.length; i++) {
-        // "network" is deliberately not in PERMISSIONS: widgets/1 has no network access.
+        // "network" is deliberately not in PERMISSIONS: a widget of widgets/1 has no network access of its own ("weather"
+        // reads what the shell fetched).
         if (PERMISSIONS.indexOf(m.permissions[i]) < 0)
             return "unknown permission " + m.permissions[i];
     }

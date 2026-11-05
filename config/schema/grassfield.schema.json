@@ -687,6 +687,36 @@
         }
       }
     },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Terminal and developer apps (Settings > Appearance > Terminal and Developer Apps, ADR-0045 OC-11): Omarchy's theme, which its terminals, editors and developer tools follow, changed with the effective appearance. ADR-0045 names these keys `appearance.terminal*`; a nested `appearance` object cannot exist in contract version 1, where `appearance` is a string (the same reason as `accent`).",
+      "properties": {
+        "matchAppearance": {
+          "type": "boolean",
+          "description": "Match Appearance: when the effective appearance changes (Light, Dark, Auto at its hours) and once at login, the shell runs `grassfield-terminal-theme light|dark`, which applies `lightTheme` or `darkTheme` with Omarchy's `omarchy-theme-set`. The Omarchy session shares that theme and its wallpaper. Default false.",
+          "default": false
+        },
+        "lightTheme": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,62}$",
+          "description": "The Omarchy theme of the light appearance, as `omarchy-theme-list` names it (\"Catppuccin Latte\"). A theme that is no longer installed is left alone (omarchy-theme-set refuses it). Default \"Catppuccin Latte\" (a light theme of Omarchy 4.0.6).",
+          "default": "Catppuccin Latte",
+          "x-grassfield": {
+            "rule": "plainText"
+          }
+        },
+        "darkTheme": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,62}$",
+          "description": "The Omarchy theme of the dark appearance, as `omarchy-theme-list` names it. Default \"Tokyo Night\" (Omarchy's own default theme).",
+          "default": "Tokyo Night",
+          "x-grassfield": {
+            "rule": "plainText"
+          }
+        }
+      }
+    },
     "keyboard": {
       "type": "object",
       "additionalProperties": false,
@@ -706,6 +736,11 @@
           "type": "boolean",
           "description": "Show the Input menu (the input source in use, FR or US) in the menu bar (Settings > Keyboard > Input Sources). The menu only exists with two input sources or more, as on macOS, where it is on by default from two. Default true.",
           "default": true
+        },
+        "dictation": {
+          "type": "boolean",
+          "description": "Dictation (Settings > Keyboard > Dictation, ADR-0045 OC-5): Ctrl-Super-X starts and stops Omarchy's voxtype (`voxtype record toggle`, speech recognised on this computer) when this is on and voxtype is installed. Read by config/hypr/grassfield/bindings.lua when the key is pressed. Default false.",
+          "default": false
         }
       }
     },
@@ -739,6 +774,18 @@
           ],
           "description": "The first day of the week in the calendars. \"auto\" (default) follows the formats.",
           "default": "auto"
+        }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Preview and Glance (docs/specs/preview.md).",
+      "properties": {
+        "textInImages": {
+          "type": "boolean",
+          "description": "Select Text in Images (Settings > General > Language & Region; macOS: Live Text; ADR-0045 OC-2): Preview and Glance read the text and the QR codes of a still image with tesseract and zbarimg when they are installed, so that its words can be selected and copied and a QR code's link opened. Read in the background from the file, never stored. Default true.",
+          "default": true
         }
       }
     },
@@ -807,6 +854,69 @@
           "default": "#000000",
           "x-grassfield": {
             "rule": "pointerColor"
+          }
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The capture toolbar (Shift-Super-5, ADR-0045 OC-1; macOS 27's screenshot toolbar): the mode chosen last and its Options menu. The toolbar writes these keys itself; no Settings pane shows them (as macOS).",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "window",
+            "selection",
+            "recordScreen",
+            "recordSelection"
+          ],
+          "default": "selection",
+          "description": "The mode the toolbar opens in (the one chosen last): Capture Entire Screen, Capture Selected Window, Capture Selected Portion, Record Entire Screen, Record Selected Portion."
+        },
+        "saveTo": {
+          "type": "string",
+          "enum": [
+            "desktop",
+            "documents",
+            "clipboard",
+            "preview"
+          ],
+          "default": "desktop",
+          "description": "Options > Save to: the Desktop, the Documents folder, the clipboard only (screenshots; a recording then goes to the Desktop), or Preview (the file is kept on the Desktop and opened in Preview)."
+        },
+        "timer": {
+          "type": "string",
+          "enum": [
+            "none",
+            "5",
+            "10"
+          ],
+          "default": "none",
+          "description": "Options > Timer: a countdown of 5 or 10 seconds before the capture or the recording starts."
+        },
+        "microphone": {
+          "type": "string",
+          "enum": [
+            "none",
+            "default"
+          ],
+          "default": "none",
+          "description": "Options > Microphone (recordings): none, or the default input. The desktop's own sound is never recorded (macOS)."
+        },
+        "showPointer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Options > Show Mouse Pointer: the pointer is drawn in screenshots and recordings."
+        },
+        "lastSelection": {
+          "type": "string",
+          "pattern": "^$|^[A-Za-z0-9._-]{1,64}=-?[0-9]{1,6},-?[0-9]{1,6},[0-9]{1,6},[0-9]{1,6}(;[A-Za-z0-9._-]{1,64}=-?[0-9]{1,6},-?[0-9]{1,6},[0-9]{1,6},[0-9]{1,6}){0,15}$",
+          "default": "",
+          "description": "The last frame of Capture/Record Selected Portion per display, which the toolbar opens on again (macOS): `NAME=x,y,w,h` entries joined by `;` (at most 16), the display's connector name and the frame in its own logical coordinates; a frame off its display is brought back on it, an empty value or a display without one gets a centred frame. The toolbar writes it.",
+          "x-grassfield": {
+            "rule": "plainText"
           }
         }
       }

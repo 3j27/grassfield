@@ -128,6 +128,10 @@ bool isReadOnlyQuery(const QStringList &argv)
     // Battery: the power profiles this machine offers (Omarchy's list of power-profiles-daemon's).
     if (program == QLatin1String("omarchy-powerprofiles-list"))
         return args.isEmpty();
+    // Appearance > Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme names (two `find` listings of its theme
+    // folders, sorted and capitalised; it writes nothing).
+    if (program == QLatin1String("omarchy-theme-list"))
+        return args.isEmpty();
     // Printers (ADR-0030): the queues with their state, description and location; the default (the user's first); the device
     // URIs; what cupsd and DNS-SD find (Add Printer); one queue's options (its paper sizes). `lpoptions -p <queue> -l` lists,
     // it changes nothing; any other lpoptions form may write and is an action.
@@ -141,9 +145,32 @@ bool isReadOnlyQuery(const QStringList &argv)
     // pacman.conf, the included file and the build's repository.conf). The installed file, never one found on PATH.
     if (program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set"))
         return args.isEmpty();
+    // ADR-0045 (OC-6, OC-9, OC-10): Omarchy's own checks, each read in full (v4.0.6) and found to write nothing, so a dev
+    // session may run them too; no argument comes from the page.
+    //   omarchy-hw-fingerprint         exit status 0 when a USB fingerprint reader is there (it reads sysfs only)
+    //   omarchy-hibernation-available  exit status 0 when hibernation is set up (it reads /sys/power/image_size and /proc/swaps
+    //                                  and tests that /etc/mkinitcpio.conf.d/omarchy_resume.conf exists)
+    // (omarchy-network-qr --meta writes nothing either, but its answer encodes the Wi-Fi password: isPrivateQuery, never here.)
+    if (program == QLatin1String("omarchy-hw-fingerprint") || program == QLatin1String("omarchy-hibernation-available"))
+        return args.isEmpty();
+    // Privacy & Security > Disk Encryption (ADR-0045 OC-8): the block devices as JSON, with what holds each mount point.
+    if (program == QLatin1String("lsblk"))
+        return args == QStringList{QStringLiteral("-J"), QStringLiteral("-o"), QStringLiteral("NAME,TYPE,FSTYPE,MOUNTPOINTS")};
     // omarchy-language is not a query: a dev session never runs a script nobody here has read (ADR-0019), and the owner's
     // Omarchy 4.0.4 does not ship it. Language & Region reads it only in a real session, and only when it is installed.
+    // Nor is `timeout -k 2 12 omarchy-brightness-display-ddc <connector>` (Displays: an external display's level, ADR-0045 OC-4). It
+    // changes no setting and no display (a DDC/CI read of the brightness), but it writes its own cache under $XDG_RUNTIME_DIR and
+    // probes every i2c bus of the machine the first time (ddcutil detect), and a dev session's outputs are the nested
+    // compositor's, which no display answers for: a dev session never asks the owner's displays (Displays shows no slider there).
     return false;
+}
+
+bool isPrivateQuery(const QStringList &argv)
+{
+    // omarchy-network-qr --meta: the current Wi-Fi network's QR code as a matrix of 0 and 1 after one "meta" line (nmcli reads,
+    // the secret through NetworkManager's own permission check, then qrencode); without an interface argument Omarchy picks the
+    // device of the default route, else the first connected Wi-Fi device, and its meta line names the network it encoded.
+    return argv == QStringList{QStringLiteral("omarchy-network-qr"), QStringLiteral("--meta")};
 }
 
 bool isPrinterName(const QString &name)
@@ -320,12 +347,18 @@ bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
         || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions")
-        || program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set");
+        || program == QLatin1String("timeout") || program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set");
 }
 
 bool isBacklightName(const QString &name)
 {
     static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_.:][A-Za-z0-9_.:-]{0,63}")));
+    return re.match(name).hasMatch();
+}
+
+bool isConnectorName(const QString &name)
+{
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z][A-Za-z-]{0,23}-[0-9]{1,4}")));
     return re.match(name).hasMatch();
 }
 
@@ -383,9 +416,24 @@ int actionTimeoutMs(const QStringList &argv, int requested)
 bool isLaunch(const QStringList &argv)
 {
     static const QString sessionEnd = QStringLiteral("/usr/lib/grassfield/grassfield-session-end");
+    // The Omarchy commands Settings opens in Omarchy's floating terminal, each alone after the launcher (ADR-0033 U11, U28;
+    // ADR-0045 OC-0.4: the argv of Omarchy's own menu, default/omarchy/omarchy-menu.jsonc, where it has one).
+    static const QStringList inTerminal{QStringLiteral("omarchy-update"),
+                                        QStringLiteral("omarchy-migrate"),
+                                        QStringLiteral("omarchy-setup-security-fingerprint"),
+                                        QStringLiteral("omarchy-remove-security-fingerprint"),
+                                        QStringLiteral("omarchy-setup-security-fido2"),
+                                        QStringLiteral("omarchy-remove-security-fido2"),
+                                        QStringLiteral("omarchy-setup-security-sshd"),
+                                        QStringLiteral("omarchy-drive-password"),
+                                        QStringLiteral("omarchy-hibernation-setup"),
+                                        QStringLiteral("omarchy-hibernation-remove"),
+                                        QStringLiteral("omarchy-voxtype-install"),
+                                        QStringLiteral("omarchy-voxtype-remove")};
     return argv == QStringList{QStringLiteral("/usr/lib/grassfield/grassfield-update-run")}
-        || argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-update")}
-        || argv == QStringList{QStringLiteral("omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-migrate")}
+        || (argv.size() == 2 && argv.at(0) == QLatin1String("omarchy-launch-floating-terminal-with-presentation") && inTerminal.contains(argv.at(1)))
+        // Dictation's Language Model… (ADR-0045 OC-5): Omarchy's command opens its floating terminal itself (`voxtype setup model`).
+        || argv == QStringList{QStringLiteral("omarchy-voxtype-model")}
         || argv == QStringList{sessionEnd, QStringLiteral("logout")} || argv == QStringList{sessionEnd, QStringLiteral("restart")};
 }
 
@@ -406,6 +454,15 @@ bool isAllowedAction(const QStringList &argv)
         static const QRegularExpression percent(QRegularExpression::anchoredPattern(QStringLiteral("(100|[1-9]?[0-9])%")));
         return argv.size() == 6 && argv.at(1) == QLatin1String("-q") && argv.at(2) == QLatin1String("-d") && isBacklightName(argv.at(3))
             && argv.at(4) == QLatin1String("set") && percent.match(argv.at(5)).hasMatch();
+    }
+    // Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command bounded by coreutils' timeout, one
+    // connector and a whole percentage, the form that sets a level (never `+N%` or `N%-`, the brightness keys' steps, which only
+    // the shell runs). timeout ends the command's whole process group, its ddcutil included, within 14 s, before the 15 s this
+    // action is given (security review, LOW 3). timeout runs nothing else.
+    if (argv.first() == QLatin1String("timeout")) {
+        static const QRegularExpression percent(QRegularExpression::anchoredPattern(QStringLiteral("(100|[1-9]?[0-9])%")));
+        return argv.size() == 7 && argv.at(1) == QLatin1String("-k") && argv.at(2) == QLatin1String("2") && argv.at(3) == QLatin1String("12")
+            && argv.at(4) == QLatin1String("omarchy-brightness-display-ddc") && isConnectorName(argv.at(5)) && percent.match(argv.at(6)).hasMatch();
     }
     // Sound: exactly the three forms of the page (qml/System.js): a device made the default, its volume (0.00 to 1.00), its mute.
     if (argv.first() == QLatin1String("wpctl")) {

@@ -16,7 +16,7 @@ Opened by the Quick Settings menu bar icon (`qs.overlay/ControlCenter.qml`): App
 
 ## Fidelity pass 2: floating modules (shell-engineer)
 `shell/overlay/ControlCenter.qml` + `shell/overlay/controlcenter/*` (pure logic in `Model.js`, tests `tests/unit/tst_ccmodel.qml`; `Module.qml` is the glass surface).
-- Grid (tokens `quicksettings.*`, `panel.controlCenterWidth` 291): cell 63, gap 13, 4 columns. Left: Wi-Fi and Bluetooth (2x1 capsules, 36-pt icon disk, title wraps to two lines, status line), then Airplane Mode and Stages (only with the plugin's `stages-available`) as 1x1 circles side by side (a hidden Airplane module leaves no empty slot). Right: Do Not Disturb (2x1) and Now Playing (2x2), shown while nothing plays too as macOS 27 does ("Not Playing", transport dimmed and inactive). Below: Display (hidden without a backlight), Keyboard Brightness (only with a `*kbd_backlight` LED) and Sound (mute, slider, device chevron) as 4x1 slider modules (radius 20, bold title); Appearance as a 4x1 capsule.
+- Grid (tokens `quicksettings.*`, `panel.controlCenterWidth` 291): cell 63, gap 13, 4 columns. Left: Wi-Fi and Bluetooth (2x1 capsules, 36-pt icon disk, title wraps to two lines, status line), then Airplane Mode and Stages (only with the plugin's `stages-available`) as 1x1 circles side by side (a hidden Airplane module leaves no empty slot). Right: Do Not Disturb (2x1) and Now Playing (2x2), shown while nothing plays too as macOS 27 does ("Not Playing", transport dimmed and inactive). Below: Display (hidden without a backlight and without a main display that answers DDC/CI), Keyboard Brightness (only with a `*kbd_backlight` LED) and Sound (mute, slider, device chevron) as 4x1 slider modules (radius 20, bold title); Appearance as a 4x1 capsule.
 - Capsule details (ADR-0024 lot 4a, C-17, measured in docs/audits/visual-tahoe-2026-10-25.md § Quick Settings — partly close, 5.5/10, and docs/audits/ui-finesse-2026-10-25/f1-macos27.md § Quick Settings): an active disk is white (`colors.knob`, the 1x1 circles too) with its glyph in the accent (the selection colour when the accent is too light on white), an inactive one the material fill with the glyph in the text colour; glyph 20 pt (`quicksettings.diskGlyph`), text 6 pt after the disk (`diskTextGap`), the state line 12 pt in the title's colour (`statusSize`), not secondary.
 - Slider modules: knobless sliders (`Slider.knobless`, also the Sound menu and the Appearance detail) on a 4-pt track (`control.sliderTrackCompact`) whose filled part is white and ends round, centred 42 pt below the module top (`quicksettings.sliderTrackCentre`, macOS 27), the title at 16, 10 (`sliderTitleX`, `sliderTitleTop`); a small glyph before and a large one after the track (`endGlyphSmall`, `endGlyphLarge`). Keyboard focus draws the ring around the track (no knob to carry it).
 - Each module is its own `Module` (Material, no shadow). `ControlCenter.surfaces` lists the visible ones; `Overlay.qml` builds one blur region per surface (`Variants` of `Region`), so every module blurs on its own (never a fake blur); the hosting window stays one transparent layer-shell surface. Position: right edge at `quicksettings.edgeMargin` (14), top at the bar plus `quicksettings.topGap` (13), set in `Overlay.qml` (the menu bar item only opens the popup).
@@ -35,7 +35,7 @@ Opened by the Quick Settings menu bar icon (`qs.overlay/ControlCenter.qml`): App
 - Known gaps: Bluetooth device lists are not exercised in the dev session guard keyboard backlight and Bluetooth device rows unverified on this hardware (no kbd LED, no paired devices).
 
 ## Auto appearance (CC8, owner decision 2026-10-23: follow macOS)
-Appearance offers Light, Dark and Auto in Quick Settings (Appearance detail) and in Settings > Appearance; the same `appearance` key (`dark|light|auto`) in both. macOS Auto is light by day and dark at night, switching at sunset and sunrise. Grassfield has no location service, so it uses the macOS fallback: a fixed local schedule, dark from 19:00 to 07:00 (tokens `autoAppearance.darkFromHour` 19 and `darkToHour` 7, local clock). The rule is one pure function (`ui/Grassfield/Ui/AutoAppearance.js`; C++ copy `apps/autoappearance.h` for Files and Preview, kept equal to the tokens by `tests/shell/auto_appearance_tokens.sh`). The shell, Settings, Files and Preview re-evaluate it every `autoAppearance.recheckInterval` (60 s) only while the setting is "auto", so every surface switches within a minute of the boundary. The Quick Settings capsule subtitle shows Light, Dark or Auto; its glyph shows the appearance in effect.
+Appearance offers Light, Dark and Auto in Quick Settings (Appearance detail) and in Settings > Appearance; the same `appearance` key (`dark|light|auto`) in both. macOS Auto is light by day and dark at night, switching at sunset and sunrise. Grassfield has no location service, so it uses the macOS fallback: a fixed local schedule, dark from 19:00 to 07:00 (tokens `autoAppearance.darkFromHour` 19 and `darkToHour` 7, local clock). The rule is one pure function (`ui/Grassfield/Ui/AutoAppearance.js`; C++ copy `apps/autoappearance.h` for Files and Preview, kept equal to the tokens by `tests/shell/auto_appearance_tokens.sh`). The shell, Settings, Files and Preview re-evaluate it every `autoAppearance.recheckInterval` (60 s) only while the setting is "auto", so every surface switches within a minute of the boundary. The Quick Settings capsule subtitle shows Light, Dark or Auto; its glyph shows the appearance in effect. With Settings > Appearance > Terminal and Developer Apps > Match Appearance on, Omarchy's theme follows each of these switches too (`shell/services/TerminalTheme.qml`, after `autoAppearance.terminalSettleMs`; ADR-0045 OC-11, docs/specs/settings.md).
 
 ## Purpose and non-goals
 Quick settings backed by real services only (§5.8): NetworkManager (Quickshell Networking), BlueZ (Quickshell
@@ -48,7 +48,13 @@ Bluetooth), PipeWire (Quickshell Pipewire), UPower, MPRIS, brightness via `brigh
 2. CC2 Bluetooth tile: power on/off, expand → paired devices connect/disconnect.
 3. CC3 Airplane mode: rfkill soft block (no root); NetworkManager/BlueZ switches only as the stated fallback.
 4. CC4 Do Not Disturb tile ↔ notifications DND.
-5. CC5 Display brightness slider (hidden if no backlight device), keyboard brightness if present.
+5. CC5 Display brightness slider, keyboard brightness if present. The Display slider drives the built-in display's backlight; on a
+   computer without one, the main display (ADR-0044, `MainDisplay.screenName`) when it answers DDC/CI, through Omarchy's
+   `omarchy-brightness-display-ddc <output> N%` under `timeout -k 2 12` (ADR-0045 OC-4; one command at a time, the last value of a
+   drag wins); else it is
+   hidden. Choice (`services/BrightnessLogic.js` `sliderTarget`): macOS Control Center's Display slider is the built-in display's,
+   and on a Mac without one the main display's; it does not follow the pointer (the brightness keys do, docs/specs/osd.md O10).
+   Same module, same slider (no other look, OC-0.7).
 6. CC6 Sound: output volume slider + mute; expand → output device list (Pipewire sinks); input device list.
 7. CC7 Now Playing: MPRIS title/artist/art, play/pause/next/prev on the active player.
 8. CC8 Material: transparency slider (`material.transparency`, 0–1) and appearance (Light/Dark/Auto).
@@ -68,4 +74,9 @@ Missing service → tile hidden with a note in the spec, never a fake toggle.
 
 ## Known limitations
 - Wi-Fi Enterprise (802.1X) setup delegates to nm-connection-editor.
+- Display on a desktop (CC5, ADR-0045 OC-4): only the main display's brightness, and only when it answers DDC/CI (DDC/CI on in its
+  menu, the `i2c-dev` module, access to `/dev/i2c-*`); with a built-in panel the slider stays the panel's, whatever display the
+  pointer is on. The slider shows the level the shell last knew: a change made with the display's buttons or in Settings shows after
+  the next brightness key. The `controlcenter brightness` and `brightnessLevel` IPC hooks still speak of the backlight only (dev
+  session test hooks, where no display is asked over DDC/CI).
 - No AirDrop / Screen Mirroring equivalents.

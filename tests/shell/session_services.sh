@@ -83,10 +83,16 @@ check bash -c '[[ $("$1" status) == off ]] && "$1" toggle && [[ $("$1" status) =
 
 # --- screenshots, autostart, units, packaging ---------------------------------------------------------------------------
 sys=$root/config/hypr/grassfield/system.lua
-desc="screenshots: Super+Shift+3 (by keycode) runs Grassfield's capture of the screen, Super+Shift+4/5 and Print a selection, never Omarchy's tool (ADR-0035 D-10)"
-check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"screen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"selection\")" "$1" && grep -q "SUPER + SHIFT + code:14\", capture(\"selection\")" "$1" && grep -q "hl.bind(\"PRINT\", capture(\"selection\")" "$1" && grep -q "exec_cmd(\"/usr/lib/grassfield/grassfield-capture \" .. mode)" "$1" && ! grep -q "omarchy-capture" "$1"' _ "$sys"
+desc="screenshots: Super+Shift+3 (by keycode) runs Grassfield's capture of the screen, Super+Shift+4 and Print a selection, never Omarchy's tool (ADR-0035 D-10)"
+check bash -c 'grep -q "SUPER + SHIFT + code:12\", capture(\"screen\")" "$1" && grep -q "SUPER + SHIFT + code:13\", capture(\"selection\")" "$1" && grep -q "hl.bind(\"PRINT\", capture(\"selection\")" "$1" && grep -q "exec_cmd(\"/usr/lib/grassfield/grassfield-capture \" .. mode)" "$1" && ! grep -q "omarchy-capture" "$1"' _ "$sys"
+desc="capture toolbar: Super+Shift+5 (by keycode) opens the shell's toolbar, bound once (bindings.lua, not system.lua); Ctrl+Super+Esc runs grassfield-capture stop in the real session (ADR-0045 OC-1)"
+check bash -c 'grep -q "bind(\"SUPER + SHIFT + code:14\", \"Screenshot and recording options\", shell(\"capture\", \"toggle\"))" "$1" && ! grep -q "code:14" "$2" && grep -q "hl.bind(\"SUPER + CTRL + ESCAPE\", capture(\"stop\")" "$2" && ! grep -q "ESCAPE" <(grep -v "SUPER + ALT + ESCAPE\|CTRL + SHIFT + ESCAPE" "$1")' _ "$root/config/hypr/grassfield/bindings.lua" "$sys"
 desc="screenshots: slurp's crosshair layer (namespace selection) is never faded out, so no picture shows it (ADR-0035 D-10)"
 check grep -q 'hl.layer_rule({ name = "gf-capture-selection-no-anim", match = { namespace = "^selection\$" }, no_anim = true })' "$root/config/hypr/grassfield/windows.lua"
+desc="capture toolbar: the countdown plate's layer goes without a fade, and both capture layers are blurred (ADR-0045 OC-1)"
+check bash -c 'grep -q "hl.layer_rule({ name = \"gf-capture-countdown-no-anim\", match = { namespace = \"^grassfield-capture-countdown\$\" }, no_anim = true })" "$1" && grep -q "|stages|capture|capture-countdown)\\$\" }, blur = true" "$1"' _ "$root/config/hypr/grassfield/windows.lua"
+desc="capture toolbar: its own layer maps without a fade, so the keyboard hand-over between displays does not blink the bar (ADR-0045 OC-1)"
+check grep -q 'hl.layer_rule({ name = "gf-capture-toolbar-no-anim", match = { namespace = "^grassfield-capture\$" }, no_anim = true })' "$root/config/hypr/grassfield/windows.lua"
 
 auto=$root/config/hypr/grassfield/autostart.lua
 for unit in crash-watch battery-watch migrate-notify automount; do

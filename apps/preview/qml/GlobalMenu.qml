@@ -31,7 +31,7 @@ Platform.MenuBar {
     Platform.Menu {
         title: qsTr("Edit")
 
-        // Text files: the selection of the text view.
+        // Text files: the selection of the text view; images: the text selected in the picture (Select Text in Images).
         Platform.MenuItem {
             text: qsTr("Copy")
             shortcut: StandardKey.Copy

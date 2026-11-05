@@ -80,8 +80,13 @@ trap stop_all EXIT
 case $work in *[[:space:]\&\<\>\"\'\\]*) die "the scratch directory '$work' needs quoting (TMPDIR)" ;; esac
 
 src=$root/apps/settings/src
+# qtbuscaller.h's signal queue (signalqueue.h, ADR-0045 fprintd's enrolment) is a QObject: moc first.
+moc=/usr/lib/qt6/moc
+[[ -x $moc ]] || moc=$(command -v moc-qt6 || command -v moc || true)
+[[ -n $moc ]] || die "moc not found"
+"$moc" "$src/signalqueue.h" -o "$work/moc_signalqueue.cpp" 2>"$work/build.log" || { cat "$work/build.log"; die "moc failed on signalqueue.h"; }
 g++ -std=c++17 -O1 -fPIC -Wno-sfinae-incomplete -I"$src" -I"$root/apps" -I/usr/include/qt6 -I/usr/include/qt6/QtCore -I/usr/include/qt6/QtDBus \
-  "$root/tests/integration/settings_dbus/probe.cpp" "$src/systembus.cpp" "$src/systemguard.cpp" "$src/busjobs.cpp" -pthread -lQt6Core -lQt6DBus -o "$work/probe" 2>"$work/build.log" ||
+  "$root/tests/integration/settings_dbus/probe.cpp" "$src/systembus.cpp" "$src/systemguard.cpp" "$src/busjobs.cpp" "$work/moc_signalqueue.cpp" -pthread -lQt6Core -lQt6DBus -o "$work/probe" 2>"$work/build.log" ||
   { cat "$work/build.log"; die "the probe did not build"; }
 
 # The private bus: a unix socket in the test's own directory; else loopback TCP with anonymous authentication (a sandbox that

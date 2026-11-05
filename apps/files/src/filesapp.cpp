@@ -1534,6 +1534,57 @@ void FilesApp::openTerminal(const QUrl &folder)
 
 namespace
 {
+// Omarchy's invocation (bin/omarchy-menu-share of Omarchy v4.0.6): LocalSend on its send page, in a transient unit of the
+// user's service manager. ShareLogic.js (LOCALSEND_ARGV) builds the same vector; the items follow it.
+const QStringList kLocalSendArgv = {QStringLiteral("systemd-run"), QStringLiteral("--user"), QStringLiteral("--quiet"), QStringLiteral("--collect"),
+                                    QStringLiteral("localsend"), QStringLiteral("--headless"), QStringLiteral("send")};
+}
+
+bool FilesApp::localSendAvailable() const
+{
+    // At each use (OC-0.3): LocalSend installed or removed while Files runs shows or hides the Share menu's item.
+    return !QStandardPaths::findExecutable(QStringLiteral("localsend")).isEmpty() && !QStandardPaths::findExecutable(QStringLiteral("systemd-run")).isEmpty();
+}
+
+void FilesApp::sendWithLocalSend(const QStringList &argv)
+{
+    // The vector is checked again here, whatever QML gave: exactly Omarchy's program and options, then at least one item,
+    // each an absolute path (so never read as an option: LocalSend takes no `--`) with no NUL that exists on this computer.
+    if (argv.size() <= kLocalSendArgv.size() || argv.mid(0, kLocalSendArgv.size()) != kLocalSendArgv) {
+        emit operationFailed(tr("These items can’t be sent with LocalSend."));
+        return;
+    }
+    const QStringList paths = argv.mid(kLocalSendArgv.size());
+    for (const QString &path : paths) {
+        if (!path.startsWith(QLatin1Char('/')) || path.contains(QChar(u'\0')) || !QFileInfo::exists(path)) {
+            emit operationFailed(tr("These items can’t be sent with LocalSend: only files and folders on this computer can."));
+            return;
+        }
+    }
+    // A dev session sends nothing: `systemd-run --user` starts LocalSend in the user's service manager, with its environment,
+    // so it would open on the owner's real desktop with the files (security review of OC-13, LOW 2; as Preview's openLink).
+    if (devSession()) {
+        emit operationFailed(tr("Not sent: a development session doesn’t start LocalSend (it would open on the real desktop)."));
+        return;
+    }
+    if (!localSendAvailable()) {
+        emit operationFailed(tr("LocalSend isn’t installed."));
+        return;
+    }
+    if (launchingBlocked()) {
+        emit operationFailed(tr("Opening files is disabled in this session (GRASSFIELD_FILES_NO_LAUNCH)."));
+        return;
+    }
+    QProcess process;
+    process.setProgram(argv.first());
+    process.setArguments(argv.mid(1));
+    process.setStandardInputFile(QProcess::nullDevice());
+    if (!process.startDetached())
+        emit operationFailed(tr("LocalSend couldn’t be started."));
+}
+
+namespace
+{
 RenameLogic::Options renameOptions(const QVariantMap &map)
 {
     RenameLogic::Options o;

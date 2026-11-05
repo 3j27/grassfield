@@ -213,3 +213,71 @@ WebP, link previews or any network access, the primary selection, Share (no Linu
 - The terminals' default Ctrl+Shift+V paste (their documented defaults; nested, step 2).
 - Real copies from KeePassXC, 1Password, Bitwarden, Firefox's password manager, a GTK and a Qt app (with HTML), XWayland
   (owner or integrator, nested); which hints password managers really set.
+
+## Emoji & Symbols (ADR-0045 OC-3)
+macOS 27's Character Viewer in its compact popover (Control-Command-Space), named "Emoji & Symbols" « Emojis et symboles »
+(ADR-0045 OC-0.5; never Apple's name). It lives in this spec because it inserts the way the history pastes: into the window
+that was active when it opened, once the keyboard is back there, through the clipboard. Code: `shell/services/Emoji.qml` (data,
+recents, placement, insertion, IPC `emoji`), `shell/services/EmojiLogic.js` (pure: categories, search, recents, grid keys,
+placement, insertion step and command), `shell/overlay/EmojiPanel.qml` (the popover, popup kind `emoji` of the Overlay),
+`shell/services/emoji-insert.sh` (the insertion's command chain). Tests: `tests/unit/tst_emoji.qml` (fixture
+`tests/fixtures/emojis.json`: 28 entries of our own, each group's first emoji where Omarchy's list has it; never Omarchy's
+file), `tests/shell/emoji_insert.sh` (the command chain on stubs), `tests/unit/tst_overlayblur.qml` (the popover's blur corner),
+`tests/security/lock_surfaces.sh` and `tests/security/lock_surfaces/shell.qml` (nothing opens while locked, GF-116).
+
+### Requirements
+| ID | Requirement |
+|---|---|
+| ES-1 | Ctrl+Super+Space (macOS Control-Command-Space; `config/hypr/grassfield/bindings.lua`, IPC `emoji toggle`; "Emoji & Symbols" in Settings > Keyboard > Keyboard Shortcuts) opens the panel; again, or Esc, or a click outside closes it. It opens at the pointer (`hyprctl cursorpos -j`, read only) on the output under it, its top left corner just under the pointer, above the pointer when the output has no room below, kept inside the output (the Overlay's placement, align `below`); without an answer within 500 ms it opens centred on the active display. Refused while the session is locked (`SessionState.refuses`); it closes when the session locks (Popups). |
+| ES-2 | The popover (macOS 27 compact layout): glass of the `menu` class with its blur region at the popovers' corner (`radius.popover`, shared with the Weather widget's Edit Location popover; `PopupKinds.blurCorner`); from the top: the shared `SearchField` ("Search", focused at once, without the 3-px focus ring: `focusRing: false`, as macOS 27's picker leaves the app's window key and draws none; the caret shows the focus), the grid of glyphs 9 to a row (`emoji.columns`, `cellSize` 36, `glyphSize` 26) under section titles in the secondary colour (an empty search: Recently Used when there is any, then the categories in macOS's order), the category bar at the bottom: one glyph button per section (Recently Used: clock, Smileys & People: face, Animals & Nature: paw, Food & Drink: cup, Activity: ball, Travel & Places: car, Objects: light bulb, Symbols: number sign, Flags: flag; All: grid), the section in view checked, its name in a tooltip; a click scrolls the grid to it (and clears a search). The keyboard selection is a square in the menus' selection role (`Appearance.colors.selection` under `selectionText`, as `MenuItem`; never the text highlight colour, which the user may set apart; `emoji.cellRadius`), the pointer's a neutral hover square. Open: the overlay layer's fade (Hyprland `layersIn`). |
+| ES-3 | Data: Omarchy's `$OMARCHY_PATH/shell/plugins/emojis/emojis.json` (`OMARCHY_PATH` when it is an absolute path, else `/usr/share/omarchy`; 1870 entries `{e, k}` in v4.0.6, MIT), read at the first opening (again at an opening after it was missing), never copied into Grassfield. Entries are validated (`EmojiLogic.parse`: a glyph of at most 48 UTF-16 units without control, separator or bidi characters, drawn as plain text; keywords at most 512 characters; at most 8000 entries). A missing, unreadable or empty file: the panel says "Emoji list not available" and offers nothing else. |
+| ES-4 | Categories: the file names no groups, so they come from the first emoji of each CLDR group in its order: 😀 Smileys & Emotion and 👋 People & Body (one Smileys & People), 🐵 Animals & Nature, 🍇 Food & Drink, 🌍 Travel & Places, 🎃 Activities (Activity), 👓 Objects, 🏧 Symbols, 🏁 Flags (indices 0, 166, 529, 681, 814, 1032, 1117, 1378, 1601 in v4.0.6, checked with jq). A first emoji missing, out of order, or a file that does not begin with 😀: one "All" section (nothing guessed). The sections show in macOS's order: Activity before Travel & Places. |
+| ES-5 | Search: typing goes to the field; every word of the query must match the entry's English keywords (Omarchy's) or the translated title of its category, as a whole word, a word's beginning or anywhere inside, case and accents ignored; keyword matches first (whole word, then beginning, then inside), category matches after, ties in the file's order; the results are one untitled section, the first one selected (Return inserts it); none: "No Results". |
+| ES-6 | Keyboard (macOS: the selection moves over the grid while the field keeps typing): arrows move the selection (left and right in reading order, up and down to the same column, a shorter row's last glyph, across sections), Page Up and Page Down by the rows in view, Tab and Shift+Tab to the next and the previous section's first glyph, Return or Enter inserts the selection, Esc clears the search, then closes. With no selection the first arrow selects the first glyph. The selection is kept in view, its section title too. |
+| ES-7 | Insert (a click or Return): the glyph goes first in Recently Used, the panel closes and FocusReturn gives the keyboard back to the window that was active when it opened (the window FocusReturn remembers when another surface was open); once that window is active again (checked every 50 ms, at most 1 s, `EmojiLogic.insertStep`) the shell runs Omarchy's `omarchy-menu-emoji-insert <glyph>` (PATH, else `$OMARCHY_PATH/bin`), which copies the glyph with `wl-copy --sensitive` (so the history never records it, PV-1) and sends Shift+Insert; without it, `wtype -- <glyph>` when wtype is installed; without either, one journal line ("neither omarchy-menu-emoji-insert nor wtype is installed") and nothing else. The detection is at use time (`command -v` in `shell/services/emoji-insert.sh`, ADR-0045 OC-0.3); the glyph and the path are arguments of that script (`EmojiLogic.insertCommand`: an argument vector, never a command line; a glyph that would read as an option is refused). Nothing is inserted when no window was active (the desktop, or nothing), the window closed, the session locked, another full-attention surface opened, or the window did not come back in time: a journal line says which. |
+| ES-8 | Recently Used: at most 30 glyphs, newest first, in `~/.local/state/grassfield/emoji-recents.json` (`$XDG_STATE_HOME/grassfield`, `GRASSFIELD_STATE_HOME` in a dev session), `{"v": 1, "recents": [...]}`, written through `shell/services/write-private.sh` (directory 0700, file 0600, atomic); read at the shell's start; a glyph no longer in Omarchy's list is not shown. |
+| ES-9 | IPC (docs/specs/security.md "IPC surface"): `emoji toggle` (action, the binding); `emoji status` (dev: the state, the counts, the last insertion's outcome; it would tell another process what the user inserted). |
+| ES-10 | The T0 Edit menu item of ADR-0045 is not built: T0 has no Edit menu (docs/specs/menubar.md: "a T0 Edit and Help menu for apps that export no menus" is still missing). An application's own Edit menu (T1/T2) is the application's. As on macOS, the Input menu has Show Emoji & Symbols (« Afficher les emojis et symboles »; `shell/overlay/InputMenu.qml`), which opens the panel over the window the menu opened over. |
+
+### Keyboard and mouse
+| Action | Keyboard | Mouse |
+|---|---|---|
+| Open, close | Ctrl+Super+Space; Esc closes (after clearing a search) | click outside closes |
+| Search | type (the field has the focus) | the field |
+| Move | arrows, Page Up, Page Down; Tab, Shift+Tab by section | hover (a neutral square) |
+| Insert | Return, Enter | click |
+| Go to a category | Tab, Shift+Tab | the category bar |
+
+### Strings (English, French)
+| English | French |
+|---|---|
+| Emoji & Symbols (the panel's accessible name and the binding's description) | Emojis et symboles |
+| Recently Used | Utilisés récemment |
+| Smileys & People · Animals & Nature · Food & Drink · Activity · Travel & Places · Objects · Symbols · Flags · All | Smileys et personnes · Animaux et nature · Nourriture et boissons · Activités · Voyages et lieux · Objets · Symboles · Drapeaux · Tous |
+| Search · No Results | Rechercher · Aucun résultat |
+| Emoji list not available | Liste d’emojis indisponible |
+| Emoji grid · Categories (accessible names) | Grille d’emojis · Catégories |
+
+### Known limitations
+- English keywords only: Omarchy's list has no French names, so a French search finds emoji by the words of a category's
+  title (« animaux » gives Animals & Nature) or by their English keywords (« chat » finds nothing unless an English keyword
+  holds it).
+- The clipboard does not keep its previous content: `omarchy-menu-emoji-insert` puts the glyph on it (sensitive, so the history
+  does not record it) and ends its copy after the paste, so the clipboard is empty afterwards (Wayland has no way to restore
+  another client's selection).
+- Insertion is Shift+Insert, which most toolkits read as Paste; an application where Shift+Insert pastes the primary selection
+  (some terminals) or nothing gets that instead. The wtype fallback types the glyph and leaves the clipboard alone, but a glyph
+  the keyboard layout cannot type may come out differently in some applications.
+- The panel opens at the pointer, not at the text caret as on macOS: Wayland gives the shell no caret position.
+- No skin tone or gender variants menu (Omarchy's list has one glyph per entry), no Frequently Used (Recently Used is what
+  the shell knows), no expanded Character Viewer window, no symbols beyond Omarchy's emoji list.
+- The close has no fade: the Overlay unloads its popup at once (as for every menu and popover); the open fades with the
+  overlay layer.
+- Inserting into a shell surface (Search's field, a Grassfield sheet) is not supported: the window must be an application's.
+
+### Not verified
+- The macOS 27 measurements (no capture of the compact Character Viewer in `design/reference/`): every `emoji.*` token is an
+  estimate; F1 pending.
+- The whole panel on screen (nested session, light and dark, en and fr), the insertion into GTK, Qt, Chromium, Firefox and
+  terminal windows, the wtype fallback, and the placement at the pointer on two outputs (`hyprctl cursorpos` layout
+  coordinates against Quickshell's screen geometry at a fractional scale).

@@ -16,6 +16,9 @@ SettingsPage {
     required property var system
     required property var store
 
+    // Hibernation's Omarchy commands in its terminal (TerminalSetupSheet, ADR-0045 OC-9), as Battery's.
+    signal setupRequested(string id)
+
     title: qsTr("Energy")
 
     // The profiles power-profiles-daemon offers (null until it answered), and the one Omarchy remembers for the power adapter.
@@ -91,6 +94,12 @@ SettingsPage {
                 onToggled: c => root.store.set("energy.preventSleep", c)
             }
         }
+    }
+
+    // Hibernation (ADR-0045 OC-9): a desktop hibernates too; the same group as Battery's. Main.qml opens the terminal sheet.
+    HibernationGroup {
+        backend: root.backend
+        onSetupRequested: id => root.setupRequested(id)
     }
 
     ErrorNote {

@@ -261,10 +261,17 @@ Scope {
     readonly property bool menubarClockShowSeconds: read("menubar.clockShowSeconds")
     readonly property string accentColor: read("accent.color")
     readonly property string accentHighlight: read("accent.highlight")
+    // Settings > Appearance > Terminal and Developer Apps (ADR-0045 OC-11): Omarchy's theme follows the effective appearance
+    // (services/TerminalTheme.qml runs grassfield-terminal-theme); the two Omarchy theme names, as omarchy-theme-list prints them.
+    readonly property bool terminalMatchAppearance: read("terminal.matchAppearance")
+    readonly property string terminalLightTheme: read("terminal.lightTheme")
+    readonly property string terminalDarkTheme: read("terminal.darkTheme")
     // automatic | mac | pc (Settings > Keyboard): how menus label shortcuts; "automatic" follows the device (MenuShortcut.style).
     readonly property string keyboardShortcutStyle: read("keyboard.shortcutStyle")
     // Settings > Keyboard > Input Sources: the Input menu of the menu bar (it exists from two input sources on).
     readonly property bool keyboardShowInputMenu: read("keyboard.showInputMenu")
+    // Settings > Keyboard > Dictation (ADR-0045 OC-5): Ctrl-Super-X runs voxtype; bindings.lua reads the file itself at each press.
+    readonly property bool keyboardDictation: read("keyboard.dictation")
     // auto | a locale name ("fr_CH"), and auto | monday … sunday (Settings > General > Language & Region): the formats of dates,
     // times and numbers, and the first day of the week in the calendars.
     readonly property string regionFormats: read("region.formats")
@@ -321,6 +328,15 @@ Scope {
     readonly property int screenSaverIdleMinutes: read("screensaver.idleMinutes")
     readonly property string screenSaverKind: read("screensaver.kind")
     readonly property string screenSaverFolder: read("screensaver.folder")
+    // The capture toolbar (Shift-Super-5, ADR-0045 OC-1): the mode chosen last and its Options menu (Save to, Timer, Microphone,
+    // Show Mouse Pointer). The toolbar writes them; no Settings pane shows them.
+    readonly property string captureMode: read("capture.mode")
+    readonly property string captureSaveTo: read("capture.saveTo")
+    readonly property string captureTimer: read("capture.timer")
+    readonly property string captureMicrophone: read("capture.microphone")
+    readonly property bool captureShowPointer: read("capture.showPointer")
+    // The last frame of the Selected Portion modes per display ("NAME=x,y,w,h;..."; CaptureModel.parseSelections reads it).
+    readonly property string captureLastSelection: read("capture.lastSelection")
 
     readonly property string hotCornerTopLeft: read("hotCorners.topLeft")
     readonly property string hotCornerTopRight: read("hotCorners.topRight")
@@ -486,6 +502,14 @@ Scope {
 
     function setNotificationsPreviews(value: string): void {
         change("notifications.previews", ["always", "unlocked", "never"].indexOf(value) >= 0 ? value : "unlocked");
+    }
+
+    // The capture toolbar's mode and options (capture.*): a value outside the schema's list is refused, the key left as it is.
+    function setCaptureOption(key: string, value: var): void {
+        const path = "capture." + key;
+        if (SettingsContract.RULES[path] === undefined || SettingsContract.validate(path, value) !== "")
+            return;
+        change(path, value);
     }
 
     // Keys the shell changed since its last write: dotted path -> value. Only these are merged into

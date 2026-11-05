@@ -202,8 +202,9 @@ TestCase {
         const tab = source("apps/files/qml/BrowserTab.qml");
         verify(/id: loadingNote[\s\S]*?Tokens\.filesLoadingDelay[\s\S]*?Spinner \{/.test(tab), "a slow listing shows the shared spinner in the view");
         const win = source("apps/files/qml/BrowserWindow.qml");
-        // Tags and Action are bare glyphs with no capsule, as macOS 27 Finder draws Share, Tags and Action on a white window.
-        verify(/Item \{[^}]*?\n\s*Row \{[^}]*?ToolButton \{\s*id: tagsButton[\s\S]*?ToolButton \{\s*id: actionButton/.test(win), "Tags and Action in a row");
+        // Share, Tags and Action are bare glyphs with no capsule, as macOS 27 Finder draws them on a white window (Share since
+        // ADR-0045 OC-13, while LocalSend is installed).
+        verify(/Item \{[^}]*?\n\s*Row \{[^}]*?ToolButton \{\s*id: shareButton[\s\S]*?ToolButton \{\s*id: tagsButton[\s\S]*?ToolButton \{\s*id: actionButton/.test(win), "Share, Tags and Action in a row");
         verify(!/RimmedCapsule \{\s*width: 2 \* Tokens\.toolbarCapsule/.test(win), "no capsule round Tags and Action");
         compare(win.indexOf("Appearance.buttonFill"), -1, "no plain capsule left in the toolbar");
         const tabs = source("apps/files/qml/TabBar.qml");

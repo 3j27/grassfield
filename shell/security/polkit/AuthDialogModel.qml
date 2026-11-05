@@ -7,7 +7,8 @@ import Grassfield.Ui
 //
 // Never auto-approve: the only call that answers polkit is submit(), and only with a non-empty
 // password typed by the user while polkit asks for a response. Nothing here calls submit() on
-// its own, and cancel() is always available.
+// its own, and cancel() is always available. The one answer given on its own is a refusal: a
+// request the user cannot answer is cancelled as soon as PAM talks without asking (refusesUnseen).
 QtObject {
     id: root
 
@@ -43,12 +44,94 @@ QtObject {
     readonly property bool responseRequired: !!flow && flow.isResponseRequired === true
     readonly property bool responseVisible: !!flow && flow.responseVisible === true
     readonly property string prompt: flow ? cleanPrompt(plainLine(flow.inputPrompt, maxDetailLength)) : ""
-    // Polkit/PAM feedback, or our own message after a failed attempt.
-    readonly property string feedback: priv.error !== "" ? priv.error : (flow ? plainLine(flow.supplementaryMessage, maxDetailLength) : "")
-    readonly property bool feedbackIsError: priv.error !== "" || (!!flow && flow.supplementaryIsError === true)
+    // Polkit/PAM feedback, or our own message after a failed attempt. While a device is awaited (awaitingDevice) the line is
+    // PAM's own (the device's instruction, or pam_faillock's notice), never the previous round's "Incorrect password": the
+    // intro says to follow the instruction below (counter-review of ADR-0045, LOW-2). Once a prompt comes, our own message
+    // comes back whenever a failure set it (priv.error is cleared only by submit, cancel or a new flow): a PAM notice that
+    // came after the failure (pam_faillock's "account is locked", only from a stack whose preauth is not silent: Omarchy's
+    // is) is then replaced by it. Open item, final counter-review LOW-A (see docs/specs/security.md).
+    readonly property string feedback: awaitingDevice ? plainLine(flow.supplementaryMessage, maxDetailLength)
+                                                      : priv.error !== "" ? priv.error : (flow ? plainLine(flow.supplementaryMessage, maxDetailLength) : "")
+    readonly property bool feedbackIsError: awaitingDevice ? flow.supplementaryIsError === true
+                                                           : priv.error !== "" || (!!flow && flow.supplementaryIsError === true)
     // An answer was sent and polkit has not asked again yet.
     readonly property bool submitted: priv.submitted
     readonly property bool canSubmit: responseRequired && !priv.submitted
+    // PAM said something and asks nothing (ADR-0045 OC-6: pam_fprintd's "Place your finger…", pam_u2f's "Please touch the FIDO
+    // authenticator."): a device is awaited, the password field waits. Only while a message is shown, never for a bare
+    // !responseRequired: between two prompts, or before pam_unix's first, a fast typist's first keys must not be dropped (a
+    // password typed short is a wrong one, and pam_faillock counts it).
+    readonly property bool awaitingDevice: !!flow && !responseRequired && !priv.submitted && plainLine(flow.supplementaryMessage, maxDetailLength) !== ""
+
+    // No device answers a request the user cannot see and answer (ADR-0045 OC-6, security review of e3542510, MAJOR-2; macOS:
+    // a request made while locked is shown after the unlock, never answered by the unlock gesture). Quickshell starts PAM the
+    // moment polkit asks, whether or not a sheet shows the request: AuthFlow's constructor runs polkit-agent-helper-1 (0.3.2
+    // flow.cpp setupSession, polkit_agent_session_initiate), again after each failure, and its API has nothing to defer or
+    // pause it. With pam_fprintd or pam_u2f in /etc/pam.d/polkit-1, a request held behind the lock, the screen saver or
+    // another sheet would hold the reader, and a touch meant for the lock screen (or for the request before) would approve
+    // it. So `request`, the flow Quickshell has open (the agent's own, also while this model is handed none: a secret sheet
+    // came first), is refused (polkit's "cancelled": the requester is told no) as soon as PAM says something without asking
+    // (pamTalks: a device's instruction, or any other line: when in doubt, no), whenever `answerable` is false (the agent's
+    // rule: its sheet is not on screen in front: locked, under the screen saver, the displays off, waiting behind another
+    // sheet, or held other than "right after another one" and not clicked), an answer sent or not. PAM asking for a password
+    // ends nothing: that request waits for the user, its sheet after the unlock. It assumes a device module announces itself
+    // before it waits (pam_fprintd always, pam_u2f with `cue`, which Omarchy sets); a silent one would defeat it.
+    // Defaults fail closed (not answerable); with no request nothing happens. The cancel runs from the event loop, never inside
+    // this binding's own change: Quickshell ends the request inside cancelAuthenticationRequest, which changes what the binding
+    // reads, and QML would report a binding loop and keep a stale value (the next request then unguarded; authagent_flows.d
+    // flows.qml test_27). It runs as soon as control returns to the event loop (Qt.callLater), within the same turn.
+    property var request: null
+    property bool answerable: false
+    readonly property bool refusesUnseen: !answerable && pamTalks(request)
+    onRefusesUnseenChanged: if (refusesUnseen)
+        Qt.callLater(root.refuseUnseen)
+
+    // Still unanswerable and PAM still talking when the event loop gets here: refused.
+    function refuseUnseen(): void {
+        if (refusesUnseen)
+            request.cancelAuthenticationRequest();
+    }
+
+    // Replaced requests (opus re-review of the ADR-0045 security fixes, MAJOR-1). Quickshell 0.3.2 replaces an open request
+    // instead of queuing it (agentimpl.cpp initiateAuthentication activates a new one while another is active) and leaves the
+    // replaced one running, its PAM included, with no sheet: a device could answer it unseen, for up to pam_fprintd's 30 s,
+    // and keep the lock screen's own fingerprint check from the reader. Every request replaced before it completed is watched
+    // (`priv.replaced`); as soon as one of them talks without asking (at once if it already did), the request Quickshell has
+    // open is refused first, then every replaced one: refusing a replaced one ends whatever request is current (its
+    // completion is still connected to agentimpl's finishAuthenticationRequest), which would leave the current one unanswered.
+    // A replaced request asking for a password is left as Quickshell leaves it (nobody can type into it). From the event loop,
+    // as above.
+    readonly property bool replacedTalks: liveReplaced().some(f => pamTalks(f))
+    onReplacedTalksChanged: if (replacedTalks)
+        Qt.callLater(root.refuseReplaced)
+    onRequestChanged: {
+        const before = priv.seen;
+        priv.seen = request;
+        if (before && request && before !== request && before.isCompleted !== true)
+            priv.replaced = liveReplaced().concat([before]);
+    }
+
+    // The replaced requests still running (a destroyed flow reads null).
+    function liveReplaced(): var {
+        return priv.replaced.filter(f => !!f && f.isCompleted !== true);
+    }
+
+    function refuseReplaced(): void {
+        if (!replacedTalks)
+            return;
+        const replaced = liveReplaced();
+        priv.replaced = [];
+        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();
+        for (const f of replaced)
+            f.cancelAuthenticationRequest();
+    }
+
+    // PAM said something and asks nothing (Quickshell keeps the last line until another one comes).
+    function pamTalks(f: var): bool {
+        return !!f && f.isResponseRequired !== true && plainLine(f.supplementaryMessage, maxDetailLength) !== "";
+    }
+
     // The user answered the request in the sheet (sent a password or cancelled it) and polkit has not asked again since: a
     // request that ends now ends on the user's answer, not under the user's typing (AuthAgent lingers only for the latter;
     // security counter-review of f9e24e1, LOW-1). Set by submit() and cancel(), cleared when polkit asks again (a failure, a
@@ -144,6 +227,9 @@ QtObject {
         property string error: ""
         property bool shown: false
         property bool answered: false
+        // The request last seen and the replaced ones still watched (refuseReplaced).
+        property var seen: null
+        property var replaced: []
     }
 
     readonly property Private priv: Private {}

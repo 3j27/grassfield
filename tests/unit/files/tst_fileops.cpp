@@ -584,3 +584,31 @@ TEST_F(FileOps, ADropOnTheSourcesOwnPlaceMovesNothing)
     EXPECT_FALSE(present(d("dir/sub/dir")));
     EXPECT_FALSE(present(d("dir/dir")));
 }
+
+// Share > Send with LocalSend… (ADR-0045 OC-13): FilesApp runs nothing but Omarchy's vector with existing local paths, and a
+// development session runs nothing at all (systemd-run --user would open LocalSend on the owner's real desktop; security
+// review LOW 2). The dev refusal comes before LocalSend is looked up, so the test needs no LocalSend.
+TEST_F(FileOps, SendWithLocalSendRefusesOtherVectorsAndADevSession)
+{
+    const QByteArray devBefore = qgetenv("GRASSFIELD_DEV");
+    const QByteArray sessionBefore = qgetenv("GRASSFIELD_SESSION");
+    const bool hadDev = qEnvironmentVariableIsSet("GRASSFIELD_DEV");
+    const bool hadSession = qEnvironmentVariableIsSet("GRASSFIELD_SESSION");
+    qputenv("GRASSFIELD_DEV", "1");
+    qunsetenv("GRASSFIELD_SESSION");
+    FilesApp app(QList<QUrl>{});
+    Told told(app);
+    write(d("a.txt"));
+    const QStringList prefix = {QStringLiteral("systemd-run"), QStringLiteral("--user"), QStringLiteral("--quiet"), QStringLiteral("--collect"),
+                                QStringLiteral("localsend"), QStringLiteral("--headless"), QStringLiteral("send")};
+    app.sendWithLocalSend(QStringList{QStringLiteral("sh"), QStringLiteral("-c"), QStringLiteral("true")});
+    app.sendWithLocalSend(prefix + QStringList{QStringLiteral("relative.txt")});
+    app.sendWithLocalSend(prefix + QStringList{d("missing.txt")});
+    EXPECT_EQ(told.messages.size(), 3) << "another program, a relative path, a missing item: refused";
+    told.messages.clear();
+    app.sendWithLocalSend(prefix + QStringList{d("a.txt")});
+    ASSERT_EQ(told.messages.size(), 1) << "a dev session sends nothing";
+    EXPECT_TRUE(told.messages.first().contains(QStringLiteral("development session"))) << told.messages.first().toStdString();
+    hadDev ? qputenv("GRASSFIELD_DEV", devBefore) : qunsetenv("GRASSFIELD_DEV");
+    hadSession ? qputenv("GRASSFIELD_SESSION", sessionBefore) : qunsetenv("GRASSFIELD_SESSION");
+}

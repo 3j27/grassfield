@@ -103,13 +103,22 @@
     "color": "multicolor",
     "highlight": "automatic"
   },
+  "terminal": {
+    "matchAppearance": false,
+    "lightTheme": "Catppuccin Latte",
+    "darkTheme": "Tokyo Night"
+  },
   "keyboard": {
     "shortcutStyle": "automatic",
-    "showInputMenu": true
+    "showInputMenu": true,
+    "dictation": false
   },
   "region": {
     "formats": "auto",
     "firstDayOfWeek": "auto"
+  },
+  "preview": {
+    "textInImages": true
   },
   "icons": {
     "mode": "default",
@@ -120,6 +129,14 @@
     "size": 24,
     "outlineColor": "#ffffff",
     "fillColor": "#000000"
+  },
+  "capture": {
+    "mode": "selection",
+    "saveTo": "desktop",
+    "timer": "none",
+    "microphone": "none",
+    "showPointer": false,
+    "lastSelection": ""
   },
   "search": {
     "showApps": true,

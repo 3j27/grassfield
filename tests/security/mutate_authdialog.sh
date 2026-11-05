@@ -90,6 +90,42 @@ check "K1 activation keys bypass the guard" $BT \
         event.accepted = true;"
 check "D1 Allow stays enabled while the answer is checked" shell/security/polkit/AuthDialog.qml \
   "                enabled: root.model.canSubmit" "                enabled: true"
+# ADR-0045 OC-6 (security review): while PAM awaits a device and asks nothing, the field takes no key; the prompt gives it back.
+check "D2 the field takes keys while PAM awaits a device" shell/security/polkit/AuthDialog.qml \
+  "                enabled: root.inputEnabled && !root.model.awaitingDevice" "                enabled: root.inputEnabled"
+check "D3 the prompt does not give the field the keys back" shell/security/polkit/AuthDialog.qml \
+  "            if (!root.model.awaitingDevice && root.model.responseRequired)
+                root.focusField();" ""
+# ADR-0045 OC-6 (security review of e3542510, MAJOR-2): a request nobody can answer is refused once PAM talks without asking.
+MG=shell/security/polkit/AuthDialogModel.qml
+check "G1 a request nobody can answer is not refused" $MG \
+  "        if (refusesUnseen)
+            request.cancelAuthenticationRequest();" "        if (refusesUnseen)
+            console.info(\"refused\");"
+check "G6 the refusal is never scheduled" $MG \
+  "        Qt.callLater(root.refuseUnseen)" "        console.info(\"refusal\")"
+check "G2 only the request in the sheet is guarded (not one waiting behind a secret sheet)" $MG \
+  "readonly property bool refusesUnseen: !answerable && pamTalks(request)" "readonly property bool refusesUnseen: !answerable && pamTalks(flow)"
+check "G3 a password prompt is refused too (the macOS model lost)" $MG \
+  "        return !!f && f.isResponseRequired !== true && " "        return !!f && "
+check "G4 answerable until the agent says otherwise (fails open)" $MG \
+  "    property bool answerable: false" "    property bool answerable: true"
+check "G5 an answer sent shields the request from the reader" $MG \
+  "readonly property bool refusesUnseen: !answerable && pamTalks(request)" "readonly property bool refusesUnseen: !answerable && pamTalks(request) && !priv.submitted"
+# Opus re-review, MAJOR-1: a request Quickshell replaced is refused, with the current one first, once its PAM talks.
+check "G7 a replaced request is not watched" $MG \
+  "            priv.replaced = liveReplaced().concat([before]);" "            ;"
+check "G8 the replaced request alone is refused (the current one left)" $MG \
+  "        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();" ""
+check "G9 the replaced request is refused first" $MG \
+  "        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();
+        for (const f of replaced)
+            f.cancelAuthenticationRequest();" "        for (const f of replaced)
+            f.cancelAuthenticationRequest();
+        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();"
 check "M1 the model answers twice (no canSubmit check)" shell/security/polkit/AuthDialogModel.qml \
   "if (!active || !canSubmit || password.length === 0) {" "if (!active || password.length === 0) {"
 # The field's busy check alone is backed by the model's canSubmit (defence in depth, by design): only both together send twice.

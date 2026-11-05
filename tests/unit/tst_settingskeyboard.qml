@@ -72,6 +72,12 @@ TestCase {
             property string bindingsFile: "/nowhere/bindings.lua"
             property var files: ({})
             property var writes: []
+            // ADR-0045: a command on PATH (none here) and Omarchy's read-only checks (recorded nowhere: no answer comes).
+            function hasCommand(name: string): bool {
+                return false;
+            }
+            function readOnlyQuery(argv: var, tag: string): void {
+            }
             function readText(path: string): var {
                 return {exists: files[path] !== undefined, ok: files[path] !== undefined, text: files[path] ?? ""};
             }

@@ -1,7 +1,8 @@
 import QtQuick
 
 // General (macOS 27): a hub. The header card, then rows that open the sub-panes; the toolbar's back button returns here.
-// Not built (docs/specs/settings.md § macOS 27 parity inventory): Sharing and the Apple-only rows.
+// Sharing holds Remote Login only (ADR-0045 OC-7). Not built (docs/specs/settings.md § macOS 27 parity inventory): the
+// Apple-only rows.
 SettingsPage {
     id: root
 
@@ -39,7 +40,7 @@ SettingsPage {
         }
     }
 
-    // macOS 27 keeps Date & Time, Language & Region and Login Items together (after AutoFill & Passwords, not built).
+    // macOS 27 keeps Date & Time, Language & Region, Login Items and Sharing together (after AutoFill & Passwords, not built).
     SettingsGroup {
         NavigationRow {
             text: qsTr("Date & Time")
@@ -57,6 +58,12 @@ SettingsPage {
             text: qsTr("Login Items")
             glyph: "list"
             onClicked: root.open("login")
+        }
+        // ADR-0045 OC-7: Sharing holds Remote Login only (superseding the owner decision of 2026-10-26 for exactly that).
+        NavigationRow {
+            text: qsTr("Sharing")
+            glyph: "remote-desktop"
+            onClicked: root.open("sharing")
         }
     }
 }

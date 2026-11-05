@@ -22,6 +22,7 @@ TestCase {
         property int submits: 0
         property int cancels: 0
         property var submitted: []
+        property bool isCompleted: false
 
         signal authenticationFailed
         signal authenticationSucceeded
@@ -141,6 +142,127 @@ TestCase {
         compare(model.feedback, "Incorrect password. Try again.");
         verify(model.submit("second"));
         compare(flow.submits, 2);
+    }
+
+    // ADR-0045 OC-6 (security review): PAM said something and asks nothing (pam_fprintd's "Place your finger…", pam_u2f's
+    // "Please touch…"): a device is awaited; the password field waits. Never for a bare "nothing asked" (keys typed before
+    // pam_unix's first prompt must not be dropped), never once the answer was sent.
+    function test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing() {
+        verify(!model.awaitingDevice, "nothing said, nothing asked: the field keeps the keys");
+        flow.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        verify(model.awaitingDevice);
+        verify(!model.canSubmit);
+        compare(model.feedback, "Place your right index finger on the fingerprint reader");
+        flow.supplementaryMessage = " \n\t";
+        verify(!model.awaitingDevice, "a message of blanks is no message");
+        flow.supplementaryMessage = "Failed to match fingerprint";
+        flow.supplementaryIsError = true;
+        verify(model.awaitingDevice);
+        // The password prompt comes: no longer awaiting, and the device's last line stays readable.
+        flow.isResponseRequired = true;
+        verify(!model.awaitingDevice);
+        verify(model.canSubmit);
+        compare(model.feedback, "Failed to match fingerprint");
+        // Sent: never awaiting again until polkit asks or fails, whatever PAM then says.
+        verify(model.submit("pw"));
+        flow.isResponseRequired = false;
+        flow.supplementaryMessage = "Please touch the FIDO authenticator.";
+        verify(!model.awaitingDevice, "after the answer was sent");
+        model.flow = null;
+        verify(!model.awaitingDevice, "no request");
+    }
+
+    // A wrong password, then the next round waits for the fingerprint reader: the line under the intro is the device's
+    // instruction, not the stale "Incorrect password" (counter-review of ADR-0045, LOW-2); the prompt brings it back.
+    function test_theNextRoundsDeviceInstructionIsShownNotTheOldError() {
+        flow.isResponseRequired = true;
+        verify(model.submit("wrong"));
+        flow.isResponseRequired = false;
+        flow.authenticationFailed();
+        compare(model.feedback, "Incorrect password. Try again.");
+        flow.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        verify(model.awaitingDevice);
+        compare(model.feedback, "Place your right index finger on the fingerprint reader");
+        verify(!model.feedbackIsError);
+        flow.isResponseRequired = true;
+        verify(!model.awaitingDevice);
+        compare(model.feedback, "Incorrect password. Try again.");
+        verify(model.feedbackIsError);
+    }
+
+    // pam_faillock's notice comes as information before the password prompt: it is not replaced when the prompt arrives.
+    function test_aLockedAccountNoticeStaysUnderThePrompt() {
+        flow.supplementaryMessage = "The account is locked due to 3 failed logins.";
+        verify(model.awaitingDevice);
+        flow.isResponseRequired = true;
+        verify(!model.awaitingDevice);
+        compare(model.feedback, "The account is locked due to 3 failed logins.");
+        verify(!model.feedbackIsError);
+    }
+
+    // ADR-0045 OC-6 (security review of e3542510, MAJOR-2): a request the user cannot answer (`answerable` false, as the agent
+    // sets it while locked, under the screen saver, waiting behind another sheet) is refused as soon as PAM talks
+    // without asking: a device's instruction, a failed match, a security key's cue, any other line (when in doubt, no). The
+    // request may be one this model is not handed (a secret sheet came first: `flow` null).
+    function test_unansweredRequestRefusedWhenPamTalks() {
+        const lines = [["Place your right index finger on the fingerprint reader", false], ["Failed to match fingerprint", true],
+            ["Please touch the FIDO authenticator.", false], ["The account is locked due to 3 failed logins.", false]];
+        model.flow = null;
+        for (const [line, error] of lines) {
+            const f = createTemporaryObject(flowComponent, test);
+            model.request = f;
+            verify(!model.answerable, "fails closed by default");
+            verify(!model.refusesUnseen, "PAM said nothing yet: " + line);
+            f.supplementaryIsError = error;
+            f.supplementaryMessage = line;
+            verify(model.refusesUnseen, line);
+            tryCompare(f, "cancels", 1, 1000, line);
+            compare(f.submits, 0, line);
+            // Quickshell ends the refused request before it hands over the next one.
+            f.isCompleted = true;
+            model.request = null;
+        }
+        compare(flow.cancels, 0, "only the request PAM talks for");
+    }
+
+    // PAM asking for a password ends nothing (the sheet shows it after the unlock), with a line above the prompt or not; a
+    // line of blanks is no line; no request, nothing to refuse.
+    function test_passwordPromptWaitsForTheUser() {
+        model.request = flow;
+        flow.isResponseRequired = true;
+        flow.supplementaryMessage = "The account is locked due to 3 failed logins.";
+        verify(!model.refusesUnseen, "PAM asks: the request waits for the user");
+        flow.supplementaryMessage = " \n\t";
+        flow.isResponseRequired = false;
+        verify(!model.refusesUnseen, "a line of blanks is no line");
+        model.request = null;
+        flow.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        verify(!model.refusesUnseen, "no request");
+        wait(1);
+        compare(flow.cancels, 0);
+    }
+
+    // While the user can answer, the reader's instruction ends nothing; the moment that stops (the lock, the saver, a hold), the
+    // request is refused, an answer sent or not (pam_unix before pam_fprintd: a wrong password, then the reader in the same
+    // round), and it is refused once.
+    function test_refusedWhenItStopsBeingAnswerable() {
+        model.request = flow;
+        model.answerable = true;
+        flow.isResponseRequired = true;
+        verify(model.submit("wrong"));
+        flow.isResponseRequired = false;
+        flow.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        verify(!model.refusesUnseen);
+        wait(1);
+        compare(flow.cancels, 0);
+        model.answerable = false;
+        verify(model.refusesUnseen);
+        compare(flow.cancels, 0, "from the event loop, not inside the binding's change");
+        tryCompare(flow, "cancels", 1);
+        flow.supplementaryMessage = "Failed to match fingerprint";
+        wait(1);
+        compare(flow.cancels, 1, "refused once while it stays unanswerable");
+        compare(flow.submits, 1, "nothing sent but the user's own answer");
     }
 
     // Untrusted strings are flattened to one capped plain line (R12 review).

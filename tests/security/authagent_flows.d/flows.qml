@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import qs.security
 import qs.services
 
 // The polkit agent (AuthAgent.qml in the harness authagent_flows.sh generates; it runs this file as tst_flows.qml) through the
@@ -26,11 +27,15 @@ Item {
             property bool supplementaryIsError: false
             property int cancels: 0
             property var submits: []
+            // test_27: what Quickshell does inside a cancel (the request ends there), else nothing.
+            property var onCancel: null
             function submit(p) {
                 submits.push(p);
             }
             function cancelAuthenticationRequest() {
                 cancels++;
+                if (onCancel)
+                    onCancel();
             }
         }
     }
@@ -47,6 +52,7 @@ Item {
         function init() {
             SessionState.locked = false;
             SessionState.saverShown = false;
+            SessionState.displaysOff = false;
             compare(top.agentC.status, Component.Ready, top.agentC.errorString());
             ag = createTemporaryObject(top.agentC, top);
             verify(ag);
@@ -332,5 +338,306 @@ Item {
             mouseClick(c);
             compare(a.cancels, 0);
         }
+
+        // ADR-0045 OC-6 (security review of e3542510, MAJOR-2): no device answers a request the user cannot see and answer.
+        // Quickshell runs PAM as soon as polkit asks; once pam_fprintd (or pam_u2f) talks without asking for a request whose
+        // sheet is not on screen in front (locked away, under the saver, waiting behind a secret sheet) or that Quickshell
+        // replaced, the agent refuses it (the requester is told no) before a touch meant for the lock screen or another request
+        // can approve it. A sheet on screen in front may be answered by the reader, held or not (integrator decision after the
+        // re-review, macOS model). PAM asking for a password ends nothing. The mock flow stays after a cancel unless the test
+        // gives it Quickshell's end (onCancel): the tests count the cancels.
+        function reader(f) {
+            f.isResponseRequired = false;
+            f.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        }
+
+        function test_20_shownRequestKeepsTheReaderUntilTheLock() {
+            const a = mkflow("A");
+            arriveFlow(a, true);
+            compare(ag.heldByLock, false);
+            reader(a);
+            verify(ag.model.awaitingDevice);
+            wait(1);
+            compare(a.cancels, 0, "the user sees the sheet and may touch the reader");
+            SessionState.locked = true;
+            tryCompare(a, "cancels", 1, 1000, "the lock came while the reader waited: refused at once");
+            compare(a.submits.length, 0);
+        }
+
+        function test_21_arrivedLockedRefusedWhenPamReachesTheReader_data() {
+            return [{tag: "isActive first", first: true}, {tag: "flow first", first: false}];
+        }
+        function test_21_arrivedLockedRefusedWhenPamReachesTheReader(d) {
+            const a = mkflow("A");
+            SessionState.locked = true;
+            arriveFlow(a, d.first);
+            wait(1);
+            compare(a.cancels, 0, "PAM said nothing yet");
+            reader(a);
+            tryCompare(a, "cancels", 1);
+            compare(a.submits.length, 0);
+        }
+
+        // The macOS model kept for a password: PAM asks (pam_faillock's line above the prompt or not), the request waits
+        // behind the lock and is shown, held, after the unlock.
+        function test_22_passwordPromptWaitsBehindTheLock() {
+            const a = mkflow("A");
+            SessionState.locked = true;
+            arriveFlow(a, true);
+            a.supplementaryMessage = "The account is locked due to 3 failed logins.";
+            SessionState.locked = false;
+            compare(ag.sheet.shown, true);
+            compare(ag.heldByLock, true);
+            wait(1);
+            compare(a.cancels, 0);
+        }
+
+        function test_23_underTheSaver() {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a, true);
+            reader(a);
+            SessionState.saverShown = true;
+            tryCompare(a, "cancels", 1, 1000, "open and awaiting the reader when the saver came");
+            endAll(true);
+            arriveFlow(b, true);
+            reader(b);
+            tryCompare(b, "cancels", 1, 1000, "arrived under the saver");
+        }
+
+        // Held and shown without the keyboard. Right after another request (Remote Login, Add Printer) the reader may answer it,
+        // clicked or not. Just after an unlock it may not until the user clicks past its guard: a finger left on the reader
+        // after unlocking would answer it, and the lock marker tells any process of the user's when to ask (opus re-review,
+        // MINOR-1). The click hold keeps stray clicks and keys out either way.
+        function test_24_heldShownReaderOnlyRightAfterAnother_data() {
+            return [{tag: "just after the unlock", why: "unlock", refused: true}, {tag: "right after another one", why: "queued", refused: false}];
+        }
+        function test_24_heldShownReaderOnlyRightAfterAnother(d) {
+            const a = mkflow("A"), b = mkflow("B"), c = mkflow("C");
+            if (d.why === "unlock") {
+                SessionState.locked = true;
+                SessionState.locked = false;
+            } else {
+                arriveFlow(a, true);
+                endAll(true);
+            }
+            arriveFlow(b, true);
+            compare(ag.heldByLock, true);
+            compare(ag.heldWhy, d.why);
+            compare(ag.sheet.shown, true);
+            compare(ag.userFocused, false);
+            reader(b);
+            if (d.refused) {
+                tryCompare(b, "cancels", 1, 1000, "held just after the unlock: a finger left on the reader must not answer it");
+            } else {
+                wait(1);
+                compare(b.cancels, 0, "held right after another one, on screen in front: a touch can only be meant for it");
+            }
+            compare(ag.sheet.takesKeys, ag.sinkingKeys, "the keys still wait for a click past the guard (or stay on the sink)");
+            if (!d.refused)
+                return;
+            // Once the user clicked past its guard, the reader may answer a request held just after an unlock.
+            endAll(true);
+            wait(1100);
+            SessionState.locked = true;
+            SessionState.locked = false;
+            arriveFlow(c, true);
+            compare(ag.heldWhy, "unlock");
+            wait(600);
+            mouseClick(ag.sheet, 5, 5);
+            compare(ag.userFocused, true);
+            reader(c);
+            wait(1);
+            compare(c.cancels, 0, "clicked past its guard: the user turned to it");
+        }
+
+        // Settings' Remote Login asks twice in a row (systemd EnableUnitFiles, then StartUnit) and Add Printer up to three
+        // times (cups-pk-helper PrinterAdd, PrinterSetEnabled, PrinterSetAcceptJobs), each request arriving right after the
+        // previous one ended (held, "right after another one"): with a fingerprint reader every one is answered by a touch.
+        function test_25_backToBackRequestsUseTheReader_data() {
+            return [{tag: "Remote Login (enable, start)", count: 2}, {tag: "Add Printer (add, enable, accept jobs)", count: 3}];
+        }
+        function test_25_backToBackRequestsUseTheReader(d) {
+            for (let i = 0; i < d.count; i++) {
+                const f = mkflow("request " + i);
+                arriveFlow(f, true);
+                compare(ag.sheet.shown, true);
+                compare(ag.heldByLock, i > 0, i > 0 ? "held: right after another one" : "the first one is not held");
+                reader(f);
+                wait(1);
+                compare(f.cancels, 0, "request " + i + " is not refused");
+                endAll(true); // the touch matched: polkit allowed it, Quickshell ends the request
+            }
+        }
+
+        // Waiting behind a secret sheet (the model is handed nothing): the agent still guards the request Quickshell has open.
+        function test_26_waitingBehindASecretSheet() {
+            const q = createTemporaryObject(queueC, top);
+            verify(q.addSecret("network"));
+            ag.queue = q;
+            compare(ag.waiting, true);
+            const a = mkflow("A");
+            arriveFlow(a, true);
+            compare(ag.model.active, false, "not handed to the sheet");
+            wait(1);
+            compare(a.cancels, 0);
+            reader(a);
+            tryCompare(a, "cancels", 1);
+        }
+
+        // Quickshell ends the request inside cancelAuthenticationRequest (the session completes, the agent finishes it), so the
+        // refusal's end runs inside the lock's or the saver's own change: the agent is left with no request, nothing mapped, no
+        // sink, and the next request, still under the lock or the saver, is held and guarded as usual.
+        function test_27_refusalEndsTheRequestInsideTheChange_data() {
+            return [{tag: "lock", saver: false}, {tag: "saver", saver: true}];
+        }
+        function test_27_refusalEndsTheRequestInsideTheChange(d) {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a, true);
+            tryVerify(() => field() && field().activeFocus);
+            typeText("pw");
+            reader(a);
+            a.onCancel = () => endAll(true);
+            if (d.saver)
+                SessionState.saverShown = true;
+            else
+                SessionState.locked = true;
+            tryCompare(a, "cancels", 1);
+            compare(a.submits.length, 0);
+            compare(ag.model.active, false);
+            compare(ag.requestOpen, false);
+            compare(ag.sinkingKeys, false, "no sink left under the lock or the saver");
+            compare(ag.sheet.visible, false);
+            compare(ag.sheet.takesKeys, false);
+            arriveFlow(b, true);
+            compare(ag.heldByLock, true);
+            compare(ag.sheet.takesKeys, false);
+            wait(1);
+            compare(b.cancels, 0, "PAM said nothing for B yet");
+            reader(b);
+            tryCompare(b, "cancels", 1, 1000, "the next request is guarded too (no binding left stale by the first end)");
+            SessionState.saverShown = false;
+            SessionState.locked = false;
+        }
+
+        // Opus re-review, MINOR-2: the displays are off for inactivity while the session is unlocked (SessionState.displaysOff):
+        // nobody sees the sheet, so the reader may not answer it (a reader in the power button pressed to wake the screen).
+        function test_32_displaysOff() {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a, true);
+            reader(a);
+            wait(1);
+            compare(a.cancels, 0, "on screen in front");
+            SessionState.displaysOff = true;
+            tryCompare(a, "cancels", 1, 1000, "the displays went off while the reader waited");
+            endAll(true);
+            wait(1100);
+            arriveFlow(b, true);
+            compare(ag.heldByLock, false, "not held: the displays being off holds nothing");
+            reader(b);
+            tryCompare(b, "cancels", 1, 1000, "arrived while the displays were off");
+        }
+
+        // Held because it arrived while locked, its PAM asking for a password (nothing refused), shown after the unlock: should
+        // its PAM then reach the reader, it is refused unless clicked (only "right after another one" counts).
+        function test_33_heldLockedThenTheReader() {
+            const a = mkflow("A");
+            SessionState.locked = true;
+            arriveFlow(a, true);
+            SessionState.locked = false;
+            compare(ag.sheet.shown, true);
+            compare(ag.heldWhy, "locked");
+            wait(1);
+            compare(a.cancels, 0, "a password prompt waits for the user");
+            reader(a);
+            tryCompare(a, "cancels", 1);
+        }
+
+        // A request held right after another one keeps that reason when the screen saver comes over it (the notice keeps the
+        // first reason): the saver itself must still refuse its reader prompt (`answerable` reads the saver, not only the hold).
+        function test_34_heldRightAfterAnotherUnderTheSaver() {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a, true);
+            endAll(true);
+            arriveFlow(b, true);
+            compare(ag.heldWhy, "queued");
+            SessionState.saverShown = true;
+            compare(ag.heldWhy, "queued", "the first reason is kept");
+            reader(b);
+            tryCompare(b, "cancels", 1, 1000, "under the saver nobody sees the sheet");
+        }
+
+        // Opus re-review, MAJOR-1: Quickshell replaces an open request instead of queuing it and leaves the replaced one running,
+        // its PAM included, with no sheet. The reviewer's probe: locked; A arrives; B replaces A; A then waits for the reader.
+        // A must be refused, and B first (refusing A ends whatever request is current in Quickshell, B unanswered otherwise).
+        function test_28_replacedRequestRefusedWhenItTalks_data() {
+            return [{tag: "locked (the reviewer's probe)", locked: true}, {tag: "unlocked", locked: false}];
+        }
+        function test_28_replacedRequestRefusedWhenItTalks(d) {
+            const a = mkflow("A"), b = mkflow("B"), order = [];
+            a.onCancel = () => order.push("A");
+            b.onCancel = () => order.push("B");
+            SessionState.locked = d.locked;
+            arriveFlow(a, true);
+            switchTo(b);
+            compare(ag.model.message, "B");
+            wait(1);
+            compare(a.cancels + b.cancels, 0, "nothing refused while the replaced request says nothing");
+            reader(a);
+            tryCompare(a, "cancels", 1, 1000, "the replaced request is refused once its PAM reaches the reader");
+            compare(b.cancels, 1, "with the request in the sheet");
+            compare(order, ["B", "A"], "the current request first");
+            compare(a.submits.length + b.submits.length, 0);
+        }
+
+        // Replaced while it already waited for the reader in the sheet the user saw: refused at once, with its replacement.
+        function test_29_replacedWhileAwaitingTheReader() {
+            const a = mkflow("A"), b = mkflow("B"), order = [];
+            a.onCancel = () => order.push("A");
+            b.onCancel = () => order.push("B");
+            arriveFlow(a, true);
+            reader(a);
+            wait(1);
+            compare(a.cancels, 0, "shown in front: the reader may answer it");
+            switchTo(b);
+            tryCompare(a, "cancels", 1);
+            compare(order, ["B", "A"]);
+        }
+
+        // A replaced request that asks for a password is left as Quickshell leaves it (nobody can type into it): its
+        // replacement is answered as usual, the reader included.
+        function test_30_replacedAskingAPasswordEndsNothing() {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a, true);
+            switchTo(b);
+            a.supplementaryMessage = "The account is locked due to 3 failed logins.";
+            reader(b);
+            wait(1);
+            compare(a.cancels + b.cancels, 0);
+        }
+
+        // With Quickshell's end: B's cancel ends the request in the sheet (the agent sees no request), A's ends nothing more.
+        // Nothing is left mapped or on the sink, and the next request is guarded as usual.
+        function test_31_replacedRefusalWithQuickshellsEnd() {
+            const a = mkflow("A"), b = mkflow("B"), c = mkflow("C");
+            SessionState.locked = true;
+            arriveFlow(a, true);
+            switchTo(b);
+            b.onCancel = () => endAll(true);
+            reader(a);
+            tryCompare(a, "cancels", 1);
+            compare(b.cancels, 1);
+            compare(ag.model.active, false);
+            compare(ag.sinkingKeys, false);
+            compare(ag.sheet.visible, false);
+            arriveFlow(c, true);
+            reader(c);
+            tryCompare(c, "cancels", 1, 1000, "still locked: the next request is refused too");
+            compare(a.cancels, 1, "A refused once");
+        }
+    }
+
+    Component {
+        id: queueC
+        SheetQueue {}
     }
 }

@@ -369,3 +369,26 @@ Details, the boundary, what remains (the person's own files, as in Omarchy's ter
 above answer it, and the re-review passed (its minors answered: the migrations' `sudo` takes root as its only target). The
 integrator's opus review found no MAJOR; its required minors are answered (no namespaces in the unit; the migrations, their
 folder, the sudo and every root command root's alone).
+
+## Amendment (ADR-0045, Omarchy capabilities, 2026-11-04, Proposed)
+ADR-0045 (OC-0.4, OC-0.7) adds system changes to Settings, all on this ADR's path where a system service has its own polkit
+action: Settings sends the D-Bus call (`Backend::busAct`, refused in a dev session, one per tag while it may wait for a
+password, its values checked in `systembus.cpp` `validAction` before any call), the service asks polkit, and Grassfield's
+polkit sheet asks the password. Calls that change something now allow interactive authorization (`QtBusCaller`, the D-Bus
+flag systemd reads before it asks the agent); reads never do. The new actions, and the polkit actions they use:
+- **Remote Login** (`ssh.enable`): systemd's `EnableUnitFiles` + `StartUnit` or `StopUnit` + `DisableUnitFiles` on
+  `sshd.service` only (the unit name is a constant of `systembus.cpp`, never the page's):
+  `org.freedesktop.systemd1.manage-unit-files` and `org.freedesktop.systemd1.manage-units`. No `Reload` (`reload-daemon`
+  would be a third request): the state is the unit file's, read from the disk (`ListUnitFilesByPatterns`).
+- **Disk Encryption > Change Password…** (`disk.passphrase`): UDisks2's `org.freedesktop.UDisks2.Encrypted.ChangePassphrase`
+  on the LUKS device under the root file system, found by Settings itself in UDisks2's objects (never named by the page):
+  `org.freedesktop.udisks2.encrypted-change-passphrase-system` (UDisks2 also needs the current passphrase). The two
+  passphrases (1 to 512 characters, no NUL) are never logged nor part of an answer.
+- **Fingerprint** (`fprint.enroll`, `fprint.delete`): fprintd's `Claim` (the caller's own user), `EnrollStart` with each
+  `EnrollStatus` passed to the page, `EnrollStop`, `Release`, and `DeleteEnrolledFinger`: `net.reactivated.fprint.device.enroll`
+  (and `.verify` for reading the enrolled fingers, which the active session holds without a password).
+What no service exposes (a package install, PAM edits, the FIDO2 registration, the hibernation swap file, initramfs and boot
+entry, OpenSSH's first setup, voxtype) is never a Settings action: it is Omarchy's own script, started as one exact argument
+vector of `systemguard.cpp` `isLaunch` (`omarchy-launch-floating-terminal-with-presentation <command>`, the path of Software
+Update's Update in Terminal…) behind a sheet that says why, and Omarchy's terminal asks for the password itself. Grassfield
+ships no polkit rule or policy for any of this.

@@ -6,7 +6,8 @@ import Grassfield.Ui
 // Small glyphs drawn from rectangles (Grassfield's own, no icon assets): the view glyphs "icons" (2x2 grid), "list" (rows),
 // "columns" (three panes) and "gallery" (a frame over a strip), at the sizes measured on Finder-Home; "more" (three dots), "plus",
 // "group" (two groups: a rule over three small squares each; the Group By button, measured on Finder-Home), "tag" (a tag
-// outline turned 45 degrees with its hole; the Tags button, measured on Finder-Search: 18 pt).
+// outline turned 45 degrees with its hole; the Tags button, measured on Finder-Search: 18 pt), "share" (a tray open at the
+// top with an arrow rising out of it; the Share button, ADR-0045 OC-13, drawn on the tag's grid, not measured).
 Item {
     id: root
 
@@ -238,6 +239,48 @@ Item {
             height: width
             radius: width / 2
             color: root.color
+        }
+    }
+
+    // share: a tray with rounded bottom corners, open in the middle of its top edge, and an arrow rising out of the opening.
+    Shape {
+        visible: root.kind === "share"
+        anchors.centerIn: parent
+        width: root.size
+        height: root.size
+        preferredRendererType: Shape.CurveRenderer
+
+        ShapePath {
+            strokeColor: root.color
+            strokeWidth: Tokens.filesViewGlyphStroke
+            fillColor: "transparent"
+            joinStyle: ShapePath.RoundJoin
+            capStyle: ShapePath.RoundCap
+            startX: 0.38 * root.size
+            startY: 0.40 * root.size
+            PathLine { x: 0.30 * root.size; y: 0.40 * root.size }
+            PathArc { x: 0.22 * root.size; y: 0.48 * root.size; radiusX: 0.08 * root.size; radiusY: 0.08 * root.size; direction: PathArc.Counterclockwise }
+            PathLine { x: 0.22 * root.size; y: 0.82 * root.size }
+            PathArc { x: 0.30 * root.size; y: 0.90 * root.size; radiusX: 0.08 * root.size; radiusY: 0.08 * root.size; direction: PathArc.Counterclockwise }
+            PathLine { x: 0.70 * root.size; y: 0.90 * root.size }
+            PathArc { x: 0.78 * root.size; y: 0.82 * root.size; radiusX: 0.08 * root.size; radiusY: 0.08 * root.size; direction: PathArc.Counterclockwise }
+            PathLine { x: 0.78 * root.size; y: 0.48 * root.size }
+            PathArc { x: 0.70 * root.size; y: 0.40 * root.size; radiusX: 0.08 * root.size; radiusY: 0.08 * root.size; direction: PathArc.Counterclockwise }
+            PathLine { x: 0.62 * root.size; y: 0.40 * root.size }
+        }
+
+        ShapePath {
+            strokeColor: root.color
+            strokeWidth: Tokens.filesViewGlyphStroke
+            fillColor: "transparent"
+            joinStyle: ShapePath.RoundJoin
+            capStyle: ShapePath.RoundCap
+            startX: 0.5 * root.size
+            startY: 0.62 * root.size
+            PathLine { x: 0.5 * root.size; y: 0.08 * root.size }
+            PathMove { x: 0.36 * root.size; y: 0.22 * root.size }
+            PathLine { x: 0.5 * root.size; y: 0.08 * root.size }
+            PathLine { x: 0.64 * root.size; y: 0.22 * root.size }
         }
     }
 }

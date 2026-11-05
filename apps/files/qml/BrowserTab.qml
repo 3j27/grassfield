@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
 import "Nav.js" as Nav
+import "ShareLogic.js" as ShareLogic
 import "TagColors.js" as TagColors
 
 // One tab of a browser window: location, history, view mode, search and every action on the selection.
@@ -961,8 +962,12 @@ FocusScope {
         if (row < 0)
             model.clearSelection();
         const items = root.chooser ? root.chooserMenu(model, row >= 0) : row >= 0 ? root.itemMenu(model) : root.backgroundMenu(model);
+        root.menuByKeyboard = keyboard;
         root.win.menuLayer.open(items, x, y, id => root.runAction(id, model), root.view, keyboard);
     }
+
+    // Whether the last item menu was opened from the keyboard (Share… then opens the Share menu with a row selected).
+    property bool menuByKeyboard: false
 
     function itemMenu(model: var): var {
         const rows = model.selectedRows();
@@ -1032,6 +1037,10 @@ FocusScope {
         items.push({separator: true});
         items.push({id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")});
         items.push({id: "copyPath", text: count === 1 ? qsTr("Copy “%1” as Pathname").arg(name) : qsTr("Copy %1 Items as Pathnames").arg(count), shortcut: qsTr("Ctrl+Alt+C")});
+        // Share…, after Copy where Finder places it (macOS 13 and later; ADR-0045 OC-13): it opens the toolbar Share button's
+        // menu where this menu was; none when there is nothing to share with (LocalSend not installed).
+        if (root.shareMenu(model).length > 0)
+            items.push({id: "share", text: qsTr("Share…")});
         // Colour tags (macOS: a row of colour dots under the edit items).
         items.push({separator: true});
         items.push(root.tagRow(model));
@@ -1121,9 +1130,42 @@ FocusScope {
         ]};
     }
 
+    // The Share menu of the selection (the toolbar's Share button, and the item menu's Share…; ADR-0045 OC-13,
+    // ShareLogic.js): "Send with LocalSend…" first, where macOS puts its nearby-device sharing, when LocalSend is installed
+    // (looked up now: installed or removed while Files runs counts), enabled for local files and folders only.
+    function shareMenu(model: var): var {
+        const urls = model ? model.selectedUrls() : [];
+        const where = model ? {isTrash: model.isTrash, isApplications: model.isApplications} : null;
+        return ShareLogic.menuItems(root.app.localSendAvailable(), ShareLogic.canSend(urls, where), qsTr("Send with LocalSend…"), root.app.devSession);
+    }
+
+    // Share… (macOS 13 and later): the Share menu opens where the item menu was (the menu layer keeps that anchor: the pointer,
+    // or the focused row or the Action button), with a row selected when that menu was opened from the keyboard.
+    function openShareMenu(model: var): void {
+        const items = root.shareMenu(model);
+        if (items.length === 0)
+            return;
+        const layer = root.win.menuLayer;
+        layer.open(items, layer.anchorX, layer.anchorY, id => root.runAction(id, model), root.view, root.menuByKeyboard);
+    }
+
+    // The selection to LocalSend (FilesApp.sendWithLocalSend checks the vector again and reports a failure). A development
+    // session sends nothing and says so in the window's banner (its menu item is dimmed; FilesApp refuses it too).
+    function sendWithLocalSend(model: var): void {
+        const where = {isTrash: model.isTrash, isApplications: model.isApplications};
+        if (root.app.devSession && ShareLogic.canSend(model.selectedUrls(), where)) {
+            root.win.showBanner(qsTr("Not sent: a development session doesn’t start LocalSend (it would open on the real desktop)."));
+            return;
+        }
+        if (!ShareLogic.maySend(model.selectedUrls(), where, root.app.devSession))
+            return;
+        root.app.sendWithLocalSend(ShareLogic.sendArgv(model.selectedUrls()));
+    }
+
     // The toolbar Action menu: item actions for a selection, folder actions otherwise.
     function actionMenu(): var {
         const m = root.activeFolder;
+        root.menuByKeyboard = false;
         if (root.chooser)
             return root.chooserMenu(m, m.selectedCount > 0);
         return m.selectedCount > 0 ? root.itemMenu(m) : root.backgroundMenu(m);
@@ -1252,6 +1294,12 @@ FocusScope {
             break;
         case "copyPath":
             root.app.copyPaths(model.selectedUrls());
+            break;
+        case "share":
+            root.openShareMenu(model);
+            break;
+        case "localsend":
+            root.sendWithLocalSend(model);
             break;
         case "terminal":
             root.app.openTerminal(model.selectedUrls()[0]);

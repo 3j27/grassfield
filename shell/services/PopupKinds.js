@@ -5,7 +5,8 @@
 // Unit-tested in tests/unit/tst_popupkinds.qml, which also holds this list to the Overlay's.
 
 const kinds = ["system", "app", "appfile", "appwindow", "appbridge", "tray", "nowplaying", "volume", "network", "battery",
-    "controlcenter", "dock", "dockstack", "forcequit", "confirm", "appabout", "notice", "tiling", "tilingSuggest", "sharePicker", "screenshare", "input"];
+    "controlcenter", "dock", "dockstack", "forcequit", "confirm", "appabout", "notice", "tiling", "tilingSuggest", "sharePicker", "screenshare", "input",
+    "emoji"];
 
 function known(kind) {
     return kinds.indexOf(kind) >= 0;
@@ -23,13 +24,15 @@ function noticeSymbol(symbol) {
 }
 
 // The corner of the Overlay's blur region behind a popup of `kind` (ADR-0039 step 4, G2): a dialog's own (`dialogCorner`,
-// radius.alert or radius.sheet, read from the loaded Dialog; a menu's while it is not loaded), Now Playing's tile, a menu's
-// for the rest.
+// radius.alert or radius.sheet, read from the loaded Dialog; a menu's while it is not loaded), Now Playing's tile, the Emoji &
+// Symbols popover's (radius.popover, the popovers' role: ADR-0045 OC-3, ADR-0039 rule 2), a menu's for the rest.
 function blurCorner(kind, dialogCorner, tokens) {
     if (dialogs.indexOf(kind) >= 0 && typeof dialogCorner === "number")
         return dialogCorner;
     if (kind === "nowplaying")
         return tokens.quicksettingsRadiusTile;
+    if (kind === "emoji")
+        return tokens.radiusPopover;
     return tokens.radiusMenu;
 }
 

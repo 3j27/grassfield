@@ -392,6 +392,8 @@ Variants {
                     return tilingPopover;
                 case "tilingSuggest":
                     return tilingSuggestions;
+                case "emoji":
+                    return emojiPanel;
                 }
                 return null;
             }
@@ -508,6 +510,12 @@ Variants {
         Component {
             id: tilingSuggestions
             TilingSuggestions {}
+        }
+
+        // Emoji & Symbols at the pointer (ADR-0045 OC-3, docs/specs/clipboard.md ES-2).
+        Component {
+            id: emojiPanel
+            EmojiPanel {}
         }
     }
 }

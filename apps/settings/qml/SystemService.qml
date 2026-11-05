@@ -29,6 +29,12 @@ QtObject {
         root.backend.query(argv, tag);
     }
 
+    // The same, waited for up to `timeoutMs` instead of the Backend's 5 s (a command bounded on its own, which must end before the
+    // Backend gives up on it: Displays' DDC/CI read, System.DDC_WAIT_MS).
+    function queryWithin(argv: var, tag: string, timeoutMs: int): void {
+        root.backend.query(argv, tag, timeoutMs);
+    }
+
     // Read-only D-Bus query ("wifi.state", "bt.state"): the answer, a JSON text, arrives as backend.finished(tag, ok, output).
     function queryBus(what: string, tag: string): void {
         root.backend.busQuery(what, tag);

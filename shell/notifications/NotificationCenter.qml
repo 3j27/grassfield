@@ -350,9 +350,11 @@ Variants {
             FocusScope {
                 id: panelItem
 
-                // Widgets: the gallery overlay and the context menu of a placed widget.
+                // Widgets: the gallery overlay, the context menu of a placed widget and the Weather widget's Edit Location…
+                // popover (ADR-0045 OC-14), which opens where the menu was.
                 property bool galleryOpen: false
                 property var menuEntry: null
+                property var editEntry: null
                 property real menuX: 0
                 property real menuY: 0
                 property Item menuReturn: null
@@ -370,6 +372,7 @@ Variants {
 
                 function closeWidgetMenu(): void {
                     menuEntry = null;
+                    editEntry = null;
                     if (menuReturn)
                         menuReturn.forceActiveFocus();
                     else
@@ -378,6 +381,11 @@ Variants {
 
                 function applyWidgetMenu(action: string): void {
                     const entry = menuEntry;
+                    if (entry && action === "weather:location") {
+                        editEntry = entry;
+                        menuEntry = null;
+                        return;
+                    }
                     menuEntry = null;
                     panelItem.forceActiveFocus();
                     if (!entry)
@@ -411,16 +419,16 @@ Variants {
 
                 // Tab and Shift+Tab reach every card in visual order (ListView.tabStep). A shortcut, because Qt moves the
                 // focus along its own chain as soon as the focused item leaves the key unhandled, before any parent
-                // sees it. Off while the widget gallery or a widget menu has the keyboard.
+                // sees it. Off while the widget gallery, a widget menu or the location popover has the keyboard.
                 Shortcut {
                     sequence: "Tab"
-                    enabled: win.open && !panelItem.galleryOpen && panelItem.menuEntry === null
+                    enabled: win.open && !panelItem.galleryOpen && panelItem.menuEntry === null && panelItem.editEntry === null
                     onActivated: list.tabStep(true)
                 }
 
                 Shortcut {
                     sequences: ["Shift+Tab", "Backtab"]
-                    enabled: win.open && !panelItem.galleryOpen && panelItem.menuEntry === null
+                    enabled: win.open && !panelItem.galleryOpen && panelItem.menuEntry === null && panelItem.editEntry === null
                     onActivated: list.tabStep(false)
                 }
 
@@ -684,9 +692,23 @@ Variants {
                 // Widget context menu (sizes, Remove Widget) at the click or the focused tile.
                 MouseArea {
                     anchors.fill: parent
-                    visible: panelItem.menuEntry !== null
+                    visible: panelItem.menuEntry !== null || panelItem.editEntry !== null
                     acceptedButtons: Qt.AllButtons
                     onPressed: panelItem.closeWidgetMenu()
+                }
+
+                // The Weather widget's Edit Location… where its menu was, on its own blur region.
+                Loader {
+                    active: panelItem.editEntry !== null
+                    x: Math.max(Tokens.spacingSm, Math.min(panelItem.menuX, panelItem.width - width - Tokens.spacingSm))
+                    y: Math.max(Tokens.spacingSm, Math.min(panelItem.menuY, panelItem.height - height - Tokens.spacingSm))
+                    sourceComponent: LocationEditor {
+                        onClosed: panelItem.closeWidgetMenu()
+                        Component.onCompleted: {
+                            hostItem.addSurface(surface, false, Tokens.radiusPopover, null);
+                            forceActiveFocus();
+                        }
+                    }
                 }
 
                 Loader {

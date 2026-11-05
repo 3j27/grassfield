@@ -1462,6 +1462,13 @@ Singleton {
         Hyprland.refreshToplevels();
     }
 
+    // An output's real scale (Hyprland's monitor scale, 1.25 on the owner's panel); 1 when the output is not known. Quickshell's
+    // ShellScreen.devicePixelRatio is the layer surface's integer ratio (2 at 1.25), not the pixels the output makes.
+    function outputScale(screenName: string): real {
+        const mon = monitorByName(screenName);
+        return mon && mon.scale > 0 ? mon.scale : 1;
+    }
+
     function monitorByName(screenName: string): var {
         const all = Hyprland.monitors ? Hyprland.monitors.values : [];
         for (let i = 0; i < all.length; i++) {

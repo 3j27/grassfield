@@ -1,14 +1,23 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Grassfield.Ui
+import "TextInImages.js" as TextInImages
 
 // Image view: fit or zoomed, rotation by quarter turns (view only, the file is never written),
 // pages of multi-page TIFF through the image provider, animation (GIF, WebP) through AnimatedImage.
+// Select Text in Images (ADR-0045 OC-2, docs/specs/preview.md P13): the text a still image holds can be selected and copied
+// (TextLayer over the picture, Copy and Select All of the Edit menu, Ctrl+C and Ctrl+A, the context menu's Copy Text and
+// Select All Text), and each QR code it holds gives a chip at the bottom right (CodeChip). Content.qml reads them
+// (ImageText) and passes them here.
 Item {
     id: root
 
     property var info: ({})
     property int fileIndex: 0
+    // PreviewApp (copyText, openLink), the text read in the picture and its QR codes (set by Content.qml).
+    property var backend: null
+    property var textPage: TextInImages.emptyPage()
+    property var codes: []
 
     // Common view interface (see Content.qml).
     readonly property bool canZoom: true
@@ -28,6 +37,19 @@ Item {
     readonly property bool waiting: root.animated && Appearance.reduceMotion && !root.playRequested
 
     onInfoChanged: root.playRequested = false
+
+    // Edit menu (GlobalMenu.qml) and the context menu: the selected text of the picture.
+    readonly property bool canCopy: textLayer.hasSelection
+    readonly property bool canSelectAll: textLayer.hasText
+
+    function copy(): void {
+        const text = textLayer.selectedText();
+        if (text !== "" && root.backend)
+            root.backend.copyText(text, false);
+    }
+    function selectAll(): void {
+        textLayer.selectAll();
+    }
 
     readonly property bool swapped: root.turns % 2 !== 0
     readonly property real natW: root.info.width ?? 1
@@ -113,6 +135,22 @@ Item {
                 fillMode: Image.Stretch
             }
 
+            // The words of the picture, laid over it with its size, centre and rotation (its coordinates are the picture's).
+            TextLayer {
+                id: textLayer
+                objectName: "textLayer"
+                anchors.centerIn: parent
+                width: root.natW * root.viewScale
+                height: root.natH * root.viewScale
+                rotation: root.turns * 90
+                visible: !root.animated
+                page: root.textPage
+                onContextMenuRequested: (x, y) => {
+                    const p = textLayer.mapToItem(root, x, y);
+                    root.openTextMenu(p.x, p.y);
+                }
+            }
+
             AnimatedImage {
                 id: animatedImage
                 anchors.centerIn: parent
@@ -147,6 +185,77 @@ Item {
         PinchHandler {
             target: null
             onScaleChanged: delta => root.setZoom(root.viewScale * delta)
+        }
+    }
+
+    // Copy (Ctrl+C; Super+C reaches a window as Ctrl+C, Omarchy's universal copy) and Select All (Ctrl+A). The viewer's Edit
+    // menu has the same keys: each acts on activatedAmbiguously too (GlobalMenu.qml); a Glance has no menu.
+    Shortcut {
+        sequences: [StandardKey.Copy]
+        enabled: root.canCopy
+        onActivated: root.copy()
+        onActivatedAmbiguously: root.copy()
+    }
+    Shortcut {
+        sequences: [StandardKey.SelectAll]
+        enabled: root.canSelectAll
+        onActivated: root.selectAll()
+        onActivatedAmbiguously: root.selectAll()
+    }
+
+    function openTextMenu(x: real, y: real): void {
+        textMenu.items = [
+            {id: "copy", text: qsTr("Copy Text"), enabled: root.canCopy},
+            {id: "selectAll", text: qsTr("Select All Text"), enabled: root.canSelectAll}
+        ];
+        textMenu.openAt(x, y);
+    }
+
+    // The picture's context menu (the app windows' one menu host, ADR-0039 step 24).
+    MenuPopup {
+        id: textMenu
+        objectName: "textMenu"
+        accessibleName: qsTr("Text in image")
+        focusBack: root
+        // Opened at the pointer, kept inside the window near its edges.
+        margins: Tokens.spacingSm
+        onChosen: id => {
+            if (id === "copy")
+                root.copy();
+            else if (id === "selectAll")
+                root.selectAll();
+        }
+    }
+
+    // The QR codes of the picture: one glass chip each at the bottom right, as macOS's data detector buttons, in the order
+    // zbarimg found them.
+    Column {
+        id: chips
+        objectName: "codeChips"
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: Tokens.spacingLg
+        spacing: Tokens.spacingSm
+        visible: !root.animated && root.codes.length > 0
+
+        Repeater {
+            model: root.codes
+
+            CodeChip {
+                required property var modelData
+                required property int index
+                anchors.right: parent ? parent.right : undefined
+                code: modelData
+                number: root.codes.length > 1 ? index + 1 : 0
+                onOpenRequested: link => {
+                    if (root.backend)
+                        root.backend.openLink(link);
+                }
+                onCopyRequested: text => {
+                    if (root.backend)
+                        root.backend.copyText(text, true);
+                }
+            }
         }
     }
 

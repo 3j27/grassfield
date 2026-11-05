@@ -19,9 +19,19 @@ bool devSession();
 //   pacman -Q (hyprland, quickshell, quickshell-git) and lspci      => 4 more, About pane
 //   pacman -Qi (the installed packages' sizes) and du -s -x --block-size=1 -- <1-16 folders of the home>   Storage pane
 //   /usr/lib/grassfield/grassfield-channel-set (no argument: it prints the channel)            Software Update pane
-// Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030).
-// Backend::query and Backend::run both use it.
+//   omarchy-hw-fingerprint, omarchy-hibernation-available (no argument): Omarchy's read-only checks (ADR-0045 OC-6, OC-9)
+//   lsblk -J -o NAME,TYPE,FSTYPE,MOUNTPOINTS                                                    Privacy & Security > Disk Encryption
+// Never omarchy-language (Language & Region runs it only in a real session where it is installed: ADR-0030), never
+// timeout -k 2 12 omarchy-brightness-display-ddc <connector> (Displays reads an external display's level only in a real session: a dev session
+// never asks the owner's displays; it writes Omarchy's cache under $XDG_RUNTIME_DIR and probes the i2c buses, ADR-0045 OC-4),
+// never omarchy-network-qr (isPrivateQuery). Backend::query and Backend::run both use it.
 bool isReadOnlyQuery(const QStringList &argv);
+
+// A query that writes nothing but answers with a secret, run only in a real session (Backend::readOnlyQuery, never in a dev
+// session, never by run()): exactly `omarchy-network-qr --meta`, Wi-Fi > Details > Share Network… (ADR-0045 OC-10), whose matrix
+// encodes the Wi-Fi password. A dev session's Wi-Fi pane reads the owner's real NetworkManager, and its screenshots are
+// committed as evidence: it never draws the owner's password (security review of ADR-0045, M-2).
+bool isPrivateQuery(const QStringList &argv);
 
 // The du arguments of the Storage pane: exactly -s -x --block-size=1 --, then 1 to 16 clean absolute paths inside the home.
 bool isFolderSizeQuery(const QStringList &args);
@@ -47,13 +57,18 @@ bool isWallpaperQuery(const QStringList &argv, const WallpaperContext &ctx);
 bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
-// & Region, omarchy-powerprofiles-set for Battery, brightnessctl for Displays, lpoptions for Printers: the user's own CUPS
-// defaults; /usr/lib/grassfield/grassfield-channel-set for Software Update). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
+// & Region, omarchy-powerprofiles-set for Battery, brightnessctl and timeout (around omarchy-brightness-display-ddc only) for Displays, lpoptions for
+// Printers: the user's own CUPS defaults; /usr/lib/grassfield/grassfield-channel-set for Software Update). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
 // changes and adding or removing a printer are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
 
 // A backlight's name under /sys/class/backlight ("intel_backlight", "amdgpu_bl1"): 1 to 64 of [A-Za-z0-9_.:-], not starting with "-".
 bool isBacklightName(const QString &name);
+
+// A Hyprland output name as the kernel names a connector ("DP-1", "HDMI-A-1", "eDP-1", "DVI-D-2"): a letter, up to 23 letters and
+// hyphens, then "-" and 1 to 4 digits. Never an option, a path or a space (shell/services/BrightnessLogic.js isConnector and
+// qml/System.js validConnector take the same rule).
+bool isConnectorName(const QString &name);
 
 // Settings > Displays (ADR-0031): one line of displays.conf or of a display trial, the rule config/hypr/grassfield/displays.lua
 // applies: v1 <TAB> desc:<1 to 160 bytes, no control character> <TAB> <W>x<H>@<Hz> (1-16384, 1-1000 Hz) <TAB> <X>x<Y>
@@ -72,7 +87,9 @@ bool isPrinterUri(const QString &uri);
 
 // A whole action command line: an allowed program, for xdg-open exactly one clean https link (xdg-open hands anything else, a
 // local file or a .desktop entry, to whatever handler claims it), for omarchy-language exactly one language code, for brightnessctl
-// exactly `-q -d <backlight> set <0-100>%`, for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
+// exactly `-q -d <backlight> set <0-100>%`, for timeout exactly `-k 2 12 omarchy-brightness-display-ddc <connector> <0-100>%`
+// (Omarchy's DDC/CI command, an external display's brightness, ADR-0045 OC-4, which keeps the level within 1..100; coreutils'
+// timeout ends its whole process group, ddcutil included, within 14 s: security review LOW 3), for wpctl exactly `set-default <id>`, `set-volume <id> <0.00-1.00>` or
 // `set-mute <id> 0|1`, for lpoptions exactly `-d <queue>` or `-p <queue> -o PageSize=<keyword>` (the user's
 // ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions), for grassfield-channel-set (the
 // installed /usr/lib/grassfield/grassfield-channel-set, never one found on PATH) exactly one of `stable`, `beta`, `repair`,
@@ -99,6 +116,16 @@ int actionTimeoutMs(const QStringList &argv, int requested);
 //                                                                       migrations a run could not finish
 //   /usr/lib/grassfield/grassfield-session-end logout|restart            Software Update > Log Out…, Restart… (U14), after the
 //                                                                       pane's own confirmation: the path of the Grassfield menu
+//   omarchy-launch-floating-terminal-with-presentation <command>        ADR-0045 OC-0.4 and OC-0.7: the setups no system service
+//                                                                       offers, behind the pane's sheet that says why a terminal
+//                                                                       opens; <command> is exactly one of
+//                                                                       omarchy-setup-security-fingerprint, omarchy-remove-security-
+//                                                                       fingerprint, omarchy-setup-security-fido2, omarchy-remove-
+//                                                                       security-fido2, omarchy-setup-security-sshd, omarchy-drive-
+//                                                                       password, omarchy-hibernation-setup, omarchy-hibernation-
+//                                                                       remove, omarchy-voxtype-install, omarchy-voxtype-remove
+//   omarchy-voxtype-model                                               Keyboard > Dictation > Language Model… (it opens Omarchy's
+//                                                                       floating terminal itself)
 // Exactly these argument vectors, nothing else.
 bool isLaunch(const QStringList &argv);
 

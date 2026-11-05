@@ -16,12 +16,18 @@ SettingsPage {
     required property var backend
     required property var system
 
-    // Main.qml opens the (i) sheets and hands the charge limit back (setLimit).
+    // Main.qml opens the (i) sheets and hands the charge limit back (setLimit). setupRequested: Hibernation's Omarchy commands
+    // in its terminal (TerminalSetupSheet, ADR-0045 OC-9).
     signal infoRequested(string topic, var power)
+    signal setupRequested(string id)
     // Options… (macOS 27): Main.qml opens PowerOptionsSheet (Prevent automatic sleeping when the display is off; battery and power adapter).
     signal optionsRequested
 
     title: qsTr("Battery")
+
+    // Hibernation's state (HibernationGroup).
+    readonly property string hibernation: hibernationGroup.status
+
 
     // The state of the battery for the toolbar, under the pane's title (macOS 27).
     readonly property string subtitle: root.statusText
@@ -248,6 +254,13 @@ SettingsPage {
                 dateText: root.chart.date
             }
         }
+    }
+
+    // Hibernation (ADR-0045 OC-9): the group Energy shows too.
+    HibernationGroup {
+        id: hibernationGroup
+        backend: root.backend
+        onSetupRequested: id => root.setupRequested(id)
     }
 
     // The push button under the groups, right-aligned (macOS 27: Options… and ?).

@@ -17,6 +17,12 @@ end
 require("grassfield.windows")
 -- Omarchy's screen-share protection for password managers (SEC-01).
 require("grassfield.privacy")
+-- Omarchy's per-application window rules that still hold in this session (ADR-0045 OC-12: Steam, Resolve, Telegram,
+-- Picture-in-Picture...). Optional: a failure is logged and costs only those rules, never the modules below.
+local apps_ok, apps_err = pcall(require, "grassfield.apps")
+if not apps_ok then
+  print("grassfield: application rules: " .. tostring(apps_err))
+end
 require("grassfield.placement")
 require("grassfield.stacking")
 require("grassfield.bindings")

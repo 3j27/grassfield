@@ -10,7 +10,8 @@ import "General.js" as General
 // language, and the group says that changing it needs a newer Omarchy (General.languageNote).
 // The formats are Grassfield's keys (region.formats, region.firstDayOfWeek): the shell formats its dates, times and numbers
 // with them at once (Translator.formats). Not built (docs/specs/settings.md): more than one preferred language, calendars
-// other than the Gregorian one, temperature and measurement units (nothing in Grassfield shows one), per-app languages.
+// other than the Gregorian one, temperature and measurement units (the Weather widget, ADR-0045 OC-14, takes °F or °C from
+// the formats' locale), per-app languages.
 SettingsPage {
     id: root
 
@@ -203,6 +204,17 @@ SettingsPage {
         SettingsRow {
             title: qsTr("Number format")
             valueText: root.formatsLocale.toString(1234567.89, "f", 2)
+        }
+        // macOS's Live Text row (ADR-0045 OC-2): Preview and Glance read the text and the QR codes of still images with
+        // tesseract and zbarimg when they are installed (preview.textInImages; docs/specs/preview.md P13).
+        SettingsRow {
+            title: qsTr("Select Text in Images")
+            subtitle: qsTr("Preview and Glance recognise the text and QR codes in images, so you can copy the text or open the link.")
+            Toggle {
+                accessibleName: qsTr("Select Text in Images")
+                checked: root.store.value("preview.textInImages")
+                onToggled: c => root.store.set("preview.textInImages", c)
+            }
         }
     }
 

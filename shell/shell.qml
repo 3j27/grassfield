@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Grassfield.I18n
 import Grassfield.Ui
+import qs.capture
 import qs.desktop
 import qs.dock
 import qs.lib
@@ -83,6 +84,18 @@ ShellRoot {
         target: SessionState
         property: "authorizing"
         value: authAgent.requestActive || secretAgent.requestActive
+    }
+    // The displays are off (Idle): no device answers a polkit request nobody can see (ADR-0045 OC-6).
+    Binding {
+        target: SessionState
+        property: "displaysOff"
+        value: idle.displayOff
+    }
+    // A security sheet or its key sink may hold the keyboard: the capture toolbar takes none meanwhile.
+    Binding {
+        target: SessionState
+        property: "securityKeyboard"
+        value: authAgent.queuePresent || secretAgent.requestActive || secretAgent.sinkingKeys
     }
 
     Connections {
@@ -541,14 +554,22 @@ ShellRoot {
     SwitcherWindow {
         controller: switcher
     }
+    // The capture toolbar (Shift-Super-5, ADR-0045 OC-1) and the countdown of its timer.
+    Capture {
+        id: captureSurface
+        // The session lock owns the screen and the keyboard: the toolbar closes and does not open.
+        locked: Lock.lockState !== "unlocked"
+    }
 
-    // Opening Overview, Apps, Search or the app switcher closes the others: the keyboard follows the visible top surface.
+    // Opening Overview, Apps, Search, the app switcher or the capture toolbar closes the others: the keyboard follows the visible
+    // top surface.
     ExclusiveSurfaces {
         surfaces: [
             {target: overviewSurface, close: () => overviewSurface.requestCloseForOther()},
             {target: appsSurface, close: () => appsSurface.hide()},
             {target: searchSurface, close: () => searchSurface.hide()},
-            {target: switcher, close: () => switcher.cancel()}
+            {target: switcher, close: () => switcher.cancel()},
+            {target: captureSurface, close: () => captureSurface.hide()}
         ]
     }
 
@@ -561,6 +582,7 @@ ShellRoot {
     // listen to the suggestions that follow a layout or an arrangement (TL28); referencing SoftwareUpdate starts its automatic
     // checks and registers its IPC target "update" (ADR-0033 d.7); referencing ActivityLink registers its IPC target "activity"
     // and writes Activity Monitor's projection while the app's window is open (ADR-0038 AM60, AM61); referencing KeyWindow
-    // writes the key window's file for the apps from the start (ADR-0039 step 17).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "share picker", SharePicker.current === null ? "idle" : "open", "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder", "key window", KeyWindow.path !== "" ? "written" : "no runtime folder")
+    // writes the key window's file for the apps from the start (ADR-0039 step 17); referencing Emoji registers its IPC target
+    // "emoji" for Ctrl+Super+Space and reads Recently Used (ADR-0045 OC-3; Omarchy's list waits for the first opening).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "share picker", SharePicker.current === null ? "idle" : "open", "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder", "key window", KeyWindow.path !== "" ? "written" : "no runtime folder", "terminal theme", TerminalTheme.state, "emoji", Emoji.state)
 }

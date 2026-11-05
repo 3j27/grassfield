@@ -106,7 +106,10 @@ TestCase {
         // A dialog not loaded yet, and the kinds that are no dialog.
         compare(PopupKinds.blurCorner("forcequit", undefined, Tokens), Tokens.radiusMenu);
         compare(PopupKinds.blurCorner("nowplaying", undefined, Tokens), Tokens.quicksettingsRadiusTile);
-        for (const kind of PopupKinds.kinds.filter(k => PopupKinds.dialogs.indexOf(k) < 0 && k !== "nowplaying"))
+        // The Emoji & Symbols popover draws its own corner (ADR-0045 OC-3, shell/overlay/EmojiPanel.qml): the blur takes it.
+        compare(PopupKinds.blurCorner("emoji", undefined, Tokens), Tokens.radiusPopover);
+        verify(source("shell/overlay/EmojiPanel.qml").indexOf("radius: Tokens.radiusPopover") >= 0, "the popover's glass has that corner");
+        for (const kind of PopupKinds.kinds.filter(k => PopupKinds.dialogs.indexOf(k) < 0 && k !== "nowplaying" && k !== "emoji"))
             compare(PopupKinds.blurCorner(kind, Tokens.radiusSheet, Tokens), Tokens.radiusMenu, kind + " takes a menu's corner");
     }
 

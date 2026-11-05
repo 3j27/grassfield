@@ -200,6 +200,8 @@ does not check its gate.
 | search | open, close, query, status | dev | `status` returns what the user types; `query`/`open` inject a query |
 | search | filter | fixtures | visual tests |
 | clipboard | status | dev | returns the clipboard history's items: titles and excerpts are what the user copied (ADR-0034); a real session's helper is reached by no IPC function |
+| emoji | toggle | action | SUPER+CTRL+SPACE (Emoji & Symbols, ADR-0045 OC-3; docs/specs/clipboard.md ES-1): opens the panel at the pointer (it asks Hyprland where the pointer is, `hyprctl cursorpos -j`, read only) or closes it; refused while locked through `SessionState.refuses`. It inserts nothing: only a choice in the panel does, into the window that was active when it opened |
+| emoji | status | dev | the panel's state, counts and the last insertion's outcome (how many recents, whether a glyph waits: it tells what the user inserted) |
 | anr | report | action | `packaging/session-bin/hyprland-dialog`, the stand-in Hyprland runs as its "not responding" dialog (ADR-0035 D-3). Only marks an app in Force Quit and its Dock menu ("(Not Responding)"); kills nothing, answers `ok` or `refused` (the reason goes to the journal only); refuses another compositor's report, a pid of 1 or below, and a window two processes share |
 | anr | status | dev | returns the marked apps' window titles |
 | activity | quit | action | Activity Monitor's Quit of a process that owns windows (`apps/activity/src/actions.cpp`, through `shellIpcArgs()`; ADR-0038 AM52, AM61): closes the windows whose client is that pid, as the Dock's Quit (an xdg close: the app may ask to save); answers `ok`, `no-windows` (the app then sends SIGTERM itself) or `refused` (a pid of 1 or below); never kills, reads no title; a shell reaches its own compositor's windows only (a nested session's, the nested ones) |
@@ -214,6 +216,8 @@ does not check its gate.
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
 | switcher | next, previous, release, quit, hide | action | SUPER+TAB, SUPER+SHIFT+TAB, SUPER release, SUPER+Q, SUPER+H while the switcher is up |
 | switcher | right, left, cancel, status | dev | tests (arrows and Esc reach the switcher through its keyboard grab) |
+| capture | toggle | action | SUPER+SHIFT+5 (`config/hypr/grassfield/bindings.lua`): opens or closes the capture toolbar (ADR-0045 OC-1); refused while locked (`SessionState.refuses`); starts no capture by itself: only the toolbar's own action runs `grassfield-capture`, after the user chose it |
+| capture | open, close, status | dev | the toolbar's nested checks; `status` returns the toolbar's mode and options and the capture helper's phase, never a file name |
 | windows | minimize, tile, arrange, tilePopover, nextOutput, hide, cycleApp, showDesktop | action | SUPER+M, SUPER+CTRL+arrows/R/U/I/J/K/RETURN/C, SUPER+CTRL+SHIFT+arrows and SUPER+CTRL+ALT+SHIFT+arrows (`arrange`: a layout of the catalogue), SUPER+CTRL+L (`tilePopover`: the tiling popover of the focused window), SUPER+CTRL+ALT+LEFT/RIGHT (`nextOutput`: the focused window onto the next output), SUPER+H, SUPER+`, SUPER+F3 (Show Desktop: moves windows aside and back, never launches or reads anything); the tiling functions move only the focused window and the next ones of its output, through the plugin's validated verbs (docs/specs/tiling.md TL26) |
 | zoom | toggle, zoomIn, zoomOut | action | SUPER+ALT+8, SUPER+ALT+= and SUPER+ALT+- (`config/hypr/grassfield/bindings.lua`); change `accessibility.zoom` and `zoomLevel` only |
 | notifications | toggleCenter | action | SUPER+N, screen corner (in process) |
@@ -750,6 +754,18 @@ VERIFIED until run). The same file hides the shell's secret sheets and its autho
 `gf-no-screen-share-secret` (`^grassfield-secret$`) and `gf-no-screen-share-polkit` (`^grassfield-polkit$`), `no_screen_share`
 (ADR-0035 D-9, step 9b, decision 9-22; `screenshare_rules.sh` checks both regexes against the namespaces the agents set, with
 a mutation). Both layers cover the output, so a capture is black while either sheet is up (nested capture NOT VERIFIED).
+Known limitation, screen recordings (ADR-0045 OC-1; opus security review of e3542510, MINOR-4): `grassfield-capture record`
+runs gpu-screen-recorder with `-w <display>` or `-w WxH+X+Y`, the arguments of Omarchy's `omarchy-capture-screenrecording`,
+whose own comment calls both the "kms backend"; `/usr/bin/gsr-kms-server` carries `cap_sys_admin=ep` (getcap). KMS capture
+reads the display's framebuffer through DRM, not Hyprland's screencopy or toplevel export, so Hyprland's `no_screen_share`
+rules are not consulted: a screen recording shows whatever is on screen, password manager windows and the authorization and
+secret sheets included (a password typed in a sheet stays dots; a password a password manager reveals does not). Screenshots
+(grim, screencopy), screen sharing through the portal and other apps' captures keep them black. What it means for the user:
+while the menu bar shows the recording item, do not open a password manager or answer a sheet unless it may be in the
+recording. The shell and the helper stop a recording when the session locks (OC-1). Possible fix, not done:
+gpu-screen-recorder's portal backend (`-w portal`, which Omarchy keeps off by default for EGL failures) goes through
+Hyprland and would honour the rules. Reasoned from the sources, not run here (a recording would capture the owner's live
+screen): NOT VERIFIED.
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
 - **The order of idle, the screen saver and display-off (ADR-0040 step 5; ID-8, IQ-T4 A, IQ-T5 A).** The idle lock is
@@ -900,6 +916,135 @@ one"), without the keyboard until a click past the guard. The polkit sheet keeps
 included (`AuthAgent.queuePresent`), so a secret sheet never shows over it. A polkit request is never refused by the secret
 sheets' bound of 8. The agent's window rules are unchanged (`tests/security/authagent_flows.sh`, `lock_surfaces.sh`);
 `tests/security/secret_sheets.sh` runs both agents and the queue together with real keys.
+
+**The capture toolbar never takes the keyboard from a sheet (opus re-review of the ADR-0045 security fixes, MINOR).** The
+capture toolbar (ADR-0045 OC-1) is an Overlay layer with Exclusive keyboard, handed between displays by mapping the new
+holder again (a layer mapped as Exclusive takes the keyboard; one turned Exclusive while mapped does not). Over an open
+polkit or secret sheet such a mapping would take the keyboard from the sheet and send the rest of a password to the toolbar.
+While `SessionState.securityKeyboard` (the polkit sheet or a secret sheet is present, or one of their key sinks still holds
+the keyboard after a request ended under the user's typing: `AuthAgent.queuePresent || SecretAgent.requestActive ||
+SecretAgent.sinkingKeys`, shell.qml's Binding; opus re-review 2, MINOR-3) the toolbar makes nothing Exclusive: no hand-over,
+no remapping, and a toolbar opened then maps without the keyboard; a hand-over under way when a sheet opens maps without it;
+once the sheet is gone the display that wants the keyboard maps again as Exclusive (`CaptureToolbar.qml` `sheetOpen`,
+`followKeyboard`). `lock_surfaces.sh` pins it with mutations (QML with PanelWindow cannot run offscreen). The key sinks'
+linger (at most 3 s) is covered, so the rest of a password never reaches the toolbar, where Return captures. Nested: NOT
+VERIFIED.
+
+**A device before the password (ADR-0045 OC-6, security review of the Settings setups, 2026-11-04).** Once Omarchy's
+fingerprint or security key setup ran, `/etc/pam.d/polkit-1` starts with `pam_fprintd` (behind Omarchy's lid-closed gate) or
+`pam_u2f` (`cue`), each `sufficient`, before `pam_unix`. Every rule below assumes that the device module announces itself
+before it waits: pam_fprintd always does, pam_u2f only with `cue` (Omarchy sets it); a silent device module would defeat
+them (see the residual of the next paragraph). polkit-agent-helper-1 then sends the module's lines as information or error
+(`AuthFlow.supplementaryMessage`, `supplementaryIsError`: "Place your right index finger on the fingerprint reader", "Failed
+to match fingerprint", "Please touch the FIDO authenticator.") and asks nothing until the module gives up (a match ends the
+request: polkit allows; a timeout, too many failed matches, no reader or a closed lid lead to `pam_unix`'s password prompt).
+While PAM has said something and asks nothing (`AuthDialogModel.awaitingDevice`: a flow, no response required, no answer
+sent, a non-empty message), the sheet's password field takes no key (`enabled: inputEnabled && !awaitingDevice`), the line
+above it says "Follow the instruction below, or wait for the password field.", and the module's own line is the feedback
+under the field; when the prompt comes the field takes the keyboard back (`onAwaitingDeviceChanged` → `focusField`, which
+still respects `inputEnabled` and AuthAgent's key sink). A bare "nothing asked" never disables the field: keys typed before
+`pam_unix`'s first prompt are kept, so a fast typist's password is not cut short (a short one is a wrong one, which
+pam_faillock counts). The last line is never cleared when the prompt arrives: pam_faillock's "account is locked" notice
+comes the same way and stays readable, except after a failed attempt of the same request, where our own "Incorrect password.
+Try again." comes back with the prompt and replaces it (open, final counter-review of ADR-0045 LOW-A, older than this
+change: clearing `priv.error` when PAM sends a new non-empty message would keep the notice, once Quickshell 0.3.x's AuthFlow
+is confirmed not to set `supplementaryMessage` itself on a failure; stock Omarchy sets pam_faillock's preauth `silent`, so
+no notice is sent there). While a device is awaited the feedback line is PAM's own line, never the previous round's
+"Incorrect password. Try again." (that message comes back with the next prompt; counter-review, LOW-2). Cancel works
+throughout; nothing is ever approved on its own, and the one answer given on its own is a refusal: a request the user cannot
+see and answer is cancelled once PAM talks without asking (next paragraph). Unit-tested (`tst_authdialogmodel`
+test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing, test_aLockedAccountNoticeStaysUnderThePrompt,
+test_theNextRoundsDeviceInstructionIsShownNotTheOldError; `tst_authdialog` test_14_awaitingADeviceTheFieldWaits;
+`mutate_authdialog.sh` D2, D3). The lock screen shows nothing of `omarchy-lock-fingerprint`'s conversation (it runs beside
+the password and unlocks on a match). With a real reader and key: NOT VERIFIED here, and the nested security gates L1 to L5
+were not run for this change (no nested session in the cloud session that made it). The field's fourth focus site
+(`onAwaitingDeviceChanged`) gives the focus only when PAM's prompt came (`!awaitingDevice && responseRequired`, never when
+the request ends) and through `focusField`, so never while the input is disabled; a focus given inside the agent's window
+reaches the keyboard only while that window holds it (shown and not held, or held and clicked past its guard).
+`lock_surfaces.sh` pins the site by its guard and the field's `enabled`, with mutations.
+
+**No device answers a request the user cannot see and answer (ADR-0045 OC-6, opus security review of e3542510, MAJOR-2).**
+macOS model: an authorization asked for while the screen is locked is shown after the unlock and never answered by the
+unlock gesture. Quickshell (0.3.2, revision 2b4501a, read in its sources: `flow.cpp`, `agentimpl.cpp`) starts PAM the moment
+polkit asks, whether or not a sheet shows the request: `PolkitAgentImpl::initiateAuthentication` activates the request at
+once, `AuthFlow`'s constructor calls `setupSession()`, which runs polkit-agent-helper-1 (`polkit_agent_session_initiate`),
+and a failed attempt starts it again; the QML API (`quickshell-service-polkit.qmltypes`) has no method to start, defer or
+pause it, only `submit`, `cancelAuthenticationRequest` and `selectedIdentity` (which restarts it). On success the helper
+reports to polkitd itself, so the agent cannot veto a match afterwards. With `pam_fprintd` or `pam_u2f` first in
+`/etc/pam.d/polkit-1`, a request held behind the lock, the screen saver or another sheet would hold the reader (a request
+open when the lock comes, or one that takes the reader in the lock's 1 s fingerprint retry gap, `Lock.qml`
+`fingerprintRetry`), and the touch meant for the lock screen (or for the request before) would approve it unseen. So the
+polkit model refuses the request Quickshell has open (`AuthDialogModel.request`, bound by the agent to `agent.flow`, also
+while the sheet is handed nothing because a secret sheet came first) as soon as PAM talks without asking (`pamTalks`: no
+response required and a non-empty line, a device's instruction or any other line, when in doubt no; Quickshell keeps the
+last line until another comes) while it is not answerable (`refusesUnseen: !answerable && pamTalks(request)` →
+`cancelAuthenticationRequest()`, polkit's "cancelled": the requester is told no, which fails closed). The cancel runs from
+the event loop (`Qt.callLater(refuseUnseen)`, which checks again), never inside the binding's own change: Quickshell ends
+the request inside the cancel, which changes what the binding reads; done inline, QML reported a binding loop and could keep
+the binding stale, leaving the next request unguarded (found by `flows.qml` test_27, whose mock ends the request inside the
+cancel as Quickshell does). `answerable` (default false) is the agent's rule: its sheet is on screen in front, that is not
+locked, no screen saver, the displays on (`SessionState.displaysOff`, a Binding in shell.qml from `Idle.displayOff`: off for
+inactivity while unlocked counts too, a reader in the power button pressed to wake the screen must not answer a sheet nobody
+sees; opus re-review 2, MINOR-2), not waiting behind another sheet, in the sheet (`requestOpen`), and not held unless it is
+held as "right after another one" or the user clicked past its guard (`!heldByLock || userFocused || heldWhy === "queued"`).
+For a request held right after another one the click hold does not count (integrator decision after the opus re-review, the
+macOS model, which accepts a touch on the authorization it shows): it keeps stray clicks and keys out of a sheet the user
+sees, and a touch on the reader can then only be meant for that sheet. A request held for another reason (just after an
+unlock, or after the lock or the saver) is not answerable until clicked (opus re-review 2, MINOR-1): a finger left on the
+reader after unlocking would answer it, and the lock marker, readable by the user's processes, tells any of them when to
+ask. Settings' Remote Login asks twice in a row (systemd `EnableUnitFiles`, then `StartUnit`) and Add Printer up to three
+times (cups-pk-helper `PrinterAdd`, `PrinterSetEnabled`, `PrinterSetAcceptJobs`), each request held as "right after another
+one": each is answered by a touch. An answer already sent shields nothing (a stack with `pam_unix` before a device module
+goes on to the reader after a wrong password, in the same round). PAM asking for a password ends nothing: that request waits
+behind the lock and is shown, held, after the unlock, as before. What the user sees: the requesting app reports that the
+authorization was cancelled, as after Cancel (polkit reports it dismissed); the app can ask again once the user is at the
+sheet. With a fingerprint stack this refuses every request that arrives locked, under the saver or behind a secret sheet,
+because PAM reaches the reader within moments. Replaced requests (opus re-review, MAJOR-1): Quickshell's agent replaces an
+open request instead of queuing it (`initiateAuthentication` pushes, then activates when the queue holds one, which it does
+again after the first activation popped it) and leaves the replaced flow running with its helper, so its PAM could hold the
+reader with no sheet left, for up to pam_fprintd's 30 s, keeping the lock screen's own fingerprint check from it, and the
+next touch meant to unlock would approve it. The model remembers the request it saw last (`priv.seen`); a change to another
+request while the previous one has not completed records the previous one (`priv.replaced`, every one still running). As
+soon as one of them talks without asking (`replacedTalks`, at once if it already did), `refuseReplaced` (from the event
+loop) refuses the request open now first, then every replaced one: refusing a replaced one first would complete it, and its
+completion is still connected to agentimpl's `finishAuthenticationRequest`, which would end the current request unanswered
+(its requester never answered). Both requesters are told no (fail closed). A replaced request that asks for a password is
+left as Quickshell leaves it (nobody can type into it; its requester waits until it gives up, as before). Tests:
+`tst_authdialogmodel` test_unansweredRequestRefusedWhenPamTalks, test_passwordPromptWaitsForTheUser,
+test_refusedWhenItStopsBeingAnswerable; `tst_authdialog` test_15 and test_16 (`mutate_authdialog.sh` G1 to G9);
+`authagent_flows.d/flows.qml` test_20 to test_34 with the real agent (the lock coming while the reader waits, a request
+arriving locked, a password prompt waiting behind the lock, the saver, held just after an unlock (refused until clicked) or
+right after another request (answered by the reader), Remote Login's two and Add Printer's three requests in a row each
+answered by the reader, a request waiting behind a secret sheet, the request ended inside the cancel with the next one still
+guarded, the reviewer's probe (locked, A, B replaces A, A then waits for the reader: B then A refused), a request replaced
+while it awaited the reader, a replaced one asking for a password left, the refusals with Quickshell's end, the displays
+turning off, a request held after the lock reaching the reader, a request held right after another one under the saver;
+`authagent_flows.sh --mutants`: twelve mutants for this guard); `lock_surfaces.sh` pins the model's guard and the agent's
+binding, with mutations. Residual (open): (1) the window between pam_fprintd starting its scan (`VerifyStart`) and the agent
+receiving its "Place your finger" line is a few milliseconds of IPC; a finger already resting on the reader and matched
+within it, or within the one event-loop turn before the cancel runs, would still approve; (2) a replaced request is refused
+only once its PAM talks, so the same window applies to it; two overlapping requests with a device stack are both refused,
+and a replaced one at a password prompt still leaks as upstream leaves it (fix upstream: queue for real); (3) both rules
+assume that a device module announces itself before it waits: pam_fprintd always does (its "Place your finger" line comes
+with the scan, and it has no silent mode), pam_u2f only with `cue`, which Omarchy's setup sets
+(`omarchy-setup-security-fido2`). A module that waits for a device without a word (pam_u2f without `cue`, another device
+module) defeats both the refusal and the replaced-request rule, since PAM then never talks without asking; such a line in
+`/etc/pam.d/polkit-1` is outside what this agent can guard. Real reader and key: NOT VERIFIED.
+
+**Omarchy's setups and `pam_faillock` (ADR-0045 OC-6, opus security review of e3542510, MINOR-5).** Read in Omarchy 4.0.6
+(`/usr/share/omarchy/bin/omarchy-setup-security-fingerprint`, `omarchy-setup-security-fido2`): when `/etc/pam.d/polkit-1`
+does not exist, each setup writes one of its own: the device line (`pam_fprintd` behind the lid gate, or `pam_u2f cue`), then
+`auth required pam_unix.so` and `pam_unix` for account, password and session, with no `system-auth`. On this machine there is
+no `/etc/pam.d/polkit-1`; polkit's stack is the vendor file `/usr/lib/pam.d/polkit-1` (`include system-auth`, which has
+`pam_faillock preauth silent deny=10 unlock_time=120`, `authfail`, `authsucc`). A file in `/etc/pam.d` takes precedence over
+the vendor one, so after either setup polkit loses `pam_faillock` (no 10-failure lockout on the authorization sheet, while
+sudo and the lock screen keep it), `pam_systemd_home` (a systemd-homed user can no longer authorize) and `pam_env`.
+`omarchy-remove-security-fingerprint` and `omarchy-remove-security-fido2` delete only their own lines and leave the file: the
+loss outlives "Remove…". Grassfield writes no PAM file (OC-0.4); Settings' setup sheets for the fingerprint and the security
+key say before the terminal opens that the administrator prompts' own rules may be replaced and no longer pause after repeated
+wrong passwords. The owner's fix, if wanted: in `/etc/pam.d/polkit-1`, replace `auth required pam_unix.so` and the three
+other `pam_unix` lines with the `include system-auth` lines of the vendor file (keeping the device lines first), or delete
+the file after "Remove…". Reported upstream: not yet (owner's call).
 
 ## L5 polkit (owner, real session)
 Never `pkexec` a real program for this test; `pkcheck` only asks polkit whether this terminal's shell may run the action

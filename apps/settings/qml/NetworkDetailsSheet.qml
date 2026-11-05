@@ -6,7 +6,8 @@ import "System.js" as System
 // Wi-Fi > Details… and Network > an Ethernet service: a connection as NetworkManager has it (macOS 27 shows a sheet with its
 // addresses): for Wi-Fi the band, the link rate and the security, for Ethernet the speed; then the IPv4 address, subnet mask
 // and router, the name servers, the IPv6 address and the hardware address, read-only, and for a Wi-Fi network Forget This
-// Network…. `device` is a device of `net.state` (System.parseNetState); `net` the Wi-Fi network (null for Ethernet).
+// Network… and, for the one this computer is on, Share Network… (a QR code, ShareNetworkSheet.qml, ADR-0045 OC-10). `device`
+// is a device of `net.state` (System.parseNetState); `net` the Wi-Fi network (null for Ethernet).
 Sheet {
     id: root
 
@@ -14,8 +15,11 @@ Sheet {
     property var device: null
     // The sheet's title for a service that is not a Wi-Fi network ("Ethernet").
     property string serviceName: ""
+    // Omarchy's omarchy-network-qr is installed (Main asks when the sheet opens): Share Network… is offered.
+    property bool canShare: false
 
     signal forgetRequested(var net)
+    signal shareRequested(var net)
 
     readonly property string ip4: root.device && root.device.ip4.length > 0 ? root.device.ip4[0] : ""
     readonly property string ip6: root.device && root.device.ip6.length > 0 ? root.device.ip6[0] : ""
@@ -71,13 +75,29 @@ Sheet {
         }
     }
 
-    Button {
-        visible: root.net !== null
-        push: true
-        text: qsTr("Forget This Network…")
-        onClicked: {
-            root.close();
-            root.forgetRequested(root.net);
+    Row {
+        spacing: Tokens.settingsAccessoryGap
+
+        Button {
+            visible: root.net !== null
+            push: true
+            text: qsTr("Forget This Network…")
+            onClicked: {
+                root.close();
+                root.forgetRequested(root.net);
+            }
+        }
+
+        // ADR-0045 OC-10: the network this computer is on, shared by a QR code (Omarchy's omarchy-network-qr); never for an
+        // enterprise (802.1X) network, whose account a code cannot hold (Omarchy refuses them too).
+        Button {
+            visible: root.net !== null && root.net.active === true && root.net.enterprise !== true && root.canShare
+            push: true
+            text: qsTr("Share Network…")
+            onClicked: {
+                root.close();
+                root.shareRequested(root.net);
+            }
         }
     }
 }

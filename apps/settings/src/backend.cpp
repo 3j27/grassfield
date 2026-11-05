@@ -42,6 +42,13 @@ constexpr int kQueryJobMs = 10000;  // a D-Bus state read: past this the page ge
 constexpr int kActionJobMs = 60000; // a D-Bus action: its look-ups are 3 s reads (kReadMs), then exactly one call of up to kActMs (30 s)
 constexpr int kPrivilegedJobMs = 370000; // three calls that may each wait for the polkit dialog (kPrivilegedMs, 120 s): Add Printer, ADR-0030
 constexpr int kUpdateCheckMs = 200000;   // the checker stops itself after 180 s (SIGTERM, then SIGKILL 5 s later): U1
+// fprintd's enrolment (ADR-0045 OC-0.7): it ends itself after a minute without a status from the reader (the person left), and
+// the job gets room for Claim and EnrollStart, which may each wait for the polkit dialog (120 s), and for a slow enrolment.
+// It also ends 300 s after EnrollStart answered whatever the reader sends (someone else's touches cannot keep it going), well
+// before the job's own limit, so a job the jobs gave up on has always ended by itself (security review of ADR-0045, L-5).
+constexpr int kEnrollIdleMs = 60000;
+constexpr int kEnrollTotalMs = 300000;
+constexpr int kEnrollJobMs = 600000;
 
 // Every tool runs in the C locale: the parsers (qml/System.js) read the English, untranslated output.
 QProcessEnvironment cLocaleEnvironment()
@@ -150,6 +157,9 @@ Backend::~Backend()
             p->waitForFinished(1000);
         }
     }
+    // An enrolment under way stops at its next quarter-second wait and releases the reader (fprintd would anyway once this
+    // process leaves the bus).
+    stopEnroll();
     m_bus.reset(); // waits for a D-Bus job a moment at most, then abandons it (busjobs.h): the window closes promptly
 }
 
@@ -227,9 +237,12 @@ void Backend::query(const QStringList &argv, const QString &tag, int timeoutMs, 
 
 void Backend::readOnlyQuery(const QStringList &argv, const QString &tag, int timeoutMs, bool shared)
 {
-    if (!grassfield::settings::isReadOnlyQuery(argv)) {
+    // A query whose answer is a secret (systemguard.h isPrivateQuery: Share Network's QR code) runs in a real session only.
+    if (!grassfield::settings::isReadOnlyQuery(argv) && (m_dev || !grassfield::settings::isPrivateQuery(argv))) {
         if (!argv.isEmpty())
-            qWarning().noquote() << "refused a read-only query that is not one:" << argv.first();
+            qWarning().noquote() << (m_dev && grassfield::settings::isPrivateQuery(argv) ? "dev guard: refused a query that answers with a secret:"
+                                                                                         : "refused a read-only query that is not one:")
+                                 << argv.first();
         emit finished(tag, false, QString());
         return;
     }
@@ -404,9 +417,10 @@ void Backend::runBus(const QString &tag, std::function<QString(grassfield::setti
 void Backend::busQuery(const QString &what, const QString &tag)
 {
     using namespace grassfield::settings;
-    static const QStringList known{QStringLiteral("wifi.state"), QStringLiteral("bt.state"), QStringLiteral("host.state"), QStringLiteral("time.state"),
-                                   QStringLiteral("time.zones"), QStringLiteral("locale.state"), QStringLiteral("user.units"), QStringLiteral("net.state"),
-                                   QStringLiteral("power.state"), QStringLiteral("privacy.state")};
+    static const QStringList known{QStringLiteral("wifi.state"),    QStringLiteral("bt.state"),      QStringLiteral("host.state"),    QStringLiteral("time.state"),
+                                   QStringLiteral("time.zones"),    QStringLiteral("locale.state"),  QStringLiteral("user.units"),    QStringLiteral("net.state"),
+                                   QStringLiteral("power.state"),   QStringLiteral("privacy.state"), QStringLiteral("sharing.state"), QStringLiteral("disk.state"),
+                                   QStringLiteral("fprint.state")};
     if (!known.contains(what)) {
         qWarning().noquote() << "refused a bus query that is not known:" << what;
         emit finished(tag, false, QString());
@@ -437,6 +451,9 @@ void Backend::busQuery(const QString &what, const QString &tag)
             : what == QLatin1String("net.state")                 ? networkState(bus)
             : what == QLatin1String("power.state")               ? powerState(bus)
             : what == QLatin1String("privacy.state")             ? privacyState(bus)
+            : what == QLatin1String("sharing.state")             ? sharingState(bus)
+            : what == QLatin1String("disk.state")                ? diskState(bus)
+            : what == QLatin1String("fprint.state")              ? fingerprintState(bus)
                                                                  : userUnits(bus, own);
         if (!r.ok)
             return r.error.isEmpty() ? QCoreApplication::translate("SystemBus", "no answer") : r.error;
@@ -471,9 +488,39 @@ bool Backend::busAct(const QString &what, const QVariantMap &op, const QString &
     const bool latch = privilegedAction(op);
     if (latch && !beginAction(tag, what))
         return false;
+    // fprintd's enrolment (ADR-0045 OC-0.7): each status reaches the page as it comes (progress), through the jobs' mailbox, so
+    // the functor that emits it runs on this thread and only while the jobs live (busjobs.h poster); the job keeps no pointer
+    // it would follow. The sheet closed or the window going ends it between two waits (stopEnroll).
+    if (op.value(QStringLiteral("op")).toString() == QLatin1String("fprint.enroll")) {
+        // An older enrolment that may still run (its job timed out for the jobs, not for itself) stops first: no stop flag is
+        // ever left without a way to set it (security review of ADR-0045, L-5).
+        stopEnroll();
+        const auto stop = std::make_shared<std::atomic<bool>>(false);
+        m_enrollStop = stop;
+        const BusJobs::Post post = m_bus->jobs.poster();
+        const QString finger = op.value(QStringLiteral("finger")).toString();
+        const auto emitProgress = [this, tag](const QString &status) { emit progress(tag, status); };
+        runBus(tag, [finger, stop, post, emitProgress](BusCaller &bus, QString *) {
+            return enrollFinger(bus, finger, [post, emitProgress](const QString &status) { post([emitProgress, status] { emitProgress(status); }); },
+                                [stop] { return stop->load(); }, kEnrollIdleMs, kEnrollTotalMs);
+        }, kEnrollJobMs, false, true);
+        return true;
+    }
     const QStringList own = userUnitDirs();
     runBus(tag, [op, own](BusCaller &bus, QString *) { return runAction(bus, op, own); }, latch ? kPrivilegedJobMs : kActionJobMs, sessionAction(op), latch);
     return true;
+}
+
+void Backend::stopEnroll()
+{
+    if (m_enrollStop)
+        m_enrollStop->store(true);
+}
+
+bool Backend::hasCommand(const QString &name) const
+{
+    static const QRegularExpression plain(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")));
+    return plain.match(name).hasMatch() && !QStandardPaths::findExecutable(name).isEmpty();
 }
 
 QVariantList Backend::screens() const
