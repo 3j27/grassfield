@@ -169,7 +169,7 @@ end
 
 -- Dictation (ADR-0045 OC-5, Settings > Keyboard > Dictation): Ctrl-Super-X starts and stops Omarchy's voxtype. Omarchy 4.0.6's own
 -- binding (default/hypr/bindings/voxtype.lua) runs `voxtype record toggle`; 4.5 removed that file and toggles the configured
--- backend (`omarchy-dictation toggle`, Alt-Space). The key follows both: where `omarchy-default-dictation` names a backend (4.5)
+-- backend from default/hypr/bindings/dictation.lua (`omarchy-dictation toggle`, Alt-Space). The key follows both: where `omarchy-default-dictation` names a backend (4.5)
 -- it runs `omarchy-dictation toggle`, else (4.0.6, or 4.5 with no backend chosen) `voxtype record toggle`. Its push-to-talk on plain F9 is not
 -- bound, the function keys stay the applications'. The key exists only where voxtype is installed when this file is read
 -- (Omarchy's voxtype install and removal both read the configuration again: `hyprctl reload`), and never in a dev session (the

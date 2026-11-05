@@ -19,10 +19,10 @@
 # of 4.0.6 became default/hypr/bindings/dictation.lua in 4.5.0 (the dictation backend system: omarchy-dictation*).
 #
 # sha256 | upstream path (relative to OMARCHY_PATH) | Grassfield files derived from it (comma-separated)
-pending:security-engineer shell/plugins/lock/Service.qml shell/security/lock/Lock.qml
-pending:security-engineer shell/plugins/services/idle/Service.qml shell/security/idle/Idle.qml
-pending:security-engineer shell/plugins/polkit/PolkitAgent.qml shell/security/polkit/AuthAgent.qml
-pending:security-engineer bin/omarchy-system-sleep-lock shell/security/idle/IdleModel.js,packaging/shims/omarchy-shell
+cf9da581ab749194d44d5f7f73dc028704373f59dd6b131a90b9c07419fed7c9 shell/plugins/lock/Service.qml shell/security/lock/Lock.qml
+37bc82e65a772744d1e80538d2b15d945d259f53293dabc2a38a633dd4590d85 shell/plugins/services/idle/Service.qml shell/security/idle/Idle.qml
+f14077e4b9e38ad07955df5761a35869dda9f5e2ad82cd889bf4d731a1143313 shell/plugins/polkit/PolkitAgent.qml shell/security/polkit/AuthAgent.qml
+a7b630b038f6ddf1f0bf464b1f64721319db6068b3e842797ac6f8943bc45e2b bin/omarchy-system-sleep-lock shell/security/idle/IdleModel.js,packaging/shims/omarchy-shell
 e5004580e41475932f852d622b36ec07bfb0e98633c4d3c3055071a54d0eda07 bin/omarchy-hyprland-session-locked shell/security/lock/Lock.qml
 # Software Update (ADR-0033 step 1): the Omarchy commands and template the [grassfield] client relies on (identical in
 # v4.0.6, except pacman-stable.conf, whose 4.0.6 version puts [omarchy] first: ADR-0033 a.1 keeps [grassfield] last either
@@ -85,10 +85,14 @@ c0ff6801196e6b8d3ee609172366ff5672c10a37dead92474e5d16bdffe86693 bin/omarchy-wea
 # ADR-0045 Settings setups (OC-5 to OC-10): the Omarchy scripts whose markers, files and output Settings reads (the PAM lines,
 # /etc/fido2/fido2, the SSH hardening file, the resume configuration, the Wi-Fi QR matrix) and the dictation binding's source.
 619b82eeea233061bdadea83566d91c065e231830c3333a41960a5a6221b96e0 bin/omarchy-network-qr apps/settings/qml/NetworkQr.js
-pending:shell-engineer bin/omarchy-setup-security-fingerprint apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
-pending:shell-engineer bin/omarchy-setup-security-fido2 apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
-pending:shell-engineer bin/omarchy-setup-security-sshd apps/settings/qml/Setups.js
-pending:shell-engineer bin/omarchy-hibernation-setup apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
-pending:shell-engineer bin/omarchy-hibernation-available apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
-pending:shell-engineer default/hypr/bindings/dictation.lua config/hypr/grassfield/bindings.lua
-pending:shell-engineer bin/omarchy-hw-fingerprint apps/settings/src/systemguard.cpp,apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+e7b1565e5b8ea1b0d88cbb7180a2f480accd4911fa542ffdf64fc0f8675eb234 bin/omarchy-setup-security-fingerprint apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+1ddc408fbf4c9e73e8b2470f4038ce2b2c71e00b336e8616a275a11286cbc270 bin/omarchy-setup-security-fido2 apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+9632c235e7de809f4ad1c6860fbfdd496b6b07a4ad88307d3740ddb98a3910cb bin/omarchy-setup-security-sshd apps/settings/qml/Setups.js
+fb51a6832070f21220caf36cad8ed06375f5108dbcf4e66c487883e45dcb2b2e bin/omarchy-hibernation-setup apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
+536fb10ce651194357f737f3926e3eb775565644cc8931f699f473a9a7078210 bin/omarchy-hibernation-available apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
+9872401070753ac3b7b11a50317ddf623333b06932efa517f3da70b1df99a0e2 default/hypr/bindings/dictation.lua config/hypr/grassfield/bindings.lua
+5fb34f30637f8266a8b825199acc86cbef31bcb14fad6a72cc85fdb86efda9fa bin/omarchy-hw-fingerprint apps/settings/src/systemguard.cpp,apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+924a9c23a6e089e83b5fdea7933cbaa0f83cb7c3576fb35f6ecc8a7fb65017a0 bin/omarchy-install-dictation-voxtype apps/settings/qml/Setups.js,apps/settings/src/systemguard.cpp
+a16c233d9c972c7873c3b53364e12508bf2d60fd74b7cbc22a241d0cb48beadd bin/omarchy-remove-dictation-voxtype apps/settings/qml/Setups.js,apps/settings/src/systemguard.cpp
+5f28b79450f9226684b6027c2e102e511df7b6f1e84ce166cffff073662fff3a bin/omarchy-dictation config/hypr/grassfield/bindings.lua
+36655c24ccd2756e978e6b18256b238e70185a3ba9d6b098f87ab9aeafb122c9 bin/omarchy-default-dictation config/hypr/grassfield/bindings.lua
