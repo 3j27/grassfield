@@ -35,7 +35,7 @@ WidgetBase {
     readonly property string conditionText: {
         if (status === "unavailable")
             return qsTranslate("Weather", "Weather unavailable");
-        if (!report)
+        if (!report || !current)
             return root.preview ? "" : qsTranslate("Weather", "Loading…");
         return root.conditionName(now.key, current.night);
     }
@@ -53,7 +53,7 @@ WidgetBase {
     readonly property string skyName: {
         if (root.greyed)
             return WeatherLogic.sky("unknown", false, true);
-        if (root.report)
+        if (root.report && root.current)
             return WeatherLogic.sky(root.now.key, root.current.night, false);
         const d = new Date();
         return WeatherLogic.sky("clear", WeatherLogic.nightByHour(d.getHours() * 60 + d.getMinutes()), false);
@@ -212,6 +212,9 @@ WidgetBase {
             visible: text !== ""
             text: root.conditionText
             font.weight: Tokens.typographyTitleWeight
+            // A long name (French "Partiellement nuageux") wraps to a second line, as macOS does, rather than being cut.
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
             color: root.ink
         }
 
