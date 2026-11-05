@@ -96,7 +96,7 @@ for a lower bound (a part of the path), `NOT VERIFIED` when nothing could be mea
 
 - `scripts/gates/p4-search-latency.sh` (gate P4): builds a 100k-file fixture under `.dev/p4-fixture`, indexes it with user-mode
   `updatedb` and times the same `plocate` argv the Search provider uses: `PROXY` (provider only, a lower bound, not the gate: 47 ms
-  median, 82 ms p95 on the loaded dev machine, archived as `docs/testing/runs/20261024T035134Z-p4-search-latency.md`; the report's
+  median, 82 ms p95 on the loaded dev machine, archived in the project's run reports; the report's
   verdict line says "exit 0 with caveats"). `--shell-log-apps FILE` judges app results per keystroke against 50 ms from the shell's own log
   (`PASS`/`FAIL`); file results stay `PROXY` until the shell timestamps them end to end.
 - `scripts/gates/r1-restart.sh` (gate R1): `--journal` reads the real unit's journal (read-only) and times every restart the

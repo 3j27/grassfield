@@ -34,7 +34,8 @@ on `grassfield-keyring` (the keys of Grassfield's package repository, ADR-0033),
 until that repository is published, install it first from there (`cd keyring && makepkg -si`). Then log out and choose
 Grassfield (the login drop-in starts it; `grassfield-login set omarchy` goes back). The step-by-step guide with
 checks and recovery is [`docs/owner-setup/real-session.md`](docs/owner-setup/real-session.md); take a snapshot first.
-Nothing runs as root, no service starts by itself, no file is written under `$HOME` by the install.
+The desktop runs as your user (only Software Update's and the update channel's helpers run as root, through polkit);
+no service starts by itself, no file is written under `$HOME` by the install.
 
 ## Uninstall
 

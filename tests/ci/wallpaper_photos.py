@@ -213,7 +213,8 @@ def main():
     if found:
         return 1
     n = len(json.loads(read()["list"])["photos"])
-    print("PASS: wallpaper_photos: %d photographs, the pins, the PKGBUILD, THIRD_PARTY.md and the legal entry agree" % n)
+    print("PASS: wallpaper_photos: %d photographs, the pins, the PKGBUILD and THIRD_PARTY.md agree%s"
+          % (n, " (and the legal entry)" if (ROOT / FILES["legal"]).exists() else " (no private legal file here: not checked)"))
     return 0
 
 

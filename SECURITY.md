@@ -32,7 +32,7 @@ account.
 ## Supported versions
 
 Only the current beta (the 1.0.0 release candidates on the `beta` channel of `packages.grassfield.site`) gets fixes. There is no
-stable channel yet. Update (Settings > Software Update, or `pacman -Syu`) before reporting.
+stable channel yet. Update (Settings > General > Software Update) before reporting.
 
 ## What to expect
 

@@ -56,7 +56,8 @@ one place.
 ### Installing from your tree
 
 `cd packaging/arch && makepkg -si` builds and installs the packages. Take a snapshot first and read
-`docs/owner-setup/real-session.md`. Nothing in Grassfield runs as root, and packages never pin an exact Hyprland version.
+`docs/owner-setup/real-session.md`. The desktop runs as your user; only two small helpers run as root, through polkit
+(pkexec): Software Update's and the update channel's (see SECURITY.md). Packages never pin an exact Hyprland version.
 
 ## Checks to run before you open a pull request
 
@@ -90,7 +91,7 @@ These come from the specs (`docs/specs/ui.md`, ADR-0002, ADR-0003, ADR-0024, ADR
 - **Blur is real.** Use the compositor's background effect or layer rules. Do not fake blur with a screenshot or an image.
 - **No Apple assets, no Apple names.** No Apple icon, font, wallpaper, sound or artwork, traced or copied, and no Apple trademark
   in a user-visible string. `tests/ci/ui_names.py` checks the strings; ADR-0003 explains the line. Our own
-  icons are drawn by hand (`branding/LICENSES.md` lists the provenance of every asset).
+  icons are drawn for the project (`branding/LICENSES.md` lists the provenance of every asset).
 - **Every visible string is translatable** (`qsTr()` in QML, `tr()` in C++); English is the source, French the first translation.
   After changing strings run `just i18n-update` and complete the French catalog.
 - **Accessibility and motion.** Honour Reduce Motion and Increase Contrast; contrast roles are tested (`just check-contrast`).
