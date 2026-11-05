@@ -15228,8 +15228,8 @@
         <translation>Configurer l’empreinte digitale</translation>
     </message>
     <message>
-        <source>Omarchy installs the fingerprint reader&apos;s driver, enrols your right index finger and turns fingerprint on for the lock screen, administrator prompts and sudo. If administrator prompts use the system&apos;s standard rules, Omarchy replaces them with its own, which do not pause after repeated wrong passwords. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.</source>
-        <translation>Omarchy installe le pilote du lecteur d’empreintes, enregistre votre index droit et active l’empreinte pour l’écran verrouillé, les demandes d’administrateur et sudo. Si les demandes d’administrateur suivent les règles standard du système, Omarchy les remplace par les siennes, qui ne marquent plus de pause après plusieurs mots de passe erronés. Cela se fait dans une fenêtre du Terminal, car des logiciels sont installés et la façon dont cet ordinateur vérifie votre identité change&#xa0;; votre mot de passe y est demandé.</translation>
+        <source>Omarchy installs the fingerprint reader&apos;s driver, enrols your right index finger and turns fingerprint on for the lock screen, administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.</source>
+        <translation>Omarchy installe le pilote du lecteur d’empreintes, enregistre votre index droit et active l’empreinte pour l’écran verrouillé, les demandes d’administrateur et sudo. Cela se fait dans une fenêtre du Terminal, car des logiciels sont installés et la façon dont cet ordinateur vérifie votre identité change&#xa0;; votre mot de passe y est demandé.</translation>
     </message>
     <message>
         <source>Remove Fingerprint Setup</source>
@@ -15244,8 +15244,8 @@
         <translation>Configurer la clé de sécurité</translation>
     </message>
     <message>
-        <source>Omarchy installs the security key tools, registers the key you plug in and touch, and turns it on for administrator prompts and sudo. If administrator prompts use the system&apos;s standard rules, Omarchy replaces them with its own, which do not pause after repeated wrong passwords. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.</source>
-        <translation>Omarchy installe les outils de clé de sécurité, enregistre la clé que vous branchez et touchez, et l’active pour les demandes d’administrateur et sudo. Si les demandes d’administrateur suivent les règles standard du système, Omarchy les remplace par les siennes, qui ne marquent plus de pause après plusieurs mots de passe erronés. Cela se fait dans une fenêtre du Terminal, car des logiciels sont installés et la façon dont cet ordinateur vérifie votre identité change&#xa0;; votre mot de passe y est demandé.</translation>
+        <source>Omarchy installs the security key tools, registers the key you plug in and touch, and turns it on for administrator prompts and sudo. It runs in a Terminal window because it installs software and changes how this computer checks who you are; it asks for your password there.</source>
+        <translation>Omarchy installe les outils de clé de sécurité, enregistre la clé que vous branchez et touchez, et l’active pour les demandes d’administrateur et sudo. Cela se fait dans une fenêtre du Terminal, car des logiciels sont installés et la façon dont cet ordinateur vérifie votre identité change&#xa0;; votre mot de passe y est demandé.</translation>
     </message>
     <message>
         <source>Remove Security Key</source>

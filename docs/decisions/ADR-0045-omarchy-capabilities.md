@@ -206,7 +206,11 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   private folder the helper makes afresh at each run (`$XDG_RUNTIME_DIR/grassfield/terminal-theme-bin`, 0700, refused when
   it is a link or another user's) with two stand-ins: `hyprctl`, which fails doing nothing, so `omarchy-restart-hyprctl`'s
   `hyprctl reload` (the chain's only hyprctl call; a user's own `theme-set` hook that calls hyprctl gets the same) never
-  reloads Grassfield's Hyprland, and `HYPRLAND_INSTANCE_SIGNATURE` is removed as well; `omarchy-theme-set-gnome`'s gsettings writes (colour scheme, GTK theme, icon theme) go through
+  reloads Grassfield's Hyprland, and `HYPRLAND_INSTANCE_SIGNATURE` is removed as well; Omarchy 4.5 (review of the 4.5 port): its `omarchy-theme-set` starts
+  `omarchy-theme-set-herdr-machines` under `setsid`, past the helper's process-group limit, which could SSH to the herdr machines
+  (this computer included) and run an unsanitised `omarchy theme set` in the live Hyprland session; the helper sets
+  `OMARCHY_THEME_SYNC_FROM=grassfield`, on which that script exits at once (only it reads the variable), and
+  `OMARCHY_THEME_WAIT=1`, which keeps 4.5's other retints inside the run (4.0.6 ignores both); `omarchy-theme-set-gnome`'s gsettings writes (colour scheme, GTK theme, icon theme) go through
   dconf's default profile to the user database, exactly as in the Omarchy session: ADR-0017's profile shares that writable
   database and only adds read-only defaults with a locked icon theme, so "Omarchy's own database" is the user database
   reached without that lock, and the Grassfield look stays its own (icon theme locked, GTK appearance from Grassfield's portal,
@@ -271,3 +275,18 @@ Grassfield has since ADR-0034. Corrected with this ADR.
 - Verification limits of the cloud session that built this: no Hyprland, no Quickshell runtime, no nested session: QML is linted
   with qmllint 6.12 against Quickshell 0.3.2's types, logic is unit-tested offline, and every visual or nested check is
   reported NOT VERIFIED until it runs on the owner's machine.
+
+## Amendment: Omarchy 4.5.0 (2026-11-05, platform work)
+Omarchy 4.5.0 is supported beside 4.0.6, which stays the minimum; the capabilities above use the same commands on both. The
+supported versions are the locks of `docs/upstream/` (one per version, chosen by the tree's newest migration, a line pending
+until reviewed: the header of `scripts/dev/upstream-drift.sh`); what 4.5.0 changed and what Grassfield did is the table in
+`docs/compat.md` "Omarchy 4.5.0 supported". Three decisions of this amendment:
+- OC-4.5-1 the Grassfield session's portal routing wins over the user's `hyprland-portals.conf` that 4.5.0's migration writes: the
+  session's `XDG_CURRENT_DESKTOP` is `Grassfield:Hyprland` and the frontend's drop-in links the user's `grassfield-portals.conf`
+  to it (`grassfield-portal-config`), which the frontend reads before `hyprland-portals.conf`; Omarchy's file is never touched and
+  the frontend's environment is not changed (a first design, another `XDG_CONFIG_HOME` for the frontend, was refused: the apps it
+  launches inherited it). macOS model: one routing, the system's.
+- OC-4.5-2 `owed.service`, Omarchy's video wallpaper daemon, does not run in the Grassfield session (the shell draws the
+  wallpaper, video included): one program owns the desktop picture.
+- OC-4.5-3 the dictation backend system of 4.5.0 (`omarchy-dictation*`) is the Settings work's (OC-5); until it lands the
+  `dictation.lua` pin stays pending.

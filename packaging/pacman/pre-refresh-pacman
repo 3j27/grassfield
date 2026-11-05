@@ -4,7 +4,7 @@
 # ~/.config/omarchy/hooks/pre-refresh-pacman.d/50-grassfield (a link, so a package update updates it; once Grassfield is
 # removed the dangling link is skipped by omarchy-hook, which runs only regular files).
 #
-# Omarchy's omarchy-refresh-pacman (Omarchy 4.0.4 and 4.0.6) copies its channel template over /etc/pacman.conf, runs
+# Omarchy's omarchy-refresh-pacman (Omarchy 4.0.4, 4.0.6 and 4.5.0: the 4.5.0 one renders the template with the regional additions first, the hook still runs after the copy) copies its channel template over /etc/pacman.conf, runs
 # `omarchy-hook pre-refresh-pacman` as the user with a warm sudo cache, then `pacman -Syyuu`. The template has no
 # [grassfield] section, so this hook appends the two lines grassfield-channel-helper writes, last, when Grassfield
 # updates are on (/etc/pacman.d/grassfield.conf exists) and the section is missing. It never writes the included file and

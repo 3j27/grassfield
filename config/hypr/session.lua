@@ -63,6 +63,12 @@ end
 omarchy.guard_path("/usr/lib/grassfield/omarchy-shims", "/usr/lib/grassfield/session-bin")
 
 hl.env("XDG_SESSION_DESKTOP", "Grassfield")
+-- Omarchy's envs.lua (above) sets XDG_CURRENT_DESKTOP=Hyprland; uwsm finalize exports the compositor's value. Grassfield first,
+-- Hyprland kept: the colon list is read item by item (the portals' UseIn=Hyprland, xdg-desktop-portal's
+-- <item>-portals.conf, OnlyShowIn/NotShowIn, Qt, GTK and Chromium take the first item they know), and the frontend then reads
+-- the user's grassfield-portals.conf (a link made by grassfield-portal-config) before Omarchy 4.5.0's hyprland-portals.conf,
+-- which Grassfield never touches. Only here: the Omarchy session keeps "Hyprland", and the nested dev session its own value.
+hl.env("XDG_CURRENT_DESKTOP", "Grassfield:Hyprland")
 hl.env("GRASSFIELD_SESSION", "1")
 
 require("grassfield.core")

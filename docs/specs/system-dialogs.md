@@ -1042,8 +1042,16 @@ Backend absent or crashed: x-d-p-gtk's values (the user's dconf, Omarchy's theme
 D-Bus activation starts it at the next read; a change made meanwhile is delivered when it starts. A backend that keeps
 failing stops after 5 starts in a minute, and the frontend answers from x-d-p-gtk until a later read or the next login. GTK
 theme missing: GTK falls back to its default theme. Routing file unreadable: `env-grassfield` sets nothing, and the session
-behaves as before step 2b. A `hyprland-portals.conf` of the user's (`~/.config/xdg-desktop-portal`) or of the
-administrator's (`/etc/xdg-desktop-portal`) wins over the session's: the apps then take x-d-p-gtk's values.
+behaves as before step 2b. A `hyprland-portals.conf` of the administrator's (`/etc/xdg-desktop-portal`) wins over the
+session's: the apps then take x-d-p-gtk's values. The user's (`~/.config/xdg-desktop-portal`) does not, in the Grassfield
+session: the frontend reads one configuration per directory (for each item of `XDG_CURRENT_DESKTOP` in order,
+`<item>-portals.conf`, else `portals.conf`), the user's directory first. Omarchy 4.5.0's migration 1788261467 writes
+`~/.config/xdg-desktop-portal/hyprland-portals.conf` (`default=hyprland;gtk`, `Secret=gnome-keyring`) on every machine it
+updates, and no system-wide file of ours can come before it. So the session's `XDG_CURRENT_DESKTOP` is `Grassfield:Hyprland`
+(`config/hypr/session.lua`) and the frontend's unit runs `grassfield-portal-config`, which links the user's
+`grassfield-portals.conf` to the session's routing (only a link of ours; a file of the user's, and Omarchy's file, are left
+alone); the session's file carries Omarchy's `Secret` line. The frontend's environment, so that of the applications it
+launches, is not changed. The Omarchy session is unchanged (tests/integration/portal_settings.sh, scenario 4c, with its controls).
 
 ### Known limitations
 x-d-p-gtk's own remaining dialogs (its file chooser until step 4, print until step 6, account) and apps that read dconf

@@ -4,6 +4,10 @@
 # code a Grassfield fork was taken from: read the change, port or reject it in the fork (and say so in
 # docs/specs/security.md "Upstream base"), then re-pin with `scripts/dev/upstream-drift.sh --update`.
 #
+# THIS FILE IS THE LOCK OF OMARCHY 4.0.6 (the minimum Grassfield supports). Omarchy 4.5.0 has its own,
+# docs/upstream/omarchy-4.5.0.lock: one lock per accepted version, chosen by the newest migration of the tree under check (the
+# line below); a tree no lock names fails. The choice and the pending-line rule are explained in scripts/dev/upstream-drift.sh.
+# omarchy-newest-migration 1792334754
 # omarchy-package 4.0.6-1
 # upstream basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0 (v4.0.6, byte-identical to the installed files)
 # previous basecamp/omarchy@c668141e9c42b13c80c9ca4ea108e11708c5e8a5 (v4.0.4; re-pinned 2026-11-03 after the review in

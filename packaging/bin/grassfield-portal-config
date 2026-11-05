@@ -1,0 +1,40 @@
+#!/bin/sh
+# grassfield-portal-config: puts the Grassfield session's portal routing in front of the user's own (ADR-0035 D-8; Omarchy 4.5.0
+# note in ADR-0045). Run by the frontend's unit (xdg-desktop-portal.service.d/10-grassfield.conf, ExecStartPre) in the user
+# manager; no argument, no output, always exit 0.
+#
+# xdg-desktop-portal reads ONE portals configuration per directory (for each name of XDG_CURRENT_DESKTOP in order,
+# <name>-portals.conf, else portals.conf), the user's directory first. Omarchy 4.5.0's migration 1788261467 writes
+# ~/.config/xdg-desktop-portal/hyprland-portals.conf (`default=hyprland;gtk`), which would win over the session's file in
+# /usr/share/grassfield/xdg and send FileChooser, Access, AppChooser, Print and Settings to gtk. The Grassfield session's
+# XDG_CURRENT_DESKTOP is "Grassfield:Hyprland" (config/hypr/session.lua), so a grassfield-portals.conf in the user's directory is
+# read before that hyprland-portals.conf. This program makes that file: a link to the session's routing (a link, so a package
+# update updates it, and a dangling one, once Grassfield is removed, is skipped by the frontend).
+#   - Only in the Grassfield session (GRASSFIELD_SESSION=1 in the unit's environment); in the Omarchy session it does nothing,
+#     and there the name Grassfield is not in XDG_CURRENT_DESKTOP, so the link is never read.
+#   - Omarchy's hyprland-portals.conf, and any other file of the user's, are never read, written, moved or removed. A
+#     grassfield-portals.conf that is not a link of ours (the user's own) is left as it is.
+#   - The directory is made only when it is missing; nothing else is written, no environment variable is changed.
+# Tested by tests/integration/portal_settings.sh (scenario 4c: the real frontend, with Omarchy 4.5.0's file in place).
+[ "${GRASSFIELD_SESSION:-}" = 1 ] || exit 0
+src=/usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf
+[ -r "$src" ] || exit 0
+base=${XDG_CONFIG_HOME:-}
+if [ -z "$base" ]; then
+  [ -n "${HOME:-}" ] || exit 0 # no home: nothing to link (never /.config)
+  base=$HOME/.config
+fi
+case $base in /*) ;; *) exit 0 ;; esac
+dir=$base/xdg-desktop-portal
+dest=$dir/grassfield-portals.conf
+if [ -L "$dest" ]; then
+  target=$(readlink -- "$dest" 2>/dev/null) || exit 0
+  [ "$target" = "$src" ] && exit 0
+  # A link of ours that points somewhere older is replaced; any other link is the user's.
+  case $target in /usr/share/grassfield/xdg/*) ln -sfn -- "$src" "$dest" 2>/dev/null ;; esac
+  exit 0
+fi
+[ -e "$dest" ] && exit 0
+mkdir -p -- "$dir" 2>/dev/null || exit 0
+ln -s -- "$src" "$dest" 2>/dev/null
+exit 0

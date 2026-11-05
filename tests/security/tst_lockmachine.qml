@@ -350,6 +350,79 @@ TestCase {
             verify(!Machine.isHolding(others[i]), String(others[i]));
     }
 
+    // Fingerprint pacing (port of Omarchy v4.5.0 FingerprintModel.js, docs/specs/security.md "Fingerprint pacing"): an
+    // attempt that reached the reader and did not end fast clears the misses; anything else is one more miss.
+    function test_fingerprintMisses() {
+        compare(Machine.fingerprintMisses(0, true, false), 0, "reached, ended normally");
+        compare(Machine.fingerprintMisses(5, true, false), 0, "a reached attempt is the recovery");
+        compare(Machine.fingerprintMisses(5, true, undefined), 0, "no fast-end flag: not fast");
+        compare(Machine.fingerprintMisses(0, false, false), 1, "never reached");
+        compare(Machine.fingerprintMisses(2, false, false), 3);
+        compare(Machine.fingerprintMisses(0, true, true), 1, "reached, then failed on the device at once");
+        compare(Machine.fingerprintMisses(4, true, true), 5);
+        compare(Machine.fingerprintMisses(0, "yes", false), 1, "only true means reached");
+        const junk = [undefined, null, NaN, -3, Infinity, "2", {}];
+        for (let i = 0; i < junk.length; i++)
+            compare(Machine.fingerprintMisses(junk[i], false, false), 1, "junk count " + String(junk[i]) + " reads as none");
+        compare(Machine.fingerprintMisses(2.7, false, false), 3, "a fractional count is floored");
+        compare(Machine.fingerprintMisses(1e9, false, false), 1001, "the count stays bounded");
+    }
+
+    // The gap before the next attempt: 1 s (as before the port) after none or one miss, then doubling to the 40 s cap,
+    // which is longer than fprintd's 30 s idle exit (a wedged claim can clear).
+    function test_fingerprintRetryMs() {
+        compare(Machine.FINGERPRINT_RETRY_MS, 1000);
+        compare(Machine.FINGERPRINT_FAST_END_MS, 2000);
+        compare(Machine.FINGERPRINT_RETRY_CAP_MS, 40000);
+        compare(Machine.FINGERPRINT_UNAVAILABLE_AFTER, 3);
+        verify(Machine.FINGERPRINT_RETRY_CAP_MS > 30000, "longer than fprintd's idle exit");
+        // Fractional counts are floored, never below the plain gap (0.5 must not give 500 ms).
+        const expected = [[0, 1000], [0.5, 1000], [1, 1000], [1.5, 1000], [2, 2000], [2.9, 2000], [3, 4000], [4, 8000], [5, 16000], [6, 32000], [7, 40000], [8, 40000], [50, 40000], [1e9, 40000]];
+        for (let i = 0; i < expected.length; i++)
+            compare(Machine.fingerprintRetryMs(expected[i][0]), expected[i][1], "misses " + expected[i][0]);
+        const junk = [undefined, null, NaN, -1, Infinity, "7", {}];
+        for (let i = 0; i < junk.length; i++)
+            compare(Machine.fingerprintRetryMs(junk[i]), 1000, "junk count " + String(junk[i]) + " reads as none");
+        // Never shorter than the plain gap, never longer than the cap, never shrinking as misses grow.
+        let previous = 0;
+        for (let m = 0; m <= 40; m++) {
+            const ms = Machine.fingerprintRetryMs(m);
+            verify(ms >= Machine.FINGERPRINT_RETRY_MS && ms <= Machine.FINGERPRINT_RETRY_CAP_MS && ms >= previous, "misses " + m + ": " + ms);
+            previous = ms;
+        }
+    }
+
+    // Opus review of 59a576f1, MINOR 1: an attempt still unreached after 20 s ends (a claim that never prompts) and is a miss,
+    // so the backoff paces the next one; 20 s is above the fast-end window and below the 25 s D-Bus method timeout of the claim.
+    function test_fingerprintReachTimeout() {
+        compare(Machine.FINGERPRINT_REACH_TIMEOUT_MS, 20000);
+        verify(Machine.FINGERPRINT_REACH_TIMEOUT_MS > Machine.FINGERPRINT_FAST_END_MS);
+        verify(Machine.FINGERPRINT_REACH_TIMEOUT_MS < 25000, "ends before the D-Bus claim timeout");
+        // A timed-out attempt never reached the reader: it is a miss whatever the fast-end window says.
+        compare(Machine.fingerprintMisses(0, false, false), 1);
+        compare(Machine.fingerprintMisses(0, false, true), 1);
+        // Claims that keep timing out reach the cap: one attempt per 20 s + 40 s at most.
+        let misses = 0;
+        for (let i = 0; i < 10; i++)
+            misses = Machine.fingerprintMisses(misses, false, false);
+        compare(Machine.fingerprintRetryMs(misses), Machine.FINGERPRINT_RETRY_CAP_MS);
+    }
+
+    // Opus review of 59a576f1, MINOR 2: a resume offers the reader again only to a lock (any lock state), with the PAM file,
+    // and not after MaxTries; a resume while unlocked leaves no pass for the next lock (one attempt with the displays off).
+    function test_fingerprintOfferedOnResume() {
+        const lockStates = ["locking", "locked", "authenticating", "releasing"];
+        for (let i = 0; i < lockStates.length; i++)
+            verify(Machine.fingerprintOfferedOnResume(true, false, lockStates[i]), lockStates[i]);
+        verify(!Machine.fingerprintOfferedOnResume(true, false, "unlocked"), "a resume while unlocked offers nothing");
+        verify(!Machine.fingerprintOfferedOnResume(false, false, "locked"), "no fingerprint PAM file");
+        verify(!Machine.fingerprintOfferedOnResume(true, true, "locked"), "MaxTries spent the reader");
+        verify(!Machine.fingerprintOfferedOnResume("yes", false, "locked"), "only true means the file exists");
+        const junk = [undefined, null, "", "LOCKED", "open", 3, {}];
+        for (let i = 0; i < junk.length; i++)
+            verify(!Machine.fingerprintOfferedOnResume(true, false, junk[i]), "unknown state " + String(junk[i]));
+    }
+
     // D-4: the lid locks unless a physical external display is active (clamshell, macOS); unreadable input locks.
     function test_lidShouldLock() {
         verify(Machine.lidShouldLock(["eDP-1"]));

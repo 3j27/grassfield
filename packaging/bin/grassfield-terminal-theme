@@ -15,8 +15,9 @@
 # session (every side effect and what happens to it: ADR-0045 OC-11 "Implementation note"):
 #   - first in PATH, a private folder this helper makes at each run ($XDG_RUNTIME_DIR/grassfield/terminal-theme-bin, 0700,
 #     refused when it is a link or not the user's) holding two stand-ins: `hyprctl`, which does nothing and fails, so the
-#     chain's only hyprctl call, omarchy-restart-hyprctl's `hyprctl reload`, never reloads Grassfield's Hyprland (a reload
-#     resets what the shell set at run time); and `pkexec`, which fails as if absent (127), so the Chromium colour step
+#     chain's hyprctl calls, omarchy-restart-hyprctl's `hyprctl reload` (Omarchy 4.5.0: `hyprctl --instance 0 reload` outside
+#     a session) and, in 4.5.0, omarchy-theme-set's read of animations:enabled (which then reads as off: no wallpaper intro),
+#     never reach Grassfield's Hyprland (a reload resets what the shell set at run time); and `pkexec`, which fails as if absent (127), so the Chromium colour step
 #     (omarchy-theme-set-browser-policy, which looks pkexec up in PATH when Omarchy's passwordless sudoers rule does not
 #     apply) never puts an administrator password sheet on screen: it then leaves Chromium's colour as it was;
 #   - no HYPRLAND_INSTANCE_SIGNATURE either (defence in depth: a hyprctl found another way reaches no compositor), and no
@@ -31,6 +32,12 @@
 #     never puts that directory before the stand-ins), then the rest of PATH (absolute entries only). Its calls to Omarchy's
 #     shell (applyTheme, themeTransition, the theme picker's preload) are refused by the stand-in; nothing restarts or
 #     signals grassfield-shell. Without the stand-ins nothing runs;
+#   - Omarchy 4.5.0's omarchy-theme-set (docs/upstream/omarchy-4.5.0.lock; the helper follows 4.0.6 and 4.5.0) returns once what
+#     is on screen has changed and runs the other retints (GTK, browser policy, editors) detached, in the same process group, so
+#     the limits and the lock above cover them; they run directly on this PATH (no login shell: the stand-ins stay first). Its
+#     calls to the OWE video-wallpaper client (`owe`) fail where owed does not run (the Grassfield session: the shell draws the
+#     wallpaper, packaging/systemd/owed.service.d). Its mirror of the theme to herdr machines (`setsid`, so outside the group) is
+#     Omarchy's own opt-in (the herdr-theme-sync toggle, off by default): it is not ours to stop;
 #   - OMARCHY_PATH as the session gives it, else /usr/share/omarchy (as omarchy.lua finds Omarchy; omarchy-theme-set reads
 #     its themes from there);
 #   - stdin is /dev/null and it runs in a process session (and process group) of its own; its output goes to a private
@@ -185,6 +192,15 @@ def theme_env(path):
     env = {k: v for k, v in os.environ.items() if k not in UNSET}
     env["PATH"] = path
     env["OMARCHY_PATH"] = omarchy_path()
+    # Omarchy 4.5's omarchy-theme-set returns once the terminals changed and leaves the other apps' retints (GTK, editors, the
+    # browser policy) running behind it when it has no terminal for stdin, as here; then they would outlive this run's lock and
+    # its time limit. OMARCHY_THEME_WAIT=1 makes it finish them first, as 4.0.6 always did (4.0.6 ignores the variable).
+    env["OMARCHY_THEME_WAIT"] = "1"
+    # Omarchy 4.5's omarchy-theme-set also starts omarchy-theme-set-herdr-machines under setsid (a session of its own, so past this
+    # run's process-group limit), which can SSH to the machines of `herdr machine list`, this one included, and run an
+    # unsanitised `omarchy theme set` in the live Hyprland session. That script exits at once when OMARCHY_THEME_SYNC_FROM is
+    # non-empty (it is how a mirrored change is kept from being sent on); nothing else reads the variable.
+    env["OMARCHY_THEME_SYNC_FROM"] = "grassfield"
     return env
 
 

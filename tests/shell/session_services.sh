@@ -192,10 +192,10 @@ check bash -c 'grep -qx "export GRASSFIELD_SESSION=1" "$1" && grep -qx "After=gr
 # automount unit runs it, the disk's name one argument of udiskie's own formatting.
 desc="grassfield-automount.service runs udiskie with grassfield-askpass as its password command; the helper is built and installed to /usr/lib/grassfield"
 check bash -c 'grep -qxF "ExecStart=/usr/bin/udiskie --automount --no-notify --no-tray --password-prompt \"/usr/lib/grassfield/grassfield-askpass udiskie {device_presentation}\"" "$1" && grep -qF "install(TARGETS grassfield-prompter grassfield-askpass RUNTIME DESTINATION lib/grassfield)" "$2" && grep -qF "add_executable(grassfield-askpass src/askpass.cpp" "$2"' _ "$pk/systemd/grassfield-automount.service" "$root/bridges/prompter/CMakeLists.txt"
-for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify bt-agent; do
+for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify bt-agent owed; do
   desc="drop-in keeps Omarchy's $unit.service out of the Grassfield session only"
   d=$pk/systemd/$unit.service.d/10-grassfield.conf
-  check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -q "$2" "$3"' _ "$d" "$unit" "$pk/arch/PKGBUILD"
+  check bash -c 'grep -qx "ConditionEnvironment=!GRASSFIELD_SESSION=1" "$1" && grep -Eq "^  for unit in (.* )?$2( .*)?; do" "$3"' _ "$d" "$unit" "$pk/arch/PKGBUILD"
 done
 desc="every helper in packaging/bin and packaging/shims is executable and installed by one PKGBUILD line (regular files only)"
 check bash -c 'for f in "$1"/bin/* "$1"/shims/*; do [[ -d $f || -x $f ]] || exit 1; done; grep -qF "find \"\$root/packaging/bin\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/\" {} +" "$1/arch/PKGBUILD" && grep -qF "find \"\$root/packaging/shims\" -maxdepth 1 -type f -exec install -m755 -t \"\$pkgdir/usr/lib/grassfield/omarchy-shims/\" {} +" "$1/arch/PKGBUILD"' _ "$pk"

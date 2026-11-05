@@ -47,9 +47,9 @@ name=org.freedesktop.impl.portal.desktop.grassfield_settings
 unit=$pk/systemd/grassfield-portal-settings.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the session's routing lists only Settings, FileChooser, Access, AppChooser and Print (D-4, D-5, D-7): Grassfield first, then gtk"
+desc="the session's routing lists only Secret (gnome-keyring, as Omarchy 4.5.0), Settings, FileChooser, Access, AppChooser and Print (D-4, D-5, D-7): Grassfield first, then gtk"
 check test "$(grep -v '^#' "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf" | grep -v '^$' | tr '\n' ' ')" = \
-  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk org.freedesktop.impl.portal.Access=grassfield;gtk org.freedesktop.impl.portal.AppChooser=grassfield;gtk org.freedesktop.impl.portal.Print=grassfield;gtk "
+  "[preferred] org.freedesktop.impl.portal.Secret=gnome-keyring org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk org.freedesktop.impl.portal.Access=grassfield;gtk org.freedesktop.impl.portal.AppChooser=grassfield;gtk org.freedesktop.impl.portal.Print=grassfield;gtk "
 desc="the .portal file, the D-Bus service file and the unit name the same bus name and program"
 check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.Settings;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal-settings" "$3" && grep -qx "SystemdService=grassfield-portal-settings.service" "$3" &&
@@ -66,8 +66,25 @@ check bash -c 'grep -q "cmake --install \"\$srcdir/portal-settings-build\"" "$1"
   grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf" "$1" &&
   grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield-settings.portal" "$1" &&
   grep -q "usr/share/dbus-1/services/$2.service" "$1" && grep -q "gen-gtk-themes.py\" \"\$srcdir/gtk-themes\"" "$1" &&
-  grep -q "\$pkgdir/usr/share/themes/" "$1" && grep -q "xdg-desktop-portal xdg-desktop-portal-gtk libcups)" "$1"' _ "$pk/arch/PKGBUILD" "$name"
+  grep -q "\$pkgdir/usr/share/themes/" "$1" && grep -q "xdg-desktop-portal xdg-desktop-portal-gtk libcups[ )]" "$1"' _ "$pk/arch/PKGBUILD" "$name"
 
+dropin=$pk/systemd/xdg-desktop-portal.service.d/10-grassfield.conf
+desc="the frontend's unit only gains grassfield-portal-config before it starts (no ExecStart, Environment or other change of what the frontend and the apps it launches get)"
+check bash -c 'grep -qx "ExecStartPre=-/usr/lib/grassfield/grassfield-portal-config" "$1" && ! grep -Eq "^(ExecStart|Environment|EnvironmentFile|PassEnvironment|UnsetEnvironment|WorkingDirectory)=" "$1" && [[ -x "$2" ]]' _ "$dropin" "$pk/bin/grassfield-portal-config"
+desc="the session names Grassfield first in XDG_CURRENT_DESKTOP, after Omarchy's envs.lua, keeping Hyprland, and only in session.lua (the Omarchy session never loads it)"
+check bash -c 'n=$(grep -n "require(\"grassfield.omarchy\")" "$1" | head -n 1 | cut -d: -f1); m=$(grep -n "^hl.env(\"XDG_CURRENT_DESKTOP\", \"Grassfield:Hyprland\")$" "$1" | cut -d: -f1); [[ -n $n && -n $m && $m -gt $n ]]' _ "$root/config/hypr/session.lua"
+if command -v systemd-analyze >/dev/null && [[ -r /usr/lib/systemd/user/xdg-desktop-portal.service ]]; then
+  # The drop-in beside a copy of the stock unit, as systemd reads them.
+  mkdir -p "$tmp/units/xdg-desktop-portal.service.d"
+  cp /usr/lib/systemd/user/xdg-desktop-portal.service "$tmp/units/"
+  cp "$dropin" "$tmp/units/xdg-desktop-portal.service.d/10-grassfield.conf"
+  desc="systemd-analyze verify reads the unit with its drop-in without a warning about it"
+  check bash -c '! systemd-analyze verify --user "$1/xdg-desktop-portal.service" 2>&1 | grep -qi "10-grassfield"' _ "$tmp/units"
+fi
+
+# The session's XDG_CURRENT_DESKTOP, read from session.lua; the real grassfield-portal-config, its path rewritten to a scratch copy.
+session_desktop=$(sed -n 's/^hl\.env("XDG_CURRENT_DESKTOP", "\(.*\)")$/\1/p' "$root/config/hypr/session.lua")
+sed "s|/usr/share/grassfield/xdg|$tmp/gf|g" "$pk/bin/grassfield-portal-config" >"$tmp/portal-config"
 # The real env file, its paths rewritten to a scratch copy.
 mkdir -p "$tmp/gf/xdg-desktop-portal"
 sed "s|/usr/share/grassfield/xdg|$tmp/gf|g" "$pk/uwsm/env-grassfield" >"$tmp/env"
@@ -84,6 +101,8 @@ desc="env-grassfield: an existing XDG_DATA_DIRS is kept after it, and sourced tw
 check test "$(envof /usr/share:/opt/share twice)" = "$tmp/gf:/usr/share:/opt/share|1|portals"
 desc="env-grassfield: GDK_DEBUG keeps the flags it has, and gets portals once"
 check test "$(envof "" twice "events" | cut -d'|' -f3)" = "events,portals"
+desc="env-grassfield sets neither XDG_CONFIG_HOME nor XDG_CURRENT_DESKTOP (the portal routing needs no change of what apps inherit from it)"
+check bash -c '[[ $(env -i PATH="$PATH" sh -c ". \"\$1\"; printf \"%s|%s\" \"\${XDG_CONFIG_HOME-unset}\" \"\${XDG_CURRENT_DESKTOP-unset}\"" _ "$1") == "unset|unset" ]]' _ "$tmp/env"
 # The shell's unit clears GTK_USE_PORTAL for the shell (gate P5); the apps it starts get it back (review of step 2b).
 desc="env-grassfield records GRASSFIELD_APPS_GTK_USE_PORTAL=1 for the shell, and the shell gives GTK_USE_PORTAL back to every app it starts (Settings and Glance included)"
 check bash -c '[[ $(env -i PATH="$PATH" sh -c ". \"\$1\"; echo \"\${GRASSFIELD_APPS_GTK_USE_PORTAL-unset}\"" _ "$1") == 1 ]] &&
@@ -119,10 +138,32 @@ settings() { # settings <dir> <json>: grassfield.json, replaced atomically as th
 }
 # One scenario: a fresh bus whose service directory starts the Grassfield backend (when GRASSFIELD is yes) and the gtk
 # stand-in on demand, then the real frontend. Sets d.
-scenario() { # scenario <name> <yes|no|broken>: broken = the backend's activation fails when the frontend starts
+scenario() { # scenario <name> <yes|no|broken> [variant]: broken = the backend's activation fails when the frontend starts.
+  # Variants, all with the user's own hyprland-portals.conf that Omarchy 4.5.0's migration 1788261467 installs (its bytes are
+  # compared after): omarchy45 = the Grassfield session (XDG_CURRENT_DESKTOP of session.lua; the frontend's unit runs
+  # grassfield-portal-config first); omarchy45-bare = no link and "Hyprland", the Omarchy session as it is, and what the Grassfield
+  # session was before this fix (the control); omarchy45-leftover = "Hyprland" with the link a Grassfield session left in the
+  # user's directory (the Omarchy session after one); omarchy45-dangling = the Grassfield session with a link whose target is gone
+  # (Grassfield removed). Without a variant: the Grassfield session and no user file. Sets d, desktop, user_conf.
   d=$tmp/$1
   mkdir -p "$d/services" "$d/config" "$d/home" "$d/run" "$d/cfg" "$d/xdg"
   chmod 700 "$d/run"
+  desktop=$session_desktop
+  user_conf=$d/cfg/xdg-desktop-portal/hyprland-portals.conf
+  if [[ ${3:-} == omarchy45* ]]; then
+    mkdir -p "$d/cfg/xdg-desktop-portal"
+    printf '[preferred]\ndefault=hyprland;gtk\norg.freedesktop.impl.portal.Secret=gnome-keyring\n' >"$user_conf"
+    cp "$user_conf" "$d/omarchy-hyprland-portals.conf.orig"
+  fi
+  case ${3:-} in
+    omarchy45) GRASSFIELD_SESSION=1 XDG_CONFIG_HOME=$d/cfg HOME=$d/home sh "$tmp/portal-config" ;;
+    omarchy45-bare) desktop=Hyprland ;;
+    omarchy45-leftover)
+      desktop=Hyprland
+      GRASSFIELD_SESSION=1 XDG_CONFIG_HOME=$d/cfg HOME=$d/home sh "$tmp/portal-config"
+      ;;
+    omarchy45-dangling) ln -s "$tmp/gone/hyprland-portals.conf" "$d/cfg/xdg-desktop-portal/grassfield-portals.conf" ;;
+  esac
   cp -r "$pk/xdg/." "$d/xdg/"
   printf '#!/bin/sh\necho $$ >%s/gtk.pid\nexport GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)"\nexec python3 -I %s gtk --log %s/gtk.log\n' \
     "$d" "$d" "$d" "$fakes" "$d" >"$d/gtk.sh"
@@ -137,7 +178,8 @@ scenario() { # scenario <name> <yes|no|broken>: broken = the backend's activatio
   settings "$d" '{"appearance": "dark"}'
   start_bus "$d" || { echo "bus: $(head -n 1 "$d/bus.log")"; return 1; }
   env -i PATH="$PATH" HOME="$d/home" XDG_CONFIG_HOME="$d/cfg" XDG_DATA_HOME="$d/home/.local/share" XDG_RUNTIME_DIR="$d/run" \
-    XDG_DATA_DIRS="$d/xdg:/usr/share" XDG_CURRENT_DESKTOP=Hyprland DBUS_SESSION_BUS_ADDRESS="$bus" "$frontend" -v -r >"$d/frontend.log" 2>&1 &
+    XDG_DATA_DIRS="$d/xdg:/usr/share" XDG_CURRENT_DESKTOP=$desktop DBUS_SESSION_BUS_ADDRESS="$bus" \
+    "$frontend" -v -r >"$d/frontend.log" 2>&1 &
   frontend_pid=$!
   wait_until 10 owned org.freedesktop.portal.Desktop
 }
@@ -175,7 +217,7 @@ check bash -c '[[ $1 == *"Using grassfield-settings.portal for org.freedesktop.i
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.AppChooser (interface specific config)"* &&
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Print (interface specific config)"* &&
   $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
-  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | sort -u | tr "\n" " ") == "Access (interface specific config) AppChooser (interface specific config) FileChooser (interface specific config) Print (interface specific config) Settings (config) " ]]' _ "$got"
+  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | grep -v "^Secret " | sort -u | tr "\n" " ") == "Access (interface specific config) AppChooser (interface specific config) FileChooser (interface specific config) Print (interface specific config) Settings (config) " ]]' _ "$got"
 read -r rss anon < <(awk '/^VmRSS:/ { r = $2 } /^RssAnon:/ { a = $2 } END { print r, a }' "/proc/$(cat "$d/backend.pid")/status" 2>/dev/null)
 desc="1 the backend's memory is within its budget (private <= 4 MB, resident <= 20 MB) [private ${anon:-?} kB, resident ${rss:-?} kB]"
 check bash -c '[[ -n $1 && -n $2 && $1 -le 4096 && $2 -le 20480 ]]' _ "$anon" "$rss"
@@ -275,6 +317,82 @@ desc="4b ... so the frontend's unit wants the backend and starts after it (packa
 check bash -c 'grep -qx "Wants=grassfield-portal-settings.service" "$1" && grep -qx "After=grassfield-portal-settings.service" "$1" &&
   ! grep -q "^Requisite=" "$2" && grep -q "usr/lib/systemd/user/xdg-desktop-portal.service.d/10-grassfield.conf" "$3"' _ \
   "$pk/systemd/xdg-desktop-portal.service.d/10-grassfield.conf" "$unit" "$pk/arch/PKGBUILD"
+
+# 4c ------------------------------------------------------------------------------------------------------------------
+# Omarchy 4.5.0's migration writes ~/.config/xdg-desktop-portal/hyprland-portals.conf (default=hyprland;gtk): the frontend reads the
+# user's directory first. The Grassfield session names Grassfield first in XDG_CURRENT_DESKTOP and the frontend's unit makes the
+# user's grassfield-portals.conf link (grassfield-portal-config); nothing of the frontend's environment changes.
+scenario shadow-control yes omarchy45-bare || exit 1
+got=$(call read-one org.gnome.desktop.interface gtk-theme)
+desc="4c control: the user's hyprland-portals.conf of Omarchy 4.5.0 wins over the session's routing when nothing prevents it [$got]"
+check test "$got" = '"Adwaita-dark"'
+stop_bus
+scenario shadow-leftover yes omarchy45-leftover || exit 1
+got=$(call read-one org.gnome.desktop.interface gtk-theme)
+desc="4c the Omarchy session (XDG_CURRENT_DESKTOP=Hyprland) with the link a Grassfield session left behind: unchanged, the user's file still rules [$got]"
+check test "$got" = '"Adwaita-dark"'
+stop_bus
+scenario shadow-dangling yes omarchy45-dangling || exit 1
+got=$(call read-one org.gnome.desktop.interface gtk-theme)
+desc="4c a dangling grassfield-portals.conf (Grassfield removed) is skipped: the frontend runs and the user's hyprland-portals.conf rules [$got]"
+check test "$got" = '"Adwaita-dark"'
+stop_bus
+scenario shadow yes omarchy45 || exit 1
+got=$(call read-one org.gnome.desktop.interface gtk-theme)
+desc="4c in the Grassfield session ($session_desktop) with that file present, Settings still goes to Grassfield [$got]"
+check test "$got" = '"Grassfield-multicolor-dark"'
+got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.[A-Za-z]+ \(((default|interface specific) )?config\)" "$d/frontend.log" | sort -u | tr '\n' ';')
+desc="4c ... and so do FileChooser, Access, AppChooser and Print, Secret goes to gnome-keyring where its portal is installed, and every other interface (Screenshot, ScreenCast) keeps the stock routing [$got]"
+check bash -c '[[ $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.FileChooser"* && $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Access"* &&
+  $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.AppChooser"* && $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Print"* &&
+  $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
+  ( ! -r /usr/share/xdg-desktop-portal/portals/gnome-keyring.portal || $1 == *"Using gnome-keyring.portal for org.freedesktop.impl.portal.Secret"* ) ]]' _ "$got"
+desc="4c the link the session made points to the session's routing, and Omarchy's hyprland-portals.conf is byte for byte what the migration wrote"
+check bash -c '[[ $(readlink "$1/cfg/xdg-desktop-portal/grassfield-portals.conf") == "$2/xdg-desktop-portal/hyprland-portals.conf" ]] && cmp -s "$1/cfg/xdg-desktop-portal/hyprland-portals.conf" "$1/omarchy-hyprland-portals.conf.orig" && [[ ! -L $1/cfg/xdg-desktop-portal/hyprland-portals.conf ]]' _ "$d" "$tmp/gf"
+# What the frontend is given is what the session gave it, so is what the applications it launches (OpenURI, OpenFile,
+# autostart files of the Background portal) inherit: the user's XDG_CONFIG_HOME, the session's XDG_CURRENT_DESKTOP, no extra variable.
+fenv=$(tr '\0' '\n' <"/proc/$frontend_pid/environ" 2>/dev/null | sort | tr '\n' ' ')
+desc="4c the frontend's environment is the session's: XDG_CONFIG_HOME stays the user's, XDG_CURRENT_DESKTOP is the session's, nothing Grassfield-specific is added [$fenv]"
+check bash -c '[[ $1 == *" XDG_CONFIG_HOME=$2/cfg "* && $1 == *" XDG_CURRENT_DESKTOP=$3 "* && $1 != *GRASSFIELD_PORTAL* && $(tr " " "\n" <<<"$1" | grep -c .) == 8 ]]' _ " $fenv" "$d" "$session_desktop"
+stop_bus
+# grassfield-portal-config on its own: it only runs in the Grassfield session, never overwrites a file of the user's, and
+# never touches Omarchy's hyprland-portals.conf.
+pc() { # pc <dir> [env...]: runs the program with that configuration home
+  local dir=$1
+  shift
+  env -i PATH="$PATH" HOME="$dir/home" XDG_CONFIG_HOME="$dir/cfg" "$@" sh "$tmp/portal-config"
+  echo $?
+}
+t=$tmp/pc1 && mkdir -p "$t/cfg/xdg-desktop-portal" "$t/home"
+printf 'omarchy\n' >"$t/cfg/xdg-desktop-portal/hyprland-portals.conf"
+got=$(pc "$t")
+desc="4c grassfield-portal-config does nothing outside the Grassfield session (no GRASSFIELD_SESSION=1) [$got]"
+check bash -c '[[ $1 == 0 && ! -e $2/cfg/xdg-desktop-portal/grassfield-portals.conf && ! -L $2/cfg/xdg-desktop-portal/grassfield-portals.conf ]]' _ "$got" "$t"
+got=$(pc "$t" GRASSFIELD_SESSION=1; pc "$t" GRASSFIELD_SESSION=1)
+desc="4c in the Grassfield session it makes the link, twice the same, exit 0, and leaves Omarchy's file as it is [$got]"
+check bash -c '[[ $1 == "0 0" && $(readlink "$2/cfg/xdg-desktop-portal/grassfield-portals.conf") == "$3/xdg-desktop-portal/hyprland-portals.conf" && $(cat "$2/cfg/xdg-desktop-portal/hyprland-portals.conf") == omarchy ]]' _ "$(tr '\n' ' ' <<<"$got" | sed 's/ $//')" "$t" "$tmp/gf"
+t=$tmp/pc2 && mkdir -p "$t/cfg/xdg-desktop-portal" "$t/home"
+printf 'mine\n' >"$t/cfg/xdg-desktop-portal/grassfield-portals.conf"
+pc "$t" GRASSFIELD_SESSION=1 >/dev/null
+desc="4c a grassfield-portals.conf that is the user's own file is kept"
+check bash -c '[[ ! -L $1/cfg/xdg-desktop-portal/grassfield-portals.conf && $(cat "$1/cfg/xdg-desktop-portal/grassfield-portals.conf") == mine ]]' _ "$t"
+t=$tmp/pc3 && mkdir -p "$t/cfg/xdg-desktop-portal" "$t/home"
+ln -s /somewhere/else.conf "$t/cfg/xdg-desktop-portal/grassfield-portals.conf"
+pc "$t" GRASSFIELD_SESSION=1 >/dev/null
+desc="4c a link that is not one of ours is kept, and a link of ours to an older path is replaced"
+t2=$tmp/pc4 && mkdir -p "$t2/cfg/xdg-desktop-portal" "$t2/home"
+ln -s "$tmp/gf/old/hyprland-portals.conf" "$t2/cfg/xdg-desktop-portal/grassfield-portals.conf"
+pc "$t2" GRASSFIELD_SESSION=1 >/dev/null
+check bash -c '[[ $(readlink "$1/cfg/xdg-desktop-portal/grassfield-portals.conf") == /somewhere/else.conf && $(readlink "$2/cfg/xdg-desktop-portal/grassfield-portals.conf") == "$3/xdg-desktop-portal/hyprland-portals.conf" ]]' _ "$t" "$t2" "$tmp/gf"
+t=$tmp/pc5 && mkdir -p "$t/home"
+got=$(env -i PATH="$PATH" HOME="$t/home" XDG_CONFIG_HOME=relative GRASSFIELD_SESSION=1 sh "$tmp/portal-config"; echo $?; env -i PATH="$PATH" GRASSFIELD_SESSION=1 sh "$tmp/portal-config"; echo $?)
+desc="4c a relative XDG_CONFIG_HOME, or no home at all, writes nothing and exits 0 [$(tr '\n' ' ' <<<"$got")]"
+check bash -c '[[ $(tr "\n" " " <<<"$1") == "0 0 " && -z $(ls -A "$2/home") ]]' _ "$got" "$t"
+t=$tmp/pc6 && mkdir -p "$t/home"
+pc "$t" GRASSFIELD_SESSION=1 >/dev/null
+desc="4c without an xdg-desktop-portal directory the program makes it (the migration may not have run), by HOME's .config when XDG_CONFIG_HOME is unset"
+got=$(env -i PATH="$PATH" HOME="$t/home" GRASSFIELD_SESSION=1 sh "$tmp/portal-config"; readlink "$t/home/.config/xdg-desktop-portal/grassfield-portals.conf")
+check test "$got" = "$tmp/gf/xdg-desktop-portal/hyprland-portals.conf"
 
 # 5 --------------------------------------------------------------------------------------------------------------------
 d=$tmp/silent

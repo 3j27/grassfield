@@ -594,7 +594,8 @@ TEST(LaunchGuard, OmarchysSetupsInItsTerminalExactly)
     const QString launcher = QStringLiteral("omarchy-launch-floating-terminal-with-presentation");
     for (const char *command : {"omarchy-setup-security-fingerprint", "omarchy-remove-security-fingerprint", "omarchy-setup-security-fido2",
                                 "omarchy-remove-security-fido2", "omarchy-setup-security-sshd", "omarchy-drive-password", "omarchy-hibernation-setup",
-                                "omarchy-hibernation-remove", "omarchy-voxtype-install", "omarchy-voxtype-remove"}) {
+                                "omarchy-hibernation-remove", "omarchy-voxtype-install", "omarchy-voxtype-remove",
+                                "omarchy-install-dictation-voxtype", "omarchy-remove-dictation-voxtype"}) {
         const QString c = QString::fromLatin1(command);
         EXPECT_TRUE(isLaunch({launcher, c})) << command;
         // Never with an argument, never outside the terminal, never as an action or a query.

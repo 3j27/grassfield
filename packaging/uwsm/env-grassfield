@@ -4,9 +4,11 @@
 # the systemd user manager and the D-Bus activation environment, and unsets it again at the end of the session.
 # The Omarchy session never sources this file: its XDG_CURRENT_DESKTOP has no Grassfield item.
 # Note: "Hyprland:Grassfield" is the value only while uwsm prepares the session. Omarchy's envs.lua (loaded by
-# config/hypr/grassfield/omarchy.lua) sets XDG_CURRENT_DESKTOP=Hyprland in the compositor, and `uwsm finalize` exports that
-# value, so the running session has XDG_CURRENT_DESKTOP=Hyprland on purpose (screen sharing, portals and Electron apps
-# recognise exactly that). XDG_SESSION_DESKTOP=Grassfield identifies the session; applications cannot use OnlyShowIn=Grassfield.
+# config/hypr/grassfield/omarchy.lua) sets XDG_CURRENT_DESKTOP=Hyprland in the compositor; config/hypr/session.lua then makes it
+# "Grassfield:Hyprland" (since Omarchy 4.5.0: the frontend of the portals must read the session's routing before the user's
+# hyprland-portals.conf, and a configuration is looked up item by item), and `uwsm finalize` exports that value. Hyprland stays
+# in the list (screen sharing, portals and Electron apps read the list item by item). XDG_SESSION_DESKTOP=Grassfield identifies the
+# session as before.
 # POSIX sh only (uwsm sources it with its own shell).
 
 # ADR-0035 decision 10-1 (amended 2026-11-03): GRASSFIELD_SESSION=1 reaches the systemd user manager here, before the
@@ -88,6 +90,10 @@ if [ -r /usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf ]; th
         *) export XDG_DATA_DIRS="/usr/share/grassfield/xdg:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" ;;
     esac
     export GTK_USE_PORTAL=1
+    # Omarchy 4.5.0's migration 1788261467 writes ~/.config/xdg-desktop-portal/hyprland-portals.conf, which the frontend reads
+    # before this directory's file: the frontend's unit links the user's grassfield-portals.conf to it (grassfield-portal-config)
+    # and the session's XDG_CURRENT_DESKTOP names Grassfield first (config/hypr/session.lua). No variable of the frontend, or of
+    # the applications it launches, is changed for that.
     # The shell's unit clears GTK_USE_PORTAL for the shell itself (gate P5); the shell gives it back to the apps it starts
     # from this one (shell/services/Apps.qml launchEnvironment).
     export GRASSFIELD_APPS_GTK_USE_PORTAL=1

@@ -40,6 +40,17 @@ if [[ -d /usr/share/omarchy/default/hypr ]]; then
   check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: Lua module default/hypr/input.lua" <<<"$1"' _ "$out" "$status"
   cp -L /usr/share/omarchy/default/hypr/input.lua "$copy/default/hypr/input.lua"
 
+  # Omarchy 4.5.0 sets its own XKB option instead of compose:caps: accepted; neither option: refused.
+  sed -i 's/compose:caps,shift:both_capslock_cancel/omarchy:shift_caps_compose/' "$copy/default/hypr/input.lua"
+  status=0; out=$(run_copy) || status=$?
+  desc="input.lua with Omarchy 4.5.0's omarchy:shift_caps_compose instead of compose:caps passes"
+  check bash -c '[[ $2 == 0 ]] && ! grep -q "^FAIL" <<<"$1"' _ "$out" "$status"
+  sed -i 's/omarchy:shift_caps_compose/some:other/' "$copy/default/hypr/input.lua"
+  status=0; out=$(run_copy) || status=$?
+  desc="input.lua with neither compose option fails the check by name"
+  check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: input.lua still reads the layout" <<<"$1"' _ "$out" "$status"
+  cp -L /usr/share/omarchy/default/hypr/input.lua "$copy/default/hypr/input.lua"
+
   rm "$copy/bin/omarchy-hook"
   status=0; out=$(run_copy) || status=$?
   desc="a missing command (omarchy-hook) fails the check by name"

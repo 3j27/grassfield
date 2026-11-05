@@ -101,6 +101,42 @@ and the owner L2 list. The lock fixes of 4.0.5/4.0.6 (stale `locked` binding bef
 Omarchy's plugin, of which Grassfield's `shell/security/lock/Lock.qml` is an adapted fork (review item for the security
 owner; no upstream commit is pinned in the file header).
 
+### Omarchy 4.5.0 supported, 4.0.6 stays the minimum (platform work of 2026-11-05)
+Omarchy's stable mirror serves omarchy 4.5.0-3 with Hyprland 0.56.2-4, quickshell 0.3.2.r7 and qt6-base 6.12.0-3 unchanged, so no
+rebuild of the compositor plugin or the shell is implied. Both versions are supported by the same code. What changed, and what
+Grassfield did (each line has a test; `GRASSFIELD_TEST_OMARCHY_ALT=<a 4.5.0 checkout>` runs the version-dependent ones on that tree):
+
+| 4.5.0 change | Effect on Grassfield | Done |
+|---|---|---|
+| `omarchy-update-keyring` refreshes `omarchy-keyring` (and Arch ARM and platform keyrings) | the update helper refreshed only `archlinux-keyring` | the helper refreshes each installed keyring, failing closed; ARM and platform keyrings are not ported (x86_64 only) |
+| `omarchy-update-system-pkgs` goes through `omarchy-update-pacman` (a systemd scope, `OMARCHY_UPDATE_PACMAN=1`) | none: the helper already runs pacman in its own system unit with the guard variable | read, nothing to port |
+| new `omarchy-update-boot` | none on x86_64: `omarchy-lifecycle-dispatch` registers `update-verify` for Apple Silicon only (exit 0 elsewhere) | not mirrored; written in the helper's header |
+| `omarchy-update-restart` reads each kernel's `modules.builtin` (4.0.6: `vmlinuz`) | the helper's restart rule used `vmlinuz` only | either file, owned by a package, in the running kernel's folder counts; Settings reads the folder's existence, true on both |
+| `omarchy-update-aur-pkgs` exits 1 on a failure and unsets `GOROOT`/`GOBIN` | none: Grassfield's update runner never runs it (AUR apps are `deferred: aur`) | read, nothing to port |
+| `omarchy-update` runs `omarchy-update-orphan-pkgs`, restarts services, clears the indicator with `omarchy-shell -q omarchy.system-update clear` | the shim answers that call (it strips `-q`); orphans were never part of the helper | read, nothing to port |
+| `omarchy-refresh-pacman` renders the channel template with regional additions | `[grassfield]` is still appended last by the `pre-refresh-pacman` hook, which still runs after the copy and before `-Syyuu`; the x86 template is unchanged (same sha256) | comment only |
+| migration 1788261467 writes `~/.config/xdg-desktop-portal/hyprland-portals.conf` | it won over the session's routing: Settings, FileChooser, Access, AppChooser and Print went to gtk | the frontend reads ONE configuration per directory (per item of `XDG_CURRENT_DESKTOP`, in order), the user's directory first, so a system-wide `grassfield-portals.conf` would lose (tested). The Grassfield session sets `XDG_CURRENT_DESKTOP=Grassfield:Hyprland` (`session.lua`) and the frontend's unit runs `grassfield-portal-config` first, which links the user's `grassfield-portals.conf` to the session's routing (a link of ours only, never over a file of the user's, Omarchy's file never touched). Nothing of the frontend's environment, or of the apps it launches, changes (an earlier design that gave it another `XDG_CONFIG_HOME` was refused: apps inherited it). The session's file also routes `Secret` to gnome-keyring. The Omarchy session is unchanged (no Grassfield item, the link is never read); a dangling link, once Grassfield is removed, is skipped. Side effect: `XDG_CURRENT_DESKTOP` has a second item, read item by item by `UseIn=`, `OnlyShowIn`, Qt, GTK and Chromium |
+| migration 1789764927 enables `owed.service` (video wallpaper, package `owe`) | a second wallpaper renderer in the Grassfield session | `owed.service.d/10-grassfield.conf`: `ConditionEnvironment=!GRASSFIELD_SESSION=1` (the shell draws the wallpaper, video included); the Omarchy session is unchanged |
+| `input.lua` sets the XKB option `omarchy:shift_caps_compose` (Caps Lock stays Caps Lock, Shift + Caps Lock composes; defined in `/etc/xkb`) and requires `default.hypr.keyboard` | the compat check failed; Grassfield sets no `kb_options` of its own, so the Omarchy module's value flows through | the check accepts both options and follows what `input.lua` requires; the include's fallback (module unloadable) uses the new option when `/etc/xkb` defines it. This is the macOS behaviour: nothing to change in Settings |
+| `davinci-resolve.lua` frees Preferences, Find Directory and "Dialog" windows from `stay_focused` | Grassfield's rule had the 4.0.6 title | the rule carries the 4.5.0 title on both (`omarchy_older_match`; `no_follow_mouse` is left out: click-to-focus) |
+| `omarchy-theme-set` plays wallpaper intros through OWE, runs retints detached, mirrors to herdr machines | `grassfield-terminal-theme` keeps the run contained | read: the stand-in `hyprctl` also covers the new read of `animations:enabled`; the detached retints stay in the process group; the herdr mirror is Omarchy's opt-in toggle (header of the helper) |
+| `omarchy-weather-location` and the weather panel detect the place through geo.omarchy.org | Grassfield's Weather widget keeps wttr.in (OC-14) | `weather.json` and `--set`/`--clear` are unchanged: nothing to port |
+| `omarchy-capture-*`, `omarchy-menu-share`, `omarchy-brightness-display*` | notification texts through `omarchy-i18n`; DDC negative cache; a platform file for DDC | arguments and output contracts unchanged: nothing to port |
+| the dictation backend system (`omarchy-dictation*`, `default/hypr/bindings/dictation.lua` replaces `voxtype.lua`); setups and hibernation scripts; the lock, idle and polkit plugins | reviewed by the shell and security work | PENDING in the lock (below) |
+
+The drift lock follows the same rule as the support: **one lock per accepted version** (`docs/upstream/omarchy.lock` for 4.0.6,
+`docs/upstream/omarchy-4.5.0.lock`), chosen by the newest migration of the tree under check, so it works for an installed
+Omarchy and for a checkout; a tree no lock names fails (closed) with the list of known locks. A line `pending:<who>` marks a file of
+that version not yet reviewed: the check fails on it by name until the reviewer replaces the field by the file's sha256. The reason
+for a lock per version rather than several hashes per line: the review of a file is a statement about one version, and a hash
+accepted for a version it was never reviewed against would pass silently (`scripts/dev/upstream-drift.sh` header).
+
+NOT VERIFIED here (no Omarchy 4.5.0 session can run on this machine): the update through Settings on a real 4.5.0 machine
+(`pkexec` helper, keyring refresh, the kernel rule after a real kernel update), the portal routing under the real systemd user
+manager (the test starts the frontend with the session's environment and runs the real `grassfield-portal-config`; the unit's
+`ExecStartPre` and Electron or Chromium with the two-item `XDG_CURRENT_DESKTOP`, screen sharing included, are not run here; the
+container test of the helper needs a docker daemon), `owed` skipped at a real login, and `hyprctl`-free theme changes with 4.5.0's `omarchy-theme-set`.
+
 ### Corrections for the documents (integrator)
 - ADR-0001, Decision: "If the include fails ... the shell shows one notification" is now true (a critical notification from
   `session.lua`, text fixed); the include is a capability check, no longer the version file; it loads `default.hypr.input` too.
