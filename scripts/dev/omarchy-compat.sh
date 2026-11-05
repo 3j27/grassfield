@@ -39,7 +39,14 @@ for m in helpers envs paths require_optional nvidia input; do
   have "Lua module default/hypr/$m.lua (required by the session include)" test -r "$omarchy/default/hypr/$m.lua"
 done
 have "helpers.lua still defines o.window (default input.lua and Omarchy's app rules call it)" has_grep 'function o.window\|o.window *=' "$omarchy/default/hypr/helpers.lua"
-have "input.lua still reads the layout from /etc/vconsole.conf (XKBLAYOUT) and sets compose:caps" bash -c 'grep -q XKBLAYOUT "$1" && grep -q "compose:caps" "$1"' _ "$omarchy/default/hypr/input.lua"
+# Omarchy 4.0.6 sets compose:caps; 4.5.0 sets its own XKB option omarchy:shift_caps_compose (Caps Lock stays Caps Lock, Shift + Caps
+# Lock composes; defined in /etc/xkb, which omarchy.lua's fallback checks for). Either keeps the keyboard defaults Grassfield follows.
+have "input.lua still reads the layout from /etc/vconsole.conf (XKBLAYOUT; 4.5.0 through default/hypr/keyboard.lua) and sets compose:caps or omarchy:shift_caps_compose" \
+  bash -c 'grep -q XKBLAYOUT "$1" && grep -q "compose:caps\|omarchy:shift_caps_compose" "$1"' _ "$omarchy/default/hypr/input.lua"
+# What input.lua requires (4.5.0: default.hypr.keyboard) must exist, or omarchy.lua's include falls back to its own defaults.
+for req in $(sed -n 's/^[^-]*require("default\.hypr\.\([a-z_]*\)").*/\1/p' "$omarchy/default/hypr/input.lua" 2>/dev/null); do
+  have "default/hypr/$req.lua (required by input.lua)" test -r "$omarchy/default/hypr/$req.lua"
+done
 have "envs.lua still sets OMARCHY_PATH and the Wayland environment the shell and apps expect" bash -c 'grep -q OMARCHY_PATH "$1" && grep -q QT_QPA_PLATFORM "$1"' _ "$omarchy/default/hypr/envs.lua"
 
 # --- Commands Grassfield runs or shadows ------------------------------------------------------------------------------
@@ -47,7 +54,8 @@ for c in omarchy-restart-shell omarchy-launch-shell; do
   have "$c exists (Grassfield shadows it with a stand-in, packaging/shims)" test -x "$omarchy/bin/$c"
 done
 have "omarchy-update-restart still restarts the shell by the name omarchy-restart-shell (the stand-in is in the update's path)" has_grep omarchy-restart-shell "$omarchy/bin/omarchy-update-restart"
-have "omarchy-launch-shell is still the only command that starts the Omarchy shell (quickshell -n -p)" bash -c '[[ $(grep -Rl "quickshell -n -p" "$1/bin" 2>/dev/null | wc -l) == 1 ]] && grep -Rq "quickshell -n -p" "$1/bin/omarchy-launch-shell"' _ "$omarchy"
+# A line that only greps for the string (4.5.0's omarchy-debug-idle lists processes) starts nothing: lines with grep, and comments, do not count.
+have "omarchy-launch-shell is still the only command that starts the Omarchy shell (quickshell -n -p)" bash -c 'n=0; for f in "$1"/bin/*; do [[ -f $f ]] && grep -v "^[[:space:]]*#" "$f" 2>/dev/null | grep -v "grep" | grep -q "quickshell -n -p" && n=$((n + 1)); done; [[ $n == 1 ]] && grep -q "quickshell -n -p" "$1/bin/omarchy-launch-shell"' _ "$omarchy"
 # Screenshots are Grassfield's own since ADR-0035 step 8 (packaging/bin/grassfield-capture): Omarchy's capture commands are no
 # longer used.
 for c in omarchy-hook omarchy-powerprofiles-init omarchy-powerprofiles-set omarchy-migrate omarchy-launch-floating-terminal-with-presentation omarchy-migrate-notify; do
@@ -128,7 +136,7 @@ have "omarchy-brightness-display-ddc still takes <monitor> [+N%|N%-|N%] (Brightn
 for th in catppuccin-latte tokyo-night; do
   have "theme $th exists (a default of terminal.lightTheme/darkTheme)" test -d "$omarchy/themes/$th"
 done
-have "omarchy-restart-hyprctl still reloads through hyprctl by name (grassfield-terminal-theme's private stand-in catches it)" has_grep '^hyprctl reload' "$omarchy/bin/omarchy-restart-hyprctl"
+have "omarchy-restart-hyprctl still reloads through hyprctl by name (grassfield-terminal-theme's private stand-in catches it)" has_grep '^hyprctl.* reload' "$omarchy/bin/omarchy-restart-hyprctl"
 have "omarchy-theme-set-browser-policy still reaches pkexec by name (grassfield-terminal-theme's private stand-in refuses it)" has_grep 'exec pkexec ' "$omarchy/bin/omarchy-theme-set-browser-policy"
 have "omarchy-theme-set calls no omarchy-restart-shell, qs, quickshell or systemctl (nothing may restart grassfield-shell)" \
   bash -c '! grep -Eq "(^|[^-[:alnum:]])(omarchy-restart-shell|qs|quickshell|systemctl)( |$)" "$1"' _ "$omarchy/bin/omarchy-theme-set"

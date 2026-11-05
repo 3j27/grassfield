@@ -1,0 +1,94 @@
+# Upstream Omarchy files the Grassfield security modules derive from (GF-AUDIT-001 GF-031, docs/specs/security.md
+# "Upstream base"). Checked by scripts/dev/upstream-drift.sh, part of `just check`: every file below must still have
+# this sha256 in the installed Omarchy (OMARCHY_PATH, default /usr/share/omarchy). A difference means upstream changed
+# code a Grassfield fork was taken from: read the change, port or reject it in the fork (and say so in
+# docs/specs/security.md "Upstream base"), then re-pin with `scripts/dev/upstream-drift.sh --update`.
+#
+# THIS FILE IS THE LOCK OF OMARCHY 4.5.0. Omarchy 4.0.6 (the minimum Grassfield supports) has docs/upstream/omarchy.lock: one
+# lock per accepted version, chosen by the newest migration of the tree under check (the line below); a tree no lock names
+# fails. The choice and the pending-line rule are explained in scripts/dev/upstream-drift.sh.
+# omarchy-newest-migration 1793667581
+# omarchy-package 4.5.0-3
+# upstream basecamp/omarchy@ac2690cd7be4f47e4a255f5e2e78d904d436b068 (v4.5.0)
+# previous: docs/upstream/omarchy.lock (v4.0.6)
+#
+# Reviewed against the Grassfield files named on each line (the 4.0.6 -> 4.5.0 diff of each file, docs/compat.md "Omarchy 4.5").
+# `pending:<who>` is a file not reviewed yet: the check FAILS on it until the reviewer replaces the field by the file's sha256.
+# Pending here: the lock, idle and polkit forks and omarchy-system-sleep-lock (security-engineer, shell/security), and the Settings
+# setups, hibernation scripts, omarchy-hw-fingerprint and the dictation binding (shell-engineer). default/hypr/bindings/voxtype.lua
+# of 4.0.6 became default/hypr/bindings/dictation.lua in 4.5.0 (the dictation backend system: omarchy-dictation*).
+#
+# sha256 | upstream path (relative to OMARCHY_PATH) | Grassfield files derived from it (comma-separated)
+pending:security-engineer shell/plugins/lock/Service.qml shell/security/lock/Lock.qml
+pending:security-engineer shell/plugins/services/idle/Service.qml shell/security/idle/Idle.qml
+pending:security-engineer shell/plugins/polkit/PolkitAgent.qml shell/security/polkit/AuthAgent.qml
+pending:security-engineer bin/omarchy-system-sleep-lock shell/security/idle/IdleModel.js,packaging/shims/omarchy-shell
+e5004580e41475932f852d622b36ec07bfb0e98633c4d3c3055071a54d0eda07 bin/omarchy-hyprland-session-locked shell/security/lock/Lock.qml
+# Software Update (ADR-0033 step 1): the Omarchy commands and template the [grassfield] client relies on (identical in
+# v4.0.6, except pacman-stable.conf, whose 4.0.6 version puts [omarchy] first: ADR-0033 a.1 keeps [grassfield] last either
+# way). Step 2 pins omarchy-update-status (the shim forwards its `omarchy.system-update refresh|clear`),
+# omarchy-launch-floating-terminal-with-presentation (the pane's "Update Now" runs it with omarchy-update) and
+# omarchy-update-restart (its reboot rule, which the pane reads: the reboot-required marker, the running kernel's modules).
+e2832cb1963ee951fb2ab32b2989083cbb599c77c30c97f720cc19c43dca369e bin/omarchy-refresh-pacman packaging/pacman/pre-refresh-pacman,packaging/bin/grassfield-channel-set
+2fc588a8bffd9deaeec180b689f187fb207caf7fbff79c2cc9df57eb59cdb140 bin/omarchy-hook packaging/pacman/pre-refresh-pacman,packaging/bin/grassfield-channel-set,packaging/bin/grassfield-update-run
+9f7b20581444fb8f8672ff5596bd8ff95f65590f018789a9b49a98ceb4b55985 bin/omarchy-update packaging/bin/grassfield-update-check,apps/settings/src/systemguard.cpp,packaging/pacman/grassfield-update-helper
+9448e1748b10e46bb4310be37d69d0eba6090f69c71264cce4fc6f344278cb7d bin/omarchy-update-lock packaging/bin/grassfield-update-check,packaging/bin/grassfield-channel-set,packaging/bin/grassfield-update-run
+257387ccfcca6211f7bc6bf2cc500bd07d4066c8354f7b869400bc5153e6d645 bin/omarchy-update-available packaging/bin/grassfield-update-check
+f8a4933a4d58b0935cc660da888cda2b4246c3c0926464d3e2e0e432c9354d70 default/pacman/pacman-stable.conf packaging/pacman/grassfield-channel.sh
+fdca38ed49e781a8383a5ac5a6a8429b923ef07b0cabbb815d7893f4b75a8b16 bin/omarchy-update-status packaging/shims/omarchy-shell
+e84d6a47e397f473f06d5f62a9f69f1b441599333a80cb1ff6a798ce9eb10b3d bin/omarchy-launch-floating-terminal-with-presentation apps/settings/src/systemguard.cpp,apps/settings/qml/SoftwareUpdateState.qml
+faaa8fa9c9534c7f699d62c014ff5eb2a26f9f109e0bdd54080a041ebca2bf9a bin/omarchy-update-restart apps/settings/qml/SoftwareUpdateState.qml,packaging/pacman/grassfield-update-helper,packaging/bin/grassfield-update-run
+# Software Update step 3 (ADR-0033 "Step 3", owner decision SU-M1): the root steps of `omarchy update` that
+# grassfield-update-helper runs itself (the system programs these scripts call with sudo, with their arguments), the guard
+# hook it satisfies, and the user steps grassfield-update-run runs after the transaction. Identical in v4.0.6 except
+# omarchy-update-keyring (4.0.6 adds --needed, which the helper follows).
+50a5ddef021dac5e79f789a53643fa91a6b8d7193b4d27786516d142525eca93 bin/omarchy-update-requires-free-space packaging/pacman/grassfield-update-helper
+22a4b71541270a7d7c6ed85d480f9f2888df059e030d30860caf4c1f9a601dda bin/omarchy-update-pkg-prune packaging/pacman/grassfield-update-helper
+a154bb5fd33ad3288be4783557887a7207176e9d05bc72585c30e27fea8e3e7b bin/omarchy-snapshot packaging/pacman/grassfield-update-helper
+7aebfa584bf24f8ded3c64597a51859617ac05e5a091fe6a299525123d7ba60a bin/omarchy-update-stay-awake packaging/pacman/grassfield-update-helper
+7be1a1775febc92002db52458c5e7efc098ac7fc35cedb8fd5ce5781cfa79ce4 bin/omarchy-update-keyring packaging/pacman/grassfield-update-helper
+c415050d01733ddf6df98631fa767acd19dfd97865eee8dc3dd394b50bc90ea8 bin/omarchy-update-system-pkgs packaging/pacman/grassfield-update-helper
+2670895ac6e9933e9554c10c65a1ad41aaffbd41ecda81e592df36d8f2a2c4ec bin/omarchy-update-system-pkgs-when-conflicted packaging/pacman/grassfield-update-helper
+aa56714de498170cf9460923dc1047dd89dcc3b08e21809ad2d764ebd1553fed bin/omarchy-update-pacman-guard packaging/pacman/grassfield-update-helper
+d72930596e608ef47004fbf444b2088b5b9a3bf94e4fdfa26b2507eadcedad99 bin/omarchy-update-analyze-logs packaging/pacman/grassfield-update-helper
+# Step 5 (SU-M2, ADR-0033 s5): grassfield-update-helper's GU_MIGRATE_LOOP copies omarchy-migrate's run loop (the same in
+# v4.0.4 and v4.0.6), restricted to an update's own migrations by name: a change of that loop is ported or rejected there.
+0c14cb7853174d5289172496e22c1bd444b20c00c1aefd589e1faa3ae6941abe bin/omarchy-migrate packaging/pacman/grassfield-update-helper,packaging/bin/grassfield-update-run
+edc8148e37bf0b43957f59f8aba7d3c6bfaf8b40d43f0199ba7bf05ae5c908a5 bin/omarchy-update-mise packaging/bin/grassfield-update-run
+fb0e7dc53e7771bf4a2f04cbb3000b86008e1662eea560f03677c9905f3c467e bin/omarchy-update-aur-pkgs packaging/bin/grassfield-update-run
+# ADR-0045 (Omarchy capabilities, 2026-11-04): the Omarchy commands, rules and data Grassfield code follows (arguments,
+# output contracts, rules copied by match) or relies on for safety (grassfield-terminal-theme: the steps of omarchy-theme-set it
+# keeps out of the Grassfield session). A change here is read and ported or rejected in the derived file, then re-pinned.
+ae9157fe949e3217137a1a3f2272a86d4e886e9a743a18c5d8c215c2d96a1e7e bin/omarchy-capture-screenrecording packaging/bin/grassfield-capture
+51d0c12853d0d69f08db01700bf67c50919cb61aa9b5958357ac23a6422b3f96 bin/omarchy-capture-text apps/preview/src/previewlogic.cpp
+2d2b2afcbf4889c34bb6d8c3710ee26b3da639f7e63e61edd9cdc5016073b021 bin/omarchy-capture-qr apps/preview/src/previewlogic.cpp,apps/preview/src/previewapp.cpp
+92e8c4b576cca6075ef4d2a54fe9d693b706a576f53be8a467ac7b725d159a80 bin/omarchy-menu-emoji-insert shell/services/emoji-insert.sh,shell/services/Emoji.qml
+cb6b10b7a377ae670720c00bcd7bdc47207de71198b3b88ab9f68dd2204efff2 bin/omarchy-brightness-display-ddc shell/services/BrightnessLogic.js,shell/services/Brightness.qml,apps/settings/qml/System.js,apps/settings/src/systemguard.cpp
+044e6bcb55bb98b683acd967414e0339f95ebe21393395b3e184d35f44809596 bin/omarchy-brightness-display shell/services/BrightnessLogic.js
+ab251f6cf6e07c6e07b0c4177220e4691d04a872c03694f2bdc606e17facd9da bin/omarchy-theme-set packaging/bin/grassfield-terminal-theme
+239391b6573d0dfa1d988785442d40155db314917872d26323b5b062201446e6 bin/omarchy-restart-hyprctl packaging/bin/grassfield-terminal-theme
+644aefa2176223e606c36552dd4c047be6ca8ded6635de90f298a3a086b89180 bin/omarchy-theme-set-browser-policy packaging/bin/grassfield-terminal-theme
+942bb8fd260387a39ef664c3b172d1fe1baff265a2592a26d8efe118f35a19aa bin/omarchy-theme-set-gnome packaging/bin/grassfield-terminal-theme
+00b2868e563b8a18311d35295b3c8c70dacd76f338b0401dcd08350540536b1e default/hypr/apps/battlenet.lua config/hypr/grassfield/apps.lua
+ea58dce626106bfed18067c161170877d4cccf22bd1a4b050cc4695d16d6abfa default/hypr/apps/davinci-resolve.lua config/hypr/grassfield/apps.lua
+d9eebb75de9898a71bdcaeba09b2dcd1e81bd0eba1eccb9c28f562704d81bffd default/hypr/apps/geforce.lua config/hypr/grassfield/apps.lua
+459cbba410e8d3498a1b9e68a779f036f6c39783e7f9dd4f456574abe4de6cae default/hypr/apps/moonlight.lua config/hypr/grassfield/apps.lua
+759e8a47b1a56079a4a16723849bb3ad520ee0137c7a6b7b05253f2dd848f5cc default/hypr/apps/retroarch.lua config/hypr/grassfield/apps.lua
+48a018d052f936f5168aa013b046cc90c031606242d6e357c0642b414bb272a3 default/hypr/apps/steam.lua config/hypr/grassfield/apps.lua
+7b7cb0be84a5b73b31c6e1004d5082c6ed5e91d3ae74931cf45b13731e4fa698 default/hypr/apps/telegram.lua config/hypr/grassfield/apps.lua
+2dc48b91cdcab9acf23ea84804bfcf108f0be4a34e8b07ddbf81fad4db8c9935 default/hypr/apps/pip.lua config/hypr/grassfield/apps.lua
+1d60fddcec5c08bdfb4904d9b20a4073f3bba34e7fa0152ce9c886f2140fc438 default/hypr/apps/webcam-overlay.lua config/hypr/grassfield/apps.lua
+197e41de207a5a80d884febb1cb86a583737aca05500fec685910f065c649c29 bin/omarchy-menu-share apps/files/qml/ShareLogic.js,apps/files/src/filesapp.cpp
+c0ff6801196e6b8d3ee609172366ff5672c10a37dead92474e5d16bdffe86693 bin/omarchy-weather-location shell/widgets/Weather.js,shell/widgets/WeatherSampler.qml
+3e7dee236b287a6b58fdb1ef9597a2e0bdbe014473795147e47ed97ff78ce579 shell/plugins/panels/weather/Model.js shell/widgets/Weather.js
+55dfe63d84b5421a5e3cad0f619bc3e0a5b3b495a972b44af0fe3a32269ed829 shell/plugins/panels/weather/Panel.qml shell/widgets/Weather.js,shell/widgets/WeatherSampler.qml
+# ADR-0045 Settings setups (OC-5 to OC-10): the Omarchy scripts whose markers, files and output Settings reads (the PAM lines,
+# /etc/fido2/fido2, the SSH hardening file, the resume configuration, the Wi-Fi QR matrix) and the dictation binding's source.
+619b82eeea233061bdadea83566d91c065e231830c3333a41960a5a6221b96e0 bin/omarchy-network-qr apps/settings/qml/NetworkQr.js
+pending:shell-engineer bin/omarchy-setup-security-fingerprint apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+pending:shell-engineer bin/omarchy-setup-security-fido2 apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml
+pending:shell-engineer bin/omarchy-setup-security-sshd apps/settings/qml/Setups.js
+pending:shell-engineer bin/omarchy-hibernation-setup apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
+pending:shell-engineer bin/omarchy-hibernation-available apps/settings/qml/Setups.js,apps/settings/qml/HibernationGroup.qml
+pending:shell-engineer default/hypr/bindings/dictation.lua config/hypr/grassfield/bindings.lua
+pending:shell-engineer bin/omarchy-hw-fingerprint apps/settings/src/systemguard.cpp,apps/settings/qml/Setups.js,apps/settings/qml/FingerprintPage.qml

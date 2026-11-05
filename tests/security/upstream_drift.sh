@@ -138,17 +138,92 @@ rc=0
 out=$(OMARCHY_PATH=$up GRASSFIELD_UPSTREAM_LOCK=$lock GRASSFIELD_UPSTREAM_ROOT=$tree GRASSFIELD_UPSTREAM_PACKAGE=0 bash "$script" 2>&1) || rc=$?
 [[ $out != *"$tmp"* ]] && pass "env: the old test variables are ignored (no fixture path in the output)" || bad "env: the variables still redirect the check: $out"
 
-# The repository's own lock: attribution always; drift against the installed Omarchy when it is there.
+# One lock per accepted Omarchy version, chosen by the newest migration of the tree (Omarchy 4.0.6 and 4.5.0): fixture locks in
+# the root's docs/upstream, no --lock.
+mkdir -p "$tree/docs/upstream" "$up/migrations"
+printf '#!/bin/sh\necho sleep-lock v2\n' >"$up/bin/omarchy-system-sleep-lock"
+printf 'upstream lock v1\n' >"$tmp/v1-Service.qml"
+sha_of() { sha256sum "$1" | cut -d' ' -f1; }
+lock_of() { # lock_of <file> <migration> <sha of Service.qml> <sha field of the sleep-lock line>
+  {
+    echo "# omarchy-newest-migration $2"
+    echo "# omarchy-package v$2"
+    echo "$3 shell/plugins/lock/Service.qml shell/security/lock/Lock.qml"
+    echo "$4 bin/omarchy-system-sleep-lock shell/security/idle/IdleModel.js,packaging/shims/omarchy-shell"
+  } >"$1"
+}
+printf 'upstream lock v2: a fix\n' >"$up/shell/plugins/lock/Service.qml"
+touch "$up/migrations/100.sh" "$up/migrations/200.sh"
+# The tree is the 2nd version (newest migration 200); the first lock is for a tree whose files were different.
+lock_of "$tree/docs/upstream/omarchy.lock" 100 "$(sha_of "$tmp/v1-Service.qml")" "$(printf '%064d' 1)"
+lock_of "$tree/docs/upstream/omarchy-2.lock" 200 "$(sha_of "$up/shell/plugins/lock/Service.qml")" "$(sha_of "$up/bin/omarchy-system-sleep-lock")"
+auto() { rc=0; out=$(bash "$script" --omarchy "${FIX_OMARCHY:-$up}" --root "$tree" --package 9.9.9-1 "$@" 2>&1) || rc=$?; }
+auto
+[[ $rc == 0 && $out == *"upstream-drift: 2 upstream files unchanged (docs/upstream/omarchy-2.lock)"* ]] \
+  && pass "versions: the lock that names the tree's newest migration is the one checked" || bad "versions: rc=$rc: $out"
+rm "$up/migrations/200.sh"
+auto
+[[ $rc == 1 && $out == *"shell/plugins/lock/Service.qml changed upstream"*"docs/upstream/omarchy.lock"* ]] \
+  && pass "versions: the same files under the other version's migration are checked against the other lock" || bad "versions: other lock rc=$rc: $out"
+touch "$up/migrations/300.sh"
+auto
+[[ $rc == 1 && $out == *"no lock names this Omarchy tree"*"newest migration 300"*"omarchy-2.lock -> 200"* ]] \
+  && pass "versions: a tree no lock names fails, closed, and the message lists the known locks" || bad "versions: unknown tree rc=$rc: $out"
+auto --update
+[[ $rc == 1 ]] && pass "versions: --update does not guess a lock for an unknown tree" || bad "versions: update unknown rc=$rc: $out"
+rm "$up/migrations/300.sh"; mkdir -p "$tmp/nomigrations"
+FIX_OMARCHY=$tmp/nomigrations auto
+[[ $rc == 1 && $out == *"no lock names this Omarchy tree"* ]] && pass "versions: a tree without migrations is unknown too" || bad "versions: no migrations rc=$rc: $out"
+cp "$tree/docs/upstream/omarchy-2.lock" "$tree/docs/upstream/omarchy-2b.lock"
+touch "$up/migrations/200.sh"
+auto
+[[ $rc == 2 && $out == *"both name the migration 200"* ]] && pass "versions: two locks naming one tree are refused (exit 2)" || bad "versions: ambiguous rc=$rc: $out"
+rm "$tree/docs/upstream/omarchy-2b.lock"
+# A line pending for one version only fails that version, with the reviewer's name; --update keeps it pending.
+lock_of "$tree/docs/upstream/omarchy-2.lock" 200 "$(sha_of "$up/shell/plugins/lock/Service.qml")" "pending:security-engineer"
+auto
+[[ $rc == 1 && $out == *"bin/omarchy-system-sleep-lock pending review by security-engineer"* && $out == *"ok:   shell/plugins/lock/Service.qml"* ]] \
+  && pass "pending: a pending line fails with 'pending review by <who>', the reviewed ones pass" || bad "pending: rc=$rc: $out"
+printf 'upstream lock v3\n' >"$up/shell/plugins/lock/Service.qml"
+auto --update
+[[ $rc == 0 && $out == *"1 line(s) stay pending"* ]] && grep -q '^pending:security-engineer bin/omarchy-system-sleep-lock ' "$tree/docs/upstream/omarchy-2.lock" \
+  && grep -q "^$(sha_of "$up/shell/plugins/lock/Service.qml") shell/plugins/lock/Service.qml " "$tree/docs/upstream/omarchy-2.lock" \
+  && grep -q '^# omarchy-newest-migration 200$' "$tree/docs/upstream/omarchy-2.lock" \
+  && pass "pending: --update re-pins the reviewed lines, leaves the pending one, keeps the marker" || bad "pending: update rc=$rc: $out; $(cat "$tree/docs/upstream/omarchy-2.lock")"
+sed -i "s/^pending:security-engineer /$(sha_of "$up/bin/omarchy-system-sleep-lock") /" "$tree/docs/upstream/omarchy-2.lock"
+auto
+[[ $rc == 0 ]] && pass "pending: replaced by the file's sha256, the line passes" || bad "pending: completed rc=$rc: $out"
+# A pending line still names derived files that exist (its attribution text waits for the review), in any lock, with or without Omarchy.
+lock_of "$tree/docs/upstream/omarchy-2.lock" 200 "$(sha_of "$up/shell/plugins/lock/Service.qml")" "pending:security-engineer"
+printf '# omarchy-newest-migration 150\n%s shell/plugins/lock/Service.qml shell/security/lock/Missing.qml\n' "$(printf '%064d' 2)" >"$tree/docs/upstream/omarchy-3.lock"
+FIX_OMARCHY=$tmp/none auto
+[[ $rc == 1 && $out == *"shell/security/lock/Missing.qml (derived from shell/plugins/lock/Service.qml) does not exist"* ]] \
+  && pass "versions: every lock's attribution is checked, whichever the tree" || bad "versions: attribution of the other lock rc=$rc: $out"
+rm "$tree/docs/upstream/omarchy-3.lock" "$tree/docs/upstream/omarchy-2.lock" "$tree/docs/upstream/omarchy.lock"
+
+# The repository's own locks: attribution always; drift against the installed Omarchy when it is there; and against another tree
+# (GRASSFIELD_TEST_OMARCHY_ALT, an Omarchy 4.5.0 checkout, say) where only the lines still pending may fail.
 rc=0
 out=$(bash "$script" --omarchy "$tmp/none" 2>&1) || rc=$?
 [[ $rc == 0 ]] && pass "real: the repository's forks are all pinned and attributed" || bad "real: attribution rc=$rc: $out"
 if [[ -d /usr/share/omarchy ]]; then
   rc=0
   out=$(bash "$script" 2>&1) || rc=$?
-  [[ $rc == 0 ]] && pass "real: the installed Omarchy matches docs/upstream/omarchy.lock" \
-    || bad "real: the installed Omarchy differs from the lock (review, then scripts/dev/upstream-drift.sh --update): $out"
+  [[ $rc == 0 ]] && pass "real: the installed Omarchy matches the lock that names it (docs/upstream/omarchy*.lock)" \
+    || bad "real: the installed Omarchy differs from its lock (review, then scripts/dev/upstream-drift.sh --update): $out"
 else
   echo "SKIP: upstream drift real: Omarchy is not installed (attribution checked above)"
+fi
+alt=${GRASSFIELD_TEST_OMARCHY_ALT:-}
+if [[ -n $alt && -d $alt/migrations ]]; then
+  rc=0
+  out=$(bash "$script" --omarchy "$alt" 2>&1) || rc=$?
+  other=$(grep '^FAIL:' <<<"$out" | grep -vc ' pending review by ' || true)
+  [[ $out != *"no lock names this Omarchy tree"* && ($rc == 0 || ($rc == 1 && $other == 0)) ]] \
+    && pass "real: $alt has a lock, and only lines still pending fail ($(grep -c ' pending review by ' <<<"$out") pending)" \
+    || bad "real: $alt (rc=$rc, $other failure(s) that are not pending): $out"
+else
+  echo "SKIP: upstream drift real: GRASSFIELD_TEST_OMARCHY_ALT (a second Omarchy tree) is not set; its lock NOT VERIFIED here"
 fi
 
 exit $fail

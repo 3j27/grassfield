@@ -378,8 +378,9 @@ package_grassfield-desktop() {
   # ADR-0041 step 6a (SQ-5 A): the timer that starts the shell's liveness probe, grassfield-shell-watchdog.service, every 30 s.
   install -Dm644 "$root/packaging/systemd/grassfield-shell-watchdog.timer" "$pkgdir/usr/lib/systemd/user/grassfield-shell-watchdog.timer"
   # bt-agent (Omarchy's pairing agent that answers bluetoothd without asking): grassfield-prompter is the pairing agent of
-  # this session (ADR-0035 D-11, decision 10-1).
-  for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify bt-agent; do
+  # this session (ADR-0035 D-11, decision 10-1). owed (Omarchy 4.5.0's video wallpaper daemon, package owe): the shell draws
+  # the wallpaper in this session.
+  for unit in omarchy-crash-watch omarchy-migrate-notify omarchy-update-user-notify bt-agent owed; do
     install -Dm644 "$root/packaging/systemd/$unit.service.d/10-grassfield.conf" \
       "$pkgdir/usr/lib/systemd/user/$unit.service.d/10-grassfield.conf"
   done

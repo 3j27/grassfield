@@ -271,3 +271,16 @@ Grassfield has since ADR-0034. Corrected with this ADR.
 - Verification limits of the cloud session that built this: no Hyprland, no Quickshell runtime, no nested session: QML is linted
   with qmllint 6.12 against Quickshell 0.3.2's types, logic is unit-tested offline, and every visual or nested check is
   reported NOT VERIFIED until it runs on the owner's machine.
+
+## Amendment: Omarchy 4.5.0 (2026-11-05, platform work)
+Omarchy 4.5.0 is supported beside 4.0.6, which stays the minimum; the capabilities above use the same commands on both. The
+supported versions are the locks of `docs/upstream/` (one per version, chosen by the tree's newest migration, a line pending
+until reviewed: the header of `scripts/dev/upstream-drift.sh`); what 4.5.0 changed and what Grassfield did is the table in
+`docs/compat.md` "Omarchy 4.5.0 supported". Three decisions of this amendment:
+- OC-4.5-1 the Grassfield session's portal routing wins over the user's `hyprland-portals.conf` that 4.5.0's migration writes: the
+  frontend starts with the session's routing directory as its configuration home (`env-grassfield`, the frontend's drop-in);
+  a hand-written portals configuration of the user's is not read there. macOS model: one routing, the system's.
+- OC-4.5-2 `owed.service`, Omarchy's video wallpaper daemon, does not run in the Grassfield session (the shell draws the
+  wallpaper, video included): one program owns the desktop picture.
+- OC-4.5-3 the dictation backend system of 4.5.0 (`omarchy-dictation*`) is the Settings work's (OC-5); until it lands the
+  `dictation.lua` pin stays pending.

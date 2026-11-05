@@ -13,7 +13,9 @@
 # It runs no Omarchy script as root: each root step is the system program an Omarchy update script calls with sudo, with
 # its arguments (omarchy-update-requires-free-space, omarchy-update-pkg-prune, omarchy-snapshot, omarchy-update-stay-awake,
 # omarchy-update-keyring, omarchy-update-system-pkgs, omarchy-update-analyze-logs, omarchy-update-restart; pinned in
-# docs/upstream/omarchy.lock). Omarchy's own files are read as data only: the new omarchy package's migrations and
+# docs/upstream/omarchy.lock and omarchy-4.5.0.lock). It follows Omarchy 4.0.6 and 4.5.0; of 4.5.0's new steps, omarchy-update-boot
+# is a no-op outside Apple Silicon (omarchy-lifecycle-dispatch registers no update-verify elsewhere) and omarchy-update-pacman
+# only wraps the same pacman in a systemd scope, which this unit already is. Omarchy's own files are read as data only: the new omarchy package's migrations and
 # commands, extracted where only root reads, for the scan. One exception, SU-M2 (s5): when the migrations this update adds
 # use `sudo` and nothing that needs a person, it runs them after the transaction AS THE PERSON who chose Update Now (an
 # administrator: a member of wheel), in the transient unit grassfield-update-migrate.service, under the primary group
@@ -695,12 +697,19 @@ pacman_run() { # report downloads pacman-argument...
   return "${PIPESTATUS[0]}"
 }
 
-# omarchy-update-keyring: the Arch keyring first, when a newer one is out (`--needed`, Omarchy 4.0.6's form: new or
-# revoked keys come as a new version). Arch has it installed; anything else has no such package to refresh.
-if [[ -n ${installed[archlinux-keyring]-} ]]; then
+# omarchy-update-keyring: the signing keyrings first, when a newer one is out (`--needed`, Omarchy 4.0.6's form: new or
+# revoked keys come as a new version). Omarchy 4.5.0 refreshes omarchy-keyring beside archlinux-keyring: the same here, each
+# one only when installed (anything else has no such package). Not ported: the Arch Linux ARM keyring and the platform
+# keyrings Omarchy 4.5.0 reads from /usr/share/omarchy-platform/keyrings, which belong to the ARM platforms (Grassfield is
+# x86_64 only); a failed refresh of any keyring stops the update before the transaction, as Omarchy's set -e does.
+keyrings=()
+for pkg in archlinux-keyring omarchy-keyring; do
+  [[ -n ${installed[$pkg]-} ]] && keyrings+=("$pkg")
+done
+if ((${#keyrings[@]})); then
   progress keyring
   no_db_lock
-  pacman_run 0 0 -S --needed --noconfirm --noprogressbar archlinux-keyring || finish 8 "the Arch keyring could not be updated"
+  pacman_run 0 0 -S --needed --noconfirm --noprogressbar "${keyrings[@]}" || finish 8 "the signing keyrings (${keyrings[*]}) could not be updated"
   started=0
 fi
 
@@ -780,12 +789,14 @@ logs=("$log")
 if grep -q 'Updating linux initcpios' -- "${logs[@]}" && ! grep -q 'Initcpio image generation successful' -- "${logs[@]}"; then
   outcome+=("bootimage failed")
 fi
-# omarchy-update-restart's kernel rule: no package's kernel under /usr/lib/modules is the running one.
+# omarchy-update-restart's kernel rule: no package's kernel under /usr/lib/modules is the running one. Omarchy 4.0.6 looks at
+# each kernel's vmlinuz, 4.5.0 at its modules.builtin (every kernel package owns it; Arch Linux ARM's ships no vmlinuz):
+# either file, owned by a package, in the running kernel's folder counts, which gives the rule of both versions.
 running=$(uname -r)
 kernel_updated=1
-for kernel in /usr/lib/modules/*/vmlinuz; do
+for kernel in /usr/lib/modules/*/modules.builtin /usr/lib/modules/*/vmlinuz; do
   if [[ -f $kernel ]] && pacman -Qo -- "$kernel" >/dev/null 2>&1 9<&-; then
-    release=${kernel%/vmlinuz}
+    release=${kernel%/*}
     if [[ ${release##*/} == "$running" ]]; then
       kernel_updated=0
       break

@@ -88,6 +88,13 @@ if [ -r /usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf ]; th
         *) export XDG_DATA_DIRS="/usr/share/grassfield/xdg:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" ;;
     esac
     export GTK_USE_PORTAL=1
+    # The frontend reads ONE portals configuration, the first of: $XDG_CONFIG_HOME, $XDG_CONFIG_DIRS, /etc, the data
+    # directories. Omarchy 4.5.0's migration 1788261467 writes ~/.config/xdg-desktop-portal/hyprland-portals.conf, which would
+    # then win over the session's file and send Settings, FileChooser, Access, AppChooser and Print to gtk. The frontend's unit
+    # (xdg-desktop-portal.service.d/10-grassfield.conf) therefore runs as `env $GRASSFIELD_PORTAL_ENV <frontend>`: in this
+    # session its configuration home is the session's routing directory; in any other session the variable is unset and
+    # the line adds nothing. Only the frontend gets it (never an app: it is not XDG_CONFIG_HOME itself).
+    export GRASSFIELD_PORTAL_ENV="XDG_CONFIG_HOME=/usr/share/grassfield/xdg"
     # The shell's unit clears GTK_USE_PORTAL for the shell itself (gate P5); the shell gives it back to the apps it starts
     # from this one (shell/services/Apps.qml launchEnvironment).
     export GRASSFIELD_APPS_GTK_USE_PORTAL=1

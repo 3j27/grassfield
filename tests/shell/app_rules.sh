@@ -78,12 +78,12 @@ print("applied " .. #applied)
 print("failed " .. #M.failed)
 for i, e in ipairs(M.rules) do
   local given = applied[i] or {}
-  local meta = { source = true, name = true, match = true, omarchy_match = true, narrowed = true }
+  local meta = { source = true, name = true, match = true, omarchy_match = true, omarchy_older_match = true, narrowed = true }
   for k in pairs(meta) do
     if k ~= "name" and k ~= "match" and given[k] ~= nil then error(e.name .. ": " .. k .. " reached Hyprland") end
   end
   print(e.source .. "\t" .. e.name .. "\t" .. pairs_of(e.omarchy_match or e.match, {}) .. "\t" .. pairs_of(e, meta)
-    .. "\t" .. (e.narrowed or "-") .. "\t" .. pairs_of(given.match or {}, {}))
+    .. "\t" .. (e.narrowed or "-") .. "\t" .. pairs_of(given.match or {}, {}) .. "\t" .. (e.omarchy_older_match and pairs_of(e.omarchy_older_match, {}) or "-"))
 end
 LUA
 out=$(cd "$tmp" && lua "$tmp/run.lua" "$rules" 2>&1)
@@ -120,7 +120,7 @@ def fields(text):
 
 
 for line in open(listing, encoding="utf-8"):
-    source, name, omarchy, effects, narrowed, given = line.rstrip("\n").split("\t")
+    source, name, omarchy, effects, narrowed, given = line.rstrip("\n").split("\t")[:6]
     o, g = fields(omarchy), fields(given)
     if narrowed == "-":
         if o != g:
@@ -198,17 +198,18 @@ def calls(text):
 
 bad = 0
 for line in open(listing, encoding="utf-8"):
-    source, name, match, effects = line.rstrip("\n").split("\t")[:4]
+    fields_ = line.rstrip("\n").split("\t")
+    source, name, match, effects = fields_[:4]
+    older = fields_[6] if len(fields_) > 6 and fields_[6] != "-" else None
     path = os.path.join(apps, source)
     if not os.path.isfile(path):
         print("  %s: %s is not an Omarchy file" % (name, source))
         bad = 1
         continue
     found = calls(open(path, encoding="utf-8").read())
-    m = [kv.split("=", 1) for kv in match.split(";")]
-    keys = {k for k, _ in m}
-
-    def same_match(call):
+    def same_match(call, match=match):
+        m = [kv.split("=", 1) for kv in match.split(";")]
+        keys = {k for k, _ in m}
         if keys == {"class"} and call.startswith("o.window(%s," % re.sub(r"\s+", "", m[0][1])):
             return True
         body = call[len("o.window("):]
@@ -217,7 +218,8 @@ for line in open(listing, encoding="utf-8"):
         first = body[:body.index("}") + 1]
         return all(("%s=%s" % (k, re.sub(r"\s+", "", v))) in first for k, v in m) and first.count("=") == len(m)
 
-    hits = [c for c in found if same_match(c)]
+    # A rule that follows a change between Omarchy versions (`omarchy_older_match`) is the match of either.
+    hits = [c for c in found if same_match(c) or (older and same_match(c, older))]
     if not hits:
         print("  %s: no o.window call of %s has the match %s" % (name, source, match))
         bad = 1

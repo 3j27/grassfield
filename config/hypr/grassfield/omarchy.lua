@@ -100,6 +100,17 @@ else
   -- Omarchy's guard: Hyprland resolves the bindings against the first layout, so a layout that cannot type Latin letters
   -- gets U.S. before it, the original one reached with Left Alt + Right Alt (the list is input.lua's M.non_latin).
   local options = "compose:caps,shift:both_capslock_cancel"
+  -- Omarchy 4.5.0: Caps Lock stays Caps Lock and Shift + Caps Lock is Compose (the macOS model), through an XKB option it
+  -- defines itself in /etc/xkb (libxkbcommon reads that before the system rules). Used only when the definition is
+  -- installed, so Omarchy 4.0.6 keeps the stock options above.
+  local rules = io.open("/etc/xkb/rules/evdev", "r")
+  if rules then
+    local text = rules:read("a") or ""
+    rules:close()
+    if text:find("omarchy:shift_caps_compose", 1, true) and exists("/etc/xkb/symbols/omarchy") then
+      options = "omarchy:shift_caps_compose"
+    end
+  end
   local non_latin = " af am ara bd bg by et ge gr il in iq ir kg kh kz la lk mk mm mn mv np rs ru sy th tj ua "
   if non_latin:find(" " .. layout:match("^[^,]*") .. " ", 1, true) then
     layout, variant = "us," .. layout, "," .. variant
