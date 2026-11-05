@@ -4,6 +4,14 @@ All notable changes of Grassfield Desktop. The version of every package, library
 file at the repository root (`scripts/dev/check-version.sh`, part of `just check`, keeps the consumers equal to it).
 Format: one section per version, newest first.
 
+## 1.0.0-rc4 (release candidate, 2026-11-05)
+
+Omarchy's capabilities in the Grassfield session (ADR-0045): the screenshot and recording toolbar (Super+Shift+5), text and
+QR codes in images (Preview, Glance), Emoji & Symbols, external display brightness over DDC/CI, the Settings setups through
+the system services (Dictation, Fingerprint & Key, Remote Login, Disk Encryption, Hibernation on Battery and Energy, Share
+Network), terminal themes that follow the appearance, per-app rules, LocalSend in Files and a Weather widget. The polkit
+sheet waits for a fingerprint or a security key, and refuses a request nobody can see once a device prompt starts.
+
 ## 1.0.0-rc3 (release candidate, 2026-11-05)
 
 The owner's report from a second machine (a desktop PC with several disks and displays), on the beta channel: uninstalling

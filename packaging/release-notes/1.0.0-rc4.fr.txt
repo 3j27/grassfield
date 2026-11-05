@@ -1,0 +1,5 @@
+Super+Maj+5 ouvre la barre de capture et d’enregistrement : tout l’écran, une fenêtre ou une sélection ; arrêtez un enregistrement depuis la barre des menus.
+Le texte et les codes QR des images se sélectionnent et se copient dans Visionneuse et Survol ; Super+Ctrl+Espace ouvre Emojis et symboles.
+La luminosité des écrans externes (DDC/CI) suit les touches de luminosité, les Réglages rapides et Écrans.
+Réglages configure la Dictée, Empreinte et clé, la Session à distance, le mot de passe du disque et l’Hibernation, et partage un réseau Wi-Fi par un code.
+Les thèmes du terminal suivent l’apparence ; Fichiers partage avec LocalSend ; un widget Météo rejoint le bureau.

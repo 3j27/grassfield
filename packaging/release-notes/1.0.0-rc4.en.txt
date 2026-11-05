@@ -1,0 +1,5 @@
+Super+Shift+5 opens the screenshot and recording toolbar: the whole screen, a window or a selection; stop a recording from the menu bar.
+Text and QR codes in images can be selected and copied in Preview and Glance; Super+Ctrl+Space opens Emoji & Symbols.
+External displays' brightness (DDC/CI) follows the brightness keys, Quick Settings and Displays.
+Settings sets up Dictation, Fingerprint & Key, Remote Login, the disk password and Hibernation, and shares a Wi-Fi network with a code.
+Terminal themes follow the appearance; Files shares with LocalSend; a Weather widget joins the desktop.
