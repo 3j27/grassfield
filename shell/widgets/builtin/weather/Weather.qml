@@ -212,9 +212,10 @@ WidgetBase {
             visible: text !== ""
             text: root.conditionText
             font.weight: Tokens.typographyTitleWeight
-            // A long name (French "Partiellement nuageux") wraps to a second line, as macOS does, rather than being cut.
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
+            // One line, as macOS draws it: a long name (French "Partiellement nuageux") shrinks toward the caption size, then is
+            // elided (WidgetLabel), so the column keeps its height and never grows into the temperature above it.
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: Tokens.typographyCaptionSize
             color: root.ink
         }
 

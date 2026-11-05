@@ -7,6 +7,8 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "CaptureModel.js" as Model
+import "../overview/ClientChrome.js" as ClientChrome
+import "../platform/WindowTiling.js" as WindowTiling
 
 // The capture toolbar's window (spec docs/specs/system-dialogs.md "Capture toolbar", ADR-0045 OC-1), one per screen, mapped
 // only on the controller's screen while open. As Search, a full-screen transparent overlay that holds the keyboard (exclusive)
@@ -102,14 +104,20 @@ Variants {
         // The window drawn on top under the point (this display's coordinates), from the platform's window list of the shown
         // Desktop and the order the windows were activated in, clipped to the display; null when none.
         function windowUnder(x: real, y: real): var {
-            const list = Compositor.windowsOn(win.name, Compositor.topologyRevision).map(w => ({
+            const list = Compositor.windowsOn(win.name, Compositor.topologyRevision).map(w => {
+                // The window as it looks: the plugin's titlebar strip lies above the window's own box (none on a window that
+                // draws its own chrome, none without the plugin), and macOS tints and captures the window with its title bar.
+                const away = WindowTiling.splitTitleAway(TilingLink.splits, w.address, Compositor.splitTitlesAway);
+                const band = Capabilities.pluginPresent && !w.fullscreen ? ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.windowTitlebarHeight, away) : 0;
+                return {
                         x: w.x,
-                        y: w.y,
+                        y: w.y - band,
                         w: w.w,
-                        h: w.h,
+                        h: w.h + band,
                         fullscreen: w.fullscreen,
                         stamp: w.toplevel && Compositor.recency.has(w.toplevel) ? Compositor.recency.get(w.toplevel) : 0
-                    }));
+                };
+            });
             const hit = Model.windowAt(list, x, y);
             return hit ? Model.clip(hit, win.bounds) : null;
         }
