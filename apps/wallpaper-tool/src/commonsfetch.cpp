@@ -32,7 +32,7 @@ namespace {
 // User-Agent policy (ADR-0016). No project URL exists yet (packaging uses a placeholder
 // domain), so that part is omitted rather than invented.
 constexpr int kMajorVersion = 0;
-const char kContact[] = "developer@notchpay.co";
+const char kContact[] = "chapdel.kamga2@gmail.com";
 
 const QStringList kHosts = {QStringLiteral("commons.wikimedia.org"), QStringLiteral("thumb.wikimedia.org"), QStringLiteral("upload.wikimedia.org")};
 // NASA APOD: the API and the picture host. science.nasa.gov (where the logo answer pointed) is deliberately not listed.
