@@ -828,7 +828,7 @@ struct GeneralFixture {
     {
         bus.handler = [this](const Call &c) -> BusReply {
             if (c.member == QLatin1String("GetAll") && c.service == kHost)
-                return ok({QVariantMap{{"PrettyHostname", "Chapdel\x01's Laptop"}, {"StaticHostname", "chapdels-laptop"}, {"Hostname", "chapdels-laptop"},
+                return ok({QVariantMap{{"PrettyHostname", "Alex\x01's Laptop"}, {"StaticHostname", "alexs-laptop"}, {"Hostname", "alexs-laptop"},
                                        {"Chassis", "laptop"}, {"HardwareVendor", "LENOVO"}, {"HardwareModel", "ThinkPad X1 Carbon Gen 11"}}});
             if (c.member == QLatin1String("GetAll") && c.service == kTime)
                 return ok({QVariantMap{{"Timezone", "Europe/Paris"}, {"NTP", true}, {"CanNTP", true}, {"NTPSynchronized", true}, {"LocalRTC", false},
@@ -859,8 +859,8 @@ TEST(SystemBusGeneral, HostStateIsHostname1sNamesAndHardware)
     GeneralFixture f;
     const StateResult r = hostState(f.bus);
     ASSERT_TRUE(r.ok);
-    EXPECT_EQ(r.json.value("pretty").toString(), QStringLiteral("Chapdel's Laptop")); // the control character is dropped
-    EXPECT_EQ(r.json.value("static").toString(), QStringLiteral("chapdels-laptop"));
+    EXPECT_EQ(r.json.value("pretty").toString(), QStringLiteral("Alex's Laptop")); // the control character is dropped
+    EXPECT_EQ(r.json.value("static").toString(), QStringLiteral("alexs-laptop"));
     EXPECT_EQ(r.json.value("chassis").toString(), QStringLiteral("laptop"));
     EXPECT_EQ(r.json.value("vendor").toString(), QStringLiteral("LENOVO"));
     EXPECT_EQ(r.json.value("model").toString(), QStringLiteral("ThinkPad X1 Carbon Gen 11"));
@@ -869,12 +869,12 @@ TEST(SystemBusGeneral, HostStateIsHostname1sNamesAndHardware)
 TEST(SystemBusGeneral, RenamingSetsThePrettyThenTheStaticNameInteractively)
 {
     GeneralFixture f;
-    EXPECT_EQ(runAction(f.bus, {{"op", "host.setName"}, {"name", QStringLiteral("  Chapdel’s ThinkPad X1  ")}}), QString());
+    EXPECT_EQ(runAction(f.bus, {{"op", "host.setName"}, {"name", QStringLiteral("  Alex’s ThinkPad X1  ")}}), QString());
     ASSERT_EQ(f.bus.calls.size(), 2);
     EXPECT_EQ(f.bus.calls[0].member, QStringLiteral("SetPrettyHostname"));
-    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{QStringLiteral("Chapdel’s ThinkPad X1"), true}));
+    EXPECT_EQ(f.bus.calls[0].args, (QVariantList{QStringLiteral("Alex’s ThinkPad X1"), true}));
     EXPECT_EQ(f.bus.calls[1].member, QStringLiteral("SetStaticHostname"));
-    EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringLiteral("chapdel-s-thinkpad-x1"), true}));
+    EXPECT_EQ(f.bus.calls[1].args, (QVariantList{QStringLiteral("alex-s-thinkpad-x1"), true}));
     // A name with nothing usable for a host name sets the pretty name only.
     GeneralFixture g;
     EXPECT_EQ(runAction(g.bus, {{"op", "host.setName"}, {"name", QStringLiteral("☃☃")}}), QString());

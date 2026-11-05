@@ -110,7 +110,7 @@ function remoteLoginRoute(sharing, hardened, on) {
     return hardened ? "native" : "terminal";
 }
 
-// "ssh chapdel@chapdels-laptop": the command another computer types (Omarchy's own words at the end of its setup:
+// "ssh alex@alexs-laptop": the command another computer types (Omarchy's own words at the end of its setup:
 // `ssh $USER@$(hostname)`). "" without a user or a host name; a name with a space or a control character is not shown.
 function sshCommand(user, host) {
     const u = String(user || "");

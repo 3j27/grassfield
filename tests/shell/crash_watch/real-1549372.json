@@ -4,7 +4,7 @@
  "CODE_LINE": "793",
  "COREDUMP_BY_PIDFD": "1",
  "COREDUMP_CGROUP": "/user.slice/user-1000.slice/user@1000.service/session.slice/wayland-wm@hyprland.desktop.service",
- "COREDUMP_CMDLINE": "qs -p /home/user/workspace/grassfieldos/.claude/worktrees/agent-a7898260dd9597d7e/shell --log-times --no-color",
+ "COREDUMP_CMDLINE": "qs -p /home/user/workspace/grassfield/.claude/worktrees/agent-a7898260dd9597d7e/shell --log-times --no-color",
  "COREDUMP_CODE": "-6",
  "COREDUMP_COMM": "qs",
  "COREDUMP_DUMPABLE": "1",

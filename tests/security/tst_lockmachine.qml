@@ -297,7 +297,7 @@ TestCase {
         compare(Machine.displayName(passwd, "bob"), "bob");
         compare(Machine.displayName(passwd, "eve"), "eve");
         compare(Machine.initials("Ada Lovelace"), "AL");
-        compare(Machine.initials("chapdel"), "C");
+        compare(Machine.initials("alex"), "A");
         compare(Machine.initials("  "), "");
     }
 

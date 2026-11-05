@@ -8,9 +8,9 @@ TestCase {
     name: "SettingsGeneral"
 
     function test_hostState() {
-        const h = General.parseHost('{"pretty":"Chapdel’s Laptop","static":"chapdels-laptop","hostname":"x","chassis":"laptop","vendor":"LENOVO","model":"ThinkPad X1 Carbon Gen 11"}');
-        compare(h.pretty, "Chapdel’s Laptop");
-        compare(General.computerName(h), "Chapdel’s Laptop");
+        const h = General.parseHost('{"pretty":"Alex’s Laptop","static":"alexs-laptop","hostname":"x","chassis":"laptop","vendor":"LENOVO","model":"ThinkPad X1 Carbon Gen 11"}');
+        compare(h.pretty, "Alex’s Laptop");
+        compare(General.computerName(h), "Alex’s Laptop");
         compare(General.computerName({pretty: "", "static": "box", hostname: "t"}), "box");
         compare(General.computerName({pretty: "", "static": "", hostname: "t"}), "t");
         compare(General.parseHost("[]"), null);
