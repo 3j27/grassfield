@@ -101,3 +101,7 @@ hl.layer_rule({ name = "gf-capture-selection-no-anim", match = { namespace = "^s
 -- The capture timer's countdown plate (ADR-0045 OC-1) goes at once too: the picture is taken half a second after the shell drops
 -- it, and a fade would put the plate in the picture.
 hl.layer_rule({ name = "gf-capture-countdown-no-anim", match = { namespace = "^grassfield-capture-countdown$" }, no_anim = true })
+-- The capture toolbar's per-display surfaces are re-mapped when the keyboard follows the pointer to another display (a mapped
+-- layer set to Exclusive does not get the focus); Hyprland's layer fade made the bar blink for about half a second each time.
+-- macOS shows and hides the screenshot toolbar at once, so its surfaces map and unmap without the compositor's fade.
+hl.layer_rule({ name = "gf-capture-toolbar-no-anim", match = { namespace = "^grassfield-capture$" }, no_anim = true })
