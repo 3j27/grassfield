@@ -7,6 +7,7 @@ root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 tmp=$(mktemp -d "${GRASSFIELD_TEST_TMP:-${TMPDIR:-/tmp}}/gate-run.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 fail=0
+relp() { local p=$1; [[ $p == "$root"/* ]] && p=${p#"$root"/}; printf '%s' "$p"; } # a report writes a path inside the repository relative to it
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 gr=$root/scripts/dev/gate-run.sh
 export GATE_RUNS_DIR=$tmp/runs GATE_ARCHIVE_DIR=$tmp/archive
@@ -22,7 +23,7 @@ check test "$rc" = 0 -a -f "$report" -a -f "$tmp/runs/20261023T120000Z-demo-pass
 desc="the command's output still reaches the caller"
 check grep -qx "PASS: one" "$tmp/out.txt"
 desc="the report has the result, the exit code, the commit, the build id and the log path"
-check bash -c 'grep -qx -- "- result: PASS" "$1" && grep -qx -- "- exit code: 0" "$1" && grep -qE -- "^- commit: [0-9a-f]{12} \((clean|dirty[^)]*)\) on " "$1" && grep -q -- "^- build id: " "$1" && grep -qx -- "- log: $2/runs/20261023T120000Z-demo-pass.log" "$1"' _ "$report" "$tmp"
+check bash -c 'grep -qx -- "- result: PASS" "$1" && grep -qx -- "- exit code: 0" "$1" && grep -qE -- "^- commit: [0-9a-f]{12} \((clean|dirty[^)]*)\) on " "$1" && grep -q -- "^- build id: " "$1" && grep -qx -- "- log: $2" "$1"' _ "$report" "$(relp "$tmp/runs/20261023T120000Z-demo-pass.log")"
 desc="the report counts PASS and SKIP lines and warns that a run with SKIP lines is not a plain pass"
 check bash -c 'grep -qx -- "- lines: PASS 2, FAIL 0, SKIP 1, NOT VERIFIED 0, PROXY 0" "$1" && grep -q -- "^- note: this run is not a plain pass" "$1"' _ "$report"
 desc="the log hash in the report is the log's sha256"
@@ -50,7 +51,7 @@ check test "$rc" = 2
 printf 'summary: ok\n' >"$tmp/late.log"
 GATE_STAMP=20261023T120200Z bash "$gr" --record nested-demo 0 "$tmp/late.log" 2>/dev/null
 desc="--record writes the report of a run that happened elsewhere (the nested scripts' summary line)"
-check bash -c 'grep -qx -- "- gate: nested-demo" "$1" && grep -qx -- "- log: $2" "$1"' _ "$tmp/runs/20261023T120200Z-nested-demo.md" "$tmp/late.log"
+check bash -c 'grep -qx -- "- gate: nested-demo" "$1" && grep -qx -- "- log: $2" "$1"' _ "$tmp/runs/20261023T120200Z-nested-demo.md" "$(relp "$tmp/late.log")"
 rc=0
 bash "$gr" --record nested-demo x "$tmp/late.log" >/dev/null 2>&1 || rc=$?
 desc="--record refuses a non-numeric exit code"
@@ -142,13 +143,15 @@ desc="a clean tree is 'clean'; a tree with only an untracked file is dirty"
 check bash -c 'grep -q "^- commit: [0-9a-f]* (clean) on" "$1/r2/20261023T131600Z-demo-clean.md" && grep -q "^- commit: [0-9a-f]* (dirty: " "$1/r2/20261023T131700Z-demo-stray.md"' _ "$tmp"
 
 # Reports and archives hold no absolute path of this machine: repository-relative inside the repository, "~" for the home folder.
-mkdir -p "$tmp/home/.dev"
+home=$(mktemp -d "${TMPDIR:-/tmp}/gate-home.XXXXXX") # outside the repository, so "~" applies
+trap 'rm -rf "$tmp" "$home"' EXIT
+mkdir -p "$home/.dev"
 printf '#!/usr/bin/env bash\necho "PASS: path $PWD $HOME/x"\n' >"$tmp/pathy.sh"
 chmod +x "$tmp/pathy.sh"
-HOME="$tmp/home" GATE_RUNS_DIR="$tmp/home/.dev/runs" GATE_ARCHIVE_DIR="$tmp/home/archive" GATE_STAMP=20261023T140000Z bash "$gr" demo-path -- "$tmp/pathy.sh" >/dev/null 2>&1
-HOME="$tmp/home" GATE_RUNS_DIR="$tmp/home/.dev/runs" GATE_ARCHIVE_DIR="$tmp/home/archive" bash "$gr" --archive >/dev/null 2>&1
+HOME="$home" GATE_RUNS_DIR="$home/.dev/runs" GATE_ARCHIVE_DIR="$home/archive" GATE_STAMP=20261023T140000Z bash "$gr" demo-path -- "$tmp/pathy.sh" >/dev/null 2>&1
+HOME="$home" GATE_RUNS_DIR="$home/.dev/runs" GATE_ARCHIVE_DIR="$home/archive" bash "$gr" --archive >/dev/null 2>&1
 desc="an archived report and log name no absolute home path (the log is written as ~/...)"
-check bash -c '! grep -rF -- "$1" "$2/home/archive" && grep -qx -- "- log: ~/.dev/runs/20261023T140000Z-demo-path.log" "$2/home/archive/20261023T140000Z-demo-path.md" && grep -qF -- "path " "$2/home/archive/20261023T140000Z-demo-path.log"' _ "$tmp/home" "$tmp"
+check bash -c '! grep -rF -- "$1" "$1/archive" && grep -qx -- "- log: ~/.dev/runs/20261023T140000Z-demo-path.log" "$1/archive/20261023T140000Z-demo-path.md" && grep -qF -- "path " "$1/archive/20261023T140000Z-demo-path.log"' _ "$home"
 mkdir -p "$root/.dev/gate-runs-test"
 GATE_RUNS_DIR="$root/.dev/gate-runs-test" GATE_ARCHIVE_DIR="$tmp/arch2" GATE_STAMP=20261023T140100Z bash "$gr" demo-rel -- "$tmp/gate.sh" 0 >/dev/null 2>&1
 GATE_RUNS_DIR="$root/.dev/gate-runs-test" GATE_ARCHIVE_DIR="$tmp/arch2" bash "$gr" --archive >/dev/null 2>&1
