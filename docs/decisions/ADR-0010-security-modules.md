@@ -162,3 +162,55 @@ gcr system prompts, KIO network passwords, NetworkManager secrets, BlueZ pairing
 
 Nothing else of this ADR changes: no PAM module or PAM service file, no greeter, no setuid code and nothing that runs as
 root (the bridge is an unprivileged systemd user unit).
+
+## Amendment 2026-11-04 (automatic sleep; Settings > Energy and Battery > Options…, macOS 27) — Proposed
+The owner's report of rc1-22 on a desktop PC: no way to set the power profile, no way to keep the PC from sleeping. Before
+this amendment nothing in Grassfield or Omarchy suspended a computer on idle (logind `IdleAction=ignore`; Omarchy's idle
+service never suspends): what the owner saw was most likely the displays turning off (`lock.displayOffPower`, 10 minutes)
+and the session locking. macOS has both: the display turns off and locks per Lock Screen, and the computer sleeps shortly
+after, unless "Prevent automatic sleeping [on power adapter] when the display is off" is on (Energy without a battery,
+Battery > Options… with one; on battery a Mac always sleeps; Grassfield differs there, see the integrator decision below).
+
+**Decision (Proposed, applied provisionally until the owner accepts it).** The idle module gains the automatic sleep:
+`IdleModel.AUTO_SLEEP_SECONDS` (60) after it turned the displays off for lack of input, with no input and no idle inhibitor
+since, the computer sleeps through `systemctl --no-ask-password suspend` (never an authorization prompt), only when
+`energy.preventSleep` is false. **Default true** (a deviation from macOS's default, where a desktop sleeps): Grassfield
+never put a computer to sleep by itself, the owner's machine runs long jobs, and an unreadable value must give back that
+behaviour, not a new one.
+
+**Integrator decision (2026-11-04, a product risk raised by the opus security review of 95dab794).** The first version let
+a laptop on battery sleep whatever the switch said (macOS): with the defaults it suspended about 3 minutes after the last
+input (display off at 2 minutes, then 60 s), with no way to turn that off, although Grassfield and Omarchy never suspended
+before, the owner runs long builds and agents, and the owner asked for a way to PREVENT sleep. So `energy.preventSleep`
+applies on battery as well as on the power adapter; the default stays on, so nothing changes after the update; a user who
+turns it off gets the macOS behaviour (sleep after the display goes off). Settings: on a laptop, Battery > Options… shows one
+switch, "Prevent automatic sleeping when the display is off", with a footnote that it applies on battery and on power
+adapter; on a desktop, Energy's switch as before. Tests: battery with the switch on, no suspend; off, suspend
+(`tst_idlemodel` `test_idleDecisionsWithPreventSleep`).
+
+**Rules.**
+- Locking is never weakened. The idle lock, the display-off lock and the displays' power-off never read
+  `energy.preventSleep` (pinned by `tst_idlemodel` `test_lockIndependentOfSleep`). The one lock the setting can lead to is
+  the lock before an automatic sleep on a session that is not locked yet (`Lock.lock("sleep")`): it only ever adds a lock,
+  never removes, delays or skips one (`test_autoSleepOnlyAddsLocks`). The displays still turn off and the session still
+  locks as `lock.*` says.
+- Grassfield suspends only in the LOCKED state with its lock secure (`IdleModel.autoSleepAction(Lock.currentState(),
+  Lock.currentlySecure())`, read afresh, and read again right before `systemctl` runs; review of 95dab794: the `holding`
+  binding included AUTHENTICATING and RELEASING, so a fingerprint success just before the due time could start a suspend
+  during the release fade). An exactly UNLOCKED session is locked first, and the sleep waits for the next due time with the
+  lock LOCKED and secure; every other state waits; a lock refused (no PAM service) leaves the computer awake and the session
+  as it was. So a degraded sleep inhibitor (no logind delay) never makes an automatic sleep unlocked.
+- Fail awake: a value that cannot be read, a refused suspend (an application's sleep block inhibitor) or a crashed shell
+  leave the computer awake, locked or unlocked exactly as Lock Screen made it. A request that did not end in a sleep is asked
+  again every 5 minutes (`IdleModel.AUTO_SLEEP_RETRY_MS`, monotonic) while the displays stay off, so a laptop goes to sleep
+  once a download's inhibitor ends (review of 95dab794); never a tight loop; input stops it. The same timer puts the computer
+  back to sleep 5 minutes after a wake without input (a timer or the network woke it, the displays stayed off): confirmed by
+  the integrator after the delta review of 2a19231d, as macOS goes back to sleep after a dark wake, and it fails closed (the
+  session stays LOCKED and secure, which a suspend requires).
+- An unlock ends a pending automatic sleep (`IdleModel.autoSleepOnLockChange`): the delay starts over with the next
+  display-off, so an unlock never leads to the lock before sleep and never undoes itself (review of 2a19231d: a fingerprint
+  touch over the due time answered "wait" while AUTHENTICATING, then "lock" once UNLOCKED; `tst_idlemodel`
+  `test_unlockOverTheDueTimeEndsTheAttempt`). A change of the lock decides again only once it is LOCKED and secure.
+- Never in the nested dev session (a due suspend is counted and logged, `idle status`); the new dev hook `idle
+  devAutoSleep <1..600>` only shortens the delay there.
+- Real suspend: NOT VERIFIED until the owner's L2 run (L3†).

@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../shell/security/idle/IdleModel.js" as IdleModel
+import "../../shell/security/LockMachine.js" as Machine
 
 TestCase {
     name: "IdleModel"
@@ -175,5 +176,269 @@ TestCase {
         for (const v of ["", "2m", "Never", undefined, null, 5, "constructor", "toString"])
             compare(IdleModel.requireAfterDisplayOffMs(v), 0, String(v));
         verify(IdleModel.DIM_UNTIL_LOCK_MAX_MS > 0 && IdleModel.DIM_UNTIL_LOCK_MAX_MS <= 10000);
+    }
+
+    // ---- Automatic sleep (macOS 27 Energy / Battery > Options…: Prevent automatic sleeping when the display is off;
+    // energy.preventSleep, default true; on battery and on the power adapter alike, integrator decision 2026-11-04). ----
+
+    // Only an exact false lets the computer sleep, on battery as on the power adapter; anything else (the default, a value
+    // that cannot be read) keeps it awake, as before the setting.
+    function test_sleepPrevented() {
+        verify(IdleModel.sleepPrevented(true), "the default: prevented");
+        verify(!IdleModel.sleepPrevented(false), "switch off: sleeps");
+        for (const v of [undefined, null, "false", 0, "", "no", [], {}])
+            verify(IdleModel.sleepPrevented(v), "unreadable value " + JSON.stringify(v) + " keeps the computer awake");
+        compare(IdleModel.sleepPrevented.length, 1, "no power source parameter: the switch applies on battery too");
+        verify(IdleModel.AUTO_SLEEP_SECONDS >= 30 && IdleModel.AUTO_SLEEP_SECONDS <= 120);
+    }
+
+    // Armed only while this module has the displays off for lack of input, sleep is not prevented, and no application holds
+    // an org.freedesktop.ScreenSaver inhibitor.
+    function test_autoSleepArmed() {
+        verify(IdleModel.autoSleepArmed(true, false, false));
+        verify(!IdleModel.autoSleepArmed(true, true, false), "prevented");
+        verify(!IdleModel.autoSleepArmed(false, false, false), "displays on");
+        verify(!IdleModel.autoSleepArmed(true, false, true), "an application inhibits idle over D-Bus");
+        // Fail awake: odd values never arm it.
+        verify(!IdleModel.autoSleepArmed("true", false, false));
+        verify(!IdleModel.autoSleepArmed(true, undefined, false), "an unknown prevention is not 'not prevented'");
+        verify(!IdleModel.autoSleepArmed(true, 0, false));
+        verify(IdleModel.autoSleepArmed(true, false, undefined), "no inhibitor reported");
+    }
+
+    // Grassfield suspends only in LOCKED with the lock secure (confirmed and verified); an exactly UNLOCKED session is locked
+    // first; every other state waits. The states are LockMachine.js's own.
+    function test_autoSleepAction() {
+        compare(Machine.LOCKED, "locked");
+        compare(Machine.UNLOCKED, "unlocked");
+        compare(IdleModel.autoSleepAction(Machine.LOCKED, true), "suspend");
+        compare(IdleModel.autoSleepAction(Machine.UNLOCKED, false), "lock");
+        compare(IdleModel.autoSleepAction(Machine.UNLOCKED, true), "lock", "a stale secure never suspends an unlocked session");
+        compare(IdleModel.autoSleepAction(Machine.LOCKING, false), "wait", "the compositor has not confirmed the lock yet");
+        compare(IdleModel.autoSleepAction(Machine.LOCKED, false), "wait", "confirmed but not verified yet");
+        compare(IdleModel.autoSleepAction(Machine.AUTHENTICATING, true), "wait", "a password or a fingerprint is being checked");
+        compare(IdleModel.autoSleepAction(undefined, true), "wait");
+        compare(IdleModel.autoSleepAction("LOCKED", true), "wait");
+        compare(IdleModel.autoSleepAction(Machine.LOCKED, "true"), "wait");
+    }
+
+    // Review of 95dab794: a fingerprint success just before the 60 s mark moves the lock to RELEASING (the unlock's fade),
+    // where Lock.holding and the secure lock are still true. No suspend may start then, at the decision or at the re-check
+    // right before systemctl runs.
+    function test_noSuspendDuringTheReleaseFade() {
+        verify(Machine.isHolding(Machine.RELEASING), "the old decision's input (holding) was true here");
+        compare(IdleModel.autoSleepAction(Machine.RELEASING, true), "wait");
+        compare(IdleModel.autoSleepAction(Machine.RELEASING, false), "wait");
+        // The whole fingerprint path, state by state: only LOCKED (before the success) suspends.
+        const path = [Machine.LOCKED, Machine.AUTHENTICATING, Machine.RELEASING, Machine.UNLOCKED];
+        compare(path.map(s => IdleModel.autoSleepAction(s, s !== Machine.UNLOCKED)), ["suspend", "wait", "wait", "lock"]);
+    }
+
+    // The idle decisions of a session whose displays went off for inactivity (unlocked) or on the lock screen (locked and
+    // secure), with the switch on and off, on battery and on the power adapter: what Idle.qml derives from IdleModel.
+    function decisions(prevent, onBattery, state) {
+        const locked = state !== Machine.UNLOCKED;
+        const t = IdleModel.timings(5);
+        const prevented = IdleModel.sleepPrevented(prevent);
+        const displaysOff = IdleModel.displaysOff(locked, !locked, locked, locked);
+        const armed = IdleModel.autoSleepArmed(displaysOff, prevented, false);
+        return {
+            lock: {
+                idleLock: t.enabled,
+                lockSeconds: t.lockSeconds,
+                idleArmed: IdleModel.idleArmed(t.enabled, locked, false, false),
+                inactiveOffArmed: IdleModel.inactiveOffArmed(IdleModel.inactiveDisplayOffSeconds(2, 10, onBattery), locked, !locked, false, false),
+                displayOffLockMs: IdleModel.requireAfterDisplayOffMs("immediately"),
+                displaysOff: displaysOff
+            },
+            sleep: armed ? IdleModel.autoSleepAction(state, locked) : "none"
+        };
+    }
+
+    // The idle lock, the display-off lock and the displays' power-off are the same whatever the switch says, on battery or
+    // not; only the sleep differs. No lock function takes the setting: their arity is what it was before it (a new parameter
+    // would have to be passed by Idle.qml, and reviewed).
+    function test_lockIndependentOfSleep() {
+        for (const onBattery of [false, true]) {
+            for (const state of [Machine.UNLOCKED, Machine.LOCKED]) {
+                const on = decisions(true, onBattery, state);
+                const off = decisions(false, onBattery, state);
+                const odd = decisions("x", onBattery, state);
+                compare(off.lock, on.lock, "battery " + onBattery + ", " + state);
+                compare(odd.lock, on.lock);
+                verify(on.lock.idleLock && on.lock.lockSeconds === 300 && on.lock.displayOffLockMs === 0);
+                verify(on.lock.displaysOff, "the displays still turn off with prevent-sleep on");
+            }
+        }
+        compare(IdleModel.timings.length, 1);
+        compare(IdleModel.idleArmed.length, 4);
+        compare(IdleModel.inactiveOffArmed.length, 5);
+        compare(IdleModel.inactiveDisplayOffSeconds.length, 3);
+        compare(IdleModel.requireAfterDisplayOffMs.length, 1);
+        compare(IdleModel.displaysOff.length, 4);
+    }
+
+    // The integrator decision of 2026-11-04: prevent-sleep on means no automatic sleep, on battery as on the power adapter;
+    // off, an unlocked session is locked first and a locked one sleeps, on battery as on the power adapter.
+    function test_idleDecisionsWithPreventSleep() {
+        for (const onBattery of [false, true]) {
+            const where = onBattery ? "battery" : "power adapter";
+            compare(decisions(true, onBattery, Machine.UNLOCKED).sleep, "none", where + ", on, unlocked: no sleep");
+            compare(decisions(true, onBattery, Machine.LOCKED).sleep, "none", where + ", on, locked: no suspend");
+            compare(decisions(false, onBattery, Machine.UNLOCKED).sleep, "lock", where + ", off, unlocked: the lock first");
+            compare(decisions(false, onBattery, Machine.LOCKED).sleep, "suspend", where + ", off, locked: suspend");
+            compare(decisions(undefined, onBattery, Machine.LOCKED).sleep, "none", where + ": an unreadable setting keeps the computer awake");
+        }
+    }
+
+    // The automatic sleep only ever ADDS a lock (review of 95dab794: it is the one path where energy.preventSleep leads to a
+    // lock). Its answers are suspend, lock or wait over every state and secure value; "lock" only on an UNLOCKED session.
+    function test_autoSleepOnlyAddsLocks() {
+        const states = [Machine.UNLOCKED, Machine.LOCKING, Machine.LOCKED, Machine.AUTHENTICATING, Machine.RELEASING, "", undefined, null, "x"];
+        for (const s of states) {
+            for (const secure of [true, false, undefined, "true"]) {
+                const a = IdleModel.autoSleepAction(s, secure);
+                verify(["suspend", "lock", "wait"].indexOf(a) >= 0, String(s) + "/" + String(secure) + ": " + a);
+                if (a === "lock")
+                    compare(s, Machine.UNLOCKED, "a lock is only ever requested on an unlocked session");
+            }
+        }
+        // In Idle.qml, the automatic sleep's block calls no Lock function that could unlock, release, abort or delay a lock,
+        // and assigns nothing on Lock: its only Lock calls are lock("sleep") and the two read-only getters.
+        const text = source();
+        const begin = text.indexOf("// ---- Automatic sleep");
+        const end = text.indexOf("SleepInhibitor {", begin);
+        verify(begin > 0 && end > begin, "the automatic sleep block");
+        const block = text.substring(begin, end);
+        const calls = block.match(/Lock\.[A-Za-z]+\s*\(/g) || [];
+        const kinds = calls.map(c => c.replace(/\s*\($/, "")).filter((c, i, all) => all.indexOf(c) === i).sort();
+        compare(kinds, ["Lock.currentState", "Lock.currentlySecure", "Lock.lock"]);
+        compare(block.match(/Lock\.lock\("[^"]*"\)/g) || [], ['Lock.lock("sleep")']);
+        verify(!/Lock\.[A-Za-z]+\s*=[^=]/.test(block), "nothing assigned on Lock");
+        verify(!/unlock|release\(|interruptRelease|abort\(/.test(block.replace(/\/\/[^\n]*/g, "")), "no unlock, release or abort");
+    }
+
+    // Review of 95dab794: a refused suspend (a download's sleep block inhibitor) is asked again while the displays stay off,
+    // every AUTO_SLEEP_RETRY_MS, never in a tight loop; input disarms it.
+    function test_autoSleepRetry() {
+        compare(IdleModel.AUTO_SLEEP_RETRY_MS, 300000, "5 minutes");
+        verify(IdleModel.AUTO_SLEEP_RETRY_MS >= 5 * IdleModel.AUTO_SLEEP_SECONDS * 1000, "never a tight loop");
+        verify(IdleModel.autoSleepRetryArmed(true, true), "displays off, a request was made: retry");
+        verify(!IdleModel.autoSleepRetryArmed(true, false), "nothing asked yet: the first request comes from the monitor");
+        verify(!IdleModel.autoSleepRetryArmed(false, true), "input (displays on) or prevented: no retry");
+        verify(!IdleModel.autoSleepRetryArmed("true", 1), "exact values only");
+        // In Idle.qml: a repeating Timer of that interval, running only while armed and asked; it clears the request and
+        // decides again (which re-reads the lock and the setting).
+        const text = source();
+        verify(/id: autoSleepRetry\s*\n\s*interval: IdleModel\.AUTO_SLEEP_RETRY_MS\s*\n\s*repeat: true\s*\n\s*running: IdleModel\.autoSleepRetryArmed\(root\.autoSleepArmed, root\.autoSleepAsked\)/.test(text));
+        verify(/id: autoSleepRetry[\s\S]*?onTriggered: \{\s*root\.autoSleepAsked = false;\s*root\.autoSleepCheck\(\);\s*\}/.test(text));
+        compare(text.split("\n").filter(l => l.indexOf("root.autoSleepAsked = false") >= 0).length, 4, "the period change, the retry, a re-check that refused, an unlock");
+    }
+
+    // What a change of the lock does to a pending automatic sleep: decide again only once LOCKED and secure; an unlock ends
+    // the attempt; anything else, nothing.
+    function test_autoSleepOnLockChange() {
+        compare(IdleModel.autoSleepOnLockChange(Machine.LOCKED, true), "recheck");
+        compare(IdleModel.autoSleepOnLockChange(Machine.UNLOCKED, false), "end");
+        compare(IdleModel.autoSleepOnLockChange(Machine.UNLOCKED, true), "end");
+        for (const s of [Machine.LOCKING, Machine.AUTHENTICATING, Machine.RELEASING, undefined, "x"])
+            compare(IdleModel.autoSleepOnLockChange(s, true), "none", String(s));
+        compare(IdleModel.autoSleepOnLockChange(Machine.LOCKED, false), "none", "not secure yet");
+        verify(IdleModel.autoSleepDue(true, true, true, false));
+        verify(!IdleModel.autoSleepDue(true, true, false, false), "the delay has not passed");
+        verify(!IdleModel.autoSleepDue(true, true, true, true), "already asked");
+        verify(!IdleModel.autoSleepDue(true, false, true, false), "input or an inhibitor");
+        verify(!IdleModel.autoSleepDue(false, true, true, false), "disarmed");
+        verify(!IdleModel.autoSleepDue("true", true, true, false), "exact values only");
+    }
+
+    // Review of 2a19231d, the exact sequence: prevent-sleep off, the displays off on the lock screen, a fingerprint touch over
+    // the due time. The due time comes while AUTHENTICATING (wait), then the unlock ends in UNLOCKED: no lock and no suspend,
+    // whatever checks run afterwards (the deferred one, the idle monitor, the retry timer), until a new display-off period.
+    // The flags and the decisions are Idle.qml's, driven through IdleModel's own functions.
+    function test_unlockOverTheDueTimeEndsTheAttempt() {
+        const s = {armed: true, idle: true, waited: false, asked: false, state: Machine.AUTHENTICATING, secure: true, actions: []};
+        const check = () => {
+            if (!IdleModel.autoSleepDue(s.armed, s.idle, s.waited, s.asked))
+                return;
+            const a = IdleModel.autoSleepAction(s.state, s.secure);
+            if (a === "wait")
+                return;
+            s.asked = true;
+            s.actions.push(a);
+        };
+        const lockChanged = (state, secure) => {
+            s.state = state;
+            s.secure = secure;
+            const next = IdleModel.autoSleepOnLockChange(state, secure);
+            if (next === "end") {
+                s.waited = false;
+                s.asked = false;
+            } else if (next === "recheck") {
+                check();
+            }
+        };
+        // The due time is reached while the fingerprint is being checked.
+        s.waited = true;
+        check();
+        compare(s.actions, [], "AUTHENTICATING: wait");
+        // The fingerprint succeeds: RELEASING (the fade), then UNLOCKED.
+        lockChanged(Machine.RELEASING, true);
+        compare(s.actions, []);
+        lockChanged(Machine.UNLOCKED, false);
+        compare([s.waited, s.asked], [false, false], "the unlock ended the attempt");
+        // Every later check, in any order (the deferred one, an idle edge, a retry tick, the monitor timer's), does nothing.
+        for (let i = 0; i < 3; i++)
+            check();
+        compare(s.actions, [], "no lock and no suspend after the unlock");
+        // Only a new display-off period (the displays came on with the unlock and went off again: armed again, the delay
+        // passed again) can lead anywhere, and then from the state as it is then.
+        s.armed = false;
+        s.armed = true;
+        s.waited = true;
+        check();
+        compare(s.actions, ["lock"], "a new period on an unlocked session: the lock before sleep, as designed");
+        // A lock that settles later decides again: LOCKED and secure, suspend.
+        s.asked = false;
+        lockChanged(Machine.LOCKING, false);
+        lockChanged(Machine.LOCKED, true);
+        compare(s.actions, ["lock", "suspend"]);
+        // In Idle.qml: both lock signals go through autoSleepLockChanged, which ends the attempt or re-checks, never more.
+        const text = source();
+        verify(/function onSecureChanged\(\): void \{\s*root\.autoSleepLockChanged\(\);\s*\}/.test(text));
+        verify(/function onLockStateChanged\(\): void \{\s*root\.autoSleepLockChanged\(\);\s*\}/.test(text));
+        verify(/const next = IdleModel\.autoSleepOnLockChange\(Lock\.currentState\(\), Lock\.currentlySecure\(\)\);\s*if \(next === "end"\) \{\s*root\.autoSleepWaited = false;\s*root\.autoSleepAsked = false;\s*\} else if \(next === "recheck"\) \{\s*Qt\.callLater\(root\.autoSleepCheck\);\s*\}/.test(text));
+        compare(text.split("\n").filter(l => l.indexOf("Qt.callLater(root.autoSleepCheck)") >= 0).length, 1, "the only deferred check is the recheck");
+        verify(/if \(!sleepMonitor\.enabled \|\| !IdleModel\.autoSleepDue\(root\.autoSleepArmed, sleepMonitor\.isIdle, root\.autoSleepWaited, root\.autoSleepAsked\)\)\s*return;/.test(text));
+    }
+
+    function source() {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", Qt.resolvedUrl("../../shell/security/idle/Idle.qml"), false);
+        xhr.send();
+        verify(xhr.responseText.length > 1000, "Idle.qml read (QML_XHR_ALLOW_FILE_READ=1)");
+        return xhr.responseText;
+    }
+
+    // Idle.qml: the idle lock and display-off lock paths never read the sleep setting (a source check); the one lock the
+    // automatic sleep can request is pinned by test_autoSleepOnlyAddsLocks.
+    function test_idleQmlLockPathsIgnoreSleep() {
+        const text = source();
+        const lines = text.split("\n");
+        const lockLines = lines.filter(l => /IdleModel\.(timings|idleArmed|inactiveOffArmed|inactiveDisplayOffSeconds|requireAfterDisplayOffMs|displaysOff)\(|Lock\.lock\("(idle|display-off)"\)/.test(l));
+        verify(lockLines.length >= 6, "found the lock paths: " + lockLines.length);
+        for (const l of lockLines)
+            verify(!/preventSleep|sleepPrevented|autoSleep/.test(l), "a lock path reads the sleep setting: " + l.trim());
+        // The setting is read in exactly two places: the binding and the fresh check before acting.
+        compare(lines.filter(l => l.indexOf("Settings.energyPreventSleep") >= 0).length, 2);
+        // The suspend is asked for only on the "suspend" answer, re-read right before systemctl, and never in the dev session.
+        verify(/if \(root\.devHooks\) \{\s*root\.autoSleepSuppressed\+\+;/.test(text));
+        compare(lines.filter(l => l.indexOf("autoSleepRequest.running = true") >= 0).length, 1);
+        verify(/if \(IdleModel\.autoSleepAction\(Lock\.currentState\(\), Lock\.currentlySecure\(\)\) !== "suspend"\) \{\s*root\.autoSleepAsked = false;\s*return;\s*\}\s*console\.info\([^\n]*\);\s*autoSleepRequest\.running = true;/.test(text),
+               "the state is read again right before systemctl runs");
+        verify(!/autoSleepAction\([^)]*holding/.test(text), "the decision never uses the holding binding");
+        // logind's own suspend, never with --ignore-inhibitors (-i) and never asking for authorization behind the lock.
+        verify(text.indexOf('command: ["systemctl", "--no-ask-password", "suspend"]') >= 0);
+        verify(!/systemctl[^\n]*(-i\b|--ignore-inhibitors|--force|-f\b)/.test(text));
     }
 }

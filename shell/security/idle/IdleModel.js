@@ -87,6 +87,77 @@ function displaysOff(lockedIdle, inactiveOff, locked, holding) {
     return inactiveOff === true && (locked !== true || holding === true);
 }
 
+// ---- Automatic sleep (macOS 27 Energy and Battery > Options: the computer sleeps once the displays are off for
+// inactivity, unless "Prevent automatic sleeping when the display is off" is on). The idle lock, the display-off lock and
+// the lock screen's display power-off above never read it (timings, idleArmed, inactiveOffArmed, requireAfterDisplayOffMs,
+// displaysOff take no part of it). The one lock it can cause is autoSleepAction's "lock": a lock requested before a sleep
+// on a session that is not locked yet, which only ever adds a lock (never removes, delays or skips one). The computer is
+// only put to sleep by Grassfield while its own lock is confirmed and in the LOCKED state. ----
+
+// Seconds the displays stay off without input before the computer sleeps (macOS sleeps about a minute after the display).
+var AUTO_SLEEP_SECONDS = 60;
+
+// A request that did not put the computer to sleep (logind refused it: an application's sleep block inhibitor, a download)
+// or a wake without input is tried again this often while the displays stay off: never a tight loop. A monotonic Timer, so
+// the time asleep does not count.
+var AUTO_SLEEP_RETRY_MS = 300000;
+
+// Automatic sleep is prevented unless energy.preventSleep is exactly false, on battery and on the power adapter alike
+// (integrator decision 2026-11-04: Grassfield and Omarchy never suspended a computer by itself, the owner runs long builds
+// and agents on battery too, and asked for a way to PREVENT sleep; macOS has no switch for battery). The value arrives read
+// through the contract (a boolean, default true); anything else keeps the computer awake: a value that cannot be read gives
+// back the behaviour from before the setting, never a sleep.
+function sleepPrevented(preventSleep) {
+    return preventSleep !== false;
+}
+
+// The retry Timer runs: the monitor is armed (displays off for lack of input, not prevented, no ScreenSaver cookie) and a
+// lock or a suspend was already asked for in this display-off period. Exact values only.
+function autoSleepRetryArmed(armed, asked) {
+    return armed === true && asked === true;
+}
+
+// The automatic sleep monitor is armed: this module turned the displays off for lack of input (the unlocked display-off
+// monitor or the lock screen's), sleep is not prevented, and no application holds an org.freedesktop.ScreenSaver inhibitor
+// (Wayland idle inhibitors: the monitor respects them). Anything but these exact values disarms it (fail awake).
+function autoSleepArmed(displaysOff, prevented, busInhibited) {
+    return displaysOff === true && prevented === false && busInhibited !== true;
+}
+
+// What a due automatic sleep does, from the lock's state machine state (LockMachine.js, read afresh: Lock.currentState())
+// and Lock.currentlySecure() (confirmed by the compositor and verified): "suspend" only in LOCKED with the lock secure;
+// "lock" only when the session is exactly UNLOCKED (the lock first; the sleep waits for the next due time, after it holds);
+// "wait" in every other case: LOCKING, AUTHENTICATING (a password or a fingerprint being checked), RELEASING (the unlock's
+// fade: a fingerprint success just before the due time must not start a sleep), LOCKED but not secure yet, or a state it
+// does not know. Never "suspend" on an unlocked, unconfirmed or opening session (review of 95dab794: `holding` alone
+// includes AUTHENTICATING and RELEASING and skips the verification).
+function autoSleepAction(state, secure) {
+    if (state === "locked" && secure === true)
+        return "suspend";
+    if (state === "unlocked")
+        return "lock";
+    return "wait";
+}
+
+// An automatic sleep is due: the monitor is armed, no input and no idle inhibitor for the delay (`idle`), the delay passed
+// since the displays went off (`waited`), and nothing was asked for yet in this attempt. Exact values only.
+function autoSleepDue(armed, idle, waited, asked) {
+    return armed === true && idle === true && waited === true && asked !== true;
+}
+
+// What a change of the lock (its state or its secure flag) does to a pending automatic sleep: "recheck" only once the
+// lock is LOCKED and secure (a lock that settled after the due time); "end" when the session is UNLOCKED (the user is back:
+// an unlock ends that attempt, so it can never lead to the lock-first path and undo the unlock; review of 2a19231d: a
+// fingerprint touch over the due time answered "wait", then "lock" once UNLOCKED); "none" otherwise (LOCKING,
+// AUTHENTICATING, RELEASING, LOCKED not secure yet, a state it does not know).
+function autoSleepOnLockChange(state, secure) {
+    if (state === "locked" && secure === true)
+        return "recheck";
+    if (state === "unlocked")
+        return "end";
+    return "none";
+}
+
 // Sleep inhibitor and PrepareForSleep watcher restarts (GF-030: never given up silently). A child that exits within
 // FAST_EXIT_MS of its start is a failure; MAX_FAST_FAILURES in a row make the module "degraded" (a notice tells the user)
 // and the child is then retried every SLOW_RETRY_MS instead of every FAST_RETRY_MS, for as long as the shell runs.

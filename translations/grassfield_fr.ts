@@ -1570,6 +1570,13 @@
     </message>
 </context>
 <context>
+    <name>AppsCell</name>
+    <message>
+        <source>Delete “%1”</source>
+        <translation>Supprimer « %1 »</translation>
+    </message>
+</context>
+<context>
     <name>AppsController</name>
     <message>
         <source>All</source>
@@ -2164,6 +2171,14 @@
     <message>
         <source>Remove hibernation</source>
         <translation>Supprimer l’hibernation</translation>
+    </message>
+    <message>
+        <source>Options…</source>
+        <translation>Options…</translation>
+    </message>
+    <message>
+        <source>Battery options</source>
+        <translation>Options de la batterie</translation>
     </message>
     <message>
         <source>The battery cannot be read: UPower did not answer.</source>
@@ -4881,6 +4896,41 @@
     </message>
 </context>
 <context>
+    <name>EnergyPage</name>
+    <message>
+        <source>Energy</source>
+        <translation>Énergie</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automatique</translation>
+    </message>
+    <message>
+        <source>Low Power</source>
+        <translation>Économie d’énergie</translation>
+    </message>
+    <message>
+        <source>High Power</source>
+        <translation>Haute puissance</translation>
+    </message>
+    <message>
+        <source>Energy modes are not available: power-profiles-daemon is not running.</source>
+        <translation>Les modes d’énergie ne sont pas disponibles&#xa0;: power-profiles-daemon n’est pas en cours d’exécution.</translation>
+    </message>
+    <message>
+        <source>The display turns off and the session locks as set in Lock Screen, whether or not the computer sleeps.</source>
+        <translation>L’écran s’éteint et la session se verrouille selon les réglages d’Écran verrouillé, que l’ordinateur suspende son activité ou non.</translation>
+    </message>
+    <message>
+        <source>Energy Mode</source>
+        <translation>Mode d’énergie</translation>
+    </message>
+    <message>
+        <source>Prevent automatic sleeping when the display is off</source>
+        <translation>Empêcher la suspension d’activité automatique lorsque l’écran est éteint</translation>
+    </message>
+</context>
+<context>
     <name>ErrorNote</name>
     <message>
         <source>The action failed.</source>
@@ -5533,6 +5583,14 @@
     <message>
         <source>Copying</source>
         <translation>Copie</translation>
+    </message>
+    <message>
+        <source>The Store can’t uninstall this application.</source>
+        <translation>Le Store ne peut pas désinstaller cette application.</translation>
+    </message>
+    <message>
+        <source>The Store could not be started.</source>
+        <translation>Le Store n’a pas pu être lancé.</translation>
     </message>
     <message>
         <source>Make Alias</source>
@@ -8477,6 +8535,14 @@
         <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
     </message>
     <message>
+        <source>Energy</source>
+        <translation>Énergie</translation>
+    </message>
+    <message>
+        <source>energy power mode low power high power performance sleep prevent automatic sleeping display off</source>
+        <translation>énergie alimentation mode économie haute puissance performance veille suspension empêcher automatique écran éteint</translation>
+    </message>
+    <message>
         <source>about software update storage date time language region login items startup</source>
         <translation>informations mise à jour logiciels stockage date heure langue région ouverture éléments démarrage</translation>
     </message>
@@ -8803,6 +8869,10 @@
     <message>
         <source>Updates</source>
         <translation>Mises à jour</translation>
+    </message>
+    <message>
+        <source>The Store can&apos;t uninstall this app.</source>
+        <translation>Le Store ne peut pas désinstaller cette app.</translation>
     </message>
     <message>
         <source>Flatpak apps</source>
@@ -9844,6 +9914,10 @@
         <translation>Obtenir Flatpak&#xa0;?</translation>
     </message>
     <message>
+        <source>Delete “%1”?</source>
+        <translation>Supprimer « %1 » ?</translation>
+    </message>
+    <message>
         <source>“%1” can&apos;t be installed from the AUR</source>
         <translation>«&#xa0;%1&#xa0;» ne peut pas être installée depuis l’AUR</translation>
     </message>
@@ -9986,6 +10060,10 @@
     <message>
         <source>Install from the AUR</source>
         <translation>Installer depuis l&apos;AUR</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
     </message>
     <message>
         <source>OK</source>
@@ -10304,6 +10382,25 @@
     <message>
         <source>The application had already quit.</source>
         <translation>L’application s’était déjà fermée.</translation>
+    </message>
+</context>
+<context>
+    <name>PowerOptionsSheet</name>
+    <message>
+        <source>Options</source>
+        <translation>Options</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>Applies on battery and on power adapter. The display turns off and the session locks as set in Lock Screen.</source>
+        <translation>S’applique sur batterie et sur adaptateur secteur. L’écran s’éteint et la session se verrouille selon les réglages d’Écran verrouillé.</translation>
+    </message>
+    <message>
+        <source>Prevent automatic sleeping when the display is off</source>
+        <translation>Empêcher la suspension d’activité automatique lorsque l’écran est éteint</translation>
     </message>
 </context>
 <context>
@@ -11302,6 +11399,10 @@
     <message>
         <source>Open this page first: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;words&gt;, installed or updates.</source>
         <translation>Ouvrir d’abord cette page&#xa0;: discover, section:&lt;id&gt;, categories, category:&lt;id&gt;, app:&lt;id&gt;, search:&lt;mots&gt;, installed ou updates.</translation>
+    </message>
+    <message>
+        <source>Print, as JSON, the installed apps by application entry and whether the Store may uninstall each.</source>
+        <translation>Affiche, en JSON, les apps installées par entrée d’application et si le Store peut désinstaller chacune.</translation>
     </message>
     <message>
         <source>See the processes and the resources they use.</source>
@@ -15357,6 +15458,45 @@
     <message>
         <source>Toolbar</source>
         <translation>Barre d’outils</translation>
+    </message>
+</context>
+<context>
+    <name>UninstallLogic</name>
+    <message>
+        <source>The Store does not manage this app.</source>
+        <translation>Le Store ne gère pas cette app.</translation>
+    </message>
+    <message>
+        <source>Part of the system.</source>
+        <translation>Fait partie du système.</translation>
+    </message>
+    <message>
+        <source>Part of Omarchy.</source>
+        <translation>Fait partie d’Omarchy.</translation>
+    </message>
+    <message>
+        <source>Part of Grassfield.</source>
+        <translation>Fait partie de Grassfield.</translation>
+    </message>
+    <message>
+        <source>Installed with another app.</source>
+        <translation>Installée avec une autre app.</translation>
+    </message>
+    <message>
+        <source>Removing it would also remove part of the system.</source>
+        <translation>Sa suppression retirerait aussi une partie du système.</translation>
+    </message>
+    <message>
+        <source>The Store can&apos;t remove this app.</source>
+        <translation>Le Store ne peut pas supprimer cette app.</translation>
+    </message>
+    <message>
+        <source>Apps can&apos;t be removed in this session.</source>
+        <translation>Les apps ne peuvent pas être supprimées dans cette session.</translation>
+    </message>
+    <message>
+        <source>The Store can&apos;t remove this app now.</source>
+        <translation>Le Store ne peut pas supprimer cette app maintenant.</translation>
     </message>
 </context>
 <context>

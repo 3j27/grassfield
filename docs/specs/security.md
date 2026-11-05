@@ -57,7 +57,7 @@ inherited one). A `GRASSFIELD_DEV=1` that leaks into a real session (environment
 user manager) therefore changes nothing: no dev hook answers, PAM is not suppressed (the lock can be opened), the sleep
 inhibitor is taken, and the lock logs once "GRASSFIELD_DEV=1 ignored in a real session". Users: `Lock.devHooks`
 (`lock status|devReload|devPauseOwnershipCheck|devForgeUnlockedAnswer|devLockView`, PAM suppression), `Idle.devHooks`
-(`idle status|devSleep|devDisplayOff`, the display power-off default), `SleepInhibitor.dev` (no inhibitor in dev),
+(`idle status|devSleep|devDisplayOff|devAutoSleep`, the display power-off default, no automatic sleep), `SleepInhibitor.dev` (no inhibitor in dev),
 `polkit status`, and, outside the security modules, `Mode.dev` (`VisualFixtures.dev` is exactly `Mode.dev`,
 `VisualFixtures.active` exactly `Mode.fixtures`), which every other IPC test hook checks (BarTone, Capabilities,
 Widgets). Tests: `tests/security/tst_devgate.qml` (the gate as the security modules import it, 225 pairs against the
@@ -191,7 +191,7 @@ does not check its gate.
 | lock | lock | action | SUPER+CTRL+Q, screen corner, Grassfield menu (in process). Only ever locks |
 | lock | lid | action | lid switch: `config/hypr/grassfield/system.lua` → `/usr/lib/grassfield/grassfield-lid closed` (D-4). Only ever locks; `docked` in clamshell mode |
 | lock | status, devReload, devPauseOwnershipCheck, devForgeUnlockedAnswer, devLockView | dev | `reload_locked.sh`, `l2_wrong_password.sh`; the pause widens the foreign-release window |
-| idle | status, devSleep, devDisplayOff | dev | `reload_locked.sh`, `lock_privacy.sh` |
+| idle | status, devSleep, devDisplayOff, devAutoSleep | dev | `reload_locked.sh`, `lock_privacy.sh`; `devAutoSleep` shortens the automatic sleep delay (the dev session never suspends) |
 | saver | status, devDelay, devShow | dev | the screen saver's nested checks (ADR-0032): `devDelay` arms it after a test's delay, `devShow` shows it at once (refused while locked); off in a dev session otherwise |
 | polkit | status | dev | registration state (the journal has it in a real session) |
 | secrets | state | dev | the secret sheets' state (ADR-0035 D-9, step 9b): the bridge connection, the name's state, counts of the shown, held, waiting and lingering requests; never a requester or a text (`tests/security/secret_bridge.sh`) |
@@ -210,6 +210,7 @@ does not check its gate.
 | update | check | action | `packaging/shims/omarchy-shell` (Omarchy's update status from inside `omarchy update`, ADR-0033 U9: origin `omarchy`); Grassfield Settings and Grassfield Store (origin `user`: "Check Now", opening the pane); `packaging/bin/grassfield-pacman-watch` from `grassfield-pacman-watch.service`, started by its path unit when pacman's local database changed (ADR-0041 U31: origin `system`, announced as a scheduled check is). Runs Grassfield's own checker once (a running check is joined, never a second one), answers `ok`, or `refused` for another origin; returns nothing it found (the result goes to `software-update.json`, ADR-0020) |
 | apps | toggle, open, close | action | XF86LaunchA, screen corner, 4-finger pinch |
 | apps | status | dev | returns the typed query |
+| apps | edit, removable, ask | dev | test hooks of deleting apps (ADR-0046): `edit` makes the icons jiggle, `removable <json>` gives the Store's answer instead of asking it, `ask <id>` is the badge's click: for a removable app it hands the app to the Store (`grassfield-store --page=uninstall:<entry>`, which opens the Store's own alert; the launcher shows none); refused outside a dev session; none removes anything (only Delete in the Store's alert does) |
 | overview | toggle, open, close | action | CTRL+UP, screen corner, 3-finger swipe |
 | overview | holdNextRelease, status, dropProbe | dev | `status` lists window titles and app ids; `dropProbe` (tiling step 6e, the follow-up of #78) runs the Overview's own drop of a window on a Desktop (ADR-0036 D72) and answers moved, refused or absent |
 | backdrop | status | dev | returns the wallpaper paths and the luminance grids of the glass backdrop (ADR-0024 G-3 tests) |
@@ -795,6 +796,41 @@ a mutation). Both layers cover the output, so a capture is black while either sh
   until input (the monitor stays armed while it is idle, `offForInactivity`); any input, an unlock without input (fingerprint)
   or a change of power source switches them on. Always off in the nested dev session (no dev hook: nothing needed one). NOT VERIFIED on hardware or in nested here
   (no compositor in the cloud container; L2†).
+- Automatic sleep (2026-11-04, Settings > Energy without a battery, Battery > Options… with one; macOS 27): before this,
+  nothing in Grassfield or Omarchy suspended a computer on idle (logind `IdleAction=ignore`, Omarchy's idle service never
+  suspends), so a computer never slept by itself. Now `IdleModel.AUTO_SLEEP_SECONDS` (60 s) after this module turned the
+  displays off for lack of input (either monitor above) the computer sleeps, through `systemctl --no-ask-password suspend` (logind, never an authorization prompt behind the lock; an
+  application's sleep block inhibitor refuses it, and the lock before sleep runs as for any sleep):
+  - only when `energy.preventSleep` is false, on battery and on the power adapter alike ("Prevent automatic sleeping when
+    the display is off"; integrator decision 2026-11-04: macOS always sleeps on battery, but Grassfield and Omarchy never
+    suspended a computer by itself and the owner runs long builds and agents on battery). Default true, and anything but an
+    exact false reads as true (`IdleModel.sleepPrevented`): a value that cannot be read gives back the old behaviour (no
+    sleep by itself), never a sleep;
+  - only while the displays are off by this module, no input and no Wayland idle inhibitor for the delay (a third
+    `IdleMonitor`, `respectInhibitors: true`, enabled only then, with a monotonic `Timer` for the delay itself), and no
+    ScreenSaver cookie held (`IdleModel.autoSleepArmed`);
+  - only in the LOCKED state with the lock secure (`IdleModel.autoSleepAction(Lock.currentState(),
+    Lock.currentlySecure())`, both read afresh: `suspend` in LOCKED and secure, `lock` in exactly UNLOCKED, `wait` in
+    LOCKING, AUTHENTICATING, RELEASING, LOCKED but not verified yet, or an unknown state), read once more right before
+    `systemctl` runs (review of 95dab794: `Lock.holding` included AUTHENTICATING and RELEASING and skipped the verification,
+    so a fingerprint success just before the due time could start a suspend during the release fade; `tst_idlemodel`
+    `test_noSuspendDuringTheReleaseFade`). A lock that settles LOCKED and secure after the due time decides again; an unlock (UNLOCKED) ends the attempt, so a fingerprint touch over the due time can never lead to the lock-first path and undo the unlock (review of 2a19231d, `IdleModel.autoSleepOnLockChange`, `test_unlockOverTheDueTimeEndsTheAttempt`). An unlocked
+    session (Require password after the display turns off later than the sleep, or Never) is locked first
+    (`Lock.lock("sleep")`, which lights the displays until the lock holds), and the next due time suspends: Grassfield never
+    puts an unlocked, unconfirmed or opening session to sleep, even with a degraded sleep inhibitor;
+  - a request that did not end in a sleep (logind refused it: a download's sleep block inhibitor; a refused lock; a wake
+    without input) is asked again every `IdleModel.AUTO_SLEEP_RETRY_MS` (5 minutes, monotonic, so the time asleep does not
+    count) while the displays stay off (review of 95dab794: a laptop otherwise stayed awake all night once the download
+    ended); never a tight loop, and input (the displays come on) stops it (`test_autoSleepRetry`);
+  - the idle lock, the display-off lock and the displays' power-off never read `energy.preventSleep` (`timings`,
+    `idleArmed`, `inactiveOffArmed`, `requireAfterDisplayOffMs`, `displaysOff` do not take it; `test_lockIndependentOfSleep`).
+    The one lock the setting can lead to is the lock before an automatic sleep on a session that is not locked yet, which
+    only ever adds a lock: never removes, delays or skips one (`test_autoSleepOnlyAddsLocks`: the automatic sleep's code
+    calls `Lock.lock("sleep")` and two read-only getters, nothing else on Lock). The displays still turn off and the session
+    still locks as Lock Screen says, whatever the switch says;
+  - never in the nested dev session (`RunMode.dev`): a due suspend is counted (`idle status` `autoSleepSuppressed`) and
+    logged, never run; `idle devAutoSleep <1..600>` shortens the delay for a nested test.
+  Real suspend NOT VERIFIED (L2†, owner).
 - The lock surface (2026-10-26): `lock.showUser` false hides the picture and the name, `lock.showMessage` shows
   `lock.message` (plain text, one line stored, at most two lines drawn) above them. Display only.
 - `org.freedesktop.ScreenSaver` inhibitors (GF-016 residual, done 2026-10-24; ADR-0008 and ADR-0010 amendments):
@@ -838,8 +874,12 @@ Store owns `org.grassfield.Store` (`.Dev` and a digest of the state directory in
 /org/grassfield/Store, one scriptable method `Open(s page, s token)`: a second launch hands it its `--page` (printable, at most
 512 characters) and its xdg-activation token (printable ASCII, at most 256) and leaves. The window checks the page again
 (Main.qml's openPage: a section, a category, an app, a search, Installed, Updates, or `type:<type>` for a well-formed media
-type); anything else keeps the page shown. It opens a page and brings the window forward, nothing else: no plan, no
-install, no removal, no update (each still needs its own button and, for the system's packages, the helper's password).
+type, or `uninstall:<application entry>`); anything else keeps the page shown. It opens a page and brings the window forward,
+nothing else: no plan, no install, no removal, no update (each still needs its own button and, for the system's packages, the
+helper's password). `uninstall:<entry>` (the launcher's delete badge, Files' Move to Trash; ADR-0046 D1) is the same: it only
+OPENS the Store's own confirmation, "Delete “App”?" with the app's Store name, icon and the packages `-Rns` takes, Cancel the
+default; no path of a hand-over calls `uninstall`, so any session-bus peer, a Flatpak included, can ask and nothing is removed
+until the user presses Delete in the Store (tst_storeoperations test_handOverOnlyOpensTheAlert).
 
 Quickshell 0.3.1 `AuthFlow` (`/usr/lib/qt6/qml/Quickshell/Services/Polkit/quickshell-service-polkit.qmltypes`) exposes
 `message`, `iconName`, `actionId`, `cookie`, `identities`, `selectedIdentity`, `isResponseRequired`, `inputPrompt`,
@@ -1141,6 +1181,18 @@ Display only: nothing below can lock, unlock, delay engaging the lock or keep it
   the final relock still releases a lock Hyprland uses). Closing this window needs a compositor-side lock/unlock event
   (e.g. from `grassfield-compositor`) or `allow_session_lock_restore = false` (which breaks crash recovery):
   owner/compositor decision.
+- Every lock check (the ownership timer, the keyboard-focus event, monitor answers) runs on the shell's event loop, so a
+  foreign release is noticed only when that loop is free. A restarted shell's start-up holds it: in the integrator's run
+  of 2026-11-04 every locked restart logged nothing for 1.2–2.1 s after its entrance, and a foreign locker that released
+  ~1.5 s after the restarted shell took its lock over left the session unlocked until the fresh lock was requested
+  1350 ms (1616 ms on main) after the release, with the 100 ms check in force throughout (not the 1 s one: the "every
+  1000 ms" line logged at that relock came from `relock()` clearing the suspicion before the lock was lost, fixed).
+  Needs a live foreign lock client at a shell restart and its release, normally the user authenticating to it, within
+  those seconds. `foreign-restart` releases once the restarted shell's entrance is logged and its IPC, served on the same
+  loop, answered within 500 ms five times in a row (≤ 150 ms still asserted); the slowest answer it saw (the hold's
+  width) must stay ≤ 3 s (`HOLD_MAX_MS`; load-sensitive: SKIP above the core count), so the gap cannot widen unnoticed.
+  Narrowing it needs a lighter start-up while locked (the entrance's first frames); Quickshell offers no check off the
+  event loop.
 - Keyboards that come and go (2026-10-24): when the session's only keyboard device goes away and another appears (a
   desktop's Bluetooth keyboard reconnecting at resume, on the lock screen), Quickshell ignores the keys of its re-created
   `wl_keyboard` until it gets a new `wl_keyboard.leave` and `enter`: the lock's password field (and the polkit dialog) is
@@ -1201,13 +1253,14 @@ same directory and the modules move without moving a file), one step at a time u
 | `tests/security/ipc_inventory.sh` | IPC surface = the table above; every action has a real-session caller, every hook its gate |
 | `tests/security/screenshare_rules.sh` | SEC-01 rule set against Omarchy's, fixture tree, built-in matches always applied, wiring |
 | `tests/security/sleep_lock_units.sh` | GF-030/D-12: gate script per state, unit and drop-in lines, package path |
-| `tests/security/lock_privacy.sh` | Nested L4 (no notification or window content on the lock), DT-05 screen share, D-4 lid lock and display off |
+| `tests/security/lock_privacy.sh` | Nested L4 (no notification or window content on the lock), DT-05 screen share, D-4 lid lock and display off; reads GF-REF, so it restarts a shell that lacks `GRASSFIELD_DESKTOP_SCREEN=GF-REF` before its setup (the banners follow the main display, ADR-0044) |
 | `tests/security/l2_wrong_password.sh` | Nested L2 with real PAM (opt-in), 3 random wrong passwords, Return ≤ 3, one run per 15 min |
 | `tests/security/reload_order/` | Offscreen `qs` test of the Quickshell reload contract the lock relies on (run by `scripts/dev/test.sh`) |
 | `tests/security/marker_read/` | Offscreen `qs` test: marker reads through the real FileView (missing, `unlocked`, empty, mode 000, directory) |
 | `tests/security/foreign_locker/` | Nested fixture: a foreign ext-session-lock client (Quickshell), released over IPC `foreign unlock`; refuses to lock without `GRASSFIELD_FOREIGN_LOCKER=1` or on the owner's instance (`.dev/main.instance`) |
 | `tests/security/reload_locked.sh` | Nested scenario: reload with marker missing/forged, `kill -9` (L1), forged marker + crash, graceful exit (SIGTERM, `qs kill`: DT-21), file watcher off, foreign locker takeover/restart (release → fresh lock ≤ 150 ms), `lock lock` and before-sleep during a desync, forced races `relock-confirm` and `foreign-gap`, `probe-cost`, `pam-audit`; `probe-memory` (10 min, explicit) |
 | `tests/security/pam_audit.sh` | Read-only PAM attempt audit over every Quickshell instance log of this tree (sourced by `reload_locked.sh`) |
+| `tests/security/nested_ready.sh`, `nested_ready_unit.sh` | Readiness wait of `reload_locked.sh` and `lock_privacy.sh` (bounded, `READY_SECONDS`, default 60): GF-REF listed and a lock state from the shell, before any step and after each shell restart; an empty answer is never a state, a timeout FAILs. Offline test with stub `hyprctl` and `qs` |
 
 IPC (all on the shell instance; classes in "IPC surface"): `lock lock` → `ok` / `already-locked` / `refused: missing-pam`
 (when already locked, the session lock is re-verified, see "Lock ownership"); `lock lid` → the same or `docked`. Dev
@@ -1216,7 +1269,7 @@ hooks, only in a dev session (else `refused`): `lock status` → `unlocked|locki
 for 10 s), `lock devForgeUnlockedAnswer` → `forged` | `not-holding` (counts one "unlocked" answer Hyprland never gave,
 as a stale answer would; only a confirmed relock can follow), `lock devLockView` → JSON {state, field: empty|filled,
 message, failedAttempts, pamSuppressed} (never the text or its length), `idle devSleep before|after` → `ok`
-(before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`,
+(before-sleep / after-resume path without logind; no inhibitor in dev), `idle devDisplayOff <0..600>` → `ok`, `idle devAutoSleep <1..600>` → `ok`,
 `idle status` → JSON, `polkit status` → `registered|unregistered`.
 
 States: `unlocked -request-> locking -acquired(secure)-> locked -submit-> authenticating -success-> releasing

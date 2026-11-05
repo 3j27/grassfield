@@ -17,11 +17,18 @@ enum class Protection { None, System, Omarchy, Grassfield };
 struct DenyList {
     QSet<QString> omarchy; // Omarchy's two package lists (omarchy-base.packages, omarchy-other.packages)
     QSet<QString> holdPkg; // pacman's HoldPkg
+    // What Grassfield's own packages list as optional dependencies (pacman -Qi "Optional Deps" of every grassfield-*): kio-extras,
+    // cmake… Pacman would remove them (nothing requires an optional dependency) and part of Grassfield would stop working
+    // (Files' network places, the plugin rebuild): "Part of Grassfield" (ADR-0046 D3).
+    QSet<QString> grassfieldOptional;
     bool omarchyRead() const { return !omarchy.isEmpty(); }
 };
 
 // The names of an Omarchy package list: comments (#…) and blank lines left out, one or more names per line.
 QSet<QString> parsePackageList(const QByteArray &text);
+
+// The names pacman -Qi lists under "Optional Deps" (LC_ALL=C), of one or more packages: "name: reason" lines and bare names.
+QSet<QString> parseOptionalDeps(const QByteArray &pacmanQi);
 
 // Grassfield's names first, then Omarchy's (its prefix, yay, its lists), then the system's (the fixed list, the kernels,
 // systemd, the boot manager, pacman, firmware, HoldPkg). A name of a list that is also the system's says "system".

@@ -509,6 +509,47 @@ TEST_F(BackendTest, TheRefusalToAskTheShellIsNeverImmediate)
     EXPECT_FALSE(seen.reason.value(tag).isEmpty());
 }
 
+// The canned battery of a dev session (GRASSFIELD_POWER_FIXTURE, ADR-0019 dev plumbing): `power.state` is answered from the file
+// without a bus; outside a dev session (or with GRASSFIELD_DEV=1 leaked into a packaged session) the variable is inert.
+TEST_F(BackendTest, PowerFixtureOnlyInADevSession)
+{
+    EnvGuard env{"GRASSFIELD_DEV", "GRASSFIELD_SESSION", "GRASSFIELD_POWER_FIXTURE"};
+    QFile fixture(scratch(QStringLiteral("power.json")));
+    ASSERT_TRUE(fixture.open(QIODevice::WriteOnly));
+    fixture.write("{\"present\":true,\"onBattery\":false,\"percent\":80,\"state\":1}\n");
+    fixture.close();
+    qputenv("GRASSFIELD_POWER_FIXTURE", QFile::encodeName(fixture.fileName()));
+    for (const char *session : {"", "1"}) {
+        if (*session) {
+            qputenv("GRASSFIELD_DEV", "1");
+            qputenv("GRASSFIELD_SESSION", session);
+        } else {
+            qunsetenv("GRASSFIELD_DEV");
+            qunsetenv("GRASSFIELD_SESSION");
+        }
+        EXPECT_EQ(Backend::powerFixture(), QString()) << session;
+    }
+    qunsetenv("GRASSFIELD_SESSION");
+    qputenv("GRASSFIELD_DEV", "1");
+    EXPECT_EQ(Backend::powerFixture(), fixture.fileName());
+
+    Answers seen;
+    Backend backend;
+    seen.listen(backend);
+    backend.busQuery(QStringLiteral("power.state"), QStringLiteral("power"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("power")) >= 1; }));
+    EXPECT_TRUE(seen.ok.value(QStringLiteral("power")));
+    EXPECT_EQ(seen.output.value(QStringLiteral("power")), QStringLiteral("{\"present\":true,\"onBattery\":false,\"percent\":80,\"state\":1}"));
+
+    // A file that cannot be read: a failed answer with its reason, never a battery.
+    qputenv("GRASSFIELD_POWER_FIXTURE", QFile::encodeName(scratch(QStringLiteral("missing.json"))));
+    backend.busQuery(QStringLiteral("power.state"), QStringLiteral("missing"));
+    ASSERT_TRUE(spinUntil([&] { return seen.finished.value(QStringLiteral("missing")) >= 1; }));
+    EXPECT_FALSE(seen.ok.value(QStringLiteral("missing")));
+    EXPECT_EQ(seen.output.value(QStringLiteral("missing")), QString());
+    EXPECT_FALSE(seen.reason.value(QStringLiteral("missing")).isEmpty());
+}
+
 // Without a shell Settings runs the checker itself (U10). In a dev session: the dev checker, its cache under the dev state, or
 // the canned answer; outside one the dev plumbing is inert.
 TEST_F(BackendTest, WithoutAShellTheCheckerRunsHere)

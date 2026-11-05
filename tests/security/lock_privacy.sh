@@ -25,12 +25,20 @@
 #                when it gives a frame; Hyprland reports LOCK on every monitor
 #   display-off  D-4: with `idle devDisplayOff 4` set before the lock, the shell turns the displays off after 4 s
 #                without input (idle status displayOff, Hyprland dpmsStatus) and on again on pointer motion
+#   auto-sleep   automatic sleep: energy.preventSleep false in the dev config and `idle devAutoSleep 2`: 2 s after the
+#                displays went off on the lock screen one sleep comes due and the dev session suppresses it (counted, never
+#                run), the 5-minute retry armed; with it true none comes due (battery or power adapter); locked
+#                throughout. Leaves energy.preventSleep true
 #   cleanup      close the foot windows (the session stays locked)
 # The fixture steps read GF-REF only (headless: it always draws). privacy also reads WAYLAND-1, the nested window on the
 # owner's screen, which gives grim a frame only while the owner's compositor draws it: without one it is reported
 # NOT VERIFIED (it carries no fixture; its lock is covered by LOCK on every monitor). Every wait is bounded
 # (timeout(1), counted loops); nothing waits forever.
-# Requires scripts/dev/nested-up.sh (GRASSFIELD_DEV=1 shell on a private bus: notify-send reaches only it).
+# Requires scripts/dev/nested-up.sh (GRASSFIELD_DEV=1 shell on a private bus: notify-send reaches only it). Can start right
+# after it: before any step, waits at most READY_SECONDS (default 60) for GF-REF and a lock state from the shell
+# (tests/security/nested_ready.sh); a timeout FAILs (exit 1) and runs no step. With `setup` among the steps, a shell
+# that runs without GRASSFIELD_DESKTOP_SCREEN=GF-REF is restarted once with `scripts/dev/shell-run.sh --desktop-screen
+# GF-REF`: the banners, the Dock and the icons follow the main display (ADR-0044), and this test reads GF-REF.
 # Exit status: 0 when every requested step passed; NOT VERIFIED items are counted on the last line and leave it unchanged.
 set -uo pipefail
 
@@ -50,6 +58,8 @@ bus=$(cat "$dev/bus.address" 2>/dev/null || true)
 for tool in grim magick notify-send foot jq awk timeout; do
   command -v "$tool" >/dev/null || { echo "lock_privacy: $tool is not installed" >&2; exit 2; }
 done
+# shellcheck source=nested_ready.sh
+. "$root/tests/security/nested_ready.sh"
 
 work=$dev/lock-privacy
 mkdir -p "$work"
@@ -367,7 +377,8 @@ step_setup() {
   echo "notifications: $(ipc notifications status)"
   # The notification image renders before the lock: magenta outside the probe window can only be the banners' marker,
   # so "0 marker px" on the lock screen covers notification images too (each banner shows it at about 32x32 px). The
-  # banners show on $out (the pointer's output, where the windows opened); WAYLAND-1 is not read here (see grab).
+  # banners show on the main display (ADR-0044), which this run pins to $out (GRASSFIELD_DESKTOP_SCREEN, before the
+  # steps); WAYLAND-1 is not read here (see grab).
   local bm=""
   for i in $(seq 1 6); do
     if grab "$out" "$work/banners-$out.png" 2>/dev/null; then
@@ -383,8 +394,21 @@ step_setup() {
     echo "banners=1" >>"$fixture"
     pass "setup: the notification banners show the marker image before the lock ($bm px outside the probe window)"
   else
-    fail "setup: the notification banners never showed the marker image ($bm px outside the probe window): 0 marker px on the lock screen would not cover notification images"
+    fail "setup: the notification banners never showed the marker image ($bm px outside the probe window; banner surface on '$(banners_output)', shell main display override '$(shell_env GRASSFIELD_DESKTOP_SCREEN)'): 0 marker px on the lock screen would not cover notification images"
   fi
+}
+
+# The output that holds the shell's banner surface (layer namespace grassfield-banners, shell/notifications/Banners.qml), ""
+# when there is none: says where the banners went when the setup does not see them on $out.
+banners_output() {
+  hypr -j layers | jq -r 'to_entries[] | select(any(.value.levels[]?[]?; .namespace == "grassfield-banners")) | .key' 2>/dev/null | head -n 1
+}
+
+# The value of <variable> in the live nested shell's environment (empty when unset, or with no live shell record).
+shell_env() { # <variable>
+  local pid
+  pid=$(dev_live_pid "$dev/shell.pid") || return 0
+  tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null | sed -n "s/^$1=//p" | head -n 1
 }
 
 step_screenshare() {
@@ -522,6 +546,81 @@ step_display_off() {
   compositor_locked && pass "display-off: still locked" || fail "display-off: Hyprland no longer reports LOCK"
 }
 
+# The dev config this nested shell reads (GRASSFIELD_CONFIG_HOME=.dev/config, scripts/dev/shell-run.sh): energy.preventSleep
+# set to $1 (true/false), the rest of the file kept; the shell follows it live.
+set_prevent_sleep() {
+  local cfg=$dev/config/grassfield.json tmp
+  mkdir -p "$dev/config"
+  tmp=$(mktemp "$dev/config/.grassfield.json.XXXXXX")
+  if [[ -s $cfg ]]; then
+    jq --argjson v "$1" '.energy = ((.energy // {}) + {preventSleep: $v})' "$cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+  else
+    jq -n --argjson v "$1" '{version: 1, energy: {preventSleep: $v}}' >"$tmp" || { rm -f "$tmp"; return 1; }
+  fi
+  mv -f "$tmp" "$cfg"
+}
+
+idle_field() { jq -r "$1" <<<"$(ipc idle status)" 2>/dev/null; }
+
+# Waits until the lock screen's monitor has the displays off again (input first lights them).
+displays_off_again() {
+  local _
+  pointer GF-REF abs 760 460 sleep 100 abs 780 480 >/dev/null
+  for _ in $(seq 1 40); do
+    [[ $(idle_field '.displayOff') == false ]] && break
+    sleep 0.25
+  done
+  for _ in $(seq 1 60); do
+    [[ $(idle_field '.displayOff') == true ]] && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
+# Automatic sleep (2026-11-04, Settings > Energy / Battery > Options…): locked with the displays off for 2 s without input
+# (`idle devAutoSleep 2`), a computer whose sleep is not prevented would suspend; the dev session never does: it counts the
+# due suspend (`autoSleepSuppressed`) instead, and the retry timer (5 min) is armed. With energy.preventSleep on, nothing is
+# due, on battery as on the power adapter (integrator decision 2026-11-04). The session stays locked either way.
+step_auto_sleep() {
+  local before after
+  echo "idle devAutoSleep 2 -> $(ipc idle devAutoSleep 2)"
+  set_prevent_sleep false || { fail "auto-sleep: the dev config could not be written"; return; }
+  for _ in $(seq 1 20); do [[ $(idle_field '.sleepPrevented') == false ]] && break; sleep 0.25; done
+  [[ $(idle_field '.sleepPrevented') == false ]] && pass "auto-sleep: energy.preventSleep false reaches the idle module (sleepPrevented false)" \
+    || fail "auto-sleep: sleepPrevented $(idle_field '.sleepPrevented') after writing false"
+  before=$(idle_field '.autoSleepSuppressed')
+  displays_off_again && pass "auto-sleep: the lock screen turned the displays off again" || fail "auto-sleep: the displays did not go off ($(ipc idle status))"
+  for _ in $(seq 1 40); do
+    after=$(idle_field '.autoSleepSuppressed')
+    [[ $after =~ ^[0-9]+$ && $before =~ ^[0-9]+$ ]] && ((after > before)) && break
+    sleep 0.25
+  done
+  [[ $after =~ ^[0-9]+$ && $before =~ ^[0-9]+$ ]] && ((after == before + 1)) \
+    && pass "auto-sleep: one automatic sleep came due 2 s after the displays went off, and the dev session suppressed it ($before -> $after)" \
+    || fail "auto-sleep: autoSleepSuppressed $before -> $after ($(ipc idle status))"
+  [[ $(idle_field '.autoSleepRetrying') == true ]] && pass "auto-sleep: the retry timer is armed while the displays stay off" \
+    || fail "auto-sleep: no retry armed ($(ipc idle status))"
+  sleep 3
+  [[ $(idle_field '.autoSleepSuppressed') == "$after" ]] && pass "auto-sleep: no second request within the retry interval (5 min): no tight loop" \
+    || fail "auto-sleep: requested again without input ($(idle_field '.autoSleepSuppressed'))"
+  compositor_locked && pass "auto-sleep: still locked (LOCK on every monitor)" || fail "auto-sleep: Hyprland no longer reports LOCK"
+  set_prevent_sleep true || { fail "auto-sleep: the dev config could not be written"; return; }
+  for _ in $(seq 1 20); do [[ $(idle_field '.sleepPrevented') == true ]] && break; sleep 0.25; done
+  [[ $(idle_field '.sleepPrevented') == true ]] && pass "auto-sleep: energy.preventSleep true reaches the idle module, whatever the power source" \
+    || fail "auto-sleep: sleepPrevented $(idle_field '.sleepPrevented') after writing true"
+  before=$(idle_field '.autoSleepSuppressed')
+  displays_off_again || fail "auto-sleep: the displays did not go off with prevent-sleep on ($(ipc idle status))"
+  sleep 4
+  after=$(idle_field '.autoSleepSuppressed')
+  [[ $after == "$before" && $(idle_field '.autoSleepArmed') == false && $(idle_field '.autoSleepRetrying') == false ]] \
+    && pass "auto-sleep: prevent-sleep on: the displays are off, the session locked, and no sleep comes due" \
+    || fail "auto-sleep: prevent-sleep on, yet autoSleepSuppressed $before -> $after ($(ipc idle status))"
+  [[ $(idle_field '.displayOff') == true ]] && pass "auto-sleep: prevent-sleep keeps the displays' own power-off" \
+    || fail "auto-sleep: displays not off with prevent-sleep on"
+  compositor_locked && pass "auto-sleep: still locked with prevent-sleep on" || fail "auto-sleep: Hyprland no longer reports LOCK"
+  echo "idle devAutoSleep 60 -> $(ipc idle devAutoSleep 60)"
+}
+
 step_cleanup() {
   local id
   for id in gf-privacy-probe gf-privacy-twin Bitwarden; do
@@ -532,9 +631,48 @@ step_cleanup() {
 }
 
 steps=("$@")
-[[ ${#steps[@]} -gt 0 ]] || steps=(setup screenshare control lock privacy display-off cleanup)
-[[ $(ipc lock status) == unlocked || " ${steps[*]} " != *" lock "* ]] \
-  || { echo "lock_privacy: the nested session is already locked; restart it (nested-down, nested-up) for the default run" >&2; exit 2; }
+[[ ${#steps[@]} -gt 0 ]] || steps=(setup screenshare control lock privacy display-off auto-sleep cleanup)
+# Ready first (tests/security/nested_ready.sh): GF-REF listed and a lock state from the shell. Right after nested-up the
+# shell does not answer yet, and its empty answer is no lock state (it once stopped this run as "already locked"). A
+# timeout FAILs: no step runs on an unknown state. Only `cleanup` needs no shell.
+needs_shell=0
+for s in "${steps[@]}"; do [[ $s == cleanup ]] || needs_shell=1; done
+if ((needs_shell)); then
+  ready_rc=0
+  nested_ready "$sig" "$sock" "$root/shell" "${READY_SECONDS:-60}" || ready_rc=$?
+  case $ready_rc in
+    0) echo "ready: GF-REF listed, lock status $nested_ready_state, after $nested_ready_ms ms" ;;
+    2) echo "lock_privacy: $nested_ready_why" >&2; exit 2 ;;
+    *) echo "FAIL ready: $nested_ready_why"; echo "lock_privacy: no step ran; exit status 1"; exit 1 ;;
+  esac
+  [[ $nested_ready_state == unlocked || " ${steps[*]} " != *" lock "* ]] \
+    || { echo "lock_privacy: the nested session is already $nested_ready_state; restart it (nested-down, nested-up) for the default run" >&2; exit 2; }
+fi
+# The banners, the Dock and the desktop icons show on the main display (ADR-0044, shell/services/MainDisplay.qml; before it
+# the banners followed the pointer's output, where this test parks it). With WAYLAND-1 and GF-REF that is the first output,
+# a race, unless the dev override GRASSFIELD_DESKTOP_SCREEN names one: the integrator's run of 2026-11-04 on d03fea8c had the
+# banners on WAYLAND-1 and both banner checks failed on GF-REF. This test looks at GF-REF only (the fixture, the banners,
+# the surfaces it opens while locked), so the shell must run with GRASSFIELD_DESKTOP_SCREEN=GF-REF, as the visual suite's
+# shell does (tests/visual/lib.sh). A shell started without it (`scripts/dev/nested-up.sh` alone, as `just
+# test-security-nested` does) is restarted once with `scripts/dev/shell-run.sh --desktop-screen GF-REF` before the setup
+# (unlocked: the default run refuses a locked session above); the product rule is unchanged. Without `setup` in the steps
+# nothing is restarted (the banners of an earlier setup would go): a note says so.
+if [[ " ${steps[*]} " == *" setup "* ]]; then
+  if [[ $(shell_env GRASSFIELD_DESKTOP_SCREEN) != "$out" ]]; then
+    echo "main display: the nested shell runs without GRASSFIELD_DESKTOP_SCREEN=$out (banners on '$(banners_output)'); restarting it with --desktop-screen $out"
+    "$root/scripts/dev/shell-run.sh" --desktop-screen "$out" >/dev/null || { echo "FAIL ready: scripts/dev/shell-run.sh --desktop-screen $out failed"; exit 1; }
+    ready_rc=0
+    nested_ready "$sig" "$sock" "$root/shell" "${READY_SECONDS:-60}" || ready_rc=$?
+    ((ready_rc == 0)) || { echo "FAIL ready: after the restart with --desktop-screen $out: $nested_ready_why"; exit 1; }
+    [[ $nested_ready_state == unlocked || " ${steps[*]} " != *" lock "* ]] \
+      || { echo "FAIL ready: the restarted shell is $nested_ready_state, not unlocked"; exit 1; }
+    [[ $(shell_env GRASSFIELD_DESKTOP_SCREEN) == "$out" ]] \
+      || { echo "FAIL ready: the restarted shell still runs without GRASSFIELD_DESKTOP_SCREEN=$out"; exit 1; }
+    echo "ready: the shell restarted with its main display on $out, lock status $nested_ready_state, after $nested_ready_ms ms"
+  fi
+elif [[ $(shell_env GRASSFIELD_DESKTOP_SCREEN) != "$out" ]]; then
+  echo "NOTE the nested shell runs without GRASSFIELD_DESKTOP_SCREEN=$out: its banners and Dock may be on another output than the one these steps read"
+fi
 for s in "${steps[@]}"; do
   echo "== $s"
   declare -F "step_${s//-/_}" >/dev/null || { echo "lock_privacy: unknown step $s" >&2; exit 2; }

@@ -68,4 +68,5 @@ MenuShortcut 1.0 MenuShortcut.js
 GlassTint 1.0 GlassTint.js
 TileGlyph 1.0 TileGlyph.qml
 SoftwareUpdateLogic 1.0 SoftwareUpdateLogic.js
+UninstallLogic 1.0 UninstallLogic.js
 SidebarPanel 1.0 SidebarPanel.qml

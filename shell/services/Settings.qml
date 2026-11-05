@@ -115,6 +115,7 @@ Singleton {
     readonly property bool lockShowUser: store.lockShowUser
     readonly property bool lockShowMessage: store.lockShowMessage
     readonly property string lockMessage: store.lockMessage
+    readonly property bool energyPreventSleep: store.energyPreventSleep
     readonly property bool searchShowApps: store.searchShowApps
     readonly property bool searchShowDocuments: store.searchShowDocuments
     readonly property bool searchShowRecents: store.searchShowRecents

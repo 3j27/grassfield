@@ -107,6 +107,19 @@ TestCase {
         verify(named(t.page.contentItem, "Turn display off when inactive"));
     }
 
+    // A computer without a battery (the owner's report of rc1-22: a desktop PC): "Turn display off when inactive" offers Never,
+    // first as on macOS, and picking it writes 0 (the shell never turns the displays off for inactivity then).
+    function test_withoutBatteryOffersNever() {
+        const t = make(false);
+        const power = named(t.page.contentItem, "Turn display off when inactive");
+        verify(power && power.visible);
+        compare(power.model[0], {id: "0", text: "Never"});
+        power.picked("0");
+        compare(last(t.store), {"lock.displayOffPower": 0});
+        compare(power.value, "0");
+        compare(power.model.filter(m => m.id === "0").length, 1, "Never once");
+    }
+
     function test_requirePassword() {
         const t = make();
         const delay = named(t.page.contentItem, "Require password after inactivity");

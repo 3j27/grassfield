@@ -361,6 +361,11 @@ QString Backend::updateFixture()
     return grassfield::apps::runmode::devValue("UPDATE_FIXTURE");
 }
 
+QString Backend::powerFixture()
+{
+    return grassfield::apps::runmode::devValue("POWER_FIXTURE");
+}
+
 void Backend::runUpdateChecker(const QString &tag)
 {
     using namespace grassfield::apps;
@@ -419,6 +424,20 @@ void Backend::busQuery(const QString &what, const QString &tag)
     if (!known.contains(what)) {
         qWarning().noquote() << "refused a bus query that is not known:" << what;
         emit finished(tag, false, QString());
+        return;
+    }
+    // A dev session's canned battery (ADR-0019 dev plumbing): read here, answered on the next turn of the event loop like a bus
+    // answer. The pages check it as they check UPower's (Power.js parseState).
+    const QString fixture = what == QLatin1String("power.state") ? powerFixture() : QString();
+    if (!fixture.isEmpty()) {
+        const QVariantMap r = readText(fixture);
+        const bool ok = r.value(QStringLiteral("ok")).toBool();
+        const QString text = r.value(QStringLiteral("text")).toString().trimmed();
+        QTimer::singleShot(0, this, [this, tag, ok, text] {
+            if (!ok)
+                emit failed(tag, QCoreApplication::translate("SystemBus", "the answer file cannot be read"));
+            emit finished(tag, ok, ok ? text : QString());
+        });
         return;
     }
     const QStringList own = userUnitDirs();

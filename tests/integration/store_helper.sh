@@ -268,7 +268,8 @@ expect "denied() found in the helper" test -s "$W/denied.sh"
 python3 -I - "$W/denied.sh" /src/tests/fixtures/store/removal-vectors.json >"$W/vectors.out" 2>&1 <<'PY'
 import json, subprocess, sys
 fn, vec = sys.argv[1], json.load(open(sys.argv[2]))
-script = "declare -A omarchy=() hold=()\n"
+script = "declare -A omarchy=() hold=() gfopt=()\n"
+script += "".join("gfopt[%s]=1\n" % n for n in vec["gfOptional"])
 script += "".join("omarchy[%s]=1\n" % n for n in vec["omarchyLists"])
 script += "".join("hold[%s]=1\n" % n for n in vec["holdPkg"])
 script += open(fn).read()

@@ -77,6 +77,25 @@ FocusScope {
     readonly property bool isTrash: String(root.url).startsWith("trash:")
     // The Applications location: read-only, opening starts the application.
     readonly property bool isApplications: String(root.url).startsWith("grassfield-apps:")
+    // Which applications of that location the Store may uninstall (ADR-0046; the Store's `--removable`, read when the
+    // location opens): "Move to Trash" on one of them hands it to the Store, whose alert is the confirmation.
+    readonly property var removableApps: UninstallLogic.parse(root.app.removableText)
+    onIsApplicationsChanged: {
+        if (root.isApplications)
+            root.app.loadRemovableApplications();
+    }
+
+    // The id of the one application selected in the Applications location, "" for anything else.
+    function selectedApplicationId(): string {
+        const f = root.activeFolder;
+        if (!f || !f.isApplications || f.selectedCount !== 1)
+            return "";
+        return root.app.applicationId(f.urlAt(f.selectedRows()[0]));
+    }
+
+    function applicationRemovable(): bool {
+        return UninstallLogic.removable(root.removableApps, root.selectedApplicationId());
+    }
 
     Accessible.role: Accessible.Pane
     Accessible.name: root.title
@@ -124,6 +143,8 @@ FocusScope {
     }
 
     Component.onCompleted: {
+        if (root.isApplications)
+            root.app.loadRemovableApplications();
         if (root.restore) {
             root.sortKey = root.restore.sortKey;
             root.sortDescending = root.restore.sortDescending;
@@ -527,7 +548,14 @@ FocusScope {
         if (urls.length === 0)
             return;
         if (root.activeFolder.isApplications) {
-            root.app.trash(urls); // refused with the permission message: the location is read-only
+            // Finder: moving an app out of Applications to the Trash uninstalls it. Here the Store is asked (ADR-0046 D1) and shows
+            // its own alert, the only confirmation; anything it may not remove is refused with the permission message (the
+            // location is read-only).
+            if (root.applicationRemovable()) {
+                root.app.uninstallApplication(root.selectedApplicationId());
+                return;
+            }
+            root.app.trash(urls);
             return;
         }
         if (root.activeFolder.isTrash)
@@ -960,7 +988,7 @@ FocusScope {
             return [
                 {id: "open", text: qsTr("Open")},
                 {separator: true},
-                {id: "trash", text: qsTr("Move to Trash"), shortcut: qsTr("Ctrl+Backspace"), enabled: false},
+                {id: "trash", text: qsTr("Move to Trash"), shortcut: qsTr("Ctrl+Backspace"), enabled: root.applicationRemovable()},
                 {separator: true},
                 {id: "info", text: qsTr("Get Info"), shortcut: qsTr("Ctrl+I")},
                 {id: "copy", text: count === 1 ? qsTr("Copy “%1”").arg(name) : qsTr("Copy %1 Items").arg(count), shortcut: qsTr("Ctrl+C")},

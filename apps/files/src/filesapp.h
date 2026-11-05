@@ -11,7 +11,9 @@
 #include <QMimeData>
 #include <QObject>
 #include <QPointF>
+#include <QDateTime>
 #include <QPointer>
+#include <QProcess>
 #include <QSettings>
 #include <QThreadPool>
 #include <QTimer>
@@ -45,6 +47,9 @@ class FilesApp : public QObject
     // Files' Choose Application panels (Open With > Other…, KIO's question when a type has no application; ADR-0035 D-5,
     // step 5c): qml/Main.qml makes each one.
     Q_PROPERTY(QObject *applicationChooser READ applicationChooser CONSTANT)
+    // The Store's answer to `grassfield-store --removable` (JSON text, "" until it came): which applications of the Applications
+    // location it may uninstall (ADR-0046). The QML reads it with UninstallLogic.parse and removes nothing itself.
+    Q_PROPERTY(QString removableText READ removableText NOTIFY removableTextChanged)
     Q_PROPERTY(QString homePath READ homePath CONSTANT)
     Q_PROPERTY(QList<QUrl> initialUrls READ initialUrls CONSTANT)
     Q_PROPERTY(bool dark READ dark NOTIFY appearanceChanged)
@@ -250,6 +255,12 @@ public:
     // How many applications the Applications location lists (Get Info on the location: macOS shows the size of the folder).
     Q_INVOKABLE int applicationsCount() const;
     Q_INVOKABLE void launchApplication(const QUrl &url);
+    // Asks the Store which applications it may uninstall (one run at a time, again at most once a minute), then removableText.
+    Q_INVOKABLE void loadRemovableApplications();
+    // Move to Trash on an application: `grassfield-store --page=uninstall:<id>.desktop`. The Store opens its own alert and removes
+    // only after Delete there; Files asks nothing and runs nothing else. `id` is an Applications-location id; anything that is not one is refused.
+    Q_INVOKABLE void uninstallApplication(const QString &id);
+    QString removableText() const { return m_removableText; }
     // Glance: starts `grassfield-preview --glance` (detached) for the local regular files among `urls`.
     Q_INVOKABLE void glance(const QList<QUrl> &urls);
 
@@ -442,6 +453,7 @@ public:
     int folderStyleRevision() const { return m_folderStyleRevision; }
 
 signals:
+    void removableTextChanged();
     void appearanceChanged();
     void undoChanged();
     void clipboardChanged();
@@ -576,6 +588,9 @@ private:
     // id -> .desktop path of the rows the Applications location listed last (built by a FolderModel on its thread).
     QVariantMap m_applicationPaths;
     QVariantMap m_applicationNames; // id -> the name the Applications location shows (the disambiguated one)
+    QString m_removableText;
+    QPointer<QProcess> m_removableProcess;
+    QDateTime m_removableAt;
     FolderStyleStore m_folderStyles;
     int m_folderStyleRevision = 0;
     // Read on first use and again when it changes (the state directory may not exist before a view is chosen).

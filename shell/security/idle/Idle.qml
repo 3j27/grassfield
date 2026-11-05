@@ -21,7 +21,11 @@ import "../../lib/RunMode.js" as RunMode
 // a key press or pointer motion: misc.key_press_enables_dpms / mouse_move_enables_dpms, looknfeel.lua, so a shell that
 // died meanwhile cannot leave the screen dark). While unlocked, lock.displayOffBattery / lock.displayOffPower minutes without
 // input (the power source in use; 0 = never) also switch them off, without locking (macOS 27 Lock Screen: Turn display off when
-// inactive); a lock that follows keeps them off until input. Also hosts the lock-before-sleep inhibitor.
+// inactive); a lock that follows keeps them off until input. Also hosts the lock-before-sleep inhibitor, and the automatic
+// sleep (macOS 27 Energy, Battery > Options…): IdleModel.AUTO_SLEEP_SECONDS after this module turned the displays off for
+// lack of input, the computer sleeps, unless energy.preventSleep is on (default; battery and power adapter alike); only in
+// the LOCKED state with the lock secure (an unlocked session is locked first: the one lock it can add), never in the nested
+// dev session.
 Scope {
     id: root
 
@@ -250,6 +254,137 @@ Scope {
         onEnabledChanged: root.updateDisplays()
     }
 
+    // ---- Automatic sleep (macOS 27 Energy and Battery > Options…: Prevent automatic sleeping when the display is off). The idle
+    // lock, the display-off lock and the lock screen's power-off above never read any of this. The one lock it can cause is
+    // the lock before an automatic sleep on a session not locked yet (autoSleepAction "lock"), which only ever adds a lock. On
+    // battery and on the power adapter alike, the computer sleeps only when energy.preventSleep is false (default true:
+    // Grassfield never put a computer to sleep by itself before, and a value that cannot be read keeps it awake;
+    // IdleModel.sleepPrevented, integrator decision 2026-11-04). ----
+    readonly property bool sleepPrevented: IdleModel.sleepPrevented(Settings.energyPreventSleep)
+    readonly property bool autoSleepArmed: IdleModel.autoSleepArmed(root.displayOff, root.sleepPrevented, root.busInhibited)
+    // Seconds the displays stay off without input before the sleep; a dev test shortens it (`idle devAutoSleep <seconds>`).
+    property int autoSleepSeconds: IdleModel.AUTO_SLEEP_SECONDS
+    // autoSleepSeconds passed since the displays went off (a monotonic Timer: the idle monitor below may count from the last
+    // input, which came well before the displays went off).
+    property bool autoSleepWaited: false
+    // A lock or a suspend was asked for: not again until the retry Timer (IdleModel.AUTO_SLEEP_RETRY_MS) or a new display-off
+    // period.
+    property bool autoSleepAsked: false
+    // Dev session: suspends that were due and not run (the dev session never suspends the owner's computer).
+    property int autoSleepSuppressed: 0
+
+    onAutoSleepArmedChanged: {
+        root.autoSleepWaited = false;
+        root.autoSleepAsked = false;
+    }
+
+    function autoSleepCheck(): void {
+        if (!sleepMonitor.enabled || !IdleModel.autoSleepDue(root.autoSleepArmed, sleepMonitor.isIdle, root.autoSleepWaited, root.autoSleepAsked))
+            return;
+        // Read afresh at the moment of the decision (a binding that missed a change must not put the computer to sleep).
+        if (IdleModel.sleepPrevented(Settings.energyPreventSleep) || root.busInhibited)
+            return;
+        const action = IdleModel.autoSleepAction(Lock.currentState(), Lock.currentlySecure());
+        if (action === "wait")
+            return;
+        root.autoSleepAsked = true;
+        if (action === "lock") {
+            // The lock first: it lights the displays until it holds (IdleModel.displaysOff), they go off again, and the next
+            // due time, with the lock LOCKED and secure, suspends.
+            console.info("grassfield-idle: displays off for " + root.autoSleepSeconds + " s without input; locking before the automatic sleep");
+            const result = Lock.lock("sleep");
+            if (result !== "ok" && result !== "already-locked")
+                console.warn("grassfield-idle: lock before the automatic sleep not engaged:", result, "; staying awake");
+            return;
+        }
+        if (root.devHooks) {
+            root.autoSleepSuppressed++;
+            console.info("grassfield-idle: automatic sleep suppressed (dev session)");
+            return;
+        }
+        // Read once more right before systemctl runs (review of 95dab794: an unlock that began meanwhile, a fingerprint just
+        // before the due time, is in AUTHENTICATING or RELEASING and must not be put to sleep).
+        if (IdleModel.autoSleepAction(Lock.currentState(), Lock.currentlySecure()) !== "suspend") {
+            root.autoSleepAsked = false;
+            return;
+        }
+        console.info("grassfield-idle: displays off for " + root.autoSleepSeconds + " s without input, locked; going to sleep (automatic)");
+        autoSleepRequest.running = true;
+    }
+
+    // A change of the lock (IdleModel.autoSleepOnLockChange, read afresh): a lock that settled LOCKED and secure after the due
+    // time decides again; an unlock ends the attempt (the delay starts over with the next display-off), so an unlock can never
+    // lead to the lock-first path and undo itself (review of 2a19231d: a fingerprint touch over the due time); anything else
+    // changes nothing.
+    function autoSleepLockChanged(): void {
+        const next = IdleModel.autoSleepOnLockChange(Lock.currentState(), Lock.currentlySecure());
+        if (next === "end") {
+            root.autoSleepWaited = false;
+            root.autoSleepAsked = false;
+        } else if (next === "recheck") {
+            Qt.callLater(root.autoSleepCheck);
+        }
+    }
+
+    Connections {
+        target: Lock
+
+        function onSecureChanged(): void {
+            root.autoSleepLockChanged();
+        }
+
+        function onLockStateChanged(): void {
+            root.autoSleepLockChanged();
+        }
+    }
+
+    Timer {
+        id: autoSleepDelay
+        interval: root.autoSleepSeconds * 1000
+        running: root.autoSleepArmed
+        onTriggered: {
+            root.autoSleepWaited = true;
+            root.autoSleepCheck();
+        }
+    }
+
+    // A request that did not end in a sleep (logind refused it: an application's sleep block inhibitor such as a download;
+    // a refused lock; a wake without input) is asked again every IdleModel.AUTO_SLEEP_RETRY_MS while the displays stay off
+    // (review of 95dab794: a laptop otherwise stays awake all night once the download ends). Never a tight loop; monotonic, so
+    // the time asleep does not count; stopped by input (the displays come on, the monitor disarms).
+    Timer {
+        id: autoSleepRetry
+        interval: IdleModel.AUTO_SLEEP_RETRY_MS
+        repeat: true
+        running: IdleModel.autoSleepRetryArmed(root.autoSleepArmed, root.autoSleepAsked)
+        onTriggered: {
+            root.autoSleepAsked = false;
+            root.autoSleepCheck();
+        }
+    }
+
+    // No input and no Wayland idle inhibitor (a video plays, even behind the lock) for autoSleepSeconds since the displays
+    // went off. Enabled only then, so its timeout is the one wanted (see `rearming`).
+    IdleMonitor {
+        id: sleepMonitor
+        enabled: root.autoSleepArmed
+        timeout: Math.max(1, root.autoSleepSeconds)
+        respectInhibitors: true
+        onIsIdleChanged: root.autoSleepCheck()
+    }
+
+    // logind decides (an application's sleep block inhibitor refuses it) and runs the lock before sleep (SleepInhibitor).
+    // --no-ask-password: an automatic sleep never asks for authorization (polkit's suspend-multiple-sessions, another user
+    // logged in): refused, the computer stays awake; no authorization sheet waits behind the lock to suspend after unlock.
+    Process {
+        id: autoSleepRequest
+        command: ["systemctl", "--no-ask-password", "suspend"]
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                console.warn("grassfield-idle: automatic sleep refused by the system (systemctl suspend exit " + exitCode + "); staying awake, locked; asked again in " + IdleModel.AUTO_SLEEP_RETRY_MS / 60000 + " min while the displays stay off");
+        }
+    }
+
     SleepInhibitor {
         id: sleepInhibitor
     }
@@ -320,7 +455,12 @@ Scope {
                 inactiveOffSeconds: root.inactiveOffSeconds,
                 inactiveOffArmed: inactiveMonitor.enabled,
                 offForInactivity: root.offForInactivity,
-                busInhibited: root.busInhibited
+                busInhibited: root.busInhibited,
+                sleepPrevented: root.sleepPrevented,
+                autoSleepArmed: root.autoSleepArmed,
+                autoSleepSeconds: root.autoSleepSeconds,
+                autoSleepSuppressed: root.autoSleepSuppressed,
+                autoSleepRetrying: autoSleepRetry.running
             });
         }
 
@@ -344,6 +484,16 @@ Scope {
             if (!root.devHooks || seconds < 0 || seconds > 600)
                 return RunMode.REFUSED;
             root.displayOffSeconds = seconds;
+            return "ok";
+        }
+
+        // Dev hook (dev only, else "refused"): seconds the displays stay off before the automatic sleep, 1..600, for a nested
+        // test of the sleep path (the dev session never suspends: it counts autoSleepSuppressed). Takes effect at the next
+        // display-off.
+        function devAutoSleep(seconds: int): string {
+            if (!root.devHooks || seconds < 1 || seconds > 600)
+                return RunMode.REFUSED;
+            root.autoSleepSeconds = seconds;
             return "ok";
         }
     }

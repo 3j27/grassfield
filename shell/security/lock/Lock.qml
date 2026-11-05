@@ -216,6 +216,12 @@ Singleton {
         return Machine.isHolding(controller.currentState()) && sessionLock.secure && verified;
     }
 
+    // The state machine's state, read afresh (LockMachine.js: unlocked, locking, locked, authenticating, releasing): the
+    // automatic sleep suspends only in LOCKED (shell/security/idle/IdleModel.js autoSleepAction). Read-only.
+    function currentState(): string {
+        return controller.currentState();
+    }
+
     // Engage the lock. reason: "ipc" | "menu" | "idle" | "display-off" | "sleep" | "lid" | "restore". Returns "ok",
     // "already-locked" or "refused: missing-pam". When this shell already holds a lock, the
     // compositor is asked again (verify()): a session found unlocked under it gets a fresh lock once
@@ -303,10 +309,13 @@ Singleton {
     // never on a single answer, which may be stale (tests/security/reload_order checks the callers).
     function relock(why: string): void {
         console.warn("grassfield-lock: the session is unlocked although this shell holds a lock (taken over and released by another client; " + why + "); taking a fresh lock");
+        // lockLost() first: `holding` ends before the inherited-lock suspicion is cleared, so no "no takeover suspected;
+        // ownership check every 1000 ms" line is logged for the lock being replaced (it read as the cause of a slow
+        // re-lock in the integrator's run of 2026-11-04, when the 100 ms check had been in force throughout).
+        controller.lockLost();
         unlockedAnswers = 0;
         verified = false;
         inheritedLock = false;
-        controller.lockLost();
         sessionLock.locked = false;
         engage();
     }

@@ -94,6 +94,7 @@ ShellRoot {
         ["lock.showMessage", true, () => Settings.lockShowMessage === true],
         ["lock.message", "Back at 3", () => Settings.lockMessage === "Back at 3"],
         ["lock.message", "two\nlines", () => Settings.lockMessage === ""],
+        ["energy.preventSleep", false, () => Settings.energyPreventSleep === false],
         ["search.showApps", false, () => Settings.searchShowApps === false],
         ["search.showDocuments", false, () => Settings.searchShowDocuments === false],
         ["search.showRecents", false, () => Settings.searchShowRecents === false],
