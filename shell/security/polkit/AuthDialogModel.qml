@@ -72,7 +72,7 @@ QtObject {
     // it. So `request`, the flow Quickshell has open (the agent's own, also while this model is handed none: a secret sheet
     // came first), is refused (polkit's "cancelled": the requester is told no) as soon as PAM says something without asking
     // (pamTalks: a device's instruction, or any other line: when in doubt, no), whenever `answerable` is false (the agent's
-    // rule: locked, under the screen saver, waiting, held and not clicked past its guard, its keys on the sink), an answer
+    // rule: its sheet is not on screen in front: locked, under the screen saver, waiting behind another sheet), an answer
     // sent or not. PAM asking for a password ends nothing: that request waits for the user, its sheet after the unlock.
     // Defaults fail closed (not answerable); with no request nothing happens. The cancel runs from the event loop, never inside
     // this binding's own change: Quickshell ends the request inside cancelAuthenticationRequest, which changes what the binding
@@ -88,6 +88,41 @@ QtObject {
     function refuseUnseen(): void {
         if (refusesUnseen)
             request.cancelAuthenticationRequest();
+    }
+
+    // Replaced requests (opus re-review of the ADR-0045 security fixes, MAJOR-1). Quickshell 0.3.2 replaces an open request
+    // instead of queuing it (agentimpl.cpp initiateAuthentication activates a new one while another is active) and leaves the
+    // replaced one running, its PAM included, with no sheet: a device could answer it unseen, for up to pam_fprintd's 30 s,
+    // and keep the lock screen's own fingerprint check from the reader. Every request replaced before it completed is watched
+    // (`priv.replaced`); as soon as one of them talks without asking (at once if it already did), the request Quickshell has
+    // open is refused first, then every replaced one: refusing a replaced one ends whatever request is current (its
+    // completion is still connected to agentimpl's finishAuthenticationRequest), which would leave the current one unanswered.
+    // A replaced request asking for a password is left as Quickshell leaves it (nobody can type into it). From the event loop,
+    // as above.
+    readonly property bool replacedTalks: liveReplaced().some(f => pamTalks(f))
+    onReplacedTalksChanged: if (replacedTalks)
+        Qt.callLater(root.refuseReplaced)
+    onRequestChanged: {
+        const before = priv.seen;
+        priv.seen = request;
+        if (before && request && before !== request && before.isCompleted !== true)
+            priv.replaced = liveReplaced().concat([before]);
+    }
+
+    // The replaced requests still running (a destroyed flow reads null).
+    function liveReplaced(): var {
+        return priv.replaced.filter(f => !!f && f.isCompleted !== true);
+    }
+
+    function refuseReplaced(): void {
+        if (!replacedTalks)
+            return;
+        const replaced = liveReplaced();
+        priv.replaced = [];
+        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();
+        for (const f of replaced)
+            f.cancelAuthenticationRequest();
     }
 
     // PAM said something and asks nothing (Quickshell keeps the last line until another one comes).
@@ -190,6 +225,9 @@ QtObject {
         property string error: ""
         property bool shown: false
         property bool answered: false
+        // The request last seen and the replaced ones still watched (refuseReplaced).
+        property var seen: null
+        property var replaced: []
     }
 
     readonly property Private priv: Private {}

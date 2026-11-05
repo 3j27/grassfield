@@ -112,6 +112,20 @@ check "G4 answerable until the agent says otherwise (fails open)" $MG \
   "    property bool answerable: false" "    property bool answerable: true"
 check "G5 an answer sent shields the request from the reader" $MG \
   "readonly property bool refusesUnseen: !answerable && pamTalks(request)" "readonly property bool refusesUnseen: !answerable && pamTalks(request) && !priv.submitted"
+# Opus re-review, MAJOR-1: a request Quickshell replaced is refused, with the current one first, once its PAM talks.
+check "G7 a replaced request is not watched" $MG \
+  "            priv.replaced = liveReplaced().concat([before]);" "            ;"
+check "G8 the replaced request alone is refused (the current one left)" $MG \
+  "        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();" ""
+check "G9 the replaced request is refused first" $MG \
+  "        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();
+        for (const f of replaced)
+            f.cancelAuthenticationRequest();" "        for (const f of replaced)
+            f.cancelAuthenticationRequest();
+        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)
+            request.cancelAuthenticationRequest();"
 check "M1 the model answers twice (no canSubmit check)" shell/security/polkit/AuthDialogModel.qml \
   "if (!active || !canSubmit || password.length === 0) {" "if (!active || password.length === 0) {"
 # The field's busy check alone is backed by the model's canSubmit (defence in depth, by design): only both together send twice.

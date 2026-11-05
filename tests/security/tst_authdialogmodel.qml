@@ -22,6 +22,7 @@ TestCase {
         property int submits: 0
         property int cancels: 0
         property var submitted: []
+        property bool isCompleted: false
 
         signal authenticationFailed
         signal authenticationSucceeded
@@ -200,7 +201,7 @@ TestCase {
     }
 
     // ADR-0045 OC-6 (security review of e3542510, MAJOR-2): a request the user cannot answer (`answerable` false, as the agent
-    // sets it while locked, under the screen saver, waiting behind another sheet or held) is refused as soon as PAM talks
+    // sets it while locked, under the screen saver, waiting behind another sheet) is refused as soon as PAM talks
     // without asking: a device's instruction, a failed match, a security key's cue, any other line (when in doubt, no). The
     // request may be one this model is not handed (a secret sheet came first: `flow` null).
     function test_unansweredRequestRefusedWhenPamTalks() {
@@ -217,6 +218,9 @@ TestCase {
             verify(model.refusesUnseen, line);
             tryCompare(f, "cancels", 1, 1000, line);
             compare(f.submits, 0, line);
+            // Quickshell ends the refused request before it hands over the next one.
+            f.isCompleted = true;
+            model.request = null;
         }
         compare(flow.cancels, 0, "only the request PAM talks for");
     }

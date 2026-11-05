@@ -55,13 +55,15 @@ Scope {
         // Quickshell qmltypes name the AuthFlow property type without exporting it (metadata quirk).
         // qmllint disable unresolved-type
         flow: agent.isActive && !root.waiting ? agent.flow : null
-        // The request Quickshell has open, handed over or not, and whether the user can see and answer it now: no lock, no
-        // screen saver, not waiting behind another sheet, in the sheet, not held unless clicked past its guard, its keys not on
-        // the sink. Otherwise a device must not answer it: it is refused as soon as PAM talks without asking
-        // (AuthDialogModel.refusesUnseen; ADR-0045 OC-6, security review of e3542510, MAJOR-2).
+        // The request Quickshell has open, handed over or not, and whether the user sees it now: its sheet is on screen and in
+        // front (no lock, no screen saver, not waiting behind another sheet, in the sheet). Otherwise a device must not answer
+        // it: it is refused as soon as PAM talks without asking (AuthDialogModel.refusesUnseen; ADR-0045 OC-6, security review
+        // of e3542510, MAJOR-2). The click hold and the key sink do not count (integrator decision after the re-review, the
+        // macOS model): they keep stray clicks and keys out of a sheet the user sees, and a touch on the reader can then only be
+        // meant for it (Settings' Remote Login and Add Printer ask twice or three times in a row, each held).
         request: agent.flow
         // qmllint enable unresolved-type
-        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys
+        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen
 
         // A request arrived, or none is left.
         onActiveChanged: root.arrive(false)
