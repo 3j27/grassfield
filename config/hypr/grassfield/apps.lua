@@ -49,12 +49,16 @@ local RULES = {
     match = { class = "^steam_app_battlenet$", title = "^Battle\\.net Setup$" },
     decorate = false, no_blur = true, no_shadow = true },
   -- davinci-resolve.lua: Resolve's menus and dialogs are windows of their own that close when they lose the focus; they keep
-  -- it while they show. Its main window and the Project Manager do not.
+  -- it while they show. Its main window and the Project Manager do not; nor, since Omarchy 4.5.0, its Preferences, Find
+  -- Directory and generic "Dialog" windows (the Voiceover panel). `omarchy_older_match` is Omarchy 4.0.6's title: the rule
+  -- carries 4.5.0's on both (tests/shell/app_rules.sh accepts either as the Omarchy match). Its other change, `no_follow_mouse`
+  -- (a modal dialog's pointer warp under follow_mouse), is left out like jetbrains.lua's: click-to-focus, above.
   { source = "davinci-resolve.lua", name = "gf-app-resolve-focus",
     match = { class = ".*[Rr]esolve.*" },
     stay_focused = true },
   { source = "davinci-resolve.lua", name = "gf-app-resolve-main-focus",
-    match = { class = ".*[Rr]esolve.*", title = "^(DaVinci Resolve( Studio)? - .+|Project Manager)$" },
+    match = { class = ".*[Rr]esolve.*", title = "^(DaVinci Resolve( Studio)? - .+|Project Manager|Preferences|Find Directory|Dialog)$" },
+    omarchy_older_match = { class = ".*[Rr]esolve.*", title = "^(DaVinci Resolve( Studio)? - .+|Project Manager)$" },
     stay_focused = false },
   -- geforce.lua, moonlight.lua, retroarch.lua, steam.lua: a full-screen game or stream keeps the screen awake.
   { source = "geforce.lua", name = "gf-app-geforce-now-idle",
@@ -111,7 +115,7 @@ local RULES = {
 for _, entry in ipairs(RULES) do
   local rule = {}
   for key, value in pairs(entry) do
-    if key ~= "source" and key ~= "omarchy_match" and key ~= "narrowed" then
+    if key ~= "source" and key ~= "omarchy_match" and key ~= "omarchy_older_match" and key ~= "narrowed" then
       rule[key] = value
     end
   end

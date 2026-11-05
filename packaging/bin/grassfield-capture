@@ -93,7 +93,7 @@ TIMERS = ("0", "5", "10")
 COUNTDOWN_GONE_SECONDS = 0.5
 # A recorder still running this long after its SIGINT is killed (its file may then be cut short).
 STOP_SECONDS = 10
-# gpu-screen-recorder's arguments, as omarchy-capture-screenrecording (v4.0.6) gives them; Omarchy records a display at its
+# gpu-screen-recorder's arguments, as omarchy-capture-screenrecording (v4.0.6 and v4.5.0, the same; 4.5.0 adds a wf-recorder fallback for machines without gpu-screen-recorder, which are not x86_64) gives them; Omarchy records a display at its
 # own size up to 4K, at 4K above.
 RECORDER = ["-k", "auto", "-f", "60", "-fm", "cfr", "-fallback-cpu-encoding", "yes"]
 RECORDER_MAX = (3840, 2160)
