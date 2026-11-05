@@ -16,6 +16,13 @@ QtObject {
     // An authorization (polkit) request is open (shell/security/polkit AuthAgent.requestActive, set by a Binding in shell.qml).
     // The clipboard history records nothing while it is true and for 2 s after (ADR-0034 Q11): an echo-on answer is copyable.
     property bool authorizing: false
+    // The displays are off for inactivity or on the lock screen (shell/security/idle Idle.displayOff, a Binding in shell.qml):
+    // the polkit agent lets no device answer a request then (nobody sees its sheet; ADR-0045 OC-6, opus re-review MINOR-2).
+    property bool displaysOff: false
+    // The polkit sheet or a secret sheet is present, or one of their key sinks still holds the keyboard after a request ended
+    // under the user's typing (AuthAgent.queuePresent, SecretAgent.requestActive / sinkingKeys; a Binding in shell.qml): the
+    // capture toolbar maps nothing as Exclusive meanwhile, so no rest of a password reaches it (opus re-review MINOR-3).
+    property bool securityKeyboard: false
     signal lockRequested(string reason)
 
     function requestLock(reason: string): void {

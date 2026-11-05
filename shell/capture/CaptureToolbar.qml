@@ -81,14 +81,15 @@ Variants {
         // mapped and changes to Exclusive is not given the focus (Escape and Return reached nothing on the display the pointer
         // moved to). The hand-over between displays is therefore a new mapping: the old holder drops to None at once, the new
         // one unmaps, then maps again as Exclusive. `root.holder` names the display that held it since the toolbar opened.
-        // While a security sheet is open (the polkit sheet or a secret sheet: SessionState.authorizing) nothing here is mapped as
-        // Exclusive, neither a hand-over nor the toolbar opening: the surface mapped last with Exclusive takes the keyboard, so the
-        // rest of a password typed into the sheet would reach the toolbar (opus re-review of the ADR-0045 security fixes, MINOR).
+        // While a security sheet may hold the keyboard (the polkit sheet or a secret sheet, or its key sink still lingering after
+        // a request ended under the user's typing: SessionState.securityKeyboard) nothing here is mapped as Exclusive, neither a
+        // hand-over nor the toolbar opening: the surface mapped last with Exclusive takes the keyboard, so the rest of a password
+        // would reach the toolbar, where Return captures (opus re-reviews of the ADR-0045 security fixes, MINOR).
         // The hand-over waits for the sheet to go, and then always maps again (a mapped layer turned Exclusive gets no focus).
         property bool holdsKeyboard: false
         property bool remapping: false
         onWantsKeyboardChanged: win.followKeyboard(false)
-        readonly property bool sheetOpen: SessionState.authorizing
+        readonly property bool sheetOpen: SessionState.securityKeyboard
         onSheetOpenChanged: {
             if (sheetOpen) {
                 // A hand-over under way stays unmapped no longer, and maps without the keyboard (keyHandover checks too).

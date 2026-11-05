@@ -56,14 +56,17 @@ Scope {
         // qmllint disable unresolved-type
         flow: agent.isActive && !root.waiting ? agent.flow : null
         // The request Quickshell has open, handed over or not, and whether the user sees it now: its sheet is on screen and in
-        // front (no lock, no screen saver, not waiting behind another sheet, in the sheet). Otherwise a device must not answer
-        // it: it is refused as soon as PAM talks without asking (AuthDialogModel.refusesUnseen; ADR-0045 OC-6, security review
-        // of e3542510, MAJOR-2). The click hold and the key sink do not count (integrator decision after the re-review, the
-        // macOS model): they keep stray clicks and keys out of a sheet the user sees, and a touch on the reader can then only be
-        // meant for it (Settings' Remote Login and Add Printer ask twice or three times in a row, each held).
+        // front (no lock, no screen saver, displays on, not waiting behind another sheet, in the sheet). Otherwise a device must
+        // not answer it: it is refused as soon as PAM talks without asking (AuthDialogModel.refusesUnseen; ADR-0045 OC-6,
+        // security review of e3542510, MAJOR-2). A held request may be answered by a touch only when it is held as "right
+        // after another one" (integrator decision after the re-review, the macOS model: Settings' Remote Login and Add Printer
+        // ask two or three times in a row) or once the user clicked past its guard. Held for any other reason (it arrived just
+        // after an unlock, or while locked or under the saver) it may not: a finger left on the reader after unlocking would
+        // answer it, and the lock marker tells any process of the user's when to ask (opus re-review, MINOR-1).
         request: agent.flow
         // qmllint enable unresolved-type
-        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen
+        answerable: !SessionState.locked && !SessionState.saverShown && !SessionState.displaysOff && !root.waiting && root.requestOpen
+                    && (!root.heldByLock || root.userFocused || root.heldWhy === "queued")
 
         // A request arrived, or none is left.
         onActiveChanged: root.arrive(false)

@@ -921,43 +921,47 @@ sheets' bound of 8. The agent's window rules are unchanged (`tests/security/auth
 capture toolbar (ADR-0045 OC-1) is an Overlay layer with Exclusive keyboard, handed between displays by mapping the new
 holder again (a layer mapped as Exclusive takes the keyboard; one turned Exclusive while mapped does not). Over an open
 polkit or secret sheet such a mapping would take the keyboard from the sheet and send the rest of a password to the toolbar.
-While `SessionState.authorizing` (the polkit sheet or a secret sheet is open, shell.qml's Binding) the toolbar makes nothing
-Exclusive: no hand-over, no remapping, and a toolbar opened then maps without the keyboard; a hand-over under way when a
-sheet opens maps without it; once the sheet is gone the display that wants the keyboard maps again as Exclusive
-(`CaptureToolbar.qml` `sheetOpen`, `followKeyboard`). `lock_surfaces.sh` pins it with mutations (QML with PanelWindow cannot
-run offscreen). Residual: the key sink's linger after a request ended under the user's typing is not `authorizing`, so a
-hand-over in those 3 s at most may take the keyboard from the sink. Nested: NOT VERIFIED.
+While `SessionState.securityKeyboard` (the polkit sheet or a secret sheet is present, or one of their key sinks still holds
+the keyboard after a request ended under the user's typing: `AuthAgent.queuePresent || SecretAgent.requestActive ||
+SecretAgent.sinkingKeys`, shell.qml's Binding; opus re-review 2, MINOR-3) the toolbar makes nothing Exclusive: no hand-over,
+no remapping, and a toolbar opened then maps without the keyboard; a hand-over under way when a sheet opens maps without it;
+once the sheet is gone the display that wants the keyboard maps again as Exclusive (`CaptureToolbar.qml` `sheetOpen`,
+`followKeyboard`). `lock_surfaces.sh` pins it with mutations (QML with PanelWindow cannot run offscreen). The key sinks'
+linger (at most 3 s) is covered, so the rest of a password never reaches the toolbar, where Return captures. Nested: NOT
+VERIFIED.
 
 **A device before the password (ADR-0045 OC-6, security review of the Settings setups, 2026-11-04).** Once Omarchy's
 fingerprint or security key setup ran, `/etc/pam.d/polkit-1` starts with `pam_fprintd` (behind Omarchy's lid-closed gate) or
-`pam_u2f` (`cue`), each `sufficient`, before `pam_unix`. polkit-agent-helper-1 then sends the module's lines as information
-or error (`AuthFlow.supplementaryMessage`, `supplementaryIsError`: "Place your right index finger on the fingerprint
-reader", "Failed to match fingerprint", "Please touch the FIDO authenticator.") and asks nothing until the module gives up
-(a match ends the request: polkit allows; a timeout, too many failed matches, no reader or a closed lid lead to `pam_unix`'s
-password prompt). While PAM has said something and asks nothing (`AuthDialogModel.awaitingDevice`: a flow, no response
-required, no answer sent, a non-empty message), the sheet's password field takes no key (`enabled: inputEnabled &&
-!awaitingDevice`), the line above it says "Follow the instruction below, or wait for the password field.", and the module's
-own line is the feedback under the field; when the prompt comes the field takes the keyboard back (`onAwaitingDeviceChanged`
-→ `focusField`, which still respects `inputEnabled` and AuthAgent's key sink). A bare "nothing asked" never disables the
-field: keys typed before `pam_unix`'s first prompt are kept, so a fast typist's password is not cut short (a short one is a
-wrong one, which pam_faillock counts). The last line is never cleared when the prompt arrives: pam_faillock's "account is
-locked" notice comes the same way and stays readable, except after a failed attempt of the same request, where our own
-"Incorrect password. Try again." comes back with the prompt and replaces it (open, final counter-review of ADR-0045 LOW-A,
-older than this change: clearing `priv.error` when PAM sends a new non-empty message would keep the notice, once Quickshell
-0.3.x's AuthFlow is confirmed not to set `supplementaryMessage` itself on a failure; stock Omarchy sets pam_faillock's
-preauth `silent`, so no notice is sent there). While a device is awaited the feedback line is PAM's own line, never
-the previous round's "Incorrect password. Try again." (that message comes back with the next prompt; counter-review, LOW-2).
-Cancel works throughout; nothing is ever approved on its own, and the one answer given on its own is a refusal: a request
-the user cannot see and answer is cancelled once PAM talks without asking (next paragraph). Unit-tested (`tst_authdialogmodel`
+`pam_u2f` (`cue`), each `sufficient`, before `pam_unix`. Every rule below assumes that the device module announces itself
+before it waits: pam_fprintd always does, pam_u2f only with `cue` (Omarchy sets it); a silent device module would defeat
+them (see the residual of the next paragraph). polkit-agent-helper-1 then sends the module's lines as information or error
+(`AuthFlow.supplementaryMessage`, `supplementaryIsError`: "Place your right index finger on the fingerprint reader", "Failed
+to match fingerprint", "Please touch the FIDO authenticator.") and asks nothing until the module gives up (a match ends the
+request: polkit allows; a timeout, too many failed matches, no reader or a closed lid lead to `pam_unix`'s password prompt).
+While PAM has said something and asks nothing (`AuthDialogModel.awaitingDevice`: a flow, no response required, no answer
+sent, a non-empty message), the sheet's password field takes no key (`enabled: inputEnabled && !awaitingDevice`), the line
+above it says "Follow the instruction below, or wait for the password field.", and the module's own line is the feedback
+under the field; when the prompt comes the field takes the keyboard back (`onAwaitingDeviceChanged` → `focusField`, which
+still respects `inputEnabled` and AuthAgent's key sink). A bare "nothing asked" never disables the field: keys typed before
+`pam_unix`'s first prompt are kept, so a fast typist's password is not cut short (a short one is a wrong one, which
+pam_faillock counts). The last line is never cleared when the prompt arrives: pam_faillock's "account is locked" notice
+comes the same way and stays readable, except after a failed attempt of the same request, where our own "Incorrect password.
+Try again." comes back with the prompt and replaces it (open, final counter-review of ADR-0045 LOW-A, older than this
+change: clearing `priv.error` when PAM sends a new non-empty message would keep the notice, once Quickshell 0.3.x's AuthFlow
+is confirmed not to set `supplementaryMessage` itself on a failure; stock Omarchy sets pam_faillock's preauth `silent`, so
+no notice is sent there). While a device is awaited the feedback line is PAM's own line, never the previous round's
+"Incorrect password. Try again." (that message comes back with the next prompt; counter-review, LOW-2). Cancel works
+throughout; nothing is ever approved on its own, and the one answer given on its own is a refusal: a request the user cannot
+see and answer is cancelled once PAM talks without asking (next paragraph). Unit-tested (`tst_authdialogmodel`
 test_awaitingDeviceOnlyWhilePamTalksAndAsksNothing, test_aLockedAccountNoticeStaysUnderThePrompt,
-test_theNextRoundsDeviceInstructionIsShownNotTheOldError;
-`tst_authdialog` test_14_awaitingADeviceTheFieldWaits; `mutate_authdialog.sh` D2, D3). The lock screen shows nothing of
-`omarchy-lock-fingerprint`'s conversation (it runs beside the password and unlocks on a match). With a real reader and key:
-NOT VERIFIED here, and the nested security gates L1 to L5 were not run for this change (no nested session in the cloud
-session that made it). The field's fourth focus site (`onAwaitingDeviceChanged`) gives the focus only when PAM's prompt came
-(`!awaitingDevice && responseRequired`, never when the request ends) and through `focusField`, so never while the input is
-disabled; a focus given inside the agent's window reaches the keyboard only while that window holds it (shown and not held,
-or held and clicked past its guard). `lock_surfaces.sh` pins the site by its guard and the field's `enabled`, with mutations.
+test_theNextRoundsDeviceInstructionIsShownNotTheOldError; `tst_authdialog` test_14_awaitingADeviceTheFieldWaits;
+`mutate_authdialog.sh` D2, D3). The lock screen shows nothing of `omarchy-lock-fingerprint`'s conversation (it runs beside
+the password and unlocks on a match). With a real reader and key: NOT VERIFIED here, and the nested security gates L1 to L5
+were not run for this change (no nested session in the cloud session that made it). The field's fourth focus site
+(`onAwaitingDeviceChanged`) gives the focus only when PAM's prompt came (`!awaitingDevice && responseRequired`, never when
+the request ends) and through `focusField`, so never while the input is disabled; a focus given inside the agent's window
+reaches the keyboard only while that window holds it (shown and not held, or held and clicked past its guard).
+`lock_surfaces.sh` pins the site by its guard and the field's `enabled`, with mutations.
 
 **No device answers a request the user cannot see and answer (ADR-0045 OC-6, opus security review of e3542510, MAJOR-2).**
 macOS model: an authorization asked for while the screen is locked is shown after the unlock and never answered by the
@@ -979,43 +983,53 @@ the event loop (`Qt.callLater(refuseUnseen)`, which checks again), never inside 
 the request inside the cancel, which changes what the binding reads; done inline, QML reported a binding loop and could keep
 the binding stale, leaving the next request unguarded (found by `flows.qml` test_27, whose mock ends the request inside the
 cancel as Quickshell does). `answerable` (default false) is the agent's rule: its sheet is on screen in front, that is not
-locked, no screen saver, not waiting behind another sheet, in the sheet (`requestOpen`). The click hold and the key sink do
-not count (integrator decision after the opus re-review, the macOS model, which accepts a touch on the authorization it
-shows): they keep stray clicks and keys out of a sheet the user sees, and a touch on the reader can then only be meant for
-that sheet. Settings' Remote Login asks twice in a row (systemd `EnableUnitFiles`, then `StartUnit`) and Add Printer up to
-three times (cups-pk-helper `PrinterAdd`, `PrinterSetEnabled`, `PrinterSetAcceptJobs`), each request held as "right after
-another one": each is answered by a touch. An answer already sent shields nothing (a stack with `pam_unix` before a device
-module goes on to the reader after a wrong password, in the same round). PAM asking for a password ends nothing: that
-request waits behind the lock and is shown, held, after the unlock, as before. What the user sees: the requesting app
-reports that the authorization was cancelled, as after Cancel (polkit reports it dismissed); the app can ask again once the
-user is at the sheet. With a fingerprint stack this refuses every request that arrives locked, under the saver or behind a
-secret sheet, because PAM reaches the reader within moments. Replaced requests (opus re-review, MAJOR-1): Quickshell's agent
-replaces an open request instead of queuing it (`initiateAuthentication` pushes, then activates when the queue holds one,
-which it does again after the first activation popped it) and leaves the replaced flow running with its helper, so its PAM
-could hold the reader with no sheet left, for up to pam_fprintd's 30 s, keeping the lock screen's own fingerprint check from
-it, and the next touch meant to unlock would approve it. The model remembers the request it saw last (`priv.seen`); a change
-to another request while the previous one has not completed records the previous one (`priv.replaced`, every one still
-running). As soon as one of them talks without asking (`replacedTalks`, at once if it already did), `refuseReplaced` (from
-the event loop) refuses the request open now first, then every replaced one: refusing a replaced one first would complete
-it, and its completion is still connected to agentimpl's `finishAuthenticationRequest`, which would end the current request
-unanswered (its requester never answered). Both requesters are told no (fail closed). A replaced request that asks for a
-password is left as Quickshell leaves it (nobody can type into it; its requester waits until it gives up, as before). Tests:
+locked, no screen saver, the displays on (`SessionState.displaysOff`, a Binding in shell.qml from `Idle.displayOff`: off for
+inactivity while unlocked counts too, a reader in the power button pressed to wake the screen must not answer a sheet nobody
+sees; opus re-review 2, MINOR-2), not waiting behind another sheet, in the sheet (`requestOpen`), and not held unless it is
+held as "right after another one" or the user clicked past its guard (`!heldByLock || userFocused || heldWhy === "queued"`).
+For a request held right after another one the click hold does not count (integrator decision after the opus re-review, the
+macOS model, which accepts a touch on the authorization it shows): it keeps stray clicks and keys out of a sheet the user
+sees, and a touch on the reader can then only be meant for that sheet. A request held for another reason (just after an
+unlock, or after the lock or the saver) is not answerable until clicked (opus re-review 2, MINOR-1): a finger left on the
+reader after unlocking would answer it, and the lock marker, readable by the user's processes, tells any of them when to
+ask. Settings' Remote Login asks twice in a row (systemd `EnableUnitFiles`, then `StartUnit`) and Add Printer up to three
+times (cups-pk-helper `PrinterAdd`, `PrinterSetEnabled`, `PrinterSetAcceptJobs`), each request held as "right after another
+one": each is answered by a touch. An answer already sent shields nothing (a stack with `pam_unix` before a device module
+goes on to the reader after a wrong password, in the same round). PAM asking for a password ends nothing: that request waits
+behind the lock and is shown, held, after the unlock, as before. What the user sees: the requesting app reports that the
+authorization was cancelled, as after Cancel (polkit reports it dismissed); the app can ask again once the user is at the
+sheet. With a fingerprint stack this refuses every request that arrives locked, under the saver or behind a secret sheet,
+because PAM reaches the reader within moments. Replaced requests (opus re-review, MAJOR-1): Quickshell's agent replaces an
+open request instead of queuing it (`initiateAuthentication` pushes, then activates when the queue holds one, which it does
+again after the first activation popped it) and leaves the replaced flow running with its helper, so its PAM could hold the
+reader with no sheet left, for up to pam_fprintd's 30 s, keeping the lock screen's own fingerprint check from it, and the
+next touch meant to unlock would approve it. The model remembers the request it saw last (`priv.seen`); a change to another
+request while the previous one has not completed records the previous one (`priv.replaced`, every one still running). As
+soon as one of them talks without asking (`replacedTalks`, at once if it already did), `refuseReplaced` (from the event
+loop) refuses the request open now first, then every replaced one: refusing a replaced one first would complete it, and its
+completion is still connected to agentimpl's `finishAuthenticationRequest`, which would end the current request unanswered
+(its requester never answered). Both requesters are told no (fail closed). A replaced request that asks for a password is
+left as Quickshell leaves it (nobody can type into it; its requester waits until it gives up, as before). Tests:
 `tst_authdialogmodel` test_unansweredRequestRefusedWhenPamTalks, test_passwordPromptWaitsForTheUser,
 test_refusedWhenItStopsBeingAnswerable; `tst_authdialog` test_15 and test_16 (`mutate_authdialog.sh` G1 to G9);
-`authagent_flows.d/flows.qml` test_20 to test_31 with the real agent (the lock coming while the reader waits, a request
-arriving locked, a password prompt waiting behind the lock, the saver, held just after an unlock or another request and
-still answered by the reader, Remote Login's two and Add Printer's three requests in a row each answered by the reader, a
-request waiting behind a secret sheet, the request ended inside the cancel with the next one still guarded, the reviewer's
-probe (locked, A, B replaces A, A then waits for the reader: B then A refused), a request replaced while it awaited the
-reader, a replaced one asking for a password left, the refusals with Quickshell's end; `authagent_flows.sh --mutants`:
-ten mutants for this guard); `lock_surfaces.sh` pins the model's guard and the agent's binding, with mutations. Residual
-(open): (1) the window between pam_fprintd starting its scan (`VerifyStart`) and the agent receiving its "Place your finger"
-line is a few milliseconds of IPC; a finger already resting on the reader and matched within it, or within the one
-event-loop turn before the cancel runs, would still approve; (2) a replaced request is refused only once its PAM talks, so
-the same window applies to it; two overlapping requests with a device stack are both refused, and a replaced one at a
-password prompt still leaks as upstream leaves it (fix upstream: queue for real); (3) a touch meant for the lock screen and
-still on the reader when a request's sheet appears just after the unlock may answer that shown sheet (accepted by the
-integrator's rule above). Real reader and key: NOT VERIFIED.
+`authagent_flows.d/flows.qml` test_20 to test_34 with the real agent (the lock coming while the reader waits, a request
+arriving locked, a password prompt waiting behind the lock, the saver, held just after an unlock (refused until clicked) or
+right after another request (answered by the reader), Remote Login's two and Add Printer's three requests in a row each
+answered by the reader, a request waiting behind a secret sheet, the request ended inside the cancel with the next one still
+guarded, the reviewer's probe (locked, A, B replaces A, A then waits for the reader: B then A refused), a request replaced
+while it awaited the reader, a replaced one asking for a password left, the refusals with Quickshell's end, the displays
+turning off, a request held after the lock reaching the reader, a request held right after another one under the saver;
+`authagent_flows.sh --mutants`: twelve mutants for this guard); `lock_surfaces.sh` pins the model's guard and the agent's
+binding, with mutations. Residual (open): (1) the window between pam_fprintd starting its scan (`VerifyStart`) and the agent
+receiving its "Place your finger" line is a few milliseconds of IPC; a finger already resting on the reader and matched
+within it, or within the one event-loop turn before the cancel runs, would still approve; (2) a replaced request is refused
+only once its PAM talks, so the same window applies to it; two overlapping requests with a device stack are both refused,
+and a replaced one at a password prompt still leaks as upstream leaves it (fix upstream: queue for real); (3) both rules
+assume that a device module announces itself before it waits: pam_fprintd always does (its "Place your finger" line comes
+with the scan, and it has no silent mode), pam_u2f only with `cue`, which Omarchy's setup sets
+(`omarchy-setup-security-fido2`). A module that waits for a device without a word (pam_u2f without `cue`, another device
+module) defeats both the refusal and the replaced-request rule, since PAM then never talks without asking; such a line in
+`/etc/pam.d/polkit-1` is outside what this agent can guard. Real reader and key: NOT VERIFIED.
 
 **Omarchy's setups and `pam_faillock` (ADR-0045 OC-6, opus security review of e3542510, MINOR-5).** Read in Omarchy 4.0.6
 (`/usr/share/omarchy/bin/omarchy-setup-security-fingerprint`, `omarchy-setup-security-fido2`): when `/etc/pam.d/polkit-1`

@@ -52,6 +52,7 @@ Item {
         function init() {
             SessionState.locked = false;
             SessionState.saverShown = false;
+            SessionState.displaysOff = false;
             compare(top.agentC.status, Component.Ready, top.agentC.errorString());
             ag = createTemporaryObject(top.agentC, top);
             verify(ag);
@@ -403,13 +404,15 @@ Item {
             tryCompare(b, "cancels", 1, 1000, "arrived under the saver");
         }
 
-        // Held and shown without the keyboard (just after an unlock, right after another request): the sheet is on screen in
-        // front, so the reader may answer it, clicked or not; the click hold still keeps stray clicks and keys out.
-        function test_24_heldButShownMayUseTheReader_data() {
-            return [{tag: "just after the unlock", why: "unlock"}, {tag: "right after another one", why: "queued"}];
+        // Held and shown without the keyboard. Right after another request (Remote Login, Add Printer) the reader may answer it,
+        // clicked or not. Just after an unlock it may not until the user clicks past its guard: a finger left on the reader
+        // after unlocking would answer it, and the lock marker tells any process of the user's when to ask (opus re-review,
+        // MINOR-1). The click hold keeps stray clicks and keys out either way.
+        function test_24_heldShownReaderOnlyRightAfterAnother_data() {
+            return [{tag: "just after the unlock", why: "unlock", refused: true}, {tag: "right after another one", why: "queued", refused: false}];
         }
-        function test_24_heldButShownMayUseTheReader(d) {
-            const a = mkflow("A"), b = mkflow("B");
+        function test_24_heldShownReaderOnlyRightAfterAnother(d) {
+            const a = mkflow("A"), b = mkflow("B"), c = mkflow("C");
             if (d.why === "unlock") {
                 SessionState.locked = true;
                 SessionState.locked = false;
@@ -423,9 +426,28 @@ Item {
             compare(ag.sheet.shown, true);
             compare(ag.userFocused, false);
             reader(b);
-            wait(1);
-            compare(b.cancels, 0, "on screen in front: a touch can only be meant for it");
+            if (d.refused) {
+                tryCompare(b, "cancels", 1, 1000, "held just after the unlock: a finger left on the reader must not answer it");
+            } else {
+                wait(1);
+                compare(b.cancels, 0, "held right after another one, on screen in front: a touch can only be meant for it");
+            }
             compare(ag.sheet.takesKeys, ag.sinkingKeys, "the keys still wait for a click past the guard (or stay on the sink)");
+            if (!d.refused)
+                return;
+            // Once the user clicked past its guard, the reader may answer a request held just after an unlock.
+            endAll(true);
+            wait(1100);
+            SessionState.locked = true;
+            SessionState.locked = false;
+            arriveFlow(c, true);
+            compare(ag.heldWhy, "unlock");
+            wait(600);
+            mouseClick(ag.sheet, 5, 5);
+            compare(ag.userFocused, true);
+            reader(c);
+            wait(1);
+            compare(c.cancels, 0, "clicked past its guard: the user turned to it");
         }
 
         // Settings' Remote Login asks twice in a row (systemd EnableUnitFiles, then StartUnit) and Add Printer up to three
@@ -495,6 +517,53 @@ Item {
             tryCompare(b, "cancels", 1, 1000, "the next request is guarded too (no binding left stale by the first end)");
             SessionState.saverShown = false;
             SessionState.locked = false;
+        }
+
+        // Opus re-review, MINOR-2: the displays are off for inactivity while the session is unlocked (SessionState.displaysOff):
+        // nobody sees the sheet, so the reader may not answer it (a reader in the power button pressed to wake the screen).
+        function test_32_displaysOff() {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a, true);
+            reader(a);
+            wait(1);
+            compare(a.cancels, 0, "on screen in front");
+            SessionState.displaysOff = true;
+            tryCompare(a, "cancels", 1, 1000, "the displays went off while the reader waited");
+            endAll(true);
+            wait(1100);
+            arriveFlow(b, true);
+            compare(ag.heldByLock, false, "not held: the displays being off holds nothing");
+            reader(b);
+            tryCompare(b, "cancels", 1, 1000, "arrived while the displays were off");
+        }
+
+        // Held because it arrived while locked, its PAM asking for a password (nothing refused), shown after the unlock: should
+        // its PAM then reach the reader, it is refused unless clicked (only "right after another one" counts).
+        function test_33_heldLockedThenTheReader() {
+            const a = mkflow("A");
+            SessionState.locked = true;
+            arriveFlow(a, true);
+            SessionState.locked = false;
+            compare(ag.sheet.shown, true);
+            compare(ag.heldWhy, "locked");
+            wait(1);
+            compare(a.cancels, 0, "a password prompt waits for the user");
+            reader(a);
+            tryCompare(a, "cancels", 1);
+        }
+
+        // A request held right after another one keeps that reason when the screen saver comes over it (the notice keeps the
+        // first reason): the saver itself must still refuse its reader prompt (`answerable` reads the saver, not only the hold).
+        function test_34_heldRightAfterAnotherUnderTheSaver() {
+            const a = mkflow("A"), b = mkflow("B");
+            arriveFlow(a, true);
+            endAll(true);
+            arriveFlow(b, true);
+            compare(ag.heldWhy, "queued");
+            SessionState.saverShown = true;
+            compare(ag.heldWhy, "queued", "the first reason is kept");
+            reader(b);
+            tryCompare(b, "cancels", 1, 1000, "under the saver nobody sees the sheet");
         }
 
         // Opus re-review, MAJOR-1: Quickshell replaces an open request instead of queuing it and leaves the replaced one running,
