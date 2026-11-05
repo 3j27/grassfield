@@ -200,6 +200,14 @@ REPO = UI.parent
 F1 = REPO / "docs" / "testing" / "f1-reference-gaps.md"
 PATH_CITE = re.compile(r"(?<![\w./-])(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|qml|sh|json)")
 ADR_CITE = re.compile(r"ADR-(\d{4})")
+# Provenance kept in the maintainers' private repository (design audits, the master prompt). A source may cite them; where the
+# file is not in this checkout (the public repository) the pointer is accepted, not followed, and main() says so once.
+PRIVATE_PATHS = ("docs/audits/", "docs/master-prompt.md", "docs/STATE.md")
+private_skipped = set()
+
+
+def is_private(path):
+    return path.startswith(PRIVATE_PATHS)
 # A section pointer has one form: `<file> \u00a7 <section>` (docs/**.md or master-prompt), ended by ";" or "]".
 SECTION_START = re.compile(r"(?<![\w./-])(docs/[A-Za-z0-9_./-]+\.md|master-prompt) \u00a7 (?=\S)")  # anchored path, one plain space, then text
 
@@ -269,6 +277,9 @@ def source_problems(source, headings):
     for path in PATH_CITE.findall(source):
         cited = True
         if not (REPO / path).exists():
+            if is_private(path):
+                private_skipped.add(path)
+                continue
             problems.append("cites %s, which does not exist" % path)
     for number in ADR_CITE.findall(source):
         cited = True
@@ -285,6 +296,8 @@ def source_problems(source, headings):
         section = section.strip()
         target = REPO / ("docs/master-prompt.md" if path == "master-prompt" else path)
         if not target.exists():
+            if is_private(str(target.relative_to(REPO))):
+                private_skipped.add(str(target.relative_to(REPO)))
             continue  # reported above as a missing path
         names, numbers = headings_of(target)
         if path.endswith("f1-reference-gaps.md"):
@@ -336,6 +349,8 @@ def provenance_errors(data):
 def main():
     data = json.loads(SRC.read_text())
     unsourced = provenance_errors(data)
+    if private_skipped:
+        print("gen-tokens: note: %d cited private provenance file(s) are not in this checkout (public repository); those pointers are not followed" % len(private_skipped), file=sys.stderr)
     if unsourced:
         print("gen-tokens: token sources that are not followable pointers:\n  " + "\n  ".join(unsourced), file=sys.stderr)
         return 1
