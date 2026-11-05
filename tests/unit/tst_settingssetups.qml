@@ -267,6 +267,21 @@ TestCase {
     }
 
     Component {
+        id: energyComp
+        SettingsQml.EnergyPage {
+            anchors.fill: parent
+            store: QtObject {
+                function value(key: string): var {
+                    return true;
+                }
+                function set(key: string, v: var): bool {
+                    return true;
+                }
+            }
+        }
+    }
+
+    Component {
         id: privacyComp
         SettingsQml.PrivacyPage {
             anchors.fill: parent
@@ -514,6 +529,36 @@ TestCase {
         verify(!n.backend.queries.some(q => q.tag === "power.hibernation"));
     }
 
+    // A desktop (Energy, no battery) hibernates too (ADR-0045 OC-9): the same group as Battery's, the same requests.
+    function test_energyHibernation() {
+        const s = service(false, {"/sys/power/image_size": "6537345024\n"});
+        const page = createTemporaryObject(energyComp, testCase, {backend: s.backend, system: s.system});
+        verify(page);
+        const group = find(page, i => i.status !== undefined && i.setUp !== undefined);
+        verify(group);
+        compare(group.status, "off");
+        verify(group.visible);
+        verify(s.backend.queries.some(q => q.tag === "power.hibernation" && q.argv[0] === "omarchy-hibernation-available"));
+        const asked = [];
+        page.setupRequested.connect(id => asked.push(id));
+        const setUp = find(page, i => i.text === "Set Up…" && i.push !== undefined);
+        verify(setUp);
+        setUp.clicked();
+        compare(asked, ["hibernation-setup"]);
+        // Omarchy says it is available: Remove….
+        s.backend.finished("power.hibernation", true, "");
+        compare(group.status, "on");
+        const remove = find(page, i => i.text === "Remove…" && i.push !== undefined);
+        verify(remove);
+        remove.clicked();
+        compare(asked, ["hibernation-setup", "hibernation-remove"]);
+        // A kernel without hibernation hides the group.
+        const none = createTemporaryObject(energyComp, testCase, {backend: service(false, {}).backend, system: s.system});
+        const hidden = find(none, i => i.status !== undefined && i.setUp !== undefined);
+        compare(hidden.status, "unsupported");
+        verify(!hidden.visible);
+    }
+
     function test_privacyDiskEncryption() {
         const s = service(false, {});
         const page = createTemporaryObject(privacyComp, testCase, {backend: s.backend, system: s.system});
@@ -560,7 +605,7 @@ TestCase {
         compare(store.writes, [{key: "keyboard.dictation", value: true}]);
         const shortcut = find(page, i => i.title === "Shortcut" && i.valueText !== undefined);
         compare(shortcut.valueText, "Ctrl+Super+X");
-        find(page, i => i.text === "Language Model…" && i.push !== undefined).clicked();
+        find(page, i => i.text === "Speech Model…" && i.push !== undefined).clicked();
         find(page, i => i.text === "Remove…" && i.push !== undefined).clicked();
         compare(asked, ["dictation-setup", "dictation-model", "dictation-remove"]);
     }

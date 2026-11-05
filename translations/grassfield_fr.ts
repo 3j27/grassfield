@@ -2141,38 +2141,6 @@
         <translation>Niveau de la batterie</translation>
     </message>
     <message>
-        <source>Hibernation</source>
-        <translation>Hibernation</translation>
-    </message>
-    <message>
-        <source>On. When the computer hibernates, the session is saved to the start-up disk and the computer turns off.</source>
-        <translation>Activée. Lorsque l’ordinateur hiberne, la session est enregistrée sur le disque de démarrage et l’ordinateur s’éteint.</translation>
-    </message>
-    <message>
-        <source>Set up, but not available: the swap file is missing or smaller than the memory. Set it up again or remove it.</source>
-        <translation>Configurée, mais indisponible&#xa0;: le fichier d’échange manque ou est plus petit que la mémoire. Configurez-la de nouveau ou supprimez-la.</translation>
-    </message>
-    <message>
-        <source>Off. Hibernation saves the session to the start-up disk and turns the computer off; it needs a swap file as large as the memory.</source>
-        <translation>Désactivée. L’hibernation enregistre la session sur le disque de démarrage et éteint l’ordinateur&#xa0;; elle nécessite un fichier d’échange aussi grand que la mémoire.</translation>
-    </message>
-    <message>
-        <source>Set Up…</source>
-        <translation>Configurer…</translation>
-    </message>
-    <message>
-        <source>Remove…</source>
-        <translation>Supprimer…</translation>
-    </message>
-    <message>
-        <source>Set up hibernation</source>
-        <translation>Configurer l’hibernation</translation>
-    </message>
-    <message>
-        <source>Remove hibernation</source>
-        <translation>Supprimer l’hibernation</translation>
-    </message>
-    <message>
         <source>Options…</source>
         <translation>Options…</translation>
     </message>
@@ -6066,8 +6034,8 @@
 <context>
     <name>FingerprintPage</name>
     <message>
-        <source>Fingerprint &amp; Security Key</source>
-        <translation>Empreinte et clé de sécurité</translation>
+        <source>Fingerprint &amp; Key</source>
+        <translation>Empreinte et clé</translation>
     </message>
     <message>
         <source>On</source>
@@ -7096,6 +7064,41 @@
     </message>
 </context>
 <context>
+    <name>HibernationGroup</name>
+    <message>
+        <source>Hibernation</source>
+        <translation>Hibernation</translation>
+    </message>
+    <message>
+        <source>On. When the computer hibernates, the session is saved to the start-up disk and the computer turns off.</source>
+        <translation>Activée. Lorsque l’ordinateur hiberne, la session est enregistrée sur le disque de démarrage et l’ordinateur s’éteint.</translation>
+    </message>
+    <message>
+        <source>Set up, but not available: the swap file is missing or smaller than the memory. Set it up again or remove it.</source>
+        <translation>Configurée, mais indisponible&#xa0;: le fichier d’échange manque ou est plus petit que la mémoire. Configurez-la de nouveau ou supprimez-la.</translation>
+    </message>
+    <message>
+        <source>Off. Hibernation saves the session to the start-up disk and turns the computer off; it needs a swap file as large as the memory.</source>
+        <translation>Désactivée. L’hibernation enregistre la session sur le disque de démarrage et éteint l’ordinateur&#xa0;; elle nécessite un fichier d’échange aussi grand que la mémoire.</translation>
+    </message>
+    <message>
+        <source>Set Up…</source>
+        <translation>Configurer…</translation>
+    </message>
+    <message>
+        <source>Remove…</source>
+        <translation>Supprimer…</translation>
+    </message>
+    <message>
+        <source>Set up hibernation</source>
+        <translation>Configurer l’hibernation</translation>
+    </message>
+    <message>
+        <source>Remove hibernation</source>
+        <translation>Supprimer l’hibernation</translation>
+    </message>
+</context>
+<context>
     <name>IconMenu</name>
     <message>
         <source>Desktop menu</source>
@@ -7748,8 +7751,8 @@
         <translation>Modèle vocal</translation>
     </message>
     <message>
-        <source>Language Model…</source>
-        <translation>Modèle de langue…</translation>
+        <source>Speech Model…</source>
+        <translation>Modèle vocal…</translation>
     </message>
     <message>
         <source>Remove…</source>
@@ -8108,8 +8111,8 @@
         <translation>Sélectionner le texte des images</translation>
     </message>
     <message>
-        <source>Select text in images to copy it or take action.</source>
-        <translation>Sélectionnez du texte dans les images pour le copier ou effectuer une action.</translation>
+        <source>Preview and Glance recognise the text and QR codes in images, so you can copy the text or open the link.</source>
+        <translation>Visionneuse et Survol reconnaissent le texte et les codes QR des images, pour que vous puissiez copier le texte ou ouvrir le lien.</translation>
     </message>
 </context>
 <context>
@@ -8447,10 +8450,6 @@
         <translation>Moniteurs</translation>
     </message>
     <message>
-        <source>monitor screen resolution refresh scale arrangement</source>
-        <translation>moniteur écran résolution rafraîchissement échelle disposition</translation>
-    </message>
-    <message>
         <source>Appearance</source>
         <translation>Apparence</translation>
     </message>
@@ -8467,12 +8466,24 @@
         <translation>Accessibilité</translation>
     </message>
     <message>
+        <source>battery power low power mode energy health charging charge limit hibernation hibernate swap</source>
+        <translation>batterie énergie mode économie d’énergie état charge limite de charge hibernation hiberner fichier d’échange</translation>
+    </message>
+    <message>
+        <source>energy power mode low power high power performance sleep prevent automatic sleeping display off hibernation hibernate swap</source>
+        <translation>énergie alimentation mode économie haute puissance performance veille suspension empêcher automatique écran éteint hibernation hiberner fichier d’échange</translation>
+    </message>
+    <message>
         <source>General</source>
         <translation>Général</translation>
     </message>
     <message>
         <source>Desktop &amp; Dock</source>
         <translation>Bureau et Dock</translation>
+    </message>
+    <message>
+        <source>monitor screen resolution refresh scale arrangement brightness external display ddc</source>
+        <translation>moniteur écran résolution rafraîchissement échelle disposition luminosité écran externe ddc</translation>
     </message>
     <message>
         <source>Menu Bar</source>
@@ -8503,6 +8514,18 @@
         <translation>inactivité verrouillage mot de passe</translation>
     </message>
     <message>
+        <source>privacy permissions location camera background screen sharing remote desktop apps flatpak portal security encryption disk password disk encryption luks</source>
+        <translation>confidentialité autorisations localisation caméra appareil photo arrière-plan partage d’écran bureau à distance apps flatpak portail sécurité chiffrement mot de passe du disque chiffrement du disque luks</translation>
+    </message>
+    <message>
+        <source>Fingerprint &amp; Key</source>
+        <translation>Empreinte et clé</translation>
+    </message>
+    <message>
+        <source>shortcuts keys bindings dictation voice typing speech model voxtype</source>
+        <translation>raccourcis touches clavier dictée dictée vocale saisie vocale modèle vocal voxtype</translation>
+    </message>
+    <message>
         <source>version system hardware processor memory computer name graphics serial</source>
         <translation>version système matériel processeur mémoire nom ordinateur graphisme série</translation>
     </message>
@@ -8531,16 +8554,8 @@
         <translation>Batterie</translation>
     </message>
     <message>
-        <source>battery power low power mode energy health charging charge limit</source>
-        <translation>batterie énergie mode économie d’énergie état charge limite de charge</translation>
-    </message>
-    <message>
         <source>Energy</source>
         <translation>Énergie</translation>
-    </message>
-    <message>
-        <source>energy power mode low power high power performance sleep prevent automatic sleeping display off</source>
-        <translation>énergie alimentation mode économie haute puissance performance veille suspension empêcher automatique écran éteint</translation>
     </message>
     <message>
         <source>about software update storage date time language region login items startup</source>
@@ -8571,20 +8586,8 @@
         <translation>Confidentialité et sécurité</translation>
     </message>
     <message>
-        <source>privacy permissions location camera background screen sharing remote desktop apps flatpak portal</source>
-        <translation>confidentialité autorisations localisation caméra appareil photo arrière-plan partage d’écran bureau à distance apps flatpak portail</translation>
-    </message>
-    <message>
-        <source>Fingerprint &amp; Security Key</source>
-        <translation>Empreinte et clé de sécurité</translation>
-    </message>
-    <message>
         <source>fingerprint reader enrol finger security key fido2 sudo administrator unlock password</source>
         <translation>empreinte digitale lecteur enregistrer doigt clé de sécurité fido2 sudo administrateur déverrouiller mot de passe</translation>
-    </message>
-    <message>
-        <source>shortcuts keys bindings</source>
-        <translation>raccourcis touches clavier</translation>
     </message>
     <message>
         <source>Mouse</source>
@@ -8649,10 +8652,6 @@
     <message>
         <source>Language &amp; Region</source>
         <translation>Langue et région</translation>
-    </message>
-    <message>
-        <source>language region formats locale date number first day of week calendar</source>
-        <translation>langue région formats paramètres régionaux date nombre premier jour de la semaine calendrier</translation>
     </message>
     <message>
         <source>Sharing</source>
@@ -8817,6 +8816,10 @@
     <message>
         <source>Delete</source>
         <translation>Supprimer</translation>
+    </message>
+    <message>
+        <source>language region formats locale date number first day of week calendar text in images text recognition qr code</source>
+        <translation>langue région formats paramètres régionaux date nombre premier jour de la semaine calendrier texte dans les images reconnaissance de texte code qr</translation>
     </message>
     <message>
         <source>Clear your clipboard history?</source>
@@ -11085,6 +11088,10 @@
         <translation>Ces autorisations s’appliquent quand une app passe par le portail de bureau, comme le font les apps isolées (Flatpak, Snap). Elles ne limitent ni les apps non isolées, ni les apps isolées qui ont un accès direct aux périphériques.</translation>
     </message>
     <message>
+        <source>Security</source>
+        <translation>Sécurité</translation>
+    </message>
+    <message>
         <source>Disk Encryption</source>
         <translation>Chiffrement du disque</translation>
     </message>
@@ -12152,6 +12159,46 @@
         <translation>partage d’écran</translation>
     </message>
     <message>
+        <source>disk encryption</source>
+        <translation>chiffrement du disque</translation>
+    </message>
+    <message>
+        <source>disk password</source>
+        <translation>mot de passe du disque</translation>
+    </message>
+    <message>
+        <source>Fingerprint &amp; Key</source>
+        <translation>Empreinte et clé</translation>
+    </message>
+    <message>
+        <source>fingerprint</source>
+        <translation>empreinte digitale</translation>
+    </message>
+    <message>
+        <source>security key</source>
+        <translation>clé de sécurité</translation>
+    </message>
+    <message>
+        <source>unlock</source>
+        <translation>déverrouiller</translation>
+    </message>
+    <message>
+        <source>sign in</source>
+        <translation>connexion</translation>
+    </message>
+    <message>
+        <source>Sharing</source>
+        <translation>Partage</translation>
+    </message>
+    <message>
+        <source>remote login</source>
+        <translation>connexion à distance</translation>
+    </message>
+    <message>
+        <source>ssh</source>
+        <translation>ssh</translation>
+    </message>
+    <message>
         <source>tracking speed</source>
         <translation>vitesse de déplacement</translation>
     </message>
@@ -12194,6 +12241,10 @@
     <message>
         <source>keys</source>
         <translation>touches</translation>
+    </message>
+    <message>
+        <source>dictation</source>
+        <translation>dictée</translation>
     </message>
     <message>
         <source>About</source>
@@ -13322,8 +13373,10 @@
         <translation>L’état de la session à distance ne peut pas être lu.</translation>
     </message>
     <message>
-        <source>To log in to this computer remotely, type “%1”.</source>
-        <translation>Pour vous connecter à cet ordinateur à distance, tapez «&#xa0;%1&#xa0;».</translation>
+        <source>To log in to this computer remotely, type:
+%1</source>
+        <translation>Pour vous connecter à cet ordinateur à distance, tapez&#xa0;:
+%1</translation>
     </message>
     <message>
         <source>Remote Login lets people log in to this computer over SSH with a key you authorized. The first time, Omarchy sets it up in a Terminal window.</source>

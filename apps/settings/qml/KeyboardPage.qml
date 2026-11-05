@@ -244,7 +244,7 @@ SettingsPage {
 
             Button {
                 push: true
-                text: qsTr("Language Model…")
+                text: qsTr("Speech Model…")
                 onClicked: root.setupRequested("dictation-model")
             }
         }

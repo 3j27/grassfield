@@ -74,7 +74,7 @@ SettingsPage {
     SettingsGroup {
         footnote: !root.answered ? ""
             : root.sharing === null ? qsTr("The state of Remote Login cannot be read.")
-            : root.on && root.sshLine !== "" ? qsTr("To log in to this computer remotely, type “%1”.").arg(root.sshLine)
+            : root.on && root.sshLine !== "" ? qsTr("To log in to this computer remotely, type:\n%1").arg(root.sshLine)
             : qsTr("Remote Login lets people log in to this computer over SSH with a key you authorized. The first time, Omarchy sets it up in a Terminal window.")
 
         SettingsRow {

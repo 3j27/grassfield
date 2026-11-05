@@ -106,11 +106,13 @@ Scope {
         {id: "notifications", title: qsTr("Notifications"), keywords: [qsTr("do not disturb"), qsTr("previews"), qsTr("banners")]},
         {id: "focus", title: qsTr("Focus"), keywords: [qsTr("do not disturb"), qsTr("silence")]},
         {id: "lock", title: qsTr("Lock Screen", "Settings page"), keywords: [qsTr("idle"), qsTr("password")]},
-        {id: "privacy", title: qsTr("Privacy & Security"), keywords: [qsTr("permissions"), qsTr("location"), qsTr("camera"), qsTr("screen sharing")]},
+        {id: "privacy", title: qsTr("Privacy & Security"), keywords: [qsTr("permissions"), qsTr("location"), qsTr("camera"), qsTr("screen sharing"), qsTr("disk encryption"), qsTr("disk password")]},
+        {id: "fingerprint", title: qsTr("Fingerprint & Key"), keywords: [qsTr("fingerprint"), qsTr("security key"), qsTr("unlock"), qsTr("sign in")]},
+        {id: "sharing", title: qsTr("Sharing"), keywords: [qsTr("remote login"), qsTr("ssh")]},
         {id: "mouse", title: qsTr("Mouse"), keywords: [qsTr("pointer"), qsTr("tracking speed"), qsTr("scrolling")]},
         {id: "trackpad", title: qsTr("Trackpad"), keywords: [qsTr("touchpad"), qsTr("tracking speed"), qsTr("tap to click"), qsTr("gestures")]},
         {id: "printers", title: qsTr("Printers"), keywords: [qsTr("printer"), qsTr("paper size"), qsTr("print")]},
-        {id: "keyboard", title: qsTr("Keyboard"), keywords: [qsTr("shortcuts"), qsTr("keys")]},
+        {id: "keyboard", title: qsTr("Keyboard"), keywords: [qsTr("shortcuts"), qsTr("keys"), qsTr("dictation")]},
         {id: "about", title: qsTr("About"), keywords: [qsTr("version"), qsTr("system"), qsTr("hardware")]},
         {id: "software-update", title: qsTr("Software Update"), keywords: [qsTr("update"), qsTr("upgrade"), qsTr("new version"), qsTr("beta")]}
     ].map(p => Object.assign({icon: SettingsPages.PAGES.find(d => d.id === p.id).icon}, p))
