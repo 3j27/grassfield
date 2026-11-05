@@ -73,6 +73,7 @@ cat >"$tmp/omarchy/bin/omarchy-theme-set" <<'SH'
   echo "omarchy=${OMARCHY_PATH-unset}"
   echo "askpass=${SUDO_ASKPASS-unset}"
   echo "wait=${OMARCHY_THEME_WAIT-unset}"
+  echo "syncfrom=${OMARCHY_THEME_SYNC_FROM-unset}"
   echo "shell=$(command -v omarchy-shell)"
   echo "pkexec=$(command -v pkexec)"
   echo "hyprctl=$(command -v hyprctl)"
@@ -89,6 +90,9 @@ echo "hyprctl-rc=$?" >>"$LOG"
 # stand-in is first in PATH all the same.
 hyprctl --instance 0 reload >/dev/null 2>&1
 echo "hyprctl45-rc=$?" >>"$LOG"
+# As Omarchy 4.5's omarchy-theme-set-herdr-machines starts (setsid, detached): it leaves at once when OMARCHY_THEME_SYNC_FROM
+# is non-empty, else it would reach ssh.
+if [[ -n ${OMARCHY_THEME_SYNC_FROM:-} ]]; then echo "herdr-sync=skipped" >>"$LOG"; else echo "herdr-sync=ssh" >>"$LOG"; fi
 # A run that never ends: a background child that ignores SIGTERM, and the script ignoring it too.
 if [[ -n ${SLOW:-} ]]; then
   sh -c 'trap "" TERM; echo $$ >"$CHILD"; while :; do sleep 1; done' &
@@ -246,6 +250,8 @@ expect "hyprctl resolves to the run's stand-in" "$(field hyprctl)" "$stubs/hyprc
 expect "  'pkexec x' fails as if pkexec were absent" "$(field pkexec-rc)" "127"
 expect "  'hyprctl reload' fails" "$(field hyprctl-rc)" "1"
 expect "  and so does Omarchy 4.5's 'hyprctl --instance 0 reload'" "$(field hyprctl45-rc)" "1"
+expect "OMARCHY_THEME_SYNC_FROM is set: Omarchy 4.5's detached herdr sync leaves at once and never reaches ssh" "$(field syncfrom)" "grassfield"
+expect "  (a fake herdr script started with it does nothing)" "$(field herdr-sync)" "skipped"
 expect "OMARCHY_THEME_WAIT=1: Omarchy 4.5 retints the other apps before it returns (it detaches them with no terminal; 4.0.6 ignores it)" \
   "$(field wait)" "1"
 grep -q '^real pkexec' "$tmp/log" && fail "the system's pkexec was reached" || pass "the system's pkexec was never reached"
