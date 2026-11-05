@@ -85,6 +85,13 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   recorder's state is a private file in `$XDG_RUNTIME_DIR/grassfield/` that the shell watches. A notice "Screen recording
   saved" with "Open" (Preview plays it) follows.
 - **Lock**: no capture starts while the session is locked; a recording stops when the session locks.
+- **Known limitation, recordings and hidden windows** (opus security review of e3542510, MINOR-4): gpu-screen-recorder records
+  a display or an area through its KMS backend (Omarchy's script calls `-w <display>` and `-w WxH+X+Y` the "kms backend";
+  `gsr-kms-server` holds `cap_sys_admin`), which reads the framebuffer and skips Hyprland's `no_screen_share` rules (SEC-01).
+  A recording therefore shows password manager windows and the authorization and secret sheets when they are on screen;
+  screenshots keep them black. For the user: keep password managers closed and answer no sheet while the menu bar shows the
+  recording item. The portal backend would honour the rules (follow-up, not done). Details and status (NOT VERIFIED, not run:
+  it would record the live screen): docs/specs/security.md, "Screen-share protection".
 
 ### OC-2 Text and QR codes in images (priority 1)
 - **Preview** (and Glance, which shares its image view) recognises text in a still image with tesseract when it is installed:

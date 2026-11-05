@@ -754,6 +754,18 @@ VERIFIED until run). The same file hides the shell's secret sheets and its autho
 `gf-no-screen-share-secret` (`^grassfield-secret$`) and `gf-no-screen-share-polkit` (`^grassfield-polkit$`), `no_screen_share`
 (ADR-0035 D-9, step 9b, decision 9-22; `screenshare_rules.sh` checks both regexes against the namespaces the agents set, with
 a mutation). Both layers cover the output, so a capture is black while either sheet is up (nested capture NOT VERIFIED).
+Known limitation, screen recordings (ADR-0045 OC-1; opus security review of e3542510, MINOR-4): `grassfield-capture record`
+runs gpu-screen-recorder with `-w <display>` or `-w WxH+X+Y`, the arguments of Omarchy's `omarchy-capture-screenrecording`,
+whose own comment calls both the "kms backend"; `/usr/bin/gsr-kms-server` carries `cap_sys_admin=ep` (getcap). KMS capture
+reads the display's framebuffer through DRM, not Hyprland's screencopy or toplevel export, so Hyprland's `no_screen_share`
+rules are not consulted: a screen recording shows whatever is on screen, password manager windows and the authorization and
+secret sheets included (a password typed in a sheet stays dots; a password a password manager reveals does not). Screenshots
+(grim, screencopy), screen sharing through the portal and other apps' captures keep them black. What it means for the user:
+while the menu bar shows the recording item, do not open a password manager or answer a sheet unless it may be in the
+recording. The shell and the helper stop a recording when the session locks (OC-1). Possible fix, not done:
+gpu-screen-recorder's portal backend (`-w portal`, which Omarchy keeps off by default for EGL failures) goes through
+Hyprland and would honour the rules. Reasoned from the sources, not run here (a recording would capture the owner's live
+screen): NOT VERIFIED.
 
 ## Lid, display power-off, screensaver inhibitors (D-4)
 - **The order of idle, the screen saver and display-off (ADR-0040 step 5; ID-8, IQ-T4 A, IQ-T5 A).** The idle lock is
