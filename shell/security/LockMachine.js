@@ -67,6 +67,43 @@ function isHolding(state) {
     return state === LOCKED || state === AUTHENTICATING || state === RELEASING;
 }
 
+// ---- Fingerprint pacing (Lock.qml, only while /etc/pam.d/omarchy-lock-fingerprint exists, SEC8). Ported with Lock.qml's
+// fingerprint pacing (whose header declares the fork) from Omarchy v4.5.0 shell/plugins/lock/FingerprintModel.js
+// (basecamp/omarchy@ac2690cd7be4f47e4a255f5e2e78d904d436b068), Copyright (c) David Heinemeier Hansson, MIT License (notice:
+// packaging/licenses/omarchy-MIT.txt); the file is absent from Omarchy 4.0.6, so its pin belongs to the 4.5.0 lock.
+// docs/specs/security.md "Fingerprint pacing". Pacing only: none of this can unlock (only a PAM success of
+// omarchy-lock-fingerprint does, LockController.fingerprintSucceeded). ----
+// The gap before the next attempt after one that reached the reader (pam_fprintd's instruction came) and ended without a
+// match, as before this port.
+var FINGERPRINT_RETRY_MS = 1000;
+// An attempt that ends this soon after the reader was reached failed on the device (a reader that drops out), not on a
+// finger: pam_fprintd waits up to 30 s for one, and three wrong fingers end in MaxTries, which stops the reader.
+var FINGERPRINT_FAST_END_MS = 2000;
+// Attempts that do not reach the reader wait twice as long each time, up to this: longer than fprintd's 30 s idle exit, so a
+// daemon whose device claim wedged (after a suspend: fprintd issue 173) can exit and start clean.
+var FINGERPRINT_RETRY_CAP_MS = 40000;
+// Misses in a row after which the journal says, once, that the reader is not answering.
+var FINGERPRINT_UNAVAILABLE_AFTER = 3;
+
+// Misses in a row after an attempt ended: none once the reader was reached and the attempt did not end fast; one more
+// otherwise (no instruction from pam_fprintd, a start that failed, an end within FINGERPRINT_FAST_END_MS). A value that is
+// not a count reads as none.
+function fingerprintMisses(misses, reached, endedFast) {
+    if (reached === true && endedFast !== true)
+        return 0;
+    var n = typeof misses === "number" && isFinite(misses) && misses > 0 ? Math.floor(misses) : 0;
+    return Math.min(n, 1000) + 1;
+}
+
+// The wait before the next attempt: FINGERPRINT_RETRY_MS after none or one miss, then doubling up to
+// FINGERPRINT_RETRY_CAP_MS. A value that is not a count reads as none.
+function fingerprintRetryMs(misses) {
+    if (!(typeof misses === "number" && isFinite(misses) && misses > 1))
+        return FINGERPRINT_RETRY_MS;
+    var doublings = Math.min(Math.floor(misses), 16) - 1;
+    return Math.min(FINGERPRINT_RETRY_MS * Math.pow(2, doublings), FINGERPRINT_RETRY_CAP_MS);
+}
+
 // Lid closed (Hyprland switch binding `switch:on:Lid Switch` in config/hypr/grassfield/system.lua, which runs
 // /usr/lib/grassfield/grassfield-lid closed -> `lock lid`): lock unless a
 // physical external display is active, which is clamshell mode, still in use on that display (macOS does not lock or

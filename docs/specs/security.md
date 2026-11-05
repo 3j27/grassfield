@@ -20,7 +20,8 @@ Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 6. SEC6 Polkit agent: exactly one; shows message, action ID and the requesting program as far as polkit tells it
    (see "Polkit details"); Cancel/Esc cancel; never auto-approve.
 7. SEC7 Idle: dim → lock → displays off on the idle lock screen (DPMS); respects Wayland idle inhibitors.
-8. SEC8 Fingerprint only if `/etc/pam.d/omarchy-lock-fingerprint` exists.
+8. SEC8 Fingerprint only if `/etc/pam.d/omarchy-lock-fingerprint` exists; offered at a pace that never keeps the reader busy
+   for nothing, never while the displays are off ("Fingerprint pacing").
 9. SEC9 Lock coverage never disappears silently: the shell restarts after any exit while the session runs, Omarchy's
    sleep-lock is skipped only while the shell runs, and a failing sleep inhibitor or watcher is reported to the user
    and retried for as long as the shell runs (GF-030, D-12).
@@ -689,7 +690,9 @@ never appears).
 
 ## Upstream base (GF-031)
 Forks reviewed against Omarchy **v4.0.6** = `basecamp/omarchy@237f1b4071a0bff2296c6d740ba2b9fd695ebfa0`, the installed
-package since 2026-11-03 (4.0.6-1; previously 4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`):
+package since 2026-11-03 (4.0.6-1; previously 4.0.4 = `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`), and against
+**v4.5.0** = `basecamp/omarchy@ac2690cd7be4f47e4a255f5e2e78d904d436b068` (tag v4.5.0, 2026-11-05; the minimum stays 4.0.6:
+every fork works with both):
 - v4.0.6 `currentlyLocked()` ("A property binding that missed a change notification once reported locked after an
   unlock, and a lock request before suspend then took that for done and never locked the session"): **ported** as
   `Lock.currentlyLocked()` / `Lock.currentlySecure()` (state machine storage via `LockController.currentState()`,
@@ -723,6 +726,45 @@ package since 2026-11-03 (4.0.6-1; previously 4.0.4 = `c668141e9c42b13c80c9ca4ea
   a.1). `bin/omarchy-update-keyring`: `pacman -Sy --needed archlinux-keyring` instead of a forced reinstall; the trusted
   Omarchy fingerprint `40DFB630FF42BCFFB047046CF0134EE680CAC571` and the keyserver trust step are unchanged;
   `grassfield-update-helper` already uses `--needed` and the same `GU_OMARCHY_FPR`. No security module change.
+- **4.0.6 → 4.5.0 review (2026-11-05, `ac2690cd`; the four pinned files differ, `omarchy-hyprland-session-locked` is
+  byte-identical)**. Classification for the forks and for the stand-ins Grassfield puts on PATH:
+  - `shell/plugins/lock/Service.qml` → `Lock.qml`: **PORT, in part**: the fingerprint pacing ("Fingerprint pacing" below).
+    Unchanged: the PAM services (`omarchy-lock-password`, `omarchy-lock-fingerprint`) and the `lock` IPC contract (`lock`
+    answers `ok`, `missing-pam` or `failed`; `status` keeps `secure` and `requested` and adds `fingerprintUnavailable`, which no
+    Grassfield caller reads). NONE: `IpcHandler` → `ShellIpc` (an `IpcHandler` that also answers on Omarchy's own socket,
+    used only by Omarchy's `omarchy-shell` wrapper, which the Grassfield stand-in shadows), i18n and right-to-left mirroring
+    (the Grassfield lock view is its own), the video wallpaper poster and the wallpaper pre-decode (the Grassfield backdrop
+    is `LockStills`, ADR-0040 step 4a), the blank run-up after a resume (Omarchy's lock blanks after 5 s; Grassfield's
+    display power-off is Idle's 30 s monitor). Not ported: the fprintd probe (`fprintd-list` at start and after a failed
+    start, `FingerprintModel.classifyProbe`): a process the security singleton would start, beyond its building blocks; the
+    backoff does its job here (no enrolment, no daemon or no reader: one attempt every 40 s at most) beside SEC8's PAM file
+    test, and Grassfield has no fingerprint indicator for it to feed. Not ported either: the 20 s reach timeout (pam_fprintd's
+    30 s and the D-Bus method timeout bound every attempt; the resume drops one orphaned by a daemon restart), the input
+    nudge (a wake offers the reader at once), the wall-clock sleep detection (no wall clock in shell/security: logind's
+    PrepareForSleep through `SleepInhibitor.afterResume`), retries after MaxTries (Grassfield keeps the reader off until
+    LOCKED anew: the password after repeated wrong fingers, the macOS model), and the "fingerprint unavailable" notice on the
+    lock screen (a UI addition, proposed separately).
+  - `shell/plugins/services/idle/Service.qml` → `Idle.qml`: NONE (`IpcHandler` → `ShellIpc`, the `qs.Commons` import).
+  - `shell/plugins/polkit/PolkitAgent.qml` → `AuthAgent.qml`: NONE (i18n, `PolkitModel.authorizationLabel(message, tr)`,
+    right-to-left mirroring, `Style.duration` for the shake); identity selection, cancellation, the agent registration and
+    the `/etc/pam.d/polkit-1` reading are unchanged.
+  - `bin/omarchy-system-sleep-lock` → `IdleModel.js` budget, `omarchy-shell` stand-in: NONE: the failure notification's text
+    goes through `omarchy-i18n` (new in 4.5); `derive_budget_ms`, `lock lock` (with `missing-pam`) and `lock status`
+    (`.secure`, `.requested`) are unchanged.
+  - Elsewhere (the 4.5 tree searched for lock, idle, sleep, suspend, polkit, pam, fprint and `ShellIpc`): `omarchy-apply-lock`
+    writes the same two PAM files; it now keeps `omarchy-lock-fingerprint` when `fprintd-list` fails (it removes it only on
+    a definitive "no fingers enrolled"), and installs with it a system-sleep hook that restarts fprintd after a resume
+    (`default/systemd/system-sleep/fprintd-resume`, fprintd issue 173) and a 3 s stop timeout for fprintd; the pacing works
+    with or without them (4.0.6 has neither: the 40 s cap lets fprintd exit). The fingerprint and FIDO2 setups now write
+    `include system-auth` into `/etc/pam.d/polkit-1` ("Omarchy's setups and `pam_faillock`"). `omarchy-shell` calls of 4.5:
+    `omarchy-system-lock` (`lock lock`, byte-identical script), `omarchy-restart-shell` (`lock status`/`lock lock`, reading
+    `.secure`/`.requested`; Grassfield ships its own stand-in), `omarchy-apply-lock` (`lock status`, only for a confirmation
+    line), the new `omarchy-debug-idle` (`idle status`, which the stand-in fails as Omarchy's wrapper does without its shell,
+    and `lock status`): no verb the stand-in has to add. `omarchy-update-status` now sends only `omarchy.system-update
+    clear` (forwarded as before). The new `omarchy-system-lid-inhibit` (logind's lid inhibitor while a USB-C or
+    Unknown-connector display is in use) runs from Omarchy's lid binding and monitor watcher, which the Grassfield session
+    does not load: a closed laptop on such a display can still suspend there, locked first (SleepInhibitor); outside the
+    security modules.
 - Pinned (GF-031 drift check): `docs/upstream/omarchy.lock` holds the sha256 of every upstream file a fork derives from
   (`plugins/lock/Service.qml` → `Lock.qml`, `plugins/services/idle/Service.qml` → `Idle.qml`,
   `plugins/polkit/PolkitAgent.qml` → `AuthAgent.qml`, `bin/omarchy-system-sleep-lock` → `IdleModel.js` budget and the
@@ -736,6 +778,41 @@ package since 2026-11-03 (4.0.6-1; previously 4.0.4 = `c668141e9c42b13c80c9ca4ea
   the review (port or reject, recorded in this section): `scripts/dev/upstream-drift.sh --update` re-pins. Test: `tests/security/upstream_drift.sh` (fixture trees:
   unchanged, edited, removed, no Omarchy, `--update`, malformed lock, lost attribution, unpinned fork; the real lock
   against the installed Omarchy).
+
+## Fingerprint pacing (SEC8; Omarchy v4.5.0 review)
+Only while `/etc/pam.d/omarchy-lock-fingerprint` exists. `Lock.qml` offers the reader through
+`PamContext("omarchy-lock-fingerprint")` while LOCKED and secure; only its `PamResult.Success` unlocks
+(`controller.fingerprintSucceeded`, then the release fade). The pacing decides when an attempt starts, never whether the
+session unlocks, and reads nothing of the conversation but whether a line is an error (nothing of it is shown or logged).
+Adapted from Omarchy v4.5.0 (`shell/plugins/lock/Service.qml`, `shell/plugins/lock/FingerprintModel.js`, MIT; constants and
+backoff in `LockMachine.js`):
+- Reached or missed: pam_fprintd's instruction (the first line that is not an error) means the reader was reached. An
+  attempt that ends without a match and without MaxTries (no finger within pam_fprintd's 30 s, a device error) is followed
+  by the next after 1 s, as before, when the reader was reached and the end did not come within 2 s of the instruction (the
+  `fingerprintFastEnd` Timer). Anything else is a miss (no instruction, a start that failed, a fast end), and from the second
+  miss in a row the gap doubles: 2, 4, 8, 16, 32, then 40 s (`LockMachine.fingerprintRetryMs`), longer than fprintd's 30 s
+  idle exit, so a daemon whose claim wedged can exit and come back clean. Before: an attempt every second for as long as the
+  lock lasted, which kept fprintd busy all night with no enrolled finger, no reader or a wedged claim. The journal says once
+  when three misses in a row are reached and once when the reader answers again.
+- Displays off (Idle's `displayOff`, mirrored in `Lock.displaysOff`): no new attempt, so the reader is not held awake all
+  night; an attempt already running ends under pam_fprintd's own timeout. The displays coming back on (input on the lock
+  screen) offer the reader at once.
+- Resume (logind's PrepareForSleep(false): `SleepInhibitor.afterResume` → `Lock.resumed()`): the misses are forgotten, an
+  attempt open across the sleep is aborted (fprintd may have been restarted by Omarchy 4.5's resume hook, or its claim be
+  stale; an abort never unlocks), and the reader is offered again after 1 s, once even with the displays still reported off
+  (the panel may light without input).
+- MaxTries (pam_fprintd's wrong fingers): the reader stays off until the lock is LOCKED anew (a password attempt that
+  failed, a new lock) or the session unlocks; neither a wake nor a resume brings it back (as before the pacing: the
+  password is needed, the macOS model).
+- Timers only (no wall clock in shell/security); the sleep is logind's signal, where Omarchy looks for wall-clock gaps.
+Polkit: with the reader free more often (displays off, the longer gaps), a request that arrives while locked reaches it
+sooner; the rule "No device answers a request the user cannot see and answer" refuses it as soon as its PAM talks, as
+before (fail closed). Tests: `tst_lockmachine.qml` test_fingerprintMisses, test_fingerprintRetryMs (four mutants of the
+helpers caught); `lock_surfaces.sh` "fingerprint" checks (the one unlock path, the start guard, one settle per attempt, the
+reader reached only on a line that is not an error, nothing of the conversation read but that or logged, the pacing never
+unlocks, the pause and the wake, the resume, MaxTries, the reset on unlock), with 17 mutations. NOT VERIFIED: a real reader
+(the development machine has neither `/etc/pam.d/omarchy-lock-fingerprint` nor fprintd), a real 4.5 session, a suspend and
+resume with a reader; `Lock.qml` cannot run offscreen (WlSessionLock), and the nested gates were not run for this change.
 
 ## Screen-share protection (SEC-01 / GF-028)
 `config/hypr/grassfield/privacy.lua`, required by `core.lua` (real and nested session): reads Omarchy's own
@@ -972,8 +1049,9 @@ and a failed attempt starts it again; the QML API (`quickshell-service-polkit.qm
 pause it, only `submit`, `cancelAuthenticationRequest` and `selectedIdentity` (which restarts it). On success the helper
 reports to polkitd itself, so the agent cannot veto a match afterwards. With `pam_fprintd` or `pam_u2f` first in
 `/etc/pam.d/polkit-1`, a request held behind the lock, the screen saver or another sheet would hold the reader (a request
-open when the lock comes, or one that takes the reader in the lock's 1 s fingerprint retry gap, `Lock.qml`
-`fingerprintRetry`), and the touch meant for the lock screen (or for the request before) would approve it unseen. So the
+open when the lock comes, or one that takes the reader while the lock's own attempt is not running: its retry gap, `Lock.qml`
+`fingerprintRetry`, 1 s and up to 40 s while the reader is not reached, and the whole time the displays are off, "Fingerprint
+pacing"), and the touch meant for the lock screen (or for the request before) would approve it unseen. So the
 polkit model refuses the request Quickshell has open (`AuthDialogModel.request`, bound by the agent to `agent.flow`, also
 while the sheet is handed nothing because a secret sheet came first) as soon as PAM talks without asking (`pamTalks`: no
 response required and a non-empty line, a device's instruction or any other line, when in doubt no; Quickshell keeps the
@@ -1044,7 +1122,10 @@ loss outlives "Remove…". Grassfield writes no PAM file (OC-0.4); Settings' set
 key say before the terminal opens that the administrator prompts' own rules may be replaced and no longer pause after repeated
 wrong passwords. The owner's fix, if wanted: in `/etc/pam.d/polkit-1`, replace `auth required pam_unix.so` and the three
 other `pam_unix` lines with the `include system-auth` lines of the vendor file (keeping the device lines first), or delete
-the file after "Remove…". Reported upstream: not yet (owner's call).
+the file after "Remove…". Reported upstream: not yet (owner's call). Omarchy 4.5.0's fingerprint and FIDO2 setups write
+`include system-auth` for auth, account, password and session after the device line (still first, `sufficient`), so a
+`/etc/pam.d/polkit-1` they create keeps `pam_faillock`; a file written by 4.0.6's setups keeps the loss until it is fixed as
+above ("Upstream base", 4.5.0 review). The device-first assumptions of the two paragraphs above hold for both.
 
 ## L5 polkit (owner, real session)
 Never `pkexec` a real program for this test; `pkcheck` only asks polkit whether this terminal's shell may run the action
@@ -1355,7 +1436,7 @@ same directory and the modules move without moving a file), one step at a time u
 | `shell/lib/RunMode.js` | The one dev rule (`dev(GRASSFIELD_DEV, GRASSFIELD_SESSION)`, `REFUSED`), imported by the security modules through a relative path, see "Dev gate" |
 | `shell/security/LockController.qml` | Auth controller over an injected PAM backend: one prompt answered, 30 s timeout, secret dropped on every outcome |
 | `shell/security/PasswordField.qml` | Shared password entry (Password echo, sensitive-data hints, plain-text placeholder, return arrow) |
-| `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists), crash marker, IPC `lock` |
+| `shell/security/lock/Lock.qml` | Singleton: `WlSessionLock`, `PamContext` (password; fingerprint only if its PAM file exists, paced: "Fingerprint pacing"), crash marker, IPC `lock` |
 | `shell/security/lock/LockView.qml` | Lock surface (display only): the output's wallpaper, sharp (the still LockStill decoded, else its colour or `WallpaperArt`), the banded scrim, date and clock, avatar/initials, name, dark frosted field, one hint line (gate A2, see Decisions); backdrop, name and picture taken once (ADR-0040 step 4a) |
 | `shell/security/lock/LockStill.qml` | Per output (display only): the lock's backdrop decided while unlocked from `WallpaperState.lockBackdrop`; a picture checked (`/usr/bin/realpath -m`: a plain cache name in the real prepared or video folder; `/usr/bin/stat %f`: a regular file of at most `wallpaper.lockStillMaxBytes`) and decoded into Qt's pixmap cache before any lock (ADR-0040 ID-7, ADR-0016 W8) |
 | `shell/security/lock/LockStills.qml` | The display data the lock surfaces take (one LockStill per output, the account picture decoded ahead), created by `Lock.qml` at run time so that it can never keep the lock from loading |

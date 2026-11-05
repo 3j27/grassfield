@@ -15,7 +15,10 @@
 #             call those IPC actions;
 #   polkit    a polkit sheet that arrives while locked is neither mapped nor given the keyboard until the unlock; a request
 #             the user cannot see (locked, saver, waiting, replaced) is refused once PAM talks without asking (ADR-0045 OC-6);
-#   saver     SessionState.saverShown has one writer, the shell.qml Binding (ADR-0032).
+#   saver     SessionState.saverShown has one writer, the shell.qml Binding (ADR-0032);
+#   fingerprint  the lock's only fingerprint unlock is fingerprintPam's PamResult.Success; its pacing (Omarchy v4.5.0 review:
+#             backoff, no attempt while the displays are off, resume) never unlocks and reads or logs nothing of the
+#             conversation; MaxTries keeps the reader off until LOCKED anew.
 # Self-test: the checker fails on a copy of the tree with one refusal removed (mutation). Plain shell test: PASS/FAIL lines.
 set -uo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -606,6 +609,65 @@ expect("sleep inhibitor: a child is healthy only after FAST_EXIT_MS with progres
                and re.search(r"Timer\s*\{\s*id:\s*" + c + r"Progress\s+interval:\s*IdleModel\.PROGRESS_BUDGET_MS\s+onTriggered:\s*\{\s*if\s*\(" + c + r"\.running\s*&&\s*!" + c + r"\.progressed\)\s*\{[^}]*?" + c + r"\.running\s*=\s*false;", sleep) is not None
                for c in ("inhibitor", "watcher")))
 
+# Fingerprint pacing (Omarchy v4.5.0 review, docs/specs/security.md "Fingerprint pacing"). Lock.qml cannot run offscreen
+# (WlSessionLock); the pure helpers are unit-tested in tst_lockmachine.qml. Here: the only fingerprint unlock is
+# fingerprintPam's PamResult.Success; the pacing (start guard, display pause, settle, resume) never unlocks, reads nothing of
+# the conversation but whether a line is an error, and logs nothing of it; MaxTries keeps the reader off until LOCKED anew.
+fp_pam_m = re.search(r"PamContext\s*\{\s*id:\s*fingerprintPam\b", lock)
+fp_pam = block_after(lock, fp_pam_m.start()) if fp_pam_m else ""
+fp_start = code(function(lock, "startFingerprint") or "")
+fp_ended = code(function(lock, "fingerprintEnded") or "")
+fp_resume = code(function(lock, "fingerprintAfterResume") or "")
+fp_wake_m = re.search(r"^\s*onDisplaysOffChanged:\s*\{", lock, re.M)
+fp_wake = block_after(lock, fp_wake_m.start()) if fp_wake_m else ""
+fp_msg_m = re.search(r"onPamMessage:\s*\{", fp_pam)
+fp_msg = block_after(fp_pam, fp_msg_m.start()) if fp_msg_m else ""
+fp_done_m = re.search(r"onCompleted:\s*result\s*=>\s*\{", fp_pam)
+fp_done = block_after(fp_pam, fp_done_m.start()) if fp_done_m else ""
+def stmts(body):
+    return [l.strip() for l in body.split("\n") if l.strip()]
+expect("fingerprint: the one fingerprint unlock is fingerprintPam's PamResult.Success",
+       len(re.findall(r"\bcontroller\.fingerprintSucceeded\s*\(", lock)) == 1
+       and re.match(r"\s*if\s*\(result === PamResult\.Success\)\s*\{\s*root\.fingerprintOpen\s*=\s*false;\s*fingerprintFastEnd\.stop\(\);\s*controller\.fingerprintSucceeded\(\);\s*\}\s*else if\s*\(result === PamResult\.MaxTries\)\s*\{", fp_done) is not None)
+expect("fingerprint: MaxTries keeps the reader off (fingerprintSpent), no retry armed",
+       re.search(r"else if\s*\(result === PamResult\.MaxTries\)\s*\{\s*root\.fingerprintOpen\s*=\s*false;\s*root\.fingerprintSpent\s*=\s*true;\s*fingerprintFastEnd\.stop\(\);\s*\}\s*else\s*\{\s*root\.fingerprintEnded\(\);\s*\}\s*$", fp_done) is not None
+       and re.search(r"^\s*onError:\s*root\.fingerprintEnded\(\)\s*$", fp_pam, re.M) is not None
+       and len(re.findall(r"\bfingerprintSpent\s*=\s*true;", lock)) == 1)
+expect("fingerprint: startFingerprint's first decisions (file, LOCKED, secure, not active, not spent; displays off without a resume pass)",
+       stmts(fp_start)[:4] == ["if (!fingerprintFile.available || controller.lockState !== Machine.LOCKED || !sessionLock.secure || fingerprintPam.active || root.fingerprintSpent)",
+                               "return;", "if (root.displaysOff && !root.fingerprintResumePass)", "return;"])
+expect("fingerprint: an attempt is settled once, then the next waits Machine.fingerprintRetryMs(misses)",
+       stmts(fp_ended)[:3] == ["if (!root.fingerprintOpen)", "return;", "root.fingerprintOpen = false;"]
+       and "root.fingerprintMisses = Machine.fingerprintMisses(before, root.fingerprintReached, fingerprintFastEnd.running);" in fp_ended
+       and re.search(r"fingerprintRetry\.interval\s*=\s*Machine\.fingerprintRetryMs\(root\.fingerprintMisses\);\s*fingerprintRetry\.restart\(\);\s*$", fp_ended) is not None
+       and re.search(r"if\s*\(!fingerprintPam\.start\(\)\)\s*root\.fingerprintEnded\(\);\s*$", fp_start) is not None)
+expect("fingerprint: the reader counts as reached on the first line that is not an error, only for an open attempt",
+       stmts(fp_msg) == ["if (root.fingerprintOpen && !root.fingerprintReached && !fingerprintPam.messageIsError) {",
+                         "root.fingerprintReached = true;", "fingerprintFastEnd.restart();", "}"]
+       and re.search(r"Timer\s*\{\s*id:\s*fingerprintFastEnd\s+interval:\s*Machine\.FINGERPRINT_FAST_END_MS\s*\}", lock) is not None
+       and len(re.findall(r"\bfingerprintFastEnd\.restart\(\)", lock)) == 1)
+fp_pam_words = re.findall(r"\b(?:message|responseRequired|responseVisible|respond)\b|\bconsole\s*\.", fp_pam)
+expect("fingerprint: nothing of the conversation is read but messageIsError, nothing answered, nothing logged (" + ", ".join(fp_pam_words) + ")",
+       fp_pam_m is not None and not fp_pam_words)
+fp_paths = fp_start + fp_ended + fp_resume + fp_wake + fp_msg
+fp_controller = sorted(set(re.findall(r"\bcontroller\s*\.\s*\w+", fp_paths)))
+expect("fingerprint: the pacing never unlocks (reads controller.lockState only; no release, marker or lock change: " + ", ".join(fp_controller) + ")",
+       all(b for b in (fp_start, fp_ended, fp_resume, fp_wake, fp_msg))
+       and fp_controller == ["controller.lockState"]
+       and re.search(r"\brelease\s*\(|\bwriteMarker\s*\(|sessionLock\s*\.\s*locked\s*=|persist\s*\.\s*intent\s*=|\bunlockRequested\b|\bfingerprintSucceeded\b", fp_paths) is None)
+expect("fingerprint: the displays going off drop the pending attempt, their wake offers the reader",
+       stmts(fp_wake) == ["if (root.displaysOff)", "fingerprintRetry.stop();", "else", "root.startFingerprint();"])
+expect("fingerprint: a resume forgets the misses, drops the attempt open across the sleep and offers the reader once (not after MaxTries)",
+       re.search(r"function resumed\(\): void \{\s*root\.resumes \+= 1;\s*root\.fingerprintAfterResume\(\);\s*\}", lock) is not None
+       and stmts(fp_resume)[:3] == ["root.fingerprintMisses = 0;", "if (!fingerprintFile.available || root.fingerprintSpent)", "return;"]
+       and re.search(r"if\s*\(fingerprintPam\.active\)\s*fingerprintPam\.abort\(\);\s*root\.fingerprintResumePass\s*=\s*true;\s*fingerprintRetry\.interval\s*=\s*Machine\.FINGERPRINT_RETRY_MS;\s*fingerprintRetry\.restart\(\);\s*$", fp_resume) is not None)
+fp_release = code(function(lock, "release") or "")
+expect("fingerprint: LOCKED anew clears MaxTries and offers the reader; the unlock resets the pacing",
+       re.search(r"if\s*\(lockState === Machine\.LOCKED\)\s*\{\s*root\.fingerprintSpent\s*=\s*false;\s*root\.startFingerprint\(\);\s*\}", lock) is not None
+       and all(s in fp_release for s in ("fingerprintRetry.stop();", "fingerprintFastEnd.stop();", "root.fingerprintOpen = false;",
+                                         "root.fingerprintMisses = 0;", "root.fingerprintSpent = false;", "root.fingerprintResumePass = false;"))
+       and re.search(r"if\s*\(fingerprintPam\.active\)\s*fingerprintPam\.abort\(\);", fp_release) is not None)
+
 for o in oks:
     print("OK " + o)
 for p in problems:
@@ -815,6 +877,23 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/lock/Lock.qml#            strandedUndecided = true;\n#' \
   'shell/security/lock/Lock.qml#        strandedUndecided = false;\n        console.info("grassfield-lock: lock requested (#        console.info("grassfield-lock: lock requested (' \
   'shell/security/lock/Lock.qml#            strandedProbe.stop(); // still undecided#            strandedProbe.stop(); strandedUndecided = false; // still undecided' \
+  'shell/security/lock/Lock.qml# || fingerprintPam.active || root.fingerprintSpent)# || fingerprintPam.active)' \
+  'shell/security/lock/Lock.qml#if (root.displaysOff && !root.fingerprintResumePass)#if (false)' \
+  'shell/security/lock/Lock.qml#                root.fingerprintSpent = true;#                root.fingerprintSpent = true;\n                fingerprintRetry.restart();' \
+  'shell/security/lock/Lock.qml#        if (!root.fingerprintOpen)\n            return;\n        root.fingerprintOpen = false;#        root.fingerprintOpen = false;' \
+  'shell/security/lock/Lock.qml#fingerprintRetry.interval = Machine.fingerprintRetryMs(root.fingerprintMisses);#fingerprintRetry.interval = Machine.FINGERPRINT_RETRY_MS;' \
+  'shell/security/lock/Lock.qml#                root.fingerprintReached = true;#                root.fingerprintReached = true;\n                console.info("grassfield-lock: " + fingerprintPam.message);' \
+  'shell/security/lock/Lock.qml#&& !fingerprintPam.messageIsError) {#&& fingerprintPam.message !== "") {' \
+  'shell/security/lock/Lock.qml#                fingerprintFastEnd.restart();#                root.fingerprintReachedAt = Date.now();' \
+  'shell/security/lock/Lock.qml#onError: root.fingerprintEnded()#onError: controller.fingerprintSucceeded()' \
+  'shell/security/lock/Lock.qml#if (result === PamResult.Success) {#if (result !== PamResult.MaxTries) {' \
+  'shell/security/lock/Lock.qml#        if (root.displaysOff)\n            fingerprintRetry.stop();#        if (root.displaysOff)\n            ;' \
+  'shell/security/lock/Lock.qml#        else\n            root.startFingerprint();#        else\n            ;' \
+  'shell/security/lock/Lock.qml#        root.resumes += 1;\n        root.fingerprintAfterResume();#        root.resumes += 1;' \
+  'shell/security/lock/Lock.qml#        if (!fingerprintFile.available || root.fingerprintSpent)\n            return;#        if (!fingerprintFile.available)\n            return;' \
+  'shell/security/lock/Lock.qml#        root.fingerprintResumePass = true;\n        fingerprintRetry.interval#        root.fingerprintResumePass = true;\n        root.release();\n        fingerprintRetry.interval' \
+  'shell/security/lock/Lock.qml#        fingerprintFastEnd.stop();\n        root.fingerprintOpen = false;\n        root.fingerprintMisses = 0;#        fingerprintFastEnd.stop();\n        root.fingerprintOpen = false;' \
+  'shell/security/lock/Lock.qml#                root.fingerprintSpent = false;\n                root.startFingerprint();#                root.startFingerprint();' \
   'shell/platform/Displays.qml#    Component.onCompleted: {\n        publishDebounce.restart();#    Component.onCompleted: {\n        Hyprland.refreshMonitors();\n        publishDebounce.restart();' \
   'shell/platform/Compositor.qml#        const all = Hyprland.monitors ? Hyprland.monitors.values : [];#        Hyprland.refreshMonitors();\n        const all = Hyprland.monitors ? Hyprland.monitors.values : [];'; do
   IFS='#' read -r file from to <<<"$case_"
