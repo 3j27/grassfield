@@ -1044,12 +1044,14 @@ failing stops after 5 starts in a minute, and the frontend answers from x-d-p-gt
 theme missing: GTK falls back to its default theme. Routing file unreadable: `env-grassfield` sets nothing, and the session
 behaves as before step 2b. A `hyprland-portals.conf` of the administrator's (`/etc/xdg-desktop-portal`) wins over the
 session's: the apps then take x-d-p-gtk's values. The user's (`~/.config/xdg-desktop-portal`) does not, in the Grassfield
-session: the frontend reads one configuration, the first found, and the user's comes first, so `env-grassfield` sets
-`GRASSFIELD_PORTAL_ENV=XDG_CONFIG_HOME=/usr/share/grassfield/xdg` and the frontend's unit runs `env $GRASSFIELD_PORTAL_ENV
-/usr/lib/xdg-desktop-portal` (nothing in the Omarchy session, where the variable is unset). Omarchy 4.5.0's migration
-1788261467 writes that user file (`default=hyprland;gtk`, `Secret=gnome-keyring`) on every machine it updates; the session's
-file carries its `Secret` line. Cost: a portals configuration the user wrote by hand is not read in the Grassfield session
-(tests/integration/portal_settings.sh, scenario 4c, with its control).
+session: the frontend reads one configuration per directory (for each item of `XDG_CURRENT_DESKTOP` in order,
+`<item>-portals.conf`, else `portals.conf`), the user's directory first. Omarchy 4.5.0's migration 1788261467 writes
+`~/.config/xdg-desktop-portal/hyprland-portals.conf` (`default=hyprland;gtk`, `Secret=gnome-keyring`) on every machine it
+updates, and no system-wide file of ours can come before it. So the session's `XDG_CURRENT_DESKTOP` is `Grassfield:Hyprland`
+(`config/hypr/session.lua`) and the frontend's unit runs `grassfield-portal-config`, which links the user's
+`grassfield-portals.conf` to the session's routing (only a link of ours; a file of the user's, and Omarchy's file, are left
+alone); the session's file carries Omarchy's `Secret` line. The frontend's environment, so that of the applications it
+launches, is not changed. The Omarchy session is unchanged (tests/integration/portal_settings.sh, scenario 4c, with its controls).
 
 ### Known limitations
 x-d-p-gtk's own remaining dialogs (its file chooser until step 4, print until step 6, account) and apps that read dconf
