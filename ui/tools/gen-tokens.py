@@ -202,7 +202,7 @@ PATH_CITE = re.compile(r"(?<![\w./-])(?:docs|tests)/[A-Za-z0-9_./-]+\.(?:md|py|q
 ADR_CITE = re.compile(r"ADR-(\d{4})")
 # Provenance kept in the maintainers' private repository (design audits, the master prompt). A source may cite them; where the
 # file is not in this checkout (the public repository) the pointer is accepted, not followed, and main() says so once.
-PRIVATE_PATHS = ("docs/audits/", "docs/master-prompt.md", "docs/STATE.md")
+PRIVATE_PATHS = ("docs/audits/", "docs/master-prompt.md", "docs/STATE.md", "docs/STATE-history.md", "docs/legal/visual-review.md", "branding/concepts/")
 private_skipped = set()
 
 
