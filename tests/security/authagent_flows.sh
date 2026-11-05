@@ -135,8 +135,12 @@ no-ended-notice (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingerin
 ended-notice-over-a-sheet (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingering#            visible: root.sinkingKeys
 device-answers-unseen (e3542510 MAJOR-2)#AuthDialogModel.qml#        if (refusesUnseen)\n            request.cancelAuthenticationRequest();#        if (refusesUnseen)\n            console.info("refused");
 refusal-inside-the-binding (e3542510 MAJOR-2, binding loop)#AuthDialogModel.qml#        Qt.callLater(root.refuseUnseen)#        root.refuseUnseen()
-device-answers-behind-lock-and-saver (e3542510 MAJOR-2)#AuthAgent.qml#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys#        answerable: !root.sinkingKeys
-device-answers-a-held-request (e3542510 MAJOR-2)#AuthAgent.qml# && (!root.heldByLock || root.userFocused) && !root.sinkingKeys# && !root.sinkingKeys
+device-answers-behind-lock-and-saver (e3542510 MAJOR-2)#AuthAgent.qml#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen#        answerable: root.requestOpen
+held-shown-request-refused (re-review: Remote Login, Add Printer)#AuthAgent.qml#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys
+replaced-not-watched (re-review MAJOR-1)#AuthDialogModel.qml#            priv.replaced = liveReplaced().concat([before]);#            ;
+replaced-alone-refused (re-review MAJOR-1)#AuthDialogModel.qml#        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)\n            request.cancelAuthenticationRequest();#        ;
+replaced-refused-first (re-review MAJOR-1)#AuthDialogModel.qml#        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)\n            request.cancelAuthenticationRequest();\n        for (const f of replaced)\n            f.cancelAuthenticationRequest();#        for (const f of replaced)\n            f.cancelAuthenticationRequest();\n        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)\n            request.cancelAuthenticationRequest();
+replaced-refusal-inside-the-binding (re-review MAJOR-1)#AuthDialogModel.qml#        Qt.callLater(root.refuseReplaced)#        root.refuseReplaced()
 device-answers-a-waiting-request (e3542510 MAJOR-2)#AuthAgent.qml#        request: agent.flow#        request: agent.isActive && !root.waiting ? agent.flow : null
 device-answers-always (e3542510 MAJOR-2)#AuthAgent.qml#        answerable: !SessionState.locked#        answerable: true || !SessionState.locked
 EOF_MUTANTS

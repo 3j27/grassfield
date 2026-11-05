@@ -28,6 +28,9 @@ TestCase {
         property bool supplementaryIsError: false
         property int cancels: 0
         property var submitted: []
+        property bool isCompleted: false
+        // test_16: the order of the cancels.
+        property var onCancel: null
 
         signal authenticationFailed
         signal authenticationSucceeded
@@ -39,6 +42,8 @@ TestCase {
 
         function cancelAuthenticationRequest(): void {
             cancels += 1;
+            if (onCancel)
+                onCancel();
         }
     }
 
@@ -144,9 +149,9 @@ TestCase {
 
     // ADR-0045 OC-6 (security review of e3542510, MAJOR-2): no device answers a request the user cannot see and answer. The
     // request Quickshell has open (AuthDialogModel.request) is refused as soon as PAM talks without asking while the agent
-    // says the user cannot answer it (`answerable` false: locked, screen saver, waiting, held), whether or not the sheet has
-    // it and whatever was sent; a password prompt waits for the user. mutate_authdialog.sh G1 to G5 remove each part of the
-    // guard. Restores the mock as it found it (the tests share it; test_3 counts its cancels and answers).
+    // says the user cannot see it (`answerable` false: locked, screen saver, waiting behind another sheet), whether or not
+    // the sheet has it and whatever was sent; a password prompt waits for the user. mutate_authdialog.sh G1 to G6 remove
+    // each part of the guard. Restores the mock as it found it (the tests share it; test_3 counts its cancels and answers).
     function test_15_aRequestNobodyCanAnswerIsRefusedWhenPamTalks() {
         const cancels = flowMock.cancels;
         const answers = flowMock.submitted;
@@ -159,6 +164,9 @@ TestCase {
         tryCompare(other, "cancels", 1, 1000, "a device would answer a request nobody sees");
         compare(other.submitted.length, 0);
         compare(flowMock.cancels, cancels, "the sheet's own request is not touched");
+        // Quickshell ends the refused request (no request in between), then hands over the next one.
+        other.isCompleted = true;
+        dialogModel.request = null;
         // The sheet's request asks for a password (pam_faillock's notice above it) while nobody can answer: it waits.
         dialogModel.request = flowMock;
         flowMock.supplementaryMessage = "The account is locked due to 3 failed logins.";
@@ -181,6 +189,35 @@ TestCase {
         flowMock.cancels = cancels;
         flowMock.submitted = answers;
         verify(!dialogModel.submitted);
+    }
+
+    // Opus re-review, MAJOR-1: Quickshell replaces an open request instead of queuing it and leaves the replaced one running,
+    // with no sheet. A replaced request that says nothing, or asks for a password, is left; one whose PAM talks without asking
+    // (the reader) is refused with the request now open, that one first. mutate_authdialog.sh G7 to G9.
+    function test_16_aReplacedRequestIsRefusedWithTheCurrentOneWhenItTalks() {
+        const order = [];
+        const r1 = createTemporaryObject(otherFlowC, test, {onCancel: () => order.push("r1")});
+        const r2 = createTemporaryObject(otherFlowC, test, {onCancel: () => order.push("r2")});
+        dialogModel.request = r1;
+        dialogModel.request = r2;
+        wait(1);
+        compare(r1.cancels + r2.cancels, 0, "a replaced request that says nothing is left");
+        r1.isResponseRequired = false;
+        r1.supplementaryMessage = "Place your right index finger on the fingerprint reader";
+        tryCompare(r1, "cancels", 1, 1000, "the replaced request reached the reader");
+        compare(r2.cancels, 1, "the request now open is refused too");
+        compare(order, ["r2", "r1"], "the request now open first");
+        // Quickshell ended both; another pair, the replaced one asking for a password: nothing refused.
+        r1.isCompleted = true;
+        r2.isCompleted = true;
+        dialogModel.request = null;
+        const r3 = createTemporaryObject(otherFlowC, test), r4 = createTemporaryObject(otherFlowC, test);
+        dialogModel.request = r3;
+        dialogModel.request = r4;
+        r3.supplementaryMessage = "The account is locked due to 3 failed logins.";
+        wait(1);
+        compare(r3.cancels + r4.cancels, 0, "a replaced request asking for a password is left");
+        dialogModel.request = null;
     }
 
     function test_1_rendering() {

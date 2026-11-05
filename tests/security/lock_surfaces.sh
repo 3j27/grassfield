@@ -14,7 +14,7 @@
 #             overview toggle/open, notifications toggleCenter, menubar open/panel, dock keyboard), and the screen corners
 #             call those IPC actions;
 #   polkit    a polkit sheet that arrives while locked is neither mapped nor given the keyboard until the unlock; a request
-#             the user cannot answer (locked, saver, waiting, held) is refused once PAM talks without asking (ADR-0045 OC-6);
+#             the user cannot see (locked, saver, waiting, replaced) is refused once PAM talks without asking (ADR-0045 OC-6);
 #   saver     SessionState.saverShown has one writer, the shell.qml Binding (ADR-0032).
 # Self-test: the checker fails on a copy of the tree with one refusal removed (mutation). Plain shell test: PASS/FAIL lines.
 set -uo pipefail
@@ -110,6 +110,22 @@ expect("shell/capture/Capture.qml: the capture runs only if the session is still
        and len(re.findall(r"CaptureState\.run\(", code(capture))) == 1)
 expect("shell/capture/Capture.qml: only show() opens the toolbar (one open = true)", len(re.findall(r"\bopen\s*=\s*true\b", code(capture))) == 1
        and re.search(r"\bopen\s*=\s*true\b", code(function(capture, "show") or "")) is not None)
+# Opus re-review of the ADR-0045 security fixes (MINOR): the toolbar's per-display keyboard hand-over maps a surface as
+# Exclusive, which takes the keyboard from a polkit or secret sheet open over it. While SessionState.authorizing nothing is
+# made Exclusive: the toolbar asks for the keyboard only through holdsKeyboard, which is set true in followKeyboard after the
+# sheet check and by the hand-over Timer only without a sheet; a sheet opening stops a hand-over under way.
+toolbar = code(read("shell/capture/CaptureToolbar.qml"))
+follow = code(function(toolbar, "followKeyboard") or "")
+expect("shell/capture/CaptureToolbar.qml: no keyboard hand-over and no Exclusive mapping while a security sheet is open",
+       re.search(r"readonly property bool sheetOpen:\s*SessionState\.authorizing\s*\n", toolbar) is not None
+       and len(re.findall(r"WlrKeyboardFocus\.Exclusive", toolbar)) == 1
+       and re.search(r"keyboardFocus:\s*holdsKeyboard\s*\?\s*WlrKeyboardFocus\.Exclusive\s*:\s*WlrKeyboardFocus\.None", toolbar) is not None
+       and len(re.findall(r"\bholdsKeyboard\s*=\s*(?!=)", toolbar)) == 6
+       and len(re.findall(r"\bholdsKeyboard\s*=\s*true\b", toolbar)) == 1
+       and re.search(r"if\s*\(win\.sheetOpen\)\s*\{\s*win\.holdsKeyboard\s*=\s*false;\s*return;\s*\}[\s\S]*win\.holdsKeyboard\s*=\s*true;", follow) is not None
+       and re.search(r"onTriggered:\s*\{\s*win\.holdsKeyboard\s*=\s*win\.wantsKeyboard\s*&&\s*!win\.sheetOpen;", toolbar) is not None
+       and re.search(r"onSheetOpenChanged:\s*\{\s*if\s*\(sheetOpen\)\s*\{\s*keyHandover\.stop\(\);\s*if\s*\(win\.remapping\)\s*\{\s*win\.remapping\s*=\s*false;\s*win\.holdsKeyboard\s*=\s*false;\s*\}\s*\}\s*else\s*\{\s*win\.followKeyboard\(true\);\s*\}", toolbar) is not None
+       and re.search(r"onWantsKeyboardChanged:\s*win\.followKeyboard\(false\)", toolbar) is not None)
 toggle = function(read("shell/notifications/Notifications.qml"), "toggleCenter") or ""
 opening = code(toggle).split("closeCenter();", 1)[-1]
 expect("shell/notifications/Notifications.qml: toggleCenter() refuses before it opens", R in opening and opening.index(R) < opening.index("centerOpen = true"))
@@ -379,8 +395,11 @@ expect("polkit sheet: the field is focused only where it may be (the agent: when
 # ADR-0045 OC-6 (opus security review of e3542510, MAJOR-2): no device answers a request the user cannot see and answer.
 # Quickshell runs PAM as soon as polkit asks (AuthFlow's constructor), so the model refuses the flow Quickshell has open as
 # soon as PAM talks without asking while it is not answerable, whatever was sent; the agent hands it every flow (also one
-# waiting behind a secret sheet) and makes it answerable only when the user can see and answer it. The refusal is the only
-# answer the model gives on its own (two cancels: the user's and this one; one submit, the user's).
+# waiting behind a secret sheet) and makes it answerable only while its sheet is on screen in front (the click hold and the
+# key sink do not count: integrator decision after the re-review, Remote Login and Add Printer ask several times in a row).
+# A request Quickshell replaced (re-review MAJOR-1) is watched and refused, the current request first, once its PAM talks.
+# The refusals are the only answers the model gives on its own (cancels: the user's, the unseen request's, the current and
+# the replaced ones' of refuseReplaced; one submit, the user's).
 expect("polkit sheet: a request the user cannot answer is refused as soon as PAM talks without asking (the model)",
        re.search(r"^\s*property var request:\s*null\s*$", model, re.M) is not None
        and re.search(r"^\s*property bool answerable:\s*false\s*$", model, re.M) is not None
@@ -391,15 +410,25 @@ expect("polkit sheet: a request the user cannot answer is refused as soon as PAM
        and len(re.findall(r"\brefuseUnseen\b", model)) == 2
        and re.search(r"function pamTalks\(f:\s*var\):\s*bool\s*\{\s*return\s+!!f\s*&&\s*f\.isResponseRequired\s*!==\s*true\s*&&\s*"
                      r"plainLine\(f\.supplementaryMessage,\s*maxDetailLength\)\s*!==\s*\"\";\s*\}", model) is not None
-       and len(re.findall(r"\.cancelAuthenticationRequest\(\)", model)) == 2 and len(re.findall(r"\.submit\(", model)) == 1
+       and len(re.findall(r"\.cancelAuthenticationRequest\(\)", model)) == 4 and len(re.findall(r"\.submit\(", model)) == 1
        and re.search(r"\bflow\.submit\(password\);", model) is not None
-       and not re.search(r"\b(?:request|answerable|refusesUnseen)\s*=(?!=)", model))
+       and not re.search(r"\b(?:request|answerable|refusesUnseen|replacedTalks)\s*=(?!=)", model))
+replaced_body = code(function(model, "refuseReplaced") or "")
+expect("polkit sheet: a request Quickshell replaced is watched and, once its PAM talks without asking, refused after the current request (the model)",
+       re.search(r"readonly property bool replacedTalks:\s*liveReplaced\(\)\.some\(f\s*=>\s*pamTalks\(f\)\)\s*\n", model) is not None
+       and re.search(r"onReplacedTalksChanged:\s*if\s*\(replacedTalks\)\s*Qt\.callLater\(root\.refuseReplaced\)\s*\n", model) is not None
+       and re.search(r"onRequestChanged:\s*\{\s*const before\s*=\s*priv\.seen;\s*priv\.seen\s*=\s*request;\s*if\s*\(before\s*&&\s*request\s*&&\s*before\s*!==\s*request\s*&&\s*"
+                     r"before\.isCompleted\s*!==\s*true\)\s*priv\.replaced\s*=\s*liveReplaced\(\)\.concat\(\[before\]\);\s*\}", model) is not None
+       and re.search(r"function liveReplaced\(\):\s*var\s*\{\s*return\s+priv\.replaced\.filter\(f\s*=>\s*!!f\s*&&\s*f\.isCompleted\s*!==\s*true\);\s*\}", model) is not None
+       and re.match(r"\s*if\s*\(!replacedTalks\)\s*return;\s*const replaced\s*=\s*liveReplaced\(\);\s*priv\.replaced\s*=\s*\[\];\s*"
+                    r"if\s*\(request\s*&&\s*request\.isCompleted\s*!==\s*true\s*&&\s*replaced\.indexOf\(request\)\s*<\s*0\)\s*request\.cancelAuthenticationRequest\(\);\s*"
+                    r"for\s*\(const f of replaced\)\s*f\.cancelAuthenticationRequest\(\);\s*$", replaced_body) is not None
+       and len(re.findall(r"\bpriv\.replaced\s*=(?!=)", model)) == 2 and len(re.findall(r"\bpriv\.seen\s*=(?!=)", model)) == 1)
 dialog_model_m = re.search(r"\bAuthDialogModel\s*\{\s*id:\s*dialogModel\b", agent)
 dialog_model = block_after(agent, dialog_model_m.start()) if dialog_model_m else ""
-expect("polkit sheet: the agent hands the model every flow Quickshell has open and makes it answerable only unlocked, without the screen saver, not waiting, in the sheet, not held unless clicked past the guard, without the sink",
+expect("polkit sheet: the agent hands the model every flow Quickshell has open and makes it answerable only while its sheet is on screen in front (unlocked, without the screen saver, not waiting, in the sheet)",
        re.search(r"^\s*request:\s*agent\.flow\s*$", dialog_model, re.M) is not None
-       and re.search(r"^\s*answerable:\s*!SessionState\.locked\s*&&\s*!SessionState\.saverShown\s*&&\s*!root\.waiting\s*&&\s*root\.requestOpen\s*&&\s*"
-                     r"\(!root\.heldByLock\s*\|\|\s*root\.userFocused\)\s*&&\s*!root\.sinkingKeys\s*$", dialog_model, re.M) is not None
+       and re.search(r"^\s*answerable:\s*!SessionState\.locked\s*&&\s*!SessionState\.saverShown\s*&&\s*!root\.waiting\s*&&\s*root\.requestOpen\s*$", dialog_model, re.M) is not None
        and len(re.findall(r"\b(?:request|answerable)\s*:", agent)) == 2
        and not re.search(r"\b(?:request|answerable|refusesUnseen)\s*=(?!=)|\.cancelAuthenticationRequest\b", agent))
 expect("polkit sheet: a request that comes right after another one ended is held (noteEnded when none is left)",
@@ -592,7 +621,7 @@ for f in shell/shell.qml shell/services/SessionState.qml shell/services/Popups.q
   shell/menubar/MenuBar.qml shell/desktop/HotCornerActions.js shell/security/polkit/AuthAgent.qml shell/security/polkit/AuthDialogModel.qml \
   shell/desktop/IconsView.qml shell/desktop/DesktopWidgets.qml shell/platform/Displays.qml shell/services/TilingHover.qml \
   shell/services/TilingSuggest.qml shell/menubar/AppMenus.qml shell/overlay/DockMenu.qml shell/overlay/ExitCover.qml \
-  shell/services/Emoji.qml shell/capture/Capture.qml; do
+  shell/services/Emoji.qml shell/capture/Capture.qml shell/capture/CaptureToolbar.qml; do
   mkdir -p "$mut/$(dirname "$f")"
   cp "$root/$f" "$mut/$f"
 done
@@ -681,9 +710,19 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthAgent.qml#        answerable: !SessionState.locked && #        answerable: ' \
   'shell/security/polkit/AuthAgent.qml#answerable: !SessionState.locked && !SessionState.saverShown && #answerable: !SessionState.locked && ' \
   'shell/security/polkit/AuthAgent.qml# && !root.waiting && root.requestOpen# && root.requestOpen' \
-  'shell/security/polkit/AuthAgent.qml#root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys#root.requestOpen && !root.sinkingKeys' \
-  'shell/security/polkit/AuthAgent.qml#(!root.heldByLock || root.userFocused) && !root.sinkingKeys#(!root.heldByLock || root.userFocused)' \
+  'shell/security/polkit/AuthAgent.qml#!root.waiting && root.requestOpen\n#!root.waiting\n' \
+  'shell/security/polkit/AuthAgent.qml#!root.waiting && root.requestOpen\n#!root.waiting && root.requestOpen && !root.sinkingKeys\n' \
+  'shell/security/polkit/AuthDialogModel.qml#            priv.replaced = liveReplaced().concat([before]);#            ;' \
+  'shell/security/polkit/AuthDialogModel.qml#        Qt.callLater(root.refuseReplaced)#        root.refuseReplaced()' \
+  'shell/security/polkit/AuthDialogModel.qml#        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)\n            request.cancelAuthenticationRequest();\n#' \
+  'shell/security/polkit/AuthDialogModel.qml#        priv.replaced = [];\n        if (request#        if (request' \
+  'shell/security/polkit/AuthDialogModel.qml#before.isCompleted !== true)#true)' \
+  'shell/security/polkit/AuthDialogModel.qml#liveReplaced().some(f => pamTalks(f))#false' \
   'shell/capture/Capture.qml#SessionState.refuses("capture")#false' \
+  'shell/capture/CaptureToolbar.qml#            if (win.sheetOpen) {\n                win.holdsKeyboard = false;\n                return;\n            }\n#' \
+  'shell/capture/CaptureToolbar.qml#                win.holdsKeyboard = win.wantsKeyboard && !win.sheetOpen;#                win.holdsKeyboard = win.wantsKeyboard;' \
+  'shell/capture/CaptureToolbar.qml#                keyHandover.stop();\n                if (win.remapping) {#                if (win.remapping) {' \
+  'shell/capture/CaptureToolbar.qml#readonly property bool sheetOpen: SessionState.authorizing#readonly property bool sheetOpen: false' \
   'shell/capture/Capture.qml#        if (locked)\n            hide();#        ;' \
   'shell/capture/Capture.qml#            if (args && !SessionState.locked)#            if (args)' \
   'shell/capture/Capture.qml#        else\n            show();#        else\n            open = true;' \

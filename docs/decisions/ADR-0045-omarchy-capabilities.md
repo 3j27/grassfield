@@ -92,6 +92,9 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   screenshots keep them black. For the user: keep password managers closed and answer no sheet while the menu bar shows the
   recording item. The portal backend would honour the rules (follow-up, not done). Details and status (NOT VERIFIED, not run:
   it would record the live screen): docs/specs/security.md, "Screen-share protection".
+- **Keyboard and security sheets** (opus re-review, MINOR): the toolbar never maps itself as Exclusive while a polkit or secret
+  sheet is open (no hand-over between displays, no opening with the keyboard), so the rest of a password typed into the sheet
+  never reaches it; it takes the keyboard again once the sheet is gone (docs/specs/security.md, "Polkit details").
 
 ### OC-2 Text and QR codes in images (priority 1)
 - **Preview** (and Glance, which shares its image view) recognises text in a still image with tesseract when it is installed:
@@ -144,12 +147,14 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   fprintd's conversation. How the sheet presents it is a security-module question (R12): checked by the security review; any
   change in `shell/security/` needs the opus reviewer's PASS.
 - **No device answers a request nobody can answer** (opus security review of e3542510, MAJOR-2). Quickshell starts PAM as soon
-  as polkit asks, whether or not the sheet shows the request, and offers no way to defer it; so a request that is locked away,
-  under the screen saver, waiting behind a secret sheet or held and not clicked is refused (polkit "cancelled") the moment PAM
-  talks without asking, before a touch meant for the lock screen or another request can approve it. A password prompt still
-  waits for the user (macOS: shown after the unlock). With a fingerprint stack, a request that arrives held is therefore
-  refused and its app must ask again. Residual: a few milliseconds between the reader starting and the agent hearing it, and
-  Quickshell's leaked replaced request. Details: docs/specs/security.md, "Polkit details".
+  as polkit asks, whether or not the sheet shows the request, and offers no way to defer it; so a request whose sheet is not
+  on screen in front (locked away, under the screen saver, waiting behind a secret sheet) is refused (polkit "cancelled") the
+  moment PAM talks without asking, before a touch meant for the lock screen can approve it. A sheet on screen in front may be
+  answered by a touch, held or not (integrator decision after the re-review: macOS accepts a touch on the authorization it
+  shows; Remote Login and Add Printer ask several times in a row). A request Quickshell replaced while it was open keeps its
+  PAM running with no sheet: once it talks, the current request and it are both refused (re-review MAJOR-1). A password
+  prompt still waits for the user (macOS: shown after the unlock). Residual: a few milliseconds between the reader starting
+  and the agent hearing it. Details: docs/specs/security.md, "Polkit details".
 - **Known limitation, `pam_faillock`** (opus security review of e3542510, MINOR-5; read in Omarchy 4.0.6's scripts): where
   `/etc/pam.d/polkit-1` does not exist (this machine: polkit uses the vendor `/usr/lib/pam.d/polkit-1`, `include system-auth`),
   the fingerprint and security key setups write one with `pam_unix` only, without `system-auth`, so the authorization sheet
