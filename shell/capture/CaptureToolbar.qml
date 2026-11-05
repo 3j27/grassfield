@@ -62,6 +62,11 @@ Variants {
         // This display's surface takes input: the toolbar's display, and every display in the modes that take a click anywhere
         // (an Entire Screen mode: the display clicked; Capture Selected Window: the window clicked).
         readonly property bool covered: win.shown || root.controller.coversAll
+        // The display that holds the keyboard. A layer surface with Exclusive keyboard keeps the pointer on its own display in
+        // the compositor: a click on another display never reaches that display's surface. In the modes that take a click on
+        // any display (coversAll) the keyboard therefore follows the pointer's display (the focused monitor), so the display the
+        // pointer is on is always the one that is Exclusive; otherwise it is the toolbar's.
+        readonly property bool holdsKeyboard: win.covered && win.name === (root.controller.coversAll ? Compositor.activeScreenName : root.controller.screenName)
         readonly property bool recordMode: Model.isRecord(root.controller.mode)
         readonly property bool framing: win.shown && (root.controller.mode === "selection" || root.controller.mode === "recordSelection")
         readonly property bool windowMode: win.covered && root.controller.mode === "window"
@@ -187,7 +192,7 @@ Variants {
 
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
-        // keyboard focus. The other displays' surfaces (input only) never hold it.
+        // keyboard focus. The other displays' surfaces (input only) hold it while the pointer is on them (holdsKeyboard).
         visible: release.mapped || win.covered
         anchors {
             top: true
@@ -198,7 +203,7 @@ Variants {
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: holdsKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-capture"
         // qmllint disable missing-type
         // The whole display takes input while covered; nothing once closed: the surface stays mapped a moment for the keyboard
@@ -231,7 +236,12 @@ Variants {
 
         KeyboardRelease {
             id: release
-            shown: win.shown
+            shown: win.holdsKeyboard
+        }
+
+        onHoldsKeyboardChanged: {
+            if (holdsKeyboard)
+                keys.forceActiveFocus();
         }
 
         onShownChanged: {

@@ -181,7 +181,8 @@ TestCase {
     function test_frameFromAWindowStillZero() {
         const b = Model.displayBounds(0, 0, 2304, 1440);
         compare(b, {w: 2304, h: 1440}, "the screen's size while the window has none");
-        compare(Model.displayBounds(1920, 1080, 2304, 1440), {w: 1920, h: 1080}, "the window's once it has one");
+        compare(Model.displayBounds(52, 30, 2304, 1440), {w: 2304, h: 1440}, "never the size the window passes through while it maps");
+        compare(Model.displayBounds(1920, 1080, 0, 0), {w: 1920, h: 1080}, "the window's when the screen has none");
         compare(Model.displayBounds(0, 0, 0, 0), {w: 0, h: 0});
         const first = Model.selectionFor("", "DP-1", b, 8);
         compare(first, {x: 576, y: 360, w: 1152, h: 720}, "the first time: centred, not 8x8 at 0,0");

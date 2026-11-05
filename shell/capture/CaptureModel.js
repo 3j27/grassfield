@@ -95,12 +95,13 @@ var HANDLES = ["topLeft", "top", "topRight", "right", "bottomRight", "bottom", "
 // A first frame (no remembered one for that display): centred, this fraction of the display each way.
 var DEFAULT_FRACTION = 0.5;
 
-// The display's logical size for the frame: the window's once it has one, else the screen's own (a window still 0x0 at the
-// moment it maps would shrink the first frame to the minimum at 0,0). {w: 0, h: 0} when neither is known.
+// The display's logical size for the frame: the screen's own (the toolbar's window covers it exactly), else the window's. The
+// window is no source while it maps: it starts at 0x0 and passes through sizes of its own, and a frame clamped to those stays
+// small. {w: 0, h: 0} when neither is known.
 function displayBounds(winW, winH, screenW, screenH) {
-    if (winW > 0 && winH > 0)
-        return {w: winW, h: winH};
-    return screenW > 0 && screenH > 0 ? {w: screenW, h: screenH} : {w: 0, h: 0};
+    if (screenW > 0 && screenH > 0)
+        return {w: screenW, h: screenH};
+    return winW > 0 && winH > 0 ? {w: winW, h: winH} : {w: 0, h: 0};
 }
 
 function validRect(r) {
