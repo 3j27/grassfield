@@ -1,14 +1,14 @@
 # Install Grassfield / Installer Grassfield
 
-PUBLISHED, UNANNOUNCED, BETA ONLY (ADR-0043 h, owner decision of 2026-11-04). The repository is at https://packages.grassfield.site with
-signing key E4921A382C349308BAA50D2F44C31B5D862EBEFA; nothing links to this page and the site stays noindex. The only channel is beta
-(1.0.0-rc2; the script installs from it by default and refuses `--channel stable` while stable is empty). The legal review
-stays mandatory before any announcement. The checksum below is for the script rendered from the current `repository.conf` and `VERSION`
-(`just render-install`; recompute it with `sha256sum` after any change to the template, the conf or VERSION).
-Known limit: today the only published checksum is served from the same host as the script, so it protects against a damaged
-download, not against a compromised host; an independent copy (site, README) comes with the announcement. SITE and README are
-placeholders until the announcement. Publié, non annoncé : aucun lien, le site reste noindex ; la revue juridique précède
-toute annonce.
+PUBLISHED, BETA ONLY (ADR-0043 h, owner decisions of 2026-11-04 and 2026-11-05). The repository is at
+https://packages.grassfield.site with signing key E4921A382C349308BAA50D2F44C31B5D862EBEFA. Since 2026-11-05 the official
+site's Download page gives this installation (commands, requirements, the key's fingerprint and the script's checksum, an
+independent copy of the host's .sha256); the site stays noindex and the legal review stays mandatory before any public
+announcement. The only channel is beta (1.0.0-rc3; the script installs from it by default and refuses `--channel stable`
+while stable is empty). The checksum below is for the script rendered from the current `repository.conf` and `VERSION`
+(`just render-install`; recompute it with `sha256sum` after any change to the template, the conf or VERSION, and update the
+site's copy with it). Publié en bêta : la page Télécharger du site donne l'installation depuis le 2026-11-05 ; le site reste
+noindex et la revue juridique précède toute annonce.
 
 ---
 

@@ -175,6 +175,13 @@ public key (v4 EdDSA, one primary, no subkey), so `just render-install` renders 
 `c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2`, to be recomputed whenever the template, the conf or `VERSION` changes: all three are inputs of the render, and `VERSION` decides the default channel; the checksum is served from the same host as the script, a known limit: it guards against a damaged download, not a compromised host, until the site and the README carry an independent copy). Rendered files are build output (`build/install/`, ignored
 by the repository) and are not committed.
 
+**Amendment (owner decision of 2026-11-05).** The owner asked for the site to give the installation: the official site's
+Download page (grassfieldhq/website) now carries the install script's two command forms (IN3 order), the requirements (the
+script's own checks), the options, the signing key's fingerprint and the script's SHA-256 (IN8: the independent copy). This
+lifts "no link from the site" above; the rest stands: the site stays noindex, the channel is beta only, and the legal review
+stays mandatory before any public announcement (no promotion beyond the page). The site's checksum must change with every
+render of the script.
+
 Bucket keys, so that the documented commands work (the bucket is `grassfield`, objects are served at the base):
 `install/grassfield-install.sh` and `install/grassfield-install.sh.sha256` (both `Cache-Control: no-cache`), and
 `grassfield-signing-key.asc` at the root (the script's host-file fallback, `$GF_BASE/grassfield-signing-key.asc`). The owner

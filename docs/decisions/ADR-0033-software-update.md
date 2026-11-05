@@ -671,6 +671,9 @@ the change to the first published release, where a miss would ship a desktop wit
 since the channel's keyring must be grassfield-packages' `keyring/`, the whole package (its `keyring-check.sh`).
 
 ## Amendments
+- **The site gives the installation (owner decision of 2026-11-05).** Amends the activation entry below: the official
+  site's Download page carries the install script, its requirements, the key's fingerprint and the script's checksum (ADR-0043 h
+  amendment). The site stays noindex; the legal review stays mandatory before any public announcement.
 - **Activation (owner decision of 2026-11-04), recorded 2026-11-04.** Amends h's "activated after the legal review": the
   repository is published at `https://packages.grassfield.site` now, **unannounced** (no link from the site, the site stays
   noindex), before the legal review, which stays mandatory before any public announcement. The owner's key
