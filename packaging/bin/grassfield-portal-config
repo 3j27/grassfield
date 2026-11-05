@@ -20,7 +20,10 @@
 src=/usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf
 [ -r "$src" ] || exit 0
 base=${XDG_CONFIG_HOME:-}
-[ -n "$base" ] || base=${HOME:-}/.config
+if [ -z "$base" ]; then
+  [ -n "${HOME:-}" ] || exit 0 # no home: nothing to link (never /.config)
+  base=$HOME/.config
+fi
 case $base in /*) ;; *) exit 0 ;; esac
 dir=$base/xdg-desktop-portal
 dest=$dir/grassfield-portals.conf
