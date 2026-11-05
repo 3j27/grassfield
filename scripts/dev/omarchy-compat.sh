@@ -147,9 +147,14 @@ for f in battlenet davinci-resolve geforce moonlight retroarch steam telegram pi
   have "app rules default/hypr/apps/$f.lua exist (config/hypr/grassfield/apps.lua ports them)" test -r "$omarchy/default/hypr/apps/$f.lua"
 done
 # Settings' setups (ADR-0045 OC-0.4, OC-5 to OC-10): the exact commands of systemguard.cpp's launch allowlist and read-only checks.
-for c in omarchy-setup-security-fingerprint omarchy-remove-security-fingerprint omarchy-setup-security-fido2 omarchy-remove-security-fido2 omarchy-setup-security-sshd omarchy-drive-password omarchy-hibernation-setup omarchy-hibernation-remove omarchy-hibernation-available omarchy-voxtype-install omarchy-voxtype-remove omarchy-voxtype-model omarchy-hw-fingerprint omarchy-network-qr; do
+for c in omarchy-setup-security-fingerprint omarchy-remove-security-fingerprint omarchy-setup-security-fido2 omarchy-remove-security-fido2 omarchy-setup-security-sshd omarchy-drive-password omarchy-hibernation-setup omarchy-hibernation-remove omarchy-hibernation-available omarchy-voxtype-model omarchy-hw-fingerprint omarchy-network-qr; do
   have "command $c exists (Settings: Fingerprint & Security Key, Sharing, Disk Encryption, Hibernation, Dictation, Share Network)" test -x "$omarchy/bin/$c"
 done
+# Dictation's setup pair was renamed in Omarchy 4.5 (omarchy-voxtype-install/-remove became omarchy-install/remove-dictation-voxtype);
+# Settings launches whichever pair exists (apps/settings/qml/Setups.js, systemguard.cpp).
+have "a dictation setup pair exists (4.0.6 omarchy-voxtype-install/-remove, or 4.5 omarchy-install/remove-dictation-voxtype)" \
+  bash -c '{ test -x "$1/bin/omarchy-voxtype-install" && test -x "$1/bin/omarchy-voxtype-remove"; } ||
+    { test -x "$1/bin/omarchy-install-dictation-voxtype" && test -x "$1/bin/omarchy-remove-dictation-voxtype"; }' _ "$omarchy"
 have "omarchy-setup-security-sshd still writes the hardening file Settings reads (10-omarchy-hardening.conf)" has_grep '10-omarchy-hardening.conf' "$omarchy/bin/omarchy-setup-security-sshd"
 have "omarchy-network-qr still has --meta (Share Network reads its meta line and matrix)" has_grep '--meta' "$omarchy/bin/omarchy-network-qr"
 for pkg in gpu-screen-recorder tesseract zbarimg ddcutil localsend wtype wl-copy curl; do
