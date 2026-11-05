@@ -95,6 +95,14 @@ var HANDLES = ["topLeft", "top", "topRight", "right", "bottomRight", "bottom", "
 // A first frame (no remembered one for that display): centred, this fraction of the display each way.
 var DEFAULT_FRACTION = 0.5;
 
+// The display's logical size for the frame: the window's once it has one, else the screen's own (a window still 0x0 at the
+// moment it maps would shrink the first frame to the minimum at 0,0). {w: 0, h: 0} when neither is known.
+function displayBounds(winW, winH, screenW, screenH) {
+    if (winW > 0 && winH > 0)
+        return {w: winW, h: winH};
+    return screenW > 0 && screenH > 0 ? {w: screenW, h: screenH} : {w: 0, h: 0};
+}
+
 function validRect(r) {
     return r !== null && typeof r === "object" && [r.x, r.y, r.w, r.h].every(v => typeof v === "number" && isFinite(v));
 }
@@ -107,6 +115,9 @@ function defaultFrame(bounds) {
 
 // A frame kept on the display: whole numbers, at least `minSize` each way (the display's size at most), moved back inside.
 function clampFrame(r, bounds, minSize) {
+    // A display of no known size cannot hold a frame: it is left as it is.
+    if (!(bounds.w > 0) || !(bounds.h > 0))
+        return validRect(r) ? r : {x: 0, y: 0, w: 0, h: 0};
     if (!validRect(r))
         return defaultFrame(bounds);
     const least = Math.min(minSize, bounds.w, bounds.h);

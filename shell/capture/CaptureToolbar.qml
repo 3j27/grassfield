@@ -64,7 +64,10 @@ Variants {
         readonly property bool recordMode: Model.isRecord(root.controller.mode)
         readonly property bool framing: win.shown && (root.controller.mode === "selection" || root.controller.mode === "recordSelection")
         readonly property bool windowMode: win.covered && root.controller.mode === "window"
-        readonly property var bounds: ({w: win.width, h: win.height})
+        // The display's logical size: the window's once mapped, else the screen's (the window is 0x0 when the frame is first made).
+        readonly property var bounds: Model.displayBounds(win.width, win.height, win.modelData ? win.modelData.width : 0, win.modelData ? win.modelData.height : 0)
+        // The output's real scale (the size readout's pixels), not the layer surface's integer ratio.
+        readonly property real outputScale: Compositor.outputScale(win.name)
         // The frame of the Selected Portion modes ({x, y, w, h}, this display's logical coordinates, CaptureModel.js), the part a
         // press took ("" none, a handle, "inside", "outside", "click"), the pointer, and whether a drag is under way.
         property var frame: ({x: 0, y: 0, w: 0, h: 0})
@@ -423,7 +426,7 @@ Variants {
 
                     anchors.centerIn: parent
                     textFormat: Text.PlainText
-                    text: Model.readout(win.frame, readout.Screen.devicePixelRatio)
+                    text: Model.readout(win.frame, win.outputScale)
                     color: Appearance.colors.text
                     font.family: Appearance.fontFamily
                     font.pixelSize: Tokens.captureReadoutTextSize
