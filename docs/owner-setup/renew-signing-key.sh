@@ -11,7 +11,7 @@
 #     then proves them: a signature made from a fresh home that holds only the new SECRET file, checked with gpgv against
 #     the new public key alone;
 #   - always stops the temporary gpg-agents and shreds the temporary GNUPGHOME, whatever happens (not after SIGKILL: see --help).
-# Prints only the fingerprint, the dates and the paths. Details: docs/owner-setup/hosting-and-key.md, ADR-0033 b.9.
+# Prints only the fingerprint, the dates and the paths. Details: ADR-0033 b.9, ADR-0043.
 set -euo pipefail
 umask 077
 ulimit -c 0 # no core dump of a process that holds a passphrase
@@ -235,7 +235,7 @@ NEW EXPIRY / NOUVELLE EXPIRATION : $expiry_date
 NEXT RENEWAL DEADLINE / PROCHAINE ECHEANCE : $deadline (extended key in grassfield-keyring / cle prolongee dans grassfield-keyring)
 Reminder expected from / rappel attendu des : $reminder
 
-EN - Next steps (ADR-0033 b.9; guide: docs/owner-setup/hosting-and-key.md, section Renewal)
+EN - Next steps (ADR-0033 b.9)
  DO NOT LOG OUT OR REBOOT until step 1 is done and checked: this folder is on tmpfs. Never import the key into ~/.gnupg.
  1. Replace the two offline copies of SECRET-grassfield-signing-key.asc (and the public key and expiry.txt) with the files of
     this folder, and check each copy with cmp. The revocation certificate is unchanged: keep it.
@@ -248,7 +248,7 @@ EN - Next steps (ADR-0033 b.9; guide: docs/owner-setup/hosting-and-key.md, secti
     ("rm -rf" on tmpfs is enough; do not rely on shred on btrfs).
  5. Never send the SECRET file or the passphrase. If this script was killed with SIGKILL, run its --help cleanup line.
 
-FR - La suite (ADR-0033 b.9 ; guide : docs/owner-setup/hosting-and-key.md, section Renewal)
+FR - La suite (ADR-0033 b.9 )
  NE VOUS DECONNECTEZ PAS ET NE REDEMARREZ PAS avant la fin de l'etape 1 : ce dossier est en tmpfs. N'importez jamais la cle dans ~/.gnupg.
  1. Remplacez les deux copies hors ligne de SECRET-grassfield-signing-key.asc (et la cle publique et expiry.txt) par les
     fichiers de ce dossier, et verifiez chaque copie avec cmp. Le certificat de revocation est inchange : gardez-le.
