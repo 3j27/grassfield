@@ -47,9 +47,9 @@ name=org.freedesktop.impl.portal.desktop.grassfield_settings
 unit=$pk/systemd/grassfield-portal-settings.service
 
 # --- static ------------------------------------------------------------------------------------------------------------
-desc="the session's routing lists only Settings, FileChooser, Access, AppChooser and Print (D-4, D-5, D-7): Grassfield first, then gtk"
+desc="the session's routing lists only Secret (gnome-keyring, as Omarchy 4.5.0), Settings, FileChooser, Access, AppChooser and Print (D-4, D-5, D-7): Grassfield first, then gtk"
 check test "$(grep -v '^#' "$pk/xdg/xdg-desktop-portal/hyprland-portals.conf" | grep -v '^$' | tr '\n' ' ')" = \
-  "[preferred] org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk org.freedesktop.impl.portal.Access=grassfield;gtk org.freedesktop.impl.portal.AppChooser=grassfield;gtk org.freedesktop.impl.portal.Print=grassfield;gtk "
+  "[preferred] org.freedesktop.impl.portal.Secret=gnome-keyring org.freedesktop.impl.portal.Settings=grassfield-settings;gtk org.freedesktop.impl.portal.FileChooser=grassfield;gtk org.freedesktop.impl.portal.Access=grassfield;gtk org.freedesktop.impl.portal.AppChooser=grassfield;gtk org.freedesktop.impl.portal.Print=grassfield;gtk "
 desc="the .portal file, the D-Bus service file and the unit name the same bus name and program"
 check bash -c 'grep -qx "DBusName=$1" "$2" && grep -qx "Interfaces=org.freedesktop.impl.portal.Settings;" "$2" && grep -qx "Name=$1" "$3" &&
   grep -qx "Exec=/usr/lib/grassfield/grassfield-portal-settings" "$3" && grep -qx "SystemdService=grassfield-portal-settings.service" "$3" &&
@@ -66,7 +66,20 @@ check bash -c 'grep -q "cmake --install \"\$srcdir/portal-settings-build\"" "$1"
   grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/hyprland-portals.conf" "$1" &&
   grep -q "usr/share/grassfield/xdg/xdg-desktop-portal/portals/grassfield-settings.portal" "$1" &&
   grep -q "usr/share/dbus-1/services/$2.service" "$1" && grep -q "gen-gtk-themes.py\" \"\$srcdir/gtk-themes\"" "$1" &&
-  grep -q "\$pkgdir/usr/share/themes/" "$1" && grep -q "xdg-desktop-portal xdg-desktop-portal-gtk libcups)" "$1"' _ "$pk/arch/PKGBUILD" "$name"
+  grep -q "\$pkgdir/usr/share/themes/" "$1" && grep -q "xdg-desktop-portal xdg-desktop-portal-gtk libcups[ )]" "$1"' _ "$pk/arch/PKGBUILD" "$name"
+
+desc="the frontend's unit runs 'env \$GRASSFIELD_PORTAL_ENV <the stock unit's frontend>' (the session's configuration home; nothing elsewhere)"
+dropin=$pk/systemd/xdg-desktop-portal.service.d/10-grassfield.conf
+check bash -c 'grep -qx "ExecStart=/usr/bin/env \$GRASSFIELD_PORTAL_ENV /usr/lib/xdg-desktop-portal" "$1" && [[ $(grep -c "^ExecStart=" "$1") == 2 ]] &&
+  { [[ ! -r /usr/lib/systemd/user/xdg-desktop-portal.service ]] || grep -qx "ExecStart=/usr/lib/xdg-desktop-portal" /usr/lib/systemd/user/xdg-desktop-portal.service; }' _ "$dropin"
+if command -v systemd-analyze >/dev/null; then
+  # The drop-in beside a copy of the stock unit, as systemd reads them.
+  mkdir -p "$tmp/units/xdg-desktop-portal.service.d"
+  cp /usr/lib/systemd/user/xdg-desktop-portal.service "$tmp/units/" 2>/dev/null
+  cp "$dropin" "$tmp/units/xdg-desktop-portal.service.d/10-grassfield.conf"
+  desc="systemd-analyze verify reads the unit with its drop-in without a warning about it"
+  check bash -c '! systemd-analyze verify --user "$1/xdg-desktop-portal.service" 2>&1 | grep -qi "10-grassfield\|GRASSFIELD_PORTAL_ENV"' _ "$tmp/units"
+fi
 
 # The real env file, its paths rewritten to a scratch copy.
 mkdir -p "$tmp/gf/xdg-desktop-portal"
@@ -84,6 +97,8 @@ desc="env-grassfield: an existing XDG_DATA_DIRS is kept after it, and sourced tw
 check test "$(envof /usr/share:/opt/share twice)" = "$tmp/gf:/usr/share:/opt/share|1|portals"
 desc="env-grassfield: GDK_DEBUG keeps the flags it has, and gets portals once"
 check test "$(envof "" twice "events" | cut -d'|' -f3)" = "events,portals"
+desc="env-grassfield: GRASSFIELD_PORTAL_ENV names the session's configuration home for the frontend only (XDG_CONFIG_HOME itself is never set), and is unset without the routing file"
+check bash -c '[[ $(env -i PATH="$PATH" sh -c ". \"\$1\"; printf \"%s|%s\" \"\${GRASSFIELD_PORTAL_ENV-unset}\" \"\${XDG_CONFIG_HOME-unset}\"" _ "$1") == "XDG_CONFIG_HOME=$2|unset" ]]' _ "$tmp/env" "$tmp/gf"
 # The shell's unit clears GTK_USE_PORTAL for the shell (gate P5); the apps it starts get it back (review of step 2b).
 desc="env-grassfield records GRASSFIELD_APPS_GTK_USE_PORTAL=1 for the shell, and the shell gives GTK_USE_PORTAL back to every app it starts (Settings and Glance included)"
 check bash -c '[[ $(env -i PATH="$PATH" sh -c ". \"\$1\"; echo \"\${GRASSFIELD_APPS_GTK_USE_PORTAL-unset}\"" _ "$1") == 1 ]] &&
@@ -119,10 +134,19 @@ settings() { # settings <dir> <json>: grassfield.json, replaced atomically as th
 }
 # One scenario: a fresh bus whose service directory starts the Grassfield backend (when GRASSFIELD is yes) and the gtk
 # stand-in on demand, then the real frontend. Sets d.
-scenario() { # scenario <name> <yes|no|broken>: broken = the backend's activation fails when the frontend starts
+scenario() { # scenario <name> <yes|no|broken> [omarchy45]: broken = the backend's activation fails when the frontend starts;
+  # omarchy45 = the user's own hyprland-portals.conf, the one Omarchy 4.5.0's migration 1788261467 installs, and the frontend
+  # started as the packaged drop-in starts it (env $GRASSFIELD_PORTAL_ENV, from env-grassfield); omarchy45-bare = the same file
+  # and the frontend started without it (what the session did before: the control)
   d=$tmp/$1
   mkdir -p "$d/services" "$d/config" "$d/home" "$d/run" "$d/cfg" "$d/xdg"
   chmod 700 "$d/run"
+  portal_env=""
+  [[ ${3:-} == omarchy45 ]] && portal_env=$(env -i PATH="$PATH" sh -c '. "$1"; printf %s "$GRASSFIELD_PORTAL_ENV"' _ "$tmp/env")
+  if [[ ${3:-} == omarchy45* ]]; then
+    mkdir -p "$d/cfg/xdg-desktop-portal"
+    printf '[preferred]\ndefault=hyprland;gtk\norg.freedesktop.impl.portal.Secret=gnome-keyring\n' >"$d/cfg/xdg-desktop-portal/hyprland-portals.conf"
+  fi
   cp -r "$pk/xdg/." "$d/xdg/"
   printf '#!/bin/sh\necho $$ >%s/gtk.pid\nexport GF_TEST_BUS=1 GF_TEST_BUS_DIR=%s DBUS_SESSION_BUS_ADDRESS="$(head -n 1 %s/bus.address)"\nexec python3 -I %s gtk --log %s/gtk.log\n' \
     "$d" "$d" "$d" "$fakes" "$d" >"$d/gtk.sh"
@@ -137,7 +161,8 @@ scenario() { # scenario <name> <yes|no|broken>: broken = the backend's activatio
   settings "$d" '{"appearance": "dark"}'
   start_bus "$d" || { echo "bus: $(head -n 1 "$d/bus.log")"; return 1; }
   env -i PATH="$PATH" HOME="$d/home" XDG_CONFIG_HOME="$d/cfg" XDG_DATA_HOME="$d/home/.local/share" XDG_RUNTIME_DIR="$d/run" \
-    XDG_DATA_DIRS="$d/xdg:/usr/share" XDG_CURRENT_DESKTOP=Hyprland DBUS_SESSION_BUS_ADDRESS="$bus" "$frontend" -v -r >"$d/frontend.log" 2>&1 &
+    XDG_DATA_DIRS="$d/xdg:/usr/share" XDG_CURRENT_DESKTOP=Hyprland DBUS_SESSION_BUS_ADDRESS="$bus" \
+    /usr/bin/env $portal_env "$frontend" -v -r >"$d/frontend.log" 2>&1 &
   frontend_pid=$!
   wait_until 10 owned org.freedesktop.portal.Desktop
 }
@@ -175,7 +200,7 @@ check bash -c '[[ $1 == *"Using grassfield-settings.portal for org.freedesktop.i
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.AppChooser (interface specific config)"* &&
   $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Print (interface specific config)"* &&
   $1 == *"org.freedesktop.impl.portal.Screenshot (default config)"* &&
-  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | sort -u | tr "\n" " ") == "Access (interface specific config) AppChooser (interface specific config) FileChooser (interface specific config) Print (interface specific config) Settings (config) " ]]' _ "$got"
+  $(grep -oE "[A-Za-z]+ \((interface specific )?config\)" <<<"$1" | grep -v "^Secret " | sort -u | tr "\n" " ") == "Access (interface specific config) AppChooser (interface specific config) FileChooser (interface specific config) Print (interface specific config) Settings (config) " ]]' _ "$got"
 read -r rss anon < <(awk '/^VmRSS:/ { r = $2 } /^RssAnon:/ { a = $2 } END { print r, a }' "/proc/$(cat "$d/backend.pid")/status" 2>/dev/null)
 desc="1 the backend's memory is within its budget (private <= 4 MB, resident <= 20 MB) [private ${anon:-?} kB, resident ${rss:-?} kB]"
 check bash -c '[[ -n $1 && -n $2 && $1 -le 4096 && $2 -le 20480 ]]' _ "$anon" "$rss"
@@ -275,6 +300,22 @@ desc="4b ... so the frontend's unit wants the backend and starts after it (packa
 check bash -c 'grep -qx "Wants=grassfield-portal-settings.service" "$1" && grep -qx "After=grassfield-portal-settings.service" "$1" &&
   ! grep -q "^Requisite=" "$2" && grep -q "usr/lib/systemd/user/xdg-desktop-portal.service.d/10-grassfield.conf" "$3"' _ \
   "$pk/systemd/xdg-desktop-portal.service.d/10-grassfield.conf" "$unit" "$pk/arch/PKGBUILD"
+
+# 4c ------------------------------------------------------------------------------------------------------------------
+scenario shadow-control yes omarchy45-bare || exit 1
+got=$(call read-one org.gnome.desktop.interface gtk-theme)
+desc="4c control: Omarchy 4.5.0's ~/.config/xdg-desktop-portal/hyprland-portals.conf wins over the session's file when nothing prevents it [$got]"
+check test "$got" = '"Adwaita-dark"'
+stop_bus
+scenario shadow yes omarchy45 || exit 1
+got=$(call read-one org.gnome.desktop.interface gtk-theme)
+desc="4c with that file present and the frontend started as the unit starts it, Settings still goes to Grassfield [$got]"
+check test "$got" = '"Grassfield-multicolor-dark"'
+got=$(grep -oE "Using [a-z-]+\.portal for org\.freedesktop\.impl\.portal\.[A-Za-z]+ \(((default|interface specific) )?config\)" "$d/frontend.log" | sort -u | tr '\n' ';')
+desc="4c ... and so do FileChooser, Access, AppChooser and Print [$got]"
+check bash -c '[[ $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.FileChooser"* && $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Access"* &&
+  $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.AppChooser"* && $1 == *"Using grassfield.portal for org.freedesktop.impl.portal.Print"* ]]' _ "$got"
+stop_bus
 
 # 5 --------------------------------------------------------------------------------------------------------------------
 d=$tmp/silent

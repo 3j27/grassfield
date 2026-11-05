@@ -141,6 +141,10 @@ mkpkg hyprland 0.56.1
 mkpkg aquamarine 0.9.0
 mkpkg kcoreaddons 6.29.0
 mkpkg omarchy-keyring 1
+mkpkg omarchy-keyring 2
+mkpkg gu-kernel 1 "usr/lib/modules/$(uname -r)/modules.builtin=builtin"
+mkpkg gu-kernel 2 "usr/lib/modules/$(uname -r)/modules.builtin=builtin two"
+mkpkg gu-kernel 3 "usr/lib/modules/$(uname -r)/vmlinuz=image"
 mkpkg gu-app 1
 mkpkg gu-app 2
 mkpkg gu-app 3
@@ -374,6 +378,27 @@ touch -d "@$(( $(date +%s) + 600 ))" "$W/repo/gutest.db.tar.gz"
 sum=$(syncsum); run_helper
 expect "a plan line with a field too many (a file name with a space) -> exit 8, nothing changed" test "$rc:$(ver gu-space):$(syncsum)" == "8:1-1:$sum"
 expect "  its log says so" grep -q "pacman's plan cannot be read" "$D/$op.log"
+
+say "the signing keyrings (Omarchy 4.5.0's omarchy-update-keyring refreshes omarchy-keyring too)"
+publish "${cur[@]/omarchy-keyring-1/omarchy-keyring-2}"; run_helper
+expect "a newer omarchy-keyring is installed before the transaction -> exit 0, omarchy-keyring 2" test "$rc:$(ver omarchy-keyring)" == "0:2-1"
+expect "  the log shows it was upgraded" grep -q '^upgrading omarchy-keyring' "$D/$op.log"
+cur=("${cur[@]/omarchy-keyring-1/omarchy-keyring-2}")
+nokeyring=()
+for p in "${cur[@]}"; do [[ $p == omarchy-keyring-* ]] || nokeyring+=("${p/gu-app-3/gu-app-5}"); done
+publish "${nokeyring[@]}"; run_helper
+expect "an installed omarchy-keyring the repository no longer carries -> exit 8 before the transaction, gu-app stays 3 (fails closed)" test "$rc:$(ver gu-app)" == "8:3-1"
+expect "  its log says the keyrings could not be updated" grep -q 'signing keyrings (archlinux-keyring omarchy-keyring) could not be updated' "$D/$op.log"
+publish "${cur[@]}"; run_helper
+expect "  once the repository carries it again -> exit 0" test "$rc" == 0
+
+say "the kernel restart rule: Omarchy 4.0.6 reads a kernel's vmlinuz, 4.5.0 its modules.builtin"
+publish "${cur[@]}" gu-kernel-1; quiet pacman -Sy; quiet pacman -S --noconfirm gu-kernel
+expect "a package owns modules.builtin of the running kernel (4.5.0's file): installed" test "$(ver gu-kernel)" == 1-1
+publish "${cur[@]}" gu-kernel-2; run_helper
+expect "  its update (same file) needs no kernel restart -> exit 0, no restart kernel" bash -c "test $rc:$(ver gu-kernel) == 0:2-1 && ! grep -qx 'restart kernel' $D/$op.exit && grep -qx 'packages 1' $D/$op.exit"
+publish "${cur[@]}" gu-kernel-3; run_helper
+expect "the kernel package now owns only the running kernel's vmlinuz (4.0.6's file) -> exit 0, still no restart kernel" bash -c "test $rc:$(ver gu-kernel) == 0:3-1 && ! grep -qx 'restart kernel' $D/$op.exit"
 
 say "the 16 newest operations are kept"
 publish "${cur[@]}"
