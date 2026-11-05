@@ -136,6 +136,13 @@ Grassfield has since ADR-0034. Corrected with this ADR.
 - Omarchy's fingerprint setup adds `pam_fprintd` to `/etc/pam.d/polkit-1` and `sudo`: Grassfield's polkit sheet then receives
   fprintd's conversation. How the sheet presents it is a security-module question (R12): checked by the security review; any
   change in `shell/security/` needs the opus reviewer's PASS.
+- **No device answers a request nobody can answer** (opus security review of e3542510, MAJOR-2). Quickshell starts PAM as soon
+  as polkit asks, whether or not the sheet shows the request, and offers no way to defer it; so a request that is locked away,
+  under the screen saver, waiting behind a secret sheet or held and not clicked is refused (polkit "cancelled") the moment PAM
+  talks without asking, before a touch meant for the lock screen or another request can approve it. A password prompt still
+  waits for the user (macOS: shown after the unlock). With a fingerprint stack, a request that arrives held is therefore
+  refused and its app must ask again. Residual: a few milliseconds between the reader starting and the agent hearing it, and
+  Quickshell's leaked replaced request. Details: docs/specs/security.md, "Polkit details".
 
 ### OC-7 Remote Login (priority 2)
 - Settings > General > Sharing, a pane with one row: "Remote Login" (switch). On = `omarchy-setup-security-sshd`, off =

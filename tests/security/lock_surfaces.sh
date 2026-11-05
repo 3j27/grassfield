@@ -12,7 +12,8 @@
 #   routes    every IPC action that opens a surface goes through that entry point (search toggle, apps toggle/open,
 #             overview toggle/open, notifications toggleCenter, menubar open/panel, dock keyboard), and the screen corners
 #             call those IPC actions;
-#   polkit    a polkit sheet that arrives while locked is neither mapped nor given the keyboard until the unlock;
+#   polkit    a polkit sheet that arrives while locked is neither mapped nor given the keyboard until the unlock; a request
+#             the user cannot answer (locked, saver, waiting, held) is refused once PAM talks without asking (ADR-0045 OC-6);
 #   saver     SessionState.saverShown has one writer, the shell.qml Binding (ADR-0032).
 # Self-test: the checker fails on a copy of the tree with one refusal removed (mutation). Plain shell test: PASS/FAIL lines.
 set -uo pipefail
@@ -358,6 +359,32 @@ expect("polkit sheet: the field is focused only where it may be (the agent: when
        and re.search(r"id:\s*field\s*enabled:\s*root\.inputEnabled\s*&&\s*!root\.model\.awaitingDevice\s*\n", dialog_src) is not None
        and re.search(r"function onFailed\(\):\s*void\s*\{\s*shakeAnimation\.restart\(\);\s*root\.focusField\(\);\s*\}", dialog_src) is not None
        and re.search(r"function onAwaitingDeviceChanged\(\):\s*void\s*\{\s*if\s*\(!root\.model\.awaitingDevice\s*&&\s*root\.model\.responseRequired\)\s*root\.focusField\(\);\s*\}", dialog_src) is not None)
+# ADR-0045 OC-6 (opus security review of e3542510, MAJOR-2): no device answers a request the user cannot see and answer.
+# Quickshell runs PAM as soon as polkit asks (AuthFlow's constructor), so the model refuses the flow Quickshell has open as
+# soon as PAM talks without asking while it is not answerable, whatever was sent; the agent hands it every flow (also one
+# waiting behind a secret sheet) and makes it answerable only when the user can see and answer it. The refusal is the only
+# answer the model gives on its own (two cancels: the user's and this one; one submit, the user's).
+expect("polkit sheet: a request the user cannot answer is refused as soon as PAM talks without asking (the model)",
+       re.search(r"^\s*property var request:\s*null\s*$", model, re.M) is not None
+       and re.search(r"^\s*property bool answerable:\s*false\s*$", model, re.M) is not None
+       and re.search(r"readonly property bool refusesUnseen:\s*!answerable\s*&&\s*pamTalks\(request\)\s*\n", model) is not None
+       # From the event loop, never inside the binding's own change (Quickshell ends the request inside the cancel: binding loop).
+       and re.search(r"onRefusesUnseenChanged:\s*if\s*\(refusesUnseen\)\s*Qt\.callLater\(root\.refuseUnseen\)\s*\n", model) is not None
+       and re.search(r"function refuseUnseen\(\):\s*void\s*\{\s*if\s*\(refusesUnseen\)\s*request\.cancelAuthenticationRequest\(\);\s*\}", model) is not None
+       and len(re.findall(r"\brefuseUnseen\b", model)) == 2
+       and re.search(r"function pamTalks\(f:\s*var\):\s*bool\s*\{\s*return\s+!!f\s*&&\s*f\.isResponseRequired\s*!==\s*true\s*&&\s*"
+                     r"plainLine\(f\.supplementaryMessage,\s*maxDetailLength\)\s*!==\s*\"\";\s*\}", model) is not None
+       and len(re.findall(r"\.cancelAuthenticationRequest\(\)", model)) == 2 and len(re.findall(r"\.submit\(", model)) == 1
+       and re.search(r"\bflow\.submit\(password\);", model) is not None
+       and not re.search(r"\b(?:request|answerable|refusesUnseen)\s*=(?!=)", model))
+dialog_model_m = re.search(r"\bAuthDialogModel\s*\{\s*id:\s*dialogModel\b", agent)
+dialog_model = block_after(agent, dialog_model_m.start()) if dialog_model_m else ""
+expect("polkit sheet: the agent hands the model every flow Quickshell has open and makes it answerable only unlocked, without the screen saver, not waiting, in the sheet, not held unless clicked past the guard, without the sink",
+       re.search(r"^\s*request:\s*agent\.flow\s*$", dialog_model, re.M) is not None
+       and re.search(r"^\s*answerable:\s*!SessionState\.locked\s*&&\s*!SessionState\.saverShown\s*&&\s*!root\.waiting\s*&&\s*root\.requestOpen\s*&&\s*"
+                     r"\(!root\.heldByLock\s*\|\|\s*root\.userFocused\)\s*&&\s*!root\.sinkingKeys\s*$", dialog_model, re.M) is not None
+       and len(re.findall(r"\b(?:request|answerable)\s*:", agent)) == 2
+       and not re.search(r"\b(?:request|answerable|refusesUnseen)\s*=(?!=)|\.cancelAuthenticationRequest\b", agent))
 expect("polkit sheet: a request that comes right after another one ended is held (noteEnded when none is left)",
        re.search(r"if\s*\(!dialogModel\.active\)\s*dialogModel\.noteEnded\(\);", arrive) is not None)
 expect("polkit sheet: the hold is set only on an arrival, a lock and the screen saver",
@@ -626,6 +653,19 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/security/polkit/AuthDialog.qml#            if (!root.model.awaitingDevice && root.model.responseRequired)\n                root.focusField();#            if (!root.model.awaitingDevice)\n                root.focusField();' \
   'shell/security/polkit/AuthDialog.qml#            if (!root.model.awaitingDevice && root.model.responseRequired)\n                root.focusField();#            if (!root.model.awaitingDevice && root.model.responseRequired)\n                field.forceActiveFocus();' \
   'shell/security/polkit/AuthDialog.qml#            if (!root.model.awaitingDevice && root.model.responseRequired)\n                root.focusField();#            root.focusField();' \
+  'shell/security/polkit/AuthDialogModel.qml#        if (refusesUnseen)\n            request.cancelAuthenticationRequest();#        if (refusesUnseen)\n            console.info("refused");' \
+  'shell/security/polkit/AuthDialogModel.qml#        Qt.callLater(root.refuseUnseen)#        root.refuseUnseen()' \
+  'shell/security/polkit/AuthDialogModel.qml#    onRefusesUnseenChanged: if (refusesUnseen)\n        Qt.callLater(root.refuseUnseen)#    onRefusesUnseenChanged: {}' \
+  'shell/security/polkit/AuthDialogModel.qml#readonly property bool refusesUnseen: !answerable && pamTalks(request)#readonly property bool refusesUnseen: !answerable && pamTalks(flow)' \
+  'shell/security/polkit/AuthDialogModel.qml#readonly property bool refusesUnseen: !answerable && pamTalks(request)#readonly property bool refusesUnseen: !answerable && pamTalks(request) && !priv.submitted' \
+  'shell/security/polkit/AuthDialogModel.qml#    property bool answerable: false#    property bool answerable: true' \
+  'shell/security/polkit/AuthDialogModel.qml#        return !!f && f.isResponseRequired !== true && #        return !!f && ' \
+  'shell/security/polkit/AuthAgent.qml#        request: agent.flow#        request: agent.isActive && !root.waiting ? agent.flow : null' \
+  'shell/security/polkit/AuthAgent.qml#        answerable: !SessionState.locked && #        answerable: ' \
+  'shell/security/polkit/AuthAgent.qml#answerable: !SessionState.locked && !SessionState.saverShown && #answerable: !SessionState.locked && ' \
+  'shell/security/polkit/AuthAgent.qml# && !root.waiting && root.requestOpen# && root.requestOpen' \
+  'shell/security/polkit/AuthAgent.qml#root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys#root.requestOpen && !root.sinkingKeys' \
+  'shell/security/polkit/AuthAgent.qml#(!root.heldByLock || root.userFocused) && !root.sinkingKeys#(!root.heldByLock || root.userFocused)' \
   'shell/security/polkit/AuthDialog.qml#            id: identityList\n            enabled: root.inputEnabled#            id: identityList' \
   'shell/security/polkit/AuthDialog.qml#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).\n                enabled: root.inputEnabled#                // No focus while AuthAgent keeps the keys on its sink (as the identity rows).' \
   'shell/security/polkit/AuthAgent.qml#        const typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());#        let typing = false;\n        const queued = follows || typing || (dialogModel.active && dialogModel.followsAnother());\n        typing = (follows && win.takesKeys) || root.sinkingKeys || (!dialogModel.active && win.takesKeys && !dialogModel.answered);' \

@@ -55,7 +55,13 @@ Scope {
         // Quickshell qmltypes name the AuthFlow property type without exporting it (metadata quirk).
         // qmllint disable unresolved-type
         flow: agent.isActive && !root.waiting ? agent.flow : null
+        // The request Quickshell has open, handed over or not, and whether the user can see and answer it now: no lock, no
+        // screen saver, not waiting behind another sheet, in the sheet, not held unless clicked past its guard, its keys not on
+        // the sink. Otherwise a device must not answer it: it is refused as soon as PAM talks without asking
+        // (AuthDialogModel.refusesUnseen; ADR-0045 OC-6, security review of e3542510, MAJOR-2).
+        request: agent.flow
         // qmllint enable unresolved-type
+        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys
 
         // A request arrived, or none is left.
         onActiveChanged: root.arrive(false)
