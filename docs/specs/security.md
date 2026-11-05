@@ -990,6 +990,20 @@ upstream note), so its PAM may still hold the reader with no sheet left; the age
 current request (its completion is still connected to `finishAuthenticationRequest`). Fix upstream (queue for real) or
 cancel both; NOT done here. Real reader and key: NOT VERIFIED.
 
+**Omarchy's setups and `pam_faillock` (ADR-0045 OC-6, opus security review of e3542510, MINOR-5).** Read in Omarchy 4.0.6
+(`/usr/share/omarchy/bin/omarchy-setup-security-fingerprint`, `omarchy-setup-security-fido2`): when `/etc/pam.d/polkit-1`
+does not exist, each setup writes one of its own: the device line (`pam_fprintd` behind the lid gate, or `pam_u2f cue`), then
+`auth required pam_unix.so` and `pam_unix` for account, password and session, with no `system-auth`. On this machine there is
+no `/etc/pam.d/polkit-1`; polkit's stack is the vendor file `/usr/lib/pam.d/polkit-1` (`include system-auth`, which has
+`pam_faillock preauth silent deny=10 unlock_time=120`, `authfail`, `authsucc`). A file in `/etc/pam.d` takes precedence over
+the vendor one, so after either setup polkit loses `pam_faillock` (no 10-failure lockout on the authorization sheet, while
+sudo and the lock screen keep it), `pam_systemd_home` (a systemd-homed user can no longer authorize) and `pam_env`.
+`omarchy-remove-security-fingerprint` and `omarchy-remove-security-fido2` delete only their own lines and leave the file: the
+loss outlives "Remove…". Grassfield writes no PAM file (OC-0.4); Settings' setup sheets for the fingerprint and the security
+key say before the terminal opens that the administrator prompts' own rules may be replaced and no longer pause after repeated
+wrong passwords. The owner's fix, if wanted: in `/etc/pam.d/polkit-1`, replace `auth required pam_unix.so` and the three
+other `pam_unix` lines with the `include system-auth` lines of the vendor file (keeping the device lines first), or delete
+the file after "Remove…". Reported upstream: not yet (owner's call).
 
 ## L5 polkit (owner, real session)
 Never `pkexec` a real program for this test; `pkcheck` only asks polkit whether this terminal's shell may run the action

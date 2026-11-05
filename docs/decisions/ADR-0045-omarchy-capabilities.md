@@ -150,6 +150,12 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   waits for the user (macOS: shown after the unlock). With a fingerprint stack, a request that arrives held is therefore
   refused and its app must ask again. Residual: a few milliseconds between the reader starting and the agent hearing it, and
   Quickshell's leaked replaced request. Details: docs/specs/security.md, "Polkit details".
+- **Known limitation, `pam_faillock`** (opus security review of e3542510, MINOR-5; read in Omarchy 4.0.6's scripts): where
+  `/etc/pam.d/polkit-1` does not exist (this machine: polkit uses the vendor `/usr/lib/pam.d/polkit-1`, `include system-auth`),
+  the fingerprint and security key setups write one with `pam_unix` only, without `system-auth`, so the authorization sheet
+  loses `pam_faillock`'s lockout (sudo and the lock screen keep it), `pam_systemd_home` and `pam_env`; the removal scripts
+  leave that file. Grassfield edits no PAM file (OC-0.4): the setup sheets say so before the terminal opens; the owner's fix is
+  in docs/specs/security.md.
 
 ### OC-7 Remote Login (priority 2)
 - Settings > General > Sharing, a pane with one row: "Remote Login" (switch). On = `omarchy-setup-security-sshd`, off =
