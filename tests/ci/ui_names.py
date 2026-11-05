@@ -127,7 +127,7 @@ def run(root, entries):
         print("ui_names: 0 files scanned: the check found nothing to look at (wrong directory?)")
         return 1
     if bad:
-        print(f"ui_names: {bad} banned name(s); see ADR-0003 and CONTRIBUTING.md, "No Apple assets, no Apple names"")
+        print(f"ui_names: {bad} banned name(s); see ADR-0003 and CONTRIBUTING.md, section Design rules")
         return 1
     print(f"ui_names: {count} files scanned, no banned name in a visible string")
     return 0
