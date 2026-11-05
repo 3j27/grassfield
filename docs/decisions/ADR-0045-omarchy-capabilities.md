@@ -92,9 +92,10 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   screenshots keep them black. For the user: keep password managers closed and answer no sheet while the menu bar shows the
   recording item. The portal backend would honour the rules (follow-up, not done). Details and status (NOT VERIFIED, not run:
   it would record the live screen): docs/specs/security.md, "Screen-share protection".
-- **Keyboard and security sheets** (opus re-review, MINOR): the toolbar never maps itself as Exclusive while a polkit or secret
-  sheet is open (no hand-over between displays, no opening with the keyboard), so the rest of a password typed into the sheet
-  never reaches it; it takes the keyboard again once the sheet is gone (docs/specs/security.md, "Polkit details").
+- **Keyboard and security sheets** (opus re-reviews, MINOR): the toolbar never maps itself as Exclusive while a polkit or
+  secret sheet, or its key sink's linger after a request ended under the user's typing, may hold the keyboard (no hand-over
+  between displays, no opening with the keyboard), so the rest of a password never reaches it; it takes the keyboard again once
+  they are gone (docs/specs/security.md, "Polkit details").
 
 ### OC-2 Text and QR codes in images (priority 1)
 - **Preview** (and Glance, which shares its image view) recognises text in a still image with tesseract when it is installed:
@@ -144,14 +145,18 @@ Grassfield has since ADR-0034. Corrected with this ADR.
   `omarchy-remove-security-fido2`. The pane says where each one is used (lock screen, administrator prompts, sudo), as the
   scripts configure them.
 - Omarchy's fingerprint setup adds `pam_fprintd` to `/etc/pam.d/polkit-1` and `sudo`: Grassfield's polkit sheet then receives
-  fprintd's conversation. How the sheet presents it is a security-module question (R12): checked by the security review; any
+  fprintd's conversation. The sheet's device rules below assume the module announces itself before it waits: pam_fprintd
+  always does, pam_u2f only with `cue`, which Omarchy's security key setup sets; a silent device module (pam_u2f without
+  `cue`) would defeat them (opus re-review 2). How the sheet presents it is a security-module question (R12): checked by the security review; any
   change in `shell/security/` needs the opus reviewer's PASS.
 - **No device answers a request nobody can answer** (opus security review of e3542510, MAJOR-2). Quickshell starts PAM as soon
   as polkit asks, whether or not the sheet shows the request, and offers no way to defer it; so a request whose sheet is not
   on screen in front (locked away, under the screen saver, waiting behind a secret sheet) is refused (polkit "cancelled") the
-  moment PAM talks without asking, before a touch meant for the lock screen can approve it. A sheet on screen in front may be
-  answered by a touch, held or not (integrator decision after the re-review: macOS accepts a touch on the authorization it
-  shows; Remote Login and Add Printer ask several times in a row). A request Quickshell replaced while it was open keeps its
+  moment PAM talks without asking, before a touch meant for the lock screen can approve it; so is one shown while the displays
+  are off for inactivity. A sheet on screen in front may be answered by a touch, and a held one when it is held as "right
+  after another one" (integrator decision after the re-review: macOS accepts a touch on the authorization it shows; Remote
+  Login and Add Printer ask several times in a row); one held just after an unlock waits for a click (a finger left on the
+  reader would answer it). A request Quickshell replaced while it was open keeps its
   PAM running with no sheet: once it talks, the current request and it are both refused (re-review MAJOR-1). A password
   prompt still waits for the user (macOS: shown after the unlock). Residual: a few milliseconds between the reader starting
   and the agent hearing it. Details: docs/specs/security.md, "Polkit details".

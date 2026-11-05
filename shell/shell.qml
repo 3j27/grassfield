@@ -85,6 +85,18 @@ ShellRoot {
         property: "authorizing"
         value: authAgent.requestActive || secretAgent.requestActive
     }
+    // The displays are off (Idle): no device answers a polkit request nobody can see (ADR-0045 OC-6).
+    Binding {
+        target: SessionState
+        property: "displaysOff"
+        value: idle.displayOff
+    }
+    // A security sheet or its key sink may hold the keyboard: the capture toolbar takes none meanwhile.
+    Binding {
+        target: SessionState
+        property: "securityKeyboard"
+        value: authAgent.queuePresent || secretAgent.requestActive || secretAgent.sinkingKeys
+    }
 
     Connections {
         target: SessionState

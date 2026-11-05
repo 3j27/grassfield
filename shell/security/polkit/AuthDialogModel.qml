@@ -72,8 +72,10 @@ QtObject {
     // it. So `request`, the flow Quickshell has open (the agent's own, also while this model is handed none: a secret sheet
     // came first), is refused (polkit's "cancelled": the requester is told no) as soon as PAM says something without asking
     // (pamTalks: a device's instruction, or any other line: when in doubt, no), whenever `answerable` is false (the agent's
-    // rule: its sheet is not on screen in front: locked, under the screen saver, waiting behind another sheet), an answer
-    // sent or not. PAM asking for a password ends nothing: that request waits for the user, its sheet after the unlock.
+    // rule: its sheet is not on screen in front: locked, under the screen saver, the displays off, waiting behind another
+    // sheet, or held other than "right after another one" and not clicked), an answer sent or not. PAM asking for a password
+    // ends nothing: that request waits for the user, its sheet after the unlock. It assumes a device module announces itself
+    // before it waits (pam_fprintd always, pam_u2f with `cue`, which Omarchy sets); a silent one would defeat it.
     // Defaults fail closed (not answerable); with no request nothing happens. The cancel runs from the event loop, never inside
     // this binding's own change: Quickshell ends the request inside cancelAuthenticationRequest, which changes what the binding
     // reads, and QML would report a binding loop and keep a stale value (the next request then unguarded; authagent_flows.d

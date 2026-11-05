@@ -117,7 +117,12 @@ expect("shell/capture/Capture.qml: only show() opens the toolbar (one open = tru
 toolbar = code(read("shell/capture/CaptureToolbar.qml"))
 follow = code(function(toolbar, "followKeyboard") or "")
 expect("shell/capture/CaptureToolbar.qml: no keyboard hand-over and no Exclusive mapping while a security sheet is open",
-       re.search(r"readonly property bool sheetOpen:\s*SessionState\.authorizing\s*\n", toolbar) is not None
+       # The guard covers the key sinks' linger too (opus re-review 2, MINOR-3): SessionState.securityKeyboard, bound in shell.qml.
+       re.search(r"readonly property bool sheetOpen:\s*SessionState\.securityKeyboard\s*\n", toolbar) is not None
+       and re.search(r"Binding\s*\{\s*target:\s*SessionState\s*property:\s*\"securityKeyboard\"\s*value:\s*authAgent\.queuePresent\s*\|\|\s*"
+                     r"secretAgent\.requestActive\s*\|\|\s*secretAgent\.sinkingKeys\s*\}", code(shell)) is not None
+       and len(re.findall(r"\"securityKeyboard\"", code(shell))) == 1
+       and re.search(r"readonly property bool queuePresent:\s*agent\.isActive\s*\|\|\s*root\.requestOpen\s*\|\|\s*root\.sinkingKeys\s*\n", code(read("shell/security/polkit/AuthAgent.qml"))) is not None
        and len(re.findall(r"WlrKeyboardFocus\.Exclusive", toolbar)) == 1
        and re.search(r"keyboardFocus:\s*holdsKeyboard\s*\?\s*WlrKeyboardFocus\.Exclusive\s*:\s*WlrKeyboardFocus\.None", toolbar) is not None
        and len(re.findall(r"\bholdsKeyboard\s*=\s*(?!=)", toolbar)) == 6
@@ -426,9 +431,14 @@ expect("polkit sheet: a request Quickshell replaced is watched and, once its PAM
        and len(re.findall(r"\bpriv\.replaced\s*=(?!=)", model)) == 2 and len(re.findall(r"\bpriv\.seen\s*=(?!=)", model)) == 1)
 dialog_model_m = re.search(r"\bAuthDialogModel\s*\{\s*id:\s*dialogModel\b", agent)
 dialog_model = block_after(agent, dialog_model_m.start()) if dialog_model_m else ""
-expect("polkit sheet: the agent hands the model every flow Quickshell has open and makes it answerable only while its sheet is on screen in front (unlocked, without the screen saver, not waiting, in the sheet)",
+# Opus re-review 2: not while the displays are off (MINOR-2, SessionState.displaysOff mirrors Idle.displayOff), and a held
+# request only when it is held as "right after another one" or clicked past its guard (MINOR-1: not just after an unlock).
+expect("polkit sheet: the agent hands the model every flow Quickshell has open and makes it answerable only while its sheet is on screen in front (unlocked, no screen saver, displays on, not waiting, in the sheet; held only right after another one or once clicked)",
        re.search(r"^\s*request:\s*agent\.flow\s*$", dialog_model, re.M) is not None
-       and re.search(r"^\s*answerable:\s*!SessionState\.locked\s*&&\s*!SessionState\.saverShown\s*&&\s*!root\.waiting\s*&&\s*root\.requestOpen\s*$", dialog_model, re.M) is not None
+       and re.search(r"^\s*answerable:\s*!SessionState\.locked\s*&&\s*!SessionState\.saverShown\s*&&\s*!SessionState\.displaysOff\s*&&\s*!root\.waiting\s*&&\s*root\.requestOpen\s*"
+                     r"&&\s*\(!root\.heldByLock\s*\|\|\s*root\.userFocused\s*\|\|\s*root\.heldWhy\s*===\s*\"queued\"\)\s*$", dialog_model, re.M) is not None
+       and re.search(r"Binding\s*\{\s*target:\s*SessionState\s*property:\s*\"displaysOff\"\s*value:\s*idle\.displayOff\s*\}", code(shell)) is not None
+       and len(re.findall(r"\"displaysOff\"", code(shell))) == 1
        and len(re.findall(r"\b(?:request|answerable)\s*:", agent)) == 2
        and not re.search(r"\b(?:request|answerable|refusesUnseen)\s*=(?!=)|\.cancelAuthenticationRequest\b", agent))
 expect("polkit sheet: a request that comes right after another one ended is held (noteEnded when none is left)",
@@ -722,7 +732,15 @@ for case_ in 'shell/dock/Dock.qml#SessionState.refuses("dock keyboard")#false' \
   'shell/capture/CaptureToolbar.qml#            if (win.sheetOpen) {\n                win.holdsKeyboard = false;\n                return;\n            }\n#' \
   'shell/capture/CaptureToolbar.qml#                win.holdsKeyboard = win.wantsKeyboard && !win.sheetOpen;#                win.holdsKeyboard = win.wantsKeyboard;' \
   'shell/capture/CaptureToolbar.qml#                keyHandover.stop();\n                if (win.remapping) {#                if (win.remapping) {' \
-  'shell/capture/CaptureToolbar.qml#readonly property bool sheetOpen: SessionState.authorizing#readonly property bool sheetOpen: false' \
+  'shell/capture/CaptureToolbar.qml#readonly property bool sheetOpen: SessionState.securityKeyboard#readonly property bool sheetOpen: false' \
+  'shell/capture/CaptureToolbar.qml#readonly property bool sheetOpen: SessionState.securityKeyboard#readonly property bool sheetOpen: SessionState.authorizing' \
+  'shell/shell.qml#value: authAgent.queuePresent || secretAgent.requestActive || secretAgent.sinkingKeys#value: authAgent.requestActive || secretAgent.requestActive' \
+  'shell/shell.qml#value: authAgent.queuePresent || secretAgent.requestActive || secretAgent.sinkingKeys#value: authAgent.queuePresent || secretAgent.requestActive' \
+  'shell/security/polkit/AuthAgent.qml#readonly property bool queuePresent: agent.isActive || root.requestOpen || root.sinkingKeys#readonly property bool queuePresent: agent.isActive || root.requestOpen' \
+  'shell/security/polkit/AuthAgent.qml#!SessionState.displaysOff && #' \
+  'shell/shell.qml#        property: "displaysOff"\n        value: idle.displayOff#        property: "displaysOff"\n        value: false' \
+  'shell/security/polkit/AuthAgent.qml#root.userFocused || root.heldWhy === "queued")#root.userFocused || root.heldWhy !== "locked")' \
+  'shell/security/polkit/AuthAgent.qml#                    && (!root.heldByLock || root.userFocused || root.heldWhy === "queued")#' \
   'shell/capture/Capture.qml#        if (locked)\n            hide();#        ;' \
   'shell/capture/Capture.qml#            if (args && !SessionState.locked)#            if (args)' \
   'shell/capture/Capture.qml#        else\n            show();#        else\n            open = true;' \

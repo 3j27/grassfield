@@ -7,10 +7,10 @@
 # counter-review of f9e24e1: nor the rest of a password typed into a request that ends unanswered; the notice that says
 # so while the keys go nowhere). window.qml runs the same agent in FakePanel.qml
 # (make_harness.py --panel): a window made again each time it is shown and given the keyboard only once mapped, as
-# Quickshell's PanelWindow and a compositor do, beside a window underneath (check of c1ca44f). flows.qml test_20 to test_27:
-# a request the user cannot see and answer (locked, saver, held, waiting behind a secret sheet) is refused once PAM talks
-# without asking, as for a fingerprint reader (ADR-0045 OC-6, security review of e3542510, MAJOR-2). No compositor, no
-# polkit, no PAM.
+# Quickshell's PanelWindow and a compositor do, beside a window underneath (check of c1ca44f). flows.qml test_20 to test_34:
+# a request the user cannot see (locked, saver, displays off, held other than right after another one, waiting behind a
+# secret sheet, replaced) is refused once PAM talks without asking, as for a fingerprint reader (ADR-0045 OC-6, security
+# review of e3542510 and its re-reviews). No compositor, no polkit, no PAM.
 #
 #   tests/security/authagent_flows.sh              the tests: PASS / FAIL
 #   tests/security/authagent_flows.sh --mutants    also each mutant below, which the tests must catch ("MUTANT <name>: CAUGHT")
@@ -135,8 +135,10 @@ no-ended-notice (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingerin
 ended-notice-over-a-sheet (f9e24e1 LOW-3)#AuthAgent.qml#            visible: root.lingering#            visible: root.sinkingKeys
 device-answers-unseen (e3542510 MAJOR-2)#AuthDialogModel.qml#        if (refusesUnseen)\n            request.cancelAuthenticationRequest();#        if (refusesUnseen)\n            console.info("refused");
 refusal-inside-the-binding (e3542510 MAJOR-2, binding loop)#AuthDialogModel.qml#        Qt.callLater(root.refuseUnseen)#        root.refuseUnseen()
-device-answers-behind-lock-and-saver (e3542510 MAJOR-2)#AuthAgent.qml#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen#        answerable: root.requestOpen
-held-shown-request-refused (re-review: Remote Login, Add Printer)#AuthAgent.qml#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen#        answerable: !SessionState.locked && !SessionState.saverShown && !root.waiting && root.requestOpen && (!root.heldByLock || root.userFocused) && !root.sinkingKeys
+device-answers-behind-lock-and-saver (e3542510 MAJOR-2)#AuthAgent.qml#        answerable: !SessionState.locked && !SessionState.saverShown && #        answerable:
+held-shown-request-refused (re-review: Remote Login, Add Printer)#AuthAgent.qml#root.userFocused || root.heldWhy === "queued")#root.userFocused)
+unlock-held-answerable (re-review 2 MINOR-1)#AuthAgent.qml#                    && (!root.heldByLock || root.userFocused || root.heldWhy === "queued")#                    && true
+displays-off-ignored (re-review 2 MINOR-2)#AuthAgent.qml#!SessionState.displaysOff && #true &&
 replaced-not-watched (re-review MAJOR-1)#AuthDialogModel.qml#            priv.replaced = liveReplaced().concat([before]);#            ;
 replaced-alone-refused (re-review MAJOR-1)#AuthDialogModel.qml#        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)\n            request.cancelAuthenticationRequest();#        ;
 replaced-refused-first (re-review MAJOR-1)#AuthDialogModel.qml#        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)\n            request.cancelAuthenticationRequest();\n        for (const f of replaced)\n            f.cancelAuthenticationRequest();#        for (const f of replaced)\n            f.cancelAuthenticationRequest();\n        if (request && request.isCompleted !== true && replaced.indexOf(request) < 0)\n            request.cancelAuthenticationRequest();
