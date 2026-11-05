@@ -191,7 +191,7 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     publishSavedSearches();
     // The progress window's rows are published at most four times a second (KIO reports every few kilobytes).
     m_progressTimer.setSingleShot(true);
-    m_progressTimer.setInterval(250);
+    m_progressTimer.setInterval(kProgressDelayMs);
     connect(&m_progressTimer, &QTimer::timeout, this, &FilesApp::publishJobs);
     qApp->installEventFilter(this);
 
@@ -1937,6 +1937,11 @@ void FilesApp::applyToEnclosed(const QUrl &url)
         }
     });
     process->start();
+}
+
+void FilesApp::setProgressDelayForTests(int ms)
+{
+    m_progressTimer.setInterval(ms > 0 ? ms : kProgressDelayMs);
 }
 
 void FilesApp::publishJobs()

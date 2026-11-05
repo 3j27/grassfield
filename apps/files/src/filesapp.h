@@ -155,6 +155,10 @@ public:
     int activityPercent() const { return m_activityPercent; }
     QVariantList jobs() const { return m_jobList; }
     Q_INVOKABLE void cancelJob(int id);
+    // The Copy window's rows wait this long before they are published (the Finder shows the window for copies that last).
+    static constexpr int kProgressDelayMs = 250;
+    // Tests only: a shorter wait (0 restores the default), so a copy that ends within 250 ms on a fast disk still publishes.
+    void setProgressDelayForTests(int ms);
     // Open With > Change All… (FP-65): `storageId` becomes the default application of the item's type (mimeapps.list).
     Q_INVOKABLE QString mimeTypeOf(const QUrl &url) const;
     Q_INVOKABLE QString defaultApplication(const QString &mimeType) const;

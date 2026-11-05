@@ -528,7 +528,9 @@ TEST_F(FileOps, APastedCopyShowsItsAmountsInTheCopyWindow)
 {
     FilesApp app(QList<QUrl>{});
     Told told(app);
-    // Enough files for the job to outlast the 250 ms the window's rows wait before they are published.
+    // The rows wait 250 ms before they are published, and a copy of this size ends sooner on a fast disk (tmpfs): the
+    // test shortens that wait, which is not what it checks (it checks that the amounts reach the row).
+    app.setProgressDelayForTests(1);
     const QByteArray block(1024, 'x');
     for (int i = 0; i < 8000; ++i)
         write(d("src/big/f") + QString::number(i), block);
