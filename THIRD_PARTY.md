@@ -276,9 +276,9 @@ The notice ships as `unicode-license-v3.txt` in the grassfield-desktop package (
 - `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`: reconstructed from the generated Hyprland header
   `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`, which carries MIT, "Copyright © 2019 Josef
   Gajdusek". Test tool, not packaged; the file itself has no notice yet (audit gap G11).
-- `docs/audits/finder-parity-2026-10-26/tools/virtual-keyboard-unstable-v1.xml`: the `zwp_virtual_keyboard_v1` protocol
+- `tests/tools/vkbd/virtual-keyboard-unstable-v1.xml`: the `zwp_virtual_keyboard_v1` protocol
   (wlroots / Purism), reduced to its requests and arguments, MIT: "Copyright © 2008-2011 Kristian Høgsberg, © 2010-2013
   Intel Corporation, © 2012-2013 Collabora, Ltd., © 2018 Purism SPC". The file carries the full notice verbatim (as
-  reproduced in Hyprland's generated `/usr/include/hyprland/protocols/virtual-keyboard-unstable-v1.hpp`). Audit tooling
-  of the Finder parity work (`vinput.py`), not packaged.
+  reproduced in Hyprland's generated `/usr/include/hyprland/protocols/virtual-keyboard-unstable-v1.hpp`). Test tooling
+  (`tests/tools/vkbd/`), not packaged.
 - Lua 5.5.1 headers (MIT) at build time; CMake, Ninja, Qt tools (build tools).
