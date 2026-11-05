@@ -96,3 +96,4 @@ fb51a6832070f21220caf36cad8ed06375f5108dbcf4e66c487883e45dcb2b2e bin/omarchy-hib
 a16c233d9c972c7873c3b53364e12508bf2d60fd74b7cbc22a241d0cb48beadd bin/omarchy-remove-dictation-voxtype apps/settings/qml/Setups.js,apps/settings/src/systemguard.cpp
 5f28b79450f9226684b6027c2e102e511df7b6f1e84ce166cffff073662fff3a bin/omarchy-dictation config/hypr/grassfield/bindings.lua
 36655c24ccd2756e978e6b18256b238e70185a3ba9d6b098f87ab9aeafb122c9 bin/omarchy-default-dictation config/hypr/grassfield/bindings.lua
+6684762de3e3b88445a165344a9093e8faedb0647137199f16ffd1861db6f87c shell/plugins/lock/FingerprintModel.js shell/security/LockMachine.js,shell/security/lock/Lock.qml
