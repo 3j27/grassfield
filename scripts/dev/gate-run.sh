@@ -24,6 +24,13 @@ runs=${GATE_RUNS_DIR:-$root/.dev/gate-runs}
 archive=${GATE_ARCHIVE_DIR:-$root/docs/testing/runs}
 max_log=262144 # bytes archived whole; a larger log is archived as its last 2000 lines
 
+# Reports and archived logs are committed: no absolute path of this machine in them. A path inside the repository becomes
+# repository-relative, the home folder becomes "~" (the user name is not recorded).
+portable() { sed -e "s#$root/##g" -e "s#$root#.#g" -e "s#${HOME:-/nonexistent-home}#~#g"; }
+rel() { local p=$1; [[ $p == "$root"/* ]] && p=${p#"$root"/}; printf '%s\n' "${p/#${HOME:-/nonexistent-home}/\~}"; }
+# The absolute path of a path as written in a report.
+absolute() { local p=$1; [[ $p == "~"* ]] && p=${HOME:-}${p#"~"}; [[ $p == /* ]] || p=$root/$p; printf '%s\n' "$p"; }
+
 usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 die() { echo "gate-run: $*" >&2; exit 2; }
 valid_name() { [[ $1 =~ ^[a-z0-9][a-z0-9._-]{0,63}$ ]]; }
@@ -79,11 +86,11 @@ write_report() { # NAME EXIT LOG
     echo "- exit code: $rc"
     echo "- commit: $commit ($dirty) on $branch"
     echo "- build id: $(build_id)"
-    echo "- log: $log"
+    echo "- log: $(rel "$log")"
     echo "- log sha256: $logsum"
     echo "- lines: PASS $pass, FAIL $fail, SKIP $skip, NOT VERIFIED $nv, PROXY $proxy"
     if [[ -s ${log%.log}.coredumps ]]; then
-      echo "- coredumps: $(head -n1 "${log%.log}.coredumps") (details: ${log%.log}.coredumps)"
+      echo "- coredumps: $(head -n1 "${log%.log}.coredumps") (details: $(rel "${log%.log}.coredumps"))"
     fi
     # "result" is the exit status; "verdict" says what that is worth.
     if [[ $rc == 3 ]]; then
@@ -122,12 +129,12 @@ case ${1:-} in
     n=0
     for r in "${reports[@]}"; do
       base=$(basename "$r" .md)
-      log=$(sed -n 's/^- log: //p' "$r" | head -n1)
-      cp -- "$r" "$archive/$base.md"
+      log=$(absolute "$(sed -n 's/^- log: //p' "$r" | head -n1)")
+      portable <"$r" >"$archive/$base.md"
       if [[ -f $log ]]; then
-        if (($(stat -c %s "$log") <= max_log)); then cp -- "$log" "$archive/$base.log"; else tail -n 2000 -- "$log" | sed -e "\$a\\" >"$archive/$base.log"; echo "(archived: last 2000 lines only; full log was $log)" >>"$archive/$base.log"; fi
+        if (($(stat -c %s "$log") <= max_log)); then portable <"$log" >"$archive/$base.log"; else tail -n 2000 -- "$log" | sed -e "\$a\\" | portable >"$archive/$base.log"; echo "(archived: last 2000 lines only; full log was $(rel "$log"))" >>"$archive/$base.log"; fi
       fi
-      [[ -f ${log%.log}.coredumps ]] && cp -- "${log%.log}.coredumps" "$archive/$base.coredumps"
+      [[ -f ${log%.log}.coredumps ]] && portable <"${log%.log}.coredumps" >"$archive/$base.coredumps"
       n=$((n + 1))
     done
     echo "gate-run: archived $n report(s) to $archive (review, then commit)" >&2

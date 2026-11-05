@@ -4,9 +4,9 @@ A polished, familiar desktop for Omarchy 4, delivered as **Grassfield Desktop**:
 next to an unmodified Omarchy system ("built for Omarchy", "based on Arch Linux"). You choose Grassfield or Omarchy at
 login; nothing of Omarchy is changed. **Grassfield OS** (an ISO and installer) comes after the desktop beta.
 
-Status: pre-release, private repository. Current state and verified facts: [`docs/STATE.md`](docs/STATE.md).
-Project brief: [`docs/master-prompt.md`](docs/master-prompt.md). Decisions: [`docs/decisions/`](docs/decisions/).
-Independent audit of the 1.0 baseline: [`docs/audits/final-1.0/`](docs/audits/final-1.0/).
+Status: pre-release (1.0.0 release candidates on the beta channel). Specifications: [`docs/specs/`](docs/specs/). Decisions:
+[`docs/decisions/`](docs/decisions/). Install guide: [`docs/install.md`](docs/install.md). Contributions are welcome: see
+[Contributing](#contributing).
 
 ## What it is
 
@@ -34,7 +34,8 @@ on `grassfield-keyring` (the keys of Grassfield's package repository, ADR-0033),
 until that repository is published, install it first from there (`cd keyring && makepkg -si`). Then log out and choose
 Grassfield (the login drop-in starts it; `grassfield-login set omarchy` goes back). The step-by-step guide with
 checks and recovery is [`docs/owner-setup/real-session.md`](docs/owner-setup/real-session.md); take a snapshot first.
-Nothing runs as root, no service starts by itself, no file is written under `$HOME` by the install.
+The desktop runs as your user (only Software Update's and the update channel's helpers run as root, through polkit);
+no service starts by itself, no file is written under `$HOME` by the install.
 
 ## Uninstall
 
@@ -69,7 +70,7 @@ Wayland session lock held by the compositor, so killing the shell never unlocks 
 ## Known limits
 
 - Pre-release. Several gates need the owner's real hardware (suspend cycles, display hotplug, a multi-day soak, a
-  hardware matrix); see the gate table in `docs/master-prompt.md` and the open items in the audit.
+  hardware matrix); see the gate table in `docs/testing/gates.md`.
 - After an update, a running session keeps the old compositor plugin until you log out. The shell has a "Log out to finish
   updating" notice for that, but it works only once the release build ships `/usr/share/grassfield/VERSION` and the plugin
   reports its version (not merged yet): until then nothing is announced.
@@ -77,8 +78,7 @@ Wayland session lock held by the compositor, so killing the shell never unlocks 
   amendment); not yet verified on real hardware.
 - Fonts requested by name that are not installed fall back to Liberation Sans, not Inter.
 - Omarchy's own shell (bar, launcher, lock) does not run inside Grassfield, by design.
-- The visual identity is close to macOS and carries trade-dress risk; the repository stays private until the legal
-  review. Not affiliated with Apple, Arch Linux or Omarchy. No Apple assets are used.
+- The visual identity is close to macOS and carries trade-dress risk (ADR-0003, ADR-0024). Not affiliated with Apple, Arch Linux or Omarchy. No Apple assets are used.
 
 ## Development (nested only)
 
@@ -92,9 +92,21 @@ just shot NAME      # screenshot of the 1920x1080 reference output to .dev/shots
 just nested-down
 ```
 
-Never run the shell or the plugin against your real session while developing; see `docs/master-prompt.md` section 7.
+Never run the shell or the plugin against your real session while developing; see [`CONTRIBUTING.md`](CONTRIBUTING.md) and ADR-0019.
 Every gate run can leave a dated report: `scripts/dev/gate-run.sh` and `just gate-archive`
 ([`docs/testing/README.md`](docs/testing/README.md)).
+
+## Contributing
+
+Issues and pull requests are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) explains how to build and try a change in the nested
+session, the checks to run (`just check`, `just test`), Conventional Commits, the design rules (macOS coherence, tokens only,
+no Apple assets or names), the extra review of the security modules, and the licensing of contributions. Please read the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Report vulnerabilities privately with GitHub Security Advisories ("Report a vulnerability"), never in a public issue. Scope,
+supported versions and what to expect: [`SECURITY.md`](SECURITY.md).
 
 ## License
 

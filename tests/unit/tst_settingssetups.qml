@@ -97,11 +97,11 @@ TestCase {
         compare(Setups.remoteLoginRoute(off, false, true), "terminal", "never set up by Omarchy: no key, the firewall closed");
         compare(Setups.remoteLoginRoute(off, true, true), "native");
         compare(Setups.remoteLoginRoute(on, false, false), "native", "turning off is always systemd's");
-        compare(Setups.sshCommand("chapdel", "chapdels-laptop"), "ssh chapdel@chapdels-laptop");
-        compare(Setups.sshCommand("chapdel", ""), "");
+        compare(Setups.sshCommand("alex", "alexs-laptop"), "ssh alex@alexs-laptop");
+        compare(Setups.sshCommand("alex", ""), "");
         compare(Setups.sshCommand("", "host"), "");
         compare(Setups.sshCommand("a b", "host"), "");
-        compare(Setups.sshCommand("chapdel", "host\nx"), "");
+        compare(Setups.sshCommand("alex", "host\nx"), "");
         // On when it starts with the computer or runs now (started by hand, enabled-runtime): security review L-3.
         verify(Setups.remoteLoginOn(on));
         verify(Setups.remoteLoginOn({installed: true, enabled: false, active: true}));
@@ -207,7 +207,7 @@ TestCase {
         id: fakeBackend
         QtObject {
             property bool devSession: false
-            property string userName: "chapdel"
+            property string userName: "alex"
             property var pendingActions: ({})
             property var files: ({})
             property var commands: ["voxtype", "omarchy-hibernation-setup", "omarchy-hibernation-available", "omarchy-network-qr"]
@@ -365,7 +365,7 @@ TestCase {
         const page = createTemporaryObject(sharingComp, testCase, {backend: s.backend, system: s.system});
         verify(page);
         compare(s.backend.busQueries.map(q => q.what), ["sharing.state", "host.state"]);
-        s.backend.finished("sharing.host", true, JSON.stringify({hostname: "chapdels-laptop"}));
+        s.backend.finished("sharing.host", true, JSON.stringify({hostname: "alexs-laptop"}));
         s.backend.finished("sharing.state", true, JSON.stringify({installed: true, unitFileState: "disabled", active: false}));
         verify(!page.on);
         const asked = [];
@@ -382,7 +382,7 @@ TestCase {
         compare(s.backend.busActions[0].tag, "sharing.act");
         s.backend.finished("sharing.state", true, JSON.stringify({installed: true, unitFileState: "enabled", active: true}));
         verify(page.on);
-        compare(page.sshLine, "ssh chapdel@chapdels-laptop");
+        compare(page.sshLine, "ssh alex@alexs-laptop");
         const row = find(page, i => i.title === "Remote Login" && i.subtitle !== undefined);
         compare(row.subtitle, "");
         // Running without starting with the computer: On, and said so (security review L-3); turning it off is systemd's.

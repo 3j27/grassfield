@@ -17,6 +17,7 @@ gen = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gen)
 
 HEADINGS = gen.f1_headings()
+HAVE_MP = (ROOT / "docs" / "master-prompt.md").exists()
 
 
 def problems(source):
@@ -28,8 +29,9 @@ def selftest():
     assert problems("x (docs/testing/f1-reference-gaps.md § Window chrome, Dock and Menus and popovers)") == []
     assert problems("see docs/testing/f1-reference-gaps.md § Search (macOS Spotlight); docs/specs/search.md") == []
     assert problems("x (master-prompt \u00a7 5.5: Reduce Motion = crossfades)") == []
-    assert problems("x (master-prompt \u00a7 5.5.9)"), "a section number with more parts than the heading"
-    assert problems("x (master-prompt \u00a7 5.5x)"), "a section number with a suffix"
+    if HAVE_MP:  # the headings of the private master prompt are needed to judge a section number
+        assert problems("x (master-prompt \u00a7 5.5.9)"), "a section number with more parts than the heading"
+        assert problems("x (master-prompt \u00a7 5.5x)"), "a section number with a suffix"
     assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu bar, Dock]") == []
     assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu barDock]"), "two names run together"
     assert problems("x master-prompt \u00a7 5.5: y [ref: docs/specs/ui.md \u00a7 Functional requirements]") == []
@@ -68,7 +70,8 @@ def selftest():
     assert problems("Estimate: a pressed light darkens by this much"), "and lower case"
     assert problems("x [ref: docs/specs/ui.md \u00a7 Material shadow]"), "a section that is not in the spec"
     assert problems("x (master-prompt \u00a7 5.5)") == []
-    assert problems("x (master-prompt \u00a7 5.55)"), "a master prompt section that does not exist"
+    if HAVE_MP:
+        assert problems("x (master-prompt \u00a7 5.55)"), "a master prompt section that does not exist"
     assert problems("ADR-0016 section 5: video") == []
     assert problems("ADR-0016 section 55: video"), "an ADR section that does not exist"
     assert problems("x [ref: docs/testing/f1-reference-gaps.md \u00a7 Menu bar]") == []
@@ -86,7 +89,7 @@ def real():
     # Mutation: renaming one real pointer of each kind makes the lint fail on the real file.
     text = (ROOT / "ui" / "tokens" / "tokens.json").read_text()
     for needle, renamed in (("docs/specs/ui.md \u00a7 Material blur follows transparency", "docs/specs/ui.md \u00a7 Material blur follows"),
-                            ("master-prompt \u00a7 5.5", "master-prompt \u00a7 5.99"),
+                            *((("master-prompt \u00a7 5.5", "master-prompt \u00a7 5.99"),) if HAVE_MP else ()),
                             ("ADR-0016 section 5", "ADR-0016 section 99"),
                             ("f1-reference-gaps.md \u00a7 Menu bar", "f1-reference-gaps.md \u00a7 Menu barX"),
                             ("docs/specs/dock.md", "docs/specs/dockX.md")):

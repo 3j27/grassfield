@@ -177,7 +177,7 @@ TestCase {
     }
 
     // The Privilege cell hugs its widest choice (inline, no bezel), so the Name column gets the rest within the window's one
-    // content margin: a short user or group name ("chapdel", "staff") is shown in full, and only a long one elides. Known
+    // content margin: a short user or group name ("alex", "staff") is shown in full, and only a long one elides. Known
     // limit: in French, beside "Lecture et écriture", the group pop-up has only a few letters at the 264-pt window (F1 gap 17;
     // "cha…" on screen), so only the owner label and the absence of overlap are checked there; Finder fits more with small
     // table controls, which Grassfield's pop-up does not have yet (review of PR #98, docs/specs/files.md FP-61).
@@ -189,7 +189,7 @@ TestCase {
     }
 
     function test_aShortNameIsNotElided(data) {
-        for (const names of [{owner: "chapdel", group: "chapdel", long: false}, {owner: "chapdel", group: "staff", long: false}, {owner: "a-user-with-a-really-quite-long-account-name", group: "a-group-with-a-long-name-too", long: true}]) {
+        for (const names of [{owner: "alex", group: "alex", long: false}, {owner: "alex", group: "staff", long: false}, {owner: "a-user-with-a-really-quite-long-account-name", group: "a-group-with-a-long-name-too", long: true}]) {
             fakeApp.permissionsResult = {valid: true, mode: 420, modeText: "-rw-r--r--", owner: names.owner, group: names.group, ownedByMe: true, isDir: false,
                                          editable: true, reason: "", groups: [names.group, "wheel"], access: [3, 1, 1]};
             const win = createTemporaryObject(fileComponent, test, {accessChoices: data.choices});
@@ -204,7 +204,7 @@ TestCase {
             verify(groupText !== undefined, "the group pop-up shows its name");
             for (const p of privileges)
                 verify(p.x >= group.x + group.width, data.tag + ": no overlap (" + (group.x + group.width) + " > " + p.x + ")");
-            // The owner row reads "chapdel (Me)" in English and "chapdel (moi)" in French (the catalog's own words): the French
+            // The owner row reads "alex (Me)" in English and "alex (moi)" in French (the catalog's own words): the French
             // label is measured with the same font, since the test runs in English.
             metrics.font = owner.font;
             metrics.text = names.owner + " (" + data.me + ")";

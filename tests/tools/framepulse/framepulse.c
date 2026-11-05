@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "usage: WAYLAND_DISPLAY=<nested socket> framepulse SECONDS\n");
         return 2;
     }
-    // The owner's session is wayland-1 (docs/CLAUDE.md): never start a client there.
+    // The owner's session is wayland-1: never start a client there.
     if (!strcmp(display, "wayland-1") || !strcmp(display, "/run/user/1000/wayland-1")) {
         fprintf(stderr, "framepulse: refusing the owner's Wayland socket\n");
         return 2;

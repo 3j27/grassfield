@@ -29,7 +29,7 @@ namespace wallpaper::commons {
 namespace {
 
 // The product's major version (CMakeLists.txt project VERSION 0.1.0) and the project contact required by Wikimedia's
-// User-Agent policy (owner-provided, ADR-0016 owner answers). No project URL exists yet (packaging uses a placeholder
+// User-Agent policy (ADR-0016). No project URL exists yet (packaging uses a placeholder
 // domain), so that part is omitted rather than invented.
 constexpr int kMajorVersion = 0;
 const char kContact[] = "chapdel.kamga2@gmail.com";

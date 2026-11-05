@@ -456,7 +456,7 @@ Hyprland's bar, not a Grassfield notice, shows config errors on 0.56.2 (CE1); it
 that fails) and its other toasts stay Hyprland's too (ADR-0035 D-2).
 
 ## 5. Password prompts (gcr, udiskie, NetworkManager, KIO; S1–S4, S6, S8, K1; ADR-0035 D-9, D-12; owner decisions Q1, Q10–Q12)
-Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12): applied in step 9a (CLAUDE.md,
+Needs the amendment of the security rule (text in ADR-0035 D-9, owner decision Q12): applied in step 9a (the project's working rules,
 master-prompt R12, ADR-0010 "Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step; R12 applies (opus
 PASS, fail closed where a secret is involved, nothing logged). Step 9a builds the bridge, its socket protocol (below) and
 its unit; step 9b the shell's queue and secret sheets for gcr's `password` and `confirm` prompts (ADR-0035 "Delivered in

@@ -4,7 +4,7 @@ Status: Proposed (integrator, under owner delegation D-5); applied with the comb
 ## Context
 - Owner goal (2026-10-26, `docs/specs/files.md` FP-71…FP-74): search as in the Finder: the scope "This Mac" or the shown
   folder, filters (kind, dates, size, tags), saved searches; "the backend is decided in an ADR (an index that exists on
-  the machine, or a bounded walk): no new service without a reason (CLAUDE.md)".
+  the machine, or a bounded walk): no new service without a reason (the project's working rules)".
 - Files today filters the shown folder by name (`FolderModel.filterText`); the tag search walks one folder tree on a
   worker thread with bounds (F16, `apps/files/src/tagsearch.*`: breadth first, one filesystem, no symbolic links, 50,000
   entries, 2,000 matches, 32 levels, generations so a superseded search never reports).

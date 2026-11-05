@@ -21,7 +21,7 @@ integrator
 ## Options
 1. Extend grassfield-menu-bridge: subscribe to the LauncherEntry signal, validate, forward a small message to the
    shell. No new process, reuses the bridge's safety code and lifetime (started with the shell, private bus in dev).
-2. A new helper process for this signal only: a new service and package content for one signal (CLAUDE.md: no new
+2. A new helper process for this signal only: a new service and package content for one signal (the project's working rules: no new
    service without need).
 3. `busctl --user monitor` / `gdbus monitor` through a Quickshell Process and parse its text: fragile output parsing,
    a monitor connection sees far more than this signal.

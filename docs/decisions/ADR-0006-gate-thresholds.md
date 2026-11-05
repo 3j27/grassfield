@@ -30,7 +30,7 @@ The 60 s sample is not a 10-minute idle run (P1 needs an owner-run idle measurem
 - Thresholds are revisited at each milestone gate with new measurements.
 
 ## Amendment 2026-10-23 (GF-017): governance record
-Items 1 and 2 restate owner decisions (docs/STATE.md "Owner decisions", D-1 to D-13: the owner's delegation, rule used for
+Items 1 and 2 restate owner decisions (the maintainers' project log "Owner decisions", D-1 to D-13: the owner's delegation, rule used for
 every choice: how macOS does it). Items 3 to 5 are **PROPOSED by the integrator, owner sign-off pending**: none of them is in
 D-1 to D-13 (D-5 covers the acceptance of ADRs only), so they are not recorded as decided.
 

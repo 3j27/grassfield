@@ -1,6 +1,6 @@
 # ADR-0032: The screen saver is a shell surface, after inactivity, that never stands in for the lock
 Status: Proposed (cloud session, owner brief 2026-10-26 "Économiseur d'écran", owner choices of 2026-10-26 recorded in
-docs/STATE.md) · Date: 2026-10-26 · Decider: owner (brief and choices), integrator (merge after review) · Number: 0032
+the maintainers' project log) · Date: 2026-10-26 · Decider: owner (brief and choices), integrator (merge after review) · Number: 0032
 
 ## Context
 The Settings brief asks for Screen Saver among the Desktop panes. On macOS 27 it is a sheet opened from Wallpaper > Screen

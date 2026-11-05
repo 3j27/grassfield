@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a change or a new capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Grassfield follows one principle: when something is undecided, we copy the macOS model (how macOS 27 lays it out, names it
+        and behaves). A request is easiest to accept when it says how macOS handles the same thing. No Apple assets or Apple
+        trademark names, and no new service, dependency or directory without a need. See CONTRIBUTING.md.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can you not do, or do badly, today?
+    validations:
+      required: true
+  - type: textarea
+    id: macos
+    attributes:
+      label: How macOS does it
+      description: Describe it in words (screenshots of Apple's software are not needed and should not be attached). If macOS has no equivalent, say so.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: The behavior you want, with the module it touches if you know it (menu bar, Dock, Settings, Files, compositor plugin, ...).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: willing
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to work on this myself.
+          required: false

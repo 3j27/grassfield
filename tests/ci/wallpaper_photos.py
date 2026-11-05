@@ -128,14 +128,27 @@ def problems(texts):
         out.append("PKGBUILD: grassfield-desktop does not depend on grassfield-wallpapers")
 
     for key in ("third", "legal"):
+        if texts.get(key) is None:  # the legal review is private: absent from the public repository
+            continue
         for p in photos:
             if p["file"] not in texts[key] or p["sourceUrl"] not in texts[key]:
                 out.append("%s: does not name %s (%s) with its Commons page" % (FILES[key], p["id"], p["file"]))
     return out
 
 
+OPTIONAL = {"legal"}  # kept in the maintainers' private notes; absent here, its check is skipped with a note
+
+
 def read():
-    return {k: (ROOT / v).read_text(encoding="utf-8") for k, v in FILES.items()}
+    out = {}
+    for k, v in FILES.items():
+        path = ROOT / v
+        if k in OPTIONAL and not path.exists():
+            print("NOTE: %s is not in this checkout; its photograph entries are NOT checked here" % v)
+            out[k] = None
+        else:
+            out[k] = path.read_text(encoding="utf-8")
+    return out
 
 
 def selftest():
@@ -169,8 +182,9 @@ def selftest():
         ("grassfield-desktop without the dependency", {"pkgbuild": base["pkgbuild"].replace("grassfield-icons grassfield-wallpapers networkmanager", "grassfield-icons networkmanager", 1)}),
         ("no shrink in build()", {"pkgbuild": base["pkgbuild"].replace("--width 5120 --quality 90", "--width 9999 --quality 90", 1)}),
         ("THIRD_PARTY.md without a photograph", {"third": base["third"].replace(first["sourceUrl"], "", 1)}),
-        ("the legal entry without a photograph", {"legal": base["legal"].replace(other["file"], "", 1)}),
     ]
+    if base["legal"] is not None:
+        mutants.append(("the legal entry without a photograph", {"legal": base["legal"].replace(other["file"], "", 1)}))
     fails = 0
     clean = problems(base)
     if clean:
@@ -199,7 +213,8 @@ def main():
     if found:
         return 1
     n = len(json.loads(read()["list"])["photos"])
-    print("PASS: wallpaper_photos: %d photographs, the pins, the PKGBUILD, THIRD_PARTY.md and the legal entry agree" % n)
+    print("PASS: wallpaper_photos: %d photographs, the pins, the PKGBUILD and THIRD_PARTY.md agree%s"
+          % (n, " (and the legal entry)" if (ROOT / FILES["legal"]).exists() else " (no private legal file here: not checked)"))
     return 0
 
 

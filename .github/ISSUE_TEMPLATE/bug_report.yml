@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in Grassfield does not work or looks wrong.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems (lock screen, polkit, secret sheets, update helper, install script, package
+        signing) must NOT be reported here: see SECURITY.md and use "Report a vulnerability" in the Security tab.
+  - type: input
+    id: grassfield
+    attributes:
+      label: Grassfield version
+      description: Output of `pacman -Q grassfield-desktop`
+      placeholder: grassfield-desktop 1.0.0rc5-1
+    validations:
+      required: true
+  - type: input
+    id: omarchy
+    attributes:
+      label: Omarchy version
+      description: Output of `omarchy-version`
+    validations:
+      required: true
+  - type: input
+    id: hyprland
+    attributes:
+      label: Hyprland and Quickshell versions
+      description: Output of `pacman -Q hyprland quickshell`
+    validations:
+      required: false
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware and display scale
+      description: CPU, GPU, laptop or desktop, each display with its resolution and scale (for example eDP-1 2880x1800 at scale 1.25).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Add a screenshot or a screen recording for anything visual (say if the scale is not 1).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        The shell and its helpers log to the user journal. Useful commands, run in the Grassfield session right after the problem:
+        `journalctl --user -u grassfield-shell -b --no-pager | tail -n 200`
+        `journalctl --user -b -p warning --no-pager | tail -n 200`
+        In a nested development session the shell log is `.dev/shell.log`. Remove anything private before pasting.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send
+      options:
+        - label: I searched the open issues for the same problem.
+          required: true
+        - label: This is not a security vulnerability (see SECURITY.md).
+          required: true

@@ -233,7 +233,7 @@ Sixteen photographs from Wikimedia Commons (ADR-0040 step 2c; the owner's call o
 `/usr/share/grassfield/wallpapers/photos/` and shown in Settings > Wallpaper > Photographs with their author, source and
 licence. The list is `packaging/arch/wallpaper-photos.json`; the build downloads each original from
 `upload.wikimedia.org`, checks its SHA-1 and changes it as follows: Resized to at most 5120 pixels wide, re-encoded as JPEG (quality 90), metadata removed (packaging/arch/PKGBUILD, apps/wallpaper-tool grassfield-wallpaper-shrink). Each photograph keeps its own
-licence; none of them is under Grassfield's licences. Details and the owner's decisions: `docs/legal/visual-review.md`
+licence; none of them is under Grassfield's licences. Details and the owner's decisions are in the maintainers' private legal review
 E40.
 
 | Photograph | Source (Commons file page) | Credit | Licence |
@@ -276,9 +276,9 @@ The notice ships as `unicode-license-v3.txt` in the grassfield-desktop package (
 - `tests/tools/vpointer/wlr-virtual-pointer-unstable-v1.xml`: reconstructed from the generated Hyprland header
   `/usr/include/hyprland/protocols/wlr-virtual-pointer-unstable-v1.hpp`, which carries MIT, "Copyright © 2019 Josef
   Gajdusek". Test tool, not packaged; the file itself has no notice yet (audit gap G11).
-- `docs/audits/finder-parity-2026-10-26/tools/virtual-keyboard-unstable-v1.xml`: the `zwp_virtual_keyboard_v1` protocol
+- `tests/tools/vkbd/virtual-keyboard-unstable-v1.xml`: the `zwp_virtual_keyboard_v1` protocol
   (wlroots / Purism), reduced to its requests and arguments, MIT: "Copyright © 2008-2011 Kristian Høgsberg, © 2010-2013
   Intel Corporation, © 2012-2013 Collabora, Ltd., © 2018 Purism SPC". The file carries the full notice verbatim (as
-  reproduced in Hyprland's generated `/usr/include/hyprland/protocols/virtual-keyboard-unstable-v1.hpp`). Audit tooling
-  of the Finder parity work (`vinput.py`), not packaged.
+  reproduced in Hyprland's generated `/usr/include/hyprland/protocols/virtual-keyboard-unstable-v1.hpp`). Test tooling
+  (`tests/tools/vkbd/`), not packaged.
 - Lua 5.5.1 headers (MIT) at build time; CMake, Ninja, Qt tools (build tools).

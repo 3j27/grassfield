@@ -185,7 +185,7 @@ render of the script.
 Bucket keys, so that the documented commands work (the bucket is `grassfield`, objects are served at the base):
 `install/grassfield-install.sh` and `install/grassfield-install.sh.sha256` (both `Cache-Control: no-cache`), and
 `grassfield-signing-key.asc` at the root (the script's host-file fallback, `$GF_BASE/grassfield-signing-key.asc`). The owner
-uploads them with `wrangler r2 object put` (commands in `docs/owner-setup/hosting-and-key.md`); the packages arrive with the
+uploads them with `wrangler r2 object put` (commands in the maintainers' private hosting notes); the packages arrive with the
 first run of grassfield-packages' publishing job.
 
 **Installer default channel (owner decision O15b of 2026-11-04, ADR-0033).** `render.py` takes the default channel from `VERSION`

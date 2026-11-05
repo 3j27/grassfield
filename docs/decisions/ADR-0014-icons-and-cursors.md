@@ -5,7 +5,7 @@ Status: Accepted (owner delegation D-5, 2026-10-23; status before acceptance: Pr
 ## Context
 The owner wants icons and cursors as Grassfield capabilities: icons with a live tint like the macOS 26 icon appearance
 modes (Default, Dark, Clear, Tinted) and Material You themed icons, and Grassfield's own cursor set with an adjustable
-accent and size. Owner decisions (2026-10-19, docs/STATE.md):
+accent and size. Owner decisions (2026-10-19, the maintainers' project log):
 - Base icon theme for the internal phase (superseded: WhiteSur was dropped on 2026-10-21, the base is now Grassfield's own icons, Breeze, Adwaita, hicolor, ADR-0017; the text that follows is the history): WhiteSur (third-party, GPL-3.0, a macOS-style theme), shipped as a package
   dependency and never vendored into this MIT repository; a designer replaces it with Grassfield's own set in 6–8 months.
   Apple's own icons are never used (hard rule). docs/legal/visual-review.md E27 must be reviewed again before any

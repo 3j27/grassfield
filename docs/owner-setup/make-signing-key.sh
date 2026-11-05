@@ -10,7 +10,7 @@
 #   - writes five files to a new private folder (on tmpfs by default, so no secret reaches the btrfs disk), then checks
 #     them, the secret file included (a signature made from a fresh home that holds only that file);
 #   - always stops the temporary gpg-agent and shreds the temporary GNUPGHOME, whatever happens (not after SIGKILL: see --help).
-# Prints only the fingerprint and the paths. Details: docs/owner-setup/hosting-and-key.md. Renewal: renew-signing-key.sh.
+# Prints only the fingerprint and the paths. Details: ADR-0033 and ADR-0043. Renewal: renew-signing-key.sh.
 set -euo pipefail
 umask 077
 ulimit -c 0 # no core dump of a process that holds a passphrase
@@ -262,7 +262,7 @@ D'AVOIR VERIFIE LES COPIES HORS LIGNE (etape 1). This folder is on $fstype ($([[
 Never import this key into ~/.gnupg. Never re-run the script to "recover" a lost folder: it makes a DIFFERENT key.
 N'importez jamais cette cle dans ~/.gnupg. Ne relancez jamais le script pour "recuperer" : il cree une AUTRE cle.
 
-EN - Next steps, in this order, in one sitting (full guide: docs/owner-setup/hosting-and-key.md)
+EN - Next steps, in this order, in one sitting (background: ADR-0033, ADR-0043)
  1. Copy ALL FIVE files of this folder to two offline media (two separate USB keys, kept in two places) and check each copy
     with cmp against the original. Only then go on. Whoever has the revocation certificate can revoke the key.
  2. Add SECRET-grassfield-signing-key.asc and its passphrase to the protected environments publish-stable and publish-beta of
@@ -277,7 +277,7 @@ EN - Next steps, in this order, in one sitting (full guide: docs/owner-setup/hos
  6. If this script was killed with SIGKILL it left the temporary folder and perhaps a gpg-agent. Clean up with:
     for d in "\${XDG_RUNTIME_DIR:-/tmp}"/grassfield-key.*; do gpgconf --homedir "\$d/gnupg" --kill all; gpgconf --homedir "\$d/verify/home" --kill all; rm -rf "\$d"; done
 
-FR - La suite, dans cet ordre, en une seule fois (guide complet : docs/owner-setup/hosting-and-key.md)
+FR - La suite, dans cet ordre, en une seule fois (contexte : ADR-0033, ADR-0043)
  1. Copiez les CINQ fichiers de ce dossier sur deux supports hors ligne (deux cles USB, rangees a deux endroits) et verifiez
     chaque copie avec cmp contre l'original. Ensuite seulement, continuez. Qui possede le certificat de revocation peut
     revoquer la cle.
@@ -301,4 +301,4 @@ printf '  %s\n' "$fpr"
 say "Expires $expiry_date; renew before $deadline (renew-signing-key.sh)." "Expire le $expiry_date ; a renouveler avant le $deadline (renew-signing-key.sh)."
 say "Files in $out:" "Fichiers dans $out :"
 printf '  %s\n' "$pub" "$fpf" "$sec  (SECRET)" "$rev  (SECRET)" "$out/README.txt"
-say "Next: $out/README.txt and docs/owner-setup/hosting-and-key.md." "Suite : $out/README.txt et docs/owner-setup/hosting-and-key.md."
+say "Next: $out/README.txt." "Suite : $out/README.txt."

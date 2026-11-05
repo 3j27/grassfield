@@ -6,7 +6,7 @@ The Dock, Apps, Search, the menu bar's app menus, the Dock menu and the desktop 
 their own way (`DesktopEntry.execute()`, `Quickshell.execDetached`, `gio open`). In a dev session (nested
 Hyprland on the owner's machine, `GRASSFIELD_DEV=1`) an app started by the shell runs with the owner's real
 profiles: a reviewer's mis-click started Chromium with the owner's default profile and Nautilus on the real
-home folder (STATE.md incident, 2026-10-17). Several modules need the same rule, so it is a cross-module
+home folder (the maintainers' project log incident, 2026-10-17). Several modules need the same rule, so it is a cross-module
 contract.
 
 ## Options

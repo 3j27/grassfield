@@ -3,7 +3,7 @@ Status: Accepted (owner decisions 2026-10-20, batch 10/11); step 1 implemented t
 
 ## Context
 
-### Owner decisions (2026-10-20, docs/STATE.md:122-125)
+### Owner decisions (2026-10-20, the maintainers' project log)
 - **Step 1, local:** photo, video and carousel wallpapers from local files; a Settings > Wallpaper pane, a rotation
   interval and a crossfade.
 - **Step 2, online:** NASA Astronomy Picture of the Day (APOD) and the Wikimedia Commons picture of the day (POTD),

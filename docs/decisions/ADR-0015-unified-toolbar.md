@@ -61,7 +61,7 @@ Status: Accepted 2026-10-22 after the nested spike, with integrator decisions on
   - Files reads `grassfield.json` live (apps/files/src/filesapp.cpp:115, :154-156).
   - Without the plugin, the apps have no lights and no drag (docs/specs/files.md:207, docs/specs/settings.md:99).
 - **Legal.** The lights are entry E18, "needs legal review" (docs/legal/visual-review.md:260-265). The owner keeps them
-  as they are while legal advice is pending (docs/STATE.md:68).
+  as they are while legal advice is pending (the maintainers' project log).
 
 ### Hyprland 0.56.2 (VERIFIED from /usr/include/hyprland)
 - **xdg-decoration.**
@@ -634,7 +634,7 @@ coverage-weighted centroid within each light's 23-pt cell, checked to ± 0.01 px
   10.2 during a double-click on fixture A9. That attempt was discarded and repeated; its cause was not identified.
 
 ## Integrator decisions after the spike (2026-10-22)
-The owner asked for decisions without questions (2026-10-21, docs/STATE.md); the macOS model decides the open points.
+The owner asked for decisions without questions (2026-10-21, the maintainers' project log); the macOS model decides the open points.
 - **Q4: the spike's split is accepted.** Zoom is native: `gf-no-maximize-event` matches `xdg_tag = "negative:.+"`, and
   the app sends one maximize request per zoom and never reads Qt's maximized state (step 4 defect). Minimize goes
   through the plugin bridge (`requestsMinimize` → `minimize-request`, FR6); without the plugin the app greys its

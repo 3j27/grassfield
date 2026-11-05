@@ -189,7 +189,7 @@ TestCase {
 
     function test_paneAfterOmarchysSetup() {
         const t = make(pageComp, false, {"/etc/pam.d/sudo": testCase.sudoPam, "/etc/pam.d/polkit-1": testCase.polkitPam,
-            "/etc/pam.d/omarchy-lock-fingerprint": "auth required pam_fprintd.so\n", "/etc/fido2/fido2": "chapdel:abc,def\n"});
+            "/etc/pam.d/omarchy-lock-fingerprint": "auth required pam_fprintd.so\n", "/etc/fido2/fido2": "alex:abc,def\n"});
         compare(t.backend.busQueries[0], {what: "fprint.state", tag: "fprint.state"});
         t.backend.finished("fprint.reader", true, "");
         verify(t.item.fingerprintSetUp);

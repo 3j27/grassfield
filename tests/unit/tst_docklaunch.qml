@@ -109,8 +109,8 @@ TestCase {
 
     function test_menuWindowsLongSameTitlesStayDistinct() {
         Launch.resetNumbers();
-        const long1 = "chapdel@archlinux: ~/workspace/grassfield-a";
-        const long2 = "chapdel@archlinux: ~/workspace/grassfield-b";
+        const long1 = "builder@archlinux: ~/workspace/grassfield-a";
+        const long2 = "builder@archlinux: ~/workspace/grassfield-b";
         const rows = Launch.menuWindows([wi("p", long1, 2, false), wi("q", long2, 1, false)], 40, "App");
         // Elided to the same 40 characters: the number follows the cut and every row is told apart.
         compare(rows.length, 2);

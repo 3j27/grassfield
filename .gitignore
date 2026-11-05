@@ -1,6 +1,6 @@
-# Dev state of the nested instance (master-prompt R3)
+# Dev state of the nested instance
 .dev/
-# Apple reference material: never committed (master-prompt §2, §14)
+# Apple reference material: never committed
 design/reference/
 # Build outputs
 build/
@@ -13,5 +13,14 @@ spikes/**/out/
 # Python bytecode
 __pycache__/
 *.pyc
-# Package downloads of the Finder parity audit's sysroot builder (docs/audits/finder-parity-2026-10-26/tools/mkroot.py)
+# Package downloads of the Finder parity audit's sysroot builder
 docs/audits/finder-parity-2026-10-26/tools/cache/
+# Maintainers' private notes. They live in a separate private repository; a local copy must never be committed here.
+/CLAUDE.md
+/docs/master-prompt.md
+/docs/STATE.md
+/docs/audits/
+/docs/STATE-history.md
+/.claude/
+/branding/concepts/
+/docs/legal/visual-review.md

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tokens only: no literal design value in the QML (CLAUDE.md "tokens only, no hardcoded values"; ADR-0039 steps 2-5, rule 6).
+"""Tokens only: no literal design value in the QML (the project rule "tokens only, no hardcoded values"; ADR-0039 steps 2-5, rule 6).
 
   python3 -I tests/ci/qml_literals.py             scan the tree, exit 1 on any literal outside the allowlist
   python3 -I tests/ci/qml_literals.py --selftest  the scanner on fixed samples

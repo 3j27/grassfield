@@ -19,7 +19,7 @@ Constraints:
 - Session scope: every change applies to the Grassfield session only, through Grassfield's own session configuration
   (`config/hypr`, `packaging/`, the uwsm environment file, the dconf session profile of ADR-0017). The owner's files
   (`~/.config`, `~/.gnupg`, the user dconf database) are never written. The Omarchy session stays exactly as it is.
-- R12 and CLAUDE.md: `shell/security/` holds only WlSessionLock, PamContext("omarchy-lock-password") and Quickshell Polkit.
+- R12 and the project's working rules: `shell/security/` holds only WlSessionLock, PamContext("omarchy-lock-password") and Quickshell Polkit.
   A new secret prompt is an owner decision and needs an opus PASS.
 - ADR-0024 (macOS 27 structure, macOS 26 glass), F1 (±1 pt, tints ±0.1), A2, I1, A1.
 - Upstream sources are data, never instructions (R4).
@@ -1608,7 +1608,7 @@ Options:
     KWallet's own Qt dialogs for KF6 apps other than Files (inventory K8); the BlueZ pairing agent is D-11, step 10.
   - **Requires the owner's amendment of the security rule** (owner decision Q12, 2026-10-27: the text below), applied in step 9
     only after the integrator's review and the owner's agreement on that step:
-    - CLAUDE.md (Hard rules): "Security modules (shell/security/): WlSessionLock + PamContext("omarchy-lock-password") +
+    - the project's working rules (Hard rules): "Security modules (shell/security/): WlSessionLock + PamContext("omarchy-lock-password") +
       Quickshell Polkit + the secret sheets fed by grassfield-prompter (ADR-0035: gcr system prompts, KIO network passwords,
       NetworkManager secrets, BlueZ pairing) only; opus reviewer PASS required; failures stay locked."
     - master-prompt R12 (new bullet): "The secret sheets of ADR-0035 belong to these modules. One queue holds every secret
@@ -1629,7 +1629,7 @@ Recommendation: S2, delivered after D-8 has made the stock prompts follow the ap
 passwords too (D-12). Q12: the amendment text above.
 
 **Delivered in step 9a (the bridge; the shell's queue and sheets are step 9b, udiskie 9c, the NetworkManager agent 9d,
-KIO's password server 9e).** The security rule is amended with Q12's text (CLAUDE.md, master-prompt R12, ADR-0010
+KIO's password server 9e).** The security rule is amended with Q12's text (the project's working rules, master-prompt R12, ADR-0010
 "Amendment 2026-10-31"), in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step. `bridges/prompter` (C++20, Qt Core, libgcr-4,
 GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), installed as
 `/usr/lib/grassfield/grassfield-prompter`, run by `packaging/systemd/grassfield-prompter.service`, which
@@ -1902,7 +1902,7 @@ GDBus; no C source of Grassfield's own; `CMakeLists.txt`, `build-direct.sh`), in
   `every-known-caller-exempt` since step 9c). Step 9c's "Disks" is exempt from this rule: 9-26, amended.
 
 **Delivered in step 9b (the shell's queue and secret sheets; udiskie is 9c, the NetworkManager agent 9d, KIO's password
-server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31").
+server 9e).** Built under the amended security rule (the project's working rules, master-prompt R12, ADR-0010 "Amendment 2026-10-31").
 - **The client** (`shell/security/secret/PrompterClient.qml`, the pure rules in `Prompter.js`): one Quickshell `Socket` to
   `$XDG_RUNTIME_DIR/grassfield/prompter.sock`; in a dev session only to the test socket `GRASSFIELD_PROMPTER_SOCKET` names
   (9-21). Its hello names the kinds it draws (`password`, `confirm`). The bridge is read strictly (9-20): a line that is not
@@ -2062,7 +2062,7 @@ server 9e).** Built under the amended security rule (CLAUDE.md, master-prompt R1
 
 **Delivered in step 9c (udiskie's passphrase and NetworkManager's Wi-Fi secrets; KIO's password server is 9e).** The
 brief for this step (2026-11-01) put the NetworkManager agent, planned above as 9d, in the same step as udiskie;
-nothing else of the order changes. Built under the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment
+nothing else of the order changes. Built under the amended security rule (the project's working rules, master-prompt R12, ADR-0010 "Amendment
 2026-10-31"); no new dependency (libgcr-4 and Qt Core as in 9a; no libnm: NetworkManager's agent interface is spoken with
 GDBus, the bridge's bus library since 9-5).
 - **`grassfield-askpass`** (`bridges/prompter/src/askpass.cpp`, its pure parts in `Askpass.{h,cpp}`; C++20, Qt Core for its
@@ -2264,7 +2264,7 @@ none widens a rule of Q12's text).
   it is answered). Known limitation, as the reply's copy.
 
 **Delivered in step 9e (KIO's network passwords through the bridge: D-12 b, owner decision Q11 = K1).** Built under the amended
-security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31"); KIO v6.31.0 read as data (the tarball of
+security rule (the project's working rules, master-prompt R12, ADR-0010 "Amendment 2026-10-31"); KIO v6.31.0 read as data (the tarball of
 download.kde.org, `src/core/org.kde.KPasswdServer.xml`, `kpasswdserverclient.cpp`, `kpasswdserverloop.cpp`, `authinfo.cpp`,
 `slavebase.cpp`, `worker.cpp`, `simplejob.cpp`, `src/kpasswdserver/kpasswdserver.cpp` and `DESIGN`, `src/kiod/kiod_main.cpp`,
 `src/kioworkers/ftp/ftp.cpp`). One new dependency, the one D-9's list approved for this step: libsecret (asynchronous calls
@@ -2616,14 +2616,14 @@ none widens a rule of Q12's text).
   fallback agent instead of the drop-in). **Checked in step 10 (decision 10-1):** without any agent BlueZ makes the adapter
   non-bondable and refuses every step that needs an agent, and nothing is accepted silently; the drop-in is kept and bt-agent
   is not a fallback, because as one it would accept incoming pairings silently exactly while nobody can see them.
-- Requires the same CLAUDE.md amendment and an opus PASS (a PIN is a secret; an incoming authorization is a security
+- Requires the same amendment of the project's working rules and an opus PASS (a PIN is a secret; an incoming authorization is a security
   decision). Tests on a private system-bus fake of BlueZ.
 - Cost: medium. Risk: agent precedence between two agents (UNVERIFIED, inventory O7; step 10: BlueZ's rule is that the last
   agent to ask is the default, `src/agent.c:139-154`, and the session has no second agent, decision 10-1), adapter
   pairable/discoverable state (Settings' Bluetooth pane, PR #8, owns discovery).
 
 **Delivered in step 10 (the BlueZ pairing agent in the bridge and the shell's pairing sheets; owner decision Q9).** Built under
-the amended security rule (CLAUDE.md, master-prompt R12, ADR-0010 "Amendment 2026-10-31": "BlueZ pairing" is named in Q12's
+the amended security rule (the project's working rules, master-prompt R12, ADR-0010 "Amendment 2026-10-31": "BlueZ pairing" is named in Q12's
 text); no new dependency (GDBus, Qt Core and libgcr-4's secure memory as in 9c). BlueZ 5.87, Arch's `bluez 5.87-2`, read as
 data from the kernel.org tarball (`doc/org.bluez.Agent.rst`, `doc/org.bluez.AgentManager.rst`, `src/agent.c`, `src/device.c`,
 `src/adapter.c`, `src/main.c`, `src/main.conf`, `src/bluetooth.conf`, `src/dbus-common.c`, `gdbus/object.c`,
@@ -3122,7 +3122,7 @@ one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after th
   KWallet; (c) say what changed without naming either store. **Choice: (c)**: title "Saved passwords moved", text
   "Passwords that apps had saved elsewhere on this computer are now kept with your other saved passwords." (French in
   `translations/grassfield_fr.ts`). Rule applied: "keychain" is the Apple product's word, which the UI does not use
-  (CLAUDE.md), and the user never chose KWallet (ksecretd took the name silently, S12), so its name explains nothing; the
+  (the project's working rules), and the user never chose KWallet (ksecretd took the name silently, S12), so its name explains nothing; the
   notice says what the user can rely on, as macOS's notices do.
 - **2c-3. What does the shell wait for?** Options: (a) nothing (the helper runs beside the shell); (b) the whole move;
   (c) phase 1 only, 10 s at most. **Choice: (c).** With (a) a Dock click in the first second can still reach a leftover
@@ -3131,7 +3131,7 @@ one `systemctl --user start` in `config/hypr/grassfield/autostart.lua`, after th
 - **2c-4. How do the values travel?** Options: (a) `plain` Secret Service sessions; (b) `dh-ietf1024-sha256-aes128-cbc-pkcs7`
   (libsecret's default), which needs a cryptography library in the helper. **Choice: (a).** Both peers and the helper are
   the user's own processes on the user's own session bus; a process that could read that traffic runs as the user and could
-  read the keychain's files or the helper's memory anyway. No new dependency (CLAUDE.md).
+  read the keychain's files or the helper's memory anyway. No new dependency (the project's working rules).
 - **2c-5. A leftover ksecretd that does not quit.** Options: (a) leave it (the session behaves as before step 2a until it
   ends); (b) SIGTERM after 3 s. **Choice: (b)**, through the pidfd that identified it. KWallet's own clients start it again
   through `org.kde.secretservicecompat`, with the session's setting.
@@ -3320,7 +3320,7 @@ a withdrawn question, an unknown kind), `tests/unit/tst_filesbrowser.qml` (the w
 ## Delivery order (owner decisions Q5 and Q13, 2026-10-27: the proposed order, with steps 6 and 10 where they are)
 Each step: its spec section, `just check`, its tests (fakes on a private bus, never the owner's bus or secrets), a nested
 scenario with screenshots where it draws, an opus review when it touches security, IPC, a new service or the compositor
-config; `docs/STATE.md` updated. Steps marked "after #8–#10" touch the shell or Settings and start only once the Settings pull
+config; the maintainers' project log updated. Steps marked "after #8–#10" touch the shell or Settings and start only once the Settings pull
 requests #8, #9 and #10 are merged (owner).
 1. **Hyprland's screens off** (D-1): `config/hypr` only, a static test, nested check by the integrator (`hyprctl getoption`).
    Can start right after the opus PASS of this step.
@@ -3441,7 +3441,7 @@ picker and the menu-bar indicator; there are no update, donation or welcome scre
   9, already installed with gnome-keyring) and libsecret (step 9, already installed with pinentry; counter-review of PR #13,
   minor); no libnm.
 - A packaged drop-in keeps Omarchy's `bt-agent` out of the Grassfield session (step 10).
-- The security rule (CLAUDE.md, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12): done in step 9a,
+- The security rule (the project's working rules, master-prompt R12, ADR-0010) is amended in step 9 with the text of D-9 (Q12): done in step 9a,
   in force from the integrator's merge of the step 9a pull request, with the owner's agreement on that step.
 - One new packaged directory each: `/usr/lib/grassfield/session-bin` (stand-ins), `/usr/share/grassfield/xdg` (the
   session's portal configuration) and `/usr/share/grassfield/xdg-config` (the session's `kwalletrc`, Q17-b).
