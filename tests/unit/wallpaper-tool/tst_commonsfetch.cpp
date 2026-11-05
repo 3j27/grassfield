@@ -239,7 +239,7 @@ TEST(CommonsCurl, ArgumentVectorCarriesTheAdrFlags)
     EXPECT_TRUE(l.contains(QStringLiteral("--noproxy")));
     // The User-Agent is the product and its contact, nothing of this machine.
     EXPECT_TRUE(userAgent().startsWith(QStringLiteral("Grassfield/0 (")));
-    EXPECT_TRUE(userAgent().contains(QStringLiteral("chapdel.kamga2@gmail.com")));
+    EXPECT_TRUE(userAgent().contains(QStringLiteral("developer@notchpay.co")));
     EXPECT_FALSE(userAgent().contains(QDir::homePath()));
 }
 
