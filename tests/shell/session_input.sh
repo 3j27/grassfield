@@ -211,6 +211,22 @@ elseif case == "fallback-non-latin" then
   io.open = function(path, mode) return open(path == "/etc/vconsole.conf" and d .. "/vconsole.conf" or path, mode) end
   dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
   say("fallback-layout", tostring(flat("kb_layout")), "[" .. tostring(flat("kb_variant")) .. "]", tostring(flat("kb_options")))
+elseif case == "fallback-xkb45" then
+  -- Omarchy 4.5.0 defines its own XKB option in /etc/xkb (Caps Lock stays Caps Lock, Shift + Caps Lock is Compose): the fallback
+  -- uses it when both files are there (read through a stub of io.open), the stock options otherwise (case "fallback").
+  local d = os.getenv("TMPCASE")
+  fixture(d .. "/omarchy", "error('renamed upstream')\n")
+  local present = os.getenv("XKB45") == "1"
+  local f = assert(io.open(d .. "/evdev", "w")); f:write("! option = symbols\n  omarchy:shift_caps_compose = +omarchy(shift_caps_compose)\n"); f:close()
+  f = assert(io.open(d .. "/omarchy-symbols", "w")); f:write('xkb_symbols "shift_caps_compose" {};\n'); f:close()
+  local map = { ["/etc/xkb/rules/evdev"] = d .. "/evdev", ["/etc/xkb/symbols/omarchy"] = d .. "/omarchy-symbols" }
+  local open = io.open
+  io.open = function(path, mode)
+    if map[path] then return present and open(map[path], mode) or nil end
+    return open(path, mode)
+  end
+  dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
+  say("xkb45", tostring(present), tostring(flat("kb_options")))
 elseif case == "no-omarchy" then
   local m = dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
   say("ok", tostring(m.ok), "reason", tostring(m.reason ~= nil))
@@ -223,7 +239,7 @@ elseif case == "bad-monitors" then
   say("ok", tostring(m.ok), "monitors", tostring(m.monitors), "problems", #m.problems)
 elseif case == "real" then
   local m = dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
-  say("ok", tostring(m.ok), "input", m.input, "problems", #m.problems, "compose", tostring((flat("kb_options") or ""):find("compose:caps", 1, true) ~= nil),
+  say("ok", tostring(m.ok), "input", m.input, "problems", #m.problems, "compose", tostring((flat("kb_options") or ""):find("compose:caps", 1, true) ~= nil or (flat("kb_options") or ""):find("omarchy:shift_caps_compose", 1, true) ~= nil),
       "rate", tostring(flat("repeat_rate")), "numlock", tostring(flat("numlock_by_default")))
   for _, p in ipairs(m.problems) do say("problem:", p) end
 elseif case:match("^session") or case:match("^dev") then
@@ -342,6 +358,13 @@ desc="when Omarchy's input module cannot load, the same defaults are applied (co
 check grep -q "^ok true input fallback problems 1$" <<<"$out"
 check grep -q "^options compose:caps,shift:both_capslock_cancel rate 40 delay 250 numlock true layout-set true$" <<<"$out"
 
+out=$(run fallback-xkb45 OMARCHY_PATH="$tmp/fallback-xkb45/omarchy" XKB45=1)
+desc="the fallback follows Omarchy 4.5.0 (Caps Lock stays Caps Lock, Shift + Caps Lock is Compose) when its XKB option is installed in /etc/xkb"
+check grep -q "^xkb45 true omarchy:shift_caps_compose$" <<<"$out"
+out=$(run fallback-xkb45 OMARCHY_PATH="$tmp/fallback-xkb45/omarchy" XKB45=0)
+desc="... and keeps Omarchy 4.0.6's stock options when it is not"
+check grep -q "^xkb45 false compose:caps,shift:both_capslock_cancel$" <<<"$out"
+
 out=$(run fallback-non-latin OMARCHY_PATH="$tmp/fallback-non-latin/omarchy")
 desc="the fallback keeps Omarchy's guard: a non-Latin layout gets U.S. first, reached with both Alt keys"
 check grep -q "^fallback-layout us,ru \[,phonetic\] compose:caps,shift:both_capslock_cancel,grp:alts_toggle$" <<<"$out"
@@ -353,10 +376,16 @@ in_fallback=$(sed -n 's/^ *local non_latin = "\(.*\)"$/\1/p' "$root/config/hypr/
 in_settings=$(sed -n '/^var NON_LATIN = \[/,/\];/p' "$root/apps/settings/qml/Keyboard.js" | sed 's/^var NON_LATIN = //' | words)
 desc="one list of non-Latin layouts in input.lua, omarchy.lua's fallback and Settings' Keyboard.js ($(wc -w <<<"$in_input") layouts)"
 check [ "$(wc -w <<<"$in_input")" -ge 20 -a "$in_input" == "$in_fallback" -a "$in_input" == "$in_settings" ]
-if [[ -r /usr/share/omarchy/default/hypr/input.lua ]]; then
-  in_omarchy=$(awk '/^local non_latin_layouts =/ {getline; print}' /usr/share/omarchy/default/hypr/input.lua | words)
-  desc="the list is the installed Omarchy's (default/hypr/input.lua)"
-  check [ "$in_omarchy" == "$in_input" ]
+# The installed Omarchy and, when GRASSFIELD_TEST_OMARCHY_ALT names one (an Omarchy 4.5.0 checkout, say), that tree too.
+omarchy_trees=()
+[[ -r /usr/share/omarchy/default/hypr/input.lua ]] && omarchy_trees+=(/usr/share/omarchy)
+[[ -n ${GRASSFIELD_TEST_OMARCHY_ALT:-} && -r $GRASSFIELD_TEST_OMARCHY_ALT/default/hypr/input.lua ]] && omarchy_trees+=("$GRASSFIELD_TEST_OMARCHY_ALT")
+if ((${#omarchy_trees[@]})); then
+  for tree in "${omarchy_trees[@]}"; do
+    in_omarchy=$(awk '/^local non_latin_layouts =/ {getline; print}' "$tree/default/hypr/input.lua" | words)
+    desc="the list is that of Omarchy's default/hypr/input.lua at $tree"
+    check [ "$in_omarchy" == "$in_input" ]
+  done
 else
   echo "SKIP: Omarchy is not installed here: its list of non-Latin layouts NOT VERIFIED"
 fi
@@ -369,10 +398,12 @@ out=$(run bad-monitors OMARCHY_PATH="$tmp/bad-monitors/omarchy")
 desc="a broken monitors.lua is reported, the environment and input still load"
 check grep -q "^ok true monitors false problems 1$" <<<"$out"
 
-if [[ -r /usr/share/omarchy/default/hypr/input.lua ]]; then
-  out=$(run real OMARCHY_PATH=/usr/share/omarchy)
-  desc="against the installed Omarchy: input defaults load (compose:caps, repeat 40, numlock), no problem"
-  check grep -q "^ok true input omarchy problems 0 compose true rate 40 numlock true$" <<<"$out"
+if ((${#omarchy_trees[@]})); then
+  for tree in "${omarchy_trees[@]}"; do
+    out=$(run real OMARCHY_PATH="$tree")
+    desc="against Omarchy at $tree: input defaults load (compose:caps or Omarchy 4.5.0's omarchy:shift_caps_compose, repeat 40, numlock), no problem"
+    check grep -q "^ok true input omarchy problems 0 compose true rate 40 numlock true$" <<<"$out"
+  done
 else
   echo "SKIP: Omarchy is not installed here"
 fi
