@@ -7,6 +7,8 @@ import Grassfield.Ui
 import qs.platform
 import qs.services
 import "CaptureModel.js" as Model
+import "../overview/ClientChrome.js" as ClientChrome
+import "../platform/WindowTiling.js" as WindowTiling
 
 // The capture toolbar's window (spec docs/specs/system-dialogs.md "Capture toolbar", ADR-0045 OC-1), one per screen, mapped
 // only on the controller's screen while open. As Search, a full-screen transparent overlay that holds the keyboard (exclusive)
@@ -30,6 +32,14 @@ Variants {
     id: root
 
     required property var controller
+
+    // The display that has held the keyboard since the toolbar opened ("" before the first); see the windows' holdsKeyboard.
+    property string holder: ""
+    readonly property bool isOpen: controller.open
+    onIsOpenChanged: {
+        if (!isOpen)
+            holder = "";
+    }
 
     model: Quickshell.screens
 
@@ -66,7 +76,30 @@ Variants {
         // the compositor: a click on another display never reaches that display's surface. In the modes that take a click on
         // any display (coversAll) the keyboard therefore follows the pointer's display (the focused monitor), so the display the
         // pointer is on is always the one that is Exclusive; otherwise it is the toolbar's.
-        readonly property bool holdsKeyboard: win.covered && win.name === (root.controller.coversAll ? Compositor.activeScreenName : root.controller.screenName)
+        readonly property bool wantsKeyboard: win.covered && win.name === (root.controller.coversAll ? Compositor.activeScreenName : root.controller.screenName)
+        // What the surface asks the compositor for. Exclusive keyboard is taken when the layer is mapped: a layer that is already
+        // mapped and changes to Exclusive is not given the focus (Escape and Return reached nothing on the display the pointer
+        // moved to). The hand-over between displays is therefore a new mapping: the old holder drops to None at once, the new
+        // one unmaps, then maps again as Exclusive. `root.holder` names the display that held it since the toolbar opened.
+        property bool holdsKeyboard: false
+        property bool remapping: false
+        onWantsKeyboardChanged: {
+            keyHandover.stop();
+            win.remapping = false;
+            if (!wantsKeyboard) {
+                holdsKeyboard = false;
+                return;
+            }
+            if (root.holder === "" || !win.visible) {
+                holdsKeyboard = true;
+            } else {
+                // Taken over from another display: unmap, then map as Exclusive.
+                holdsKeyboard = false;
+                win.remapping = true;
+                keyHandover.restart();
+            }
+            root.holder = win.name;
+        }
         readonly property bool recordMode: Model.isRecord(root.controller.mode)
         readonly property bool framing: win.shown && (root.controller.mode === "selection" || root.controller.mode === "recordSelection")
         readonly property bool windowMode: win.covered && root.controller.mode === "window"
@@ -102,14 +135,20 @@ Variants {
         // The window drawn on top under the point (this display's coordinates), from the platform's window list of the shown
         // Desktop and the order the windows were activated in, clipped to the display; null when none.
         function windowUnder(x: real, y: real): var {
-            const list = Compositor.windowsOn(win.name, Compositor.topologyRevision).map(w => ({
+            const list = Compositor.windowsOn(win.name, Compositor.topologyRevision).map(w => {
+                // The window as it looks: the plugin's titlebar strip lies above the window's own box (none on a window that
+                // draws its own chrome, none without the plugin), and macOS tints and captures the window with its title bar.
+                const away = WindowTiling.splitTitleAway(TilingLink.splits, w.address, Compositor.splitTitlesAway);
+                const band = Capabilities.pluginPresent && !w.fullscreen ? ClientChrome.band(w, Capabilities.has(ClientChrome.FEATURE), Tokens.windowTitlebarHeight, away) : 0;
+                return {
                         x: w.x,
-                        y: w.y,
+                        y: w.y - band,
                         w: w.w,
-                        h: w.h,
+                        h: w.h + band,
                         fullscreen: w.fullscreen,
                         stamp: w.toplevel && Compositor.recency.has(w.toplevel) ? Compositor.recency.get(w.toplevel) : 0
-                    }));
+                };
+            });
             const hit = Model.windowAt(list, x, y);
             return hit ? Model.clip(hit, win.bounds) : null;
         }
@@ -193,7 +232,7 @@ Variants {
         screen: modelData
         // Mapped a moment longer than it holds the keyboard: a layer destroyed while Exclusive leaves the compositor with no
         // keyboard focus. The other displays' surfaces (input only) hold it while the pointer is on them (holdsKeyboard).
-        visible: release.mapped || win.covered
+        visible: (release.mapped || win.covered) && !win.remapping
         anchors {
             top: true
             bottom: true
@@ -232,6 +271,16 @@ Variants {
 
         Region {
             id: passThrough
+        }
+
+        Timer {
+            id: keyHandover
+
+            interval: Tokens.focusReturnMenuActionSettleMs
+            onTriggered: {
+                win.holdsKeyboard = win.wantsKeyboard;
+                win.remapping = false;
+            }
         }
 
         KeyboardRelease {
