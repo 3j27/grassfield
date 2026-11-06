@@ -6,6 +6,7 @@
 #include "autoappearance.h"
 
 #include "filelogic.h"
+#include "ongoing.h"
 #include "launchguard.h"
 #include "navlogic.h"
 #include "permissionlogic.h"
@@ -193,6 +194,14 @@ FilesApp::FilesApp(const QList<QUrl> &initialUrls, QObject *parent)
     m_progressTimer.setSingleShot(true);
     m_progressTimer.setInterval(kProgressDelayMs);
     connect(&m_progressTimer, &QTimer::timeout, this, &FilesApp::publishJobs);
+    // The jobs in the menu bar (ADR-0052): Stop there stops the job as the Copy window's button does.
+    m_ongoing = new grassfield::apps::OngoingPublisher(this);
+    connect(m_ongoing, &grassfield::apps::OngoingPublisher::actionInvoked, this, [this](const QString &id, const QString &action) {
+        bool ok = false;
+        const int job = id.startsWith(QLatin1String("copy-")) ? id.mid(5).toInt(&ok) : 0;
+        if (action == QLatin1String("stop") && ok)
+            cancelJob(job);
+    });
     qApp->installEventFilter(this);
 
     // Appearance follows grassfield.json like every Grassfield surface (read only).
@@ -1946,6 +1955,7 @@ void FilesApp::setProgressDelayForTests(int ms)
 
 void FilesApp::publishJobs()
 {
+    QHash<QString, grassfield::apps::OngoingActivity> activities;
     QVariantList list;
     QList<JobProgress> rows = m_progress.values();
     std::sort(rows.begin(), rows.end(), [](const JobProgress &a, const JobProgress &b) { return a.id < b.id; });
@@ -1957,7 +1967,17 @@ void FilesApp::publishJobs()
         const QString detail = FileLogic::copyDetail(p.processed, p.total, p.speed, p.percent);
         const int percent = FileLogic::copyPercent(p.processed, p.total, p.percent);
         list.append(QVariantMap{{QStringLiteral("id"), int(p.id)}, {QStringLiteral("title"), title}, {QStringLiteral("detail"), detail}, {QStringLiteral("percent"), percent}});
+        // The same row as an ongoing activity (ADR-0052): the bar sweeps while the job tells no amount.
+        grassfield::apps::OngoingActivity a;
+        a.kind = QStringLiteral("transfer");
+        a.title = title;
+        a.subtitle = detail;
+        a.progress = percent >= 0 ? qBound(0, percent, 100) / 100.0 : -1;
+        a.actions = {{QStringLiteral("stop"), tr("Stop")}};
+        activities.insert(QStringLiteral("copy-%1").arg(p.id), a);
     }
+    if (m_ongoing)
+        m_ongoing->sync(activities);
     if (list == m_jobList)
         return;
     m_jobList = list;

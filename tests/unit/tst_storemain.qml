@@ -247,16 +247,30 @@ TestCase {
         compare(value("App ID"), "org.example.Notes");
         compare(value("Runtime"), "org.gnome.Platform 50");
         compare(value("Verified Developer"), "Verified by Flathub");
-        compare(value("Can Access"), undefined, "not before flatpak answered");
-        t.backend.flatpakInfo("org.example.Other", {version: "9", access: ["outside"]});
-        compare(value("Can Access"), undefined, "another app's answer");
-        t.backend.flatpakInfo("org.example.Notes", {version: "1.2", download: "1.5 MB", installed: "4.0 MB", license: "MIT", access: ["network"]});
-        compare(value("Can Access"), "The internet");
+        // Permissions (ADR-0049): the cards, once flatpak said what it grants; never before, never another app's.
+        const cards = () => find(t.win.page, i => i.grants !== undefined && i.cards !== undefined);
+        verify(cards() !== null);
+        verify(!cards().visible, "not before flatpak answered");
+        compare(value("Can Access"), undefined, "the cards say it now");
+        t.backend.flatpakInfo("org.example.Other", {version: "9", access: ["outside"], permissions: [{key: "outside", name: "", level: 1, detail: ""}]});
+        verify(!cards().visible, "another app's answer");
+        t.backend.flatpakInfo("org.example.Notes", {version: "1.2", download: "1.5 MB", installed: "4.0 MB", license: "MIT", access: ["network", "folders"],
+                                                    permissions: [{key: "network", name: "", level: 1, detail: ""},
+                                                                  {key: "folders", name: "xdg-download", level: 2, detail: ""}]});
         compare(value("Version"), "1.2");
         compare(value("Download Size"), "1.5 MB");
         compare(value("Installed Size"), "4.0 MB");
-        t.backend.flatpakInfo("org.example.Notes", {version: "1.2", access: []});
-        compare(value("Can Access"), "Only its own window and files");
+        tryVerify(() => cards().visible);
+        compare(cards().cards.map(c => c.title), ["Files and Folders", "Network"]);
+        const shown = text => find(t.win.page, i => i.text === text && i.visible) !== null;
+        verify(shown("Permissions"));
+        verify(shown("What “Notes” can reach beyond its own window and files, as Flatpak grants it."));
+        verify(shown("Downloads (read and write)"));
+        verify(shown("Other files: only those you choose in an Open or Save dialog."));
+        t.backend.flatpakInfo("org.example.Notes", {version: "1.2", access: [], permissions: []});
+        compare(cards().cards.map(c => c.title), ["Only Its Own Window and Files"]);
+        t.backend.flatpakInfo("org.example.Notes", {version: "1.2"});
+        verify(!cards().visible, "unread: nothing said rather than too little");
     }
 
     // Flathub's switch (SD20, step 3c): shown with flatpak, written to grassfield.json; while it could not be added, it
@@ -367,21 +381,29 @@ TestCase {
         const update = () => find(page, i => i.text === "Update" && i.visible && i.clicked !== undefined);
         tryVerify(() => update() !== null);
         verify(update().enabled);
-        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, widened: [], unknown: []};
+        // ADR-0049: an update that only reaches less starts at once too.
+        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, asks: false, unknown: [], held: [],
+                                                        changed: [{name: "Draw", asks: false, changes: [{change: "removed", key: "network", name: "", level: 1}]}]};
         update().clicked();
         verify(t.backend.calls.indexOf("plan:update:flatpak:org.example.Draw") >= 0);
         verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") >= 0, "no sheet: it starts");
         const sheet = find(t.win.contentItem, i => i.confirmEnabled !== undefined && i.plan !== undefined && i.showUpdate !== undefined);
         verify(!sheet.visible);
-        // It would reach more: the sheet says what first, and Update starts it.
+        // It would reach more: the sheet says what first, grant by grant (ADR-0049), and Update starts it.
         t.backend.operations = [];
         t.backend.calls = [];
-        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, widened: [{name: "Draw", access: ["home", "network"]}], unknown: ["Other"]};
+        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, asks: true, unknown: ["Other"], held: [],
+                                                        changed: [{name: "Draw", asks: true, changes: [
+                                                            {change: "added", key: "network", name: "", level: 1},
+                                                            {change: "widened", key: "home", name: "~", level: 2, previous: {key: "folders", name: "xdg-download", level: 2}},
+                                                            {change: "removed", key: "audio", name: "", level: 1}]}]};
         tryVerify(() => update() !== null);
         update().clicked();
         tryVerify(() => sheet.visible);
         compare(sheet.title, "Update “Draw”?");
-        verify(sheet.message.indexOf("After this update, “Draw” can also reach: ") === 0, sheet.message);
+        verify(sheet.message.indexOf("After this update, “Draw” can also reach:\nNetwork: The internet and your local network\n"
+                                     + "Files and Folders: Your home folder (read and write) (was: Downloads (read and write))\n\n"
+                                     + "It can no longer reach:\nMicrophone and Speakers: Your speakers and microphone") === 0, sheet.message);
         verify(sheet.message.indexOf("What this update lets Other reach could not be read.") > 0);
         compare(sheet.confirmText, "Update");
         verify(t.backend.calls.indexOf("update:flatpak:org.example.Draw") < 0, "nothing before the sheet's button");
@@ -391,7 +413,7 @@ TestCase {
         // Only what could not be read (SD33): the sheet asks too, never a silent update; Cancel runs nothing.
         t.backend.operations = [];
         t.backend.calls = [];
-        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, widened: [], unknown: ["Draw"]};
+        t.backend.plans["flatpak:org.example.Draw"] = {refusal: "", refs: 1, asks: true, changed: [], unknown: ["Draw"], held: []};
         tryVerify(() => update() !== null);
         update().clicked();
         tryVerify(() => sheet.visible);
@@ -415,10 +437,27 @@ TestCase {
         tryVerify(() => update() !== null && !update().enabled);
         // Update All of the group.
         t.backend.calls = [];
-        t.backend.plans["store:flatpak-updates"] = {refusal: "", refs: 2, widened: [], unknown: []};
+        // ADR-0049: an app that asks for more says so in the list; Update All leaves it out, without a sheet.
+        t.backend.updates = Object.assign({}, t.backend.updates, {flatpak: Object.assign({}, t.backend.updates.flatpak, {
+            apps: t.backend.updates.flatpak.apps.map(a => Object.assign({}, a, {asksForMore: true, permissionChanges: [
+                {change: "added", key: "home", name: "~", level: 2}, {change: "removed", key: "network", name: "", level: 1}]}))})});
+        tryVerify(() => shown("Asks for more: Your home folder (read and write)"));
+        verify(shown("Apps that ask for more than before update only when you update them one by one."));
+        t.backend.plans["store:flatpak-updates"] = {refusal: "", refs: 2, asks: false, changed: [], unknown: [], held: ["Draw"]};
         button("Update All").clicked();
         verify(t.backend.calls.indexOf("plan:update:store:flatpak-updates") >= 0);
-        verify(t.backend.calls.indexOf("update:store:flatpak-updates") >= 0);
+        verify(t.backend.calls.indexOf("update:store:flatpak-updates") >= 0, "the others update at once");
+        verify(!sheet.visible);
+        // Every app asks for more: the sheet says to update them one by one.
+        t.backend.operations = [];
+        t.backend.calls = [];
+        t.backend.plans["store:flatpak-updates"] = {refusal: "unavailable", detail: "held", held: ["Draw"]};
+        button("Update All").clicked();
+        tryVerify(() => sheet.visible);
+        compare(sheet.message, "Each of these apps asks for more than before. Update them one by one to see what they ask for.");
+        verify(t.backend.calls.indexOf("update:store:flatpak-updates") < 0);
+        sheet.confirm();
+        tryVerify(() => !sheet.visible);
         // While a system update runs: said, and nothing to start.
         t.backend.updates = Object.assign({}, t.backend.updates, {running: true});
         verify(shown("Update in progress"));

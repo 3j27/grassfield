@@ -1,0 +1,613 @@
+#!/usr/bin/python3 -I
+"""Give apps the person cannot see less CPU and I/O (ADR-0048). Run by the shell as an argv, never as a service.
+
+The shell decides what the person can see (one state per window, merged per process: focused, visible, occluded, hidden;
+shell/services/AppEnergyLogic.js) and runs this helper when that picture changes or when the helper asked to be run again.
+This helper maps each process to its app scope, checks why an app must be left alone, and applies or lifts the limits with
+`systemctl --user set-property --runtime` (gone when the scope stops or the user manager ends). What it applied is kept in
+a state file under $XDG_RUNTIME_DIR, which lives exactly as long as those runtime properties: `reset` (shell start, setting
+turned off, grassfield-shell.service ExecStopPost) lifts all of it.
+
+  grassfield-energy round --power battery|mains --windows '{"<pid>": "<state>", ...}' [--media PIDS] [--keep PIDS]
+  grassfield-energy wake (--all | --pid PID ...)
+  grassfield-energy reset
+  grassfield-energy status [--json]
+Every command takes [--state FILE] [--dry-run]. A dry run decides and records as usual, in its own state file
+(app-energy.dry.json unless --state names one), and never runs systemctl nor writes a cgroup file. In a dev session
+(GRASSFIELD_DEV "1", GRASSFIELD_SESSION not "1": a nested session, whose windows' processes live in the owner's own scopes)
+every command is a dry run, unless the test seams replace both /proc and the cgroup tree (a fixture written by a test).
+
+The ladder (Luma's idea, reimplemented), on battery only: an app occluded for 10 s gets CPUWeight 40 and IOWeight 60 (and a
+cpu.uclamp.max hint of 60 % when the file is writable), hidden for 30 s 20 and 30 (uclamp 40 %). On the power adapter nothing
+is limited and everything held is lifted (macOS: the saving is for the battery; a computer without one never limits). Weights
+only order the queue when something competes. The focused and visible apps are never touched.
+When unsure, nothing is limited: an app whose process or scope cannot be read, a scope outside the person's
+app-graphical.slice, a scope holding a session process, an app playing or recording, holding an alarm, working (more than
+0.5 % of a core over the sampling window, its first sample counting as working), kept running by the person, or whose
+weight someone else set (Activity Monitor's Efficiency Mode) is left alone.
+
+Test seams, honoured only in a dev session (ADR-0019's rule for dev plumbing, as grassfield-report): GRASSFIELD_PROC_ROOT,
+GRASSFIELD_CGROUP_ROOT, GRASSFIELD_ENERGY_NOW (the monotonic clock, seconds). Standard library only.
+"""
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+FOCUSED, VISIBLE, OCCLUDED, HIDDEN = "focused", "visible", "occluded", "hidden"
+ORDER = (FOCUSED, VISIBLE, OCCLUDED, HIDDEN)  # most awake first
+
+# state -> (CPUWeight, IOWeight, uclamp max % or None, seconds in the state before it applies)
+ON_BATTERY = {OCCLUDED: (40, 60, 60, 10), HIDDEN: (20, 30, 40, 30)}
+ON_MAINS = {}  # nothing on the power adapter (integrator decision 2026-11-05, the switch says "while on battery")
+DEFAULT_WEIGHT = 100
+
+QUIET_FRACTION = 0.005  # of one core, over the sampling window: below it the app is not working
+SAMPLE_WINDOW = 10.0  # seconds: the shortest window a judgement of "working" is made on
+WAIT_TICK = 10  # run again this soon while an app waits for its delay (at most)
+HOLD_TICK = 60  # run again this soon while anything is limited or claimed (claims change)
+DEVICE_PREFIXES = ("/dev/snd/", "/dev/video", "/dev/media")
+ALARM_CLOCKS = ("8", "9")  # CLOCK_REALTIME_ALARM, CLOCK_BOOTTIME_ALARM
+MAX_WINDOWS = 512
+MAX_PIDS = 256
+
+# Session processes, by /proc/PID/comm (15 characters at most): a scope holding one is never limited, whatever its windows.
+SESSION_COMMS = ("Hyprland", "hyprland", "Xwayland", "qs", "quickshell", ".quickshell-wra", "pipewire", "pipewire-pulse",
+                 "wireplumber", "hypridle", "hyprlock", "hyprsunset", "mako", "swayosd-server", "walker", "elephant", "waybar",
+                 "uwsm", "gnome-keyring-d")
+SESSION_PREFIXES = ("xdg-desktop-por", "xdg-document-p", "xdg-permission-", "ibus-", "fcitx", "grassfield-shel",
+                    "grassfield-menu", "grassfield-prom", "grassfield-port", "grassfield-secu", "polkit-")
+
+# A dev session (ADR-0019): GRASSFIELD_DEV "1" and GRASSFIELD_SESSION not "1". Only there are the test seams honoured.
+DEV = os.environ.get("GRASSFIELD_DEV") == "1" and os.environ.get("GRASSFIELD_SESSION") != "1"
+PROC_ROOT = (os.environ.get("GRASSFIELD_PROC_ROOT") if DEV else "") or "/proc"
+CGROUP_ROOT = (os.environ.get("GRASSFIELD_CGROUP_ROOT") if DEV else "") or "/sys/fs/cgroup"
+# Both trees are a test's fixture: the decisions come from files the test wrote, never from the owner's processes.
+# Compared once resolved: "/proc/", "/proc/." or a link to the real tree is the real tree, never a fixture.
+FIXTURE = os.path.realpath(PROC_ROOT) != os.path.realpath("/proc") and \
+    os.path.realpath(CGROUP_ROOT) != os.path.realpath("/sys/fs/cgroup")
+UNIT_RE = re.compile(r"^app-[A-Za-z0-9:_.\\-]{1,200}\.scope$")
+
+REASONS = {
+    "keep": "kept running by the person",
+    "media": "playing or recording sound or video",
+    "device": "a sound, camera or video device is open",
+    "alarm": "an alarm is set",
+    "working": "still working",
+    "foreign": "its weight was set elsewhere",
+    "session": "a session process runs in it",
+}
+
+
+# ---- pure decisions ----
+
+def rung(state, on_battery):
+    """(cpu, io, uclamp, after) for a state, None to leave the app alone."""
+    return (ON_BATTERY if on_battery else ON_MAINS).get(state)
+
+
+def most_awake(states):
+    for s in ORDER:
+        if s in states:
+            return s
+    return HIDDEN
+
+
+def app_unit(cgroup, uid):
+    """The app scope of a cgroup v2 path when it is one of the person's apps (ADR-0011), else ""."""
+    prefix = "/user.slice/user-%d.slice/user@%d.service/app.slice/app-graphical.slice/" % (uid, uid)
+    if not isinstance(cgroup, str) or not cgroup.startswith(prefix):
+        return ""
+    unit = cgroup[len(prefix):]
+    return unit if UNIT_RE.match(unit) else ""
+
+
+def quiet(before, after, seconds):
+    if seconds <= 0:
+        return False
+    return max(0, after - before) / 1e6 / seconds < QUIET_FRACTION
+
+
+def no_stronger(applied, uclamp, target):
+    """The limits held now are not stronger than the rung `target` (a weight is stronger when lower)."""
+    if not applied and uclamp is None:
+        return True
+    if target is None:
+        return False
+    cpu, io, clamp, _after = target
+    if applied.get("CPUWeight", DEFAULT_WEIGHT) < cpu or applied.get("IOWeight", DEFAULT_WEIGHT) < io:
+        return False
+    return uclamp is None or (clamp is not None and uclamp >= clamp)
+
+
+def session_comm(comm):
+    return comm in SESSION_COMMS or any(comm.startswith(p) for p in SESSION_PREFIXES)
+
+
+def parse_windows(text):
+    """{pid: state} from the shell's JSON, bounded; anything malformed is dropped."""
+    try:
+        raw = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    out = {}
+    for key, state in list(raw.items())[:MAX_WINDOWS]:
+        if isinstance(key, str) and key.isdigit() and 0 < int(key) < 1 << 22 and state in ORDER:
+            out[int(key)] = state
+    return out
+
+
+def parse_pids(text):
+    out = []
+    for part in (text or "").split(",")[:MAX_PIDS]:
+        part = part.strip()
+        if part.isdigit() and 0 < int(part) < 1 << 22:
+            out.append(int(part))
+    return out
+
+
+def plan(records, report, now, on_battery, probe, sample=None):
+    """Decide every app's limits. `records`: unit -> record (changed in place); `report`: unit -> state of its windows.
+    `probe(unit, record, now)` returns the claim keys of an app that would be limited; `sample(record, now)` takes a CPU
+    sample of an app waiting for its delay, so that its work is judged on a full window when the delay ends. Returns
+    (actions, next seconds): actions are ("set", unit, {CPUWeight, IOWeight}, uclamp or None) and ("release", unit)."""
+    actions = []
+    nxt = 0
+    for unit in list(records):
+        if unit not in report:
+            if records[unit].get("applied") or records[unit].get("uclamp") is not None:
+                actions.append(("release", unit))
+            del records[unit]
+    for unit, state in sorted(report.items()):
+        r = records.setdefault(unit, {"state": state, "since": now, "applied": {}, "uclamp": None, "mark": None, "busy": True})
+        if r["state"] != state:
+            r["state"], r["since"], r["mark"], r["busy"] = state, now, None, True
+        r["reasons"] = []
+        r["waiting"] = 0
+        target = rung(state, on_battery)
+        held = bool(r["applied"]) or r["uclamp"] is not None
+        if target is None:
+            if held:
+                actions.append(("release", unit))
+            continue
+        cpu, io, clamp, after = target
+        left = r["since"] + after - now
+        if left > 0:
+            r["waiting"] = round(left, 1)
+            nxt = min(nxt or WAIT_TICK, max(1, int(left + 0.999)), WAIT_TICK)
+            if not held:
+                if sample:
+                    sample(r, now)
+                continue
+            if not no_stronger(r["applied"], r["uclamp"], target):
+                actions.append(("release", unit))
+                continue
+        claims = probe(unit, r, now)
+        r["reasons"] = claims
+        nxt = min(nxt or HOLD_TICK, HOLD_TICK)
+        if claims:
+            # Released; with a weight set elsewhere (Efficiency Mode) the release leaves CPUWeight alone and still puts
+            # IOWeight and uclamp back (Actor.release).
+            if held:
+                actions.append(("release", unit))
+            continue
+        if left > 0:
+            continue
+        wanted = {"CPUWeight": cpu, "IOWeight": io}
+        if r["applied"] != wanted or r["uclamp"] != (clamp if on_battery else None):
+            actions.append(("set", unit, wanted, clamp if on_battery else None))
+    return actions, nxt
+
+
+# ---- reading the system ----
+
+def read(path, limit=65536):
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read(limit)
+    except OSError:
+        return None
+
+
+def cgroup_of(pid):
+    text = read("%s/%d/cgroup" % (PROC_ROOT, pid))
+    if text is None:
+        return ""
+    for line in text.splitlines():
+        if line.startswith("0::"):
+            return line[3:].strip()
+    return ""
+
+
+def scope_dir(cgroup):
+    return CGROUP_ROOT + cgroup
+
+
+def scope_pids(cgroup):
+    text = read(scope_dir(cgroup) + "/cgroup.procs", 1 << 20)
+    if text is None:
+        return []
+    return [int(t) for t in text.split() if t.isdigit()][:4096]
+
+
+def fd_claims(pids):
+    """{"device", "alarm"} found among the open descriptors of `pids`."""
+    found = set()
+    for pid in pids:
+        base = "%s/%d" % (PROC_ROOT, pid)
+        try:
+            fds = os.listdir(base + "/fd")
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                target = os.readlink(base + "/fd/" + fd)
+            except OSError:
+                continue
+            if target.startswith(DEVICE_PREFIXES):
+                found.add("device")
+            elif target == "anon_inode:[timerfd]" and "alarm" not in found:
+                info = read(base + "/fdinfo/" + fd, 4096) or ""
+                for line in info.splitlines():
+                    if line.startswith("clockid:") and line.split(":", 1)[1].strip() in ALARM_CLOCKS:
+                        found.add("alarm")
+            if found == {"device", "alarm"}:
+                return found
+    return found
+
+
+def cpu_usec(cgroup):
+    text = read(scope_dir(cgroup) + "/cpu.stat")
+    for line in (text or "").splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0] == "usage_usec" and parts[1].isdigit():
+            return int(parts[1])
+    return None
+
+
+def weight_now(cgroup):
+    """The scope's CPU weight as the kernel has it: "idle", a number, or DEFAULT_WEIGHT when the file is absent."""
+    if (read(scope_dir(cgroup) + "/cpu.idle") or "").strip() == "1":
+        return "idle"
+    text = (read(scope_dir(cgroup) + "/cpu.weight") or "").strip()
+    return int(text) if text.isdigit() else DEFAULT_WEIGHT
+
+
+class Probe:
+    """The claims of an app that would be limited (D-3), read from /proc and the cgroup tree."""
+
+    def __init__(self, media_units, keep_units):
+        self.media_units = media_units
+        self.keep_units = keep_units
+
+    def __call__(self, unit, r, now):
+        found = []
+        if unit in self.keep_units:
+            found.append("keep")
+        if unit in self.media_units:
+            found.append("media")
+        weight = weight_now(r["cgroup"])
+        mine = r["applied"].get("CPUWeight") if r["applied"] else None
+        if weight != DEFAULT_WEIGHT and weight != mine:
+            found.append("foreign")
+        pids = scope_pids(r["cgroup"])
+        for pid in pids:
+            comm = (read("%s/%d/comm" % (PROC_ROOT, pid), 64) or "").strip()
+            if session_comm(comm):
+                found.append("session")
+                break
+        fds = fd_claims(pids)
+        found += [k for k in ("device", "alarm") if k in fds]
+        if self.working(r, now):
+            found.append("working")
+        return found
+
+    @staticmethod
+    def working(r, now):
+        used = cpu_usec(r["cgroup"])
+        if used is None:
+            return True  # cannot be read: when unsure, do not limit
+        mark = r.get("mark")
+        if not mark:
+            r["mark"], r["busy"] = [used, now], True
+            return True
+        window = now - mark[1]
+        if window >= SAMPLE_WINDOW:
+            r["busy"] = not quiet(mark[0], used, window)
+            r["mark"] = [used, now]
+        return bool(r.get("busy", True))
+
+
+# ---- acting ----
+
+def systemctl(args):
+    try:
+        done = subprocess.run(["systemctl", "--user"] + args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.PIPE, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if done.returncode != 0:
+        err = done.stderr.decode("utf-8", "replace").strip().splitlines()
+        print("grassfield-energy: systemctl %s: %s" % (" ".join(args[:3]), err[-1] if err else done.returncode), file=sys.stderr)
+    return done.returncode == 0
+
+
+def write_uclamp(cgroup, value):
+    path = scope_dir(cgroup) + "/cpu.uclamp.max"
+    if not os.path.isfile(path):
+        return False
+    try:
+        with open(path, "w", encoding="ascii") as f:
+            f.write(value)
+    except OSError:
+        return False
+    return True
+
+
+class Actor:
+    def __init__(self, data, dry):
+        self.data = data
+        self.dry = dry
+
+    def set(self, unit, r, wanted, clamp):
+        if r["applied"] != wanted:
+            props = ["%s=%d" % (k, v) for k, v in sorted(wanted.items())]
+            if self.dry or systemctl(["set-property", "--runtime", "--", unit] + props):
+                r["applied"] = dict(wanted)
+        if clamp != r["uclamp"]:
+            if clamp is None:
+                self.unclamp(r)
+            elif self.data.get("uclamp") != "unavailable":
+                if self.dry or write_uclamp(r["cgroup"], str(clamp)):
+                    r["uclamp"] = clamp
+                    if not self.dry:
+                        self.data["uclamp"] = "available"
+                else:
+                    self.data["uclamp"] = "unavailable"
+
+    def unclamp(self, r):
+        if r["uclamp"] is not None:
+            if not self.dry:
+                write_uclamp(r["cgroup"], "max")
+            r["uclamp"] = None
+
+    def release(self, unit, r):
+        """Put the unit back as it was found. IOWeight and uclamp always go back; CPUWeight only while it still holds the
+        value set here (or the default): a weight someone else set since (Efficiency Mode) is theirs and is left alone."""
+        if r.get("applied"):
+            if not self.dry and os.path.isdir(scope_dir(r["cgroup"])):
+                keys = sorted(r["applied"])
+                if weight_now(r["cgroup"]) not in (r["applied"].get("CPUWeight"), DEFAULT_WEIGHT):
+                    keys = [k for k in keys if k != "CPUWeight"]
+                if keys:
+                    # An empty value puts systemd's default back (the property is unset again).
+                    systemctl(["set-property", "--runtime", "--", unit] + ["%s=" % k for k in keys])
+            r["applied"] = {}
+        self.unclamp(r)
+
+
+# ---- the state file ----
+
+def default_state_path(dry=False):
+    """A dry run keeps its own file: its records were never applied, and a real reset must still find the real ones."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    return os.path.join(runtime, "grassfield", "app-energy.dry.json" if dry else "app-energy.json")
+
+
+def load(path):
+    text = read(path, 1 << 22)
+    try:
+        data = json.loads(text) if text else {}
+    except ValueError:
+        data = {}
+    if not isinstance(data, dict) or data.get("v") != 1 or not isinstance(data.get("apps"), dict):
+        data = {"v": 1, "apps": {}}
+    data["apps"] = {u: r for u, r in data["apps"].items()
+                    if UNIT_RE.match(u) and isinstance(r, dict) and isinstance(r.get("cgroup"), str)
+                    and isinstance(r.get("applied"), dict)}
+    for r in data["apps"].values():
+        r.setdefault("uclamp", None)
+        r.setdefault("mark", None)
+        r.setdefault("busy", True)
+        r.setdefault("since", 0)
+        r.setdefault("state", HIDDEN)
+    return data
+
+
+def save(path, data):
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, sort_keys=True)
+    os.replace(tmp, path)
+
+
+def locked(path):
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    fd = os.open(path + ".lock", os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def clock():
+    if DEV:
+        try:
+            return float(os.environ["GRASSFIELD_ENERGY_NOW"])
+        except (KeyError, ValueError):
+            pass
+    return time.monotonic()
+
+
+# ---- commands ----
+
+def units_of(pids, uid, cache):
+    out = set()
+    for pid in pids:
+        if pid not in cache:
+            cache[pid] = cgroup_of(pid)
+        unit = app_unit(cache[pid], uid)
+        if unit:
+            out.add(unit)
+    return out
+
+
+def cmd_round(args, data, dry):
+    windows = parse_windows(args.get("windows", ""))
+    if windows is None or args.get("power") not in ("battery", "mains"):
+        print("grassfield-energy: round needs --power battery|mains and --windows JSON", file=sys.stderr)
+        return 2, None
+    on_battery = args["power"] == "battery"
+    now = clock()
+    uid = os.getuid()
+    cache = {}
+    report, cgroups, skipped = {}, {}, {}
+    per_unit = {}
+    for pid, state in sorted(windows.items()):
+        cache[pid] = cgroup_of(pid)
+        unit = app_unit(cache[pid], uid)
+        if not unit:
+            skipped[str(pid)] = "outside the person's apps" if cache[pid] else "process not readable"
+            continue
+        per_unit.setdefault(unit, []).append(state)
+        cgroups[unit] = cache[pid]
+    for unit, states in per_unit.items():
+        report[unit] = most_awake(states)
+    apps = data["apps"]
+    if data.get("power") == "battery" and not on_battery:
+        for r in apps.values():
+            r["since"] = now  # back on the adapter: everything is lifted now and earns the milder rung again
+    data["power"] = args["power"]
+    for unit, cg in cgroups.items():
+        if unit in apps:
+            apps[unit]["cgroup"] = cg
+    probe = Probe(units_of(parse_pids(args.get("media")), uid, cache), units_of(parse_pids(args.get("keep")), uid, cache))
+    gone = {u: dict(r) for u, r in apps.items() if u not in report}
+    for unit in report:
+        if unit not in apps:
+            apps[unit] = {"state": report[unit], "since": now, "applied": {}, "uclamp": None, "mark": None, "busy": True,
+                          "cgroup": cgroups[unit]}
+    actions, nxt = plan(apps, report, now, on_battery, probe, Probe.working)
+    actor = Actor(data, dry)
+    for action in actions:
+        if action[0] == "set":
+            actor.set(action[1], apps[action[1]], action[2], action[3])
+        else:
+            r = apps.get(action[1]) or gone.get(action[1])
+            if r:
+                actor.release(action[1], r)
+    data["skipped"] = skipped
+    data["at"] = now
+    held = sum(1 for r in apps.values() if r["applied"] or r["uclamp"] is not None)
+    if held and not nxt:
+        nxt = HOLD_TICK
+    return 0, {"next": nxt, "limited": held, "apps": len(apps)}
+
+
+def cmd_wake(args, data, dry):
+    now = clock()
+    actor = Actor(data, dry)
+    pids = set(parse_pids(",".join(args.get("pid", []))))
+    uid = os.getuid()
+    targets = set(data["apps"]) if args.get("all") else units_of(pids, uid, {})
+    for unit in targets:
+        r = data["apps"].get(unit)
+        if not r:
+            continue
+        actor.release(unit, r)
+        r["state"], r["since"], r["mark"], r["busy"], r["waiting"] = VISIBLE, now, None, True, 0
+    return 0, {"woken": len(targets & set(data["apps"]))}
+
+
+def cmd_reset(args, data, dry):
+    actor = Actor(data, dry)
+    for unit, r in data["apps"].items():
+        actor.release(unit, r)
+    n = len(data["apps"])
+    data["apps"] = {}
+    data["skipped"] = {}
+    return 0, {"reset": n}
+
+
+def describe(data, now):
+    lines = []
+    lines.append("power: %s · uclamp: %s%s" % (data.get("power", "unknown"), data.get("uclamp", "unknown"),
+                                                " · dry run" if data.get("dry") else ""))
+    if not data["apps"]:
+        lines.append("no app is managed")
+    for unit, r in sorted(data["apps"].items()):
+        held = max(0, int(now - r.get("since", now)))
+        head = "%s: %s for %d s" % (unit, r.get("state"), held)
+        if r.get("applied"):
+            limits = ", ".join("%s=%s" % kv for kv in sorted(r["applied"].items()))
+            if r.get("uclamp") is not None:
+                limits += ", uclamp.max=%d%%" % r["uclamp"]
+            lines.append(head + " · limited (%s)" % limits)
+        elif r.get("reasons"):
+            lines.append(head + " · not limited: " + "; ".join(REASONS.get(k, k) for k in r["reasons"]))
+        elif r.get("waiting"):
+            lines.append(head + " · not limited yet (%s s to go)" % r["waiting"])
+        else:
+            lines.append(head + " · not limited: seen by the person")
+    for pid, why in sorted((data.get("skipped") or {}).items()):
+        lines.append("window process %s: never limited (%s)" % (pid, why))
+    return "\n".join(lines)
+
+
+def parse_args(argv):
+    if not argv or argv[0] not in ("round", "wake", "reset", "status"):
+        return None
+    args = {"cmd": argv[0], "pid": []}
+    i = 1
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--dry-run", "--all", "--json"):
+            args[a[2:].replace("-", "_")] = True
+        elif a in ("--state", "--power", "--windows", "--media", "--keep", "--pid") and i + 1 < len(argv):
+            if a == "--pid":
+                args["pid"].append(argv[i + 1])
+            else:
+                args[a[2:]] = argv[i + 1]
+            i += 1
+        else:
+            return None
+        i += 1
+    return args
+
+
+def main(argv):
+    args = parse_args(argv)
+    if args is None:
+        print(__doc__.split("\n\n")[2], file=sys.stderr)
+        return 2
+    dry = bool(args.get("dry_run")) or (DEV and not FIXTURE)
+    path = args.get("state") or default_state_path(dry)
+    if args["cmd"] == "status":
+        data = load(path)
+        if args.get("json"):
+            print(json.dumps(data, sort_keys=True))
+        else:
+            print(describe(data, clock()))
+        return 0
+    fd = locked(path)
+    try:
+        data = load(path)
+        if data.get("dry") and not dry:
+            data = {"v": 1, "apps": {}}  # a dry run's records were never applied: never "release" them for real
+        command = {"round": cmd_round, "wake": cmd_wake, "reset": cmd_reset}[args["cmd"]]
+        code, summary = command(args, data, dry)
+        if code == 0:
+            data["dry"] = dry
+            save(path, data)
+            print(json.dumps(summary, sort_keys=True))
+        return code
+    finally:
+        os.close(fd)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -435,6 +435,14 @@ function audioKinds(text) {
     return kinds;
 }
 
+// id -> PipeWire node name for every output of `wpctl status -n` (Sound Effects' "Play sound effects through", ADR-0047).
+function audioNodeNames(text) {
+    const names = {};
+    for (const d of parseAudio(text).sinks)
+        names[d.id] = d.name;
+    return names;
+}
+
 function defaultOf(list) {
     for (const d of list) {
         if (d.isDefault)

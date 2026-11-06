@@ -58,6 +58,14 @@ step of `scripts/dev/test.sh`) fails when
 Limits: the batch runners (`qmltestrunner` over `tests/unit`, a gtest binary) report one result for their group, so
 the run check is per layer, not per file. Which layer a test is in is a judgement the reviewer checks.
 
+## User-reported regressions
+
+Every failure a person using Grassfield reports gets a stable ID (`URR-NNN`) in
+[`user-reported-regressions.md`](user-reported-regressions.md): the report date and version, the reproduction, the cause,
+the fix with its regression test, the verification and the first shipped version. A source fix is not a shipped fix: an
+entry stays open until a released version carries it. Beta testers attach the file `grassfield-report` writes (Settings >
+General > About > Create Diagnostic Report…, ADR-0053); the report stays private, the ledger cites only the version.
+
 ## `scripts/dev/test.sh`
 
 ```

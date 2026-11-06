@@ -47,31 +47,118 @@ TestCase {
         compare(Store.getBlockText("flathubOff", "flatpak"), "Turn on Flathub in the Store's settings to install from it.");
         compare(Store.getBlockText("noFlatpak", "flatpak"), "Flathub needs the flatpak package.");
         compare(Store.uninstallReasonText("flathubOff", "flatpak"), "Turn on Flathub in the Store's settings to uninstall it from the Store.");
-        compare(Store.accessWords(["network", "allFiles", "home", "folders", "devices", "input", "usb", "kvm", "audio", "x11", "sharedMemory",
-                                   "printers", "ssh", "gpg", "smartCards", "bus", "systemBus", "bluetooth", "canbus", "devel", "multiarch", "login", "outside"]),
-                ["The internet", "All your files", "Your home folder", "Some of your folders", "Devices such as cameras, USB drives and game controllers",
-                 "Game controllers and other input devices", "USB devices", "Virtual machines, through KVM", "Your speakers and microphone",
-                 "The X11 display, where it can see what other X11 apps show and what you type in them", "Memory your other programs share",
-                 "Your printers", "Your SSH keys, through the SSH agent", "Your GnuPG keys, through the GnuPG agent", "Smart cards",
-                 "Every service of your session", "Every service of the system", "Bluetooth", "CAN bus devices",
-                 "Developer features that can trace programs", "32-bit programs", "Programs that start when you log in",
-                 "Programs outside its sandbox"]);
-        // Named services, flatpak's own words for a grant the Store does not know, the count past the list; a key this
-        // window does not know is said as it is (PR #58: never less than the metadata grants).
-        compare(Store.accessWords(["sessionService:org.freedesktop.secrets", "systemService:org.freedesktop.login1", "other:devices=tpm",
-                                   "more:14", "unknown", "later:x"]),
-                ["The session service “org.freedesktop.secrets”", "The system service “org.freedesktop.login1”",
-                 "A permission the Store can't describe: devices=tpm", "14 more", "A permission the Store can't describe: unknown",
-                 "A permission the Store can't describe: later:x"]);
-        compare(Store.accessText(["network", "home"]), "The internet, Your home folder");
-        compare(Store.accessText(["unknown"]), "A permission the Store can't describe: unknown");
-        compare(Store.accessText([]), "Only its own window and files");
-        compare(Store.accessText(undefined), "", "unread: nothing said rather than too little");
-        compare(Store.accessText(null), "");
         compare(Store.groupTitle("flatpak"), "Flathub");
         compare(Store.resultText({kind: "install", outcome: "stopped"}), "", "stopped by the user: nothing to say");
         verify(!Store.canTryAgain({outcome: "stopped"}));
         compare(Store.resultText({kind: "install", outcome: "failed", source: "flatpak"}), "The installation failed.");
+    }
+
+    // A Flatpak's permissions (ADR-0049): every class in its group and words, the places with their mode, bus names with
+    // their plain name, the notes under the wide grants, a grant the Store does not know as flatpak writes it.
+    function test_permissionItems() {
+        const item = (key, name, level) => Store.permissionItem({key: key, name: name || "", level: level || 1});
+        const groups = {network: "network", allFiles: "files", home: "files", folders: "files", devices: "devices", input: "devices",
+                        usb: "devices", usbPortal: "devices", usbHidden: "devices", kvm: "devices", bluetooth: "devices", canbus: "devices",
+                        printers: "devices", smartCards: "keys", audio: "sound", x11: "display", x11Fallback: "display", ssh: "keys", gpg: "keys",
+                        bus: "services", systemBus: "services", login: "background", outside: "sandbox", devel: "sandbox", ipc: "other", shm: "other",
+                        multiarch: "other", other: "other"};
+        for (const key in groups)
+            compare(item(key, key === "allFiles" ? "/" : key === "home" ? "~" : key === "folders" ? "xdg-download" : "").group, groups[key], key);
+        compare(item("folders", "xdg-download", 2).text, "Downloads (read and write)");
+        compare(item("folders", "xdg-pictures/Screenshots", 1).text, "Pictures/Screenshots (read only)");
+        compare(item("folders", "~/Games", 2).text, "~/Games (read and write)");
+        compare(item("folders", "$RUN/pipewire-0", 2).text, "Your session's runtime folder: pipewire-0 (read and write)");
+        compare(item("folders", "/run/media/alice", 1).text, "Removable drives (read only)");
+        compare(item("folders", "*", 1).text, "A folder its path climbs out of (“..”), which could be anywhere (read only)");
+        compare(item("folders", "/opt/data", 2).text, "/opt/data (read and write)");
+        compare(item("folders", "xdg-download", 2).note, "", "a folder: no note");
+        compare(item("allFiles", "/", 2).text, "All files on this computer (read and write)");
+        compare(item("allFiles", "/", 2).note, "It can read and change any file you can, including other apps' data and connected drives.");
+        compare(item("allFiles", "/", 1).note, "It can read any file you can, including other apps' data and connected drives.");
+        compare(item("allFiles", "host-os", 1).text, "The system's programs and libraries (read only)");
+        compare(item("allFiles", "host-os", 1).note, "");
+        compare(item("home", "~", 2).text, "Your home folder (read and write)");
+        compare(item("home", "~", 1).note, "It can read everything in your home folder, including other apps' data and settings.");
+        compare(item("devices").note, "Cameras, microphones, game controllers, USB drives and any other device, without asking.");
+        compare(item("x11").text, "The X11 display");
+        compare(item("x11").note, "Through X11 it can see what other X11 apps show and what you type in them.");
+        compare(item("x11Fallback").text, "The X11 display, only where Wayland is missing");
+        compare(item("x11Fallback").note, "This session has Wayland: here it gets no X11.");
+        compare(item("usb").text, "USB devices, directly");
+        compare(item("usb").note, "Any USB device, without asking.", "raw USB: as wide as all devices for USB");
+        compare(item("usbPortal", "all").text, "USB devices, through the USB portal");
+        compare(item("usbPortal", "vnd:1234+dev:5678").text, "The USB device vnd:1234+dev:5678, through the USB portal");
+        compare(item("usbHidden", "vnd:1234").text, "Hidden from it: the USB device vnd:1234");
+        compare(item("usbHidden", "all").text, "Hidden from it: every USB device");
+        compare(item("ipc").text, "Memory your other programs share (IPC)");
+        compare(item("shm").text, "The shared memory folder of your other programs (/dev/shm)");
+        compare(item("folders", "~/Games", 3).text, "~/Games (read and write, created if missing)");
+        compare(Store.previousWords({key: "folders", name: "~/Games", previous: {key: "folders", name: "~/Games", level: 3}}), "read and write, created if missing");
+        compare(item("bus").note, "Including services that can start programs outside its sandbox.");
+        compare(item("sessionService", "org.example.Sync", 1).text, "Talks to “org.example.Sync”");
+        compare(item("sessionService", "org.example.Sync", 2).text, "Owns the name “org.example.Sync”");
+        compare(item("sessionService", "org.example.*", 1).text, "Talks to every service under “org.example”");
+        compare(item("sessionService", "org.example.*", 1).note, "A wildcard: services it does not name are included.");
+        compare(item("sessionService", "org.gtk.vfs.*", 1).text, "Talks to “Network locations and the Trash (org.gtk.vfs.*)”");
+        compare(item("sessionService", "org.freedesktop.secrets", 1).group, "keys");
+        compare(item("systemService", "org.freedesktop.NetworkManager", 1).text, "Talks to “Network settings (org.freedesktop.NetworkManager)”, on the system");
+        compare(item("login").note, "It can add programs that start at your next login, outside its sandbox.");
+        compare(item("outside").note, "Anything it starts this way has all of your access.");
+        compare(item("other", "devices=tpm").text, "A permission the Store can't describe: devices=tpm");
+        compare(item("later", "x").text, "A permission the Store can't describe: later", "a key this window does not know, as it is");
+        compare(item("more", "40").text, "40 more permissions");
+    }
+
+    // The product page's cards and the sheets' lines: the groups present in their order, the Files card's footnote unless
+    // all files or the home folder are granted; [] for nothing granted, null (no section) when unread.
+    function test_permissionGroups() {
+        compare(Store.permissionGroups(null), null);
+        compare(Store.permissionGroups(undefined), null);
+        compare(Store.permissionGroups([]), []);
+        const groups = Store.permissionGroups([{key: "network", name: "", level: 1}, {key: "folders", name: "xdg-download", level: 2},
+                                               {key: "audio", name: "", level: 1}, {key: "sessionService", name: "org.freedesktop.secrets", level: 1},
+                                               {key: "outside", name: "", level: 1}]);
+        compare(groups.map(g => g.id), ["files", "network", "sound", "keys", "sandbox"]);
+        compare(groups.map(g => g.icon), ["folder", "globe", "microphone", "key", "exclamationmark-triangle"]);
+        compare(groups[0].title, "Files and Folders");
+        compare(groups[0].items, [{text: "Downloads (read and write)", note: ""}]);
+        compare(groups[0].footnote, "Other files: only those you choose in an Open or Save dialog.");
+        compare(groups[2].items[0].note, "It can record from the microphone without asking.");
+        compare(Store.permissionGroups([{key: "home", name: "~", level: 1}])[0].footnote, "", "the home folder: no footnote");
+        compare(Store.permissionLines([{key: "network", name: "", level: 1}, {key: "folders", name: "xdg-music", level: 1},
+                                       {key: "folders", name: "xdg-download", level: 2}]),
+                ["Files and Folders: Music (read only), Downloads (read and write)", "Network: The internet and your local network"]);
+        compare(Store.permissionLines(null), []);
+        for (const id of ["files", "network", "devices", "sound", "display", "keys", "services", "background", "sandbox", "other"])
+            verify(Store.permissionGroupTitle(id) !== "", id);
+        compare(Store.permissionGroupTitle("devices"), "Camera and Other Devices");
+    }
+
+    // An update's changes (ADR-0049): what it newly reaches with what it had, what it no longer reaches; the Updates list's
+    // line, at most three then a count.
+    function test_permissionChanges() {
+        const changes = [{change: "added", key: "network", name: "", level: 1},
+                         {change: "widened", key: "folders", name: "xdg-download", level: 2, previous: {key: "folders", name: "xdg-download", level: 1}},
+                         {change: "widened", key: "home", name: "~", level: 2, previous: {key: "folders", name: "xdg-documents", level: 2}},
+                         {change: "removed", key: "audio", name: "", level: 1},
+                         {change: "narrowed", key: "folders", name: "~/Projects/notes", level: 1, previous: {key: "folders", name: "~/Projects", level: 2}},
+                         {change: "more", name: "3"}];
+        const lines = Store.changeLines(changes);
+        compare(lines.more, ["Network: The internet and your local network",
+                             "Files and Folders: Downloads (read and write) (was: read only)",
+                             "Files and Folders: Your home folder (read and write) (was: Documents (read and write))",
+                             "3 more changes"]);
+        compare(lines.less, ["Microphone and Speakers: Your speakers and microphone",
+                             "Files and Folders: ~/Projects/notes (read only) (was: ~/Projects (read and write))"]);
+        compare(Store.changeLines(undefined), {more: [], less: []});
+        compare(Store.asksForMoreText({asksForMore: false, permissionChanges: changes}), "");
+        compare(Store.asksForMoreText({name: "x"}), "");
+        compare(Store.asksForMoreText({asksForMore: true, permissionsUnknown: true}), "What this update can reach couldn't be checked.");
+        compare(Store.asksForMoreText({asksForMore: true, permissionChanges: changes.slice(0, 3)}),
+                "Asks for more: The internet and your local network, Downloads (read and write), Your home folder (read and write)");
+        compare(Store.asksForMoreText({asksForMore: true, permissionChanges: changes.slice(0, 3).concat([{change: "added", key: "x11", name: "", level: 1},
+                                                                                                         {change: "added", key: "more", name: "7", level: 1}])}),
+                "Asks for more: The internet and your local network, Downloads (read and write), Your home folder (read and write), 2 more");
     }
 
     function test_symbols() {

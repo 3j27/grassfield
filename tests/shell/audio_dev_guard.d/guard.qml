@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Grassfield.Ui
 import qs.services
 import qs.osd
 
@@ -32,6 +33,16 @@ ShellRoot {
         target: Audio
         function onDevSuppressed(): void {
             root.suppressed++;
+        }
+    }
+
+    // Sound effects (ADR-0047 B-7): nothing plays in a dev session.
+    property int soundSuppressed: 0
+
+    Connections {
+        target: Sounds
+        function onDevSuppressed(): void {
+            root.soundSuppressed++;
         }
     }
 
@@ -70,6 +81,13 @@ ShellRoot {
         Connectivity.setAirplane(true);
         BluetoothState.setEnabled(false);
         const b = [Brightness.adjust(0.05), Brightness.setLevel(0.9), Brightness.setKbdLevel(0.9)];
+        // The alert and an interface sound: what the settings let play (the owner's grassfield.json may silence them).
+        const events = ["alert", "trash-empty"];
+        const playable = events.filter(e => SoundEffects.argvFor(e, Sounds.settings, [], "/t") !== null).length;
+        const s = events.map(e => Sounds.play(e));
+        // GNOME's sound keys (gsettings): never written from a dev session.
+        Sounds.gnomeWritten = "";
+        Sounds.syncGnome();
 
         if (dev) {
             check("every volume/mute/key action refused", r.every(v => v === false));
@@ -78,7 +96,12 @@ ShellRoot {
             check("zero backend writes", Audio.backendWrites === 0);
             check("every refusal signalled (4 volume + mute + 3 keys + 2 devices + 3 Osd keys)", suppressed === 13);
             check("brightness refused", b.every(v => v === false));
+            check("no sound played", s.every(v => v === false) && Sounds.started === 0);
+            check("every sound refusal signalled", soundSuppressed === playable);
+            check("GNOME's sound keys untouched", Sounds.gnomeWrites === 0);
         } else {
+            check("sounds played as the settings allow", Sounds.started === playable && soundSuppressed === 0);
+            check("GNOME's sound keys written", Sounds.gnomeWrites >= 2);
             check("volume written", fakeSink.audio.volume < 0.5 || fakeSink.audio.volume > 0.5 || Audio.backendWrites > 0);
             check("mute written", fakeSink.audio.muted === true);
             check("backend written", Audio.backendWrites >= 9);

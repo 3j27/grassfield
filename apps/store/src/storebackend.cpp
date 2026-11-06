@@ -499,7 +499,7 @@ StoreBackend::StoreBackend(QObject *parent)
     , m_cancel(std::make_shared<std::atomic_bool>(false))
 {
     m_pool.setMaxThreadCount(2); // one load and one product page's pacman -Si at a time
-    m_updatePool.setMaxThreadCount(2); // Updates: a check (the shell, pacman -Qu, Flathub's) and an update's plan at once
+    m_updatePool.setMaxThreadCount(3); // Updates: a check (the shell, pacman -Qu, Flathub's), its review and an update's plan at once
     // qGuiApp casts whatever application there is: the unit tests' is a QCoreApplication.
     if (auto *gui = guiApp())
         connect(gui, &QGuiApplication::focusWindowChanged, this, &StoreBackend::focusWindowChanged);
@@ -573,6 +573,13 @@ StoreBackend::StoreBackend(QObject *parent)
     ops.flatpakEnv = flatpakEnvironment();
     m_operations = std::make_unique<Operations>(ops);
     connect(m_operations.get(), &Operations::changed, this, &StoreBackend::operationsChanged);
+    // The running operation in the menu bar (ADR-0052); its Stop is the ring's square (SD26).
+    m_ongoing = new apps::OngoingPublisher(this);
+    connect(this, &StoreBackend::operationsChanged, this, &StoreBackend::publishOngoing);
+    connect(m_ongoing, &apps::OngoingPublisher::actionInvoked, this, [this](const QString &id, const QString &action) {
+        if (action == QLatin1String("stop") && id.startsWith(QLatin1String("op-")))
+            stopOperation(id.mid(3));
+    });
     connect(m_operations.get(), &Operations::finished, this, [this](const QString &app) {
         m_installPlans.remove(app);
         m_removePlans.remove(app);
@@ -1126,6 +1133,13 @@ QVariantMap StoreBackend::updates() const
                                         {QStringLiteral("launcher"), true}};
         m.insert(QStringLiteral("ref"), f.ref);
         m.insert(QStringLiteral("page"), a != nullptr);
+        // What its update changes (ADR-0049), once read: an update that asks for more, or could not be read, waits for its
+        // own Update.
+        if (const auto r = m_flatpakReview.constFind(f.ref); r != m_flatpakReview.cend()) {
+            m.insert(QStringLiteral("asksForMore"), r->asks || r->unknown);
+            m.insert(QStringLiteral("permissionsUnknown"), r->unknown);
+            m.insert(QStringLiteral("permissionChanges"), r->changes);
+        }
         apps.append(m);
     }
     // An update's plan running (each app's commit and access read, SD33): how many apps it checked, of how many.
@@ -1268,7 +1282,55 @@ void StoreBackend::checkFlatpakUpdates()
             ++self->m_revision; // the buttons' Update
             emit self->updatesChanged();
             emit self->dataChanged();
+            if (all)
+                self->reviewFlatpakUpdates();
         });
+    });
+}
+
+void StoreBackend::reviewFlatpakUpdates()
+{
+    // The reviews of refs no longer listed go; the others stay until this review replaces them.
+    QSet<QString> listed;
+    QStringList refs;
+    for (const FlatpakUpdate &u : std::as_const(m_flatpakUpdates)) {
+        listed.insert(u.ref);
+        if (u.app && isFlatpakAppRef(u.ref))
+            refs.append(u.ref);
+    }
+    for (auto it = m_flatpakReview.begin(); it != m_flatpakReview.end();) {
+        if (listed.contains(it.key()))
+            ++it;
+        else
+            it = m_flatpakReview.erase(it);
+    }
+    if (refs.isEmpty() || !flatpakUpdateBlock().isEmpty())
+        return;
+    const int generation = ++m_reviewGeneration;
+    const FlatpakTools tools = flatpakTools();
+    const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
+    QPointer<StoreBackend> self(this);
+    m_updatePool.start([self, generation, refs, tools, cancel] {
+        for (const QString &ref : refs) {
+            if (*cancel)
+                return;
+            const QString commit = flatpakRemoteCommit(tools, ref);
+            const std::optional<QList<FlatpakPermissionChange>> changes = commit.isEmpty() ? std::nullopt
+                                                                                           : flatpakPermissionChanges(tools, ref, commit);
+            FlatpakReview review;
+            review.unknown = !changes;
+            review.asks = changes && asksForMore(*changes);
+            if (changes)
+                review.changes = view::permissionChanges(*changes);
+            QMetaObject::invokeMethod(self.data(), [self, generation, ref, review] {
+                if (!self || generation != self->m_reviewGeneration)
+                    return;
+                if (std::none_of(self->m_flatpakUpdates.cbegin(), self->m_flatpakUpdates.cend(), [&ref](const FlatpakUpdate &u) { return u.ref == ref; }))
+                    return; // no longer listed
+                self->m_flatpakReview.insert(ref, review);
+                emit self->updatesChanged();
+            });
+        }
     });
 }
 
@@ -1344,9 +1406,11 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
         emit planReady(id, kind, {{QStringLiteral("refusal"), QStringLiteral("unavailable")}, {QStringLiteral("detail"), block.isEmpty() ? QStringLiteral("queued") : block}});
         return;
     }
-    // What each app's update lets it reach that it could not (SD25 for an update): flatpak's --noninteractive accepts it
-    // silently, so the sheet says it first. The commit read is the one checked and the one the update deploys (S32: a newer
-    // commit published meanwhile is listed again and asked about again, never taken silently).
+    // What each app's update changes in what it may reach (SD25 for an update, ADR-0049): flatpak's --noninteractive accepts
+    // more silently, so an update that asks for more (or whose metadata could not be read) is never applied unasked: its
+    // own Update says it first, and Update All leaves it out ("Asks for more" on the list). Narrower or removed grants
+    // apply as any update. The commit read is the one checked and the one the update deploys (S32: a newer commit
+    // published meanwhile is listed again and asked about again, never taken silently).
     QList<std::pair<QString, QString>> apps; // ref, name
     for (const QString &ref : refs) {
         if (!isFlatpakAppRef(ref))
@@ -1354,6 +1418,7 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
         const StoreApp *a = flatpakApp(flatpakRefId(ref));
         apps.append({ref, a ? a->name.pick(m_language) : flatpakRefId(ref)});
     }
+    const bool all = id == kFlatpakUpdatesApp;
     m_updatePlanning.insert(id, {0, int(apps.size())});
     ++m_revision; // its button says it is checked
     emit updatesChanged();
@@ -1361,20 +1426,32 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
     const FlatpakTools tools = flatpakTools();
     const std::shared_ptr<std::atomic_bool> cancel = m_cancel;
     QPointer<StoreBackend> self(this);
-    m_updatePool.start([self, id, kind, refs, apps, tools, cancel] {
-        QVariantList widened;
-        QStringList unknown;
+    m_updatePool.start([self, id, kind, refs, apps, all, tools, cancel] {
+        QVariantList changed;
+        QStringList unknown, held;
+        QSet<QString> heldRefs;
+        bool asks = false;
         QHash<QString, QString> pinned, installedThen;
         int done = 0;
         for (const auto &[ref, name] : apps) {
             if (*cancel)
                 return;
             const QString commit = flatpakRemoteCommit(tools, ref);
-            const std::optional<QStringList> added = commit.isEmpty() ? std::nullopt : flatpakAccessAdded(tools, ref, commit);
-            if (!added)
+            const std::optional<QList<FlatpakPermissionChange>> changes = commit.isEmpty() ? std::nullopt
+                                                                                           : flatpakPermissionChanges(tools, ref, commit);
+            const bool more = !changes || asksForMore(*changes);
+            if (!changes)
                 unknown.append(name);
-            else if (!added->isEmpty())
-                widened.append(QVariantMap{{QStringLiteral("name"), name}, {QStringLiteral("access"), *added}});
+            else if (!changes->isEmpty())
+                changed.append(QVariantMap{{QStringLiteral("name"), name},
+                                           {QStringLiteral("asks"), more},
+                                           {QStringLiteral("changes"), view::permissionChanges(*changes)}});
+            if (more && all) {
+                held.append(name); // Update All never takes it: its own Update asks
+                heldRefs.insert(ref);
+            } else if (more) {
+                asks = true;
+            }
             if (!commit.isEmpty()) {
                 pinned.insert(ref, commit);
                 installedThen.insert(ref, flatpakInstalledCommit(tools, ref));
@@ -1389,20 +1466,30 @@ void StoreBackend::planFlatpakUpdate(const QString &id)
         if (*cancel)
             return;
         UpdatePlan plan;
-        plan.refs = refs;
         for (const QString &ref : refs) {
+            if (heldRefs.contains(ref))
+                continue;
+            plan.refs.append(ref);
             plan.commits.append(pinned.value(ref));
             plan.fromCommits.append(installedThen.value(ref));
         }
-        const QVariantMap out{{QStringLiteral("refusal"), QString()},
-                              {QStringLiteral("refs"), int(refs.size())},
-                              {QStringLiteral("widened"), widened},
-                              {QStringLiteral("unknown"), unknown}};
-        QMetaObject::invokeMethod(self.data(), [self, id, kind, plan, out] {
+        // Update All with every app held and no runtime left: nothing it may do alone.
+        const bool nothing = plan.refs.isEmpty();
+        const QVariantMap out{{QStringLiteral("refusal"), nothing ? QStringLiteral("unavailable") : QString()},
+                              {QStringLiteral("detail"), nothing ? QStringLiteral("held") : QString()},
+                              {QStringLiteral("refs"), int(plan.refs.size())},
+                              {QStringLiteral("asks"), asks},
+                              {QStringLiteral("changed"), changed},
+                              {QStringLiteral("unknown"), unknown},
+                              {QStringLiteral("held"), held}};
+        QMetaObject::invokeMethod(self.data(), [self, id, kind, plan, out, nothing] {
             if (!self)
                 return;
             self->m_updatePlanning.remove(id);
-            self->m_updatePlans.insert(id, plan);
+            if (nothing)
+                self->m_updatePlans.remove(id);
+            else
+                self->m_updatePlans.insert(id, plan);
             ++self->m_revision;
             emit self->updatesChanged();
             emit self->dataChanged();
@@ -2169,6 +2256,7 @@ void StoreBackend::plan(const QString &id, const QString &kind)
                                   {QStringLiteral("download"), view::sizeText(p.downloadSize, locale)},
                                   {QStringLiteral("installed"), QString()},
                                   {QStringLiteral("access"), p.access},
+                                  {QStringLiteral("permissions"), view::permissions(p.permissions, p.morePermissions)},
                                   {QStringLiteral("detail"), p.detail}};
             if (p.refusal != Refusal::None)
                 qInfo("grassfield-store: %s: flatpak's plan: %s", qPrintable(id), qPrintable(p.detail));
@@ -2410,6 +2498,50 @@ bool StoreBackend::removeWaiting(const QString &operationId)
     return m_operations->removeWaiting(operationId);
 }
 
+QHash<QString, apps::OngoingActivity> StoreBackend::ongoingActivities(const QVariantList &operations)
+{
+    QHash<QString, apps::OngoingActivity> out;
+    if (operations.isEmpty())
+        return out;
+    const QVariantMap op = operations.first().toMap(); // the running one first (SR18)
+    const QString state = op.value(QStringLiteral("state")).toString();
+    const QString id = op.value(QStringLiteral("id")).toString();
+    if (state == QLatin1String("waiting") || !isOperationId(id))
+        return out;
+    const QString kind = op.value(QStringLiteral("kind")).toString();
+    const QString name = op.value(QStringLiteral("name")).toString();
+    const int done = op.value(QStringLiteral("done")).toInt();
+    const int total = op.value(QStringLiteral("total")).toInt();
+    apps::OngoingActivity a;
+    a.kind = QStringLiteral("install");
+    if (kind == QLatin1String("remove"))
+        a.title = QCoreApplication::translate("StoreOngoing", "Uninstalling “%1”").arg(name);
+    else if (kind == QLatin1String("update"))
+        a.title = name.isEmpty() ? QCoreApplication::translate("StoreOngoing", "Updating Apps") : QCoreApplication::translate("StoreOngoing", "Updating “%1”").arg(name);
+    else
+        a.title = QCoreApplication::translate("StoreOngoing", "Installing “%1”").arg(name);
+    if (state == QLatin1String("authorizing"))
+        a.subtitle = QCoreApplication::translate("StoreOngoing", "Waiting for permission…");
+    else if (state == QLatin1String("opening"))
+        a.subtitle = QCoreApplication::translate("StoreOngoing", "Opening Terminal…");
+    else if (state == QLatin1String("checking"))
+        a.subtitle = QCoreApplication::translate("StoreOngoing", "Finishing…");
+    else if (total > 0)
+        a.subtitle = QCoreApplication::translate("StoreOngoing", "%1 of %2").arg(done).arg(total);
+    if (state == QLatin1String("running") && total > 0)
+        a.progress = qBound(0.0, double(done) / double(total), 1.0);
+    if (op.value(QStringLiteral("stoppable")).toBool())
+        a.actions = {{QStringLiteral("stop"), QCoreApplication::translate("StoreOngoing", "Stop")}};
+    out.insert(QStringLiteral("op-") + id, a);
+    return out;
+}
+
+void StoreBackend::publishOngoing()
+{
+    if (m_ongoing && m_operations)
+        m_ongoing->sync(ongoingActivities(m_operations->list()));
+}
+
 bool StoreBackend::stopOperation(const QString &operationId)
 {
     return m_operations->stop(operationId);
@@ -2445,6 +2577,8 @@ void StoreBackend::requestFlatpakInfo(const QString &id)
                    {QStringLiteral("installed"), view::sizeText(facts->installed, locale)}};
             if (facts->access) // unread: the page says nothing rather than "only its own window and files"
                 out.insert(QStringLiteral("access"), *facts->access);
+            if (facts->permissions)
+                out.insert(QStringLiteral("permissions"), view::permissions(facts->permissions->grants, facts->permissions->more));
         }
         QMetaObject::invokeMethod(this, [this, id, out] { emit flatpakInfo(id, out); }, Qt::QueuedConnection);
     });

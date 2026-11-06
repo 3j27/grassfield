@@ -1,0 +1,11 @@
+# flatpak 1.17's conditional grants as flatpak writes them back (common/flatpak-context.c flatpak_permission_serialize:
+# "!x", then "x" for older flatpaks, then "if:x:<condition>"; doc/flatpak-metadata.xml "Conditional Permissions").
+[Application]
+name=org.example.Game
+runtime=org.freedesktop.Platform/x86_64/25.08
+
+[Context]
+shared=network;
+sockets=wayland;!x11;x11;if:x11:!has-wayland;pulseaudio;
+devices=dri;input;!all;all;if:all:!has-input-device;
+features=if:bluetooth:has-usb-portal;

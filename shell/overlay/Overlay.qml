@@ -362,6 +362,8 @@ Variants {
                     return trayMenu;
                 case "nowplaying":
                     return nowPlayingPopover;
+                case "ongoing":
+                    return ongoingPopover;
                 case "volume":
                     return volumeMenu;
                 case "network":
@@ -433,6 +435,12 @@ Variants {
         Component {
             id: nowPlayingPopover
             NowPlayingPopover {}
+        }
+
+        // An ongoing activity's popover (ADR-0052): what an app published, drawn by the shell.
+        Component {
+            id: ongoingPopover
+            OngoingPopover {}
         }
 
         Component {

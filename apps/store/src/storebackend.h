@@ -12,6 +12,7 @@
 #include "catalogstore.h"
 #include "channel.h"
 #include "flatpak.h"
+#include "ongoing.h"
 #include "operations.h"
 #include "pacman.h"
 #include "plancheck.h"
@@ -180,15 +181,17 @@ public:
     Q_INVOKABLE void requestAur(const QString &id);
     Q_INVOKABLE void requestBuildScript(const QString &id);
     // A Flatpak's facts for the Information list (SR11), answered by flatpakInfo: {version, license, download, installed
-    // (sizes as the locale writes them), access (flatpak.h flatpakAccess's keys)}, from `remote-info` while it is not
-    // installed (online only), else from `info --user`; {} when flatpak could not say.
+    // (sizes as the locale writes them), access (flatpak.h flatpakAccess's keys), permissions (view::permissions: the
+    // product page's cards, ADR-0049)}, from `remote-info` while it is not installed (online only), else from `info --user`;
+    // {} when flatpak could not say.
     Q_INVOKABLE void requestFlatpakInfo(const QString &id);
     // Updates (SR24, SR25; step 4): software-update.json as view::updates reads it, with: checking (the shell was asked for a
     // check, not answered yet), askFailed (no shell answered), running (Omarchy's update lock held by another program, or
     // the checker says an update runs), unfinished (pacman -Qu's packages while no update runs: the last system update did
     // not finish, S12), flatpak {on, state: "" | checking | failed, apps (summaries with ref), runtimes (their count),
     // block ("" or why no Flatpak update can run now)}, and count (the apps with an update, Flatpaks included: the
-    // sidebar's number).
+    // sidebar's number). A Flatpak app, once its update is reviewed (ADR-0049): asksForMore, permissionsUnknown,
+    // permissionChanges (view::permissionChanges).
     QVariantMap updates() const;
     // Check Now (SR24): the shell's check (ADR-0033 d.7), pacman -Qu, and the Flatpaks' (remote-ls --updates, S31).
     Q_INVOKABLE void checkUpdates();
@@ -211,9 +214,11 @@ public:
     // Get and Uninstall… (SR14, SR22): what the operation would do, answered by planReady(app, kind, plan): {refusal: "" |
     // busy | unfinished | outdated | offline | dependency | protected | failed | unavailable, packages [{name, version, repo,
     // size}], download, installed, unfinished, upgrades, dependents, protected, detail}. kind: install or remove; update for
-    // a Flatpak with an update or kFlatpakUpdatesApp (step 4): {refusal: "" | unavailable, detail, refs (their count),
-    // widened [{name, access}] (what each update lets an app reach that it could not), unknown [names whose access could
-    // not be read]}: the sheet asks only when one of the two lists is not empty.
+    // a Flatpak with an update or kFlatpakUpdatesApp (step 4): {refusal: "" | unavailable, detail ("held" when Update All
+    // has nothing it may do alone), refs (their count), asks (the sheet must ask: the app's update asks for more or could
+    // not be read), changed [{name, asks, changes (view::permissionChanges)}], unknown [names whose metadata could not be
+    // read], held [names Update All leaves out: they ask for more or could not be read]} (ADR-0049). A Flatpak's install
+    // plan also gives permissions (view::permissions).
     Q_INVOKABLE void plan(const QString &id, const QString &kind);
     // What the app's buttons may do now: {installed, launcher, get: "" or why not, uninstall: "" or why not} (getBlock,
     // uninstallBlock). Read again with `revision` and `operations`.
@@ -228,6 +233,9 @@ public:
     // The sheet's default button: the operation joins the queue, with the plan made last for this app (false when there is
     // none, or the app cannot be installed or removed).
     Q_INVOKABLE bool install(const QString &id);
+    // The running operation as an ongoing activity in the menu bar (ADR-0052): "op-<id>" -> "Installing “App”", its count
+    // ("2 of 5") and bar, and Stop while it can be stopped; none while nothing runs (a waiting queue shows nothing).
+    static QHash<QString, apps::OngoingActivity> ongoingActivities(const QVariantList &operations);
     Q_INVOKABLE bool uninstall(const QString &id);
     // A Flatpak's Update, or Update All of the group (kFlatpakUpdatesApp), with the plan made last for it: the refs it checked.
     Q_INVOKABLE bool update(const QString &id);
@@ -340,6 +348,9 @@ private:
     void askShellToCheck();
     void readUnfinished();
     void checkFlatpakUpdates();
+    // What each listed app's update changes in what it may reach (ADR-0049), read after a check for the Updates list's
+    // "Asks for more"; the update's own plan reads it again (planFlatpakUpdate).
+    void reviewFlatpakUpdates();
     void followUpdates();
     // The installed Flathub app `flatpakId` names (an AppStream app of Flathub, else ""), and the update of an app id.
     const StoreApp *flatpakApp(const QString &flatpakId) const;
@@ -381,6 +392,8 @@ private:
     std::shared_ptr<std::atomic_bool> m_cancel;
     std::shared_ptr<std::atomic_bool> m_screenshotGate = std::make_shared<std::atomic_bool>(true);
     std::unique_ptr<Operations> m_operations;
+    apps::OngoingPublisher *m_ongoing = nullptr; // ADR-0052: the running operation in the menu bar
+    void publishOngoing();
     QHash<QString, InstallPlan> m_installPlans; // app id -> the plan its sheet showed
     QHash<QString, RemovePlan> m_removePlans;
     QHash<QString, AurPackage> m_aurPackages; // name -> what the AUR answered this run
@@ -392,6 +405,12 @@ private:
     // Updates (step 4).
     QList<FlatpakUpdate> m_flatpakUpdates; // Flathub's only
     QString m_flatpakUpdatesState;          // "", checking, failed
+    struct FlatpakReview {
+        bool asks = false, unknown = false; // it asks for more; its metadata could not be read
+        QVariantList changes;               // view::permissionChanges
+    };
+    QHash<QString, FlatpakReview> m_flatpakReview; // an app's ref -> what its listed update changes
+    int m_reviewGeneration = 0;                    // a newer check's review replaces an older one's
     QDateTime m_flatpakCheckedAt;
     bool m_systemChecking = false;
     bool m_askFailed = false;

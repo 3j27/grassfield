@@ -526,8 +526,24 @@ snapshot /srv/primary/stable/x86_64 k1 k1sub stable 1.1.0 2.0.0 && mirror
 snapshot /srv/newhost/stable/x86_64 k1 k1sub stable 1.1.0 2.0.0
 quiet pacman -Syu --noconfirm
 expect "2.0.0 (built for the new host, the old one as previous) installed from the old host" test "$(installed)" == 2.0.0-1
-expect "its post_upgrade rewrote grassfield.conf for the new host (stable) and dropped the synced files" \
-  test "$(grep -v '^#' /etc/pacman.d/grassfield.conf | tr '\n' '|'):$(ls /var/lib/pacman/sync/grassfield.* 2>/dev/null | wc -l)" == 'SigLevel = Required|Server = file:///srv/newhost/stable/$arch|:0'
+# Inside the transaction the synced [grassfield] files are kept (deleting them would make every grassfield-* package foreign
+# for the rest of omarchy update, whose omarchy-update-aur-pkgs runs yay -Sua: GF-045, ADR-0050 security review HIGH 1);
+# their time goes to the epoch, so the next sync downloads the database and its signature again.
+expect "its post_upgrade rewrote grassfield.conf for the new host (stable); the synced database and signature kept, their time the epoch" \
+  test "$(grep -v '^#' /etc/pacman.d/grassfield.conf | tr '\n' '|'):$(stat -c %Y /var/lib/pacman/sync/grassfield.db /var/lib/pacman/sync/grassfield.db.sig 2>/dev/null | tr '\n' ' ')" == 'SigLevel = Required|Server = file:///srv/newhost/stable/$arch|:0 0 '
+expect "pacman -Qm lists no grassfield-* package after the migration (yay -Sua would see them as foreign)" \
+  bash -c "! pacman -Qmq 2>/dev/null | grep -q '^grassfield-'"
+# ADR-0050 (A17), to add with a snapshot that carries the marker package grassfield-rollout 1-1 (NOT VERIFIED, not run here):
+#   1. publish the marker in /srv/primary/stable/x86_64 and serve the 20 cohort paths /srv/primary/stable/cohort/NN/x86_64 as
+#      copies of that snapshot; pacman -Syu installing a newer grassfield-desktop: its post_upgrade (pacman holding db.lck)
+#      runs `pacman -Sl grassfield`, gets the marker and writes the cohort form; the synced files keep their time (plain ->
+#      cohort: their time the epoch); pacman -Qmq lists no grassfield-*; the next pacman -Sy from the cohort path exits 0
+#      with a 200 for the database and its signature;
+#   2. a cohort path missing (404): pacman falls back to the plain lines for the database and its signature, -Sy exits 0;
+#   3. the marker withdrawn: the next Grassfield upgrade writes the plain form, the synced files' time the epoch, -Sy exits 0
+#      with a 200 for both files (no "signature ... is invalid");
+#   4. /var/lib/pacman/sync/grassfield.db removed before an upgrade: post_upgrade's pacman -Sl prints nothing and exits 0
+#      (a missing database is no error to libalpm); the scriptlet reads that as no listing and the form is unchanged.
 expect "pacman -Sy from the new host; channel stable" bash -c "pacman -Sy >/dev/null 2>&1 && [[ \$(runuser -u alice -- env HOME=/home/alice grassfield-channel-set) == stable ]]"
 printf 'SigLevel = Required\nServer = file:///srv/custom/beta/$arch\n' >/etc/pacman.d/grassfield.conf
 expect "a file naming neither the base nor a previous one: the scriptlet's upgrade leaves it alone; the channel reads custom" \

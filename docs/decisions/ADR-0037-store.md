@@ -505,7 +505,10 @@ nothing ever signals pacman.
   --commit=<c> -- <ref>`: `--commit` takes one ref, S32d), the rest together; a newer commit published meanwhile is not
   taken (S32c) but listed again and asked about by a new plan (S32e). A pinned ref is done when its installed commit is that
   one, another when a new check no longer lists it, never on flatpak's exit code alone (S31d); a command that fails ends
-  the update ("interrupted", N of M). `omarchy update` does not update Flatpaks.
+  the update ("interrupted", N of M). `omarchy update` does not update Flatpaks. **Amended by ADR-0049** (2026-11-05):
+  what an app can reach is read grant by grant (folder and mode, bus name and policy) and shown as cards on its page; an
+  update's changes are added, widened, removed or narrowed; Update All leaves out every app whose update asks for more or
+  could not be read ("Asks for more: …" on the list), and that app's own Update says what changes.
 - **Badge (owner, ST8).** The only Dock badge for updates stays on Settings (ADR-0033 U18: Grassfield and Omarchy releases).
   The Store's tile has no badge, Flatpaks included; the Store's sidebar shows the number of apps with an update.
 

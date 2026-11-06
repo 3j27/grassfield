@@ -99,6 +99,30 @@
         <translation>%1 disponibles sur %2</translation>
     </message>
     <message>
+        <source>Diagnostic Report</source>
+        <translation>Rapport de diagnostic</translation>
+    </message>
+    <message>
+        <source>Creating the report…</source>
+        <translation>Création du rapport…</translation>
+    </message>
+    <message>
+        <source>Saved as “%1”.</source>
+        <translation>Enregistré sous «&#xa0;%1&#xa0;».</translation>
+    </message>
+    <message>
+        <source>The report could not be created.</source>
+        <translation>Le rapport n’a pas pu être créé.</translation>
+    </message>
+    <message>
+        <source>Saves a report about this computer to your Downloads folder. Nothing is sent: you decide whether to share it.</source>
+        <translation>Enregistre un rapport sur cet ordinateur dans votre dossier Téléchargements. Rien n’est envoyé&#xa0;: vous décidez de le partager ou non.</translation>
+    </message>
+    <message>
+        <source>Create Diagnostic Report…</source>
+        <translation>Créer un rapport de diagnostic…</translation>
+    </message>
+    <message>
         <source>Processor</source>
         <translation>Processeur</translation>
     </message>
@@ -5601,6 +5625,10 @@
         <translation>Renommer 1 élément</translation>
     </message>
     <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+    <message>
         <source>copy</source>
         <translation>copie</translation>
     </message>
@@ -6957,8 +6985,92 @@
         <translation>Rétablir</translation>
     </message>
     <message>
+        <source>New Memo</source>
+        <translation>Nouveau mémo</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
         <source>Cut</source>
         <translation>Couper</translation>
+    </message>
+    <message>
+        <source>Font</source>
+        <translation>Police</translation>
+    </message>
+    <message>
+        <source>Bold</source>
+        <translation>Gras</translation>
+    </message>
+    <message>
+        <source>Italic</source>
+        <translation>Italique</translation>
+    </message>
+    <message>
+        <source>Underline</source>
+        <translation>Souligné</translation>
+    </message>
+    <message>
+        <source>Bigger</source>
+        <translation>Plus grand</translation>
+    </message>
+    <message>
+        <source>Smaller</source>
+        <translation>Plus petit</translation>
+    </message>
+    <message>
+        <source>Bulleted List</source>
+        <translation>Liste à puces</translation>
+    </message>
+    <message>
+        <source>Color</source>
+        <translation>Couleur</translation>
+    </message>
+    <message>
+        <source>Yellow</source>
+        <translation>Jaune</translation>
+    </message>
+    <message>
+        <source>Blue</source>
+        <translation>Bleu</translation>
+    </message>
+    <message>
+        <source>Green</source>
+        <translation>Vert</translation>
+    </message>
+    <message>
+        <source>Pink</source>
+        <translation>Rose</translation>
+    </message>
+    <message>
+        <source>Purple</source>
+        <translation>Violet</translation>
+    </message>
+    <message>
+        <source>Grey</source>
+        <translation>Gris</translation>
+    </message>
+    <message>
+        <source>Memo</source>
+        <translation>Mémo</translation>
+    </message>
+    <message>
+        <source>Float on Top</source>
+        <translation>Toujours au premier plan</translation>
+    </message>
+    <message>
+        <source>Translucent</source>
+        <translation>Translucide</translation>
+    </message>
+    <message>
+        <source>Expand</source>
+        <translation>Déplier</translation>
+    </message>
+    <message>
+        <source>Collapse</source>
+        <translation>Replier</translation>
     </message>
     <message>
         <source>Paste</source>
@@ -8442,10 +8554,6 @@
         <translation>Son</translation>
     </message>
     <message>
-        <source>volume output input speakers microphone mute audio</source>
-        <translation>volume sortie entrée haut-parleurs microphone muet audio</translation>
-    </message>
-    <message>
         <source>Displays</source>
         <translation>Moniteurs</translation>
     </message>
@@ -8572,6 +8680,10 @@
     <message>
         <source>dock magnification autohide desktop icons items screen corners titlebar window tile tiling layouts suggestions margins</source>
         <translation>dock agrandissement masquage bureau icônes éléments coins de l’écran barre de titre fenêtre mosaïque disposer dispositions suggestions marges</translation>
+    </message>
+    <message>
+        <source>volume output input speakers microphone mute audio alert sound effects beep feedback</source>
+        <translation>volume sortie entrée haut-parleurs microphone muet audio son d’alerte effets sonores bip retour</translation>
     </message>
     <message>
         <source>Focus</source>
@@ -9090,10 +9202,57 @@
     </message>
 </context>
 <context>
+    <name>MemoWindow</name>
+    <message>
+        <source>Memo</source>
+        <translation>Mémo</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Expand</source>
+        <translation>Déplier</translation>
+    </message>
+    <message>
+        <source>Collapse</source>
+        <translation>Replier</translation>
+    </message>
+    <message>
+        <source>Memo text</source>
+        <translation>Texte du mémo</translation>
+    </message>
+    <message>
+        <source>Delete this memo?</source>
+        <translation>Supprimer ce mémo&#xa0;?</translation>
+    </message>
+    <message>
+        <source>Its text can&apos;t be recovered.</source>
+        <translation>Son texte ne pourra pas être récupéré.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Supprimer</translation>
+    </message>
+</context>
+<context>
     <name>MenuBar</name>
     <message>
         <source>Desktop</source>
         <translation>Bureau</translation>
+    </message>
+    <message>
+        <source>In Progress</source>
+        <translation>En cours</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1&#xa0;: %2</translation>
     </message>
     <message>
         <source>Grassfield menu</source>
@@ -9827,6 +9986,24 @@
     </message>
 </context>
 <context>
+    <name>OngoingCli</name>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+</context>
+<context>
+    <name>OngoingPopover</name>
+    <message>
+        <source>In Progress</source>
+        <translation>En cours</translation>
+    </message>
+    <message>
+        <source>%1%</source>
+        <translation>%1&#xa0;%</translation>
+    </message>
+</context>
+<context>
     <name>OperationSheet</name>
     <message>
         <source>Uninstall “%1”?</source>
@@ -9937,10 +10114,6 @@
         <translation>Sa mise à jour est déjà en attente.</translation>
     </message>
     <message>
-        <source>After this update, “%1” can also reach: %2.</source>
-        <translation>Après cette mise à jour, «&#xa0;%1&#xa0;» peut aussi accéder à&#xa0;: %2.</translation>
-    </message>
-    <message>
         <source>What this update lets %1 reach could not be read.</source>
         <translation>Ce à quoi cette mise à jour permet à %1 d’accéder n’a pas pu être lu.</translation>
     </message>
@@ -9987,10 +10160,6 @@
     <message>
         <source>It can reach only its own window and files.</source>
         <translation>Elle n’accède qu’à sa propre fenêtre et à ses propres fichiers.</translation>
-    </message>
-    <message>
-        <source>It can reach: %1.</source>
-        <translation>Elle peut accéder à&#xa0;: %1.</translation>
     </message>
     <message>
         <source>These will be installed:</source>
@@ -10047,6 +10216,22 @@
     <message>
         <source>The Store could not read what this would change.</source>
         <translation>Le Store n’a pas pu lire ce que cela changerait.</translation>
+    </message>
+    <message>
+        <source>Each of these apps asks for more than before. Update them one by one to see what they ask for.</source>
+        <translation>Chacune de ces apps demande davantage qu’avant. Mettez-les à jour une par une pour voir ce qu’elles demandent.</translation>
+    </message>
+    <message>
+        <source>After this update, “%1” can also reach:</source>
+        <translation>Après cette mise à jour, «&#xa0;%1&#xa0;» pourra aussi accéder à&#xa0;:</translation>
+    </message>
+    <message>
+        <source>It can no longer reach:</source>
+        <translation>Elle ne pourra plus accéder à&#xa0;:</translation>
+    </message>
+    <message>
+        <source>It can reach:</source>
+        <translation>Elle peut accéder à&#xa0;:</translation>
     </message>
     <message>
         <source>Update</source>
@@ -10248,6 +10433,25 @@
     </message>
 </context>
 <context>
+    <name>PermissionCards</name>
+    <message>
+        <source>Only Its Own Window and Files</source>
+        <translation>Sa fenêtre et ses fichiers uniquement</translation>
+    </message>
+    <message>
+        <source>It can reach only its own window, its own folder in ~/.var/app and the files you choose.</source>
+        <translation>Elle n’accède qu’à sa fenêtre, à son dossier dans ~/.var/app et aux fichiers que vous choisissez.</translation>
+    </message>
+    <message>
+        <source>Permissions</source>
+        <translation>Autorisations</translation>
+    </message>
+    <message>
+        <source>What “%1” can reach beyond its own window and files, as Flatpak grants it.</source>
+        <translation>Ce à quoi «&#xa0;%1&#xa0;» peut accéder au-delà de sa fenêtre et de ses fichiers, tel que Flatpak l’y autorise.</translation>
+    </message>
+</context>
+<context>
     <name>PlacesModel</name>
     <message>
         <source>Recents</source>
@@ -10404,6 +10608,14 @@
     <message>
         <source>Prevent automatic sleeping when the display is off</source>
         <translation>Empêcher la suspension d’activité automatique lorsque l’écran est éteint</translation>
+    </message>
+    <message>
+        <source>Slow down apps you can&apos;t see while on battery</source>
+        <translation>Ralentir les apps que vous ne voyez pas sur batterie</translation>
+    </message>
+    <message>
+        <source>Apps whose windows are covered, minimized or on another desktop get less processor and disk time. The app you are using, and apps that play sound, record, set an alarm or are still working, keep their full speed. Nothing is slowed down on the power adapter.</source>
+        <translation>Les apps dont les fenêtres sont recouvertes, placées dans le Dock ou sur un autre bureau reçoivent moins de temps de processeur et de disque. L’app que vous utilisez et les apps qui lisent du son, enregistrent, ont une alarme programmée ou travaillent encore gardent toute leur vitesse. Rien n’est ralenti sur l’adaptateur secteur.</translation>
     </message>
 </context>
 <context>
@@ -11262,10 +11474,6 @@
         <translation>Vérifié par Flathub</translation>
     </message>
     <message>
-        <source>Can Access</source>
-        <translation>Accès</translation>
-    </message>
-    <message>
         <source>Version</source>
         <translation>Version</translation>
     </message>
@@ -11415,6 +11623,10 @@
         <source>See the processes and the resources they use.</source>
         <translation>Voir les processus et les ressources qu’ils utilisent.</translation>
     </message>
+    <message>
+        <source>Keep short notes on the desktop.</source>
+        <translation>Garder de courtes notes sur le bureau.</translation>
+    </message>
 </context>
 <context>
     <name>RecentItems</name>
@@ -11429,6 +11641,33 @@
     <message>
         <source>Clear Menu</source>
         <translation>Effacer le menu</translation>
+    </message>
+</context>
+<context>
+    <name>RefusalWindow</name>
+    <message>
+        <source>Memos</source>
+        <translation>Mémos</translation>
+    </message>
+    <message>
+        <source>Your memos were saved by a newer version of Memos.</source>
+        <translation>Vos mémos ont été enregistrés par une version plus récente de Mémos.</translation>
+    </message>
+    <message>
+        <source>Memos can&apos;t read your memos.</source>
+        <translation>Mémos ne peut pas lire vos mémos.</translation>
+    </message>
+    <message>
+        <source>Nothing was changed. Open them with that version.</source>
+        <translation>Rien n’a été modifié. Ouvrez-les avec cette version.</translation>
+    </message>
+    <message>
+        <source>Nothing was changed. Check that the memos folder can be read, then open Memos again.</source>
+        <translation>Rien n’a été modifié. Vérifiez que le dossier des mémos peut être lu, puis rouvrez Mémos.</translation>
+    </message>
+    <message>
+        <source>Quit</source>
+        <translation>Quitter</translation>
     </message>
 </context>
 <context>
@@ -11944,6 +12183,14 @@
     <message>
         <source>mute</source>
         <translation>muet</translation>
+    </message>
+    <message>
+        <source>alert sound</source>
+        <translation>son d’alerte</translation>
+    </message>
+    <message>
+        <source>sound effects</source>
+        <translation>effets sonores</translation>
     </message>
     <message>
         <source>Displays</source>
@@ -13833,12 +14080,36 @@
         <translation>Grassfield %1</translation>
     </message>
     <message>
+        <source>Important security update. Installed: %1</source>
+        <translation>Mise à jour de sécurité importante. Version installée&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>Installed: %1</source>
         <translation>Version installée&#xa0;: %1</translation>
     </message>
     <message>
         <source>More Info…</source>
         <translation>Plus d’informations…</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 is an important security update.</source>
+        <translation>Grassfield %1 est une mise à jour de sécurité importante.</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 is being released gradually.</source>
+        <translation>Grassfield %1 est en cours de déploiement progressif.</translation>
+    </message>
+    <message>
+        <source>It will be offered to this computer soon.</source>
+        <translation>Elle sera bientôt proposée sur cet ordinateur.</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 has been withdrawn.</source>
+        <translation>Grassfield %1 a été retirée.</translation>
+    </message>
+    <message>
+        <source>A corrected version will be offered to this computer as soon as it&apos;s ready.</source>
+        <translation>Une version corrigée sera proposée sur cet ordinateur dès qu’elle sera prête.</translation>
     </message>
     <message>
         <source>Omarchy %1</source>
@@ -14057,6 +14328,14 @@
         <translation>Son</translation>
     </message>
     <message>
+        <source>Selected Sound Output Device</source>
+        <translation>Appareil de sortie audio sélectionné</translation>
+    </message>
+    <message>
+        <source>Device not connected</source>
+        <translation>Appareil non connecté</translation>
+    </message>
+    <message>
         <source>Built-in</source>
         <translation>Intégré</translation>
     </message>
@@ -14083,6 +14362,58 @@
     <message>
         <source>Virtual</source>
         <translation>Virtuel</translation>
+    </message>
+    <message>
+        <source>Sound Effects</source>
+        <translation>Effets sonores</translation>
+    </message>
+    <message>
+        <source>Alert sound</source>
+        <translation>Son d’alerte</translation>
+    </message>
+    <message>
+        <source>Meadow</source>
+        <translation>Prairie</translation>
+    </message>
+    <message>
+        <source>Dewdrop</source>
+        <translation>Rosée</translation>
+    </message>
+    <message>
+        <source>Reed</source>
+        <translation>Roseau</translation>
+    </message>
+    <message>
+        <source>Lantern</source>
+        <translation>Lanterne</translation>
+    </message>
+    <message>
+        <source>Ember</source>
+        <translation>Braise</translation>
+    </message>
+    <message>
+        <source>Thistle</source>
+        <translation>Chardon</translation>
+    </message>
+    <message>
+        <source>Play the alert sound</source>
+        <translation>Lire le son d’alerte</translation>
+    </message>
+    <message>
+        <source>Play sound effects through</source>
+        <translation>Lire les effets sonores sur</translation>
+    </message>
+    <message>
+        <source>Alert volume</source>
+        <translation>Volume des alertes</translation>
+    </message>
+    <message>
+        <source>Play user interface sound effects</source>
+        <translation>Lire les effets sonores de l’interface utilisateur</translation>
+    </message>
+    <message>
+        <source>Play feedback when volume is changed</source>
+        <translation>Émettre un son lors du changement de volume</translation>
     </message>
     <message>
         <source>Sound is not available: PipeWire did not answer or no audio device was found.</source>
@@ -14554,32 +14885,12 @@
         <translation>Activez Flathub dans les réglages du Store pour la désinstaller depuis le Store.</translation>
     </message>
     <message>
-        <source>The internet</source>
-        <translation>Internet</translation>
-    </message>
-    <message>
-        <source>All your files</source>
-        <translation>Tous vos fichiers</translation>
-    </message>
-    <message>
         <source>Your home folder</source>
         <translation>Votre dossier personnel</translation>
     </message>
     <message>
-        <source>Some of your folders</source>
-        <translation>Certains de vos dossiers</translation>
-    </message>
-    <message>
-        <source>Devices such as cameras, USB drives and game controllers</source>
-        <translation>Des appareils comme les caméras, les clés USB et les manettes de jeu</translation>
-    </message>
-    <message>
         <source>Game controllers and other input devices</source>
         <translation>Les manettes de jeu et les autres périphériques d’entrée</translation>
-    </message>
-    <message>
-        <source>USB devices</source>
-        <translation>Les appareils USB</translation>
     </message>
     <message>
         <source>Virtual machines, through KVM</source>
@@ -14588,18 +14899,6 @@
     <message>
         <source>Your speakers and microphone</source>
         <translation>Vos haut-parleurs et votre micro</translation>
-    </message>
-    <message>
-        <source>The X11 display, where it can see what other X11 apps show and what you type in them</source>
-        <translation>L’affichage X11, où elle peut voir ce que montrent les autres apps X11 et ce que vous y tapez</translation>
-    </message>
-    <message>
-        <source>Memory your other programs share</source>
-        <translation>La mémoire que partagent vos autres programmes</translation>
-    </message>
-    <message>
-        <source>Your printers</source>
-        <translation>Vos imprimantes</translation>
     </message>
     <message>
         <source>Your SSH keys, through the SSH agent</source>
@@ -14646,24 +14945,12 @@
         <translation>Des programmes hors de son bac à sable</translation>
     </message>
     <message>
-        <source>The session service “%1”</source>
-        <translation>Le service de session «&#xa0;%1&#xa0;»</translation>
-    </message>
-    <message>
-        <source>The system service “%1”</source>
-        <translation>Le service système «&#xa0;%1&#xa0;»</translation>
-    </message>
-    <message>
         <source>%1 more</source>
         <translation>%1 de plus</translation>
     </message>
     <message>
         <source>A permission the Store can&apos;t describe: %1</source>
         <translation>Une permission que le Store ne sait pas décrire&#xa0;: %1</translation>
-    </message>
-    <message>
-        <source>Only its own window and files</source>
-        <translation>Seulement sa propre fenêtre et ses propres fichiers</translation>
     </message>
     <message>
         <source>Open</source>
@@ -14790,6 +15077,322 @@
         <translation>Mise à jour de logiciels n’a pas encore recherché de mises à jour.</translation>
     </message>
     <message>
+        <source>Files and Folders</source>
+        <translation>Fichiers et dossiers</translation>
+    </message>
+    <message>
+        <source>Network</source>
+        <translation>Réseau</translation>
+    </message>
+    <message>
+        <source>Camera and Other Devices</source>
+        <translation>Caméra et autres appareils</translation>
+    </message>
+    <message>
+        <source>Microphone and Speakers</source>
+        <translation>Micro et haut-parleurs</translation>
+    </message>
+    <message>
+        <source>Display</source>
+        <translation>Affichage</translation>
+    </message>
+    <message>
+        <source>Keys and Passwords</source>
+        <translation>Clés et mots de passe</translation>
+    </message>
+    <message>
+        <source>Other Apps and Services</source>
+        <translation>Autres apps et services</translation>
+    </message>
+    <message>
+        <source>Background and Login</source>
+        <translation>Arrière-plan et ouverture de session</translation>
+    </message>
+    <message>
+        <source>Outside Its Sandbox</source>
+        <translation>Hors de son bac à sable</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message>
+        <source>Your saved passwords</source>
+        <translation>Vos mots de passe enregistrés</translation>
+    </message>
+    <message>
+        <source>Desktop settings</source>
+        <translation>Réglages du bureau</translation>
+    </message>
+    <message>
+        <source>Network locations and the Trash</source>
+        <translation>Emplacements réseau et Corbeille</translation>
+    </message>
+    <message>
+        <source>Network settings</source>
+        <translation>Réglages réseau</translation>
+    </message>
+    <message>
+        <source>Your location</source>
+        <translation>Votre position</translation>
+    </message>
+    <message>
+        <source>Sessions, sleep and shutdown</source>
+        <translation>Sessions, suspension d’activité et extinction</translation>
+    </message>
+    <message>
+        <source>Battery</source>
+        <translation>Batterie</translation>
+    </message>
+    <message>
+        <source>Disks</source>
+        <translation>Disques</translation>
+    </message>
+    <message>
+        <source>Devices on your local network</source>
+        <translation>Appareils de votre réseau local</translation>
+    </message>
+    <message>
+        <source>Desktop</source>
+        <translation>Bureau</translation>
+    </message>
+    <message>
+        <source>Documents</source>
+        <translation>Documents</translation>
+    </message>
+    <message>
+        <source>Downloads</source>
+        <translation>Téléchargements</translation>
+    </message>
+    <message>
+        <source>Music</source>
+        <translation>Musique</translation>
+    </message>
+    <message>
+        <source>Pictures</source>
+        <translation>Images</translation>
+    </message>
+    <message>
+        <source>Public</source>
+        <translation>Public</translation>
+    </message>
+    <message>
+        <source>Templates</source>
+        <translation>Modèles</translation>
+    </message>
+    <message>
+        <source>Videos</source>
+        <translation>Vidéos</translation>
+    </message>
+    <message>
+        <source>All files on this computer</source>
+        <translation>Tous les fichiers de cet ordinateur</translation>
+    </message>
+    <message>
+        <source>The system&apos;s programs and libraries</source>
+        <translation>Les programmes et bibliothèques du système</translation>
+    </message>
+    <message>
+        <source>The system&apos;s settings</source>
+        <translation>Les réglages du système</translation>
+    </message>
+    <message>
+        <source>A folder its path climbs out of (“..”), which could be anywhere</source>
+        <translation>Un dossier dont le chemin remonte («&#xa0;..&#xa0;»), qui peut se trouver n’importe où</translation>
+    </message>
+    <message>
+        <source>Your session&apos;s runtime folder</source>
+        <translation>Le dossier d’exécution de votre session</translation>
+    </message>
+    <message>
+        <source>Your session&apos;s runtime folder: %1</source>
+        <translation>Le dossier d’exécution de votre session&#xa0;: %1</translation>
+    </message>
+    <message>
+        <source>Removable drives</source>
+        <translation>Disques amovibles</translation>
+    </message>
+    <message>
+        <source>%1 (read and write, created if missing)</source>
+        <translation>%1 (lecture et écriture, créé s’il manque)</translation>
+    </message>
+    <message>
+        <source>%1 (read and write)</source>
+        <translation>%1 (lecture et écriture)</translation>
+    </message>
+    <message>
+        <source>%1 (read only)</source>
+        <translation>%1 (lecture seule)</translation>
+    </message>
+    <message>
+        <source>The internet and your local network</source>
+        <translation>Internet et votre réseau local</translation>
+    </message>
+    <message>
+        <source>It can read and change any file you can, including other apps&apos; data and connected drives.</source>
+        <translation>Elle peut lire et modifier tous les fichiers auxquels vous avez accès, y compris les données des autres apps et les disques connectés.</translation>
+    </message>
+    <message>
+        <source>It can read any file you can, including other apps&apos; data and connected drives.</source>
+        <translation>Elle peut lire tous les fichiers auxquels vous avez accès, y compris les données des autres apps et les disques connectés.</translation>
+    </message>
+    <message>
+        <source>It can read and change everything in your home folder, including other apps&apos; data and settings.</source>
+        <translation>Elle peut lire et modifier tout votre dossier personnel, y compris les données et les réglages des autres apps.</translation>
+    </message>
+    <message>
+        <source>It can read everything in your home folder, including other apps&apos; data and settings.</source>
+        <translation>Elle peut lire tout votre dossier personnel, y compris les données et les réglages des autres apps.</translation>
+    </message>
+    <message>
+        <source>All devices</source>
+        <translation>Tous les appareils</translation>
+    </message>
+    <message>
+        <source>Cameras, microphones, game controllers, USB drives and any other device, without asking.</source>
+        <translation>Caméras, micros, manettes de jeu, clés USB et tout autre appareil, sans demander.</translation>
+    </message>
+    <message>
+        <source>USB devices, directly</source>
+        <translation>Les appareils USB, directement</translation>
+    </message>
+    <message>
+        <source>Any USB device, without asking.</source>
+        <translation>N’importe quel appareil USB, sans demander.</translation>
+    </message>
+    <message>
+        <source>USB devices, through the USB portal</source>
+        <translation>Les appareils USB, par le portail USB</translation>
+    </message>
+    <message>
+        <source>The USB device %1, through the USB portal</source>
+        <translation>L’appareil USB %1, par le portail USB</translation>
+    </message>
+    <message>
+        <source>Hidden from it: every USB device</source>
+        <translation>Masqués pour elle&#xa0;: tous les appareils USB</translation>
+    </message>
+    <message>
+        <source>Hidden from it: the USB device %1</source>
+        <translation>Masqué pour elle&#xa0;: l’appareil USB %1</translation>
+    </message>
+    <message>
+        <source>Bluetooth devices, directly</source>
+        <translation>Les appareils Bluetooth, directement</translation>
+    </message>
+    <message>
+        <source>Your printers, directly</source>
+        <translation>Vos imprimantes, directement</translation>
+    </message>
+    <message>
+        <source>It can record from the microphone without asking.</source>
+        <translation>Elle peut enregistrer avec le micro sans demander.</translation>
+    </message>
+    <message>
+        <source>The X11 display</source>
+        <translation>L’affichage X11</translation>
+    </message>
+    <message>
+        <source>Through X11 it can see what other X11 apps show and what you type in them.</source>
+        <translation>Par X11, elle peut voir ce qu’affichent les autres apps X11 et ce que vous y tapez.</translation>
+    </message>
+    <message>
+        <source>The X11 display, only where Wayland is missing</source>
+        <translation>L’affichage X11, seulement là où Wayland manque</translation>
+    </message>
+    <message>
+        <source>This session has Wayland: here it gets no X11.</source>
+        <translation>Cette session a Wayland&#xa0;: ici, elle n’obtient pas X11.</translation>
+    </message>
+    <message>
+        <source>Including services that can start programs outside its sandbox.</source>
+        <translation>Y compris des services qui peuvent lancer des programmes hors de son bac à sable.</translation>
+    </message>
+    <message>
+        <source>Including services that change the system&apos;s settings.</source>
+        <translation>Y compris des services qui modifient les réglages du système.</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation>%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Owns every name under “%1”</source>
+        <translation>Possède tous les noms sous «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Talks to every service under “%1”</source>
+        <translation>Communique avec tous les services sous «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Owns the name “%1”</source>
+        <translation>Possède le nom «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Talks to “%1”</source>
+        <translation>Communique avec «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>%1, on the system</source>
+        <translation>%1, sur le système</translation>
+    </message>
+    <message>
+        <source>A wildcard: services it does not name are included.</source>
+        <translation>Un joker&#xa0;: des services qu’elle ne nomme pas sont inclus.</translation>
+    </message>
+    <message>
+        <source>It can add programs that start at your next login, outside its sandbox.</source>
+        <translation>Elle peut ajouter des programmes qui se lancent à votre prochaine ouverture de session, hors de son bac à sable.</translation>
+    </message>
+    <message>
+        <source>Anything it starts this way has all of your access.</source>
+        <translation>Tout ce qu’elle lance ainsi a tous vos accès.</translation>
+    </message>
+    <message>
+        <source>Memory your other programs share (IPC)</source>
+        <translation>La mémoire que partagent vos autres programmes (IPC)</translation>
+    </message>
+    <message>
+        <source>The shared memory folder of your other programs (/dev/shm)</source>
+        <translation>Le dossier de mémoire partagée de vos autres programmes (/dev/shm)</translation>
+    </message>
+    <message>
+        <source>%1 more permissions</source>
+        <translation>%1 autres autorisations</translation>
+    </message>
+    <message>
+        <source>Other files: only those you choose in an Open or Save dialog.</source>
+        <translation>Autres fichiers&#xa0;: uniquement ceux que vous choisissez dans une zone de dialogue Ouvrir ou Enregistrer.</translation>
+    </message>
+    <message>
+        <source>read and write</source>
+        <translation>lecture et écriture</translation>
+    </message>
+    <message>
+        <source>read only</source>
+        <translation>lecture seule</translation>
+    </message>
+    <message>
+        <source>read and write, created if missing</source>
+        <translation>lecture et écriture, créé s’il manque</translation>
+    </message>
+    <message>
+        <source>%1 more changes</source>
+        <translation>%1 autres changements</translation>
+    </message>
+    <message>
+        <source>%1: %2 (was: %3)</source>
+        <translation>%1&#xa0;: %2 (auparavant&#xa0;: %3)</translation>
+    </message>
+    <message>
+        <source>What this update can reach couldn&apos;t be checked.</source>
+        <translation>Ce à quoi cette mise à jour peut accéder n’a pas pu être vérifié.</translation>
+    </message>
+    <message>
+        <source>Asks for more: %1</source>
+        <translation>Demande davantage&#xa0;: %1</translation>
+    </message>
+    <message>
         <source>Checking for updates…</source>
         <translation>Recherche de mises à jour…</translation>
     </message>
@@ -14902,6 +15505,45 @@
     <message>
         <source>Stop installing %1</source>
         <translation>Arrêter l’installation de %1</translation>
+    </message>
+</context>
+<context>
+    <name>StoreOngoing</name>
+    <message>
+        <source>Uninstalling “%1”</source>
+        <translation>Désinstallation de «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Updating Apps</source>
+        <translation>Mise à jour des apps</translation>
+    </message>
+    <message>
+        <source>Updating “%1”</source>
+        <translation>Mise à jour de «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Installing “%1”</source>
+        <translation>Installation de «&#xa0;%1&#xa0;»</translation>
+    </message>
+    <message>
+        <source>Waiting for permission…</source>
+        <translation>En attente de l’autorisation…</translation>
+    </message>
+    <message>
+        <source>Opening Terminal…</source>
+        <translation>Ouverture du Terminal…</translation>
+    </message>
+    <message>
+        <source>Finishing…</source>
+        <translation>Finalisation…</translation>
+    </message>
+    <message>
+        <source>%1 of %2</source>
+        <translation>%1 sur %2</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
     </message>
 </context>
 <context>
@@ -15621,6 +16263,10 @@
     <message>
         <source>Update All</source>
         <translation>Tout mettre à jour</translation>
+    </message>
+    <message>
+        <source>Apps that ask for more than before update only when you update them one by one.</source>
+        <translation>Les apps qui demandent davantage qu’avant ne se mettent à jour que lorsque vous les mettez à jour une par une.</translation>
     </message>
 </context>
 <context>
@@ -17528,6 +18174,14 @@
         <translation>Découvrez les nouveautés dans Mise à jour de logiciels.</translation>
     </message>
     <message>
+        <source>Important security update</source>
+        <translation>Mise à jour de sécurité importante</translation>
+    </message>
+    <message>
+        <source>Grassfield %1 includes important security fixes. Install it in Software Update.</source>
+        <translation>Grassfield %1 contient des correctifs de sécurité importants. Installez-la dans Mise à jour de logiciels.</translation>
+    </message>
+    <message>
         <source>Omarchy %1 is available</source>
         <translation>Omarchy %1 est disponible</translation>
     </message>
@@ -17606,6 +18260,14 @@
     <message>
         <source>Some updates finish when you log out. Log out and back in to use them.</source>
         <translation>Certaines mises à jour se terminent à la fermeture de session. Fermez la session, puis rouvrez-la pour les utiliser.</translation>
+    </message>
+    <message>
+        <source>New display arrangement</source>
+        <translation>Nouvelle disposition des écrans</translation>
+    </message>
+    <message>
+        <source>These displays are connected together for the first time. Open Displays Settings to arrange them and choose the main display.</source>
+        <translation>Ces écrans sont connectés ensemble pour la première fois. Ouvrez les réglages Moniteurs pour les disposer et choisir l’écran principal.</translation>
     </message>
     <message>
         <source>and 1 more</source>

@@ -7,6 +7,7 @@
 // Store's children (childprocess.h, and the plan's own pseudo-terminal) with LC_ALL=C.
 #pragma once
 
+#include "flatpakpermissions.h"
 #include "plancheck.h"
 
 #include <QByteArray>
@@ -81,7 +82,7 @@ FlatpakPrompt flatpakPrompt(const QStringList &lines);
 // notifications, tray, menus, screen saver, accessibility, file manager and the portals to talk to, media-player names
 // and its own to own too), and "other:<text>" for each grant the Store does not know, as flatpak writes it. At most 30
 // lines: the last is then "more:<count>". nullopt when it is not an app's metadata (no [Application] name) or holds a
-// value flatpak cannot interpret: unknown, never "nothing".
+// value flatpak cannot interpret: unknown, never "nothing". The flat list of flatpakpermissions.h's parse.
 std::optional<QStringList> flatpakAccess(const QByteArray &metadata);
 
 // What `remote-info` (before an install) or `info --user` (after) says of an app, for the Information list (SR11).
@@ -90,6 +91,7 @@ struct FlatpakFacts {
     qint64 download = -1;  // remote-info's Download Size
     qint64 installed = -1; // remote-info's Installed Size, info's Installed
     std::optional<QStringList> access; // flatpakAccess of its metadata; nullopt when it could not be read
+    std::optional<FlatpakPermissions> permissions; // the same, grant by grant (ADR-0049)
 };
 // Their "Key: value" lines (version, licence, sizes; access is not in them).
 FlatpakFacts parseFlatpakInfo(const QByteArray &out);
@@ -140,11 +142,14 @@ bool isFlatpakCommit(const QString &commit);
 QString flatpakRemoteCommit(const FlatpakTools &tools, const QString &ref);
 // The commit of a ref in the user's installation (`info --user --show-commit -- <ref>`); "" when unread or not installed.
 QString flatpakInstalledCommit(const FlatpakTools &tools, const QString &ref);
-// What an update of an app lets it reach that the installed one cannot (SD25 for an update: flatpak's --noninteractive
-// would accept it silently): the access of Flathub's commit (`remote-info --show-metadata`, of `commit` when one is given:
-// `--commit=<commit>`, S32a, the one the update then deploys) that the installed one's (`info --show-metadata`) does not
-// name, in flatpakAccess's order; a cut list ("more:<n>") always counts as added; nullopt when either could not be read.
-std::optional<QStringList> flatpakAccessAdded(const FlatpakTools &tools, const QString &ref, const QString &commit = QString());
+// What an update of an app changes in what it may reach (SD25 for an update, ADR-0049: flatpak's --noninteractive would
+// accept more silently): the grants of Flathub's commit (`remote-info --show-metadata`, of `commit` when one is given:
+// `--commit=<commit>`, S32a, the one the update then deploys) against the installed one's (`info --show-metadata`),
+// each added, widened, removed or narrowed (flatpakpermissions.h diffFlatpakPermissions; the installed side read Narrowest,
+// the newer Widest); nullopt when either could not
+// be read, or names another app than the ref's.
+std::optional<QList<FlatpakPermissionChange>> flatpakPermissionChanges(const FlatpakTools &tools, const QString &ref,
+                                                                       const QString &commit = QString());
 
 // A Flatpak's install plan (SD25): what its metadata grants it (`access`), then flatpak's own plan on a pseudo-terminal,
 // answered yes for the runtime it requires and no to proceed, so nothing is installed: the refs it would add (packages:

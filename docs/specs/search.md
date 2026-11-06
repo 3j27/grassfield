@@ -47,8 +47,34 @@ command); in French the Settings page reads "Écran verrouillé" and the command
 - IPC target `search`: `toggle()`, `open(text)`, `close()`, `query(text)` (sets the query without opening), `status()` (JSON of visible groups).
 - Groups: Top Hit (best app, else command, else document; absent when an inline answer exists), Calculator, Conversion, Applications, Commands, Documents, Recent. An empty query shows no results at all (macOS Tahoe: the field alone until the first keystroke; there is no browse row to keep); documents, recent ones included, appear from the first keystroke.
 - Calculator never uses eval/Function: own tokenizer and recursive-descent parser, depth limit 250, input limit 200 chars, function/constant lookup by `switch`.
-- Files: `localsearch search -f -l 20 -- term`, then `plocate -i -b` when localsearch returns nothing or is unusable (on the dev machine `localsearch status` reports 0 files indexed, so plocate answers). Results are limited to `$HOME` and exclude hidden path segments. argv arrays only, wrapped in `timeout 2`, stale queries ignored by sequence number. Dev knobs: `GRASSFIELD_SEARCH_ROOT`, `GRASSFIELD_SEARCH_PLOCATE_DB`.
-- Usage boost: `$GRASSFIELD_STATE_HOME` or `$XDG_STATE_HOME/grassfield/search-usage.json`, mode 0600, directory 0700, at most 500 entries.
+- Files: `localsearch search -f -l 60 -- term`, then `plocate -i -b` when localsearch returns nothing or is unusable (on the dev machine `localsearch status` reports 0 files indexed, so plocate answers). Results are limited to `$HOME` and exclude hidden path segments. The 60 candidates (`Ranking.FILE_CANDIDATES`) are ranked (see "File ranking") and the best `Tokens.searchMaxFiles` (20) are shown. argv arrays only, wrapped in `timeout 2`, stale queries ignored by sequence number. Dev knobs: `GRASSFIELD_SEARCH_ROOT`, `GRASSFIELD_SEARCH_PLOCATE_DB`.
+- Usage boost: `$GRASSFIELD_STATE_HOME` or `$XDG_STATE_HOME/grassfield/search-usage.json`, mode 0600, directory 0700, at most 500 apps (by desktop id) and, capped apart so they never push the apps out, 200 files opened from Search (`file:<path>`), the most recent of each kind. Version 2 (2026-11-05): each entry is `{count, last, weight}`; a pick adds 1 to the weight decayed since the last pick (half-life `USAGE_HALF_LIFE_DAYS` = 14 days, weight capped at 50, a decayed weight under 0.01 counts as nothing) and the boost is `min(20, 5·log2(1 + decayed weight))`, so it fades when an app or a file is no longer used. A version 1 file (`{count, last}`) is migrated on read (weight = count, capped, decaying from its last pick); the next pick writes version 2. A newer version is read as empty.
+- File ranking (2026-11-05): the Documents group orders the provider's candidates with `Ranking.rankFiles` (pure,
+  `tests/unit/tst_searchranking.qml`), on the scale of the app scores. Inspired by Project Luma's luma-search ranking
+  (Apache-2.0; mechanism only, no code copied).
+  - Text: the best of the whole name and the name without its extension (`textScore`: 100 exact, 80 prefix, 65 word prefix,
+    50 substring, ≤25 fuzzy); a query of several words matches when every word does (0.8 of the weakest); a file found by
+    its content only (localsearch) scores 10.
+  - Junk names, at most 40 in all: an editor backup (`name~`, `#name#`) 26; a backup extension (`.bak .old .orig .tmp .swp
+    .swo .part .crdownload .rej`) 26; a duplicate mark (`(2)`, ` copy`, ` copy 3`, ` - Copy`, ` (copie)`, ` - copie 2`) 20;
+    the first junk word of the name (camelCase and digits split words), English and French: backup(s)/bak/bck/bkp/copy/tmp/
+    autosave/sauvegarde(s)/copie 22, old/temp/conflicted/temporaire(s)/conflit 20, orig/ancien(ne)(s) 18, stale/obsolete/
+    vieux/vieille/périmé 16, archived 12. A word or extension the query touches is not junk (a search for "backup" wants the
+    backups).
+  - Location: below the home, two levels are free (`~/Documents/a.txt`) and each further level costs 3 (at most 18); a path
+    outside the home costs 12; a generated, cache or hidden folder on the way (node_modules, __pycache__, cache, build,
+    builddir, _build, dist, target, obj, venv, site-packages, vendor, deps, cmakefiles, rpmbuild, buildroot, tmp, temp,
+    bower_components, __macosx, `.anything`) costs 45. The result's own name is not judged as a folder (a folder named
+    "build" answers "build").
+  - XDG folders: +20 for one of the user's Desktop, Documents, Download, Music, Pictures, Videos folders, +8 for what lies in
+    one. They are read from `$XDG_CONFIG_HOME/user-dirs.dirs` (`Files.parseUserDirs`, followed live), so they carry the
+    user's language ("Téléchargements"); without that file no folder is favoured (no English name is assumed); a folder set
+    to the home itself (xdg-user-dirs' "off") is ignored.
+  - Usage: the decayed boost above, for the files opened from Search (Documents or Recent, `file:<path>`). Delete Search
+    History forgets them with the apps.
+  - Order: score, then the shorter path, then code unit order. Cost (S2/P4): `test_filePerformanceOn300Paths` ranks 300
+    paths with 50 usage records in about 6 ms in the container (limit 50 ms); it runs once per file answer, not per
+    keystroke. The app ranking with a usage record per app (`test_performanceOn300Entries`) stays about 2.5 ms per keystroke.
 - Apps: entries with NoDisplay, or hidden by OnlyShowIn/NotShowIn for `$XDG_CURRENT_DESKTOP`, are not listed. Search uses the same list as the Apps window (`Apps.isListed()` in `shell/services/Apps.qml`, fed by `launchpad/hidden-entries.sh`); the list is rebuilt, debounced, when desktop entries change and Search re-ranks on `Apps.listChanged`.
 - Commands: Sleep, Restart, Shut Down, Log Out reuse `Power` and the confirmation dialogs. Lock Screen (REQ-SRCH-PRV-d2) locks through the lock module (`Lock.lock("search")`, the singleton behind the `lock` IPC target of shell/security/lock; the System menu calls the same function); `Search.lockAvailable` is true.
 - Settings pages provider (REQ-SRCH-PRV-d1, macOS model: Spotlight lists System Settings panes): typing a page name or one of its keywords (title scores like a command, keywords at 0.8 of that) lists the page in a "Settings" group (also as Top Hit when it beats the best app and command) and Return opens Grassfield Settings on it (`SettingsApp.openSection(id)`, `grassfield-settings --section=<id>`). Pure matching in `shell/search/SettingsPages.js` (page ids = the Settings sections); a fourth filter chip "Settings" joins Applications, Commands and Documents. Test: `tests/unit/tst_searchsettings.qml`.

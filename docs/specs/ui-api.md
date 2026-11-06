@@ -83,6 +83,7 @@ add Spinner
 add ProgressRing
 add MenuPopup
 add TimeOfDay
+add SoundEffects
 ```
 
 ## Property changes of public types

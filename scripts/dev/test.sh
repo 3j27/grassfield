@@ -273,6 +273,11 @@ gtest_suite tests/unit/activity "apps/activity/build-direct.sh --tests >/dev/nul
   ".dev/build/activity-unit-tests --gtest_brief=1" ".dev/build/activity-unit-tests-asan --gtest_brief=1" \
   ".dev/build/activity-window-tests --gtest_brief=1" ".dev/build/activity-window-tests-asan --gtest_brief=1" \
   ".dev/build/activity-window-qml-tests --gtest_brief=1"
+# Grassfield Memos (ADR-0051): the store (round trip, 0700/0600 re-asserted, atomic writes, forward-only migration, a newer
+# schema refused untouched, an unreadable file set aside, no memo text in a log), the text helpers (cleaned HTML, Font menu,
+# plain paste), the frames read from Hyprland (a fake socket) and the backend. Built twice: plain, then with ASan and UBSan.
+gtest_suite tests/unit/memos "apps/memos/build-direct.sh --tests >/dev/null && apps/memos/build-direct.sh --tests --asan" \
+  ".dev/build/memos-unit-tests --gtest_brief=1" ".dev/build/memos-unit-tests-asan --gtest_brief=1"
 # grassfield-menu-bridge logic (menu/1 validation, DBusMenu layout mapping, mnemonics, guards). The peer-to-peer D-Bus
 # case skips itself inside the sandbox (no Unix sockets).
 # Built twice: plain, then with ASan and UBSan.

@@ -114,6 +114,8 @@ Singleton {
     // Real volume change through wpctl (Audio.keyStep; refused in a dev session, nothing runs), then show.
     function volumeStep(direction: string): void {
         Audio.keyStep(direction);
+        // Volume feedback (sound.volumeFeedback), once the keys rest (ADR-0047 B-5).
+        Sounds.volumeKey(direction);
     }
 
     // The brightness keys act on the active display (ADR-0045 OC-4, BrightnessLogic.keyTarget): an external display that

@@ -4,7 +4,10 @@
 #   remove    (pre_remove) what the helper's off does: the [grassfield] lines, /etc/pacman.d/grassfield.conf, the synced
 #             files, the Grassfield keys; `pacman -R grassfield-desktop` leaves no [grassfield] and no trusted key
 #   upgrade   (post_upgrade) the host migration: a file whose primary Server is <previous base>/<channel>/$arch is written
-#             again from this build's template; anything else is left alone
+#             again from this build's template; anything else is left alone. Then the staged rollout (ADR-0050): a file in
+#             this build's form takes the cohort form when the verified [grassfield] database lists grassfield-rollout 1,
+#             the plain form otherwise
+#   remove also deletes the machine's rollout wariness (/var/lib/grassfield/rollout-wariness)
 # Not the polkit action's program: run through pkexec it falls under polkit's generic org.freedesktop.policykit.exec. It
 # does not check pacman's db.lck (pacman holds it while scriptlets run). Exit 0 done, 1 failed, 2 usage.
 # Its only input is its argument vector. -p keeps bash from reading BASH_ENV or importing a function; then, while its
@@ -22,8 +25,14 @@ gf_start
 gf_lock 120
 
 case "$#:${1-}" in
-  1:remove) gf_off ;;
-  1:upgrade) gf_migrate ;;
+  1:remove)
+    gf_off
+    gf_forget_wariness || gf_fail "cannot remove $GF_WARINESS"
+    ;;
+  1:upgrade)
+    gf_migrate
+    gf_rollout
+    ;;
   *)
     echo "usage: grassfield-channel-scriptlet remove|upgrade (run by grassfield-desktop's pacman scriptlets)" >&2
     exit 2

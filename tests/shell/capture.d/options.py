@@ -48,7 +48,7 @@ slurp_argv = ["-b", tokens["veil"]["value"], "-s", tokens["selection"]["value"],
 os.makedirs(os.path.join(fake, "impl"))
 write(os.path.join(fake, "notify-send"), '#!/bin/bash\nexec -a notify-send /usr/bin/python3 -I "$(dirname "$0")/impl/notify-send" "$@"\n')
 NAMES = ("grim", "slurp", "wl-copy", "notify-send", "hyprctl", "xdg-user-dir", "pkill", "systemd-run", "uwsm-app", "gdbus",
-         "gpu-screen-recorder")
+         "gpu-screen-recorder", "pw-play")
 for name in NAMES:
     write(os.path.join(fake, "impl" if name == "notify-send" else "", name), r'''#!/usr/bin/python3 -I
 import json, os, re, signal, sys, time
@@ -279,6 +279,13 @@ check(r.returncode == 0 and len(grim) == 1 and grim[0]["argv"] == ["-o", "HDMI-A
       and calls("notify-send") == [] and (files(desktop), files(documents)) == before,
       "Save to Clipboard: the focused display's picture copied as PNG, no file, no notice (macOS) [%r]"
       % (grim[0]["argv"] if grim else None))
+# The shutter plays for a picture copied alone too (ADR-0047 B-5; pw-play is not waited for).
+for _ in range(40):
+    if calls("pw-play"):
+        break
+    time.sleep(0.05)
+check(len(calls("pw-play")) == 1 and calls("pw-play")[0]["argv"][-1] == "/usr/share/sounds/grassfield/stereo/screen-capture.wav",
+      "Save to Clipboard: the shutter plays once")
 before = set(files(desktop))
 r, _ = capture(["selection", "--save", "preview"], FAKE_SLURP="10,20 300x200")
 run = calls("systemd-run")

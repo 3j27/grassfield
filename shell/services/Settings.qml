@@ -53,6 +53,12 @@ Singleton {
     readonly property real clipboardClearedAt: store.clipboardClearedAt
     readonly property real clipboardPinnedClearedAt: store.clipboardPinnedClearedAt
     readonly property bool updatesAutomaticCheck: store.updatesAutomaticCheck
+    readonly property bool energySlowHiddenApps: store.energySlowHiddenApps
+    readonly property string soundAlert: store.soundAlert
+    readonly property real soundAlertVolume: store.soundAlertVolume
+    readonly property string soundEffectsOutput: store.soundEffectsOutput
+    readonly property bool soundUiEffects: store.soundUiEffects
+    readonly property bool soundVolumeFeedback: store.soundVolumeFeedback
     readonly property var dockRecent: store.dockRecent
     readonly property var dockFolders: store.dockFolders
     readonly property var dockStackOptions: store.dockStackOptions

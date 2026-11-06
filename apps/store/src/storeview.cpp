@@ -261,6 +261,40 @@ QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, con
     return out;
 }
 
+namespace {
+QVariantMap grantMap(const FlatpakGrant &g)
+{
+    return {{QStringLiteral("key"), g.key}, {QStringLiteral("name"), g.name}, {QStringLiteral("level"), g.level}};
+}
+} // namespace
+
+QVariantList permissions(const QList<FlatpakGrant> &grants, int more)
+{
+    QVariantList out;
+    for (const FlatpakGrant &g : grants)
+        out.append(grantMap(g));
+    if (more > 0)
+        out.append(grantMap({QStringLiteral("more"), QString::number(more), 1}));
+    return out;
+}
+
+QVariantList permissionChanges(const QList<FlatpakPermissionChange> &changes, int limit)
+{
+    QVariantList out;
+    for (const FlatpakPermissionChange &c : changes) {
+        if (out.size() >= limit) {
+            out.append(QVariantMap{{QStringLiteral("change"), QStringLiteral("more")},
+                                   {QStringLiteral("name"), QString::number(changes.size() - limit)}});
+            break;
+        }
+        QVariantMap m = grantMap(c.grant);
+        m.insert(QStringLiteral("change"), changeKindName(c.kind));
+        m.insert(QStringLiteral("previous"), c.previous.key.isEmpty() ? QVariant() : QVariant(grantMap(c.previous)));
+        out.append(m);
+    }
+    return out;
+}
+
 QVariantMap packageFacts(const PackageInfo &info, const QLocale &locale)
 {
     return {{QStringLiteral("name"), info.name},

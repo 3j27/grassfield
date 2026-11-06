@@ -69,4 +69,5 @@ GlassTint 1.0 GlassTint.js
 TileGlyph 1.0 TileGlyph.qml
 SoftwareUpdateLogic 1.0 SoftwareUpdateLogic.js
 UninstallLogic 1.0 UninstallLogic.js
+SoundEffects 1.0 SoundEffects.js
 SidebarPanel 1.0 SidebarPanel.qml

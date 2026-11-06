@@ -7,14 +7,47 @@ import "System.js" as System
 // segmented control over the device table (Name, Type; the default device selected, a click or the arrow keys choose another),
 // then the volume of that side (LevelRow) and Mute. PipeWire through `wpctl`: `wpctl status` is read, then `wpctl status -n` once a device
 // is new (its node name gives the Type); default device, volume and mute change only through SystemService, so never in a dev
-// session. No Sound Effects group: Grassfield plays no alert, start-up or interface sounds.
+// session. Above it the macOS 27 "Sound Effects" group (ADR-0047 B-4): Alert sound (a pick plays it; the play button beside it
+// plays it again), Play sound effects through, Alert volume (the alert plays once the drag rests), and the interface-sound and
+// volume-feedback switches, all sound.* settings; previews run pw-play through SystemService (never in a dev session). No
+// "Play sound on startup": Grassfield has no start-up sound.
 SettingsPage {
     id: root
 
     required property var backend
     required property var system
+    required property var store
 
     title: qsTr("Sound")
+
+    // PipeWire node id -> node name of the outputs, from `wpctl status -n`.
+    property var nodeNames: ({})
+    readonly property string alert: root.store.value("sound.alert")
+    readonly property real alertVolume: root.store.value("sound.alertVolume")
+    readonly property string effectsOutput: root.store.value("sound.effectsOutput")
+    // The outputs now: {node, text}, by node name.
+    readonly property var outputs: {
+        const out = [];
+        for (const d of root.audio.sinks) {
+            const node = root.nodeNames[d.id];
+            if (node !== undefined && SoundEffects.NODE_NAME.test(node) && !out.some(o => o.node === node))
+                out.push({node: node, text: d.name});
+        }
+        return out;
+    }
+    // "Play sound effects through": the selected output device, then each output; a remembered one that is not connected.
+    readonly property var outputChoices: {
+        const out = [{id: "", text: qsTr("Selected Sound Output Device")}].concat(root.outputs.map(o => ({id: o.node, text: o.text})));
+        if (root.effectsOutput !== "" && !out.some(c => c.id === root.effectsOutput))
+            out.push({id: root.effectsOutput, text: qsTr("Device not connected")});
+        return out;
+    }
+
+    // The alert sound at a level through the chosen output while it is connected (the selected device otherwise).
+    function preview(alert: string, level: real): void {
+        const node = SoundEffects.target(root.effectsOutput, root.outputs.map(o => o.node));
+        root.system.act("sound preview", SoundEffects.previewArgv(alert, level, node), "sound.preview");
+    }
 
     property bool answered: false
     property var audio: ({sinks: [], sources: []})
@@ -108,8 +141,10 @@ SettingsPage {
                 break;
             case "audio.names":
                 root.naming = false;
-                if (ok)
+                if (ok) {
                     root.kinds = Object.assign({}, root.kinds, System.audioKinds(output));
+                    root.nodeNames = Object.assign({}, root.nodeNames, System.audioNodeNames(output));
+                }
                 break;
             case "audio.act":
                 root.pending = -1;
@@ -127,6 +162,88 @@ SettingsPage {
     }
 
     Component.onCompleted: root.refresh()
+
+    SettingsGroup {
+        caption: qsTr("Sound Effects")
+
+        SettingsRow {
+            title: qsTr("Alert sound")
+
+            ComboBox {
+                anchors.verticalCenter: parent.verticalCenter
+                inline: true
+                accessibleName: qsTr("Alert sound")
+                model: [{id: "meadow", text: qsTr("Meadow")}, {id: "dewdrop", text: qsTr("Dewdrop")}, {id: "reed", text: qsTr("Reed")},
+                    {id: "lantern", text: qsTr("Lantern")}, {id: "ember", text: qsTr("Ember")}, {id: "thistle", text: qsTr("Thistle")}]
+                value: root.alert
+                onPicked: id => {
+                    root.store.set("sound.alert", id);
+                    root.preview(id, root.alertVolume);
+                }
+            }
+
+            ToolButton {
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "media-play"
+                accessibleName: qsTr("Play the alert sound")
+                onClicked: root.preview(root.alert, root.alertVolume)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Play sound effects through")
+
+            ComboBox {
+                anchors.verticalCenter: parent.verticalCenter
+                inline: true
+                accessibleName: qsTr("Play sound effects through")
+                model: root.outputChoices
+                value: root.effectsOutput
+                onPicked: id => root.store.set("sound.effectsOutput", id)
+            }
+        }
+
+        LevelRow {
+            id: alertVolumeRow
+            system: root.system
+            title: qsTr("Alert volume")
+            value: root.alertVolume
+            what: "alert volume"
+            // The setting, then the alert once the drag rests (macOS plays it at the new volume).
+            property real rested: 0
+            apply: v => {
+                alertVolumeRow.rested = v;
+                previewRest.restart();
+                return root.store.set("sound.alertVolume", Math.round(v * 100) / 100);
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Play user interface sound effects")
+
+            Toggle {
+                accessibleName: qsTr("Play user interface sound effects")
+                checked: root.store.value("sound.uiEffects") === true
+                onToggled: c => root.store.set("sound.uiEffects", c)
+            }
+        }
+
+        SettingsRow {
+            title: qsTr("Play feedback when volume is changed")
+
+            Toggle {
+                accessibleName: qsTr("Play feedback when volume is changed")
+                checked: root.store.value("sound.volumeFeedback") === true
+                onToggled: c => root.store.set("sound.volumeFeedback", c)
+            }
+        }
+    }
+
+    Timer {
+        id: previewRest
+        interval: 400
+        onTriggered: root.preview(root.alert, alertVolumeRow.rested)
+    }
 
     SettingsGroup {
         visible: root.answered && !root.available

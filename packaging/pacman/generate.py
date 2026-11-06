@@ -10,6 +10,9 @@ them, and writes into DIR the root-owned files the package installs under /usr/s
                             grassfield-channel-set and grassfield-update-check)
   grassfield-stable.conf    the content of /etc/pacman.d/grassfield.conf for each channel: SigLevel = Required, then
   grassfield-beta.conf      one Server line per base, the primary first (the only source the root helper writes from)
+  grassfield-stable-cohort.conf  the staged rollout's cohort form (ADR-0050 2): one Server line per base on the path
+  grassfield-beta-cohort.conf    <base>/<channel>/cohort/@COHORT@/$arch, then the plain lines as a fallback; the root
+                                 scriptlet replaces @COHORT@ with the machine's two digits and nothing else
   grassfield-signing-key.asc  the pinned public key, copied once its fingerprint is checked (empty when none is pinned)
 
 Fails (exit 1, nothing written) on an unknown, missing or repeated key, a base that is not https:// (or file:// for
@@ -132,6 +135,12 @@ def main(argv):
             f"# Grassfield's package repository, channel {channel} (ADR-0033). Written by grassfield-channel-set from\n"
             f"# /usr/share/grassfield/pacman/grassfield-{channel}.conf; Software Update's \"Repair...\" writes it again.\n"
             "SigLevel = Required\n" + "".join(f"Server = {b}/{channel}/$arch\n" for b in [base] + mirrors))
+        files[f"grassfield-{channel}-cohort.conf"] = (
+            f"# Grassfield's package repository, channel {channel}, staged rollout (ADR-0033, ADR-0050). Written by\n"
+            f"# grassfield-channel-scriptlet from /usr/share/grassfield/pacman/grassfield-{channel}-cohort.conf: this computer's\n"
+            "# cohort first, then the channel's own path when a cohort path does not answer.\n"
+            "SigLevel = Required\n" + "".join(f"Server = {b}/{channel}/cohort/@COHORT@/$arch\n" for b in [base] + mirrors)
+            + "".join(f"Server = {b}/{channel}/$arch\n" for b in [base] + mirrors))
     for name, text in files.items():
         with open(os.path.join(args.out, name), "w", encoding="utf-8") as f:
             f.write(text)

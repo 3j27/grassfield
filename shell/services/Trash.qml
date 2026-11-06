@@ -44,6 +44,7 @@ Singleton {
             return;
         }
         Quickshell.execDetached(argv);
+        Sounds.play("trash-empty");
         refreshTimer.restart();
     }
 

@@ -38,6 +38,16 @@ Per-screen top bar with the system menu, the application menus (T0: app, File, W
      Ctrl-Super-Esc); it opens no menu and is not in the menu cycle. Never hidden by crowding (as the screen-sharing indicator).
      Known limitation: unlike the screen-sharing indicator it is not pinned in the corner when the bar hides over a full-screen
      window; it comes back with the bar.
+   - Ongoing activities ("In Progress", ADR-0052; host: docs/specs/menu-bridge.md MB18): one item per activity an application
+     published through `org.grassfield.Ongoing1`, right of the third-party items, at most `ongoing.barMax` (3, the most recently
+     started). The item is the kind's heavy glyph (`clock`, `transfer`, `record`, `download`, `phone`, `activity`) and, when there
+     is one, its time (a countdown rounded up, or the elapsed time, m:ss and h:mm:ss) or its percent, in tabular figures; the
+     time moves every `ongoing.tickMs`. A click opens popup kind `ongoing` (`shell/overlay/OngoingPopover.qml`, `ongoing.popoverWidth`
+     wide, the menu glass): the app's icon and name from its verified desktop entry, the title and subtitle as plain text, a bar
+     (or the sweep) or the time, and the app's buttons (at most 3; a click sends the action and closes). The items are in the
+     menu cycle and menu tracking. While the session is locked every item and the popover show "In Progress", the glyph and the
+     progress only, and buttons do nothing. Optional for crowding, as Now Playing. Model: `shell/platform/Ongoing.js`
+     (`tests/unit/tst_ongoing.qml`). Rendering is NOT VERIFIED in the container that built it (no Quickshell runtime).
    - Crowding (macOS: status items that would collide with the menus are hidden): the status area gets the width between the application menus and the right inset; third-party items, Now Playing and Search (the optional ones) are hidden leftmost first until the rest fits; the system items, Quick Settings and the clock stay, and an application name too long for the room they leave is elided, so nothing overlaps the menus. Pure decision `StatusLogic.hiddenItems` (`tst_statuslogic.qml`); test hook `menubar statusState`.
 7. Keyboard in menus: Up/Down/Home/End, Return/Space activate, Right opens a submenu, Left closes it, Esc closes. Disabled rows are skipped.
 8. Every string uses `qsTr()`; every control has `Accessible.name`/role and a visible focus ring.

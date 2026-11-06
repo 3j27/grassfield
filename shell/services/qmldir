@@ -10,6 +10,7 @@ singleton Journal 1.0 Journal.qml
 singleton Entrance 1.0 Entrance.qml
 singleton Trash 1.0 Trash.qml
 singleton Audio 1.0 Audio.qml
+singleton Sounds 1.0 Sounds.qml
 singleton Apps 1.0 Apps.qml
 singleton Connectivity 1.0 Connectivity.qml
 singleton Rfkill 1.0 Rfkill.qml
@@ -33,6 +34,7 @@ singleton WallpaperOnline 1.0 WallpaperOnline.qml
 singleton RecentItems 1.0 RecentItems.qml
 singleton ThemeIcons 1.0 ThemeIcons.qml
 WallClock 1.0 WallClock.qml
+DisplayArrival 1.0 DisplayArrival.qml
 singleton Clipboard 1.0 Clipboard.qml
 singleton TilingHover 1.0 TilingHover.qml
 singleton TilingSuggest 1.0 TilingSuggest.qml
@@ -43,3 +45,4 @@ singleton ActivityLink 1.0 ActivityLink.qml
 singleton KeyWindow 1.0 KeyWindow.qml
 singleton Emoji 1.0 Emoji.qml
 singleton CaptureState 1.0 CaptureState.qml
+singleton AppEnergy 1.0 AppEnergy.qml

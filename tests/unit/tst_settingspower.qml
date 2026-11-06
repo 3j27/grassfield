@@ -292,7 +292,7 @@ TestCase {
     Component {
         id: fakeStore
         QtObject {
-            property var values: ({"energy.preventSleep": true})
+            property var values: ({"energy.preventSleep": true, "energy.slowHiddenApps": true})
             property var writes: []
             function value(key: string): var {
                 return values[key];
@@ -419,5 +419,11 @@ TestCase {
         compare(store.writes, [{"energy.preventSleep": false}]);
         sw.toggled(true);
         compare(store.values["energy.preventSleep"], true);
+        // ADR-0048: apps you can't see, on by default, written at once.
+        const slow = find(sheet, i => i.accessibleName === "Slow down apps you can't see while on battery" && i.toggled !== undefined);
+        verify(slow);
+        verify(slow.checked);
+        slow.toggled(false);
+        compare(store.writes[store.writes.length - 1], {"energy.slowHiddenApps": false});
     }
 }

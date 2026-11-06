@@ -99,10 +99,14 @@ Product page (step 2)
   Licence, Homepage and Bug tracker (buttons that open the browser on click, https only). For an Omarchy setup: "What this
   setup changes" (our catalog's text) and the recipe's name. For the AUR: Maintainer (or "Orphaned"), Votes, Popularity, Last
   updated, "Flagged out of date" when so, and "View Build Script" (the PKGBUILD as plain text in a sheet, fetched on click).
-  For a Flatpak: the app id, the runtime, "Can access" (every grant of its metadata in plain words, a bus name or a grant
-  the Store does not know named as flatpak writes it; "Only its own window and files" only when nothing more is granted,
-  nothing when its metadata could not be read; ADR-0037 SD25) and
-  Flathub's verified-developer flag when its AppStream carries one.
+  For a Flatpak: the app id, the runtime and
+  Flathub's verified-developer flag when its AppStream carries one; then, under Information, "Permissions"
+  (« Autorisations », ADR-0049): every grant of its metadata in plain words on cards grouped as the App Store's privacy
+  section (Files and Folders with each folder and its mode, Network, Camera and Other Devices, Microphone and Speakers,
+  Display, Keys and Passwords, Other Apps and Services, Background and Login, Outside Its Sandbox, Other), a short note
+  under a wide grant, X11 apart from X11 only where Wayland is missing (none in this session), raw USB apart from the USB
+  portal's devices and those hidden from it, a bus name or a grant the Store does not know named as flatpak writes it; one card "Only Its Own
+  Window and Files" only when nothing more is granted; nothing when its metadata could not be read (ADR-0037 SD25).
 - SR12. An app with several launchers names the one "Open" uses; an app with none (a command-line tool) says so and has no
   "Open".
 
@@ -257,8 +261,14 @@ Updates (step 4; ADR-0037 d, owner ST8)
   the app's Update waits. Each app is updated to the commit its plan checked (a newer one published meanwhile is listed
   again and asked about again, S32), unless it was updated outside the Store since its plan (another commit installed):
   then it is left as it is, never downgraded; it is done when that commit is installed (an unpinned ref: when a new check
-  no longer lists it), never on flatpak's exit code alone (offline it exits 0 with "Nothing to update.", S31d). Update All
-  takes every listed update; its sheet says "Update the Flatpak apps?".
+  no longer lists it), never on flatpak's exit code alone (offline it exits 0 with "Nothing to update.", S31d). After each
+  check every app's update is reviewed (ADR-0049, as pessimistic as flatpak's own check: the installed metadata read
+  narrowest, the newer widest; a folder inside one it had, X11's fallback to X11, a USB device no longer hidden, create
+  after read and write are more): one that asks for more (a grant added or widened) or could not be read
+  says "Asks for more: …" (« Demande davantage : … ») where its summary is, and the group says "Apps that ask for more
+  than before update only when you update them one by one."; Update All takes every other listed update, at once and
+  without a sheet, and leaves those to their own Update, whose sheet lists what the app can newly reach and what it no
+  longer can; everything held, Update All's sheet says to update them one by one.
 - SR25. The sidebar's Updates row shows the number of apps with an update, Flatpaks included. The Store's Dock tile has no
   badge: the only update badge is Software Update's, on Settings (owner, ST8).
 

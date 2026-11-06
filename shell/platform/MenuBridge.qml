@@ -8,6 +8,7 @@ import Grassfield.Ui
 import qs.services // layering-exception: GF-087
 import qs.lib
 import "MenuBridge.js" as Logic
+import "Ongoing.js" as Ongoing
 import "Minimized.js" as Minimized
 import "QuickLook.js" as QuickLook
 
@@ -88,6 +89,27 @@ Singleton {
                 console.warn("grassfield: menu bridge: no screensaver heartbeat for " + root.screensaverStaleMs + " ms; idle inhibitors ignored");
             root.screenSaverInhibited = false;
         }
+    }
+
+    // Applications' ongoing activities (ADR-0052): Ongoing.js state built from the bridge's ongoing lines, drawn by the menu
+    // bar (one item each) and its "ongoing" popover. Empty without a bridge. The bridge sends them redacted (no app, text or
+    // button) until this shell reports the session unlocked, and the menu bar redacts them again while locked.
+    property var ongoing: Ongoing.empty()
+    readonly property bool sessionLocked: SessionState.locked
+    onSessionLockedChanged: root.sendLock()
+
+    function sendLock(): void {
+        send(Ongoing.lockLine(SessionState.locked));
+    }
+
+    // The user chose button `action` of activity `id`: the bridge sends it to the application that published it. False when
+    // nothing was sent (locked, no bridge, invalid).
+    function ongoingAction(id: string, action: string): bool {
+        const line = Ongoing.actionLine(id, action);
+        if (SessionState.locked || line === "" || !socket.connected)
+            return false;
+        send(line);
+        return true;
     }
 
     // Applies one parsed screensaver line (handleLine; tests call it directly).
@@ -276,6 +298,7 @@ Singleton {
     function sendHello(): void {
         send(Logic.helloLine(root.appmenuFeature));
         root.helloSent = true;
+        root.sendLock(); // the bridge counts the session locked until told (ADR-0052)
         syncOpen();
     }
 
@@ -304,6 +327,17 @@ Singleton {
             break;
         case "screensaver":
             root.applyScreensaver(msg);
+            break;
+        case "ongoing": {
+            const item = Ongoing.parse(msg.msg);
+            if (item)
+                root.ongoing = Ongoing.apply(root.ongoing, item);
+            else
+                console.info("grassfield: menu bridge: ignored a malformed ongoing activity");
+            break;
+        }
+        case "ongoing-end":
+            root.ongoing = Ongoing.end(root.ongoing, msg.id);
             break;
         case "error":
             console.info("grassfield: menu bridge:", msg.code, msg.window, msg.message);
@@ -361,6 +395,8 @@ Singleton {
             // ... and their idle inhibitors no longer count: the idle lock works again (fail closed).
             root.screenSaverInhibited = false;
             screensaverWatch.stop();
+            // ... and the activities it relayed are gone with it (their publishers' state is unknown).
+            root.ongoing = Ongoing.empty();
             root.openedWindow = "";
             root.openedRegistration = null;
             root.items = [];

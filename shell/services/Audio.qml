@@ -5,6 +5,7 @@ import Quickshell
 import qs.lib
 import Quickshell.Io
 import Quickshell.Services.Pipewire
+import "AudioRoutingLogic.js" as Routing
 
 // Default output (PipeWire through Quickshell). volume is 0..1 on the cubic scale of wpctl, pavucontrol and the volume
 // keys: Quickshell's PwNodeAudio.volume already speaks it (measured nested 2026-10-24: raw channelVolumes 0.007994,
@@ -142,5 +143,244 @@ Singleton {
     // Nodes must be tracked to expose their audio properties.
     PwObjectTracker {
         objects: [root.sink, root.source].concat(root.sinks).concat(root.sources)
+    }
+
+    // ---- Automatic output routing (ADR-0047 part A) ---------------------------------------------------------------------
+    // Headphones, headsets and Bluetooth audio the person connects take the sound; other outputs never do; a person's move
+    // away from such a device is remembered per device. The rules are AudioRoutingLogic.js (a pure state machine fed here
+    // with timestamps); this part feeds it the sinks once Quickshell has their properties, joins each node's device
+    // properties (`pw-dump <device.id>`, read-only), runs one timer to its next deadline, logs its decisions and switches
+    // through backendWrite(), the guarded write (a dev session logs and changes nothing). WirePlumber returns the sound to
+    // the previous output when a device leaves: nothing is done here then.
+    readonly property string routingFile: Mode.stateDir + "/audio-routing.json"
+    property var routing: Routing.create(null)
+    property bool routingMemoryReady: false
+    property bool routingReadOnly: false
+    property bool routingStarted: false
+    // Node names fed to the router.
+    property var routingFed: ({})
+    // device.id -> the device's PipeWire properties (pw-dump), or {} when it gave none.
+    property var routingDevices: ({})
+    // Device ids waiting for pw-dump, the first one asked now.
+    property var routingAsk: []
+
+    function routingDeviceId(node: var): int {
+        const id = parseInt(node.properties["device.id"], 10);
+        return isFinite(id) && id >= 0 ? id : -1;
+    }
+
+    function routingDescribe(node: var): var {
+        const id = root.routingDeviceId(node);
+        return Routing.describe(node.properties, id >= 0 ? (root.routingDevices[id] ?? null) : null);
+    }
+
+    // The sinks whose properties Quickshell has read, by node name.
+    function routingLive(): var {
+        const live = {};
+        for (const n of root.sinks) {
+            if (n.ready && n.properties["node.name"] !== undefined)
+                live[n.name] = n;
+        }
+        return live;
+    }
+
+    function routingApply(actions: var): void {
+        for (const a of actions) {
+            if (a.type === "note") {
+                console.info(Routing.describeNote(a));
+            } else if (a.type === "switch") {
+                const node = root.sinks.find(n => n.name === a.node);
+                // Refused (dev session) or gone: the next default change is not ours, nor is the configured default.
+                if (!node || !root.backendWrite("output device", () => {
+                        Pipewire.preferredDefaultAudioSink = node;
+                    })) {
+                    root.routing.expected = "";
+                    root.routing.routed = "";
+                }
+            }
+        }
+        if (root.routing.dirty) {
+            root.routing.dirty = false;
+            if (!root.routingReadOnly) {
+                routingWriter.command = ["sh", Quickshell.shellPath("services/write-private.sh"), Mode.stateDir, root.routingFile, Routing.serializeMemory(root.routing.memory)];
+                routingWriter.running = true;
+            }
+        }
+        const due = Routing.nextDeadline(root.routing);
+        if (due === null) {
+            routingTimer.stop();
+        } else {
+            routingTimer.interval = Math.max(1, due - Date.now());
+            routingTimer.restart();
+        }
+    }
+
+    function routingAskDevice(node: var): void {
+        const id = root.routingDeviceId(node);
+        if (id < 0 || root.routingDevices[id] !== undefined || root.routingAsk.indexOf(id) >= 0)
+            return;
+        root.routingAsk = root.routingAsk.concat([id]);
+        root.routingNextAsk();
+    }
+
+    function routingNextAsk(): void {
+        if (deviceDump.running || root.routingAsk.length === 0)
+            return;
+        deviceDump.deviceId = root.routingAsk[0];
+        deviceDump.command = ["pw-dump", "--no-colors", String(deviceDump.deviceId)];
+        deviceDump.running = true;
+        dumpTimeout.restart();
+    }
+
+    function routingDeviceAnswer(id: int, props: var): void {
+        if (root.routingAsk.indexOf(id) < 0)
+            return;
+        const devices = Object.assign({}, root.routingDevices);
+        devices[id] = props ?? {};
+        root.routingDevices = devices;
+        root.routingAsk = root.routingAsk.filter(x => x !== id);
+        if (root.routingStarted) {
+            const now = Date.now();
+            const live = root.routingLive();
+            let actions = [];
+            for (const name of Object.keys(root.routingFed)) {
+                if (live[name] && root.routingDeviceId(live[name]) === id)
+                    actions = actions.concat(Routing.updated(root.routing, root.routingDescribe(live[name]), now));
+            }
+            root.routingApply(actions);
+        }
+        root.routingNextAsk();
+    }
+
+    function syncRouting(): void {
+        if (!root.routingMemoryReady || !Pipewire.ready)
+            return;
+        const now = Date.now();
+        const live = root.routingLive();
+        const fed = Object.assign({}, root.routingFed);
+        let actions = [];
+        if (!root.routingStarted) {
+            const outputs = Object.keys(live).map(name => root.routingDescribe(live[name]));
+            for (const name of Object.keys(live))
+                fed[name] = true;
+            actions = Routing.start(root.routing, outputs, Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.name : "", now);
+            root.routingStarted = true;
+        } else {
+            for (const name of Object.keys(live)) {
+                if (fed[name])
+                    continue;
+                fed[name] = true;
+                actions = actions.concat(Routing.added(root.routing, root.routingDescribe(live[name]), now));
+            }
+            for (const name of Object.keys(fed)) {
+                if (live[name])
+                    continue;
+                delete fed[name];
+                // WirePlumber's configured default as Quickshell still resolves it (null once that node is gone: unknown).
+                const configured = Pipewire.preferredDefaultAudioSink ? Pipewire.preferredDefaultAudioSink.name : "";
+                actions = actions.concat(Routing.removed(root.routing, name, now, configured));
+            }
+        }
+        root.routingFed = fed;
+        for (const name of Object.keys(live))
+            root.routingAskDevice(live[name]);
+        root.routingApply(actions);
+    }
+
+    onSinksChanged: syncRouting()
+
+    Connections {
+        target: Pipewire
+
+        function onReadyChanged(): void {
+            root.syncRouting();
+        }
+
+        function onDefaultAudioSinkChanged(): void {
+            // The default may be null for a moment while it changes: only real nodes are reported.
+            if (!root.routingStarted || !Pipewire.defaultAudioSink)
+                return;
+            root.syncRouting();
+            root.routingApply(Routing.defaultChanged(root.routing, Pipewire.defaultAudioSink.name, Date.now()));
+        }
+    }
+
+    // A sink becomes known to the router once Quickshell has bound it and read its properties.
+    Instantiator {
+        model: root.sinks
+
+        delegate: Connections {
+            required property var modelData
+
+            target: modelData
+
+            function onReadyChanged(): void {
+                root.syncRouting();
+            }
+
+            function onPropertiesChanged(): void {
+                root.syncRouting();
+            }
+        }
+    }
+
+    Timer {
+        id: routingTimer
+        onTriggered: root.routingApply(Routing.tick(root.routing, Date.now()))
+    }
+
+    // The remembered choices (audio-routing.json, state class): read once; routing starts after it (or its absence).
+    FileView {
+        id: routingMemory
+        path: root.routingFile
+        printErrors: false
+
+        function use(text: string): void {
+            if (root.routingMemoryReady)
+                return;
+            const m = Routing.parseMemory(text);
+            root.routingReadOnly = m.readOnly;
+            root.routing = Routing.create({devices: m.devices});
+            root.routingMemoryReady = true;
+            root.syncRouting();
+        }
+
+        onLoaded: use(text())
+        onLoadFailed: use("")
+    }
+
+    Process {
+        id: routingWriter
+        onExited: code => {
+            if (code !== 0)
+                console.warn("audio routing: could not write", root.routingFile);
+        }
+    }
+
+    Process {
+        id: deviceDump
+        property int deviceId: -1
+        stdout: StdioCollector {
+            onStreamFinished: {
+                dumpTimeout.stop();
+                root.routingDeviceAnswer(deviceDump.deviceId, Routing.deviceProps(text, deviceDump.deviceId));
+            }
+        }
+        onExited: code => {
+            if (code !== 0) {
+                dumpTimeout.stop();
+                root.routingDeviceAnswer(deviceDump.deviceId, null);
+            }
+        }
+    }
+
+    // A pw-dump that does not answer: the node's own properties decide.
+    Timer {
+        id: dumpTimeout
+        interval: 2000
+        onTriggered: {
+            deviceDump.running = false;
+            root.routingDeviceAnswer(deviceDump.deviceId, null);
+        }
     }
 }

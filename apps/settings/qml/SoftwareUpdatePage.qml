@@ -327,12 +327,34 @@ SettingsPage {
             // The mark's tile in the brand green, as General > About's (ADR-0040 ID-11; review of 5391761).
             tileColor: "grassfield"
             title: root.view.grassfield ? qsTr("Grassfield %1").arg(SoftwareUpdateLogic.releaseName(root.view.grassfield.available, root.view.grassfield.installed)) : ""
-            subtitle: root.view.grassfield ? qsTr("Installed: %1").arg(SoftwareUpdateLogic.displayVersion(root.view.grassfield.installed)) : ""
+            // ADR-0050 (U36): a release its descriptor marks as a security release says so.
+            subtitle: !root.view.grassfield ? ""
+                : root.view.rollout.security ? qsTr("Important security update. Installed: %1").arg(SoftwareUpdateLogic.displayVersion(root.view.grassfield.installed))
+                : qsTr("Installed: %1").arg(SoftwareUpdateLogic.displayVersion(root.view.grassfield.installed))
 
             LinkText {
                 text: qsTr("More Info…")
                 onActivated: root.infoRequested("notes")
             }
+        }
+        // The staged rollout (ADR-0050, U35): a newer release still being released gradually, which the database this
+        // computer syncs does not offer yet. No button: it is installed once offered.
+        SettingsRow {
+            visible: root.view.rollout.staged !== null && !root.running
+            glyph: "grassfield-logo"
+            tileColor: "grassfield"
+            title: !root.view.rollout.staged ? ""
+                : root.view.rollout.staged.security ? qsTr("Grassfield %1 is an important security update.").arg(SoftwareUpdateLogic.releaseName(root.view.rollout.staged.version, root.view.installed.grassfield))
+                : qsTr("Grassfield %1 is being released gradually.").arg(SoftwareUpdateLogic.releaseName(root.view.rollout.staged.version, root.view.installed.grassfield))
+            subtitle: qsTr("It will be offered to this computer soon.")
+        }
+        // The installed release was withdrawn (ADR-0050, U37), while no newer one is offered yet.
+        SettingsRow {
+            visible: root.view.rollout.withdrawn !== "" && root.view.grassfield === null && !root.running
+            glyph: "grassfield-logo"
+            tileColor: "grassfield"
+            title: qsTr("Grassfield %1 has been withdrawn.").arg(SoftwareUpdateLogic.displayVersion(root.view.rollout.withdrawn))
+            subtitle: qsTr("A corrected version will be offered to this computer as soon as it's ready.")
         }
         SettingsRow {
             visible: root.view.omarchy !== null

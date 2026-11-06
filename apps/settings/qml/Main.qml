@@ -69,7 +69,7 @@ Window {
         {id: "search", group: 2, title: qsTr("Search"), icon: "search", keywords: qsTr("search results history calculator conversions documents commands clipboard copy paste")},
         {id: "wallpaper", group: 2, title: qsTr("Wallpaper"), icon: "wallpaper", keywords: qsTr("background picture photo image folder slideshow shuffle colour color desktop picture")},
         {id: "notifications", group: 3, title: qsTr("Notifications"), icon: "bell", keywords: qsTr("do not disturb previews banners")},
-        {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio")},
+        {id: "sound", group: 3, title: qsTr("Sound"), icon: "volume-3", keywords: qsTr("volume output input speakers microphone mute audio alert sound effects beep feedback")},
         {id: "focus", group: 3, title: qsTr("Focus"), icon: "moon", keywords: qsTr("do not disturb silence quiet banners")},
         {id: "lock", group: 4, title: qsTr("Lock Screen"), icon: "lock", keywords: qsTr("idle inactivity password")},
         {id: "privacy", group: 4, title: qsTr("Privacy & Security"), icon: "hand", keywords: qsTr("privacy permissions location camera background screen sharing remote desktop apps flatpak portal security encryption disk password disk encryption luks")},
@@ -980,6 +980,7 @@ Window {
         SoundPage {
             backend: root.backend
             system: sys
+            store: cfg
         }
     }
 

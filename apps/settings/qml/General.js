@@ -513,3 +513,39 @@ function parseUnits(text) {
     const v = parseJson(text);
     return v && Array.isArray(v.units) ? v.units.filter(u => u && typeof u.unit === "string" && typeof u.state === "string") : [];
 }
+
+// ---- About > Create Diagnostic Report… (ADR-0053) -----------------------------------------------------------------------
+
+// The installed report tool, run with no argument (systemguard.cpp isAllowedAction takes exactly this).
+var REPORT_ARGV = ["/usr/lib/grassfield/grassfield-report"];
+
+// The file grassfield-report printed (its last non-empty line): an absolute, clean path to a grassfield-report-*.txt file,
+// without control characters; "" for anything else. Anywhere: the user's Downloads folder (XDG_DOWNLOAD_DIR) may lie outside
+// the home, and the report was written all the same.
+function reportPath(output) {
+    if (typeof output !== "string")
+        return "";
+    const lines = output.split("\n").map(l => l.trim()).filter(l => l !== "");
+    const path = lines.length > 0 ? lines[lines.length - 1] : "";
+    if (!path.startsWith("/") || /[\u0000-\u001f\u007f]/.test(path) || /(^|\/)\.{1,2}(\/|$)/.test(path) || path.indexOf("//") >= 0)
+        return "";
+    return /^grassfield-report-[^/]+\.txt$/.test(reportName(path)) ? path : "";
+}
+
+// Whether Files may show the report's folder: inside the home only (systemguard.cpp isRevealInFiles holds the same rule).
+function revealable(path, home) {
+    if (typeof path !== "string" || path === "" || typeof home !== "string" || !home.startsWith("/"))
+        return false;
+    const h = home.replace(/\/+$/, "");
+    return h !== "" && path.startsWith(h + "/");
+}
+
+// The file's name.
+function reportName(path) {
+    return typeof path === "string" ? path.slice(path.lastIndexOf("/") + 1) : "";
+}
+
+// The command that shows the report's folder in Files (systemguard.cpp isRevealInFiles).
+function revealArgv(path) {
+    return ["/usr/bin/grassfield-files", "--", path.slice(0, path.lastIndexOf("/"))];
+}

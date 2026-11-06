@@ -73,9 +73,10 @@ state() {
   [[ $(sections) == 1 ]] || { echo repair; return; }
   base=$(conf_value GRASSFIELD_REPO_BASE)
   server=$(primary)
+  # The plain form, or the staged rollout's cohort form that the package scriptlet writes (ADR-0050 2).
   case $server in
-    "$base/stable/\$arch") echo stable ;;
-    "$base/beta/\$arch") echo beta ;;
+    "$base/stable/\$arch" | "$base/stable/cohort/"[01][0-9]"/\$arch") echo stable ;;
+    "$base/beta/\$arch" | "$base/beta/cohort/"[01][0-9]"/\$arch") echo beta ;;
     *) echo custom ;;
   esac
 }
@@ -196,7 +197,7 @@ case ${1-} in
         require_build
         require_no_update
         case $(primary) in
-          */beta/\$arch) run_helper set beta ;;
+          */beta/\$arch | */beta/cohort/[01][0-9]/\$arch) run_helper set beta ;;
           *) run_helper set "$(fallback_channel)" ;;
         esac
         ;;

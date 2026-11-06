@@ -16,7 +16,8 @@ import "Store.js" as Store
 // installs it in its terminal, which asks for the password, and when Flathub's apps reach the launcher, then pacman's plan.
 // A plan that cannot run says why instead, and offers Software Update when the system must be updated first; Esc
 // or Cancel close it and nothing runs. A Flatpak's update (step 4) asks only when it lets an app reach more than before, or
-// when that could not be read (SD25 for an update): otherwise it starts at once, as an update does on macOS.
+// when that could not be read (SD25 for an update): otherwise it starts at once, as an update does on macOS. Update All
+// never asks: what asks for more waits for its own Update (ADR-0049), whose sheet says what changes, grant by grant.
 Sheet {
     id: root
 
@@ -78,7 +79,8 @@ Sheet {
             if (root.pendingUpdate) {
                 root.pendingUpdate = false;
                 root.plan = plan;
-                const quiet = plan.refusal === "" && (plan.widened || []).length === 0 && (plan.unknown || []).length === 0;
+                // ADR-0049: only an update that asks for more (or could not be checked) asks; Update All leaves those out.
+                const quiet = plan.refusal === "" && !plan.asks;
                 if (quiet)
                     root.backend.update(app);
                 else
@@ -124,9 +126,18 @@ Sheet {
             if (root.refusal !== "")
                 return root.plan.detail === "none" ? qsTr("There's nothing to update now.")
                      : root.plan.detail === "queued" ? qsTr("It's already waiting to be updated.")
+                     : root.plan.detail === "held" ? qsTr("Each of these apps asks for more than before. Update them one by one to see what they ask for.")
                      : Store.getBlockText(root.plan.detail || "", "flatpak") || qsTr("The Store could not read what this would change.");
-            // What each update lets its app reach that it could not (SD25 for an update), and what could not be read.
-            const parts = (root.plan.widened || []).map(w => qsTr("After this update, “%1” can also reach: %2.").arg(w.name).arg(Store.accessWords(w.access).join(", ")));
+            // What each update changes in what its app can reach (ADR-0049): what it newly reaches, then what it no longer
+            // does; and what could not be read.
+            const parts = [];
+            for (const c of root.plan.changed || []) {
+                const lines = Store.changeLines(c.changes);
+                if (lines.more.length > 0)
+                    parts.push(qsTr("After this update, “%1” can also reach:").arg(c.name) + "\n" + lines.more.join("\n"));
+                if (lines.less.length > 0)
+                    parts.push(qsTr("It can no longer reach:") + "\n" + lines.less.join("\n"));
+            }
             if ((root.plan.unknown || []).length > 0)
                 parts.push(qsTr("What this update lets %1 reach could not be read.").arg((root.plan.unknown || []).join(", ")));
             parts.push(root.app.id === "store:flatpak-updates" ? qsTr("They're updated in your own folder, for you alone, without administrator rights.")
@@ -161,11 +172,13 @@ Sheet {
                 // The user's own installation: no password, nothing of the system changes (b.3).
                 if (root.removing)
                     return qsTr("Its data in ~/.var/app/%1 stays. Runtimes no other app needs are removed too.").arg(root.app.flatpakId || root.app.name || "");
-                // What it can reach, never less than its metadata grants (SD25): unread, nothing is said.
-                const access = root.plan.access === undefined || root.plan.access === null ? null : Store.accessWords(root.plan.access);
+                // What it can reach, never less than its metadata grants (SD25), grouped as its page's cards (ADR-0049):
+                // unread, nothing is said.
+                const grants = root.plan.permissions === undefined || root.plan.permissions === null ? null : root.plan.permissions;
+                const lines = grants === null ? null : Store.permissionLines(grants);
                 return [qsTr("It's installed in your own folder, for you alone, without administrator rights."),
-                        access === null ? "" : access.length === 0 ? qsTr("It can reach only its own window and files.")
-                                                                   : qsTr("It can reach: %1.").arg(access.join(", ")),
+                        lines === null ? "" : lines.length === 0 ? qsTr("It can reach only its own window and files.")
+                                                                 : qsTr("It can reach:") + "\n" + lines.join("\n"),
                         qsTr("These will be installed:")].filter(t => t !== "").join("\n\n");
             }
             if (root.aur) {

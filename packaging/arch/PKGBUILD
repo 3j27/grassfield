@@ -199,6 +199,10 @@ build() {
   cmake -S "$(_root)/apps/activity" -B "$srcdir/activity-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
   cmake --build "$srcdir/activity-build"
+  # Grassfield Memos (ADR-0051): the app, its QML, its desktop entry and its icon; packaged in grassfield-desktop.
+  cmake -S "$(_root)/apps/memos" -B "$srcdir/memos-build" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build "$srcdir/memos-build"
   # Grassfield Store (ADR-0037): the app, its QML, its root helper and polkit policy; packaged as grassfield-store.
   cmake -S "$(_root)/apps/store" -B "$srcdir/store-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
@@ -246,7 +250,8 @@ package_grassfield-desktop() {
   # Settings no longer runs nmcli or bluetoothctl; the packages stay declared because the services must be installed), wireplumber
   # (wpctl, the Sound page) and wl-clipboard (wl-copy) are used by Settings and the shell (ARCH-08): declared, not assumed to come
   # with Omarchy. grim and slurp take Grassfield's screenshots (packaging/bin/grassfield-capture, ADR-0035 D-10, step 8): declared
-  # too, now that Grassfield runs them itself.
+  # too, now that Grassfield runs them itself. pipewire (pw-play, pw-dump) plays the sound effects and reads the outputs'
+  # devices for the automatic routing (ADR-0047).
   # Software Update (ADR-0033): grassfield-keyring (O12: the keys pacman trusts for [grassfield], built and published beside
   # these packages by grassfieldhq/grassfield-packages, as omarchy depends on omarchy-keyring; added once that repository
   # built it, owner decision O21), pacman-contrib (checkupdates) and fakeroot (the checker's [grassfield]-only sync),
@@ -264,7 +269,7 @@ package_grassfield-desktop() {
   # already installed with gnome-keyring (probe P15), declared because Grassfield's own binary needs it. libsecret: the
   # bridge's KIO password server keeps remembered network passwords in the Secret Service with it (ADR-0035 D-12 b, step
   # 9e); already installed with gcr-4, declared for the same reason.
-  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons grassfield-wallpapers networkmanager bluez-utils wireplumber wl-clipboard grim slurp grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups gcr-4 libsecret)
+  depends=(hyprland uwsm quickshell qt6-declarative qt6-wayland wayland qt6-svg inter-font kio solid kcoreaddons kservice kwindowsystem qt6-multimedia qt6-imageformats qt6-webengine ffmpeg curl python librsvg hyprcursor breeze-icons grassfield-icons grassfield-wallpapers networkmanager bluez-utils wireplumber pipewire wl-clipboard grim slurp grassfield-keyring pacman-contrib fakeroot gnome-keyring xdg-desktop-portal xdg-desktop-portal-gtk libcups gcr-4 libsecret)
   # Quickshell's v0.3.2 tag lets a session lock the compositor drops go unnoticed (WlSessionLock::unlock() never emits,
   # fixed upstream in 18c95fae, shipped from 0.3.2.r7): the lock would not be taken again (fail-open). That exact version is
   # refused; 0.3.1 and the 0.3.2 snapshots from r7 on are not matched by `=0.3.2`.
@@ -337,9 +342,9 @@ package_grassfield-desktop() {
   install -d "$pkgdir/usr/lib/grassfield/omarchy-shims"
   # Regular files only: an ignored __pycache__ or editor directory in the tree must neither break nor enter the package.
   find "$root/packaging/bin" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/" {} +
-  # The commands a person types are on PATH.
+  # The commands a person types are on PATH (grassfield-report: the diagnostic report a beta tester attaches, ADR-0053).
   install -d "$pkgdir/usr/bin"
-  for tool in grassfield-login grassfield-login-check grassfield-nightshift grassfield-channel-set; do
+  for tool in grassfield-login grassfield-login-check grassfield-nightshift grassfield-channel-set grassfield-report; do
     ln -s "../lib/grassfield/$tool" "$pkgdir/usr/bin/$tool"
   done
   # Software Update (ADR-0033 c and "Step 3"; OPUS SECURITY REVIEW for these root programs): grassfield-channel-helper (the
@@ -360,7 +365,8 @@ package_grassfield-desktop() {
   install -Dm644 "$root/packaging/pacman/49-grassfield-update.rules" "$pkgdir/usr/share/polkit-1/rules.d/49-grassfield-update.rules"
   install -Dm644 "$root/packaging/pacman/grassfield-update.sysusers" "$pkgdir/usr/lib/sysusers.d/grassfield-update.conf"
   install -Dm644 -t "$pkgdir/usr/share/grassfield/pacman/" "$srcdir/pacman/repository.conf" "$srcdir/pacman/grassfield-stable.conf" \
-    "$srcdir/pacman/grassfield-beta.conf" "$srcdir/pacman/grassfield-signing-key.asc"
+    "$srcdir/pacman/grassfield-beta.conf" "$srcdir/pacman/grassfield-stable-cohort.conf" "$srcdir/pacman/grassfield-beta-cohort.conf" \
+    "$srcdir/pacman/grassfield-signing-key.asc"
   install -Dm755 "$root/packaging/pacman/pre-refresh-pacman" "$pkgdir/usr/share/grassfield/omarchy-hooks/pre-refresh-pacman"
   # GF-032: stand-ins that keep Omarchy's update, theme and font tools from starting Omarchy's shell in this session.
   find "$root/packaging/shims" -maxdepth 1 -type f -exec install -m755 -t "$pkgdir/usr/lib/grassfield/omarchy-shims/" {} +
@@ -385,7 +391,8 @@ package_grassfield-desktop() {
       "$pkgdir/usr/lib/systemd/user/$unit.service.d/10-grassfield.conf"
   done
   # Menu bridge: /usr/bin/grassfield-menu-bridge, /usr/lib/systemd/user/grassfield-menu-bridge.service,
-  # /usr/share/dbus-1/interfaces/org.grassfield.MenuBridge1.xml (started by the session's autostart.lua).
+  # /usr/share/dbus-1/interfaces/org.grassfield.MenuBridge1.xml (started by the session's autostart.lua); ongoing activities
+  # (ADR-0052): /usr/share/dbus-1/interfaces/org.grassfield.Ongoing1.xml and /usr/bin/grassfield-ongoing.
   DESTDIR="$pkgdir" cmake --install "$srcdir/menu-bridge-build"
   # grassfield-prompter (ADR-0035 D-9): /usr/lib/grassfield/grassfield-prompter and its user unit
   # /usr/lib/systemd/user/grassfield-prompter.service (started by the session's autostart.lua);
@@ -430,6 +437,8 @@ package_grassfield-desktop() {
   DESTDIR="$pkgdir" cmake --install "$srcdir/preview-build"
   # Activity Monitor (ADR-0038; no root part, no polkit action).
   DESTDIR="$pkgdir" cmake --install "$srcdir/activity-build"
+  # Grassfield Memos (ADR-0051; no root part, no service).
+  DESTDIR="$pkgdir" cmake --install "$srcdir/memos-build"
   # The Dock's Apps tile: Grassfield's own drawing (ADR-0040 IQ-B5 C), found through any icon theme's hicolor fallback.
   install -Dm644 "$root/branding/icons/apps/org.grassfield.Apps.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/org.grassfield.Apps.svg"
 
@@ -442,6 +451,13 @@ package_grassfield-desktop() {
   install -d "$pkgdir/usr/share/grassfield/cursors/src"
   install -m644 "$root"/branding/cursors/src/*.svg.in "$pkgdir/usr/share/grassfield/cursors/src/"
   chmod 755 "$pkgdir/usr/share/grassfield/cursors/build.sh"
+
+  # The grassfield sound theme (ADR-0047 B-2): Grassfield's own sounds (branding/sounds, generated and committed) under the
+  # freedesktop Sound Theme Specification; bell.wav is the default alert for libcanberra users (the shell plays the chosen one).
+  install -Dm644 "$root/branding/sounds/grassfield/index.theme" "$pkgdir/usr/share/sounds/grassfield/index.theme"
+  install -d "$pkgdir/usr/share/sounds/grassfield/stereo"
+  install -m644 "$root"/branding/sounds/grassfield/stereo/*.wav "$pkgdir/usr/share/sounds/grassfield/stereo/"
+  ln -s grassfield-alert-meadow.wav "$pkgdir/usr/share/sounds/grassfield/stereo/bell.wav"
 
   # The session icon theme grassfield-icons (ADR-0017) is its own package (a dependency): it also carries Grassfield's own
   # generic phone, tablet and media player glyphs under the names of the Apple device pictures of Breeze and Adwaita (E27).

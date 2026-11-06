@@ -950,8 +950,6 @@ QtObject {
     readonly property int notificationIconRadius: 7
     // F1 gap 7 (meas-A): icon 13-15 from the card edge; added to the 12-pt card padding [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationIconInset: 2
-    // F1 gap 7 (meas-A): text column 57-58 from the card edge = 14 + 32 icon + 11 [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
-    readonly property int notificationTextGap: 11
     // F1 gap 7 (meas-A): title and body lines on one 16-pt pitch, no extra gap [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationLineGap: 0
     // spec N2: default 5 s [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
@@ -3767,6 +3765,20 @@ QtObject {
     readonly property int storeInfoLabelSize: Math.round(12 * Appearance.textScale)
     // estimate: an Information value [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeInfoValueSize: Math.round(13 * Appearance.textScale)
+    // estimate: a column of the product page's permission cards, three at the reference width as the macOS 27 App Store's privacy cards [ref: ADR-0049; docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePermissionCardMinWidth: 260
+    // estimate: between permission cards, as between category tiles [ref: ADR-0049; docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePermissionCardGap: 16
+    // estimate: a permission card's corner, as a category tile's [ref: ADR-0049; docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePermissionCardRadius: 12
+    // estimate: a permission card's inset [ref: ADR-0049; docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePermissionCardPadding: 16
+    // estimate: a permission card's glyph above its title [ref: ADR-0049; docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePermissionIconSize: 22
+    // estimate: a permission card's title, bold, the Information value's size [ref: ADR-0049; docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePermissionTitleSize: Math.round(13 * Appearance.textScale)
+    // estimate: between a permission card's items [ref: ADR-0049; docs/audits/store-2026-10-27/parity.md]
+    readonly property int storePermissionItemGap: 6
     // estimate: the offline notice's inset [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeNoticePadding: 10
     // estimate: the offline notice's corner [ref: docs/audits/store-2026-10-27/parity.md]
@@ -3861,6 +3873,15 @@ QtObject {
 
     // the selected tab's indicator of GTK 3.24.52 Adwaita and GTK 4.24.1 Default (box-shadow inset 4 px): the generated GTK themes recolour it, never resize it [ref: docs/decisions/ADR-0035-system-dialogs.md D-8]
     readonly property int gtkTabIndicatorWidth: 4
+
+    // own value: ongoing activities the menu bar shows at once, the most recently started (ADR-0052 D6) [ref: docs/decisions/ADR-0052-ongoing-activities.md; docs/specs/menubar.md]
+    readonly property int ongoingBarMax: 3
+    // estimate: an ongoing activity's popover under the menu bar, about Now Playing's two Quick Settings columns wide (ADR-0052 D6) [ref: docs/decisions/ADR-0052-ongoing-activities.md; docs/specs/menubar.md]
+    readonly property int ongoingPopoverWidth: 300
+    // own value: the publishing app's icon at the top of the popover (ADR-0052 D6) [ref: docs/decisions/ADR-0052-ongoing-activities.md; docs/specs/menubar.md]
+    readonly property int ongoingAppIconSize: 32
+    // own value: a timer's time in the menu bar and the popover moves once a second [ref: docs/decisions/ADR-0052-ongoing-activities.md; docs/specs/menubar.md]
+    readonly property int ongoingTickMs: 1000
 
     // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
     readonly property int tilingEdge: 4
@@ -3967,6 +3988,8 @@ QtObject {
     readonly property int softwareUpdateRecheckMs: 1800000
     // the nmcli metered query; a hung answer counts as not metered, as the online wallpaper does (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateMeteredTimeoutMs: 10000
+    // an automatic check waits while the computer runs on its battery at this charge or less (Luma's download condition: mains or above 30 %) (U7) [ref: docs/specs/updates.md § Functional requirements; ADR-0050]
+    readonly property int softwareUpdateMinimumBatteryPercent: 30
     // estimate: after Update in Terminal… the pane asks for a check once Omarchy's terminal has taken its update lock, so the check waits for the update and the button stays disabled meanwhile (U11, U28) [ref: docs/specs/updates.md § Functional requirements; ADR-0033]
     readonly property int softwareUpdateLaunchCheckMs: 5000
     // while Update Now runs, the pane reads the runner's state and the helper's progress this often; they are replaced by rename, never watched (U25) [ref: docs/specs/updates.md § Functional requirements; ADR-0033 s3.5]
@@ -4080,4 +4103,73 @@ QtObject {
     readonly property int activityGpuHistoryWidth: 360
     // estimate: GPU History, two GPUs' graphs [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityGpuHistoryHeight: 220
+
+    // estimate: a new memo's width, the desktop notes app's default proportion (no macOS 27 capture measured) [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosWindowWidth: 240
+    // estimate: a new memo's height, the desktop notes app's default proportion (no macOS 27 capture measured) [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosWindowHeight: 200
+    // estimate: the narrowest memo, room for both boxes and a few words of the collapsed first line [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosWindowMinWidth: 120
+    // estimate: the shortest expanded memo, the strip and two lines of text [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosWindowMinHeight: 72
+    // estimate: the tallest memo, the store's own bound on a side (apps/memos/src/memostore.h kMaxSide) [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosWindowMaxSide: 16384
+    // estimate: the memo's title strip, thinner than a window titlebar as on macOS's desktop notes [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosStripHeight: 18
+    // estimate: the side of the close box and the collapse box drawn in the strip [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosBoxSize: 9
+    // estimate: the boxes' distance from the strip's left and right edges [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosBoxInset: 5
+    // estimate: the boxes' outline width, one point like the strip's own fine lines [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosBoxStroke: 1
+    // estimate: the boxes' and the collapsed line's ink, the memo ink at this opacity on the strip [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property real memosBoxOpacity: 0.6
+    // estimate: the resize grip in the memo's bottom-right corner, its three diagonal lines [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosGripSize: 12
+    // estimate: the gap between the resize grip's diagonal lines [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosGripLineGap: 3
+    // estimate: the memo text's default size, the system body size of the apps [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosTextSize: Math.round(13 * Appearance.textScale)
+    // estimate: Font > Smaller stops at this pixel size, still readable [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosTextSizeMin: 9
+    // estimate: Font > Bigger stops at this pixel size, a headline on a large memo [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosTextSizeMax: 72
+    // estimate: one Font > Bigger or Smaller step, one pixel as the system's font panel steps [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosTextSizeStep: 1
+    // estimate: the text's inset from the memo's edges below the strip [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosTextMargin: 8
+    // estimate: the first line shown in a collapsed memo's strip [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosCollapsedTextSize: Math.round(11 * Appearance.textScale)
+    // estimate: a new memo opens down and to the right of the front memo by this much (ADR-0051 D-5) [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property int memosCascadeStep: 22
+    // estimate: a Translucent memo's paper and strip opacity, the desktop showing through (ADR-0051 D-7) [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property real memosTranslucentOpacity: 0.72
+    // own value: the memo text, a warm near-black like the warm neutrals of ADR-0040; 4.5:1 or more on every paper and strip, tested in tests/visual/test_contrast_tokens.py [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosInk: "#26231E"
+    // own value: the yellow memo's paper, a pastel of Grassfield's own; dE 9 or more from the macOS colours of tests/visual/test_contrast_tokens.py [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosYellowPaper: "#FCEFA1"
+    // own value: the yellow memo's title strip, its paper one step darker [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosYellowStrip: "#F2DC6E"
+    // own value: the blue memo's paper, a pastel of Grassfield's own; dE 9 or more from the macOS colours of tests/visual/test_contrast_tokens.py [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosBluePaper: "#C9E3F5"
+    // own value: the blue memo's title strip, its paper one step darker [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosBlueStrip: "#A9CDE8"
+    // own value: the green memo's paper, a pastel of Grassfield's own; dE 9 or more from the macOS colours of tests/visual/test_contrast_tokens.py [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosGreenPaper: "#D2EEC4"
+    // own value: the green memo's title strip, its paper one step darker [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosGreenStrip: "#B3DCA3"
+    // own value: the pink memo's paper, a pastel of Grassfield's own; dE 9 or more from the macOS colours of tests/visual/test_contrast_tokens.py [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosPinkPaper: "#F6D0DA"
+    // own value: the pink memo's title strip, its paper one step darker [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosPinkStrip: "#EBB2C2"
+    // own value: the purple memo's paper, a pastel of Grassfield's own; dE 9 or more from the macOS colours of tests/visual/test_contrast_tokens.py [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosPurplePaper: "#DDD0F2"
+    // own value: the purple memo's title strip, its paper one step darker [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosPurpleStrip: "#C7B3E6"
+    // own value: the grey memo's paper, a pastel of Grassfield's own; dE 9 or more from the macOS colours of tests/visual/test_contrast_tokens.py [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosGreyPaper: "#E6E3DD"
+    // own value: the grey memo's title strip, its paper one step darker [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property string memosGreyStrip: "#D1CDC5"
+    // estimate: the in-memo Delete alert's veil over the memo, its paper at this opacity [ref: docs/decisions/ADR-0051-memos.md; docs/specs/memos.md]
+    readonly property real memosAlertFillOpacity: 0.94
 }

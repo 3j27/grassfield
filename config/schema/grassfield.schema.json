@@ -444,6 +444,11 @@
           "type": "boolean",
           "default": true,
           "description": "The computer does not go to sleep by itself once the displays are off for inactivity, on battery and on the power adapter alike (macOS 27 Energy, and Battery > Options…: Prevent automatic sleeping when the display is off; integrator decision 2026-11-04: macOS has no switch for battery, Grassfield does). Off: it sleeps a minute after the displays went off, only while its lock is confirmed. The displays still turn off and the session still locks as lock.* says; the only lock this key can add is the one before an automatic sleep. Default on: a Grassfield computer never went to sleep by itself before this key, and an unreadable value keeps it that way."
+        },
+        "slowHiddenApps": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apps the person cannot see get less CPU and I/O (ADR-0048, Battery > Options…): on battery an app covered by the focused window for 10 s gets CPUWeight 40 and IOWeight 60, one hidden (minimized, hidden, on another Desktop) for 30 s 20 and 30. Nothing is limited on the power adapter (and so never on a computer without a battery): plugging in lifts everything. The app in front, apps playing or recording, holding an alarm or still working are never limited; everything is lifted at once when the person looks for an app (overview, app switcher, Dock, focus) or plugs in. Off: no limit at all."
         }
       }
     },
@@ -1042,6 +1047,52 @@
           "x-grassfield": {
             "rule": "wallpaperPath"
           }
+        }
+      }
+    },
+    "sound": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Sound effects (Settings > Sound > Sound Effects, ADR-0047 part B).",
+      "properties": {
+        "alert": {
+          "type": "string",
+          "enum": [
+            "meadow",
+            "dewdrop",
+            "reed",
+            "lantern",
+            "ember",
+            "thistle"
+          ],
+          "default": "meadow",
+          "description": "The alert sound (the error bell of applications): one of Grassfield's own sounds, /usr/share/sounds/grassfield/stereo/grassfield-alert-<id>.wav."
+        },
+        "alertVolume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.75,
+          "description": "Volume of the alert and the interface sounds, relative to the output's volume, on the cubic scale of the volume keys; 0 silences the alert."
+        },
+        "effectsOutput": {
+          "type": "string",
+          "pattern": "^([A-Za-z0-9_][A-Za-z0-9_.:@+-]{0,254})?$",
+          "default": "",
+          "description": "Where the alert and the interface sounds play: \"\" = the selected sound output device; else a PipeWire node name (used while that output is connected, the selected device otherwise).",
+          "x-grassfield": {
+            "rule": "nodeName"
+          }
+        },
+        "uiEffects": {
+          "type": "boolean",
+          "default": true,
+          "description": "Play user interface sound effects: Empty Trash, an item removed from the Dock, power connected, the screenshot shutter."
+        },
+        "volumeFeedback": {
+          "type": "boolean",
+          "default": false,
+          "description": "Play feedback when the volume is changed with the volume keys (once the keys rest)."
         }
       }
     },

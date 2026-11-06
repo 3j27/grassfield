@@ -26,6 +26,7 @@ add_library(grassfield-store-backend STATIC
     src/childprocess.cpp src/childprocess.h
     src/fetch.cpp src/fetch.h
     src/flatpak.cpp src/flatpak.h
+    src/flatpakpermissions.cpp src/flatpakpermissions.h
     src/operations.cpp src/operations.h
     src/pacman.cpp src/pacman.h
     src/plancheck.cpp src/plancheck.h
@@ -35,10 +36,12 @@ add_library(grassfield-store-backend STATIC
     src/storebackend.cpp src/storebackend.h
     src/storeenv.h
     src/storemodel.cpp src/storemodel.h
-    src/storeview.cpp src/storeview.h)
+    src/storeview.cpp src/storeview.h
+    ../ongoing.h)
 target_include_directories(grassfield-store-backend PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/..
     ${CMAKE_CURRENT_SOURCE_DIR}/../../ui/i18n)
-target_link_libraries(grassfield-store-backend PUBLIC Qt6::Core Qt6::Gui Qt6::Network ZLIB::ZLIB)
+# Qt6::DBus: the ongoing activity of the running operation (ADR-0052, apps/ongoing.h).
+target_link_libraries(grassfield-store-backend PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus ZLIB::ZLIB)
 
 add_executable(grassfield-store src/main.cpp src/screenshotprovider.cpp src/screenshotprovider.h src/storeinstance.h)
 # windowchrome.h (ADR-0015): one Qt private header and the three xdg-toplevel-tag requests on libwayland-client.
@@ -71,6 +74,7 @@ if(GTest_FOUND)
         ../../tests/unit/store/tst_childprocess.cpp
         ../../tests/unit/store/tst_fetch.cpp
         ../../tests/unit/store/tst_flatpak.cpp
+        ../../tests/unit/store/tst_flatpakpermissions.cpp
         ../../tests/unit/store/tst_operations.cpp
         ../../tests/unit/store/tst_pacman.cpp
         ../../tests/unit/store/tst_plancheck.cpp

@@ -3,7 +3,8 @@
 # tests/shell/audio_dev_guard.d/guard.qml (every volume, mute, key and device action) offscreen with a wpctl shim first on PATH
 # that only records its arguments, twice: dev (must make zero backend calls, zero wpctl runs) and a control without
 # the guard (must write the stand-in sink and run the shim, which proves the test can fail). The shim is the only
-# wpctl that can run here: nothing touches the machine.
+# wpctl that can run here: nothing touches the machine. The sound effects (ADR-0047) are held the same way: a pw-play shim,
+# never started in dev (Sounds.play refuses), started in the control as the settings allow.
 # Plain shell test: prints PASS/FAIL, exits non-zero on failure.
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -20,7 +21,7 @@ for entry in shell/*; do
   [[ $(basename "$entry") == shell.qml ]] || ln -s "$root/$entry" "$tmp/cfg/$(basename "$entry")"
 done
 cp tests/shell/audio_dev_guard.d/guard.qml "$tmp/cfg/shell.qml"
-for tool in wpctl pactl; do
+for tool in wpctl pactl pw-play gsettings; do
   printf '#!/bin/sh\necho "%s $*" >> "%s/marker"\nexit 0\n' "$tool" "$tmp" >"$tmp/bin/$tool"
   chmod +x "$tmp/bin/$tool"
 done
@@ -33,7 +34,7 @@ run() { # mode (dev|real) -> prints qs output
   [[ $1 == leaked ]] && envdev=(GRASSFIELD_DEV=1 GRASSFIELD_SESSION=1) && expect=real
   env -u WAYLAND_DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE -u GRASSFIELD_DEV -u GRASSFIELD_SESSION "${envdev[@]}" GF_EXPECT="$expect" \
     PATH="$tmp/bin:$PATH" QT_QPA_PLATFORM=offscreen QML_IMPORT_PATH="$root/ui:$root/.dev/build/qml" \
-    XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache" \
+    XDG_RUNTIME_DIR="$tmp/runtime" XDG_CACHE_HOME="$tmp/cache" XDG_STATE_HOME="$tmp/state" \
     timeout 60 qs -p "$tmp/cfg" --no-color 2>&1 || true
 }
 

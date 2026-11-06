@@ -54,6 +54,7 @@ const DEFAULTS = {
     "lock.showMessage": false,
     "lock.message": "",
     "energy.preventSleep": true,
+    "energy.slowHiddenApps": true,
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
     "hotCorners.bottomLeft": "none",
@@ -116,6 +117,11 @@ const DEFAULTS = {
     "screensaver.idleMinutes": 0,
     "screensaver.kind": "artwork",
     "screensaver.folder": "",
+    "sound.alert": "meadow",
+    "sound.alertVolume": 0.75,
+    "sound.effectsOutput": "",
+    "sound.uiEffects": true,
+    "sound.volumeFeedback": false,
     "store.sources.aur": false,
     "store.sources.flathub": false,
     "store.screenshots": true,
@@ -185,6 +191,7 @@ const ALL_DEFAULTS = {
     "lock.showMessage": false,
     "lock.message": "",
     "energy.preventSleep": true,
+    "energy.slowHiddenApps": true,
     "hotCorners.topLeft": "none",
     "hotCorners.topRight": "none",
     "hotCorners.bottomLeft": "none",
@@ -247,6 +254,11 @@ const ALL_DEFAULTS = {
     "screensaver.idleMinutes": 0,
     "screensaver.kind": "artwork",
     "screensaver.folder": "",
+    "sound.alert": "meadow",
+    "sound.alertVolume": 0.75,
+    "sound.effectsOutput": "",
+    "sound.uiEffects": true,
+    "sound.volumeFeedback": false,
     "store.sources.aur": false,
     "store.sources.flathub": false,
     "store.screenshots": true,
@@ -312,6 +324,7 @@ const RULES = {
     "lock.showMessage": {"type": "boolean"},
     "lock.message": {"type": "plainText", "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]{0,200}$"},
     "energy.preventSleep": {"type": "boolean"},
+    "energy.slowHiddenApps": {"type": "boolean"},
     "hotCorners.topLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.topRight": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
     "hotCorners.bottomLeft": {"type": "enum", "values": ["none", "overview", "notifications", "apps", "lock"]},
@@ -374,6 +387,11 @@ const RULES = {
     "screensaver.idleMinutes": {"type": "integer", "min": 0, "max": 240},
     "screensaver.kind": {"type": "enum", "values": ["artwork", "wallpaperClock", "slideshow", "clock", "moving"]},
     "screensaver.folder": {"type": "wallpaperPath"},
+    "sound.alert": {"type": "enum", "values": ["meadow", "dewdrop", "reed", "lantern", "ember", "thistle"]},
+    "sound.alertVolume": {"type": "number", "min": 0, "max": 1},
+    "sound.effectsOutput": {"type": "nodeName", "pattern": "^([A-Za-z0-9_][A-Za-z0-9_.:@+-]{0,254})?$"},
+    "sound.uiEffects": {"type": "boolean"},
+    "sound.volumeFeedback": {"type": "boolean"},
     "store.sources.aur": {"type": "boolean"},
     "store.sources.flathub": {"type": "boolean"},
     "store.screenshots": {"type": "boolean"},
@@ -414,6 +432,8 @@ function validate(path, value) {
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected auto or a locale name such as fr_CH";
     case "plainText":
         return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected one line of text without control characters";
+    case "nodeName":
+        return typeof value === "string" && new RegExp(rule.pattern).test(value) ? "" : path + ": expected \"\" or a PipeWire node name";
     case "wallpaperPath":
         // "" (no path) is valid: the source then reads as the built-in artwork.
         return value === "" || WallpaperConfig.pathProblem(value) === "" ? "" : path + ": expected an absolute path without control characters (at most 4096 bytes)";

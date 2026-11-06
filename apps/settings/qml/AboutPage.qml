@@ -65,6 +65,19 @@ SettingsPage {
         return inches > 0 ? qsTr("%1-inch (%2)").arg(Qt.locale().toString(inches, "f", inches % 1 === 0 ? 0 : 1)).arg(pixels) : pixels;
     }
 
+    // Create Diagnostic Report… (ADR-0053): "" | running | done | failed, and the file it wrote.
+    property string reportState: ""
+    property string reportFile: ""
+
+    function createReport(): void {
+        if (root.reportState === "running")
+            return;
+        if (root.system.act("diagnostic report", General.REPORT_ARGV, "report.act")) {
+            root.reportFile = "";
+            root.reportState = "running";
+        }
+    }
+
     function rename(text: string): void {
         const current = General.computerName(root.host);
         const wanted = text.trim();
@@ -95,6 +108,13 @@ SettingsPage {
                     nameField.text = General.computerName(root.host);
             } else if (tag === "host.act") {
                 root.system.queryBus("host.state", "host.state");
+            } else if (tag === "report.act") {
+                const path = ok ? General.reportPath(output) : "";
+                root.reportFile = path;
+                root.reportState = path !== "" ? "done" : "failed";
+                // Files shows the folder that holds it (in the session's language: Backend.launch), when it is in the home.
+                if (General.revealable(path, root.backend.homeDir))
+                    root.system.launch("show the diagnostic report", General.revealArgv(path));
             } else if (tag.startsWith("about.pacman.")) {
                 const answered = Object.assign({}, root.versions);
                 answered[tag.slice("about.pacman.".length)] = ok ? SysInfo.pacmanVersion(output) : "";
@@ -232,6 +252,27 @@ SettingsPage {
             title: root.volume && root.volume.name !== "" ? root.volume.name : qsTr("Startup Disk")
             glyph: "drive"
             valueText: root.volume ? qsTr("%1 available of %2").arg(root.diskText(root.volume.available)).arg(root.diskText(root.volume.total)) : ""
+        }
+    }
+
+    // macOS keeps System Report… at the end of About; here the report a beta tester attaches (ADR-0053): one private file in the
+    // Downloads folder, shown in Files; nothing is sent.
+    SettingsGroup {
+        visible: root.backend.reportTool === true || root.system.dev === true
+
+        SettingsRow {
+            title: qsTr("Diagnostic Report")
+            subtitle: root.reportState === "running" ? qsTr("Creating the report…")
+                : root.reportState === "done" ? qsTr("Saved as “%1”.").arg(General.reportName(root.reportFile))
+                : root.reportState === "failed" ? qsTr("The report could not be created.")
+                : qsTr("Saves a report about this computer to your Downloads folder. Nothing is sent: you decide whether to share it.")
+
+            Button {
+                push: true
+                text: qsTr("Create Diagnostic Report…")
+                enabled: root.reportState !== "running"
+                onClicked: root.createReport()
+            }
         }
     }
 

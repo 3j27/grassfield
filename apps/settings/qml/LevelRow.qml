@@ -13,6 +13,9 @@ SettingsRow {
     // The command that sets a level (an argument vector, or null when it cannot be set), what it is called in the log, and the
     // tag its answer comes back with.
     property var command: null
+    // Instead of a command: a function that applies a level itself (Sound's Alert volume, a setting) and returns whether it
+    // was applied.
+    property var apply: null
     property string what: ""
     property string tag: ""
     property bool settable: true
@@ -48,8 +51,14 @@ SettingsRow {
         // The throttle first, so the row stays busy from one write to the next (the page never sees a drag end in between); a
         // command of its own before the write, so an answer that came at once is not missed.
         throttle.start();
-        root.running = root.oneAtATime;
         root.pending = NaN;
+        // A row that applies its level itself (apply) has no command to wait for.
+        if (root.apply !== null) {
+            if (root.apply(v) !== true)
+                slider.local = NaN;
+            return;
+        }
+        root.running = root.oneAtATime;
         if (!root.command || !root.system.act(root.what, root.command(v), root.tag)) {
             root.running = false;
             slider.local = NaN;
@@ -85,7 +94,7 @@ SettingsRow {
         y: root.center - height / 2
         width: root.sliderWidth
         accessibleName: root.accessibleName
-        enabled: root.settable && root.command !== null
+        enabled: root.settable && (root.command !== null || root.apply !== null)
         opacity: enabled ? 1 : Tokens.materialDisabledOpacity
         from: 0
         to: 1

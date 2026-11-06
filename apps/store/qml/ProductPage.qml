@@ -10,14 +10,14 @@ import "Store.js" as Store
 // page asks for the AUR's facts when it opens (maintainer or orphaned, votes, popularity, last update, the out-of-date
 // flag; SR11) and offers its build script, fetched on click (ADR-0037 e.6: plain text, never run by the Store). A Flatpak's
 // page asks flatpak for its version, sizes and what it can reach (Flathub's before an install, the user's installation's
-// after), and shows its app id, runtime and Flathub's verified flag (SR11).
+// after), and shows its app id, runtime and Flathub's verified flag (SR11), then its Permissions as cards (ADR-0049).
 ScrollPage {
     id: root
 
     required property var backend
     property var app: ({})
     // pacman -Si's facts, asked for when the page opens (version, sizes, build date); a Flatpak's from flatpak (version,
-    // licence, download and installed sizes, access).
+    // licence, download and installed sizes, access, permissions: the grants of view::permissions).
     property var facts: ({})
     readonly property string factsPackage: root.app.package ? root.app.package : (root.app.packages && root.app.packages.length > 0 ? root.app.packages[0] : "")
 
@@ -63,7 +63,7 @@ ScrollPage {
         function onFlatpakInfo(id: string, facts: var): void {
             if (id === root.app.id)
                 root.facts = {version: facts.version, downloadSize: facts.download, installedSize: facts.installed,
-                              licenses: facts.license, access: facts.access};
+                              licenses: facts.license, access: facts.access, permissions: facts.permissions};
         }
     }
 
@@ -447,7 +447,6 @@ ScrollPage {
                 {label: qsTr("App ID"), value: root.app.kind === "flatpak" ? (root.app.flatpakId || "") : ""},
                 {label: qsTr("Runtime"), value: root.app.kind === "flatpak" ? (root.app.runtime || "") : ""},
                 {label: qsTr("Verified Developer"), value: root.app.kind === "flatpak" && root.app.verified ? qsTr("Verified by Flathub") : ""},
-                {label: qsTr("Can Access"), value: root.app.kind === "flatpak" && root.facts.access !== undefined ? Store.accessText(root.facts.access) : ""},
                 {label: qsTr("Version"), value: root.facts.version || root.aur.version || ""},
                 {label: qsTr("Maintainer"), value: root.app.kind !== "aur" ? "" : root.aur.orphaned ? qsTr("Orphaned") : (root.aur.maintainer || "")},
                 {label: qsTr("Votes"), value: root.aur.votes !== undefined ? String(root.aur.votes) : ""},
@@ -508,5 +507,13 @@ ScrollPage {
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.storeBadgeSize
         }
+    }
+
+    // Permissions (ADR-0049): what a Flatpak can reach, as cards; nothing while its metadata is not read.
+    PermissionCards {
+        width: root.contentWidth
+        visible: root.app.kind === "flatpak" && root.facts.permissions !== undefined && root.facts.permissions !== null
+        grants: root.app.kind === "flatpak" && root.facts.permissions !== undefined ? root.facts.permissions : null
+        appName: root.app.name || ""
     }
 }

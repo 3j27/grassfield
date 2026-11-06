@@ -96,6 +96,34 @@ function parsePlocate(text, query, home, limit) {
     return hits.slice(0, limit).map(h => h.path);
 }
 
+// The user's XDG folders that file results favour (Ranking.xdgBonus), from user-dirs.dirs (xdg-user-dirs-update writes it in
+// the user's language: "Téléchargements", "Bilder"...): Desktop, Documents, Download, Music, Pictures and Videos, as canonical
+// absolute paths. `$HOME` is expanded; a folder set to the home itself (xdg-user-dirs' way of turning one off), a relative or
+// hidden one, and any other line are ignored. No file, no folders: names are never guessed in English.
+const XDG_USER_DIR_KEYS = ["DESKTOP", "DOCUMENTS", "DOWNLOAD", "MUSIC", "PICTURES", "VIDEOS"];
+
+function parseUserDirs(text, home) {
+    const out = [];
+    if (typeof text !== "string" || !home)
+        return out;
+    const h = canonical(home);
+    for (const line of text.split("\n")) {
+        const m = /^\s*XDG_([A-Z]+)_DIR\s*=\s*"((?:[^"\\]|\\.)*)"\s*$/.exec(line);
+        if (!m || XDG_USER_DIR_KEYS.indexOf(m[1]) < 0)
+            continue;
+        let value = m[2].replace(/\\(.)/g, "$1");
+        if (value === "$HOME" || value.startsWith("$HOME/"))
+            value = h + value.slice(5);
+        if (!value.startsWith("/") || value.indexOf("\0") >= 0)
+            continue;
+        const c = canonical(value);
+        if (c === h || hasHiddenSegment(c, h) || out.indexOf(c) >= 0)
+            continue;
+        out.push(c);
+    }
+    return out;
+}
+
 function unescapeXml(s) {
     return s.replace(/&(lt|gt|quot|apos|amp);/g, (m, n) => ({lt: "<", gt: ">", quot: "\"", apos: "'", amp: "&"})[n]);
 }

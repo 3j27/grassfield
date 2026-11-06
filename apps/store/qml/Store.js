@@ -245,58 +245,277 @@ function uninstallReasonText(reason, kind) {
     return "";
 }
 
-// What a Flatpak can reach beyond its own window and folder (SR11, SD25), from its metadata (flatpak.h flatpakAccess),
-// each in plain words: a class, "sessionService:<name>", "systemService:<name>", "other:<flatpak's words>",
-// "more:<count>". A key this window does not know is said as it is, never left out. [] when it reaches nothing more.
-function accessWords(keys) {
-    const words = {
-        "network": qsTr("The internet"),
-        "allFiles": qsTr("All your files"),
-        "home": qsTr("Your home folder"),
-        "folders": qsTr("Some of your folders"),
-        "devices": qsTr("Devices such as cameras, USB drives and game controllers"),
-        "input": qsTr("Game controllers and other input devices"),
-        "usb": qsTr("USB devices"),
-        "kvm": qsTr("Virtual machines, through KVM"),
-        "audio": qsTr("Your speakers and microphone"),
-        "x11": qsTr("The X11 display, where it can see what other X11 apps show and what you type in them"),
-        "sharedMemory": qsTr("Memory your other programs share"),
-        "printers": qsTr("Your printers"),
-        "ssh": qsTr("Your SSH keys, through the SSH agent"),
-        "gpg": qsTr("Your GnuPG keys, through the GnuPG agent"),
-        "smartCards": qsTr("Smart cards"),
-        "bus": qsTr("Every service of your session"),
-        "systemBus": qsTr("Every service of the system"),
-        "bluetooth": qsTr("Bluetooth"),
-        "canbus": qsTr("CAN bus devices"),
-        "devel": qsTr("Developer features that can trace programs"),
-        "multiarch": qsTr("32-bit programs"),
-        "login": qsTr("Programs that start when you log in"),
-        "outside": qsTr("Programs outside its sandbox")
-    };
-    return Array.from(keys || [], k => {
-        const key = String(k);
-        if (words[key] !== undefined)
-            return words[key];
-        const colon = key.indexOf(":");
-        const kind = colon < 0 ? "" : key.slice(0, colon), value = key.slice(colon + 1);
-        if (kind === "sessionService")
-            return qsTr("The session service “%1”").arg(value);
-        if (kind === "systemService")
-            return qsTr("The system service “%1”").arg(value);
-        if (kind === "more")
-            return qsTr("%1 more").arg(value);
-        return qsTr("A permission the Store can't describe: %1").arg(kind === "other" ? value : key);
-    });
+// ---- A Flatpak's permissions, grant by grant (ADR-0049): the product page's cards, the sheets' lines, the Updates list's
+// "Asks for more". A grant is the backend's {key, name, level} (view::permissions; a place's level 1 read only, 2 read and
+// write, 3 create); a change adds {change, previous} (view::permissionChanges).
+
+// The groups in the order the page shows them: id, title, glyph (branding/icons/symbolic).
+const PERMISSION_GROUPS = [
+    ["files", "folder"], ["network", "globe"], ["devices", "camera"], ["sound", "microphone"], ["display", "display"],
+    ["keys", "key"], ["services", "apps"], ["background", "power"], ["sandbox", "exclamationmark-triangle"], ["other", "info"]
+];
+
+function permissionGroupTitle(id) {
+    switch (id) {
+    case "files":
+        return qsTr("Files and Folders");
+    case "network":
+        return qsTr("Network");
+    case "devices":
+        return qsTr("Camera and Other Devices");
+    case "sound":
+        return qsTr("Microphone and Speakers");
+    case "display":
+        return qsTr("Display");
+    case "keys":
+        return qsTr("Keys and Passwords");
+    case "services":
+        return qsTr("Other Apps and Services");
+    case "background":
+        return qsTr("Background and Login");
+    case "sandbox":
+        return qsTr("Outside Its Sandbox");
+    }
+    return qsTr("Other");
 }
 
-// The same in one line: "Can access" (SR11); "Only its own window and files" when it reaches nothing more; "" when
-// what it can reach could not be read (nothing said rather than too little).
-function accessText(keys) {
-    if (keys === undefined || keys === null)
+// Bus names Grassfield can name in plain words (the session's and the system's).
+function busNameWords(name) {
+    switch (name) {
+    case "org.freedesktop.secrets":
+        return qsTr("Your saved passwords");
+    case "ca.desrt.dconf":
+        return qsTr("Desktop settings");
+    case "org.gtk.vfs.*":
+        return qsTr("Network locations and the Trash");
+    case "org.freedesktop.NetworkManager":
+        return qsTr("Network settings");
+    case "org.freedesktop.GeoClue2":
+        return qsTr("Your location");
+    case "org.bluez":
+        return qsTr("Bluetooth");
+    case "org.freedesktop.login1":
+        return qsTr("Sessions, sleep and shutdown");
+    case "org.freedesktop.UPower":
+        return qsTr("Battery");
+    case "org.freedesktop.UDisks2":
+        return qsTr("Disks");
+    case "org.freedesktop.Avahi":
+        return qsTr("Devices on your local network");
+    }
+    return "";
+}
+
+// A user folder as flatpak writes it (xdg-download…), in the words of the file manager's sidebar.
+function userFolderWords(word) {
+    switch (word) {
+    case "xdg-desktop":
+        return qsTr("Desktop");
+    case "xdg-documents":
+        return qsTr("Documents");
+    case "xdg-download":
+        return qsTr("Downloads");
+    case "xdg-music":
+        return qsTr("Music");
+    case "xdg-pictures":
+        return qsTr("Pictures");
+    case "xdg-public-share":
+        return qsTr("Public");
+    case "xdg-templates":
+        return qsTr("Templates");
+    case "xdg-videos":
+        return qsTr("Videos");
+    }
+    return "";
+}
+
+// A place (the backend's normalised name) in plain words.
+function placeWords(place) {
+    if (place === "/" || place === "host-root")
+        return qsTr("All files on this computer");
+    if (place === "host-os")
+        return qsTr("The system's programs and libraries");
+    if (place === "host-etc")
+        return qsTr("The system's settings");
+    if (place === "~")
+        return qsTr("Your home folder");
+    if (place === "*")
+        return qsTr("A folder its path climbs out of (“..”), which could be anywhere");
+    const slash = place.indexOf("/");
+    const head = slash < 0 ? place : place.slice(0, slash), rest = slash < 0 ? "" : place.slice(slash + 1);
+    const folder = userFolderWords(head);
+    if (folder !== "")
+        return rest === "" ? folder : folder + "/" + rest;
+    if (head === "$RUN")
+        return rest === "" ? qsTr("Your session's runtime folder") : qsTr("Your session's runtime folder: %1").arg(rest);
+    if (/^\/(run\/media|media|mnt)(\/|$)/.test(place))
+        return qsTr("Removable drives");
+    return place;
+}
+
+// One grant as an item: its group, its words, and a short note when it is wide (what it means, said plainly).
+function permissionItem(g) {
+    const key = String(g.key || ""), name = String(g.name || ""), level = Number(g.level || 1);
+    const write = level >= 2;
+    const mode = text => level >= 3 ? qsTr("%1 (read and write, created if missing)").arg(text)
+                       : write ? qsTr("%1 (read and write)").arg(text) : qsTr("%1 (read only)").arg(text);
+    switch (key) {
+    case "network":
+        return {group: "network", text: qsTr("The internet and your local network"), note: ""};
+    case "allFiles":
+    case "home":
+    case "folders": {
+        const all = key === "allFiles" && (name === "/" || name === "host-root"), home = key === "home";
+        const note = all ? (write ? qsTr("It can read and change any file you can, including other apps' data and connected drives.")
+                                  : qsTr("It can read any file you can, including other apps' data and connected drives."))
+                   : home ? (write ? qsTr("It can read and change everything in your home folder, including other apps' data and settings.")
+                                   : qsTr("It can read everything in your home folder, including other apps' data and settings."))
+                   : "";
+        return {group: "files", text: mode(placeWords(name)), note: note};
+    }
+    case "devices":
+        return {group: "devices", text: qsTr("All devices"),
+                note: qsTr("Cameras, microphones, game controllers, USB drives and any other device, without asking.")};
+    case "input":
+        return {group: "devices", text: qsTr("Game controllers and other input devices"), note: ""};
+    case "usb":
+        return {group: "devices", text: qsTr("USB devices, directly"), note: qsTr("Any USB device, without asking.")};
+    case "usbPortal":
+        return {group: "devices", text: name === "all" ? qsTr("USB devices, through the USB portal") : qsTr("The USB device %1, through the USB portal").arg(name),
+                note: ""};
+    case "usbHidden":
+        return {group: "devices", text: name === "all" ? qsTr("Hidden from it: every USB device") : qsTr("Hidden from it: the USB device %1").arg(name),
+                note: ""};
+    case "kvm":
+        return {group: "devices", text: qsTr("Virtual machines, through KVM"), note: ""};
+    case "bluetooth":
+        return {group: "devices", text: qsTr("Bluetooth devices, directly"), note: ""};
+    case "canbus":
+        return {group: "devices", text: qsTr("CAN bus devices"), note: ""};
+    case "printers":
+        return {group: "devices", text: qsTr("Your printers, directly"), note: ""};
+    case "smartCards":
+        return {group: "keys", text: qsTr("Smart cards"), note: ""};
+    case "audio":
+        return {group: "sound", text: qsTr("Your speakers and microphone"), note: qsTr("It can record from the microphone without asking.")};
+    case "x11":
+        return {group: "display", text: qsTr("The X11 display"),
+                note: qsTr("Through X11 it can see what other X11 apps show and what you type in them.")};
+    case "x11Fallback":
+        return {group: "display", text: qsTr("The X11 display, only where Wayland is missing"),
+                note: qsTr("This session has Wayland: here it gets no X11.")};
+    case "ssh":
+        return {group: "keys", text: qsTr("Your SSH keys, through the SSH agent"), note: ""};
+    case "gpg":
+        return {group: "keys", text: qsTr("Your GnuPG keys, through the GnuPG agent"), note: ""};
+    case "bus":
+        return {group: "services", text: qsTr("Every service of your session"),
+                note: qsTr("Including services that can start programs outside its sandbox.")};
+    case "systemBus":
+        return {group: "services", text: qsTr("Every service of the system"), note: qsTr("Including services that change the system's settings.")};
+    case "sessionService":
+    case "systemService": {
+        const wildcard = name.endsWith(".*");
+        const known = busNameWords(name);
+        const shown = known !== "" ? qsTr("%1 (%2)").arg(known).arg(name) : wildcard ? name.slice(0, -2) : name;
+        const text = wildcard && known === "" ? (write ? qsTr("Owns every name under “%1”").arg(shown) : qsTr("Talks to every service under “%1”").arg(shown))
+                                              : (write ? qsTr("Owns the name “%1”").arg(shown) : qsTr("Talks to “%1”").arg(shown));
+        const group = name === "org.freedesktop.secrets" ? "keys" : "services";
+        return {group: group, text: key === "systemService" ? qsTr("%1, on the system").arg(text) : text,
+                note: wildcard ? qsTr("A wildcard: services it does not name are included.") : ""};
+    }
+    case "login":
+        return {group: "background", text: qsTr("Programs that start when you log in"),
+                note: qsTr("It can add programs that start at your next login, outside its sandbox.")};
+    case "outside":
+        return {group: "sandbox", text: qsTr("Programs outside its sandbox"), note: qsTr("Anything it starts this way has all of your access.")};
+    case "devel":
+        return {group: "sandbox", text: qsTr("Developer features that can trace programs"), note: ""};
+    case "ipc":
+        return {group: "other", text: qsTr("Memory your other programs share (IPC)"), note: ""};
+    case "shm":
+        return {group: "other", text: qsTr("The shared memory folder of your other programs (/dev/shm)"), note: ""};
+    case "multiarch":
+        return {group: "other", text: qsTr("32-bit programs"), note: ""};
+    case "more":
+        return {group: "other", text: qsTr("%1 more permissions").arg(name), note: ""};
+    }
+    return {group: "other", text: qsTr("A permission the Store can't describe: %1").arg(key === "other" ? name : key), note: ""};
+}
+
+// The product page's cards: [{id, title, icon, items [{text, note}], footnote}] in the groups' order, only those present.
+// [] for none (the page then says "only its own window and files"); null when unread (the page says nothing).
+function permissionGroups(grants) {
+    if (grants === undefined || grants === null)
+        return null;
+    const byGroup = {};
+    for (const g of grants) {
+        const item = permissionItem(g);
+        (byGroup[item.group] = byGroup[item.group] || []).push({text: item.text, note: item.note});
+    }
+    const wideFiles = Array.from(grants, g => g.key === "home" || (g.key === "allFiles" && (g.name === "/" || g.name === "host-root"))).indexOf(true) >= 0;
+    return PERMISSION_GROUPS.filter(p => byGroup[p[0]] !== undefined).map(p => ({
+        id: p[0], title: permissionGroupTitle(p[0]), icon: p[1], items: byGroup[p[0]],
+        footnote: p[0] === "files" && !wideFiles ? qsTr("Other files: only those you choose in an Open or Save dialog.") : ""
+    }));
+}
+
+// The same as lines for a sheet: "Files and Folders: Downloads (read and write), Music (read only)", one per group.
+function permissionLines(grants) {
+    const groups = permissionGroups(grants);
+    if (groups === null)
+        return [];
+    return groups.map(g => qsTr("%1: %2").arg(g.title).arg(g.items.map(i => i.text).join(", ")));
+}
+
+// What a grant was before an update (a widened or narrowed change's previous), in words.
+function previousWords(change) {
+    const p = change.previous;
+    if (!p)
         return "";
-    const words = accessWords(keys);
-    return words.length === 0 ? qsTr("Only its own window and files") : words.join(", ");
+    if (p.key === change.key && p.name === change.name)
+        return Number(p.level) >= 3 ? qsTr("read and write, created if missing") : Number(p.level) >= 2 ? qsTr("read and write") : qsTr("read only");
+    return permissionItem(p).text;
+}
+
+// An update's changes as the sheet says them: what the app can newly reach (added, widened, with what it had), then what
+// it can no longer reach (removed, narrowed). {more: [lines], less: [lines]}.
+function changeLines(changes) {
+    const more = [], less = [];
+    for (const c of changes || []) {
+        if (c.change === "more") {
+            more.push(qsTr("%1 more changes").arg(c.name));
+            continue;
+        }
+        const item = permissionItem(c);
+        const group = permissionGroupTitle(item.group);
+        const was = previousWords(c);
+        const line = was !== "" ? qsTr("%1: %2 (was: %3)").arg(group).arg(item.text).arg(was) : qsTr("%1: %2").arg(group).arg(item.text);
+        if (c.change === "added" || c.change === "widened")
+            more.push(line);
+        else
+            less.push(line);
+    }
+    return {more: more, less: less};
+}
+
+// The Updates list's line under an app whose update asks for more (ADR-0049): what it newly reaches, in short; "" for one
+// that does not.
+function asksForMoreText(app) {
+    if (!app || !app.asksForMore)
+        return "";
+    if (app.permissionsUnknown)
+        return qsTr("What this update can reach couldn't be checked.");
+    const words = [];
+    for (const c of app.permissionChanges || []) {
+        if (c.change !== "added" && c.change !== "widened")
+            continue;
+        const text = c.key === "more" ? qsTr("%1 more").arg(c.name) : permissionItem(c).text;
+        if (words.indexOf(text) < 0)
+            words.push(text);
+    }
+    const shown = words.length > 3 ? words.slice(0, 3).concat([qsTr("%1 more").arg(words.length - 3)]) : words;
+    return qsTr("Asks for more: %1").arg(shown.join(", "));
 }
 
 function buttonText(state) {

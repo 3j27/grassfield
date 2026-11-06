@@ -32,8 +32,10 @@ Scenarios (each prints one "[fuzz]" line and PASS/FAIL lines; a finding names th
   update-check    packaging/bin/grassfield-update-check with stub children (nothing runs): checkupdates' and pacman -Q's
                   output, vercmp's answer, the failures and last-success files, the release notes document, pacman.conf
                   and the repository file, the BUILD-DEPS record and the local database
-                  entry behind the toolkit comparison (ADR-0041 step 2b). Contract: nothing raises (parse_notes raises ValueError or UnicodeDecodeError
-                  only, which its caller catches); the state is one of the documented ones; the other updates are
+                  entry behind the toolkit comparison (ADR-0041 step 2b), the staged rollout's descriptor (ADR-0050).
+                  Contract: nothing raises (parse_notes and parse_rollout raise ValueError or UnicodeDecodeError
+                  only, which their callers catch); a parsed descriptor's reach is within [0, 1] and its offer time an
+                  integer or None; the state is one of the documented ones; the other updates are
                   counted as listed, sorted, without Grassfield's or Omarchy's packages; every time is None or ISO 8601;
                   the output line stays under the 256 KiB cap and is JSON; the failures file holds a plausible time
                   afterwards; a release of the notes has a well-formed version, date and plain-text notes; the toolkit
@@ -529,6 +531,15 @@ def update_check():
     notes_corpus = [json.dumps(notes).encode(), json.dumps({"version": 1, "releases": []}).encode()]
     fail_corpus = [b'{"first": 1799999000}', b'{"first": 1700000000}', b'{"first": 1e999}', b'{"first": "x"}', b"", b"[]", b'{"first": true}']
     succ_corpus = [b"1799990000\n", b"", b"x", b"1e999", b"-5"]
+    rollout_corpus = [json.dumps({"schema": 1, "channel": "stable", "arch": "x86_64", "cohorts": 20,
+                                  "generatedAt": "2026-10-27T05:00:00Z", "expiresAt": "2026-11-20T05:00:00Z",
+                                  "releases": [{"version": "1.0.1-1", "importance": "normal", "state": "rolling",
+                                                "rollout": {"startAt": "2026-10-27T04:00:00Z", "startPercent": 5, "durationHours": 168}},
+                                               {"version": "1.0.2-1", "importance": "normal", "state": "paused",
+                                                "rollout": {"startAt": "2026-10-27T04:00:00Z", "startPercent": 0, "durationHours": 1,
+                                                            "pausedAt": "2026-10-27T04:30:00Z"}},
+                                               {"version": "1.0.3-1", "importance": "security", "state": "rolling", "rollout": None}]}).encode(),
+                      b'{"schema":1}', b""]
     conf_corpus = ["[options]\nHoldPkg = pacman\n[core]\nInclude = /etc/pacman.d/mirrorlist\n[grassfield]\nInclude = /etc/pacman.d/grassfield.conf\n",
                    "# Grassfield\nServer = https://repo.example/stable/$arch\nServer = https://mirror.example/stable/$arch # mirror\n",
                    "Server=https://repo.example/beta/$arch\n", ""]
@@ -695,6 +706,18 @@ def update_check():
                 return False
             check_notes(out)
             return bool(out)
+        if i % 10 == 3:
+            raw = mut.mutate(mut.rng.pick(rollout_corpus), rollout_corpus, m.ROLLOUT_CAP + 64)
+            try:
+                d = m.parse_rollout(raw, "stable", "x86_64", 1793000000, mut.rng.pick([None, 1792990000, 1793100000]))
+            except (ValueError, UnicodeDecodeError):
+                return False
+            for r in d["releases"]:
+                v = m.reach(r, mut.rng.pick([1793000000, 0, 1893000000]))
+                assert 0.0 <= v <= 1.0, (v, r)
+                t = m.offer_at(r, mut.rng.pick([None, 0, 7, 19]))
+                assert t is None or isinstance(t, int), (t, r)
+            return True
         text = mut.text(mut.rng.pick(conf_corpus), conf_corpus, 65536)
         listed = m.servers(text)
         assert isinstance(listed, list) and all(isinstance(s, str) and "\n" not in s for s in listed), listed

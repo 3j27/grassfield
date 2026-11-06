@@ -133,9 +133,20 @@ TEST(Flatpak, UpdatesListed)
     EXPECT_FALSE(listFlatpakUpdates(tools));
 }
 
-// What an update lets an app reach that it could not (SD25 for an update): the installed metadata against Flathub's newer
-// one; nothing new, something new, and either unread.
-TEST(Flatpak, UpdateAccessAdded)
+// What an update changes in what an app may reach (SD25 for an update, ADR-0049): the installed metadata against
+// Flathub's newer one; nothing new, something new, something less, and either unread.
+namespace {
+// The changes as "<kind> <key>[ <name>]" lines.
+QStringList changeLines(const std::optional<QList<FlatpakPermissionChange>> &changes)
+{
+    QStringList out;
+    for (const FlatpakPermissionChange &c : changes.value_or(QList<FlatpakPermissionChange>()))
+        out.append((changeKindName(c.kind) + QLatin1Char(' ') + c.grant.key + QLatin1Char(' ') + c.grant.name).trimmed());
+    return out;
+}
+} // namespace
+
+TEST(Flatpak, UpdatePermissionChanges)
 {
     QTemporaryDir dir;
     const QByteArray d = dir.path().toUtf8();
@@ -151,45 +162,46 @@ TEST(Flatpak, UpdateAccessAdded)
                                       "  remote-info*) cat '" + d + "/newer' ;;\n"
                                       "esac\n");
     const QString ref = QStringLiteral("app/org.example.Hello/x86_64/stable");
-    std::optional<QStringList> added = flatpakAccessAdded(tools, ref);
-    ASSERT_TRUE(added);
-    EXPECT_TRUE(added->isEmpty());
+    std::optional<QList<FlatpakPermissionChange>> changes = flatpakPermissionChanges(tools, ref);
+    ASSERT_TRUE(changes);
+    EXPECT_TRUE(changes->isEmpty());
     EXPECT_EQ(readAll(dir.filePath(QStringLiteral("calls"))), "info --user --show-metadata -- " + ref.toUtf8() + "\n"
                                                                 "remote-info --user --show-metadata flathub " + ref.toUtf8() + "\n");
     storetest::writeFile(dir.filePath(QStringLiteral("newer")),
                          "[Application]\nname=org.example.Hello\n[Context]\nshared=network;\nfilesystems=home;\nsockets=x11;\n");
-    added = flatpakAccessAdded(tools, ref);
-    ASSERT_TRUE(added);
-    EXPECT_EQ(*added, (QStringList{QStringLiteral("home"), QStringLiteral("x11"), QStringLiteral("login"), QStringLiteral("outside")}));
-    // What it could reach and no longer can is not "added".
+    changes = flatpakPermissionChanges(tools, ref);
+    EXPECT_EQ(changeLines(changes), (QStringList{QStringLiteral("added home ~"), QStringLiteral("added x11"), QStringLiteral("added login"),
+                                                 QStringLiteral("added outside")}));
+    EXPECT_TRUE(asksForMore(*changes));
+    // What it could reach and no longer can is removed, and applies as any update.
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n");
-    added = flatpakAccessAdded(tools, ref);
-    ASSERT_TRUE(added);
-    EXPECT_TRUE(added->isEmpty());
-    // Unread: metadata naming no app, or a value flatpak cannot interpret.
+    changes = flatpakPermissionChanges(tools, ref);
+    EXPECT_EQ(changeLines(changes), QStringList{QStringLiteral("removed network")});
+    EXPECT_FALSE(asksForMore(*changes));
+    // Unread: metadata naming no app, another app, or a value flatpak cannot interpret.
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Context]\nshared=network;\n");
-    EXPECT_FALSE(flatpakAccessAdded(tools, ref));
+    EXPECT_FALSE(flatpakPermissionChanges(tools, ref));
+    storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Other\n");
+    EXPECT_FALSE(flatpakPermissionChanges(tools, ref)) << "another app's metadata";
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nfilesystems=b\\qc;\n");
-    EXPECT_FALSE(flatpakAccessAdded(tools, ref));
+    EXPECT_FALSE(flatpakPermissionChanges(tools, ref));
     // The installed side unread (flatpak info fails, whatever it printed) is unread too, whatever the newer commit reaches.
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nshared=network;\n");
-    ASSERT_TRUE(flatpakAccessAdded(tools, ref));
+    ASSERT_TRUE(flatpakPermissionChanges(tools, ref));
     storetest::writeFile(dir.filePath(QStringLiteral("unreadable")), "");
-    EXPECT_FALSE(flatpakAccessAdded(tools, ref));
+    EXPECT_FALSE(flatpakPermissionChanges(tools, ref));
     QFile::remove(dir.filePath(QStringLiteral("unreadable")));
-    EXPECT_FALSE(flatpakAccessAdded(tools, QStringLiteral("runtime/org.example.Platform/x86_64/1"))) << "an app's ref only";
+    EXPECT_FALSE(flatpakPermissionChanges(tools, QStringLiteral("runtime/org.example.Platform/x86_64/1"))) << "an app's ref only";
 
-    // A cut list ("more:<n>", 30 lines at most) is never matched: the same count on both sides may hide new names.
+    // A cut list (more than kMaxFlatpakGrants grants) is never matched: the same names on both sides may hide new ones.
     QByteArray many = "[Application]\nname=org.example.Hello\n[Session Bus Policy]\n";
-    for (int i = 10; i < 50; ++i)
-        many += "org.example.Service" + QByteArray::number(i) + "=talk\n";
+    for (int i = 0; i < kMaxFlatpakGrants + 40; ++i)
+        many += "org.example.Service" + QByteArray::number(1000 + i) + "=talk\n";
     storetest::writeFile(dir.filePath(QStringLiteral("installed")), many);
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), many);
-    const std::optional<QStringList> cut = flatpakAccess(many);
-    ASSERT_TRUE(cut && cut->size() == 30 && cut->last().startsWith(QLatin1String("more:")));
-    added = flatpakAccessAdded(tools, ref);
-    ASSERT_TRUE(added);
-    EXPECT_EQ(*added, QStringList{cut->last()}) << "the named services match; the cut count is new";
+    changes = flatpakPermissionChanges(tools, ref);
+    EXPECT_EQ(changeLines(changes), QStringList{QStringLiteral("added more 40")}) << "the named services match; the cut is new";
+    EXPECT_TRUE(asksForMore(*changes));
 
     // The commit (S32a): Flathub's, and the installed one; 64 lowercase hex digits, else unread. With a commit, its own
     // metadata is read (--commit), the one the update then deploys.
@@ -201,12 +213,11 @@ TEST(Flatpak, UpdateAccessAdded)
     QFile::remove(dir.filePath(QStringLiteral("calls")));
     storetest::writeFile(dir.filePath(QStringLiteral("installed")), "[Application]\nname=org.example.Hello\n");
     storetest::writeFile(dir.filePath(QStringLiteral("newer")), "[Application]\nname=org.example.Hello\n[Context]\nfilesystems=home;\n");
-    added = flatpakAccessAdded(tools, ref, c1);
-    ASSERT_TRUE(added);
-    EXPECT_EQ(*added, (QStringList{QStringLiteral("home"), QStringLiteral("login"), QStringLiteral("outside")}));
+    changes = flatpakPermissionChanges(tools, ref, c1);
+    EXPECT_EQ(changeLines(changes), (QStringList{QStringLiteral("added home ~"), QStringLiteral("added login"), QStringLiteral("added outside")}));
     EXPECT_EQ(readAll(dir.filePath(QStringLiteral("calls"))), "info --user --show-metadata -- " + ref.toUtf8() + "\n"
                                                                 "remote-info --user --show-metadata --commit=" + c1.toUtf8() + " flathub " + ref.toUtf8() + "\n");
-    EXPECT_FALSE(flatpakAccessAdded(tools, ref, QStringLiteral("abc"))) << "not a commit";
+    EXPECT_FALSE(flatpakPermissionChanges(tools, ref, QStringLiteral("abc"))) << "not a commit";
     for (const QByteArray &bad : {QByteArray("abc\n"), QByteArray(64, 'A') + "\n", QByteArray(63, 'a') + "\n", QByteArray(65, 'a') + "\n", QByteArray()}) {
         storetest::writeFile(dir.filePath(QStringLiteral("commit")), bad);
         EXPECT_EQ(flatpakRemoteCommit(tools, ref), QString()) << bad.constData();
@@ -731,9 +742,9 @@ TEST(Flatpak, RealUpdate)
     const QString commit = flatpakRemoteCommit(tools, ref);
     ASSERT_TRUE(isFlatpakCommit(commit));
     EXPECT_NE(flatpakInstalledCommit(tools, ref), commit);
-    const std::optional<QStringList> added = flatpakAccessAdded(tools, ref, commit);
-    ASSERT_TRUE(added);
-    EXPECT_TRUE(added->isEmpty()) << added->join(QLatin1Char(',')).toStdString();
+    const std::optional<QList<FlatpakPermissionChange>> changes = flatpakPermissionChanges(tools, ref, commit);
+    ASSERT_TRUE(changes);
+    EXPECT_TRUE(changes->isEmpty()) << changeLines(changes).join(QLatin1Char(',')).toStdString();
     OperationRecord record;
     record.packages = {ref};
     record.commits = {commit};

@@ -291,7 +291,7 @@ bool Backend::launch(const QString &what, const QStringList &argv)
         emit suppressed(what);
         return false;
     }
-    if (!grassfield::settings::isLaunch(argv)) {
+    if (!grassfield::settings::isLaunch(argv) && !grassfield::settings::isRevealInFiles(argv, homeDir())) {
         qWarning().noquote() << "refused a launch that is not one of Settings':" << what;
         return false;
     }
@@ -313,6 +313,11 @@ bool Backend::omarchyUpdate() const
 {
     return !QStandardPaths::findExecutable(QStringLiteral("omarchy-launch-floating-terminal-with-presentation")).isEmpty()
         && !QStandardPaths::findExecutable(QStringLiteral("omarchy-update")).isEmpty();
+}
+
+bool Backend::reportTool() const
+{
+    return QFileInfo(QStringLiteral("/usr/lib/grassfield/grassfield-report")).isExecutable();
 }
 
 bool Backend::updateRunner() const

@@ -1,0 +1,39 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!-- Ongoing activities (ADR-0052), served by grassfield-menu-bridge as org.grassfield.Ongoing1 at /org/grassfield/Ongoing1.
+     The caller's application is the one the kernel says it is (its Flatpak id, or its systemd application scope, matched to
+     an installed desktop entry), never a field of a call; a caller outside an application scope gets AccessDenied.
+
+     Publish(id, state): creates or replaces the caller's activity `id` ([A-Za-z0-9_-]{1,64}). state, every other key refused:
+       kind      s  required: timer, transfer, recording, install, call or progress
+       title     s  required: one plain line of 1 to 64 characters (control and bidirectional characters removed)
+       subtitle  s  0 to 128 characters
+       progress  d  0..1; absent or negative: indeterminate
+       started   x  Unix ms: the elapsed time is shown (at most 7 days ago)
+       ends      x  Unix ms: a countdown is shown (at most 24 hours ahead); excludes started; a timer needs one of the two
+       actions   a(ss) at most 3 (id [a-z][a-z0-9-]{0,31}, label of 1 to 24 characters): the shell draws them as buttons
+     Errors: InvalidArgs, AccessDenied (no verified application, or another connection's activity), LimitsExceeded (3 per
+     application, 16 in all, 10 calls a second per connection).
+     End(id): ends it (an unknown id is not an error). An activity also ends when its connection leaves the bus, and 10
+     minutes after its `ends` time.
+     ActionInvoked(id, action): sent to the activity's connection only, when the user chose one of its buttons (never while
+     the session is locked: the shell then shows "In Progress" without text or buttons).
+     A breaking change needs Ongoing2. -->
+<node>
+  <interface name="org.grassfield.Ongoing1">
+    <method name="Publish">
+      <arg name="id" type="s" direction="in"/>
+      <arg name="state" type="a{sv}" direction="in"/>
+    </method>
+    <method name="End">
+      <arg name="id" type="s" direction="in"/>
+    </method>
+    <method name="Version">
+      <arg name="version" type="s" direction="out"/>
+    </method>
+    <signal name="ActionInvoked">
+      <arg name="id" type="s"/>
+      <arg name="action" type="s"/>
+    </signal>
+  </interface>
+</node>

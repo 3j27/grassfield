@@ -303,10 +303,11 @@ TestCase {
         t.win.requestGet(app);
         verify(t.backend.calls.indexOf("plan:install:org.example.Notes") >= 0);
         t.backend.planReady("org.example.Notes", "install", {refusal: "", packages: [{name: "org.gnome.Platform", version: "50", repo: "flathub", size: "418.8 MB"},
-            {name: "org.example.Notes", version: "stable", repo: "flathub", size: "1.5 MB"}], download: "420.3 MB", installed: "", access: ["network", "home"], detail: ""});
+            {name: "org.example.Notes", version: "stable", repo: "flathub", size: "1.5 MB"}], download: "420.3 MB", installed: "", access: ["network", "home"], detail: "",
+            permissions: [{key: "network", name: "", level: 1, detail: ""}, {key: "home", name: "~", level: 2, detail: ""}]});
         compare(s.title, "Install “Notes”?");
-        compare(s.message, "It's installed in your own folder, for you alone, without administrator rights.\n\nIt can reach: The internet, Your home folder.\n\n"
-                + "These will be installed:");
+        compare(s.message, "It's installed in your own folder, for you alone, without administrator rights.\n\nIt can reach:\n"
+                + "Files and Folders: Your home folder (read and write)\nNetwork: The internet and your local network\n\nThese will be installed:");
         compare(s.confirmText, "Install");
         verify(!s.returnCancels, "the user's own folder, nothing built: Install is the default");
         verify(find(s, i => i.text === "Download, at most" && i.visible) !== null);
@@ -322,15 +323,17 @@ TestCase {
 
         t.win.requestGet(app);
         t.backend.planReady("org.example.Notes", "install", {refusal: "", packages: [{name: "org.example.Notes", version: "stable", repo: "flathub", size: "1.5 MB"}],
-            download: "1.5 MB", access: []});
+            download: "1.5 MB", access: [], permissions: []});
         verify(s.message.indexOf("It can reach only its own window and files.") >= 0, s.message);
         s.close();
         // A grant the window does not know is still said; what it can reach unread: no claim at all (PR #58).
         t.win.requestGet(app);
         t.backend.planReady("org.example.Notes", "install", {refusal: "", packages: [{name: "org.example.Notes", version: "stable", repo: "flathub", size: "1.5 MB"}],
-            download: "1.5 MB", access: ["outside", "sessionService:org.freedesktop.systemd1", "other:devices=tpm"]});
-        verify(s.message.indexOf("It can reach: Programs outside its sandbox, The session service “org.freedesktop.systemd1”, "
-                                 + "A permission the Store can't describe: devices=tpm.") >= 0, s.message);
+            download: "1.5 MB", access: ["outside", "sessionService:org.freedesktop.systemd1", "other:devices=tpm"],
+            permissions: [{key: "outside", name: "", level: 1, detail: ""}, {key: "sessionService", name: "org.freedesktop.systemd1", level: 1, detail: ""},
+                          {key: "other", name: "devices=tpm", level: 1, detail: ""}]});
+        verify(s.message.indexOf("It can reach:\nOther Apps and Services: Talks to “org.freedesktop.systemd1”\n"
+                                 + "Outside Its Sandbox: Programs outside its sandbox\nOther: A permission the Store can't describe: devices=tpm") >= 0, s.message);
         s.close();
         t.win.requestGet(app);
         t.backend.planReady("org.example.Notes", "install", {refusal: "", packages: [{name: "org.example.Notes", version: "stable", repo: "flathub", size: "1.5 MB"}],

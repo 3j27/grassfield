@@ -21,6 +21,18 @@ TEST(Channel, ThePrimaryServerOfGrassfieldConf)
     EXPECT_EQ(catalogUrl(*path), QUrl(QStringLiteral("https://example.org/grassfield/stable/x86_64/grassfield-catalog.v1.json")));
 }
 
+TEST(Channel, TheCohortFormReadsAsItsChannel)
+{
+    // ADR-0050 2: the cohort lines come first, then the plain lines; the catalog is the channel's own path's.
+    const auto c = channelFromConf("SigLevel = Required\nServer = https://packages.example.org/stable/cohort/07/$arch\n"
+                                   "Server = https://packages.example.org/stable/$arch\n");
+    ASSERT_TRUE(c);
+    EXPECT_EQ(c->name, QStringLiteral("stable"));
+    EXPECT_EQ(catalogUrl(*c), QUrl(QStringLiteral("https://packages.example.org/stable/x86_64/grassfield-catalog.v1.json")));
+    EXPECT_FALSE(channelFromConf("Server = https://packages.example.org/stable/cohort/20/$arch\n"));
+    EXPECT_FALSE(channelFromConf("Server = https://packages.example.org/beta/cohort/7/$arch\n"));
+}
+
 TEST(Channel, OtherShapesFallBackToTheBuildsBase)
 {
     EXPECT_FALSE(channelFromConf(""));

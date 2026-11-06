@@ -31,6 +31,9 @@
 
 class FolderModel;
 class KJob;
+namespace grassfield::apps {
+class OngoingPublisher;
+}
 class PlacesModel;
 class KioPrompts;
 
@@ -510,6 +513,8 @@ private:
     QHash<KJob *, JobProgress> m_progress;
     quint64 m_nextJobId = 1;
     QTimer m_progressTimer;
+    // Each job of the Copy window is also an ongoing activity in the menu bar, with Stop (ADR-0052).
+    grassfield::apps::OngoingPublisher *m_ongoing = nullptr;
     void publishJobs();
     // `source`'s amounts, speed and percent are `tracked`'s (the same job, or the copy a paste runs inside).
     void followAmounts(KJob *tracked, KJob *source);

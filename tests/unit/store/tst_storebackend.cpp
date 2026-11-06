@@ -1204,9 +1204,9 @@ TEST(StoreBackend, Updates)
     // The launcher's and Files' question (ADR-0046 D1): the installed apps by application entry, "" blocking nothing.
     const QVariantMap byEntry = backend.removalByEntry();
     ASSERT_TRUE(byEntry.contains(QStringLiteral("org.example.Notes.desktop"))) << "an installed Flatpak is listed by its entry";
-    const QVariantMap notes = byEntry.value(QStringLiteral("org.example.Notes.desktop")).toMap();
-    EXPECT_EQ(notes.value(QStringLiteral("app")).toString(), QStringLiteral("org.example.Notes"));
-    EXPECT_EQ(notes.value(QStringLiteral("block")).toString(), backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("uninstall")).toString())
+    const QVariantMap notesEntry = byEntry.value(QStringLiteral("org.example.Notes.desktop")).toMap();
+    EXPECT_EQ(notesEntry.value(QStringLiteral("app")).toString(), QStringLiteral("org.example.Notes"));
+    EXPECT_EQ(notesEntry.value(QStringLiteral("block")).toString(), backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("uninstall")).toString())
         << "the same answer as the product page's menu";
     EXPECT_FALSE(byEntry.contains(QStringLiteral("org.example.Paint.desktop"))) << "an app that is not installed is not listed";
     EXPECT_EQ(backend.appForEntry(QStringLiteral("org.example.Notes")), QStringLiteral("org.example.Notes")) << "with or without .desktop";
@@ -1214,16 +1214,45 @@ TEST(StoreBackend, Updates)
     EXPECT_EQ(backend.appForEntry(QStringLiteral("../etc/passwd")), QString());
     EXPECT_EQ(backend.appForEntry(QStringLiteral("nothing.desktop")), QString());
 
-    // Its plan: Flathub's newer metadata reaches the home folder, which the installed one does not.
-    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    // ADR-0049: after the check, the list says the update asks for more (Flathub's newer metadata reaches the home folder,
+    // which the installed one does not), grant by grant.
+    ASSERT_TRUE(waitFor([&] { return flatpak().value(QStringLiteral("apps")).toList().first().toMap().contains(QStringLiteral("asksForMore")); }))
+        << "reviewed after the check";
+    const QVariantMap notes = flatpak().value(QStringLiteral("apps")).toList().first().toMap();
+    EXPECT_TRUE(notes.value(QStringLiteral("asksForMore")).toBool());
+    EXPECT_FALSE(notes.value(QStringLiteral("permissionsUnknown")).toBool());
+    const auto changeKeys = [](const QVariantList &changes) {
+        QStringList out;
+        for (const QVariant &c : changes)
+            out.append(c.toMap().value(QStringLiteral("change")).toString() + QLatin1Char(' ') + c.toMap().value(QStringLiteral("key")).toString());
+        return out;
+    };
+    EXPECT_EQ(changeKeys(notes.value(QStringLiteral("permissionChanges")).toList()),
+              (QStringList{QStringLiteral("added home"), QStringLiteral("added login"), QStringLiteral("added outside")}));
+    // Update All leaves it out: only the runtime would update, and Notes waits for its own Update.
+    backend.plan(kFlatpakUpdatesApp, QStringLiteral("update"));
     ASSERT_TRUE(waitFor([&] { return plans.size() == 1; }));
     QVariantMap plan = plans.last().second;
     EXPECT_EQ(plan.value(QStringLiteral("refusal")).toString(), QString());
+    EXPECT_EQ(plan.value(QStringLiteral("refs")).toInt(), 1) << "the runtime alone";
+    EXPECT_EQ(plan.value(QStringLiteral("held")).toStringList(), QStringList{QStringLiteral("Example Notes")});
+    EXPECT_FALSE(plan.value(QStringLiteral("asks")).toBool()) << "Update All never asks: what asks for more is left out";
+    plans.clear();
+
+    // Its own plan: the same changes, and the sheet asks.
+    backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
+    ASSERT_TRUE(waitFor([&] { return plans.size() == 1; }));
+    plan = plans.last().second;
+    EXPECT_EQ(plan.value(QStringLiteral("refusal")).toString(), QString());
     EXPECT_EQ(plan.value(QStringLiteral("refs")).toInt(), 1);
-    QVariantList widened = plan.value(QStringLiteral("widened")).toList();
-    ASSERT_EQ(widened.size(), 1);
-    EXPECT_EQ(widened.first().toMap().value(QStringLiteral("access")).toStringList(),
-              (QStringList{QStringLiteral("home"), QStringLiteral("login"), QStringLiteral("outside")}));
+    EXPECT_TRUE(plan.value(QStringLiteral("asks")).toBool());
+    EXPECT_TRUE(plan.value(QStringLiteral("held")).toStringList().isEmpty());
+    const QVariantList changed = plan.value(QStringLiteral("changed")).toList();
+    ASSERT_EQ(changed.size(), 1);
+    EXPECT_EQ(changed.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Example Notes"));
+    EXPECT_TRUE(changed.first().toMap().value(QStringLiteral("asks")).toBool());
+    EXPECT_EQ(changeKeys(changed.first().toMap().value(QStringLiteral("changes")).toList()),
+              (QStringList{QStringLiteral("added home"), QStringLiteral("added login"), QStringLiteral("added outside")}));
     EXPECT_FALSE(backend.update(QStringLiteral("org.example.Paint"))) << "no plan for it";
     ASSERT_TRUE(backend.update(QStringLiteral("org.example.Notes")));
     EXPECT_FALSE(backend.update(QStringLiteral("org.example.Notes"))) << "its plan is used once";
@@ -1242,8 +1271,9 @@ TEST(StoreBackend, Updates)
     ASSERT_TRUE(waitFor([&] { return plans.size() == 2; }));
     plan = plans.last().second;
     EXPECT_EQ(plan.value(QStringLiteral("refs")).toInt(), 1);
-    EXPECT_TRUE(plan.value(QStringLiteral("widened")).toList().isEmpty());
+    EXPECT_TRUE(plan.value(QStringLiteral("changed")).toList().isEmpty());
     EXPECT_TRUE(plan.value(QStringLiteral("unknown")).toStringList().isEmpty());
+    EXPECT_TRUE(plan.value(QStringLiteral("held")).toStringList().isEmpty());
     ASSERT_TRUE(backend.update(kFlatpakUpdatesApp));
     ASSERT_TRUE(waitFor([&] { return backend.operations().isEmpty(); }));
     EXPECT_TRUE(backend.results().isEmpty());
@@ -1295,7 +1325,8 @@ TEST(StoreBackend, Updates)
     backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
     ASSERT_TRUE(waitFor([&] { return plans.size() == asked + 1; }));
     EXPECT_EQ(plans.last().second.value(QStringLiteral("unknown")).toStringList(), QStringList{QStringLiteral("Example Notes")});
-    EXPECT_TRUE(plans.last().second.value(QStringLiteral("widened")).toList().isEmpty());
+    EXPECT_TRUE(plans.last().second.value(QStringLiteral("changed")).toList().isEmpty());
+    EXPECT_TRUE(plans.last().second.value(QStringLiteral("asks")).toBool()) << "unread: never silent";
     QFile::remove(s.path(QStringLiteral("fixture/nometa")));
     storetest::writeFile(s.path(QStringLiteral("fixture/nocommit")), "");
     backend.plan(QStringLiteral("org.example.Notes"), QStringLiteral("update"));
@@ -1565,4 +1596,43 @@ TEST(StoreBackend, Flathub)
     EXPECT_FALSE(backend.actions(QStringLiteral("org.example.Notes")).value(QStringLiteral("installed")).toBool());
     EXPECT_TRUE(calls().contains(QStringLiteral("uninstall --user --noninteractive -- org.example.Notes\nuninstall --user --noninteractive --unused\n")));
     EXPECT_TRUE(backend.results().isEmpty()) << "done: nothing to say";
+}
+
+// ADR-0052: the running operation is the Store's one ongoing activity in the menu bar; a waiting queue shows nothing.
+TEST(StoreOngoing, TheRunningOperationOnly)
+{
+    const QString id = QStringLiteral("0123456789abcdef0123456789abcdef");
+    auto op = [&id](const QString &state, const QString &kind, int done, int total, bool stoppable) {
+        return QVariantMap{{QStringLiteral("id"), id},           {QStringLiteral("app"), QStringLiteral("org.gimp.GIMP")},
+                           {QStringLiteral("name"), QStringLiteral("GIMP")}, {QStringLiteral("kind"), kind},
+                           {QStringLiteral("state"), state},     {QStringLiteral("done"), done},
+                           {QStringLiteral("total"), total},     {QStringLiteral("stoppable"), stoppable}};
+    };
+    EXPECT_TRUE(StoreBackend::ongoingActivities({}).isEmpty());
+    EXPECT_TRUE(StoreBackend::ongoingActivities({op(QStringLiteral("waiting"), QStringLiteral("install"), 0, 3, false)}).isEmpty());
+
+    const auto running = StoreBackend::ongoingActivities({op(QStringLiteral("running"), QStringLiteral("install"), 1, 4, true)});
+    ASSERT_EQ(running.size(), 1);
+    const grassfield::apps::OngoingActivity a = running.value(QStringLiteral("op-") + id);
+    EXPECT_EQ(a.kind, QStringLiteral("install"));
+    EXPECT_EQ(a.title, QStringLiteral("Installing “GIMP”"));
+    EXPECT_EQ(a.subtitle, QStringLiteral("1 of 4"));
+    EXPECT_DOUBLE_EQ(a.progress, 0.25);
+    ASSERT_EQ(a.actions.size(), 1);
+    EXPECT_EQ(a.actions.first().id, QStringLiteral("stop"));
+
+    const auto removing = StoreBackend::ongoingActivities({op(QStringLiteral("authorizing"), QStringLiteral("remove"), 0, 2, false)});
+    const grassfield::apps::OngoingActivity r = removing.value(QStringLiteral("op-") + id);
+    EXPECT_EQ(r.title, QStringLiteral("Uninstalling “GIMP”"));
+    EXPECT_EQ(r.subtitle, QStringLiteral("Waiting for permission…"));
+    EXPECT_LT(r.progress, 0.0) << "indeterminate until it runs";
+    EXPECT_TRUE(r.actions.isEmpty());
+
+    QVariantMap all = op(QStringLiteral("running"), QStringLiteral("update"), 0, 0, false);
+    all.insert(QStringLiteral("name"), QString());
+    EXPECT_EQ(StoreBackend::ongoingActivities({all}).value(QStringLiteral("op-") + id).title, QStringLiteral("Updating Apps"));
+    // The id names the host's key: a malformed operation id gives nothing.
+    QVariantMap bad = op(QStringLiteral("running"), QStringLiteral("install"), 0, 0, false);
+    bad.insert(QStringLiteral("id"), QStringLiteral("../x"));
+    EXPECT_TRUE(StoreBackend::ongoingActivities({bad}).isEmpty());
 }
