@@ -70,7 +70,8 @@ K=shell/platform/showdesktop/ShowDesktopController.qml
 
 # ---- display unplug -------------------------------------------------------------------------------------------------------------
 REPL='ScreenChoice.replacement(root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name))'
-try "Popups handler assigns Compositor.activeScreenName" shell/services/Popups.qml "root.screenName = $REPL;" "root.screenName = Compositor.activeScreenName;"
+try "Popups handler assigns Compositor.activeScreenName" shell/services/Popups.qml "root.screenName = next.screen;" "root.screenName = Compositor.activeScreenName;"
+try "Popups handler no longer closes what its output took with it" shell/services/Popups.qml "ScreenChoice.afterScreensChanged(root.kind, root.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name))" "ScreenChoice.afterScreensChanged(root.kind, root.screenName, Compositor.activeScreenName, Quickshell.screens.map(s => s.name))"
 try "Switcher handler assigns Compositor.activeScreenName" shell/switcher/Switcher.qml "root.screenName = $REPL;" "root.screenName = Compositor.activeScreenName;"
 try "Notifications handler assigns Compositor.activeScreenName" shell/notifications/Notifications.qml "root.centerScreen = ScreenChoice.replacement(root.centerScreen, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name));" "root.centerScreen = Compositor.activeScreenName;"
 try "Apps handler assigns Compositor.activeScreenName" shell/launchpad/AppsController.qml "root.screenName = $REPL;" "root.screenName = Compositor.activeScreenName;"
