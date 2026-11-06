@@ -42,4 +42,10 @@ if grep -q ':top' "$root/apps/memos/src/hyprframes.cpp" "$root/config/hypr/grass
 else
   check "no :top tag suffix is built or read" 0
 fi
+# Square corners (ADR-0051 D-6): the Memos app id gets rounding 0, and nothing but rounding is taken from it there.
+grep -qF 'name = "gf-memos-square", match = { class = "^org\\.grassfield\\.Memos$" }, rounding = 0 })' "$root/config/hypr/grassfield/windows.lua"
+check "the memo windows have square corners (rounding 0, by the app id exactly)" $?
+# The collapse's resize (placement.lua memo_resize): bounded, one action per size-suffix change.
+grep -q 'local MEMO_SIZE_MAX = 16384' "$root/config/hypr/grassfield/placement.lua" && grep -q 'memo_sizes\[key\] == want' "$root/config/hypr/grassfield/placement.lua"
+check "memo_resize is bounded and acts only when the size suffix changes" $?
 exit $fails
