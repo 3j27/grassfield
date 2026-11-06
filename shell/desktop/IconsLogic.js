@@ -16,6 +16,34 @@ function darkLabelOver(range, lightBelow) {
     return range !== null && range !== undefined && typeof range.lumMin === "number" && range.lumMin >= lightBelow;
 }
 
+// The visible label under an icon (macOS: Finder's desktop): two lines at most, wrapped at words, and what does not fit is cut
+// in the MIDDLE of the second line, so the end of the name (its extension) stays (Qt's own elide does not cut wrapped text in
+// the middle). A first word wider than the label breaks anywhere, as Text.WrapAtWordBoundaryOrAnywhere did. `fits(text)`: the
+// text is no wider than the label; `elide(text)`: the text cut in the middle to that width (FontMetrics.elidedText). The same
+// rule as the Dock's stack labels (shell/dock/Stacks.js labelLines), for anywhere-breaks. Returns the lines joined by "\n".
+function labelLines(name, fits, elide) {
+    const text = String(name === undefined || name === null ? "" : name).replace(/\s+/g, " ").trim();
+    if (text === "" || fits(text))
+        return text;
+    const words = text.split(" ");
+    let first = "";
+    let rest = "";
+    if (!fits(words[0])) {
+        let n = 1;
+        while (n < text.length && fits(text.slice(0, n + 1)))
+            n++;
+        first = text.slice(0, n);
+        rest = text.slice(n).trim();
+    } else {
+        let used = 1;
+        while (used < words.length && fits(words.slice(0, used + 1).join(" ")))
+            used++;
+        first = words.slice(0, used).join(" ");
+        rest = words.slice(used).join(" ");
+    }
+    return rest === "" ? first : first + "\n" + (fits(rest) ? rest : elide(rest));
+}
+
 // ---- grid ---------------------------------------------------------------------------------------
 
 // {cols, rows} that fit in a work area of w x h px.

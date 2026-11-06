@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Grassfield.Ui
 import "CenterLogic.js" as CenterLogic
 
@@ -110,8 +111,17 @@ ListView {
             radius: height / 2
             // Same backing as the x of a card (A2: the label must stay legible on any wallpaper).
             color: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.fixedGlassAlpha(Tokens.notificationCloseTintOpacity))
-            border.width: 1
+            // One device pixel at every scale (UI audit 2026-11-05 U37).
+            border.width: 1 / Math.max(1, Screen.devicePixelRatio)
             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+        }
+
+        // Pressed: the shared pressed fill over the pill (LOW, UI audit 2026-11-05).
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+            visible: gcArea.pressed
         }
 
         // The pill keeps its rim; the shared ring goes outside it, after a key only (ADR-0039 step 7).
@@ -156,6 +166,7 @@ ListView {
         }
 
         MouseArea {
+            id: gcArea
             anchors.fill: parent
             enabled: ctl.opacity > 0
             cursorShape: Qt.ArrowCursor
@@ -899,8 +910,17 @@ ListView {
                     anchors.fill: parent
                     radius: width / 2
                     color: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.fixedGlassAlpha(Tokens.notificationCloseTintOpacity))
-                    border.width: 1
+                    // One device pixel at every scale (UI audit 2026-11-05 U37).
+                    border.width: 1 / Math.max(1, Screen.devicePixelRatio)
                     border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+                }
+
+                // Pressed: the shared pressed fill over the badge (LOW, UI audit 2026-11-05).
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+                    visible: cardCloseArea.pressed
                 }
 
                 KeyFocus {
@@ -919,6 +939,7 @@ ListView {
                 }
 
                 MouseArea {
+                    id: cardCloseArea
                     anchors.fill: parent
                     enabled: parent.opacity > 0
                     cursorShape: Qt.ArrowCursor
@@ -1098,7 +1119,11 @@ ListView {
                             live: row.live
                             body: Notifications.bodyFor(item.bodyHtml, item.appName)
                             timeText: Notifications.timeFor(item.time)
-                            iconSource: Notifications.iconSource(Notifications.imageFor(item.image, item.appName), Notifications.appIconFor(item.appIcon, item.appName))
+                            // The image as the app's preview setting allows it: the icon tile's stand-in or the
+                            // trailing thumbnail (U27).
+                            readonly property string shownImage: Notifications.imageFor(item.image, item.appName)
+                            iconSource: Notifications.appIconSource(shownImage, Notifications.appIconFor(item.appIcon, item.appName))
+                            imageSource: Notifications.thumbnailSource(shownImage)
                             onActionTriggered: actionId => {
                                 if (item.actable(rowContent))
                                     Notifications.invokeAction(item.key, actionId);

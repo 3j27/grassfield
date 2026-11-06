@@ -190,6 +190,18 @@ Variants {
                 id: 0
             }
         ])
+        // The Desktop thumbnails shrink to fit the band (macOS): the centred row keeps a gap clear of the "+" at the right edge
+        // (the same room on the left keeps it centred), width, height and gap scaled together (UI audit 2026-11-05 U14).
+        readonly property real tileRoom: (modelData ? modelData.width : 0) - 2 * (Tokens.overviewAddSize + Tokens.overviewAddEdgeInset + Tokens.overviewTileGap)
+        readonly property real tileFullRow: (tiles.length - 1) * Tokens.overviewTileWidth + Math.max(0, tiles.length - 2) * Tokens.overviewTileGap
+        readonly property real tileScale: tileFullRow > tileRoom && tileFullRow > 0 ? Math.max(0, tileRoom) / tileFullRow : 1
+        readonly property real tileW: Tokens.overviewTileWidth * tileScale
+        readonly property real tileH: Tokens.overviewTileHeight * tileScale
+        readonly property real tileGap: Tokens.overviewTileGap * tileScale
+        // The wallpaper this output's desktop shows, under every Desktop miniature (U29).
+        readonly property var wallpaper: WallpaperState.lockBackdrop(screenName)
+        // One device pixel: the borders and rules stay crisp at a fractional scale (UI audit 2026-11-05, LOW).
+        readonly property real hairline: 1 / Math.max(1, modelData ? modelData.devicePixelRatio : 1)
 
         screen: modelData
         // Persistent: created once per screen and kept mapped (transparent, no input) between
@@ -596,7 +608,7 @@ Variants {
                     Rectangle {
                         anchors.bottom: parent.bottom
                         width: parent.width
-                        height: 1
+                        height: win.hairline
                         color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialSeparatorOpacity)
                     }
 
@@ -621,13 +633,14 @@ Variants {
                         readonly property bool dropTarget: win.dragKey !== "" && win.dropIndex === index && win.dropAllowed(win.dragKey, index)
                         readonly property bool focused: win.spaceFocus === index
                         readonly property int count: win.tiles.length - 1
-                        readonly property real rowWidth: count * Tokens.overviewTileWidth + Math.max(0, count - 1) * Tokens.overviewTileGap
+                        readonly property real rowWidth: count * win.tileW + Math.max(0, count - 1) * win.tileGap
 
-                        // Thumbnails centred on the band; the add button is a round 32 button at the right edge.
-                        width: isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
-                        height: isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight + Tokens.overviewTileLabelGap + Tokens.overviewTileLabelHeight
-                        x: isPlus ? win.width - Tokens.overviewAddSize - Tokens.overviewAddEdgeInset : (win.width - rowWidth) / 2 + index * (Tokens.overviewTileWidth + Tokens.overviewTileGap)
-                        y: isPlus ? Tokens.overviewBarTopMargin + (Tokens.overviewTileHeight - Tokens.overviewAddSize) / 2 : Tokens.overviewBarTopMargin
+                        // Thumbnails centred on the band (shrunk to fit it, win.tileScale); the add button is a round 32 button at
+                        // the right edge.
+                        width: isPlus ? Tokens.overviewAddSize : win.tileW
+                        height: isPlus ? Tokens.overviewAddSize : win.tileH + Tokens.overviewTileLabelGap + Tokens.overviewTileLabelHeight
+                        x: isPlus ? win.width - Tokens.overviewAddSize - Tokens.overviewAddEdgeInset : (win.width - rowWidth) / 2 + index * (win.tileW + win.tileGap)
+                        y: isPlus ? Tokens.overviewBarTopMargin + (win.tileH - Tokens.overviewAddSize) / 2 : Tokens.overviewBarTopMargin
                         Accessible.role: Accessible.Button
                         // Desktops are numbered by position (macOS), never by the compositor's workspace id; a Split View Desktop
                         // takes no number and is named after its apps (Compositor.spacesOn, tiling.md TL33).
@@ -637,8 +650,8 @@ Variants {
 
                         Rectangle {
                             id: face
-                            height: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileHeight
-                            width: tile.isPlus ? Tokens.overviewAddSize : Tokens.overviewTileWidth
+                            height: tile.isPlus ? Tokens.overviewAddSize : win.tileH
+                            width: tile.isPlus ? Tokens.overviewAddSize : win.tileW
                             radius: tile.isPlus ? height / 2 : Tokens.overviewThumbRadius
                             // The add button is a bare plus at rest (macOS 27), a light glass circle under the pointer; a thumbnail
                             // the material's fill at rest, the neutral selection of an item on glass under the pointer or as a drop
@@ -647,7 +660,7 @@ Variants {
                             color: tile.isPlus ? (face.plusLit ? Appearance.withAlpha(Appearance.colors.knob, Appearance.dark ? Tokens.overviewAddFillOpacityDark : Tokens.overviewAddFillOpacity) : "transparent")
                                 : tile.dropTarget || tileMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
                                 : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                            border.width: tile.isPlus && !face.plusLit ? 0 : 1
+                            border.width: tile.isPlus && !face.plusLit ? 0 : win.hairline
                             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
                             // Selection ring outside the thumbnail (macOS), so the picture keeps its size.
@@ -671,6 +684,8 @@ Variants {
                                 screenW: tile.isPlus ? 0 : tile.modelData.screenW
                                 screenH: tile.isPlus ? 0 : tile.modelData.screenH
                                 capture: !tile.modelData.active
+                                wallpaper: win.wallpaper
+                                radius: face.radius - face.border.width
                             }
 
                             Icon {
@@ -863,11 +878,12 @@ Variants {
                         visible: thumb.v2 && thumb.dragging
                     }
 
-                    // Selection / hover outline.
+                    // Selection / hover outline: one ring outside the window, the Desktop tiles' gap clear of it (UI audit
+                    // 2026-11-05, LOW: one ring model for the windows, the Desktops and Stages).
                     Rectangle {
                         anchors.fill: parent
-                        anchors.margins: -Tokens.overviewSelectionWidth
-                        radius: Tokens.overviewThumbRadius + Tokens.overviewSelectionWidth
+                        anchors.margins: -Tokens.overviewSelectionWidth - Tokens.overviewRingGap
+                        radius: Tokens.overviewThumbRadius + Tokens.overviewSelectionWidth + Tokens.overviewRingGap
                         color: "transparent"
                         border.width: Tokens.overviewSelectionWidth
                         border.color: Appearance.focusRingColor
@@ -938,7 +954,7 @@ Variants {
                 x: win.strip.rects.length > 0 ? win.strip.rects[0].x : 0
                 y: win.strip.dividerY
                 width: win.strip.rects.length > 0 ? win.strip.rects[win.strip.rects.length - 1].x + win.strip.rects[win.strip.rects.length - 1].w - x : 0
-                height: 1
+                height: win.hairline
                 opacity: win.progress
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 Accessible.ignored: true
@@ -983,7 +999,7 @@ Variants {
                         // (one role each, ADR-0039 step 12, G6).
                         color: mini.focused || miniMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
                             : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                        border.width: mini.focused || miniMouse.containsMouse ? Tokens.overviewSelectionWidth : 1
+                        border.width: mini.focused || miniMouse.containsMouse ? Tokens.overviewSelectionWidth : win.hairline
                         border.color: mini.focused || miniMouse.containsMouse ? Appearance.focusRingColor : Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
                         ScreencopyView {
@@ -1047,7 +1063,8 @@ Variants {
                 }
             }
 
-            // App icon and name under the selected (hovered) window.
+            // App icon and window title under the selected (hovered) window, the app's name for a window without a title (macOS
+            // Mission Control names the hovered window; UI audit 2026-11-05, LOW). Shown only for that window, as macOS.
             // The window's name on a plate: a text surface, the menus' class (ADR-0039 step 22).
             Material {
                 id: label
@@ -1057,6 +1074,7 @@ Variants {
                 readonly property var rect: win.marked !== "" ? win.placedMap[win.marked] : undefined
                 readonly property var entry: info ? Apps.lookup(info.appId) : null
                 readonly property string appName: info ? Apps.nameFor(info.appId) : ""
+                readonly property string title: info && info.title !== "" ? info.title : appName
 
                 visible: info !== undefined && rect !== undefined && win.dragKey === ""
                 opacity: win.progress >= 1 ? 1 : 0
@@ -1073,7 +1091,7 @@ Variants {
                 y: box ? box.y : 0
                 z: 50
                 Accessible.role: Accessible.StaticText
-                Accessible.name: appName
+                Accessible.name: title
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -1096,7 +1114,7 @@ Variants {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.min(implicitWidth, Tokens.overviewLabelMaxWidth - 2 * Tokens.spacingMd - Tokens.overviewLabelIconSize - Tokens.spacingSm)
-                        text: label.appName
+                        text: label.title
                         textFormat: Text.PlainText
                         elide: Text.ElideRight
                         color: Appearance.colors.text

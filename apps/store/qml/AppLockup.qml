@@ -7,6 +7,9 @@ import "Store.js" as Store
 // Return or Space opens its product page (an item without one, such as a web app our catalog does not list, opens nothing).
 FocusScope {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     property real iconSize: Tokens.storeLockupIconSize
@@ -120,7 +123,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         // One point, as every separator of the apps (ADR-0039 D5, step 24; it was one device pixel).
-        height: Tokens.appsBorderWidth
+        height: root.hairline
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 

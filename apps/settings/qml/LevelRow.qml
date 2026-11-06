@@ -39,6 +39,9 @@ SettingsRow {
 
     implicitHeight: root.contentTop + Tokens.settingsSliderRowHeight - 1
     labelsOffset: Tokens.settingsSliderRowTitleOffset
+    // The slider sits outside the row's slot: the labels and the two glyphs dim with it, once (the slider draws its own
+    // disabled look; UI audit 2026-11-05 U18).
+    dimmed: Appearance.dimsDisabled(root) || Appearance.dimsDisabled(slider)
 
     function flush(): void {
         // The running command's answer sends what waits.
@@ -75,7 +78,7 @@ SettingsRow {
         color: Appearance.windowSecondary
         x: Tokens.settingsSliderRowLowGlyphX + (Tokens.settingsSliderRowGlyphSize - width) / 2
         y: root.center - height / 2
-        opacity: slider.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: root.dimmed ? Tokens.materialDisabledOpacity : 1
     }
 
     Slider {
@@ -86,7 +89,6 @@ SettingsRow {
         width: root.sliderWidth
         accessibleName: root.accessibleName
         enabled: root.settable && root.command !== null
-        opacity: enabled ? 1 : Tokens.materialDisabledOpacity
         from: 0
         to: 1
         stepSize: 0.05
@@ -105,7 +107,7 @@ SettingsRow {
         color: Appearance.windowSecondary
         x: root.width - Tokens.settingsSliderRowHighGlyphInset - width + (root.highGlyphSize - Tokens.settingsSliderRowGlyphSize) / 2
         y: root.center - height / 2
-        opacity: slider.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: root.dimmed ? Tokens.materialDisabledOpacity : 1
     }
 
     Timer {

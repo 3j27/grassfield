@@ -248,10 +248,16 @@ Variants {
                 // the namespace is in the layer rule list (config/hypr/grassfield/windows.lua) as the fallback. Reduce
                 // Transparency (opaque material) asks for none.
                 BackgroundEffect.blurRegion: Appearance.effectiveTransparency > 0 ? tileBlur : null
+                // The tile as drawn: a lifted tile is scaled about its centre (widget.liftScale), and the region follows it so no
+                // unblurred rim shows round it (UI audit 2026-11-05, LOW). The tile's parent fills the window: its coordinates
+                // are the window's.
                 Region {
                     id: tileBlur
-                    item: tile
-                    radius: Tokens.widgetRadius
+                    x: tile.x - tile.width * (tile.scale - 1) / 2
+                    y: tile.y - tile.height * (tile.scale - 1) / 2
+                    width: tile.width * tile.scale
+                    height: tile.height * tile.scale
+                    radius: Tokens.widgetRadius * tile.scale
                 }
                 // qmllint enable missing-type
 

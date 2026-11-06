@@ -6,7 +6,8 @@ Design: ADR-0010. Rules: master-prompt R12, §5.9. Gates: §10 L1–L5.
 - Lock screen: the wallpaper, sharp (ADR-0040 IQ-W4 A; ASSUMPTION from memory), large clock and date at the top center, user avatar (circle) and name near
   the bottom center, a rounded password field with a return arrow; wrong password → the field shakes.
   "Cancel"/"Switch user" are not shown for a single user.
-- Authorization dialog: a compact centered sheet with a lock icon, "<App> wants to make changes.", the
+- Authorization dialog: a compact sheet raised above the centre (`panel.dialogRaise`, fading in; its width, radius and title
+  stay distinct from the secret sheets, R12 / ADR-0035 9-18) with a lock icon, "<App> wants to make changes.", the
   user name field prefilled, password field, Cancel / Allow (default) buttons.
 
 ## Functional requirements
@@ -1527,10 +1528,11 @@ Decisions:
   under the date and clock band and under the account column; `lock.scrimClearOpacity` 0.25 between them, where no text
   lies, the `lock.scrimFeather` ramps on the clear side of each band edge, the edges bound to the two columns' geometry, so
   every text line lies on 0.6 at every text scale; the whole surface at 0.6 when there is no room), and a dark frosted
-  password field (shadow colour at `lock.fieldFillOpacity` 0.45, `textSecondary` placeholder, white focus ring at
-  `lock.focusRingOpacity`). The scrim alone carries the contrast (the shadow is decoration). Minimum over 9 worst-case
+  password field (shadow colour at `lock.fieldFillOpacity` 0.45, `textSecondary` placeholder centred in the field; no focus
+  ring: the field always holds the keyboard on the lock and its blinking caret is the cue, as macOS (UI audit 2026-11-05
+  U23); the SDDM greeter still draws a white ring at `lock.focusRingOpacity`). The scrim alone carries the contrast (the shadow is decoration). Minimum over 9 worst-case
   wallpaper colours (`tests/visual/test_contrast_tokens.py`, "lock ..." roles): text 5.27, initials 3.41 (large), placeholder
-  8.59, dots and caret 10.75, return arrow 3.12 hovered, focus ring 3.51, selected dots 6.31 on the selection band, which is
+  8.59, dots and caret 10.75, return arrow 3.12 hovered, the greeter's focus ring 3.51, selected dots 6.31 on the selection band, which is
   4.46 against the field; rendered at rest by `tests/visual/contrast.sh`
   (surface `lock`). Display only: no binding of the field's geometry, focus or input depends on these tokens or on an effect
   (the field has no layer); a missing colour, scrim or shadow token only loses that colour or the shadow. Checked in nested

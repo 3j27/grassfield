@@ -26,7 +26,7 @@ Item {
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.typographyTitleSize
-            font.weight: Tokens.typographyMenuBoldWeight
+            font.weight: Tokens.typographyTitleWeight
         }
 
         Text {

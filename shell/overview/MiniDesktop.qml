@@ -1,5 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
+import QtQuick.Window
 import Quickshell.Wayland
 import Grassfield.Ui
 import qs.services
@@ -22,12 +24,67 @@ Item {
     property bool capture: true
     // Live capture of the frames; otherwise one frame per window.
     property bool live: false
+    // The desktop's wallpaper under the windows (macOS draws each Desktop over its wallpaper; UI audit 2026-11-05 U29): what the
+    // desktop shows on this output (WallpaperState.lockBackdrop: {kind: "picture"|"color"|"art", file, color, artwork,
+    // variant}), or null for the plain plate. A picture is the helper's prepared still decoded once at the thumbnail's size and
+    // shared by every Desktop of the output (one cache entry); the whole wallpaper is a static layer, masked to `radius`.
+    property var wallpaper: null
+    property real radius: 0
 
     readonly property real scaleFactor: screenW > 0 && screenH > 0 ? Math.min(width / screenW, height / screenH) : 0
     readonly property real offsetX: (width - screenW * scaleFactor) / 2
     readonly property real offsetY: (height - screenH * scaleFactor) / 2
 
     clip: true
+
+    Rectangle {
+        id: wallpaperMask
+        anchors.fill: parent
+        radius: root.radius
+        visible: false
+        layer.enabled: wallpaperArea.visible
+    }
+
+    Item {
+        id: wallpaperArea
+
+        readonly property string kind: root.wallpaper ? root.wallpaper.kind : ""
+
+        anchors.fill: parent
+        visible: kind !== "" && root.width > 0 && root.height > 0
+        layer.enabled: visible
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: wallpaperMask
+        }
+
+        Image {
+            anchors.fill: parent
+            visible: wallpaperArea.kind === "picture"
+            source: visible && root.wallpaper.file !== "" ? "file://" + root.wallpaper.file : ""
+            sourceSize: Qt.size(Math.ceil(root.width * Screen.devicePixelRatio), Math.ceil(root.height * Screen.devicePixelRatio))
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            visible: wallpaperArea.kind === "color"
+            color: visible ? root.wallpaper.color : "transparent"
+        }
+
+        // Created only when the artwork is the wallpaper.
+        Loader {
+            anchors.fill: parent
+            active: wallpaperArea.kind === "art"
+
+            sourceComponent: GrassfieldArtwork {
+                // lockBackdrop names a valid artwork and variant for every record (Artwork.js reads anything else as the default).
+                artwork: root.wallpaper ? root.wallpaper.artwork : ""
+                variant: root.wallpaper ? root.wallpaper.variant : ""
+            }
+        }
+    }
 
     Repeater {
         model: root.windows.slice(-root.maxWindows)

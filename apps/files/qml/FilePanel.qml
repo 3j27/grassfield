@@ -18,6 +18,9 @@ import "PanelLogic.js" as PanelLogic
 //   (and its last choice) or all of them, the others dimmed; Open (or a double-click) answers the chosen application.
 Window {
     id: panel
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     // FileChooser (apps/portal/src/filechooser.h): the disk probes and, for an Open or Save panel, the answer. Null for Files'
@@ -807,7 +810,7 @@ Window {
             Rectangle {
                 visible: panel.saving
                 width: parent.width
-                height: Tokens.appsBorderWidth
+                height: panel.hairline
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
@@ -921,7 +924,7 @@ Window {
                     id: toolbarRule
                     anchors.top: toolbar.bottom
                     width: parent.width
-                    height: Tokens.appsBorderWidth
+                    height: panel.hairline
                     opacity: tab.scrolled ? 1 : 0
                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 }
@@ -964,7 +967,7 @@ Window {
 
             Rectangle {
                 width: parent.width
-                height: Tokens.appsBorderWidth
+                height: panel.hairline
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 
@@ -1054,7 +1057,7 @@ Window {
 
             Rectangle {
                 width: parent.width
-                height: Tokens.appsBorderWidth
+                height: panel.hairline
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 

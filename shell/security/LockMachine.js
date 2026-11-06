@@ -366,3 +366,18 @@ function capsLockFromKey(text, shift) {
 function clockFormat(localeTimeFormat) {
     return /a/i.test(String(localeTimeFormat || "")) ? "h:mm" : "H:mm";
 }
+
+// Lock-screen date pattern in the region's order (UI audit 2026-11-05 U24): `pattern` is the translated "dddd d MMMM";
+// where the region writes the month first (the first unquoted d or M of its short date format, "M/d/yy" in the US), it
+// becomes "dddd, MMMM d" ("Wednesday, November 5"); a day-first region ("dd/MM/yyyy": the UK, France) and a translated
+// pattern of another shape are left alone. The menu bar's rule (shell/menubar/ClockFormat.js monthFirst and orderDate),
+// repeated here: a security module imports only lib, services and security modules (tests/ci/import_graph.py).
+function datePattern(pattern, localeShortDate) {
+    var p = String(pattern);
+    var bare = String(localeShortDate || "").replace(/'[^']*'/g, "");
+    var m = bare.indexOf("M");
+    var d = bare.indexOf("d");
+    if (m < 0 || (d >= 0 && d < m))
+        return p;
+    return p.replace(/^(d{4}) (d{1,2}) (M{3,4})$/, "$1, $3 $2");
+}

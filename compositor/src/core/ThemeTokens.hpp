@@ -131,6 +131,10 @@ namespace gf::theme::tokens {
     inline constexpr double kWindowInactiveSelectionOpacityLight = 0.045;
     // estimate: the same, dark appearance (macOS's unemphasized dark selection, about #464646 on a #2B2B2B sidebar, white at 0.11; no dark macOS 27 inactive selection measured) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
     inline constexpr double kWindowInactiveSelectionOpacityDark = 0.11;
+    // a selected row, cell or icon of a content view (list, columns, icons, gallery, processes) that is not focused or whose window is not key, light appearance: the hover ink at this opacity over the white content (macOS unemphasizedSelectedContentBackgroundColor #DCDCDC on #FFFFFF, black at 0.137); a sidebar keeps inactiveSelectionOpacity (UI audit 2026-11-05 U16) [ref: docs/audits/ui-audit-2026-11-05.md]
+    inline constexpr double kWindowUnemphasizedSelectionOpacityLight = 0.137;
+    // estimate: the same, dark appearance (macOS #464646 on its dark content, white at about 0.14 over the window background) (UI audit 2026-11-05 U16) [ref: docs/audits/ui-audit-2026-11-05.md]
+    inline constexpr double kWindowUnemphasizedSelectionOpacityDark = 0.14;
     // the pointer within this many logical px of a free side edge tiles (grassfield-compositor kEdge before ADR-0036 step 1) [ref: docs/specs/tiling.md § Functional requirements; docs/specs/compositor.md § Functional requirements]
     inline constexpr int kTilingEdge = 4;
     // logical px at the top and bottom of a free side edge where a drag tiles a quarter (kCorner before ADR-0036 step 1; compared with the owner's captures in nested, F1) [ref: docs/specs/tiling.md § Functional requirements]

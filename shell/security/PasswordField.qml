@@ -15,7 +15,12 @@ FocusScope {
     property color textColor: Appearance.colors.text
     property color placeholderColor: Appearance.colors.textSecondary
     property color fillColor: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-    property color focusColor: Appearance.colors.accent
+    // The shared keyboard focus ring (FocusRing: outside the field, as on every other field) while the field has the focus.
+    // Off on the lock, whose field always has the focus: a plain frosted capsule, as macOS draws it (UI audit 2026-11-05 U23).
+    // Display only: it never changes the field's geometry, focus or input.
+    property bool focusRing: true
+    // Where the placeholder (and "Checking…") sits: centred in the lock's capsule, as macOS; leading elsewhere.
+    property int placeholderAlignment: Text.AlignLeft
     // Selection (Shift+arrows, Ctrl+A) as in every other text field of the shell and on macOS, where it follows the
     // accent (highlight) colour: the accent behind the dots, drawn in the text colour made for it (gate A2).
     property color selectionColor: Appearance.colors.accent
@@ -86,8 +91,11 @@ FocusScope {
         anchors.fill: parent
         radius: root.radius
         color: root.fillColor
-        border.width: input.activeFocus ? Tokens.controlFocusRing : 0
-        border.color: root.focusColor
+    }
+
+    FocusRing {
+        shapeRadius: root.radius
+        visible: root.focusRing && input.activeFocus
     }
 
     TextInput {
@@ -152,6 +160,7 @@ FocusScope {
         color: root.placeholderColor
         font.family: Appearance.fontFamily
         font.pixelSize: root.fontSize
+        horizontalAlignment: root.placeholderAlignment
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         Accessible.ignored: true

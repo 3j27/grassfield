@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Grassfield.Ui
 
 // Icon, title, relative time, sanitized body and action buttons of one notification. Used by
@@ -17,7 +18,11 @@ Item {
     property int maxBodyLines: Tokens.notificationBannerBodyLines
     property string body: ""
     property string timeText: ""
+    // The app's icon (the tile at the leading edge, always: UI audit 2026-11-05 U27) and the picture the app attached,
+    // shown as a rounded thumbnail at the trailing edge (macOS); "" for none.
     property string iconSource: ""
+    property string imageSource: ""
+    readonly property bool hasThumbnail: imageSource !== "" && thumbImage.status !== Image.Error
     // "default" is the click action, never a button. Dead and restored entries have none.
     readonly property var buttons: live ? JSON.parse(actionsJson).filter(a => a.id !== "default" && a.id !== "") : []
     property bool moreOpen: false
@@ -47,9 +52,9 @@ Item {
     }
 
     implicitWidth: Tokens.notificationBannerWidth
-    implicitHeight: Math.max(Tokens.notificationBannerIconSize, column.implicitHeight)
+    implicitHeight: Math.max(Tokens.notificationBannerIconSize, root.hasThumbnail ? Tokens.notificationThumbnailSize : 0, column.implicitHeight)
 
-    // Icon tile: image/app icon, or a bell on a neutral tile.
+    // Icon tile: the app icon, or a bell on a neutral tile.
     Item {
         id: iconTile
         x: Tokens.notificationIconInset
@@ -89,18 +94,20 @@ Item {
     Column {
         id: column
         x: iconTile.x + iconTile.width + Tokens.notificationTextGap
-        width: root.width - x
+        width: root.width - x - (root.hasThumbnail ? Tokens.notificationThumbnailSize + Tokens.notificationThumbnailGap : 0)
         spacing: Tokens.notificationLineGap
 
         Item {
             width: parent.width
             height: title.implicitHeight
 
+            // On the title's baseline (LOW, UI audit 2026-11-05: the smaller caption sat above it).
             Text {
                 textFormat: Text.PlainText
                 id: stamp
                 anchors.right: parent.right
                 anchors.rightMargin: root.trailingReserve
+                anchors.baseline: title.baseline
                 text: root.timeText
                 color: Appearance.colors.textSecondary
                 font.family: Appearance.fontFamily
@@ -148,6 +155,52 @@ Item {
         }
     }
 
+    // The attached picture: a rounded thumbnail at the trailing edge, centred on the card as the icon tile (U27). Its
+    // corners are a real mask (as the Overview's thumbnails), not a clip to the bounding box.
+    Item {
+        id: thumbnail
+        visible: root.hasThumbnail
+        x: root.width - width
+        y: Math.max(0, (root.implicitHeight - height) / 2)
+        width: Tokens.notificationThumbnailSize
+        height: width
+
+        Item {
+            anchors.fill: parent
+            layer.enabled: thumbnail.visible
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: thumbMask
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                visible: thumbImage.status !== Image.Ready
+            }
+
+            Image {
+                id: thumbImage
+                anchors.fill: parent
+                source: root.imageSource
+                // Images are limited to 256 px (N9).
+                sourceSize: Qt.size(Tokens.notificationImageMax, Tokens.notificationImageMax)
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                smooth: true
+                mipmap: true
+            }
+        }
+
+        Rectangle {
+            id: thumbMask
+            anchors.fill: parent
+            radius: Tokens.notificationThumbnailRadius
+            visible: false
+            layer.enabled: true
+        }
+    }
+
     Component {
         id: actionRow
 
@@ -159,9 +212,12 @@ Item {
             readonly property Repeater repeater: rep
             readonly property Item moreButton: more
 
-            // macOS: equal-width capsules spanning the card, 22 tall.
+            // macOS: equal-width capsules spanning the card, 22 tall. More reveals the rest on further rows of the same
+            // capsules (LOW, UI audit 2026-11-05: they were squeezed into one row down to "…"); never more than
+            // notificationMaxActions + 1 to a row.
             readonly property int shownCount: rep.count + (more.visible ? 1 : 0)
-            readonly property real equalWidth: shownCount > 0 ? (width - (shownCount - 1) * spacing) / shownCount : width
+            readonly property int perRow: Math.min(shownCount, Tokens.notificationMaxActions + 1)
+            readonly property real equalWidth: perRow > 0 ? (width - (perRow - 1) * spacing) / perRow : width
 
             Repeater {
                 id: rep

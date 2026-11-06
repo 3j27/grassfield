@@ -7,6 +7,9 @@ import Grassfield.Ui
 // Nothing is ever written: zoom, rotation and page are properties of the view.
 Window {
     id: viewerWin
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     // Set by the launcher (src/main.cpp).
     required property var backend
@@ -34,7 +37,21 @@ Window {
     // What the toolbar needs beside the sidebar: its inset, the toggle, the tools and their margins. A window narrower than the
     // sidebar plus this collapses the sidebar by itself (as macOS) and shows it again when it widens, if it was open; the
     // toolbar's items never overlap.
-    readonly property real toolbarRest: (sidebarGroup.visible ? sidebarGroup.width + Tokens.spacingMd : 0) + tools.width + Tokens.spacingMd
+    // The open search counts with its least width (preview.searchMinWidth), not its full one: opening it keeps the thumbnails
+    // wherever that fits, and the field takes what room is left up to its own width (UI audit 2026-11-05, LOW).
+    readonly property real toolsClosedWidth: {
+        let w = 0;
+        let n = 0;
+        for (const c of tools.children) {
+            if (!c.visible)
+                continue;
+            w += c === searchBox ? Tokens.toolbarCapsule : c.width;
+            n++;
+        }
+        return w + Math.max(0, n - 1) * tools.spacing;
+    }
+    readonly property real searchExtra: searchBox.visible && viewerWin.searchOpen ? Tokens.previewSearchMinWidth - Tokens.toolbarCapsule : 0
+    readonly property real toolbarRest: (sidebarGroup.visible ? sidebarGroup.width + Tokens.spacingMd : 0) + viewerWin.toolsClosedWidth + viewerWin.searchExtra + Tokens.spacingMd
     readonly property real toolbarNeed: Tokens.windowItemsInset + viewerWin.toolbarRest
     // The narrowest window: the toolbar with the lights in it (the sidebar hidden), so its items never overlap.
     readonly property real toolbarMin: Math.max(toolbar.controls.contentStart, Tokens.windowItemsInset) + viewerWin.toolbarRest
@@ -482,12 +499,17 @@ Window {
             Item {
                 id: searchBox
                 visible: viewerWin.view?.canSearch ?? false
-                width: viewerWin.searchOpen ? Tokens.previewSearchWidth : Tokens.toolbarCapsule
+                // Open: its own width where the toolbar has it, else the room the other items leave (the title yields), never
+                // under preview.searchMinWidth (the window's minimum counts that much).
+                readonly property real spare: toolbar.width - (sidebarGroup.visible ? sidebarGroup.x + sidebarGroup.width + Tokens.spacingMd : toolbar.contentStart)
+                    - viewerWin.toolsClosedWidth - Tokens.spacingMd
+                width: viewerWin.searchOpen ? Math.floor(Math.max(Tokens.previewSearchMinWidth, Math.min(Tokens.previewSearchWidth, Tokens.toolbarCapsule + searchBox.spare))) : Tokens.toolbarCapsule
                 height: Tokens.toolbarCapsule
 
-                // The toolbar's rimmed glass capsule, as the groups beside it (ADR-0039 step 16).
+                // Closed: the toolbar's rimmed glass capsule, as the groups beside it (ADR-0039 step 16).
                 RimmedCapsule {
                     anchors.fill: parent
+                    visible: !viewerWin.searchOpen
                     fillOpacity: Tokens.toolbarCapsuleFillOpacity
                 }
 
@@ -504,34 +526,15 @@ Window {
                     }
                 }
 
-                Glyph {
-                    id: searchIcon
-                    visible: viewerWin.searchOpen
-                    kind: "search"
-                    size: Tokens.menuIconSize
-                    color: Appearance.colors.textSecondary
-                    x: Tokens.spacingMd
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-
-                TextInput {
+                // Open: the shared toolbar search field (UI audit 2026-11-05 U34: its clear button, focus ring and window
+                // states), the matches' count before the clear button.
+                SearchField {
                     id: searchInput
-                    TextCursor {}
                     visible: viewerWin.searchOpen
-                    anchors {
-                        left: searchIcon.right
-                        leftMargin: Tokens.spacingSm
-                        right: matches.left
-                        rightMargin: Tokens.spacingSm
-                        verticalCenter: parent.verticalCenter
-                    }
-                    clip: true
-                    color: Appearance.colors.text
-                    selectionColor: Appearance.highlight
-                    selectedTextColor: Appearance.highlightText
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyBodySize
-                    Accessible.role: Accessible.EditableText
+                    toolbar: true
+                    width: parent.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    rightPadding: Tokens.spacingSm + (searchInput.text !== "" ? Tokens.menuIconSize + Tokens.spacingSm + matches.implicitWidth + Tokens.spacingSm : 0)
                     Accessible.name: qsTr("Search in document")
                     Keys.onPressed: event => {
                         if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && viewerWin.view) {
@@ -542,31 +545,21 @@ Window {
                             event.accepted = true;
                         }
                     }
-                    Keys.onEscapePressed: viewerWin.closeSearch()
 
                     Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: searchInput.text === ""
+                        id: matches
+                        anchors {
+                            right: parent.right
+                            rightMargin: Tokens.menuIconSize + Tokens.spacingSm
+                            verticalCenter: parent.verticalCenter
+                        }
+                        visible: searchInput.text !== ""
                         textFormat: Text.PlainText
-                        text: qsTr("Search")
-                        color: Appearance.colors.textSecondary
-                        font: searchInput.font
+                        text: viewerWin.view && viewerWin.view.matches !== undefined ? qsTr("%1 found").arg(viewerWin.view.matches) : ""
+                        color: Appearance.windowSecondary
+                        font.family: Appearance.fontFamily
+                        font.pixelSize: Tokens.typographyCaptionSize
                     }
-                }
-
-                Text {
-                    id: matches
-                    anchors {
-                        right: parent.right
-                        rightMargin: Tokens.spacingMd
-                        verticalCenter: parent.verticalCenter
-                    }
-                    visible: viewerWin.searchOpen && searchInput.text !== ""
-                    textFormat: Text.PlainText
-                    text: viewerWin.view && viewerWin.view.matches !== undefined ? qsTr("%1 found").arg(viewerWin.view.matches) : ""
-                    color: Appearance.colors.textSecondary
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.typographyCaptionSize
                 }
             }
         }
@@ -656,7 +649,7 @@ Window {
         anchors.top: toolbar.bottom
         x: toolbar.x
         width: toolbar.width
-        height: Tokens.appsBorderWidth
+        height: viewerWin.hairline
         z: 2
         visible: !viewerWin.slideshow && viewerWin.view !== null && viewerWin.view.scrolled === true
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
@@ -734,7 +727,8 @@ Window {
                     readonly property real cellWidth: Math.round(row.cellHeight / row.aspect)
                     // The name's strip under the picture, inside the plate.
                     readonly property real captionHeight: Math.max(Tokens.previewPlateCaption, labelText.implicitHeight + Tokens.spacingSm)
-                    readonly property color plateColor: viewerWin.keyLook ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.hover, Appearance.inactiveSelectionOpacity)
+                    // The accent in the key window, the shared unemphasized grey otherwise (UI audit 2026-11-05 U16).
+                    readonly property color plateColor: viewerWin.keyLook ? Appearance.colors.selection : Appearance.unemphasizedSelection
                     // The plate: the page thumbnails' (a fixed width, 8 in from the list's left edge, the right gap holding the scroll bar).
                     readonly property real plateSlot: Tokens.previewThumbnailWidth + 2 * Tokens.previewPlatePad
                     // The plate hugs the picture: the same padding on all sides, centred in the slot (a portrait one is narrower).
@@ -748,7 +742,8 @@ Window {
                     Accessible.selected: row.selected
 
                     // Selection (macOS Preview, as the page thumbnails): the picture and its name on a rounded plate, the accent
-                    // for the current file (compact: a ring around the row); a light plate under the hovered one.
+                    // for the current file (compact: the row filled the same way, as a macOS list); a light plate under the
+                    // hovered one. The list never takes the keyboard, so no focus ring.
                     Rectangle {
                         anchors {
                             fill: parent
@@ -756,10 +751,8 @@ Window {
                             rightMargin: fileList.compact ? 0 : Math.max(0, row.width - row.plateX - row.plateWidth)
                         }
                         radius: fileList.compact ? Tokens.radiusControl : Tokens.previewPlateRadius
-                        color: row.selected && !fileList.compact ? row.plateColor
-                            : rowMouse.containsMouse && !row.selected ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
-                        border.width: row.selected && fileList.compact ? Tokens.controlFocusOutline : 0
-                        border.color: viewerWin.keyLook ? Appearance.colors.accent : Appearance.withAlpha(Appearance.colors.text, Appearance.inactiveTextOpacity)
+                        color: row.selected ? row.plateColor
+                            : rowMouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
                     }
 
                     Item {
@@ -833,7 +826,7 @@ Window {
                         // A file name may contain line breaks: keep one line, shown as the return symbol.
                         text: DisplayName.text(row.modelData.name)
                         verticalAlignment: Text.AlignVCenter
-                        color: row.selected && !fileList.compact && viewerWin.keyLook ? Appearance.colors.selectionText : Appearance.colors.text
+                        color: row.selected && viewerWin.keyLook ? Appearance.colors.selectionText : Appearance.colors.text
                         font.family: Appearance.fontFamily
                         font.pixelSize: fileList.compact ? Tokens.typographyBodySize : Tokens.typographyCaptionSize
                     }

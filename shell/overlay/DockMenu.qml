@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import QtQuick.Window
 import Quickshell
 import Quickshell.Io
 import Grassfield.Ui
@@ -198,14 +199,19 @@ PopupMenu {
 
     // Tail pointing at the icon (reference: rounded panel with a tail on the shelf side). The Overlay centres the menu on
     // the icon and keeps it Tokens.panelPopupMargin inside the window: the tail follows the icon when that clamps it.
+    // Each tail overlaps the menu by one device pixel only, the body's rim it has to cover: it overlapped by a logical
+    // pixel (1.25 device pixels at 1.25), a band where the tail's glass lay over the body's and the tint doubled (LOW, UI
+    // audit 2026-11-05).
+    readonly property real tailSeam: 1 / Math.max(1, Screen.devicePixelRatio)
+
     Shape {
         visible: Popups.align === "above"
         readonly property real menuX: Math.max(Tokens.panelPopupMargin, Math.min(root.Window.width - root.width - Tokens.panelPopupMargin, Popups.anchorX - root.width / 2))
         readonly property real tipX: Math.max(Tokens.radiusMenu + Tokens.dockMenuTailWidth / 2, Math.min(root.width - Tokens.radiusMenu - Tokens.dockMenuTailWidth / 2, Popups.anchorX - menuX))
         x: tipX - Tokens.dockMenuTailWidth / 2
-        y: root.height - 1
+        y: root.height - root.tailSeam
         width: Tokens.dockMenuTailWidth
-        height: Tokens.dockMenuTailHeight + 1
+        height: Tokens.dockMenuTailHeight + root.tailSeam
         preferredRendererType: Shape.CurveRenderer
         Accessible.ignored: true
 
@@ -220,7 +226,7 @@ PopupMenu {
             }
             PathLine {
                 x: Tokens.dockMenuTailWidth / 2
-                y: Tokens.dockMenuTailHeight + 1
+                y: Tokens.dockMenuTailHeight + root.tailSeam
             }
             PathLine {
                 x: 0
@@ -237,9 +243,9 @@ PopupMenu {
         visible: facingLeft || Popups.align === "leftOf"
         readonly property real menuY: Math.max(0, Math.min(root.Window.height - root.height - Tokens.panelPopupMargin, Popups.anchorY - root.height / 2))
         readonly property real tipY: Math.max(Tokens.radiusMenu + Tokens.dockMenuTailWidth / 2, Math.min(root.height - Tokens.radiusMenu - Tokens.dockMenuTailWidth / 2, Popups.anchorY - menuY))
-        x: facingLeft ? -Tokens.dockMenuTailHeight : root.width - 1
+        x: facingLeft ? -Tokens.dockMenuTailHeight : root.width - root.tailSeam
         y: tipY - Tokens.dockMenuTailWidth / 2
-        width: Tokens.dockMenuTailHeight + 1
+        width: Tokens.dockMenuTailHeight + root.tailSeam
         height: Tokens.dockMenuTailWidth
         preferredRendererType: Shape.CurveRenderer
         Accessible.ignored: true
@@ -247,18 +253,18 @@ PopupMenu {
         ShapePath {
             strokeWidth: 0
             fillColor: root.glassFill // the menu's own glass (ADR-0039 step 22)
-            startX: sideTail.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+            startX: sideTail.facingLeft ? Tokens.dockMenuTailHeight + root.tailSeam : 0
             startY: 0
             PathLine {
-                x: sideTail.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+                x: sideTail.facingLeft ? Tokens.dockMenuTailHeight + root.tailSeam : 0
                 y: Tokens.dockMenuTailWidth
             }
             PathLine {
-                x: sideTail.facingLeft ? 0 : Tokens.dockMenuTailHeight + 1
+                x: sideTail.facingLeft ? 0 : Tokens.dockMenuTailHeight + root.tailSeam
                 y: Tokens.dockMenuTailWidth / 2
             }
             PathLine {
-                x: sideTail.facingLeft ? Tokens.dockMenuTailHeight + 1 : 0
+                x: sideTail.facingLeft ? Tokens.dockMenuTailHeight + root.tailSeam : 0
                 y: 0
             }
         }

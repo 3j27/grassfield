@@ -20,6 +20,9 @@ Item {
     property string folderColor: ""
     property string folderGlyph: ""
     property bool selected: false
+    // The desktop is the key surface (IconsView.isKey): a selection is the accent label only then, the unemphasized grey
+    // otherwise (Files' cell.focused; UI audit 2026-11-05 U25).
+    property bool key: true
     property bool renaming: false
     // Reason of the last refused rename ("" when none), shown by the field.
     property string renameError: ""
@@ -42,7 +45,14 @@ Item {
         const grid = Backdrop.grids[root.screenName] ?? null;
         return (grid ? GlassTint.gridRange(grid, root.labelRect, 0) : null) ?? whole;
     }
-    readonly property bool darkLabel: !root.selected && !root.renaming && Logic.darkLabelOver(root.labelRange, Tokens.menubarToneLightBelow)
+    // The wallpaper under the label is bright (dark ink there), whatever the selection.
+    readonly property bool brightUnder: Logic.darkLabelOver(root.labelRange, Tokens.menubarToneLightBelow)
+    // The neutral greys follow the same tone: the dark appearance's (white ink) on a dark wallpaper, the light one's on a bright one.
+    readonly property var groundColors: brightUnder ? Appearance.lightColors : Appearance.darkColors
+    // Selected on the key desktop: the accent label with its own text colour. Selected elsewhere: the label keeps its ink and
+    // halo over a grey pill (macOS greys a selection whose window is not key).
+    readonly property bool emphasized: root.selected && root.key
+    readonly property bool darkLabel: !root.emphasized && !root.renaming && root.brightUnder
 
     function measureLabel(): void {
         if (!root.visible || labelBox.width <= 0)
@@ -123,15 +133,16 @@ Item {
         onLoadFailed: info.read = true
     }
 
-    // Icon, with a selection tint behind it.
+    // Icon, with a selection backdrop behind it: a neutral grey, never the accent (Files' icon backdrop: the fill at
+    // material.fillOpacity, radius.control; U25), in the wallpaper's tone.
     Rectangle {
         id: tint
         anchors.horizontalCenter: parent.horizontalCenter
         y: Tokens.spacingXs
         width: root.iconSize + 2 * Tokens.spacingXs
         height: root.iconSize + 2 * Tokens.spacingXs
-        radius: Tokens.desktopIconSelectionRadius
-        color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity)
+        radius: Tokens.radiusControl
+        color: Appearance.withAlpha(root.groundColors.fill, Tokens.materialFillOpacity)
         visible: root.selected
     }
 
@@ -197,16 +208,22 @@ Item {
         id: labelBox
         anchors.horizontalCenter: parent.horizontalCenter
         y: tint.y + tint.height + Tokens.spacingXs
-        width: root.renaming ? root.width - Tokens.spacingXs : Math.min(root.width - Tokens.spacingXs, labelText.implicitWidth + 2 * Tokens.spacingXs)
+        // As wide as the widest line drawn (a wrapped name's pill does not span its unwrapped width).
+        width: root.renaming ? root.width - Tokens.spacingXs : Math.min(root.width - Tokens.spacingXs, labelText.contentWidth + 2 * Tokens.spacingXs)
         height: (field.visible ? field.height : labelText.implicitHeight) + Tokens.spacingXs
-        radius: Tokens.desktopIconSelectionRadius
-        color: root.renaming ? Appearance.withAlpha(Appearance.colors.fieldFill, Tokens.desktopIconRenameFillOpacity) : (root.selected ? Appearance.colors.selection : "transparent")
+        // The name's pill has Files' radius (radius.control / 2); the rename field keeps its own.
+        radius: root.renaming ? Tokens.desktopIconSelectionRadius : Tokens.radiusControl / 2
+        color: root.renaming ? Appearance.withAlpha(Appearance.colors.fieldFill, Tokens.desktopIconRenameFillOpacity)
+            : root.emphasized ? Appearance.colors.selection
+            : root.selected ? Appearance.withAlpha(root.groundColors.hover, root.brightUnder ? Tokens.windowUnemphasizedSelectionOpacityLight : Tokens.windowUnemphasizedSelectionOpacityDark)
+            : "transparent"
         border.width: root.renaming ? Tokens.controlFocusOutline : 0
         border.color: root.renameError !== "" ? Appearance.darkColors.danger : Appearance.colors.accent
         onWidthChanged: Qt.callLater(root.measureLabel)
         onHeightChanged: Qt.callLater(root.measureLabel)
         // Second pass of the drop shadow: the shadow of the text and its own shadow, a denser soft halo (gate A2: white text
-        // must stay legible on a white wallpaper). Off on the accent highlight, while renaming, and for a dark label.
+        // must stay legible on a white wallpaper). Off on the accent highlight, while renaming, and for a dark label; off on the
+        // grey pill too (it would shade the pill: the text's own two passes keep its halo).
         layer.enabled: !root.selected && !root.renaming && !root.darkLabel
         layer.effect: MultiEffect {
             shadowEnabled: true
@@ -222,13 +239,18 @@ Item {
             id: labelFx
             anchors.fill: parent
             visible: !root.renaming
-            layer.enabled: !root.selected && !root.darkLabel
+            layer.enabled: !root.emphasized && !root.darkLabel
             layer.effect: MultiEffect {
                 shadowEnabled: true
                 shadowColor: Appearance.darkColors.shadow
                 shadowOpacity: Tokens.desktopIconLabelShadowOpacity
                 shadowBlur: Tokens.desktopIconLabelShadowBlur
                 shadowVerticalOffset: Tokens.desktopIconLabelShadowOffsetY
+            }
+
+            FontMetrics {
+                id: labelMetrics
+                font: labelText.font
             }
 
             Text {
@@ -239,21 +261,22 @@ Item {
                 anchors.topMargin: Tokens.spacingXs / 2
                 width: root.width - 2 * Tokens.spacingXs - Tokens.spacingXs
                 horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                // Two lines at most, wrapped at words, a long name cut in the middle of the second line so its extension stays
+                // (IconsLogic.labelLines; macOS Finder). Qt's own elide cuts wrapped text only at its end.
+                wrapMode: Text.NoWrap
                 maximumLineCount: Tokens.desktopIconLabelMaxLines
-                elide: Text.ElideRight
-                text: DisplayName.text(root.label)
+                text: Logic.labelLines(DisplayName.text(root.label), t => labelMetrics.advanceWidth(t) <= labelText.width, t => labelMetrics.elidedText(t, Qt.ElideMiddle, labelText.width))
                 textFormat: Text.PlainText
                 // White text with a soft dark drop shadow whatever the appearance (a desktop label sits on the wallpaper, not
-                // on material); the selected label is drawn on the selection fill with its text colour (gate A2).
-                color: root.selected ? Appearance.colors.selectionText : (root.darkLabel ? Appearance.lightColors.barText : Appearance.darkColors.text)
+                // on material); the selected label on the key desktop is drawn on the selection fill with its text colour (gate A2).
+                color: root.emphasized ? Appearance.colors.selectionText : (root.darkLabel ? Appearance.lightColors.barText : Appearance.darkColors.text)
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.desktopIconLabelSize
                 font.weight: Tokens.typographyMenuWeight
                 // The core of the shadow is a one pixel outline at labelShadowOpacity, softened by the blurred copy below.
-                style: root.selected || root.darkLabel ? Text.Normal : Text.Outline
+                style: root.emphasized || root.darkLabel ? Text.Normal : Text.Outline
                 styleColor: Appearance.withAlpha(Appearance.darkColors.shadow, Tokens.desktopIconLabelShadowOpacity)
-                layer.enabled: !root.selected && !root.darkLabel
+                layer.enabled: !root.emphasized && !root.darkLabel
                 layer.effect: MultiEffect {
                     shadowEnabled: true
                     shadowColor: Appearance.darkColors.shadow

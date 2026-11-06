@@ -167,7 +167,9 @@ TestCase {
 
     function test_theRestInTheSource() {
         const lockup = source("apps/store/qml/AppLockup.qml");
-        verify(lockup.indexOf("height: Tokens.appsBorderWidth") > 0 && lockup.indexOf("devicePixelRatio") < 0, "the separator is one point, through the token");
+        // One point through the token, in whole device pixels (UI audit 2026-11-05 U37: 1 px at 1.25, not a soft 1.25 px).
+        verify(lockup.indexOf("height: root.hairline") > 0 && lockup.indexOf("Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)") > 0,
+               "the separator is one point, through the token, snapped to device pixels");
         for (const [path, id] of [["apps/store/qml/CardShelf.qml", "shelfFocus"], ["apps/store/qml/CategoriesPage.qml", "tileFocus"],
                                   ["apps/store/qml/HeroCarousel.qml", "heroFocus"], ["apps/store/qml/ProductPage.qml", "moreFocus"],
                                   ["apps/store/qml/Sidebar.qml", "accountFocus"], ["apps/store/qml/StoreButton.qml", "ringFocus"]]) {

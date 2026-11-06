@@ -10,6 +10,9 @@ import Grassfield.Ui
 // With nothing selected it shows the folder; with several items, how many.
 Item {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var tab
     // The listing whose selection is shown (the tab's active folder).
@@ -364,7 +367,7 @@ Item {
                     Rectangle {
                         visible: line.index > 0
                         width: parent.width
-                        height: Tokens.appsBorderWidth
+                        height: root.hairline
                         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                     }
 

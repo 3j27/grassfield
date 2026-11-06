@@ -144,6 +144,29 @@ TestCase {
                 id: boxedToggle
                 accessibleName: "Boxed"
             }
+
+            Button {
+                id: boxedButton
+                text: "Boxed"
+            }
+
+            Slider {
+                id: boxedSlider
+            }
+        }
+
+        // A container that disables what it holds without dimming it: the controls dim themselves (UI audit 2026-11-05 U18).
+        Item {
+            enabled: false
+
+            Button {
+                id: plainBoxedButton
+                text: "Plain"
+            }
+
+            Slider {
+                id: plainBoxedSlider
+            }
         }
     }
 
@@ -341,6 +364,14 @@ TestCase {
         verify(!boxedToggle.enabled);
         verify(!boxedToggle.dimmed, "the container dims it once");
         compare(boxedToggle.opacity, 1);
+    }
+
+    // One disabled rule (UI audit 2026-11-05 U18): a control dims once, by itself or by the dimmed container around it.
+    function test_disabledControlsDimOnce() {
+        compare(boxedButton.opacity, 1, "inside a dimmed container: not dimmed again");
+        verify(!boxedSlider.dimmed);
+        compare(plainBoxedButton.opacity, Tokens.materialDisabledOpacity, "a container that does not dim: the button dims");
+        verify(plainBoxedSlider.dimmed, "a slider has a disabled look too");
     }
 
     // A disabled or hidden control ignores every activation path, assistive technology included (R12).

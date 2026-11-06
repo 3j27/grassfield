@@ -9,6 +9,9 @@ import "TabsLogic.js" as TabsLogic
 // macOS file manager with Ctrl in place of Command.
 Window {
     id: win
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     // Main.qml: the windows, closed tabs and moves of tabs between windows.
@@ -39,6 +42,16 @@ Window {
         const room = toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - trailing - Tokens.windowItemsInset;
         return room < Math.min(titleMetrics.advanceWidth, Tokens.filesToolbarTitleMinWidth);
     }
+    // The room the open search field and the title share right of back and forward (the view switcher folded), with Tags and
+    // Action or without them (UI audit 2026-11-05 U11).
+    function searchRoom(withTags: bool): real {
+        const others = Tokens.filesViewPopupWidth + Tokens.filesGroupButtonWidth + 2 * Tokens.spacingSm + (withTags ? (win.shareShown ? 3 : 2) * Tokens.toolbarCapsule + Tokens.spacingSm : 0);
+        return toolbar.width - toolbar.titleStart - Tokens.windowItemsGap - others - Tokens.windowItemsInset;
+    }
+    // The title's room beside a search's field while there is room for both.
+    readonly property real searchTitleRoom: Math.min(titleMetrics.advanceWidth, Math.max(Tokens.filesToolbarTitleMinWidth, toolbar.width / 3))
+    // Tags and Action yield first where the open search field would otherwise be narrower than its own width (U11).
+    readonly property bool toolbarTagsShown: !searchCapsule.expanded || win.searchRoom(true) - win.searchTitleRoom >= Tokens.filesSearchWidth
     property string notice: ""
     // ADR-0015: the window draws its own chrome; the apps' tagger (apps/windowchrome.h) names its role for the
     // compositor, whose plugin then draws no titlebar on it.
@@ -848,6 +861,7 @@ Window {
                 // (ADR-0045 OC-13: LocalSend installed; FP-20). Tags: the colour tags of the selection, and Tags… for named
                 // ones (FP-21, FP-63).
                 Item {
+                    visible: win.toolbarTagsShown
                     width: (win.shareShown ? 3 : 2) * Tokens.toolbarCapsule
                     height: Tokens.toolbarCapsule
                     anchors.verticalCenter: parent.verticalCenter
@@ -920,18 +934,16 @@ Window {
                 }
 
                 // Search field (ADR-0027): while a search is shown it takes the toolbar's free width, the title keeping its
-                // own (Finder-Search, FP-22).
+                // own (Finder-Search, FP-22). Never wider than the room right of back and forward: the title yields, then
+                // Tags and Action, down to a floor (U11).
                 SearchCapsule {
                     id: searchCapsule
                     anchors.verticalCenter: parent.verticalCenter
                     tab: win.tab
                     expandedWidth: {
-                        if (!win.tab || !win.tab.fileSearch)
-                            return Tokens.filesSearchWidth;
-                        const others = Tokens.filesViewPopupWidth + Tokens.filesGroupButtonWidth + tagsButton.width + actionButton.width + 4 * Tokens.spacingSm;
-                        const title = Math.min(titleMetrics.advanceWidth, Math.max(Tokens.filesToolbarTitleMinWidth, toolbar.width / 3));
-                        const room = toolbar.width - toolbar.titleStart - title - Tokens.windowItemsGap - others - Tokens.windowItemsInset;
-                        return Math.max(Tokens.filesSearchWidth, Math.floor(room));
+                        const room = win.searchRoom(win.toolbarTagsShown);
+                        const wanted = win.tab && win.tab.fileSearch ? Math.max(Tokens.filesSearchWidth, room - win.searchTitleRoom) : Tokens.filesSearchWidth;
+                        return Math.max(Tokens.filesSearchMinWidth, Math.floor(Math.min(wanted, room)));
                     }
                 }
             }
@@ -951,7 +963,7 @@ Window {
             id: toolbarRule
             anchors.top: tabBar.bottom
             width: parent.width
-            height: Tokens.appsBorderWidth
+            height: win.hairline
             // A search's scope bar draws its own hairline below; none between it and the toolbar (Finder-Search).
             opacity: win.tabBarVisible || (win.tab !== null && win.tab.scrolled && !scopeBar.visible) ? 1 : 0
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
@@ -1055,7 +1067,7 @@ Window {
 
             Rectangle {
                 width: parent.width
-                height: Tokens.appsBorderWidth
+                height: win.hairline
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 

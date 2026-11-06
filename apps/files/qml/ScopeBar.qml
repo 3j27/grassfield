@@ -8,6 +8,9 @@ import Grassfield.Ui
 // Finder-Search (tokens files.scope*); the rows have no reference capture (tokens marked estimate).
 Item {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     // The BrowserTab shown (null: no bar).
@@ -22,7 +25,7 @@ Item {
     readonly property bool inFolder: root.query.valid && String(root.query.folder) !== ""
 
     visible: root.query.valid
-    implicitHeight: visible ? Tokens.filesScopeBarHeight + root.rows.length * Tokens.filesCriteriaRowHeight + Tokens.appsBorderWidth : 0
+    implicitHeight: visible ? Tokens.filesScopeBarHeight + root.rows.length * Tokens.filesCriteriaRowHeight + root.hairline : 0
     Accessible.role: Accessible.ToolBar
     Accessible.name: qsTr("Search scope")
 
@@ -37,9 +40,11 @@ Item {
 
         property string label: ""
         property bool selected: false
+        // The widest the pill may be (the folder's: the room left of Save and +); a longer label is elided in the middle.
+        property real maximumWidth: Infinity
         signal activated
 
-        width: Math.ceil(pillText.implicitWidth + 2 * Tokens.filesScopePillPadding)
+        width: Math.min(pill.maximumWidth, Math.ceil(pillText.implicitWidth + 2 * Tokens.filesScopePillPadding))
         height: Tokens.filesScopePillHeight
         radius: Tokens.filesScopePillRadius
         color: pill.selected ? Appearance.withAlpha(Appearance.colors.text, Tokens.filesScopePillOpacity) : "transparent"
@@ -60,6 +65,8 @@ Item {
             id: pillText
             textFormat: Text.PlainText
             anchors.centerIn: parent
+            width: Math.min(implicitWidth, Math.max(0, pill.width - 2 * Tokens.filesScopePillPadding))
+            elide: Text.ElideMiddle
             text: pill.label
             color: pill.selected ? Appearance.colors.text : Appearance.windowSecondary
             font.family: Appearance.fontFamily
@@ -89,7 +96,7 @@ Item {
 
         height: Tokens.filesScopePillHeight
         radius: Tokens.filesScopePillRadius
-        color: buttonArea.pressed ? Appearance.withAlpha(Appearance.colors.text, Tokens.filesScopePillOpacity) : Appearance.withAlpha(Appearance.colors.text, Tokens.toolbarCapsuleFillOpacity)
+        color: buttonArea.pressed ? Appearance.withAlpha(Appearance.colors.text, Tokens.filesScopePillOpacity) : Appearance.withAlpha(Appearance.colors.text, Tokens.filesScopeButtonOpacity)
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: button.accessibleName
@@ -137,6 +144,7 @@ Item {
         height: Tokens.filesScopeBarHeight
 
         Row {
+            id: scopeRow
             x: Tokens.spacingMd
             anchors.verticalCenter: parent.verticalCenter
             spacing: Tokens.filesScopePillGap
@@ -158,8 +166,11 @@ Item {
                 onActivated: root.tab.setSearchScope("")
             }
 
+            // Never under Save and + (UI audit 2026-11-05 U13): bounded to the room left of them, the name elided in the middle.
             ScopePill {
+                id: folderPill
                 anchors.verticalCenter: parent.verticalCenter
+                maximumWidth: Math.max(0, trailingButtons.x - Tokens.filesScopePillGap - scopeRow.x - folderPill.x)
                 visible: String(root.scopeFolder) !== ""
                 label: qsTr("“%1”").arg(root.folderLabel(root.scopeFolder))
                 selected: root.inFolder
@@ -168,6 +179,7 @@ Item {
         }
 
         Row {
+            id: trailingButtons
             anchors.right: parent.right
             anchors.rightMargin: Tokens.filesScopeTrailingInset
             anchors.verticalCenter: parent.verticalCenter
@@ -216,7 +228,7 @@ Item {
     Rectangle {
         anchors.bottom: parent.bottom
         width: parent.width
-        height: Tokens.appsBorderWidth
+        height: root.hairline
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -253,7 +265,7 @@ Item {
 
         Rectangle {
             width: parent.width
-            height: Tokens.appsBorderWidth
+            height: root.hairline
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
 

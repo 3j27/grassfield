@@ -40,6 +40,9 @@ Item {
     readonly property real labelHeight: Tokens.launcherLabelSize * Tokens.launcherLabelLineHeight * Tokens.launcherLabelLines
     readonly property real iconTop: (cellH - Tokens.launcherIconSize - Tokens.launcherLabelGap - labelHeight) / 2
     readonly property real highlightSize: Tokens.launcherIconSize + 2 * Tokens.spacingXs
+    // Concentric with the icon (UI audit 2026-11-05 LOW): the app icon's corner (launcher.highlightRadiusScale of its side)
+    // plus the highlight's inset around it; it had the icon's own corner, too tight for the larger plate.
+    readonly property real highlightRadius: Tokens.launcherIconSize * Tokens.launcherHighlightRadiusScale + Tokens.spacingXs
 
     width: cellW
     height: cellH
@@ -54,7 +57,7 @@ Item {
         y: root.iconTop - Tokens.spacingXs
         width: root.highlightSize
         height: root.highlightSize
-        radius: Tokens.launcherIconSize * Tokens.launcherHighlightRadiusScale
+        radius: root.highlightRadius
         visible: area.containsMouse && !root.selected
         color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
     }
@@ -66,7 +69,7 @@ Item {
         y: root.iconTop - Tokens.spacingXs
         width: root.highlightSize
         height: root.highlightSize
-        radius: Tokens.launcherIconSize * Tokens.launcherHighlightRadiusScale
+        radius: root.highlightRadius
         color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity)
         border.width: Tokens.launcherSelectionWidth
         // The focus ring colour: the accent, or the text colour where the accent does not hold (ADR-0039 step 7).
@@ -97,6 +100,14 @@ Item {
         Accessible.name: qsTr("Delete “%1”").arg(root.info.name)
         Accessible.onPressAction: root.deleteRequested()
 
+        // Pressed: the shared pressed fill over the badge (LOW, UI audit 2026-11-05).
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+            visible: badgeArea.pressed
+        }
+
         Icon {
             anchors.centerIn: parent
             name: "close-glyph"
@@ -105,6 +116,7 @@ Item {
         }
 
         MouseArea {
+            id: badgeArea
             anchors.fill: parent
             onClicked: root.deleteRequested()
         }

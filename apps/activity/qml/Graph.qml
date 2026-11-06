@@ -9,6 +9,9 @@ import Grassfield.Ui
 // `capacity`; with them each value is at its own place (the battery's times).
 Item {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     property var graph: ({})
     property int capacity: 1
@@ -104,7 +107,7 @@ Item {
     Rectangle {
         visible: root.style === "mirrored"
         width: parent.width
-        height: Tokens.appsBorderWidth
+        height: root.hairline
         y: Math.round(parent.height / 2)
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }

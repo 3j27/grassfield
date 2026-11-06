@@ -66,6 +66,14 @@ NavItem {
             }
         }
 
+        // Pressed: the shared pressed fill over the disk (LOW, UI audit 2026-11-05).
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+            visible: diskArea.pressed
+        }
+
         Icon {
             anchors.centerIn: parent
             size: Tokens.quicksettingsDiskGlyph
@@ -76,6 +84,7 @@ NavItem {
         }
 
         MouseArea {
+            id: diskArea
             anchors.fill: parent
             enabled: root.available
             cursorShape: Qt.ArrowCursor
@@ -93,9 +102,10 @@ NavItem {
 
         Column {
             anchors.left: parent.left
-            // Text is elided before the chevron, never under it.
+            // Text is elided before the chevron, never under it. The chevron's room is kept whether it shows or not, so the
+            // text never re-wraps when the pointer comes in (UI audit 2026-11-05 U26).
             anchors.right: parent.right
-            anchors.rightMargin: chevron.visible ? chevron.width + Tokens.spacingXs : 0
+            anchors.rightMargin: root.expandable ? chevron.width + Tokens.spacingXs : 0
             anchors.verticalCenter: parent.verticalCenter
 
             Label {
@@ -125,10 +135,10 @@ NavItem {
             }
         }
 
-        // The chevron only shows while the row is hovered or focused (a 139-pt capsule has no room for it).
+        // The chevron only shows while the row is hovered, has the keyboard focus or is open (as macOS 27).
         Icon {
             id: chevron
-            visible: root.expandable && (hover.hovered || root.activeFocus || root.expanded)
+            visible: root.expandable && (hover.hovered || root.visualFocus || root.expanded)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             size: Tokens.panelCcChevron
