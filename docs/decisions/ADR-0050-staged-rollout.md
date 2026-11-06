@@ -135,8 +135,9 @@ Who gets what is decided by the paths (pacman). The descriptor only tells the pa
 - **Security**: the available Grassfield release's row reads "Grassfield 1.0.2" with "Important security update. Installed:
   1.0.1"; a security release still being synced reads "Grassfield 1.0.2 is an important security update." / "It will be
   offered to this computer soon."
-- **Withdrawn**: "Grassfield 1.0.1 has been withdrawn." / "A corrected version will be offered to this computer as soon as
-  it's ready."
+- **Withdrawn**: the headline says "Grassfield 1.0.1 has been withdrawn" (not "This computer is up to date", review of the
+  Luma pull request, nested finding 10), and the row under it "A corrected version is on its way." / "It will be offered to
+  this computer as soon as it's ready."
 - A **paused** release shows nothing (macOS explains no phased release); one that was staged disappears from the pane.
 - French: « Grassfield 1.0.1 est en cours de déploiement progressif. » / « Elle sera bientôt proposée sur cet ordinateur. »
   and the rest in `translations/grassfield_fr.ts`.
