@@ -50,6 +50,11 @@ public:
     Q_INVOKABLE void remove(const QString &id);
     // The memo window's xdg-toplevel tag now (memo:<id>[@x,y], hyprframes.h).
     Q_INVOKABLE QString tagFor(const QString &id) const;
+    // The same after reading the window frames from Hyprland now (a collapse or an expand sends the corner it had before).
+    Q_INVOKABLE QString freshTagFor(const QString &id);
+    // Sends `window`'s tag again (the memo collapsed or expanded: the tag names the size the compositor gives the window);
+    // main.cpp does it (windowchrome.h).
+    Q_INVOKABLE void retag(QObject *window, const QString &tag);
     // Positions read now and every change written now (Quit, the last memo closed, SIGTERM).
     Q_INVOKABLE bool saveNow();
     // The clipboard's text, or the primary selection's (the middle button on Linux).
@@ -82,6 +87,7 @@ signals:
     // Emitted by saveNow() before it writes: each window pushes the text it still holds (MemoWindow.flush, Main.qml), through
     // a direct call, so the write that follows has it (Quit, SIGTERM, a window deactivated).
     void aboutToSave();
+    void retagRequested(QWindow *window, const QString &tag);
     // Saved, or failed (no memo text in `message`).
     void saved(bool ok);
 

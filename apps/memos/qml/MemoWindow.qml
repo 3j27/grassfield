@@ -37,6 +37,9 @@ Window {
     readonly property real paperOpacity: memo.translucent ? Tokens.memosTranslucentOpacity : 1
     // A height change that is the collapse itself, not the user's resize.
     property bool applyingHeight: false
+    // The tag with the new size goes out once the window has committed its new constraints (the next frame).
+    property bool sizeTagDue: false
+    property string tagBeforeResize: ""
     // Set once the window is made: the sizes given at creation are the stored ones, not changes.
     property bool ready: false
 
@@ -47,6 +50,13 @@ Window {
     // Collapsed, the memo is its strip: it does not grow taller from the edges.
     maximumHeight: memo.collapsed ? Tokens.memosStripHeight : Tokens.memosWindowMaxSide
     visible: true
+
+    onFrameSwapped: {
+        if (!memo.sizeTagDue)
+            return;
+        memo.sizeTagDue = false;
+        memo.backend.retag(memo, MemoLogic.sizedTag(memo.tagBeforeResize, memo.width, memo.height));
+    }
 
     function plainText(): string {
         return textEdit.getText(0, textEdit.length);
@@ -67,10 +77,14 @@ Window {
     function setCollapsed(on: bool): void {
         if (on === memo.collapsed)
             return;
+        // The corner the memo has now, read before the change: Hyprland moves a window whose surface changes size.
+        memo.tagBeforeResize = memo.backend.freshTagFor(memo.memoId);
         memo.applyingHeight = true;
         memo.collapsed = on;
         memo.height = MemoLogic.windowHeight(on, memo.expandedHeight, Tokens.memosStripHeight, Tokens.memosWindowMinHeight);
         memo.applyingHeight = false;
+        // Wayland has no resize request for a floating window: the compositor's rule resizes it to the size on the tag.
+        memo.sizeTagDue = true;
         if (!on)
             textEdit.forceActiveFocus();
         memo.push({collapsed: on});
@@ -560,6 +574,9 @@ Window {
                 Button {
                     objectName: "memoCancelDelete"
                     push: true
+                    // The paper is light in both appearances: the label is the memo's ink, not the system's (white in dark).
+                    labelColor: Tokens.memosInk
+                    fillColor: Appearance.withAlpha(Tokens.memosInk, Tokens.memosAlertButtonFillOpacity)
                     text: qsTr("Cancel")
                     onClicked: memo.cancelClose()
                 }

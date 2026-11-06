@@ -61,6 +61,17 @@ void quitOnSignals(QGuiApplication &app)
     ::sigaction(SIGINT, &action, nullptr);
 }
 
+// Sends a memo window's tag again (the memo collapsed or expanded: its tag now names the size the compositor's rule gives the
+// window, ADR-0051 D-6): the same request ChromeTagger sends at the window's creation (apps/windowchrome.h).
+void sendTagAgain(QWindow *window, const QString &tag)
+{
+    if (!window || QGuiApplication::platformName() != QLatin1String("wayland"))
+        return;
+    auto *native = window->nativeInterface<QNativeInterface::Private::QWaylandWindow>();
+    if (auto *toplevel = native ? native->surfaceRole<::xdg_toplevel>() : nullptr)
+        grassfield::apps::detail::sendTag(toplevel, tag.toUtf8());
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -109,6 +120,7 @@ int main(int argc, char *argv[])
 
     // The backend outlives the engine (declared first, destroyed last).
     memos::MemosApp backend(memos::MemoStore::dataDir(), [] { return memos::currentFrames(); });
+    QObject::connect(&backend, &memos::MemosApp::retagRequested, &app, &sendTagAgain);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &backend, [&backend] { backend.saveNow(); });
 
     QQmlApplicationEngine engine;

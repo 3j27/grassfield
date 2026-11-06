@@ -171,6 +171,20 @@ QString MemosApp::tagFor(const QString &id) const
     return memoTag(m.id, m.hasPosition, m.x, m.y);
 }
 
+QString MemosApp::freshTagFor(const QString &id)
+{
+    applyFrames();
+    return tagFor(id);
+}
+
+void MemosApp::retag(QObject *window, const QString &tag)
+{
+    if (auto *w = qobject_cast<QWindow *>(window)) {
+        w->setProperty("gfChromeRole", tag);
+        emit retagRequested(w, tag);
+    }
+}
+
 bool MemosApp::applyFrames()
 {
     if (!m_frames)

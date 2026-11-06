@@ -103,6 +103,17 @@ table, a cell, a paragraph or a run; the text kept), so a hand-edited file loads
   position only: no stacking is granted by a name any more). Binding the rules to Memos' process
   needs a pid that Lua can trust (Hyprland 0.56's Lua window object is not known here to carry one, and a pid alone does not
   name the program); left for the nested session with the `hl.meta.lua` stub at hand.
+- **Collapse resizes the window** (nested review, finding 6). Hyprland 0.56 keeps a floating window at the size it has when
+  its client only commits a smaller or larger surface, so a collapsed memo sat on an empty rectangle. The app cannot ask for a
+  size on Wayland, so a collapse or an expand sends the xdg-toplevel tag again with `!<w>x<h>` (`memo:<id>[@x,y]!<w>x<h>`),
+  once the window has committed its new constraints, and with the corner it had before (read from Hyprland just before).
+  `placement.lua` (`memo_resize`, on `window.update_rules`) resizes the window to that size when the suffix changes, and puts
+  the corner back inside the free area (macOS's notes shrink to their strip in place). Only a change of the suffix acts, so
+  a resize by the user is never undone; the size is bounded and the request is only ever about the window that sent it.
+  Proved in nested at scale 1.25: 240x200 to 240x18 and back, four transitions, the corner at the same place.
+- **Square corners** (finding 8): macOS's notes have square corners and the resize grip sits in the bottom-right one, which a
+  rounded window cut. `windows.lua` sets `rounding = 0` for the Memos app id (`gf-memos-square`); a name claimed by another
+  client gets square corners and nothing else.
 - `windows.lua` lists `org.grassfield.Memos` with the apps that draw their own chrome (no plugin titlebar) and lets its
   windows send their own maximize request (there is none, the list is the client-chrome one).
 - Without Hyprland's socket (another compositor, an error) frames stay unknown: memos open where the compositor puts them,
@@ -133,7 +144,7 @@ corrupt file kept aside, validation, no memo text in any log message. `tst_hyprf
 filtered, the tag built and read. `tests/unit/tst_memos.qml`: MemoLogic.js (colours, cascade, first line, tags, collapse)
 and a memo window offscreen with a fake backend (strip, collapse, close alert, colour, translucent, menu-less keys).
 
-## NOT VERIFIED (no Hyprland, no nested session in the build container)
-The Lua placement rule, Hyprland honouring a client's own resize when collapsing, the
+The Lua placement rule (the collapse resize, the square corners and the Cancel button were checked in nested, review fix 2026-11-06), the
+The Lua placement rule, (the collapse resize, the square corners and the Cancel button were checked in nested, review fix 2026-11-06), the
 global menu export, the window's look on screen (visual NOT verified unless the spec says otherwise), multi-display
 positions (a memo whose display is gone is fitted onto the display it opens on).

@@ -90,6 +90,17 @@ QtObject {
         return m ? root.tag(m) : "";
     }
 
+    // The tags the windows sent again (a collapse or an expand), in order.
+    property var retags: []
+
+    function retag(window, tag) {
+        root.retags = root.retags.concat([tag]);
+    }
+
+    function freshTagFor(id) {
+        return root.tagFor(id);
+    }
+
     // As MemosApp: saveNow() asks the windows to push what they hold first.
     signal aboutToSave
 

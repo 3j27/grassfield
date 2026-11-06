@@ -18,7 +18,7 @@ Decision record: `docs/decisions/ADR-0051-memos.md` (D-1 to D-7). The app is "Me
 |---|---|---|
 | MM1 | One window per memo, its strip with a close box (left) and a collapse box (right), drawn with tokens (`memos.*`) | built |
 | MM2 | Drag the strip to move (`startSystemMove`); the bottom-right grip resizes (`startSystemResize`) | built (compositor side NOT VERIFIED) |
-| MM3 | Double-click on the strip, the collapse box or Note > Collapse: the window becomes the strip, with the first line; again expands to the stored height | built (Hyprland honouring the client's resize NOT VERIFIED) |
+| MM3 | Double-click on the strip, the collapse box or Note > Collapse: the window becomes the strip, with the first line; again expands to the stored height. The window really resizes: the tag is sent again with `!<w>x<h>` and `placement.lua` `memo_resize` applies it (ADR-0051 D-6) | built, proved in nested at 1.25 |
 | MM4 | Six colours, paper and strip tokens, ink 4.5:1 or more on each (`tests/visual/test_contrast_tokens.py`) | built |
 | MM5 | Rich text: Bold, Italic, Underline, Bigger, Smaller, Bulleted List (`MemoFormatter`, `QTextCursor`) | built |
 | MM6 | Every paste and drop is plain text; stored HTML is cleaned of images, links and background images on load (ADR-0051 D-4) | built |
@@ -60,4 +60,4 @@ Decision record: `docs/decisions/ADR-0051-memos.md` (D-1 to D-7). The app is "Me
 - `tests/unit/tst_memos.qml`: `apps/memos/qml/MemoLogic.js` and a memo window offscreen with a fake backend.
 
 ## NOT VERIFIED
-Everything that needs Hyprland or a nested session (ADR-0051 "NOT VERIFIED"): positions, the collapse resize, the global menu export, the window's look on a real screen.
+Everything that needs Hyprland or a nested session (ADR-0051 "NOT VERIFIED"): positions, the global menu export, the window's look on a real screen.

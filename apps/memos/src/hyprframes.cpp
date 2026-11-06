@@ -28,7 +28,7 @@ QString memoTag(const QString &id, bool hasPosition, int x, int y)
 
 QString memoIdOfTag(const QString &tag)
 {
-    static const QRegularExpression re(QStringLiteral("^memo:([0-9a-f]{32})(?:@-?\\d+,-?\\d+)?$"));
+    static const QRegularExpression re(QStringLiteral("^memo:([0-9a-f]{32})(?:@-?\\d+,-?\\d+)?(?:!\\d+x\\d+)?$"));
     const QRegularExpressionMatch m = re.match(tag);
     return m.hasMatch() ? m.captured(1) : QString();
 }

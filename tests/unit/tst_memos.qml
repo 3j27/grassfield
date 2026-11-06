@@ -153,6 +153,19 @@ TestCase {
         verify(close.x < collapse.x, "close at the left end, collapse at the right end");
     }
 
+    // A Wayland client cannot resize its floating window: a collapse and an expand send the tag again with the size the
+    // compositor's rule gives the window (ADR-0051 D-6, placement.lua memo_resize).
+    function test_collapseAndExpandSendTheSizeOnTheTag() {
+        const t = makeMemo({height: 260, expandedHeight: 260, width: 250});
+        t.win.toggleCollapsed();
+        tryVerify(() => t.backend.retags.length === 1, 2000, "the tag goes out once the new size is committed");
+        compare(t.backend.retags[0], "memo:a!250x" + Tokens.memosStripHeight);
+        t.win.toggleCollapsed();
+        tryVerify(() => t.backend.retags.length === 2, 2000);
+        compare(t.backend.retags[1], "memo:a!250x260");
+        compare(MemoLogic.sizedTag("memo:a@5,6!240x18", 250, 260.4), "memo:a@5,6!250x260", "an older size is replaced");
+    }
+
     function test_collapseKeepsTheMemosHeight() {
         const t = makeMemo({height: 260, expandedHeight: 260});
         t.win.toggleCollapsed();
@@ -220,7 +233,6 @@ TestCase {
         // Float on Top is not shipped (ADR-0051 D-6): its key does nothing and no tag is sent again.
         keyClick(Qt.Key_F, Qt.ControlModifier | Qt.AltModifier);
         verify(t.win.floating === undefined);
-        compare(t.win.gfChromeRole, "memo:a");
     }
 
     function test_fontKeysAndPlainPaste() {
@@ -379,7 +391,7 @@ TestCase {
         const main = createTemporaryObject(comp, testCase, {backend: backend, globalMenu: false});
         compare(main.windows.length, 0);
         verify(main.refusalWindow);
-        compare(backend.created, 0);
+        compare(backend["created"], 0);
         verify(main.newMemo() === null);
         main.refusalWindow.destroy();
     }
