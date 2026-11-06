@@ -1,0 +1,8 @@
+Les notifications bougent en douceur : quand une bannière s’en va, celles du dessous ne sautent plus.
+Une revue complète de l’interface : le texte français tient dans les alertes et les barres d’outils, les textes indicatifs sont plus clairs, les pochettes gardent leurs coins arrondis et les mises en page sont corrigées à l’échelle 125 %.
+Le son vous suit : connecter un casque Bluetooth ou USB y envoie le son, et Grassfield a ses propres effets sonores (Réglages > Son > Effets sonores).
+Sur batterie, les apps que vous ne voyez pas reçoivent une plus petite part du processeur.
+Nouvelle app : Mémos, pour des notes rapides sur votre bureau.
+Le Store montre à quoi chaque app Flatpak peut accéder ; une mise à jour qui demande davantage n’est pas incluse dans « Tout mettre à jour » tant que vous ne la faites pas depuis sa page.
+Les copies de fichiers et les installations du Store en cours s’affichent dans la barre des menus.
+Réglages > Général > Informations peut créer un rapport de diagnostic pour un signalement de bug, sans les noms de vos dossiers.

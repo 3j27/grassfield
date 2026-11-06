@@ -4,6 +4,17 @@ All notable changes of Grassfield Desktop. The version of every package, library
 file at the repository root (`scripts/dev/check-version.sh`, part of `just check`, keeps the consumers equal to it).
 Format: one section per version, newest first.
 
+## 1.0.0-rc6 (release candidate, 2026-11-06)
+
+The UI audit of 2026-11-05 (docs/audits): the notification banners move as one stack (no jump after an exit, the blur
+under them follows), alerts and countdowns translated in their handlers, French alerts and toolbars that fit, lighter
+placeholders, rounded artwork, selection states and the 1.25 scale. The ideas retained from Project Luma (ADR-0047 to
+ADR-0053): audio routing to headphones and an original MIT sound set with Sound Effects; lower CPU and IO weights for the
+apps you cannot see on battery (`grassfield-energy`); Flatpak permissions in the Store, with an update that asks for more
+held from Update All; staged rollout cohorts (inactive until the signed database lists its marker); Memos; ongoing
+activities in the menu bar; the diagnostic report, search file ranking and a notice for a never-seen display combination.
+The Store reads repository.conf through its fixture in dev sessions.
+
 ## 1.0.0-rc5 (release candidate, 2026-11-05)
 
 Omarchy 4.5.0 support, beside 4.0.6: the lock's fingerprint pacing (Omarchy 4.5's backoff, no attempt with the displays

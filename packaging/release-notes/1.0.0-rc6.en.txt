@@ -1,0 +1,8 @@
+Notifications move smoothly: when a banner leaves, the ones below it no longer jump.
+A full review of the interface: French text fits in alerts and toolbars, placeholders are lighter, artwork keeps its rounded corners, and layouts are fixed at 125 % scale.
+Sound follows you: connecting Bluetooth or USB headphones moves the sound to them, and Grassfield has its own sound effects (Settings > Sound > Sound Effects).
+On battery, apps you cannot see get a smaller share of the processor.
+New app: Memos, for quick notes on your desktop.
+The Store shows what each Flatpak app can reach; an update that asks for more is left out of Update All until you update it from its page.
+File copies and Store installs in progress show in the menu bar.
+Settings > General > About can create a diagnostic report for a bug report, without your folder names.
