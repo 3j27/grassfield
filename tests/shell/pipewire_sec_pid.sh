@@ -56,7 +56,7 @@ fi
 # A playing stream that claims to be pid 1 (init) twice over and to belong to client 0.
 head -c 4000000 /dev/zero >"$tmp/silence.raw"
 "${pwenv[@]}" pw-cat -p --raw --rate 48000 --channels 1 --format s16 --target gf-null \
-  -P '{ "pipewire.sec.pid" = "1", "application.process.id" = "1", "client.id" = "0", "node.name" = "gf-forger" }' "$tmp/silence.raw" \
+  -P '{ "pipewire.sec.pid" = "1", "application.process.id" = "1", "client.id" = "0", "object.serial" = "999999", "node.name" = "gf-forger" }' "$tmp/silence.raw" \
   >"$tmp/cat.log" 2>&1 &
 cat_pid=$!
 pids+=($cat_pid)
@@ -82,6 +82,11 @@ echo "node.client.id=${client_id:-none} node.sec.pid=$node_sec node.application.
 
 check "the stream node names a client that exists" "$([[ -n $client_id && -n $client ]] && echo 0 || echo 1)"
 check "the node's client.id is the server's, not the forged client.id 0" "$([[ -n $client_id && $client_id != 0 ]] && echo 0 || echo 1)"
+node_serial=$(jq -r '.info.props["object.serial"] // "absent"' <<<"$node")
+client_serial=$(jq -r '.info.props["object.serial"] // "absent"' <<<"$client")
+echo "node.object.serial=$node_serial client.object.serial=$client_serial"
+check "the node's object.serial is the server's, not the forged 999999" "$([[ $node_serial =~ ^[0-9]+$ && $node_serial != 999999 ]] && echo 0 || echo 1)"
+check "the Client is older than its stream (a lower object.serial: the helper's reuse guard)" "$([[ $client_serial =~ ^[0-9]+$ && $node_serial =~ ^[0-9]+$ && $client_serial -lt $node_serial ]] && echo 0 || echo 1)"
 check "the Client's pipewire.sec.pid is the real pid of the process on the socket, set by the server" "$([[ $client_sec == "$cat_pid" ]] && echo 0 || echo 1)"
 check "the Client's pipewire.sec.pid is not the forged value" "$([[ $client_sec != 1 ]] && echo 0 || echo 1)"
 # Facts that decided the code (ADR-0048 D-3), recorded as they are on this machine.
