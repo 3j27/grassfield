@@ -154,9 +154,20 @@ decisions (`status` explains them) and never runs `systemctl` nor writes a cgrou
 - NOT VERIFIED (no Hyprland, Quickshell runtime, user manager or cgroup v2 in the agent's container): the shell wiring at
   run time, `systemctl set-property` with empty values on a real scope, uclamp writability, the battery gain, no stutter
   when switching back to an app (owner L2), the Settings sheet's rendering (visual NOT verified), and that the stream nodes' property
-  maps in Quickshell carry `pipewire.sec.pid` (a private PipeWire instance could not be started in the sandbox; owner L2: `pw-dump`
-  on a playing stream). A stream without it names no process: the helper's `/dev/snd` check still applies, and the person's
-  choice to keep an app running (`--keep`) is the remedy until the field is confirmed.
+  maps in Quickshell carry `pipewire.sec.pid`, and whether a client can forge it there. Facts read from sources
+  (second security review, finding 3): `pipewire/keys.h` says `PW_KEY_SEC_PID` is the "Client pid, set by protocol", and that
+  the `PW_KEY_SEC_*` keys "must be obtained from trusted sources by the protocol and placed as read-only properties": that is
+  a property of the CLIENT object, which the server fills from the socket's credentials. Whether it is also on the stream NODE,
+  and whether a node property set by the client (`pw-cat -P`) can override it, is not documented. Quickshell's `PwNode`
+  (`quickshell-service-pipewire.qmltypes`) exposes only `properties` (the node's), no Client object, so the unforgeable route
+  (the node's `client.id`, then that Client's `pipewire.sec.pid`) would need the helper to read it from `pw-dump`.
+  `tests/shell/pipewire_sec_pid.sh` proves it on a PRIVATE daemon (own runtime folder and socket, no session manager, never the
+  default socket; a forging `pw-cat` stream; `pw-dump` on the private socket) and prints the node's and the Client's values; it
+  SKIPs where a daemon cannot start. The agent's sandbox forbids creating a socket, so it SKIPped there: NOT VERIFIED.
+  Until the facts are known the code is unchanged: a node without the property names no process (no claim, no crash:
+  `tst_appenergy.qml` `test_streamPids`), the helper's `/dev/snd` check still applies, and `--keep` is the remedy. Owner
+  command (private daemon only, read-only for the session): `tests/shell/pipewire_sec_pid.sh`; if the node's value is absent
+  or forged, switch the shell to the node's `client.id` and a `pw-dump` lookup in `grassfield-energy`.
 
 ## Consequences
 - New: `packaging/bin/grassfield-energy` (installed with the other helpers in `/usr/lib/grassfield`),

@@ -530,6 +530,7 @@
  {"path": "tests/shell/crash_watch.sh", "layer": "logic"},
  {"path": "tests/shell/diagnostic_report.sh", "layer": "logic"},
  {"path": "tests/shell/app_energy.sh", "layer": "logic"},
+ {"path": "tests/shell/pipewire_sec_pid.sh", "layer": "logic"},
  {"path": "tests/fuzz/helpers_fuzz.sh", "layer": "logic"},
  {"path": "tests/fuzz/activity_fuzz.sh", "layer": "logic"},
  {"path": "tests/fuzz/prompter_protocol.sh", "layer": "logic"},
