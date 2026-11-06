@@ -12,10 +12,14 @@ cd "$root" || exit 2
 fail=0
 check() { if "$@"; then echo "PASS: $desc"; else echo "FAIL: $desc"; fail=1; fi; }
 
-for f in shell/services/Popups.qml shell/switcher/Switcher.qml shell/notifications/Notifications.qml shell/launchpad/AppsController.qml shell/search/Search.qml; do
+for f in shell/switcher/Switcher.qml shell/notifications/Notifications.qml shell/launchpad/AppsController.qml shell/search/Search.qml; do
   desc="$f: the screens-changed handler exists and moves its state with ScreenChoice.replacement from live data (not activeScreenName)"
   check bash -c 'h=$(awk "/function onScreensChanged\\(\\)/,/^        }/" "$1"); [ -n "$h" ] && grep -q "ScreenChoice.replacement(root\\.[A-Za-z]*, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name))" <<<"$h" && ! grep -q "activeScreenName" <<<"$h"' _ "$f"
 done
+
+# Popups goes through ScreenChoice.afterScreensChanged (closes the kinds that die with their output, else moves with replacement()).
+desc="shell/services/Popups.qml: the screens-changed handler exists and moves its state with ScreenChoice.afterScreensChanged from live data (not activeScreenName)"
+check bash -c 'h=$(awk "/function onScreensChanged\\(\\)/,/^        }/" "$1"); [ -n "$h" ] && grep -q "ScreenChoice.afterScreensChanged(root\\.kind, root\\.screenName, Compositor.focusedScreenName, Quickshell.screens.map(s => s.name))" <<<"$h" && grep -q "root.close()" <<<"$h" && ! grep -q "activeScreenName" <<<"$h"' _ shell/services/Popups.qml
 
 desc="SearchPanel: the window reads its screen name with a null guard"
 check grep -q 'root.controller.screenName === (modelData ? modelData.name : "")' shell/search/SearchPanel.qml
