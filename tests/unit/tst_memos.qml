@@ -55,7 +55,7 @@ TestCase {
     // its parent's family has the focus, so only a toplevel memo can be seen losing it.
     function makeMemo(props, toplevel) {
         const backend = fakeBackend.createObject(testCase);
-        backend.stored = [{id: "a", color: "blue", html: "", width: 240, height: 200, collapsed: false, floating: false, translucent: false}];
+        backend.stored = [{id: "a", color: "blue", html: "", width: 240, height: 200, collapsed: false, translucent: false}];
         backend.open(240, 200);
         const manager = fakeManager.createObject(testCase);
         const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/memos/qml/MemoWindow.qml"));
@@ -209,7 +209,7 @@ TestCase {
         compare(t.backend.removed, []);
     }
 
-    function test_translucentAndFloatOnTop() {
+    function test_translucentAndNoFloatOnTop() {
         const t = makeMemo();
         const body = t.win.contentItem.children[0];
         compare(t.win.paperOpacity, 1);
@@ -217,11 +217,10 @@ TestCase {
         verify(t.win.translucent);
         compare(t.win.paperOpacity, Tokens.memosTranslucentOpacity);
         compare(t.backend.lastUpdate("a", "translucent"), true);
+        // Float on Top is not shipped (ADR-0051 D-6): its key does nothing and no tag is sent again.
         keyClick(Qt.Key_F, Qt.ControlModifier | Qt.AltModifier);
-        verify(t.win.floating);
-        compare(t.backend.retags, ["memo:a:top"], "the window sends its tag again with :top");
-        keyClick(Qt.Key_F, Qt.ControlModifier | Qt.AltModifier);
-        compare(t.backend.retags, ["memo:a:top", "memo:a"]);
+        verify(t.win.floating === undefined);
+        compare(t.win.gfChromeRole, "memo:a");
     }
 
     function test_fontKeysAndPlainPaste() {
@@ -315,14 +314,14 @@ TestCase {
     }
 
     function test_mainOpensTheStoredMemos() {
-        const m = makeMain([{id: "a", color: "green", html: "<p>one</p>", width: 250, height: 210, collapsed: false, floating: true, translucent: false},
-                            {id: "b", color: "pink", html: "", width: 200, height: 300, collapsed: true, floating: false, translucent: true}]);
+        const m = makeMain([{id: "a", color: "green", html: "<p>one</p>", width: 250, height: 210, collapsed: false, translucent: false},
+                            {id: "b", color: "pink", html: "", width: 200, height: 300, collapsed: true, translucent: true}]);
         compare(m.main.windows.length, 2);
         const a = m.main.windows[0], b = m.main.windows[1];
         compare(a.colorName, "green");
         compare(a.width, 250);
         compare(a.height, 210);
-        compare(a.gfChromeRole, "memo:a:top");
+        compare(a.gfChromeRole, "memo:a");
         verify(b.collapsed);
         compare(b.height, Tokens.memosStripHeight);
         compare(b.expandedHeight, 300);
@@ -340,8 +339,8 @@ TestCase {
     }
 
     function test_mainReopensWhatTheCompositorClosed() {
-        const m = makeMain([{id: "a", color: "yellow", html: "<p>x</p>", width: 240, height: 200, collapsed: false, floating: false, translucent: false},
-                            {id: "b", color: "blue", html: "<p>y</p>", width: 240, height: 200, collapsed: false, floating: false, translucent: false}]);
+        const m = makeMain([{id: "a", color: "yellow", html: "<p>x</p>", width: 240, height: 200, collapsed: false, translucent: false},
+                            {id: "b", color: "blue", html: "<p>y</p>", width: 240, height: 200, collapsed: false, translucent: false}]);
         m.main.windowClosed(m.main.windows[0]);
         compare(m.main.windows.length, 1);
         compare(m.backend.removed, [], "the memo is kept");
@@ -356,8 +355,8 @@ TestCase {
 
     // Quit and SIGTERM save through backend.saveNow(): every window pushes what it holds first.
     function test_mainFlushesEveryWindowBeforeASave() {
-        const m = makeMain([{id: "a", color: "yellow", html: "", width: 240, height: 200, collapsed: false, floating: false, translucent: false},
-                            {id: "b", color: "blue", html: "", width: 240, height: 200, collapsed: false, floating: false, translucent: false}]);
+        const m = makeMain([{id: "a", color: "yellow", html: "", width: 240, height: 200, collapsed: false, translucent: false},
+                            {id: "b", color: "blue", html: "", width: 240, height: 200, collapsed: false, translucent: false}]);
         m.main.windows[0].editor.insert(0, "first");
         m.main.windows[1].editor.insert(0, "second");
         compare(m.backend.lastUpdate("a", "html"), undefined);
@@ -373,7 +372,7 @@ TestCase {
     }
 
     function test_mainRefusesANewerStore() {
-        const m = makeMain([{id: "a", color: "yellow", html: "", width: 240, height: 200, collapsed: false, floating: false, translucent: false}]);
+        const m = makeMain([{id: "a", color: "yellow", html: "", width: 240, height: 200, collapsed: false, translucent: false}]);
         cleanupMain(m);
         const backend = fakeBackend.createObject(testCase, {refusal: "newer"});
         const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/memos/qml/Main.qml"));

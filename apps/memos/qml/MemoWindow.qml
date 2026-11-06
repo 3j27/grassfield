@@ -16,14 +16,13 @@ Window {
     property string colorName: "yellow"
     property string initialHtml: ""
     property bool collapsed: false
-    property bool floating: false
     property bool translucent: false
     // The memo's own height, kept while it is collapsed (the window is then the strip's height).
     property int expandedHeight: Tokens.memosWindowHeight
     // The registrar is there (Main.qml, kept up to date by src/main.cpp): the memo exports its menus.
     property bool globalMenu: false
     // ADR-0015 and ADR-0051 D-6: the window draws its own chrome; its xdg-toplevel tag is its memo tag (memo:<id>...), which
-    // the compositor's rules read (no plugin titlebar, the stored position, Float on Top). Set once, before the window maps.
+    // the compositor's rules read (no plugin titlebar, the stored position). Set once, before the window maps.
     property string gfChromeRole: ""
     // The Delete alert is up (Close on a memo with text).
     property bool confirmingClose: false
@@ -79,13 +78,6 @@ Window {
 
     function toggleCollapsed(): void {
         memo.setCollapsed(!memo.collapsed);
-    }
-
-    function toggleFloating(): void {
-        memo.floating = !memo.floating;
-        memo.push({floating: memo.floating});
-        // The compositor reads Float on Top from the tag (stacking.lua): the window sends it again.
-        memo.backend.retag(memo, memo.backend.tagFor(memo.memoId));
     }
 
     function toggleTranslucent(): void {
@@ -272,11 +264,6 @@ Window {
         enabled: !memo.collapsed
         onActivated: memo.toggleList()
         onActivatedAmbiguously: memo.toggleList()
-    }
-    Shortcut {
-        sequence: "Ctrl+Alt+F"
-        onActivated: memo.toggleFloating()
-        onActivatedAmbiguously: memo.toggleFloating()
     }
     Shortcut {
         sequence: "Ctrl+Alt+T"

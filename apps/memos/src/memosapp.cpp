@@ -148,7 +148,6 @@ void MemosApp::update(const QString &id, const QVariantMap &changes)
     setSide("width", m.width);
     setSide("height", m.height);
     setBool("collapsed", m.collapsed);
-    setBool("floating", m.floating);
     setBool("translucent", m.translucent);
     if (changed)
         scheduleSave();
@@ -169,15 +168,7 @@ QString MemosApp::tagFor(const QString &id) const
     if (i < 0)
         return {};
     const Memo &m = m_memos.at(i);
-    return memoTag(m.id, m.floating, m.hasPosition, m.x, m.y);
-}
-
-void MemosApp::retag(QObject *window, const QString &tag)
-{
-    if (auto *w = qobject_cast<QWindow *>(window)) {
-        w->setProperty("gfChromeRole", tag);
-        emit retagRequested(w, tag);
-    }
+    return memoTag(m.id, m.hasPosition, m.x, m.y);
 }
 
 bool MemosApp::applyFrames()
@@ -259,9 +250,8 @@ QVariantMap MemosApp::toMap(const Memo &m) const
             {QStringLiteral("width"), m.width},
             {QStringLiteral("height"), m.height},
             {QStringLiteral("collapsed"), m.collapsed},
-            {QStringLiteral("floating"), m.floating},
             {QStringLiteral("translucent"), m.translucent},
-            {QStringLiteral("tag"), memoTag(m.id, m.floating, m.hasPosition, m.x, m.y)}};
+            {QStringLiteral("tag"), memoTag(m.id, m.hasPosition, m.x, m.y)}};
 }
 
 void MemosApp::readAppearance()

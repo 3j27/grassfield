@@ -19,7 +19,6 @@ QtObject {
     property var memos: []
     property var updates: []
     property var removed: []
-    property var retags: []
     property int saves: 0
     property int created: 0
     property string clipboard: "pasted"
@@ -52,7 +51,7 @@ QtObject {
     }
 
     function tag(m) {
-        return "memo:" + m.id + (m.floating ? ":top" : "");
+        return "memo:" + m.id;
     }
 
     function open(w, h) {
@@ -68,7 +67,7 @@ QtObject {
         if (root.refusal !== "")
             return ({});
         root.created++;
-        const m = {id: "new" + root.created, color: "yellow", html: "", width: w, height: h, collapsed: false, floating: false, translucent: false};
+        const m = {id: "new" + root.created, color: "yellow", html: "", width: w, height: h, collapsed: false, translucent: false};
         root.memos = root.memos.concat([m]);
         return Object.assign({tag: root.tag(m)}, m);
     }
@@ -89,10 +88,6 @@ QtObject {
     function tagFor(id) {
         const m = root.memos.find(x => x.id === id);
         return m ? root.tag(m) : "";
-    }
-
-    function retag(window, tag) {
-        root.retags = root.retags.concat([tag]);
     }
 
     // As MemosApp: saveNow() asks the windows to push what they hold first.

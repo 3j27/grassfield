@@ -151,14 +151,14 @@ local function fit(window)
 end
 
 -- Grassfield Memos (ADR-0051 D-6): a memo window names the position it had in its xdg-toplevel tag,
--- "memo:<32 hex>[:top]@<x>,<y>" (layout coordinates, as Hyprland's window list gave them to the app); it opens there, kept
+-- "memo:<32 hex>@<x>,<y>" (layout coordinates, as Hyprland's window list gave them to the app); it opens there, kept
 -- inside the free area of the display it opens on (the same bounds as `fit`). A tag without a position (a memo never seen by
 -- the compositor) leaves Hyprland's placement. Known limit: a memo whose display is gone comes back on the one it opens on.
 local function memo_place(window)
   if not window or not window.floating or window.fullscreen ~= 0 then
     return
   end
-  -- The app id exactly (case-sensitive, as Memos sets it) and the tag exactly: 32 lowercase hex digits, ":top" or nothing,
+  -- The app id exactly (case-sensitive, as Memos sets it) and the tag exactly: 32 lowercase hex digits,
   -- then the position (review of the memos slice: any client could pass a loose match).
   if window.class ~= "org.grassfield.Memos" then
     return
@@ -166,9 +166,6 @@ local function memo_place(window)
   local tag = window.xdg_tag or ""
   local id = "^memo:" .. string.rep("[0-9a-f]", 32)
   local hx, hy = tag:match(id .. "@(%-?%d+),(%-?%d+)$")
-  if not hx then
-    hx, hy = tag:match(id .. ":top@(%-?%d+),(%-?%d+)$")
-  end
   if not hx then
     return
   end
