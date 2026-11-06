@@ -210,9 +210,12 @@ check("claims: an open sound device protects it", limited_after(base(fds={"7": "
 check("claims: an open camera protects it", limited_after(base(fds={"7": "/dev/video0"})) == [])
 check("claims: a render node alone does not", limited_after(base(fds={"7": "/dev/dri/renderD128"})) != [])
 # PipeWire claims (D-3): stream node ids -> the node's client.id -> that Client's pipewire.sec.pid, from pw-dump (here a fixture).
-def dump(nodes, clients):
-    out = [{"id": i, "type": "PipeWire:Interface:Node", "info": {"props": p}} for i, p in nodes.items()]
-    out += [{"id": i, "type": "PipeWire:Interface:Client", "info": {"props": p}} for i, p in clients.items()]
+def dump(nodes, clients, serials=True):
+    # Serials as the server gives them: a client is created before its streams (lower object.serial).
+    def sp(p, n):
+        return {"object.serial": str(n), **p} if serials else p
+    out = [{"id": i, "type": "PipeWire:Interface:Node", "info": {"props": sp(p, 1000 + i)}} for i, p in nodes.items()]
+    out += [{"id": i, "type": "PipeWire:Interface:Client", "info": {"props": sp(p, 10 + i)}} for i, p in clients.items()]
     return out
 
 def with_dump(data, raw=None):
@@ -236,6 +239,16 @@ check("claims: a pid the NODE carries (forged pipewire.sec.pid, application.proc
 check("claims: a node without client.id, or whose client is missing, protects nothing",
       limited_env(with_dump(dump({50: {"pipewire.sec.pid": "300"}}, {7: {"pipewire.sec.pid": "300"}})), ["--streams", "50"]) != []
       and limited_env(with_dump(dump({50: {"client.id": "8"}}, {7: {"pipewire.sec.pid": "300"}})), ["--streams", "50"]) != [])
+# PipeWire reuses object ids: a lingering node whose client left, and a newer client that took its id, protects nothing.
+reused = dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "300"}})
+reused[1]["info"]["props"]["object.serial"] = "5000"
+check("claims: a client newer than the stream (a reused client id) protects nothing", limited_env(with_dump(reused), ["--streams", "50"]) != [])
+check("claims: a node or client without object.serial protects nothing",
+      limited_env(with_dump(dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "300"}}, serials=False)), ["--streams", "50"]) != [])
+check("claims: a dump nested deeper than the parser allows is no claim and no failure",
+      limited_env(with_dump(None, raw="[" * 200000 + "]" * 200000), ["--streams", "50"]) != [])
+check("claims: non-ASCII digits in --streams are dropped, no failure",
+      limited_env(with_dump(real), ["--streams", "\u00b2,5\u0660"]) != [])
 check("claims: a stream id that is not in the dump protects nothing", limited_env(with_dump(real), ["--streams", "51"]) != [])
 check("claims: a dump that is not JSON, or not a list, is no claim and no failure",
       limited_env(with_dump(None, "not json"), ["--streams", "50"]) != [] and limited_env(with_dump(None, "{}"), ["--streams", "50"]) != [])

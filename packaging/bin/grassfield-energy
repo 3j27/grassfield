@@ -142,7 +142,7 @@ def parse_windows(text):
         return None
     out = {}
     for key, state in list(raw.items())[:MAX_WINDOWS]:
-        if isinstance(key, str) and key.isdigit() and 0 < int(key) < 1 << 22 and state in ORDER:
+        if isinstance(key, str) and key.isascii() and key.isdigit() and 0 < int(key) < 1 << 22 and state in ORDER:
             out[int(key)] = state
     return out
 
@@ -151,7 +151,7 @@ def parse_pids(text):
     out = []
     for part in (text or "").split(",")[:MAX_PIDS]:
         part = part.strip()
-        if part.isdigit() and 0 < int(part) < 1 << 22:
+        if part.isascii() and part.isdigit() and 0 < int(part) < 1 << 22:
             out.append(int(part))
     return out
 
@@ -179,7 +179,7 @@ def read_pw_dump():
         if len(raw) > PWDUMP_MAX:
             return None
         data = json.loads(raw.decode("utf-8", "replace"))
-    except (OSError, subprocess.SubprocessError, ValueError):
+    except (OSError, subprocess.SubprocessError, ValueError, RecursionError):
         return None
     return data if isinstance(data, list) else None
 
@@ -187,7 +187,9 @@ def read_pw_dump():
 def stream_client_pids(dump, node_ids):
     """The pids behind these PipeWire node ids, from a `pw-dump` list: node id -> info.props["client.id"] (the server sets it,
     a client cannot) -> the Client object of that id -> its props["pipewire.sec.pid"] (read from the socket's credentials).
-    Nothing a node says about a pid is read. A node or a client that is missing or malformed gives no pid."""
+    Nothing a node says about a pid is read. A node or a client that is missing or malformed gives no pid. PipeWire reuses
+    object ids, so the client must be older than the node (a lower object.serial; serials are never reused): a node that
+    outlived its client (object.linger) never resolves to a later client that took the same id."""
     objects = {}
     for obj in dump if isinstance(dump, list) else []:
         if isinstance(obj, dict) and isinstance(obj.get("id"), int) and isinstance(obj.get("type"), str):
@@ -198,16 +200,27 @@ def stream_client_pids(dump, node_ids):
         found = info.get("props") if isinstance(info, dict) else None
         return found if isinstance(found, dict) else {}
 
-    def number(value):
+    def digits(value):
         text = str(value).strip() if isinstance(value, (int, str)) and not isinstance(value, bool) else ""
-        return int(text) if text.isdigit() and 0 < int(text) < 1 << 22 else None
+        return text if text.isascii() and text.isdigit() and len(text) <= 19 else ""
+
+    def number(value):
+        text = digits(value)
+        return int(text) if text and 0 < int(text) < 1 << 22 else None
+
+    def serial(obj):
+        text = digits(props(obj).get("object.serial"))
+        return int(text) if text else None
 
     out = set()
     for node_id in set(node_ids):
         node = objects.get(("PipeWire:Interface:Node", node_id))
         client_id = number(props(node).get("client.id")) if node else None
         client = objects.get(("PipeWire:Interface:Client", client_id)) if client_id else None
-        pid = number(props(client).get("pipewire.sec.pid")) if client else None
+        node_serial, client_serial = (serial(node), serial(client)) if client else (None, None)
+        if node_serial is None or client_serial is None or client_serial >= node_serial:
+            continue
+        pid = number(props(client).get("pipewire.sec.pid"))
         if pid:
             out.add(pid)
     return out

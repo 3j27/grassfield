@@ -80,8 +80,11 @@ Checked by the helper only for apps that would be limited or are limited:
 - sound or video: a PipeWire stream node of one of its processes, or an open `/dev/snd/*`, `/dev/video*`, `/dev/media*` descriptor
   in any process of its scope. The shell passes only the ids of the stream nodes (`--streams`); the helper reads `pw-dump`
   (only when an app would be limited and a stream exists, at most once per round, 5 s timeout, 8 MiB at most) and maps node
-  -> its `client.id` -> that Client object's `pipewire.sec.pid`. A pid on the node itself (`pipewire.sec.pid`,
-  `application.process.id`) is never read. A missing dump, node or client is no claim (the app may be limited: fail-safe as
+  -> its `client.id` -> that Client object's `pipewire.sec.pid`, and only when the Client is older than the node (a lower
+  `object.serial`: PipeWire reuses object ids but never serials, so a node that outlived its client never resolves to a
+  later client that took the same id). A pid on the node itself (`pipewire.sec.pid`, `application.process.id`) is never
+  read. Ids are ASCII digits only; a dump that is not a list, too large or nested too deep is no dump. A missing dump,
+  node, client or serial is no claim (the app may be limited: fail-safe as
   for every unreadable input; `--keep` and the `/dev/snd` check remain). Facts proved on a private daemon (below);
 - an alarm: a timerfd on `CLOCK_REALTIME_ALARM` (8) or `CLOCK_BOOTTIME_ALARM` (9) (`clockid:` in `/proc/PID/fdinfo`);
 - working: more than 0.5 % of one core over the last sampling window (`cpu.stat` `usage_usec` of the scope, a window of at
