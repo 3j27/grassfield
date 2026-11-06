@@ -402,8 +402,9 @@ function permissionItem(g) {
         return {group: "display", text: qsTr("The X11 display"),
                 note: qsTr("Through X11 it can see what other X11 apps show and what you type in them.")};
     case "x11Fallback":
+        // A reassurance, not a warning: shown on its page, never under the install sheet's "Take care:" (calm).
         return {group: "display", text: qsTr("The X11 display, only where Wayland is missing"),
-                note: qsTr("This session has Wayland: here it gets no X11.")};
+                note: qsTr("This session has Wayland: here it gets no X11."), calm: true};
     case "ssh":
         return {group: "keys", text: qsTr("Your SSH keys, through the SSH agent"), note: ""};
     case "gpg":
@@ -451,7 +452,7 @@ function permissionGroups(grants) {
     const byGroup = {};
     for (const g of grants) {
         const item = permissionItem(g);
-        (byGroup[item.group] = byGroup[item.group] || []).push({text: item.text, note: item.note});
+        (byGroup[item.group] = byGroup[item.group] || []).push(item.calm === true ? {text: item.text, note: item.note, calm: true} : {text: item.text, note: item.note});
     }
     const wideFiles = Array.from(grants, g => g.key === "home" || (g.key === "allFiles" && (g.name === "/" || g.name === "host-root"))).indexOf(true) >= 0;
     return PERMISSION_GROUPS.filter(p => byGroup[p[0]] !== undefined).map(p => ({
@@ -478,7 +479,7 @@ function permissionSummary(grants) {
     const warnings = [];
     for (const g of groups) {
         for (const i of g.items) {
-            if (i.note !== "" && warnings.indexOf(i.note) < 0)
+            if (i.note !== "" && i.calm !== true && warnings.indexOf(i.note) < 0)
                 warnings.push(i.note);
         }
     }

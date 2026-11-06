@@ -138,6 +138,10 @@ TestCase {
         compare(sum.titles, ["Network", "Microphone and Speakers", "Other Apps and Services", "Outside Its Sandbox"]);
         compare(sum.warnings, ["It can record from the microphone without asking.", "Including services that can start programs outside its sandbox.",
                                "Anything it starts this way has all of your access."]);
+        // A reassurance (X11 only where Wayland is missing) is on its page, never a warning of the install sheet.
+        const calm = Store.permissionSummary([{key: "x11Fallback", name: "", level: 1}]);
+        compare(calm.titles.length, 1);
+        compare(calm.warnings, []);
         compare(Store.permissionSummary(null), null);
         compare(Store.permissionSummary([]).titles, []);
         for (const id of ["files", "network", "devices", "sound", "display", "keys", "services", "background", "sandbox", "other"])

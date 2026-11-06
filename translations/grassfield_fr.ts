@@ -10166,6 +10166,14 @@
         <translation>Elle n’accède qu’à sa propre fenêtre et à ses propres fichiers.</translation>
     </message>
     <message>
+        <source>It can reach: %1.</source>
+        <translation>Elle peut accéder à&#xa0;: %1.</translation>
+    </message>
+    <message>
+        <source>, </source>
+        <translation>, </translation>
+    </message>
+    <message>
         <source>These will be installed:</source>
         <translation>Ces éléments seront installés&#xa0;:</translation>
     </message>
@@ -10234,16 +10242,8 @@
         <translation>Elle ne pourra plus accéder à&#xa0;:</translation>
     </message>
     <message>
-        <source>It can reach:</source>
-        <translation>Elle peut accéder à&#xa0;:</translation>
-    </message>
-    <message>
         <source>Take care:</source>
         <translation>Attention&#xa0;:</translation>
-    </message>
-    <message>
-        <source>Its page lists each one.</source>
-        <translation>Sa page les détaille un à un.</translation>
     </message>
     <message>
         <source>Update</source>
