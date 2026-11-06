@@ -63,7 +63,10 @@ if [[ -d /usr/share/omarchy/default/hypr ]]; then
   check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: Emoji list .*emojis.json" <<<"$1"' _ "$out" "$status"
   mv "$copy/emojis.json.away" "$copy/shell/plugins/emojis/emojis.json"
 
-  sed -i 's/^hyprctl reload/hyprctl dispatch forcerendererreload/' "$copy/bin/omarchy-restart-hyprctl"
+  # Any form of the reload line: `hyprctl reload` up to Omarchy 4.0, `hyprctl "${instance[@]}" reload` from 4.5.0.
+  sed -i 's/^\(hyprctl.*\) reload/\1 dispatch forcerendererreload/' "$copy/bin/omarchy-restart-hyprctl"
+  desc="the stand-in mutation applied to the installed omarchy-restart-hyprctl (no reload line left)"
+  check bash -c '! grep -q "^hyprctl.* reload" "$1"' _ "$copy/bin/omarchy-restart-hyprctl"
   status=0; out=$(run_copy) || status=$?
   desc="omarchy-restart-hyprctl reaching the compositor another way (the terminal theme helper's stand-in) fails the check"
   check bash -c '[[ $2 == 1 ]] && grep -q "^FAIL: omarchy-restart-hyprctl still reloads" <<<"$1"' _ "$out" "$status"
