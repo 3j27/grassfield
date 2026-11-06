@@ -671,6 +671,13 @@ the change to the first published release, where a miss would ship a desktop wit
 since the channel's keyring must be grassfield-packages' `keyring/`, the whole package (its `keyring-check.sh`).
 
 ## Amendments
+- **ADR-0050 (staged rollout), Proposed 2026-11-05.** a/c: `grassfield.conf` may hold the cohort form (20 cohort paths
+  `<base>/<channel>/cohort/<NN>/$arch` before the plain lines), written only by `grassfield-channel-scriptlet upgrade` when
+  the verified database lists the marker package `grassfield-rollout` 1, from a wariness root keeps in
+  `/var/lib/grassfield/rollout-wariness`; `set` still writes the plain form. d: the checker reads the signed
+  `grassfield-rollout.json` (pane only) and the automatic check also waits on battery at 30 % or less. g/h: the publisher's
+  per-cohort paths, monotonic resolution, marker and descriptor (ADR-0050 g). Root code changed: the scriptlet and its
+  library (opus security review).
 - **The site gives the installation (owner decision of 2026-11-05).** Amends the activation entry below: the official
   site's Download page carries the install script, its requirements, the key's fingerprint and the script's checksum (ADR-0043 h
   amendment). The site stays noindex; the legal review stays mandatory before any public announcement.

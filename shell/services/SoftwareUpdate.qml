@@ -15,7 +15,8 @@ import Grassfield.Ui
 //     `update-running` again starts the next one only after waitRetryMs. A file that still says `update-running` when the
 //     shell starts (the waiter ended with the session: a reboot or a log out during the update, a crash) is checked at once.
 //   - Automatic checks (updates.automaticCheck, default on): 10 minutes after the start, then every 6 hours, skipped while
-//     offline or on a metered connection (U7); a retry the checker asks for (retryAt, U3) comes earlier.
+//     offline, on a metered connection, or on battery at 30 % or less (U7; ADR-0050 6, Luma's download conditions: looked
+//     at again when the computer is plugged in); a retry the checker asks for (retryAt, U3) comes earlier.
 //   - Each newly found Grassfield or Omarchy version, and each `blocking` episode, is announced once (`announce`; shell.qml
 //     posts the notification), never for a check the user started (U20, U22).
 //   - Update Now's runs (ADR-0033 "Step 4", U33): the runner's state ($XDG_RUNTIME_DIR/grassfield/software-update-run.json,
@@ -97,6 +98,8 @@ Singleton {
     property bool userAsked: false
     // An automatic check waits for the connectivity to come back.
     property bool deferred: false
+    // An automatic check waits for mains power (ADR-0050 6).
+    property bool powerDeferred: false
 
     // Test seams (a command that does not exist, or one that hangs, and short timeouts); the defaults are the production
     // values.
@@ -243,6 +246,12 @@ Singleton {
             later();
             return;
         }
+        if (SoftwareUpdateLogic.lowBattery(Battery.onBattery, Battery.present, Battery.percent, Tokens.softwareUpdateMinimumBatteryPercent)) {
+            console.info("software update: automatic check skipped (on battery at " + Battery.percent + " %)");
+            powerDeferred = true;
+            later();
+            return;
+        }
         meteredHandled = false;
         meteredProc.didStart = false;
         meteredProc.command = meteredCommand;
@@ -251,7 +260,7 @@ Singleton {
         meteredProc.running = true;
     }
 
-    // Skipped (offline, metered): looked at again later, or when the connectivity changes.
+    // Skipped (offline, metered, low battery): looked at again later, or when the connectivity or the power source changes.
     function later(): void {
         autoTimer.interval = Tokens.softwareUpdateRecheckMs;
         autoTimer.restart();
@@ -310,6 +319,17 @@ Singleton {
         function onFullyConnectedChanged(): void {
             if (Connectivity.fullyConnected && root.deferred) {
                 root.deferred = false;
+                root.automatic();
+            }
+        }
+    }
+
+    Connections {
+        target: Battery
+
+        function onOnBatteryChanged(): void {
+            if (!Battery.onBattery && root.powerDeferred) {
+                root.powerDeferred = false;
                 root.automatic();
             }
         }

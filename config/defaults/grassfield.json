@@ -66,7 +66,8 @@
     "message": ""
   },
   "energy": {
-    "preventSleep": true
+    "preventSleep": true,
+    "slowHiddenApps": true
   },
   "hotCorners": {
     "topLeft": "none",
@@ -159,6 +160,13 @@
     "idleMinutes": 0,
     "kind": "artwork",
     "folder": ""
+  },
+  "sound": {
+    "alert": "meadow",
+    "alertVolume": 0.75,
+    "effectsOutput": "",
+    "uiEffects": true,
+    "volumeFeedback": false
   },
   "store": {
     "sources": {

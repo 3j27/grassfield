@@ -146,3 +146,9 @@ two `[grassfield]` lines at the end of `/etc/pacman.conf`. Only `grassfield-chan
 files in `/usr/share/grassfield/pacman-keyring/` belong to the `grassfield-keyring` package. Step 3 (owner decision SU-M1)
 adds the runner's runtime row above; the root helper's status files in `/run/grassfield-update/` (root, 0755) are system
 files, as the Store's `/run/grassfield-store/` are, and `/usr/share/grassfield/BUILD-DEPS` belongs to grassfield-desktop.
+
+## Amendment (ADR-0047, audio routing and sound effects, 2026-11-05, Proposed)
+One state file: `audio-routing.json` (state, 0600 in the 0700 folder, written by `services/write-private.sh`; the shell writes
+and reads it; `version` 1 from the start): the output devices that stopped taking the sound by themselves (ADR-0047 A-6).
+`grassfield.json` gains `sound.alert`, `sound.alertVolume`, `sound.effectsOutput` (a new pattern rule, `nodeName`),
+`sound.uiEffects` and `sound.volumeFeedback`, generated from the schema like every other key (decision 1).

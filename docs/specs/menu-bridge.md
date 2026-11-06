@@ -246,6 +246,20 @@ top-level menus (Left/Right).
       process; `close`, another `open` or the registrar's release ends the wait;
     - every Wayland window of the process shows the process's newest menu; a registration from an X11 client is kept and
       never served (its windows carry no pid).
+- **MB18 Ongoing activities** (ADR-0052). While it runs the bridge owns `org.grassfield.Ongoing1` (never taken over) and
+  serves `Publish(s id, a{sv} state)`, `End(s id)` and `Version()` at `/org/grassfield/Ongoing1` (`src/Ongoing.h`,
+  `src/OngoingObject.h`, XML in `dbus/org.grassfield.Ongoing1.xml`):
+    - the caller's application comes from the kernel only: `GetConnectionCredentials` (uid, pid, pidfd), then
+      `/proc/<pid>/root/.flatpak-info` or the systemd app unit of `/proc/<pid>/cgroup` (ADR-0011's scope contract), matched
+      to an installed desktop entry by id or by its `Exec` binary; anything else is `AccessDenied`;
+    - every state key is type- and range-checked, unknown keys refused, text reduced to one plain line; at most 3
+      activities per application, 16 in all, 3 actions each, 10 calls a second per connection (`End` exempt), 64 connections
+      tracked (a verified one holding nothing gives its place), a refusal remembered 5 s;
+    - an activity ends with `End`, when its connection leaves the bus, or 10 minutes after its `ends` time;
+    - the shell gets `ongoing` / `ongoing-end` lines on every change and the whole set when it connects, redacted (no
+      app, text or action) until it sends `{"type":"lock","locked":false}`; its `{"type":"ongoing-action",…}` reaches the
+      activity's connection as the unicast signal `ActionInvoked(id, action)`, never while locked (`error` `locked`,
+      `unknown-activity`, `unknown-action` otherwise).
 
 ## Acceptance criteria (each mapped to a test or scenario; level L0/L1/L2)
 | Req | Test | Level | Status |
@@ -259,6 +273,8 @@ top-level menus (Left/Right).
 | MB15 (D-Bus) | `tests/integration/launcher_entry.sh` (bare; private bus, bridge, socket tap as the shell, `tests/fixtures/launcher-entry.py` as applications): count and clamp, count-visible, progress and clamp, progress-visible, urgent, flood (21 lines for 300 updates, last state arrives), sender disconnect, replay to a new shell, invalid uri and wrong signature (penalty logged, sender refused then served again). Fails on the bridge before ADR-0018 | L1 | 2026-10-22: PASS (and every behaviour check FAILs against the previous bridge) |
 | MB16 (logic) | `tests/unit/menu-bridge/tst_screensaver.cpp` (cookies distinct and non-zero, owner-only release, sender gone, limits, clean names, only two methods served, `SetActive` refused, wrong signatures, the line and its clamp, introspection); shell: `tests/unit/tst_menubridge.qml` `test_screensaverLines`, `tests/security/tst_idlemodel.qml` `test_idleArmed` | L0 | 2026-10-24: see the security report |
 | MB16 (D-Bus) | `tests/integration/screensaver_inhibit.sh` (bare; private bus, bridge, socket tap, `tests/fixtures/screensaver-client.py`): name owned, first state, Inhibit on both paths, other/unknown cookies, owner release, sender leaving, NotSupported members, 16-cookie limit, replay to a new shell, bridge exit | L1 | NOT VERIFIED (needs Unix sockets: bare, outside the sandbox) |
+| MB18 (logic) | `tests/unit/menu-bridge/tst_ongoing.cpp` (30, incl. the host without the bus: redaction before the first lock report and after a new shell, buttons only unlocked and declared, `/proc` reads failing closed (unreadable root, pidfd), admission (refusal memory, End exempt and Publish rate-limited, cap before rate, only verified connections holding nothing evicted); 13 review mutants all killed; text cleaning, ids, every state field and limit, unit names and escapes, `.flatpak-info`, `Exec` parsing and XDG precedence, identity verdicts, ownership, per-app and total caps, sender gone, expiry, rate, full and redacted lines, the two shell lines, the XML, the apps' client); shell: `tests/unit/tst_ongoing.qml` | L0 | 2026-11-05: 124/124 PASS (30 ongoing), plain and ASan/UBSan |
+| MB18 (D-Bus) | private bus, bridge in a development run: `Version`, introspection, `Publish` from outside an app scope is `AccessDenied`, other members `UnknownMethod`, an unknown `ongoing-action` answered `unknown-activity` (scratch run, not committed) | L1 | 2026-11-05: PASS for the refusal path; the accepted path NOT VERIFIED (needs systemd app scopes) |
 | MB2, MB17 (logic) | `tests/unit/menu-bridge/tst_menubridge.cpp` `Registrar.*` (7: register and unregister, malformed calls and other members, the caps without eviction, the newest registration of the window's process, settling, a reused pid, the pid namespace identity) and `ShellMessages.OpenRegisteredParses` | L0 | 2026-10-26: 88/88 PASS outside the sandbox (84 + 4 skipped inside it); after the review of 9ba1d40 (namespace identity) 84 PASS + 4 skipped in the sandbox |
 | MB11, MB12, MB17 (shell) | `tests/unit/tst_menubridge.qml` (pid-only appmenu events, the open-registered line, `foreign-namespace` as a lost menu, the keyboard-focus event) | L0 | 2026-10-26: 17/17 PASS |
 | MB12, MB17 (nested) | `tests/integration/electron_menus.sh [ROUNDS]` (bare; Obsidian offline on the private bus: RegisterWindow kept, its menus in the bar, File > New Window, Close Window and Quit clicked with the pointer, no layout failure; ROUNDS fresh Obsidians in one session) | L1 | After the review of 9ba1d40 (the action waits for the keyboard-focus event): `electron_menus.sh 10` PASS, 10/10 rounds, twice in a row (runs `.dev/electron-menus/run-20261026-052820` and, after merging main, `run-20261026-054024`; Hyprland 0.56.2 efb50993); in 5 of the 20 rounds File first showed Obsidian's short startup menu and showed New Window at the second opening (logged); `global_menus.sh` PASS on the same build (Qt menu-demo, Chromium, Qt Linguist, Preview, T0, phase B). An earlier 10-round run failed 1 round on that short menu (the test then opened File once only). Before: 2026-10-26 PASS, 17/17 checks (Hyprland 0.56.2 efb50993, Obsidian 1.13.7 / Electron 43.6.0, run `.dev/electron-menus/run-20261026-012602`: menus File, Edit, View, Window, Help; New Window opened a second window through the popup, which showed its own menu (File: Open Vault..., Close, Quit) with no layout failure; Close Window and Quit worked; no process left). Earlier manual nested probe 2026-10-25 (before the settle delay): RegisterWindow kept, the bar showed File, Edit, View, Window, Help (vault window: File, Edit, Insert, Format, View, Window, Help); File > Quit closed the app; with the popup open a DBusMenu Event for File > New Window did nothing and after Escape the same Event opened a window; with the action sent after the close, File > New Window (2 -> 3 windows) and File > Close (3 -> 2) worked through the popup; a new window's GetLayout right after RegisterWindow answered UnknownMethod (what the settle delay addresses) |
@@ -284,12 +300,17 @@ top-level menus (Left/Right).
   "progress":P|null,"urgent":bool|null}`; `count` 0 hides the badge, `progress` -1 hides the bar, all three `null`
   forgets the app. Input: the `com.canonical.Unity.LauncherEntry` `Update(s, a{sv})` signal on the bridge's bus.
 - **menu/1 `screensaver`** (bridge → shell, additive, MB16): `{"type":"screensaver","inhibited":bool,"count":N}`.
+- **menu/1 ongoing activities** (additive, MB18, ADR-0052 D5): bridge → shell `{"type":"ongoing","id":"<16 hex>","app":s,
+  "kind":s,"title":s,"subtitle":s,"progress":P|null,"started":ms|null,"ends":ms|null,"actions":[{"id":s,"label":s}],
+  "redacted":bool}` and `{"type":"ongoing-end","id":"<16 hex>"}`; shell → bridge `{"type":"lock","locked":bool}` and
+  `{"type":"ongoing-action","id":"<16 hex>","action":s}`.
 - **gfc/1 `appmenu`** gains the additive field `"pid":N` (consumers that ignore it are unaffected): the client of a
   `set_address` registration; with an empty service and path, the window's Wayland client (MB17), 0 for X11/XWayland
   windows and for a window that is gone.
 - **D-Bus**: `org.grassfield.MenuBridge1` (MB9; `Status` also reports `screensaver` (name owned), `inhibitors` and
   `registrations` (MB2)),
-  `com.canonical.AppMenu.Registrar` (MB1, MB2), `org.freedesktop.ScreenSaver` (MB16).
+  `com.canonical.AppMenu.Registrar` (MB1, MB2), `org.freedesktop.ScreenSaver` (MB16), `org.grassfield.Ongoing1` (MB18;
+  `Status` reports `ongoing` (name owned) and `activities`).
 - **Test hook**: `qs ipc call menubar bridgeState <output>` → JSON (shown window, bridge state, left titles and the
   open bridge menu's rows in output coordinates).
 

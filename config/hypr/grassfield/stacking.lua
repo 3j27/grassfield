@@ -15,6 +15,9 @@ local function full_screen(window)
   return window ~= nil and (window.fullscreen or 0) >= 2
 end
 
+-- Grassfield Memos has no Float on Top (ADR-0051 D-6): a rule keyed on the app id and a tag would trust names any Wayland
+-- client can claim. It returns with a compositor-plugin check of the client's real credentials.
+
 local function raise(window)
   if not window then
     return

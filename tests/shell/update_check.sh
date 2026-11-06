@@ -382,6 +382,152 @@ setup(); put("conf-broken", ""); put("installed", toolkit_lines(**{"qt6-base": "
 check("...and in a failed one", r["state"] == "failed" and [p["name"] for p in r["toolkit"]["packages"] if p["moved"]] == ["qt6-base"], r)
 rm_record(); shutil.rmtree(m.PACMAN_LOCAL, ignore_errors=True)
 
+# -- ADR-0050: the staged rollout's descriptor (schema, bounds, freshness, anti-replay, signature), the reach formula and
+# cohort offering, the cohort form of the Server line, and what the checker reports (staged, withdrawn, security)
+NOW = 1793000000
+ARCH = os.uname().machine
+def ramp(start=NOW - 3600, pct=5, hours=168, paused=None):
+    r = {"startAt": m.iso(start), "startPercent": pct, "durationHours": hours}
+    if paused is not None: r["pausedAt"] = m.iso(paused)
+    return r
+def desc(releases=None, **over):
+    d = {"schema": 1, "channel": "stable", "arch": ARCH, "cohorts": 20, "generatedAt": m.iso(NOW - 60),
+         "expiresAt": m.iso(NOW + 7 * 86400),
+         "releases": releases if releases is not None else [{"version": "1.0.1-1", "importance": "normal", "state": "rolling", "rollout": ramp()}]}
+    d.update(over)
+    return d
+def parsed(d, seen=None, raw=None):
+    try:
+        return m.parse_rollout(raw if raw is not None else json.dumps(d).encode(), "stable", ARCH, NOW, seen)
+    except m.Stale as e:
+        return "stale"
+    except ValueError as e:
+        return "invalid"
+ok = parsed(desc())
+check("a well-formed descriptor parses (times as Unix seconds, no pausedAt)", isinstance(ok, dict)
+      and ok["releases"][0]["rollout"] == {"startAt": NOW - 3600, "startPercent": 5, "durationHours": 168, "pausedAt": None}, ok)
+REL = {"version": "1.0.1-1", "importance": "normal", "state": "rolling", "rollout": ramp()}
+for desc_text, d in [
+        ("an unknown top-level key", dict(desc(), extra=1)),
+        ("a missing top-level key", {k: v for k, v in desc().items() if k != "expiresAt"}),
+        ("schema 2", desc(schema=2)), ("schema true", desc(schema=True)), ("schema \"1\"", desc(schema="1")),
+        ("another channel", desc(channel="beta")), ("another architecture", desc(arch="aarch64-not-this")),
+        ("19 cohorts", desc(cohorts=19)), ("cohorts true", desc(cohorts=True)),
+        ("a time without Z", desc(generatedAt="2026-10-27T00:00:00+00:00")), ("an impossible date", desc(generatedAt="2026-02-30T00:00:00Z")),
+        ("expiresAt before generatedAt", desc(expiresAt=m.iso(NOW - 120))),
+        ("expiresAt 32 days after generatedAt", desc(expiresAt=m.iso(NOW - 60 + 32 * 86400))),
+        ("releases not a list", desc(releases={"a": 1})), ("17 releases", desc(releases=[dict(REL, version=f"1.0.{i}-1") for i in range(17)])),
+        ("a release with an extra key", desc(releases=[dict(REL, notes="x")])),
+        ("a release without rollout", desc(releases=[{k: v for k, v in REL.items() if k != "rollout"}])),
+        ("a malformed version", desc(releases=[dict(REL, version="1.0.1")])), ("a version with a newline", desc(releases=[dict(REL, version="1.0.1-1\n")])),
+        ("a repeated version", desc(releases=[REL, REL])),
+        ("an unknown importance", desc(releases=[dict(REL, importance="critical")])), ("an unknown state", desc(releases=[dict(REL, state="done")])),
+        ("a normal rolling release without a ramp", desc(releases=[dict(REL, rollout=None)])),
+        ("startPercent 101", desc(releases=[dict(REL, rollout=ramp(pct=101))])), ("startPercent 5.5", desc(releases=[dict(REL, rollout=dict(ramp(), startPercent=5.5))])),
+        ("durationHours -1", desc(releases=[dict(REL, rollout=ramp(hours=-1))])), ("durationHours 8761", desc(releases=[dict(REL, rollout=ramp(hours=8761))])),
+        ("pausedAt on a rolling release", desc(releases=[dict(REL, rollout=ramp(paused=NOW))])),
+        ("a paused release without pausedAt", desc(releases=[dict(REL, state="paused")])),
+        ("pausedAt before startAt", desc(releases=[dict(REL, state="paused", rollout=ramp(paused=NOW - 7200))])),
+        ("a ramp with an extra key", desc(releases=[dict(REL, rollout=dict(ramp(), reach=1))]))]:
+    check("descriptor refused: " + desc_text, parsed(d) == "invalid", parsed(d))
+check("descriptor refused: larger than 16 KiB", parsed(None, raw=b" " * 16385 + json.dumps(desc()).encode()) == "invalid")
+check("descriptor refused: not UTF-8 JSON", parsed(None, raw=b"\xff{") == "invalid")
+check("descriptor refused: nested too deep", parsed(None, raw=b"[" * 100000) == "invalid")
+check("a security release and a withdrawn one may skip the ramp", isinstance(parsed(desc(releases=[
+    dict(REL, importance="security", rollout=None), dict(REL, version="1.0.0-1", state="withdrawn", rollout=None)])), dict))
+check("stale: generatedAt more than a day ahead", parsed(desc(generatedAt=m.iso(NOW + 86401), expiresAt=m.iso(NOW + 2 * 86400))) == "stale")
+check("a day ahead is tolerated (clock skew)", isinstance(parsed(desc(generatedAt=m.iso(NOW + 86400), expiresAt=m.iso(NOW + 2 * 86400))), dict))
+check("stale: expired", parsed(desc(generatedAt=m.iso(NOW - 10 * 86400), expiresAt=m.iso(NOW))) == "stale")
+check("stale: older than one already accepted (anti-replay)", parsed(desc(), seen=NOW) == "stale")
+check("the same generatedAt as the one accepted passes", isinstance(parsed(desc(), seen=NOW - 60), dict))
+
+# The reach formula and cohort offering (the publisher's, g.4)
+def rel(**kw):
+    r = {"version": "1.0.1-1", "importance": "normal", "state": "rolling", "rollout": {"startAt": 1000, "startPercent": 10, "durationHours": 10, "pausedAt": None}}
+    r.update(kw)
+    return r
+check("reach before the start: 0", m.reach(rel(), 999) == 0.0)
+check("reach at the start: startPercent", abs(m.reach(rel(), 1000) - 0.10) < 1e-9)
+check("reach half way: 10 % + 90 % / 2", abs(m.reach(rel(), 1000 + 5 * 3600) - 0.55) < 1e-9)
+check("reach after the ramp: 1", m.reach(rel(), 1000 + 11 * 3600) == 1.0)
+check("a security release reaches everyone at once", m.reach(rel(importance="security"), 0) == 1.0)
+check("no ramp: everyone", m.reach(rel(rollout=None, state="withdrawn"), 0) == 1.0)
+check("duration 0: everyone from the start", m.reach(rel(rollout={"startAt": 1000, "startPercent": 0, "durationHours": 0, "pausedAt": None}), 1000) == 1.0)
+paused = rel(state="paused", rollout={"startAt": 1000, "startPercent": 10, "durationHours": 10, "pausedAt": 1000 + 5 * 3600})
+check("a pause freezes the reach (no cohort goes back)", abs(m.reach(paused, 1000 + 9 * 3600) - 0.55) < 1e-9)
+check("cohort 0 is offered at 5 %, cohort 1 is not", m.offered(0, 0.05) and not m.offered(1, 0.05))
+check("cohort 10 is offered just past 50 %, not at 50 %", m.offered(10, 0.5001) and not m.offered(10, 0.5))
+check("cohort 19 is offered just past 95 %", m.offered(19, 0.951) and not m.offered(19, 0.95))
+check("the plain path (unenrolled) only at 100 %", not m.offered(None, 0.999) and m.offered(None, 1.0))
+for cohort in (0, 1, 5, 10, 19, None):
+    t = m.offer_at(rel(), cohort)
+    check(f"offer_at for cohort {cohort} is the first second the formula offers it",
+          m.offered(cohort, m.reach(rel(), t)) and (t == 1000 or not m.offered(cohort, m.reach(rel(), t - 1))), t)
+check("offer_at: a paused or security release has no date", m.offer_at(paused, 3) is None and m.offer_at(rel(importance="security"), 3) is None)
+
+# The Server line's form, and the plain URL the descriptor is fetched from
+B = "https://packages.grassfield.site"
+check("form: plain stable", m.form_of(B + "/stable/$arch", B) == ("stable", None))
+check("form: cohort 07 of beta", m.form_of(B + "/beta/cohort/07/$arch", B) == ("beta", 7))
+for bad in ("/stable/cohort/20/$arch", "/stable/cohort/7/$arch", "/stable/cohort/07/x86_64", "/stable/cohort/07/$arch/x"):
+    check("form: " + bad + " is custom", m.form_of(B + bad, B) == ("custom", None))
+check("form: another base is custom", m.form_of("https://elsewhere.example/stable/cohort/07/$arch", B) == ("custom", None))
+check("plain_url drops the cohort segment", m.plain_url(B + "/stable/cohort/07/x86_64") == B + "/stable/x86_64"
+      and m.plain_url(B + "/stable/x86_64") == B + "/stable/x86_64")
+
+# The checker end to end (curl on file://, gpgv a stub): no request without the marker; the cohort form; staged, withdrawn,
+# security; invalid, stale; the anti-replay mark kept
+def publish(d, raw=None):
+    p = SRV + "/stable/x86_64"
+    os.makedirs(p, exist_ok=True)
+    with open(p + "/grassfield-rollout.json", "wb") as f: f.write(raw if raw is not None else json.dumps(d).encode())
+    with open(p + "/grassfield-rollout.json.sig", "wb") as f: f.write(b"sig")
+def rollout_setup(updates="", installed="1.0.0-1", marker=True):
+    setup(server="file://" + SRV + "/stable/cohort/07/$arch")
+    put("installed", f"grassfield-desktop {installed}\nomarchy 4.0.4-1\n")
+    put("updates", updates)
+    put("grassfield-names", "grassfield-desktop\ngrassfield-keyring\n" + ("grassfield-rollout\n" if marker else ""))
+    shutil.rmtree(SRV + "/stable/x86_64", ignore_errors=True)
+    shutil.rmtree(SRV + "/stable/cohort", ignore_errors=True)
+R2 = {"version": "1.0.2-1", "importance": "normal", "state": "rolling", "rollout": ramp()}
+rollout_setup(marker=False); publish(desc([R2])); r = run(now=NOW)
+check("no marker in the database: no rollout, and the cohort form still reads as stable", r["rollout"] is None
+      and r["channel"] == "stable" and r["state"] == "up-to-date", r)
+rollout_setup(); r = run(now=NOW)
+check("marker, no descriptor published: descriptor none, cohort 7 from the Server line", r["rollout"] ==
+      {"descriptor": "none", "cohort": 7, "staged": None, "withdrawn": None, "security": False}, r["rollout"])
+rollout_setup(updates="grassfield-desktop 1.0.0-1 -> 1.0.1-1\n")
+publish(desc([REL, R2, dict(R2, version="1.0.3-1", state="paused", rollout=ramp(paused=NOW))])); r = run(now=NOW)
+st = r["rollout"]["staged"] if r["rollout"] else None
+check("staged: the newest rolling release beyond what the database offers (a paused one is not staged)",
+      r["rollout"]["descriptor"] == "ok" and st and st["version"] == "1.0.2-1" and st["security"] is False
+      and st["offerAt"] == m.iso(m.offer_at(m.parse_rollout(json.dumps(desc([R2])).encode(), "stable", ARCH, NOW, None)["releases"][0], 7))
+      and r["grassfield"]["available"] == "1.0.1-1" and r["state"] == "available", r)
+check("the accepted descriptor's time is kept (anti-replay)", open(tmp + "/cache/grassfield/health-db/rollout-seen-stable").read() == str(NOW - 60))
+publish(desc([R2], generatedAt=m.iso(NOW - 3600))); r = run(now=NOW)
+check("an older descriptor than the one accepted: stale, nothing staged", r["rollout"]["descriptor"] == "stale" and r["rollout"]["staged"] is None, r["rollout"])
+rollout_setup(updates="grassfield-desktop 1.0.0-1 -> 1.0.2-1\n"); publish(desc([R2])); r = run(now=NOW)
+check("what the database offers is not staged", r["rollout"]["staged"] is None and r["rollout"]["descriptor"] == "ok", r["rollout"])
+rollout_setup(updates="grassfield-desktop 1.0.0-1 -> 1.0.2-1\n"); publish(desc([dict(R2, importance="security", rollout=None)])); r = run(now=NOW)
+check("security: the release the database offers is a security release", r["rollout"]["security"] is True, r["rollout"])
+rollout_setup(); publish(desc([dict(R2, importance="security", rollout=None)])); r = run(now=NOW)
+check("a security release not in the database yet: staged with security", r["rollout"]["staged"] == {"version": "1.0.2-1", "security": True, "offerAt": None}, r["rollout"])
+rollout_setup(installed="1.0.1-1"); publish(desc([dict(REL, state="withdrawn", rollout=None)])); r = run(now=NOW)
+check("withdrawn: the installed release is withdrawn, nothing staged", r["rollout"]["withdrawn"] == "1.0.1-1" and r["rollout"]["staged"] is None, r["rollout"])
+rollout_setup(installed="1.0.0-1"); publish(desc([dict(REL, state="withdrawn", rollout=None)])); r = run(now=NOW)
+check("a withdrawn release that is not the installed one is not reported", r["rollout"]["descriptor"] == "ok"
+      and r["rollout"]["withdrawn"] is None, r["rollout"])
+rollout_setup(); publish(None, raw=b"{"); r = run(now=NOW)
+check("a malformed descriptor: invalid, the check still succeeds", r["rollout"]["descriptor"] == "invalid" and r["state"] == "up-to-date", r)
+rollout_setup(); publish(desc([R2])); put("gpgv-rc", "1"); r = run(now=NOW)
+check("a bad signature: invalid, nothing staged", r["rollout"]["descriptor"] == "invalid" and r["rollout"]["staged"] is None, r["rollout"])
+rollout_setup(); publish(desc([R2])); put("signer", ROGUE); r = run(now=NOW)
+check("a signature by an untrusted key: invalid", r["rollout"]["descriptor"] == "invalid", r["rollout"])
+rollout_setup(); publish(desc([R2], channel="beta")); r = run(now=NOW)
+check("another channel's descriptor: invalid", r["rollout"]["descriptor"] == "invalid", r["rollout"])
+setup(listed=False, conf=False); put("grassfield-names", "grassfield-rollout\n"); r = run(now=NOW)
+check("not set up: no rollout at all", r["state"] == "not-set-up" and r["rollout"] is None, r)
+
 # -- the whole program (the installed paths): root refusal, its own lock, Omarchy's update lock and the waiter
 setup()
 env = dict(os.environ, XDG_CACHE_HOME=tmp + "/xdg-cache", XDG_RUNTIME_DIR=tmp + "/run")

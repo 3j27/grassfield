@@ -67,7 +67,7 @@ function lastSuccess(file) {
 
 function successPart(a) {
     const out = {};
-    for (const k of ["state", "channel", "checkedAt", "lastSuccessAt", "grassfield", "omarchy", "others", "otherPackages", "otherPackagesTruncated"]) {
+    for (const k of ["state", "channel", "checkedAt", "lastSuccessAt", "grassfield", "omarchy", "others", "otherPackages", "otherPackagesTruncated", "rollout"]) {
         if (a[k] !== undefined)
             out[k] = a[k];
     }
@@ -185,6 +185,32 @@ function sessionStart(signature, fallbackMs) {
     return t > 0 ? Math.min(t, fallbackMs) : fallbackMs;
 }
 
+// --- Staged rollout (ADR-0050; docs/specs/updates.md U34-U38) -------------------------------------------------------------
+// A package version in the grammar the checker accepts for a release (pkgver-pkgrel).
+const RELEASE_VERSION = /^[0-9][0-9A-Za-z.+_]*-[1-9][0-9]*(\.[0-9]+)?$/;
+
+// What the checker's `rollout` says, for the pane: {staged: {version, security} | null, withdrawn: "" | version, security}.
+// `staged`: a release still being released gradually, not yet in the database this computer syncs; `withdrawn`: the
+// installed release was withdrawn; `security`: the Grassfield release the database offers is a security release. Anything
+// malformed reads as nothing to say.
+function rolloutOf(answer) {
+    const r = isObject(answer) && isObject(answer.rollout) && answer.rollout.descriptor === "ok" ? answer.rollout : null;
+    const none = {staged: null, withdrawn: "", security: false};
+    if (r === null)
+        return none;
+    const staged = isObject(r.staged) && typeof r.staged.version === "string" && RELEASE_VERSION.test(r.staged.version)
+        ? {version: r.staged.version, security: r.staged.security === true} : null;
+    const withdrawn = typeof r.withdrawn === "string" && RELEASE_VERSION.test(r.withdrawn) ? r.withdrawn : "";
+    return {staged: staged, withdrawn: withdrawn, security: r.security === true};
+}
+
+// Luma's download conditions where Grassfield checks on its own (ADR-0050 6, U7): an automatic check waits while the
+// computer runs on its battery at `minimumPercent` or less. A computer without a battery, or on mains, checks; so does one
+// whose power is unknown (no UPower: a desktop must still check). A check the person asks for is never held back.
+function lowBattery(onBattery, batteryPresent, percent, minimumPercent) {
+    return onBattery === true && batteryPresent === true && Number(percent) <= minimumPercent;
+}
+
 // What an answer brings that was never announced: each Grassfield or Omarchy version found for the first time (U20), a
 // `blocking` episode (U22), and a toolkit replaced under the running session (U31: once per session, whatever the versions,
 // the id carries the session's start and the `announced` list survives a restart of the shell). [{id, kind, version, installed}].
@@ -194,15 +220,20 @@ function news(file, answer, sessionStartMs) {
     if (isObject(answer) && LISTING.indexOf(answer.state) >= 0) {
         for (const kind of ["grassfield", "omarchy"]) {
             const r = answer[kind];
+            // A Grassfield security release (ADR-0050) is announced as one: "security <version>".
+            const named = kind === "grassfield" && rolloutOf(answer).security ? "security" : kind;
             if (isObject(r) && r.available)
-                out.push({kind: kind, version: String(r.available), installed: String(r.installed || "")});
+                out.push({kind: named, version: String(r.available), installed: String(r.installed || "")});
         }
     }
     if (isObject(answer) && answer.state === "blocking" && answer.episode)
         out.push({kind: "blocking", version: String(answer.episode), installed: ""});
     if (toolkitLogout(answer, sessionStartMs, toolkitAsked(file)))
         out.push({kind: "toolkit", version: String(sessionStartMs), installed: ""});
-    return out.map(n => Object.assign(n, {id: n.kind + " " + n.version})).filter(n => announced.indexOf(n.id) < 0);
+    // A Grassfield release is announced once, as a security release or not, whatever a later descriptor says.
+    const twin = n => n.kind === "security" ? "grassfield " + n.version : n.kind === "grassfield" ? "security " + n.version : "";
+    return out.map(n => Object.assign(n, {id: n.kind + " " + n.version}))
+        .filter(n => announced.indexOf(n.id) < 0 && (twin(n) === "" || announced.indexOf(twin(n)) < 0));
 }
 
 function withAnnounced(file, items) {
@@ -373,7 +404,9 @@ function view(file, checking) {
         },
         others: listing ? others : 0,
         otherPackages: listing && Array.isArray(s.otherPackages) ? s.otherPackages : [],
-        otherPackagesTruncated: s && s.otherPackagesTruncated === true
+        otherPackagesTruncated: s && s.otherPackagesTruncated === true,
+        // ADR-0050: what the staged rollout's descriptor explains (rolloutOf), from the last success with Grassfield set up.
+        rollout: s && (s.state === "up-to-date" || s.state === "available") ? rolloutOf(s) : rolloutOf(null)
     };
 }
 

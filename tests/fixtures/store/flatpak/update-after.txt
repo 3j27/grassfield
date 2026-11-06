@@ -1,0 +1,13 @@
+[Application]
+name=org.example.Editor
+runtime=org.gnome.Platform/x86_64/50
+
+[Context]
+shared=ipc;
+sockets=wayland;fallback-x11;
+devices=dri;all;
+filesystems=xdg-documents;~/Projects/notes:ro;
+
+[Session Bus Policy]
+org.freedesktop.secrets=own
+org.example.*=talk

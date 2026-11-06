@@ -325,6 +325,44 @@ TestCase {
         verify(!button(t.page, "Update Now"), "nothing left to update");
     }
 
+    // ADR-0050 (U35-U37): a release still being released gradually, a security release, a withdrawn one.
+    function test_stagedRollout() {
+        const upToDate = {grassfield: {installed: "1.0.0-1", available: null}, omarchy: {installed: "4.0.6-1", available: null}};
+        let t = make(answer("up-to-date", Object.assign({rollout: {descriptor: "ok", cohort: 12, staged: {version: "1.0.1-1", security: false, offerAt: null}, withdrawn: null, security: false}}, upToDate)));
+        verify(row(t.page, "This computer is up to date"), "the headline is what the database offers");
+        const staged = row(t.page, "Grassfield 1.0.1 is being released gradually.");
+        verify(staged);
+        compare(staged.subtitle, "It will be offered to this computer soon.");
+        compare(staged.tileColor, "grassfield");
+        verify(!shown(staged, i => i.push === true), "no button: it is installed once offered");
+        verify(!button(t.page, "Update Now"), "nothing to install yet");
+
+        t = make(answer("up-to-date", Object.assign({rollout: {descriptor: "ok", cohort: 12, staged: {version: "1.0.1-1", security: true, offerAt: null}, withdrawn: null, security: false}}, upToDate)));
+        verify(row(t.page, "Grassfield 1.0.1 is an important security update."));
+
+        const sec = available();
+        sec.rollout = {descriptor: "ok", cohort: 3, staged: null, withdrawn: null, security: true};
+        t = make(sec);
+        compare(row(t.page, "Grassfield 1.0.1").subtitle, "Important security update. Installed: 1.0.0");
+
+        t = make(answer("up-to-date", Object.assign({rollout: {descriptor: "ok", cohort: 3, staged: null, withdrawn: "1.0.0-1", security: false}}, upToDate)));
+        // The headline says it, never "up to date" under a withdrawn release (nested review finding 10).
+        verify(row(t.page, "Grassfield 1.0.0 has been withdrawn"));
+        verify(!row(t.page, "This computer is up to date"), "not up to date: its release was withdrawn");
+        const gone = row(t.page, "A corrected version is on its way.");
+        verify(gone);
+        compare(gone.subtitle, "It will be offered to this computer as soon as it's ready.");
+
+        const fixed = available();
+        fixed.rollout = {descriptor: "ok", cohort: 3, staged: null, withdrawn: "1.0.0-1", security: false};
+        t = make(fixed);
+        verify(!row(t.page, "Grassfield 1.0.0 has been withdrawn"), "a newer release is offered: its row is the answer");
+        verify(!row(t.page, "A corrected version is on its way."));
+
+        t = make(answer("up-to-date", Object.assign({rollout: {descriptor: "stale", cohort: 3, staged: {version: "1.0.1-1", security: false, offerAt: null}, withdrawn: null, security: false}}, upToDate)));
+        verify(!row(t.page, "Grassfield 1.0.1 is being released gradually."), "a stale descriptor explains nothing");
+    }
+
     // A stored update-running whose waiter ended with the session (a reboot or a log out during the update, a crash) is never
     // kept: the pane checks when it opens, and Check Now stays available (integrator review of a9a5974, MAJOR 3).
     function test_aStaleUpdateRunningIsCheckedAgain() {

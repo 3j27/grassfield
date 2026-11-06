@@ -424,9 +424,39 @@ TestCase {
     function openPage(file, t) {
         const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/" + file));
         compare(comp.status, Component.Ready, comp.errorString());
-        const page = createTemporaryObject(comp, testCase, {backend: t.backend, system: t.service, width: 700, height: 900});
+        const props = {backend: t.backend, system: t.service, width: 700, height: 900};
+        // The pages that also write settings (Sound's effects) get a stand-in for the ConfigStore.
+        if (file === "SoundPage.qml") {
+            t.store = createTemporaryObject(fakeStore, testCase);
+            props.store = t.store;
+        }
+        const page = createTemporaryObject(comp, testCase, props);
         verify(page);
         return page;
+    }
+
+    // ConfigStore's value(key) and set(key, value), on the generated contract's defaults; `sets` records the writes.
+    Component {
+        id: fakeStore
+        QtObject {
+            property var data: ({})
+            property int revision: 0
+            property var sets: []
+            function value(key: string): var {
+                void revision;
+                return data[key] !== undefined ? data[key] : SettingsContract.DEFAULTS[key];
+            }
+            function set(key: string, v: var): bool {
+                if (SettingsContract.validate(key, v) !== "")
+                    return false;
+                const d = Object.assign({}, data);
+                d[key] = v;
+                data = d;
+                sets.push({key: key, value: v});
+                revision++;
+                return true;
+            }
+        }
     }
 
     function test_wifiRefreshKeepsRowsAndFocus() {
@@ -931,6 +961,9 @@ TestCase {
         const hdmi = soundRow(page, "HDMI [Main]");
         // The groups are laid out (the page's column positions them before the next frame).
         tryVerify(() => page.contentItem.children[0].height > 0);
+        // The table is below the Sound Effects group: scrolled into view first.
+        tryVerify(() => hdmi.mapToItem(page.contentItem, 0, 0).y > page.contentItem.children[0].children[0].height);
+        page.contentY = Math.max(0, hdmi.mapToItem(page.contentItem, 0, 0).y - 100);
         mouseClick(hdmi);
         verify(table.activeFocus, "a click focuses the table");
         compare(t.backend.actions.length, 1);
@@ -957,11 +990,97 @@ TestCase {
         compare(table.accessibleName, "Input devices");
     }
 
+    // ---- Sound Effects (ADR-0047 B-4) ----
+
+    function controlNamed(page, name) {
+        return findChild(page, "", c => c.accessibleName === name && c.visible !== false);
+    }
+
+    function test_soundEffectsAlertPickPlaysAndPersists() {
+        const t = makeService(false);
+        const page = openPage("SoundPage.qml", t);
+        const picker = controlNamed(page, "Alert sound");
+        verify(picker);
+        compare(picker.model.map(m => m.id), SoundEffects.ALERTS);
+        compare(picker.value, "meadow");
+        picker.picked("lantern");
+        compare(t.store.sets[0], {key: "sound.alert", value: "lantern"});
+        compare(picker.value, "lantern");
+        compare(t.backend.actions.length, 1);
+        compare(t.backend.actions[0].what, "sound preview");
+        compare(t.backend.actions[0].argv, ["pw-play", "--media-role", "Notification", "--volume", "0.422", "--", "/usr/share/sounds/grassfield/stereo/grassfield-alert-lantern.wav"]);
+        // The play button plays it again.
+        controlNamed(page, "Play the alert sound").clicked();
+        compare(t.backend.actions.length, 2);
+        compare(t.backend.actions[1].argv, t.backend.actions[0].argv);
+    }
+
+    function test_soundEffectsOutputChoices() {
+        const t = makeService(false);
+        const page = openPage("SoundPage.qml", t);
+        const picker = controlNamed(page, "Play sound effects through");
+        compare(picker.model.map(m => m.id), [""], "the selected device only until the outputs are known");
+        t.backend.finished("audio.status", true, wpctlStatus);
+        t.backend.finished("audio.names", true, wpctlNames);
+        compare(picker.model.map(m => m.id), ["", "alsa_output.pci-0000_00_1f.3.analog-stereo", "alsa_output.pci-0000_00_1f.3.hdmi-stereo"]);
+        compare(picker.model[0].text, "Selected Sound Output Device");
+        compare(picker.model[2].text, "HDMI [Main]");
+        picker.picked("alsa_output.pci-0000_00_1f.3.hdmi-stereo");
+        compare(t.store.value("sound.effectsOutput"), "alsa_output.pci-0000_00_1f.3.hdmi-stereo");
+        // The preview goes through the chosen output while it is connected.
+        controlNamed(page, "Play the alert sound").clicked();
+        compare(t.backend.actions[0].argv.slice(5, 7), ["--target", "alsa_output.pci-0000_00_1f.3.hdmi-stereo"]);
+        // A remembered output that is not connected: listed as such, and the preview uses the selected device.
+        t.store.set("sound.effectsOutput", "bluez_output.AA_BB_CC_DD_EE_FF.1");
+        compare(picker.model[picker.model.length - 1], {id: "bluez_output.AA_BB_CC_DD_EE_FF.1", text: "Device not connected"});
+        compare(picker.value, "bluez_output.AA_BB_CC_DD_EE_FF.1");
+        controlNamed(page, "Play the alert sound").clicked();
+        verify(t.backend.actions[1].argv.indexOf("--target") < 0);
+    }
+
+    function test_soundEffectsAlertVolumeAndSwitches() {
+        const t = makeService(false);
+        const page = openPage("SoundPage.qml", t);
+        const row = findChild(page, "", c => c.title === "Alert volume" && c.apply !== undefined);
+        verify(row);
+        compare(row.value, 0.75);
+        verify(row.apply(0.5));
+        compare(t.store.value("sound.alertVolume"), 0.5);
+        compare(row.value, 0.5);
+        // The alert plays once the drag rests, at the new volume.
+        compare(t.backend.actions.length, 0);
+        tryCompare(t.backend.actions, "length", 1);
+        compare(t.backend.actions[0].argv[4], "0.125");
+        const ui = controlNamed(page, "Play user interface sound effects");
+        const feedback = controlNamed(page, "Play feedback when volume is changed");
+        verify(ui.checked);
+        verify(!feedback.checked, "off by default, as macOS");
+        ui.toggled(false);
+        feedback.toggled(true);
+        compare(t.store.value("sound.uiEffects"), false);
+        compare(t.store.value("sound.volumeFeedback"), true);
+        verify(!ui.checked);
+        verify(feedback.checked);
+    }
+
+    function test_soundEffectsPreviewSuppressedInDev() {
+        const t = makeService(true);
+        const page = openPage("SoundPage.qml", t);
+        controlNamed(page, "Alert sound").picked("reed");
+        controlNamed(page, "Play the alert sound").clicked();
+        compare(t.backend.actions.length, 0);
+        verify(t.service.suppressedNote);
+        // The choice itself is a setting: it is kept.
+        compare(t.store.value("sound.alert"), "reed");
+    }
+
     function test_soundDevSessionChoosesNothing() {
         const t = makeService(true);
         const page = openPage("SoundPage.qml", t);
         t.backend.finished("audio.status", true, wpctlStatus);
         tryVerify(() => page.contentItem.children[0].height > 0);
+        tryVerify(() => soundRow(page, "HDMI [Main]").mapToItem(page.contentItem, 0, 0).y > page.contentItem.children[0].children[0].height);
+        page.contentY = Math.max(0, soundRow(page, "HDMI [Main]").mapToItem(page.contentItem, 0, 0).y - 100);
         mouseClick(soundRow(page, "HDMI [Main]"));
         compare(t.backend.actions.length, 0);
         compare(page.pending, -1);

@@ -10,7 +10,7 @@ hl.window_rule({ name = "gf-float-all", match = { class = ".*" }, float = true }
 -- suppression. Two rules make the negation of those matches (any class but Grassfield's and the third-party list below;
 -- or no xdg tag and not in that list) without reading the tag itself: the tag is a dynamic effect, the suppression a
 -- static one read at map. tests/shell/client_chrome_rules.sh checks that both negations are built from the two lists.
-hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview|Store|Activity)|chromium|firefox|org\\.mozilla\\.firefox|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, suppress_event = "maximize" })
+hl.window_rule({ name = "gf-no-maximize-event", match = { class = "negative:^(org\\.grassfield\\.(Files|Settings|Preview|Store|Activity|Memos)|chromium|firefox|org\\.mozilla\\.firefox|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$" }, suppress_event = "maximize" })
 hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "negative:^(chromium|firefox|org\\.mozilla\\.firefox|md\\.obsidian\\.Obsidian|org\\.gnome\\.Evince|org\\.gnome\\.Nautilus)$", xdg_tag = "negative:.+" }, suppress_event = "maximize" })
 
 -- Client chrome (ADR-0015): Grassfield apps that draw their own lights and toolbar are tagged
@@ -19,7 +19,8 @@ hl.window_rule({ name = "gf-no-maximize-event-untagged", match = { class = "nega
 -- class list is the apps that set a tag; KIO and widget dialogs set none and keep the plugin titlebar. The plugin and the
 -- shell read the same tag name: keep it in step with shell/overview/ClientChrome.js. Never `decorate = false`: it also
 -- drops Hyprland's border and shadow.
-hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview|Store|Activity)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })
+-- Grassfield Memos (ADR-0051) draws a memo's strip instead of lights; its tag is the memo's (`memo:<id>...`, any tag matches).
+hl.window_rule({ name = "gf-client-chrome", match = { class = "^org\\.grassfield\\.(Files|Settings|Preview|Store|Activity|Memos)$", xdg_tag = ".+" }, tag = "+grassfield-client-chrome" })
 
 -- Third-party apps that draw their own window controls (GF-056; ADR-0015 amendment 2026-10-25). macOS: a window has one
 -- set of traffic lights, close, minimize, zoom, top-left; an app that draws its own title bar gets no second bar from the
@@ -70,6 +71,11 @@ hl.window_rule({ name = "gf-client-chrome-info-rounding", match = { class = "^or
 -- the whole class: the pattern must cover all of it (a bare prefix never matches, so its negation would match every
 -- window).
 hl.window_rule({ name = "gf-third-party-rounding", match = { class = "negative:^org\\.grassfield\\..*$" }, rounding = 17 })
+
+-- Grassfield Memos: a memo window has square corners, as macOS's desktop notes (its paper and strip are rectangles, and the
+-- resize grip sits in the bottom-right corner, which a rounded window cuts). Only the corner radius is taken from the app id,
+-- a name any client could claim: the worst a claim gets is square corners (ADR-0051 D-6).
+hl.window_rule({ name = "gf-memos-square", match = { class = "^org\\.grassfield\\.Memos$" }, rounding = 0 })
 
 -- Glance (quick look of Preview): a floating panel centered on the screen, without the plugin titlebar.
 hl.window_rule({ name = "gf-glance", match = { class = "^org\\.grassfield\\.Preview\\.Glance$" }, float = true, center = true, decorate = false })

@@ -95,7 +95,7 @@ Scope {
     readonly property var settingsPageList: [
         {id: "wifi", title: qsTr("Wi-Fi"), keywords: [qsTr("wireless"), qsTr("network"), qsTr("internet")]},
         {id: "bluetooth", title: qsTr("Bluetooth"), keywords: [qsTr("devices"), qsTr("headphones"), qsTr("pair")]},
-        {id: "sound", title: qsTr("Sound"), keywords: [qsTr("volume"), qsTr("output"), qsTr("input"), qsTr("microphone"), qsTr("mute")]},
+        {id: "sound", title: qsTr("Sound"), keywords: [qsTr("volume"), qsTr("output"), qsTr("input"), qsTr("microphone"), qsTr("mute"), qsTr("alert sound"), qsTr("sound effects")]},
         {id: "displays", title: qsTr("Displays"), keywords: [qsTr("monitor"), qsTr("screen"), qsTr("resolution"), qsTr("scale")]},
         {id: "appearance", title: qsTr("Appearance"), keywords: [qsTr("dark"), qsTr("light"), qsTr("auto"), qsTr("theme"), qsTr("accent"), qsTr("transparency"), qsTr("icons")]},
         {id: "wallpaper", title: qsTr("Wallpaper"), keywords: [qsTr("background"), qsTr("picture"), qsTr("shuffle")]},
@@ -443,7 +443,7 @@ Scope {
 
     function spawnSearch(seq: int, term: string, stage: string): void {
         const argv = stage === "localsearch"
-            ? ["timeout", "2", "localsearch", "search", "-f", "-l", String(Tokens.searchMaxFiles), "--", term]
+            ? ["timeout", "2", "localsearch", "search", "-f", "-l", String(Ranking.FILE_CANDIDATES), "--", term]
             : ["timeout", "2", "plocate", "-i", "-b", "-l", "1500"].concat(plocateDb !== "" ? ["-d", plocateDb] : [], ["--", term]);
         const p = searchProc.createObject(root, {seq: seq, term: term, stage: stage, command: argv});
         // Reassigned, not pushed: a mutated array does not notify, and filesPending must see the search start.
@@ -473,14 +473,15 @@ Scope {
         proc.destroy(200);
         if (proc.seq !== fileSeq)
             return;
-        const limit = Tokens.searchMaxFiles;
+        // More candidates than are shown: the ranking (junk names, generated folders, depth, XDG folders, usage) keeps the best.
+        const limit = Ranking.FILE_CANDIDATES;
         const paths = proc.stage === "localsearch" ? Files.parseLocalsearch(text, filesRoot, limit) : Files.parsePlocate(text, proc.term, filesRoot, limit);
         if (paths.length === 0 && proc.stage === "localsearch") {
             spawnSearch(proc.seq, proc.term, "plocate");
             return;
         }
-        fileHits = paths;
         const t0 = Date.now();
+        fileHits = Ranking.rankFiles(paths, proc.term, {home: filesRoot, xdgDirs: xdgDirs, usage: usage, now: t0}, Tokens.searchMaxFiles);
         fileHitsOnly = true;
         compute();
         fileHitsOnly = false;
@@ -513,6 +514,8 @@ Scope {
             return;
         case "file":
         case "recent":
+            // The file ranking's usage boost (Ranking.rankFiles: "file:" + path, decayed like the apps').
+            bumpUsage("file:" + item.path);
             hide();
             if (reveal)
                 Apps.openDetached(["gio", "open", Files.dirName(item.path)]);
@@ -877,6 +880,21 @@ Scope {
             root.usage = Ranking.parseUsage(usageFile.text());
             root.forgetHistory();
         }
+    }
+
+    // The user's XDG folders (Desktop, Documents, Downloads, Music, Pictures, Videos in the user's language), which file results
+    // favour (Ranking.rankFiles); read only, followed when xdg-user-dirs-update rewrites it.
+    property var xdgDirs: []
+    readonly property string userDirsPath: (Quickshell.env("XDG_CONFIG_HOME") || (root.home + "/.config")) + "/user-dirs.dirs"
+
+    FileView {
+        id: userDirsFile
+        path: root.userDirsPath
+        printErrors: false
+        watchChanges: true
+        onLoaded: root.xdgDirs = Files.parseUserDirs(userDirsFile.text(), root.home)
+        onLoadFailed: root.xdgDirs = []
+        onFileChanged: userDirsFile.reload()
     }
 
     // Recent documents, read only.

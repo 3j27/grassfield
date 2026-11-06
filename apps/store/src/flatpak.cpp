@@ -23,186 +23,12 @@ namespace grassfield::store {
 namespace {
 
 constexpr qint64 kTerminalMax = 1024 * 1024; // the plan's output, at most
-constexpr qsizetype kAccessMax = 30;      // flatpakAccess's lines, at most
 
 // A ref's arch or branch: letters, digits, "_", "." and "-", never first a "." or "-", never "..".
 bool isPart(const QString &part, int max)
 {
     static const QRegularExpression re(QStringLiteral(R"(\A[A-Za-z0-9_][A-Za-z0-9._-]*\z)"));
     return part.size() <= max && re.match(part).hasMatch() && !part.contains(QLatin1String(".."));
-}
-
-// A key-file list as GLib reads it for flatpak (g_key_file_get_string_list): ";" ends an entry unless escaped, and \s,
-// \n, \t, \r, \\ and \; decode. Any other escape, or one at the end, is a value flatpak refuses to interpret (S29):
-// std::nullopt.
-std::optional<QStringList> keyFileList(const QString &value)
-{
-    QStringList out;
-    QString entry;
-    for (qsizetype i = 0; i < value.size(); ++i) {
-        const QChar c = value.at(i);
-        if (c == QLatin1Char(';')) {
-            out.append(entry);
-            entry.clear();
-            continue;
-        }
-        if (c != QLatin1Char('\\')) {
-            entry += c;
-            continue;
-        }
-        if (++i == value.size())
-            return std::nullopt;
-        switch (value.at(i).unicode()) {
-        case 's':
-            entry += QLatin1Char(' ');
-            break;
-        case 'n':
-            entry += QLatin1Char('\n');
-            break;
-        case 't':
-            entry += QLatin1Char('\t');
-            break;
-        case 'r':
-            entry += QLatin1Char('\r');
-            break;
-        case '\\':
-        case ';':
-            entry += value.at(i);
-            break;
-        default:
-            return std::nullopt;
-        }
-    }
-    if (!entry.isEmpty())
-        out.append(entry);
-    return out;
-}
-
-// A filesystems entry as flatpak reads it (S29): "\x" is x, and the first ":" not escaped starts its mode (ro, rw,
-// create; only ro keeps it from writing).
-struct FilesystemEntry {
-    QString path;
-    bool readOnly = false;
-};
-
-FilesystemEntry filesystemEntry(const QString &entry)
-{
-    FilesystemEntry out;
-    QString mode;
-    bool inMode = false;
-    for (qsizetype i = 0; i < entry.size(); ++i) {
-        const QChar c = entry.at(i);
-        if (inMode) {
-            mode += c;
-        } else if (c == QLatin1Char('\\')) {
-            if (++i < entry.size())
-                out.path += entry.at(i);
-        } else if (c == QLatin1Char(':')) {
-            inMode = true;
-        } else {
-            out.path += c;
-        }
-    }
-    out.readOnly = mode == QLatin1String("ro");
-    return out;
-}
-
-// A filesystems path as one place, normalised as flatpak does first ("//", "/./" and a trailing "/" or "/." collapse,
-// S29): "/" for host (all but /run, /var, /tmp and the system's own folders, as flatpak mounts it), "~" for the home
-// folder (home, ~, a home folder by its absolute path), "~/.config", "~/.local/share", "~/.cache" for xdg-config,
-// xdg-data and xdg-cache, "$RUN" for the user's runtime folder (xdg-run, /run/user/<uid>; /var/run is /run), and "*" for
-// a path with ".." (it could be anywhere; flatpak refuses one, S29). Any other word (host-os, host-etc, host-root,
-// xdg-download...) stays as written.
-QString canonicalPath(const QString &path)
-{
-    const bool absolute = path.startsWith(QLatin1Char('/'));
-    QStringList parts;
-    for (const QString &part : path.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
-        if (part == QLatin1String(".."))
-            return QStringLiteral("*");
-        if (part != QLatin1String("."))
-            parts.append(part);
-    }
-    if (parts.isEmpty())
-        return absolute ? QStringLiteral("/") : QString();
-    if (absolute && parts.first() == QLatin1String("var") && parts.value(1) == QLatin1String("run"))
-        parts.removeFirst(); // /var/run is /run
-    QString base;
-    if (!absolute) {
-        const QString head = parts.takeFirst();
-        if (head == QLatin1String("host") && parts.isEmpty())
-            return QStringLiteral("/");
-        if (head == QLatin1String("home") || head == QLatin1String("~"))
-            base = QStringLiteral("~");
-        else if (head == QLatin1String("xdg-config"))
-            base = QStringLiteral("~/.config");
-        else if (head == QLatin1String("xdg-data"))
-            base = QStringLiteral("~/.local/share");
-        else if (head == QLatin1String("xdg-cache"))
-            base = QStringLiteral("~/.cache");
-        else if (head == QLatin1String("xdg-run"))
-            base = QStringLiteral("$RUN");
-        else
-            return (QStringList{head} + parts).join(QLatin1Char('/'));
-    } else if (parts.first() == QLatin1String("home") || (parts.first() == QLatin1String("var") && parts.value(1) == QLatin1String("home"))) {
-        parts.remove(0, parts.first() == QLatin1String("var") ? 2 : 1); // /home, /var/home: every home folder
-        if (!parts.isEmpty())
-            parts.removeFirst(); // the user's
-        base = QStringLiteral("~");
-    } else if (parts.first() == QLatin1String("run") && (parts.size() == 1 || parts.at(1) == QLatin1String("user"))) {
-        parts.remove(0, qMin<qsizetype>(parts.size(), 3)); // /run, /run/user, /run/user/<uid>
-        base = QStringLiteral("$RUN");
-    } else {
-        return QLatin1Char('/') + parts.join(QLatin1Char('/'));
-    }
-    return parts.isEmpty() ? base : base + QLatin1Char('/') + parts.join(QLatin1Char('/'));
-}
-
-// Whether a canonical path reaches `target`: holds it, or is inside it ("/" holds the home folder, not the runtime folder;
-// "*" holds everything).
-bool reaches(const QString &path, const QString &target)
-{
-    if (path == QLatin1String("*"))
-        return true;
-    if (path == QLatin1String("/"))
-        return target.startsWith(QLatin1Char('~'));
-    return path == target || target.startsWith(path + QLatin1Char('/')) || path.startsWith(target + QLatin1Char('/'));
-}
-
-// A canonical path it can write where programs start at the next login, outside its sandbox: the session's autostart
-// and systemd user units, Hyprland's and uwsm's configuration, Omarchy's hooks (post-boot runs at each login),
-// environment.d, the shells' start files, ~/.local/bin (on PATH).
-bool startsAtLogin(const QString &path, bool readOnly)
-{
-    if (readOnly)
-        return false;
-    static const QStringList targets{QStringLiteral("~/.config/autostart"), QStringLiteral("~/.config/systemd"), QStringLiteral("~/.config/hypr"),
-                                     QStringLiteral("~/.config/uwsm"), QStringLiteral("~/.config/omarchy"), QStringLiteral("~/.config/environment.d"),
-                                     QStringLiteral("~/.config/fish"), QStringLiteral("~/.local/share/systemd"), QStringLiteral("~/.local/bin"),
-                                     QStringLiteral("~/.bashrc"), QStringLiteral("~/.bash_profile"), QStringLiteral("~/.bash_login"),
-                                     QStringLiteral("~/.profile"), QStringLiteral("~/.zshrc"), QStringLiteral("~/.zshenv"), QStringLiteral("~/.zprofile"),
-                                     QStringLiteral("~/.zlogin")};
-    return std::any_of(targets.cbegin(), targets.cend(), [&path](const QString &t) { return reaches(path, t); });
-}
-
-// A canonical path that reaches past its sandbox: anything in the user's runtime folder but the sound server's sockets
-// and the app's own folder (the session bus's and systemd's sockets bypass the bus filter, Hyprland's can start
-// programs, others are services' own; read-only does not stop a connection), anything in the system's /run but removable
-// media (the system bus, docker...), a path with "..", or, written, flatpak's own folder (its overrides grant any
-// permission), the session's D-Bus services (D-Bus starts one on the host when its name is called) or the launcher's
-// entries (run on the host when opened), or a folder above one of them (home, xdg-data, host).
-bool reachesOutside(const QString &path, bool readOnly, const QString &appId)
-{
-    const auto within = [&path](const QString &folder) { return path == folder || path.startsWith(folder + QLatin1Char('/')); };
-    if (path == QLatin1String("*"))
-        return true;
-    if (within(QStringLiteral("$RUN")))
-        return !within(QStringLiteral("$RUN/pipewire-0")) && !within(QStringLiteral("$RUN/pulse")) && !within(QStringLiteral("$RUN/app/") + appId);
-    if (path.startsWith(QLatin1String("/run/")))
-        return !within(QStringLiteral("/run/media"));
-    static const QStringList written{QStringLiteral("~/.local/share/flatpak"), QStringLiteral("~/.local/share/dbus-1"),
-                                     QStringLiteral("~/.local/share/applications")};
-    return !readOnly && std::any_of(written.cbegin(), written.cend(), [&path](const QString &w) { return reaches(path, w); });
 }
 
 // flatpak's last words when a command failed: its error lines, else the last lines it wrote.
@@ -492,191 +318,10 @@ FlatpakPrompt flatpakPrompt(const QStringList &lines)
 
 std::optional<QStringList> flatpakAccess(const QByteArray &metadata)
 {
-    // Each "group key=value" line of the metadata; the classes are decided once the app's id is known.
-    struct Line {
-        QString group, key, value;
-    };
-    QList<Line> lines;
-    QString group, appId;
-    for (const QByteArray &raw : metadata.split('\n')) {
-        const QString line = QString::fromUtf8(raw).trimmed();
-        if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
-            continue;
-        if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
-            group = line.mid(1, line.size() - 2).trimmed();
-            continue;
-        }
-        const qsizetype eq = line.indexOf(QLatin1Char('='));
-        if (eq <= 0)
-            continue;
-        const Line l{group, line.left(eq).trimmed(), line.mid(eq + 1).trimmed()};
-        if (l.group == QLatin1String("Application") && l.key == QLatin1String("name"))
-            appId = l.value;
-        lines.append(l);
-    }
-    if (!isFlatpakId(appId))
-        return std::nullopt; // not an app's metadata: what it may reach is unknown, never "nothing"
-
-    QSet<QString> found, sockets;
-    QStringList session, system, other;
-    const auto unknown = [&other](const QString &text) {
-        const QString clean = cleanPlainText(text, 160, false);
-        if (!other.contains(clean))
-            other.append(clean);
-    };
-    // A bus name it may talk to or own: none of these harmless ones is named, the desktop's notifications, tray, menus,
-    // screen saver inhibition, accessibility, file manager and the portals (which ask the user themselves) to talk to,
-    // its own names and media-player names to own too; the session's services that start programs on the host, or grant
-    // permissions, are "outside" too, and so is a wildcard that covers one of them.
-    static const QStringList harmless{QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("org.kde.StatusNotifierWatcher"),
-                                      QStringLiteral("com.canonical.AppMenu.Registrar"), QStringLiteral("org.freedesktop.ScreenSaver"),
-                                      QStringLiteral("org.a11y.Bus"), QStringLiteral("org.freedesktop.FileManager1")};
-    static const QStringList escapes{QStringLiteral("org.freedesktop.Flatpak"), QStringLiteral("org.freedesktop.systemd1"),
-                                     QStringLiteral("org.freedesktop.impl.portal.PermissionStore")};
-    static const QRegularExpression busName(QStringLiteral(R"(\A[A-Za-z0-9_.*-]{1,255}\z)"));
-    const auto covers = [](const QString &name, const QString &service) {
-        // "X.*" is X and every name below it, as xdg-dbus-proxy reads it.
-        return name == service
-            || (name.endsWith(QLatin1String(".*")) && (service == name.chopped(2) || service.startsWith(name.chopped(1))));
-    };
-    const auto busPolicy = [&](const Line &l, bool onSession) {
-        if (l.value == QLatin1String("none") || l.value == QLatin1String("see"))
-            return; // nothing, or only that the name exists
-        if (!busName.match(l.key).hasMatch()) {
-            unknown(QStringLiteral("[%1] %2=%3").arg(l.group, l.key, l.value));
-            return;
-        }
-        if (onSession) {
-            // The escapes first: an app whose own id is one of them (or covers one) is not harmless for it.
-            const bool escaping = std::any_of(escapes.cbegin(), escapes.cend(), [&](const QString &service) { return covers(l.key, service); });
-            // The harmless services are harmless to talk to; owning one (standing in for the portals or the
-            // notifications) is named. Its own names and a media-player name are its to own.
-            const bool talk = l.value == QLatin1String("talk");
-            if (escaping)
-                found.insert(QStringLiteral("outside"));
-            else if ((talk && (harmless.contains(l.key) || l.key.startsWith(QLatin1String("org.freedesktop.portal."))))
-                     || l.key.startsWith(QLatin1String("org.mpris.MediaPlayer2.")) || l.key == appId
-                     || l.key.startsWith(appId + QLatin1Char('.')))
-                return;
-        }
-        QStringList &names = onSession ? session : system;
-        if (!names.contains(l.key))
-            names.append(l.key);
-    };
-
-    for (const Line &l : lines) {
-        if (l.group == QLatin1String("Session Bus Policy") || l.group == QLatin1String("System Bus Policy")) {
-            busPolicy(l, l.group == QLatin1String("Session Bus Policy"));
-            continue;
-        }
-        if (l.group == QLatin1String("USB Devices")) {
-            // Devices it may list and open through the USB portal; hidden-devices only takes some away.
-            if (l.key == QLatin1String("enumerable-devices") && !l.value.isEmpty())
-                found.insert(QStringLiteral("usb"));
-            else if (l.key != QLatin1String("hidden-devices"))
-                unknown(QStringLiteral("[%1] %2=%3").arg(l.group, l.key, l.value));
-            continue;
-        }
-        if (l.group == QLatin1String("Application") || l.group == QLatin1String("Runtime") || l.group == QLatin1String("Environment")
-            || l.group == QLatin1String("Extra Data") || l.group == QLatin1String("ExtensionOf") || l.group == QLatin1String("Build")
-            || l.group.startsWith(QLatin1String("Extension ")))
-            continue; // what it is, its variables inside the sandbox, its extensions: no grant
-        if (l.group != QLatin1String("Context")) {
-            unknown(QStringLiteral("[%1] %2=%3").arg(l.group, l.key, l.value)); // a [Policy …] or a group of a later flatpak
-            continue;
-        }
-        if (l.key == QLatin1String("persistent") || l.key == QLatin1String("unset-environment"))
-            continue; // its own folder in ~/.var/app, its variables
-        const std::optional<QStringList> entries = keyFileList(l.value);
-        if (!entries)
-            return std::nullopt; // a value flatpak cannot interpret: what it may reach is unknown
-        for (QString entry : *entries) {
-            entry = entry.trimmed();
-            if (entry.isEmpty() || entry.startsWith(QLatin1Char('!')))
-                continue; // a permission taken away
-            // A filesystems entry as flatpak reads it: its escapes decoded, its path normalised, its mode.
-            const FilesystemEntry fs = l.key == QLatin1String("filesystems") ? filesystemEntry(entry) : FilesystemEntry{};
-            const QString place = l.key == QLatin1String("filesystems") ? canonicalPath(fs.path) : QString();
-            const QString word = l.key == QLatin1String("shared") ? (entry == QLatin1String("network") ? QStringLiteral("network")
-                                                                     : entry == QLatin1String("ipc")   ? QStringLiteral("sharedMemory")
-                                                                                                       : QString())
-                : l.key == QLatin1String("sockets")
-                ? (entry == QLatin1String("wayland") || entry == QLatin1String("inherit-wayland-socket") || entry == QLatin1String("fallback-x11")
-                       ? QStringLiteral("-") // its own window; fallback-x11 is decided below
-                   : entry == QLatin1String("x11")         ? QStringLiteral("x11")
-                   : entry == QLatin1String("pulseaudio")  ? QStringLiteral("audio")
-                   : entry == QLatin1String("session-bus") ? QStringLiteral("bus")
-                   : entry == QLatin1String("system-bus")  ? QStringLiteral("systemBus")
-                   : entry == QLatin1String("ssh-auth")    ? QStringLiteral("ssh")
-                   : entry == QLatin1String("gpg-agent")   ? QStringLiteral("gpg")
-                   : entry == QLatin1String("pcsc")        ? QStringLiteral("smartCards")
-                   : entry == QLatin1String("cups")        ? QStringLiteral("printers")
-                                                           : QString())
-                : l.key == QLatin1String("devices")
-                ? (entry == QLatin1String("dri")     ? QStringLiteral("-") // the graphics processor that draws its window
-                   : entry == QLatin1String("all")   ? QStringLiteral("devices")
-                   : entry == QLatin1String("input") ? QStringLiteral("input")
-                   : entry == QLatin1String("usb")   ? QStringLiteral("usb")
-                   : entry == QLatin1String("kvm")   ? QStringLiteral("kvm")
-                   : entry == QLatin1String("shm")   ? QStringLiteral("sharedMemory")
-                                                     : QString())
-                : l.key == QLatin1String("features")
-                ? (entry == QLatin1String("per-app-dev-shm") ? QStringLiteral("-") // shared between its own instances only
-                   : entry == QLatin1String("bluetooth")     ? QStringLiteral("bluetooth")
-                   : entry == QLatin1String("canbus")        ? QStringLiteral("canbus")
-                   : entry == QLatin1String("devel")         ? QStringLiteral("devel")
-                   : entry == QLatin1String("multiarch")     ? QStringLiteral("multiarch")
-                                                             : QString())
-                : l.key == QLatin1String("filesystems")
-                ? (place == QLatin1String("/") || place == QLatin1String("host-os") || place == QLatin1String("host-etc")
-                           || place == QLatin1String("host-root")
-                       ? QStringLiteral("allFiles")
-                   : place == QLatin1String("~") ? QStringLiteral("home")
-                                                 : QStringLiteral("folders"))
-                : QString();
-            if (l.key == QLatin1String("sockets"))
-                sockets.insert(entry);
-            if (l.key == QLatin1String("filesystems") && startsAtLogin(place, fs.readOnly))
-                found.insert(QStringLiteral("login"));
-            if (l.key == QLatin1String("filesystems") && reachesOutside(place, fs.readOnly, appId))
-                found.insert(QStringLiteral("outside"));
-            if (word.isEmpty())
-                unknown(QStringLiteral("%1=%2").arg(l.key, entry)); // a grant this flatpak may know and the Store does not
-            else if (word != QLatin1String("-"))
-                found.insert(word);
-        }
-    }
-    // Its own id and every name below it are its to own on the session bus (flatpak's default): an id that is one of the
-    // session's escapes, or holds one, is outside its sandbox whatever its policy says.
-    if (std::any_of(escapes.cbegin(), escapes.cend(), [&appId](const QString &e) { return e == appId || e.startsWith(appId + QLatin1Char('.')); }))
-        found.insert(QStringLiteral("outside"));
-    // fallback-x11 is the X11 display when it has no Wayland socket; the whole session bus reaches org.freedesktop.Flatpak.
-    if (sockets.contains(QStringLiteral("fallback-x11")) && !sockets.contains(QStringLiteral("wayland")))
-        found.insert(QStringLiteral("x11"));
-    if (found.contains(QStringLiteral("bus")))
-        found.insert(QStringLiteral("outside"));
-
-    QStringList out;
-    for (const char *key : {"network", "allFiles", "home", "folders", "devices", "input", "usb", "kvm", "audio", "x11", "sharedMemory", "printers",
-                            "ssh", "gpg", "smartCards", "bus", "systemBus", "bluetooth", "canbus", "devel", "multiarch", "login", "outside"}) {
-        if (found.contains(QLatin1String(key)))
-            out.append(QLatin1String(key));
-    }
-    session.sort();
-    system.sort();
-    for (const QString &name : std::as_const(session))
-        out.append(QStringLiteral("sessionService:") + name);
-    for (const QString &name : std::as_const(system))
-        out.append(QStringLiteral("systemService:") + name);
-    for (const QString &text : std::as_const(other))
-        out.append(QStringLiteral("other:") + text);
-    // At most kAccessMax lines; the rest counted, never dropped unsaid (the named classes come first, so they stay).
-    if (out.size() > kAccessMax) {
-        const qsizetype more = out.size() - (kAccessMax - 1);
-        out = out.mid(0, kAccessMax - 1);
-        out.append(QStringLiteral("more:%1").arg(more));
-    }
-    return out;
+    const std::optional<FlatpakPermissions> permissions = flatpakPermissions(metadata);
+    if (!permissions)
+        return std::nullopt;
+    return permissions->access;
 }
 
 FlatpakFacts parseFlatpakInfo(const QByteArray &out)
@@ -781,8 +426,11 @@ std::optional<FlatpakFacts> flatpakFacts(const FlatpakTools &tools, const QStrin
         return std::nullopt;
     FlatpakFacts facts = parseFlatpakInfo(info.out);
     const ChildResult meta = runChild(tools.flatpak, head + QStringList{QStringLiteral("--show-metadata")} + where, options(tools, 30000));
-    if (meta.ok())
-        facts.access = flatpakAccess(meta.out);
+    if (meta.ok()) {
+        facts.permissions = flatpakPermissions(meta.out);
+        if (facts.permissions)
+            facts.access = facts.permissions->access;
+    }
     return facts;
 }
 
@@ -845,7 +493,7 @@ QString flatpakInstalledCommit(const FlatpakTools &tools, const QString &ref)
     return isFlatpakCommit(commit) ? commit : QString();
 }
 
-std::optional<QStringList> flatpakAccessAdded(const FlatpakTools &tools, const QString &ref, const QString &commit)
+std::optional<QList<FlatpakPermissionChange>> flatpakPermissionChanges(const FlatpakTools &tools, const QString &ref, const QString &commit)
 {
     if (!isFlatpakAppRef(ref) || (!commit.isEmpty() && !isFlatpakCommit(commit)))
         return std::nullopt;
@@ -860,17 +508,14 @@ std::optional<QStringList> flatpakAccessAdded(const FlatpakTools &tools, const Q
     const ChildResult newer = runChild(tools.flatpak, newerArgs, options(tools, 30000));
     if (!installed.ok() || !newer.ok())
         return std::nullopt;
-    const std::optional<QStringList> before = flatpakAccess(installed.out);
-    const std::optional<QStringList> after = flatpakAccess(newer.out);
-    if (!before || !after)
+    // The installed side read narrowest, the newer widest (ADR-0049): no new grant hides behind an old one read generously.
+    const std::optional<FlatpakPermissions> before = flatpakPermissions(installed.out, FlatpakReading::Narrowest);
+    const std::optional<FlatpakPermissions> after = flatpakPermissions(newer.out);
+    // Both of the app the ref names: metadata of another app is not this update's.
+    const QString id = flatpakRefId(ref);
+    if (!before || !after || before->appId != id || after->appId != id)
         return std::nullopt;
-    QStringList added;
-    for (const QString &a : *after) {
-        // A cut list ("more:<n>") is never matched: each of its lines may be new.
-        if (!before->contains(a) || a.startsWith(QLatin1String("more:")))
-            added.append(a);
-    }
-    return added;
+    return diffFlatpakPermissions(*before, *after);
 }
 
 InstallPlan checkFlatpakInstall(const QString &ref, const FlatpakTools &tools, bool online)
@@ -895,14 +540,16 @@ InstallPlan checkFlatpakInstall(const QString &ref, const FlatpakTools &tools, b
         plan.detail = childWords(meta, QStringLiteral("flatpak remote-info"));
         return plan;
     }
-    const std::optional<QStringList> access = flatpakAccess(meta.out);
-    if (!access) {
+    const std::optional<FlatpakPermissions> permissions = flatpakPermissions(meta.out);
+    if (!permissions) {
         // What it may reach must be said before it is installed (SD25): without its metadata, no plan.
         plan.refusal = Refusal::Failed;
         plan.detail = QStringLiteral("flatpak remote-info: no metadata for ") + ref.left(80);
         return plan;
     }
-    plan.access = *access;
+    plan.access = permissions->access;
+    plan.permissions = permissions->grants;
+    plan.morePermissions = permissions->more;
     // flatpak's own plan (SD25): the refs it would add with the app, its runtime and their extensions, answered no.
     const TerminalRun run = runPlan(tools.flatpak, {QStringLiteral("install"), QStringLiteral("--user"), kFlathubRemote, ref}, tools.env,
                                     tools.planMs);

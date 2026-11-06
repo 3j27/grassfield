@@ -81,3 +81,48 @@ NOT VERIFIED, no new dependency. GTK/Qt/Wayland-native apps are unaffected.
 - Contract: `displays.main` (additive). Readers: shell (`MainDisplay`), Settings (Displays). Tests: `tests/unit/tst_displayrole.qml`.
 - The dev override `GRASSFIELD_DESKTOP_SCREEN` is folded into `MainDisplay`: the one source for the Dock, the icons and the banners.
 - The banners no longer follow the focused output: they stay on the main display (macOS).
+
+## Amendment A-1 2026-11-05: a combination of displays never seen before
+Status: Proposed (2026-11-05), applied provisionally (owner rule of 2026-10-28: decide alone, the recommended option, the
+macOS model first). Inspired by Project Luma's luma-displays "arrival" (Apache-2.0: wait for the hot-plug to settle, two
+displays or more, an arrangement not known yet); no code copied.
+
+Context: D-2 remembers the main display per set of connected displays, but nothing tells the user that a set they never had
+(the laptop at a new desk, a projector) may need arranging: Hyprland places a new monitor to the right at its preferred mode.
+
+Options:
+1. Nothing (macOS: plugging a display in extends the desktop; Displays is opened by the user).
+2. Open Settings > Displays by itself once the hot-plug has settled (Luma opens its Displays panel once).
+3. One notice whose click opens Settings > Displays.
+
+Decision: option 3. macOS opens no window on hot-plug; a window that opens by itself takes the focus from what the user was
+doing, and a notice keeps the arrangement one click away without that. Rules (`shell/services/DisplayArrival.js`, pure,
+`tests/unit/tst_displayarrival.qml`; wiring `shell/services/DisplayArrival.qml`, posted from `shell/shell.qml` with
+`Notifications.postInternalAction`, the click runs `SettingsApp.openSection("displays")`, the way the Software Update notices
+open their pane):
+- A combination is the sorted set of the connected displays' keys (`DisplayRole.setOf`, D-2: make, model, serial, never the
+  connector alone). It is taken only once Hyprland has described every output (`MainDisplay.live.ready`).
+- Settled: the set has not changed for 3 s (`SETTLE_MS`; a dock brings its monitors one after the other).
+- Offered once per new combination of two displays or more. Known, never offered: a set in the seen-set, or a set the user
+  already chose a main display for (`displays.main`). Recorded without a notice: the set the session starts with (the user
+  did not just plug it in) and a single display (nothing to arrange).
+- Locked: the offer waits and is decided again at the unlock (if the set is still connected); nothing appears over the lock.
+- Dev sessions: offered only by a dev shell with its own state folder (`GRASSFIELD_STATE_HOME`) whose outputs are all virtual
+  (`WAYLAND-n`, `HEADLESS-n`, `X11-n`: a nested session). A dev shell on the owner's displays neither offers nor writes.
+- Storage: `displays-seen.json` in the shell's state folder (`$GRASSFIELD_STATE_HOME` or `$XDG_STATE_HOME/grassfield`),
+  `{version: 1, seen: [<combination key>...]}`, newest first, at most 32, file 0600, folder 0700. Malformed reads as empty
+  (every set is then new once more, and the session's own set is recorded silently first). The keys hold the displays' make,
+  model and serial, as `displays.main` does; nothing leaves the machine.
+
+UI: title "New display arrangement", body "These displays are connected together for the first time. Open Displays Settings
+to arrange them and choose the main display." The click opens the pane. Not done: a separate "Displays Settings…" button on
+the notice (the shell's own notices have no buttons today: their buttons render only for a sender's live notification;
+adding them is a change to the notification module, left for later).
+
+Failure modes: Hyprland never describes an output (the set is never taken: nothing is offered); a burst longer than 3 s with
+a pause (two notices are impossible for one set, at worst the intermediate set is offered once); Settings not installed
+(SettingsApp's "not installed" notice).
+
+NOT VERIFIED (no compositor here): hot-plug in a nested session (`hyprctl output create headless` through `scripts/nestctl`),
+the notice's look, the click opening Displays. Owner L2: plug a monitor never used with this laptop, wait 3 s, see one notice;
+unplug and plug again, no notice; lock, plug a new one, unlock, see it then.

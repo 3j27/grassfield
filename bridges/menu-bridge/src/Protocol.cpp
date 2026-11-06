@@ -96,6 +96,18 @@ namespace gf::menubridge {
         }
     }
 
+    bool isValidOngoingKey(QStringView key) {
+        if (key.size() != 16)
+            return false;
+        return std::all_of(key.begin(), key.end(), [](QChar c) { return isAsciiDigit(c) || (c >= u'a' && c <= u'f'); });
+    }
+
+    bool isValidOngoingAction(QStringView action) {
+        if (action.isEmpty() || action.size() > 32 || !(action.front() >= u'a' && action.front() <= u'z'))
+            return false;
+        return std::all_of(action.begin(), action.end(), [](QChar c) { return (c >= u'a' && c <= u'z') || isAsciiDigit(c) || c == u'-'; });
+    }
+
     bool isValidWindow(QStringView window) {
         if (window.isEmpty() || window.size() > 16)
             return false;
@@ -130,6 +142,27 @@ namespace gf::menubridge {
                 return fail(QStringLiteral("field:appmenu"));
             msg.type    = ShellMessage::Type::Hello;
             msg.appmenu = appmenu.toBool();
+            return msg;
+        }
+        // ADR-0052: the session's lock state, and a click on an ongoing activity's button.
+        if (type == QLatin1String("lock")) {
+            const QJsonValue locked = o.value(QLatin1String("locked"));
+            if (!locked.isBool())
+                return fail(QStringLiteral("field:locked"));
+            msg.type   = ShellMessage::Type::Lock;
+            msg.locked = locked.toBool();
+            return msg;
+        }
+        if (type == QLatin1String("ongoing-action")) {
+            const QJsonValue id     = o.value(QLatin1String("id"));
+            const QJsonValue action = o.value(QLatin1String("action"));
+            if (!id.isString() || !isValidOngoingKey(id.toString()))
+                return fail(QStringLiteral("field:id"));
+            if (!action.isString() || !isValidOngoingAction(action.toString()))
+                return fail(QStringLiteral("field:action"));
+            msg.type    = ShellMessage::Type::OngoingAction;
+            msg.ongoing = id.toString();
+            msg.action  = action.toString();
             return msg;
         }
 
@@ -183,7 +216,9 @@ namespace gf::menubridge {
                 break;
             }
             case ShellMessage::Type::Close:
-            case ShellMessage::Type::Hello: break;
+            case ShellMessage::Type::Hello:
+            case ShellMessage::Type::Lock:
+            case ShellMessage::Type::OngoingAction: break;
         }
         return msg;
     }

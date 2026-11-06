@@ -30,7 +30,9 @@ QUrl join(const QUrl &base, const QString &path)
 std::optional<Channel> channelFromConf(const QByteArray &grassfieldConf)
 {
     static const QRegularExpression server(QStringLiteral(R"(\A\s*Server\s*=\s*(\S+)\s*\z)"));
-    static const QRegularExpression shape(QStringLiteral(R"(\A(.+)/(stable|beta)/\$arch\z)"));
+    // The plain form, or the staged rollout's cohort form <base>/<channel>/cohort/<NN>/$arch (ADR-0050 2): the catalog is
+    // read from the channel's own path either way.
+    static const QRegularExpression shape(QStringLiteral(R"(\A(.+)/(stable|beta)(?:/cohort/[01][0-9])?/\$arch\z)"));
     for (const QByteArray &raw : grassfieldConf.split('\n')) {
         const QString line = QString::fromUtf8(raw);
         if (line.trimmed().startsWith(QLatin1Char('#')))

@@ -7,6 +7,31 @@ import "../../apps/settings/qml/General.js" as General
 TestCase {
     name: "SettingsGeneral"
 
+    // ADR-0053: the path grassfield-report printed, taken only when it is a report file inside the home; the Files command.
+    function test_diagnosticReportPath() {
+        const home = "/home/u";
+        const ok = "/home/u/Téléchargements/grassfield-report-20261105-100000.txt";
+        compare(General.reportPath(ok + "\n"), ok);
+        compare(General.reportPath("noise\n" + ok + "\n\n"), ok);
+        // The report was written: any clean absolute report path is named (XDG_DOWNLOAD_DIR may lie outside the home)...
+        compare(General.reportPath("/data/downloads/grassfield-report-1.txt\n"), "/data/downloads/grassfield-report-1.txt");
+        for (const bad of ["", "\n", "/home/u/../v/grassfield-report-1.txt", "/home/u/./grassfield-report-1.txt", "/home/u//grassfield-report-1.txt",
+                           "/home/u/report.txt", "/home/u/grassfield-report-1.sh", "relative/grassfield-report-1.txt", "/home/u/a\u0007/grassfield-report-1.txt"])
+            compare(General.reportPath(bad), "", bad);
+        compare(General.reportPath(null), "");
+        // ...but Files opens only a folder inside the home (systemguard.cpp isRevealInFiles).
+        verify(General.revealable(ok, home));
+        verify(General.revealable(ok, home + "/"));
+        verify(!General.revealable("/data/downloads/grassfield-report-1.txt", home));
+        verify(!General.revealable("/home/uu/grassfield-report-1.txt", home));
+        verify(!General.revealable(ok, "/"));
+        verify(!General.revealable(ok, ""));
+        verify(!General.revealable("", home));
+        compare(General.reportName(ok), "grassfield-report-20261105-100000.txt");
+        compare(General.revealArgv(ok), ["/usr/bin/grassfield-files", "--", "/home/u/Téléchargements"]);
+        compare(General.REPORT_ARGV, ["/usr/lib/grassfield/grassfield-report"]);
+    }
+
     function test_hostState() {
         const h = General.parseHost('{"pretty":"Alex’s Laptop","static":"alexs-laptop","hostname":"x","chassis":"laptop","vendor":"LENOVO","model":"ThinkPad X1 Carbon Gen 11"}');
         compare(h.pretty, "Alex’s Laptop");

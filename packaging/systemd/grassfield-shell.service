@@ -58,6 +58,9 @@ UnsetEnvironment=GTK_USE_PORTAL
 # user-writable directory, and a copy there would replace the lock screen and the polkit agent. Every `qs ipc` caller
 # (bindings, lid, sleep-lock stand-in) names the same path. tests/shell/session_services.sh keeps them in step.
 ExecStart=/usr/bin/qs -n -p /usr/share/grassfield/shell
+# ADR-0048 D-4: the CPU and I/O limits the shell set on apps the person could not see are lifted when it stops or crashes
+# (the restarted shell resets them again at start). "-": a failure here never marks the unit failed.
+ExecStopPost=-/usr/lib/grassfield/grassfield-energy reset
 # Gate R1 and GF-030: back within ~1 s after ANY exit while the session runs: a crash, SIGTERM, `qs kill`, exit 0.
 # Hyprland keeps a lock alive while the shell is away (ext-session-lock) and the restarted shell takes it back
 # (ADR-0010). A stop through systemd is never restarted: logout (graphical-session.target stops, PartOf=) or

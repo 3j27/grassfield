@@ -455,4 +455,52 @@ TestCase {
         const done = Logic.runView(run("done"), false, null, false);
         compare([done.state, done.result], ["done", "terminal"]);
     }
+
+    // ADR-0050: the staged rollout's explanation, from the checker's `rollout` (U34-U36).
+    function rolloutAnswer(state, rollout, gf) {
+        const a = state === "available" ? available(gf || "1.0.1-1") : answer(state, {channel: "stable",
+            grassfield: {installed: "1.0.0-1", available: null, notes: [], notesError: null}, omarchy: {installed: "4.0.4-1", available: null}});
+        a.rollout = rollout;
+        return a;
+    }
+
+    function test_rolloutView() {
+        const staged = {descriptor: "ok", cohort: 7, staged: {version: "1.0.2-1", security: false, offerAt: "2026-11-06T10:00:00Z"}, withdrawn: null, security: false};
+        let v = Logic.view(Logic.combine(null, rolloutAnswer("up-to-date", staged)), false);
+        compare(v.rollout.staged, {version: "1.0.2-1", security: false}, "up to date with a release still being released gradually");
+        compare(v.kind, "up-to-date", "the headline stays what the database says");
+        v = Logic.view(Logic.combine(Logic.combine(null, rolloutAnswer("up-to-date", staged)), answer("failed", {error: "offline"})), false);
+        compare(v.rollout.staged.version, "1.0.2-1", "kept with the last success through a failed check");
+        v = Logic.view(Logic.combine(null, rolloutAnswer("available", {descriptor: "ok", cohort: null, staged: null, withdrawn: null, security: true}, "1.0.2-1")), false);
+        compare([v.rollout.security, v.grassfield.available], [true, "1.0.2-1"], "the release offered is a security release");
+        v = Logic.view(Logic.combine(null, rolloutAnswer("up-to-date", {descriptor: "ok", cohort: 3, staged: null, withdrawn: "1.0.0-1", security: false})), false);
+        compare(v.rollout.withdrawn, "1.0.0-1", "the installed release was withdrawn");
+        for (const bad of [null, {descriptor: "stale", staged: staged.staged}, {descriptor: "invalid", security: true},
+                           {descriptor: "ok", staged: {version: "1.0.2"}, withdrawn: "x\n", security: "yes"}, "ok", []]) {
+            v = Logic.view(Logic.combine(null, rolloutAnswer("up-to-date", bad)), false);
+            compare(v.rollout, {staged: null, withdrawn: "", security: false}, "nothing to say for " + JSON.stringify(bad));
+        }
+        v = Logic.view(Logic.combine(null, answer("not-set-up", {rollout: staged})), false);
+        compare(v.rollout.staged, null, "not set up: no rollout");
+        compare(Logic.view(null, false).rollout, {staged: null, withdrawn: "", security: false}, "before any answer");
+    }
+
+    function test_securityAnnouncedOnce() {
+        const sec = rolloutAnswer("available", {descriptor: "ok", cohort: 0, staged: null, withdrawn: null, security: true}, "1.0.2-1");
+        const items = Logic.news(null, sec, 0);
+        compare(items.map(n => n.id), ["security 1.0.2-1"], "a security release is announced as one");
+        const after = Logic.withAnnounced(null, items);
+        compare(Logic.news(after, available("1.0.2-1"), 0).length, 0, "the same release, its descriptor gone: not announced again");
+        compare(Logic.news(Logic.withAnnounced(null, Logic.news(null, available("1.0.2-1"), 0)), sec, 0).length, 0,
+                "announced first as a release, then marked security: not again");
+    }
+
+    function test_lowBattery() {
+        verify(Logic.lowBattery(true, true, 30, 30), "on battery at 30 %: waits");
+        verify(Logic.lowBattery(true, true, 5, 30), "on battery at 5 %: waits");
+        verify(!Logic.lowBattery(true, true, 31, 30), "on battery above 30 %: checks");
+        verify(!Logic.lowBattery(false, true, 5, 30), "on mains: checks");
+        verify(!Logic.lowBattery(true, false, 0, 30), "no battery: checks");
+        verify(!Logic.lowBattery(undefined, undefined, undefined, 30), "unknown: checks");
+    }
 }

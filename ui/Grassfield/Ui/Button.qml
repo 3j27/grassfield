@@ -12,6 +12,10 @@ T.Button {
     property bool capsule: false
     // macOS 27 push button: a capsule as wide as its label instead of the default's wider rounded rectangle (a row's "Set…").
     property bool push: false
+    // The label and the fill of a button that sits on a surface that does not follow the appearance (a memo's paper, light in
+    // both): they default to the appearance's own and a caller may set both.
+    property color labelColor: root.accentFill ? (root.destructive ? Appearance.colors.destructiveText : Appearance.colors.selectionText) : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
+    property color fillColor: root.accentFill ? (root.destructive ? Appearance.colors.destructive : Appearance.colors.selection) : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
     // macOS 27 sheet button (Print, Open): as tall and as wide as a push button, a rounded rectangle with the
     // control.sheetButtonRadius corner instead of the capsule (the shared Sheet and the shell's sheets set it; ADR-0039 step 10).
     property bool sheet: false
@@ -58,7 +62,7 @@ T.Button {
 
     background: Rectangle {
         radius: root.shapeRadius
-        color: root.accentFill ? (root.destructive ? Appearance.colors.destructive : Appearance.colors.selection) : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+        color: root.fillColor
         // Increase Contrast: the border token carries a stronger value then.
         border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
@@ -78,7 +82,7 @@ T.Button {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         text: root.text
-        color: root.accentFill ? (root.destructive ? Appearance.colors.destructiveText : Appearance.colors.selectionText) : (root.destructive ? Appearance.colors.danger : Appearance.colors.text)
+        color: root.labelColor
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize
         font.letterSpacing: Appearance.tracking(Tokens.typographyMenuSize)

@@ -54,7 +54,8 @@ slurp_argv = ["-b", colours["veil"], "-s", colours["selection"], "-c", colours["
 # own name (exec -a), so the helper finds it in /proc as it finds the real one.
 os.makedirs(os.path.join(fake, "impl"))
 write(os.path.join(fake, "notify-send"), '#!/bin/bash\nexec -a notify-send /usr/bin/python3 -I "$(dirname "$0")/impl/notify-send" "$@"\n')
-for name in ("grim", "slurp", "wl-copy", "notify-send", "hyprctl", "xdg-user-dir", "pkill", "systemd-run", "uwsm-app", "gdbus"):
+for name in ("grim", "slurp", "wl-copy", "notify-send", "hyprctl", "xdg-user-dir", "pkill", "systemd-run", "uwsm-app", "gdbus",
+             "pw-play"):
     write(os.path.join(fake, "impl" if name == "notify-send" else "", name), r'''#!/usr/bin/python3 -I
 import json, os, re, signal, sys, time
 name = os.path.basename(sys.argv[0])
@@ -460,6 +461,47 @@ for bad in (home, "/", "", "relative/dir"):
     r, _ = capture("screen", FAKE_DESKTOP=bad)
     check(len(files(desktop)) == count + 2 and not any(f.endswith(".png") for f in os.listdir(home)),
           "xdg-user-dir answering %r: ~/Desktop" % bad)
+
+# The shutter (ADR-0047 B-5): pw-play once a picture is saved, as Settings > Sound says (the defaults without a file).
+def played():
+    # pw-play is started in its own session and not waited for: give it a moment to record itself.
+    for _ in range(40):
+        if calls("pw-play"):
+            break
+        time.sleep(0.05)
+    return [c["argv"] for c in calls("pw-play")]
+
+
+SHUTTER = "/usr/share/sounds/grassfield/stereo/screen-capture.wav"
+config = os.path.join(home, ".config", "grassfield")
+os.makedirs(config, exist_ok=True)
+r, _ = capture("screen")
+check(played() == [["--media-role", "Notification", "--volume", "0.422", "--", SHUTTER]],
+      "the shutter plays once per capture at the default alert volume (0.75 cubed) [%r]" % played())
+with open(os.path.join(config, "grassfield.json"), "w") as f:
+    json.dump({"version": 1, "sound": {"uiEffects": True, "alertVolume": 0.5, "effectsOutput": "bluez_output.AA_BB_CC_DD_EE_FF.1"}}, f)
+r, _ = capture("screen")
+check(played() == [["--media-role", "Notification", "--volume", "0.125", "--target", "bluez_output.AA_BB_CC_DD_EE_FF.1", "--", SHUTTER]],
+      "it follows the alert volume and the effects output [%r]" % played())
+with open(os.path.join(config, "grassfield.json"), "w") as f:
+    json.dump({"version": 1, "sound": {"alertVolume": 7, "effectsOutput": "-x", "uiEffects": "no"}}, f)
+r, _ = capture("screen")
+check(played() == [["--media-role", "Notification", "--volume", "1.000", "--", SHUTTER]],
+      "the contract's rules: a volume clamped, an invalid output or switch is the default [%r]" % played())
+for sound in ({"uiEffects": False}, {"alertVolume": 0}):
+    with open(os.path.join(config, "grassfield.json"), "w") as f:
+        json.dump({"version": 1, "sound": sound}, f)
+    r, _ = capture("screen")
+    time.sleep(0.3)
+    check(r.returncode == 0 and calls("pw-play") == [], "no shutter with %r" % sound)
+os.unlink(os.path.join(config, "grassfield.json"))
+os.mkfifo(os.path.join(config, "grassfield.json"))
+r, _ = capture("screen")
+check(r.returncode == 0 and len(played()) == 1, "a FIFO in place of grassfield.json is not waited on: the defaults")
+os.unlink(os.path.join(config, "grassfield.json"))
+r, _ = capture("screen", FAKE_GRIM="fail")
+time.sleep(0.3)
+check(calls("pw-play") == [], "no shutter when no picture was saved")
 
 # French: the names and the notice.
 r, _ = capture("screen", LANG="fr_FR.UTF-8")

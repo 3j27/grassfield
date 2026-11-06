@@ -6,6 +6,7 @@
 #pragma once
 
 #include "aur.h"
+#include "flatpakpermissions.h"
 #include "removal.h"
 
 #include <QByteArray>
@@ -60,6 +61,8 @@ struct InstallPlan {
     QStringList upgrades;   // Outdated: the installed packages the plan would upgrade
     QString protectedPackage; // Protected (AUR): the name of the deny list it would build
     QStringList access;     // (Flatpak) what its metadata lets it reach (flatpak.h flatpakAccess)
+    QList<FlatpakGrant> permissions; // (Flatpak) the same, grant by grant (flatpakpermissions.h), and how many more
+    int morePermissions = 0;
     QString detail;         // pacman's own message, for Details
 };
 

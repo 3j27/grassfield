@@ -51,7 +51,8 @@ add_library(grassfield-files-core STATIC
     ${GF_FILES_SRC}/recents.cpp ${GF_FILES_SRC}/recents.h
     ${GF_FILES_SRC}/kioprompts.cpp ${GF_FILES_SRC}/kioprompts.h
     ${GF_FILES_SRC}/applicationchooser.cpp ${GF_FILES_SRC}/applicationchooser.h
-    ${GF_FILES_SRC}/kiopromptlogic.cpp ${GF_FILES_SRC}/kiopromptlogic.h)
+    ${GF_FILES_SRC}/kiopromptlogic.cpp ${GF_FILES_SRC}/kiopromptlogic.h
+    ${CMAKE_CURRENT_LIST_DIR}/../ongoing.h)
 set_target_properties(grassfield-files-core PROPERTIES AUTOMOC ON POSITION_INDEPENDENT_CODE ON)
 target_compile_features(grassfield-files-core PUBLIC cxx_std_17)
 target_include_directories(grassfield-files-core PUBLIC ${GF_FILES_SRC} ${CMAKE_CURRENT_LIST_DIR}/..

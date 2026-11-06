@@ -800,7 +800,28 @@ class ContrastTokens(unittest.TestCase):
                 out["color.%s.%s" % (group, name)] = d["color"][group][name]["value"]
         for name in ("closeColor", "minimizeColor", "zoomColor"):
             out["window." + name] = d["window"][name]["value"]
+        # Memos' papers and strips (ADR-0051 D-1): Grassfield's own pastels.
+        for name, leaf in d["memos"].items():
+            if name.endswith("Paper") or name.endswith("Strip"):
+                out["memos." + name] = leaf["value"]
         return out
+
+    # Memos (ADR-0051, docs/specs/memos.md MM4): the memo ink reads at 4.5:1 or more on every paper and every strip, and the
+    # strip's boxes (the ink at memos.boxOpacity) at 3:1, a graphic, on every strip. Opaque here; a Translucent memo shows the
+    # desktop through and is the user's choice, as on macOS.
+    def test_memo_ink_reads_on_every_paper_and_strip(self):
+        d = self.tok.data["memos"]
+        ink = hex_rgb(d["ink"]["value"])
+        names = sorted(n[:-len("Paper")] for n in d if n.endswith("Paper"))
+        self.assertEqual(names, sorted(["yellow", "blue", "green", "pink", "purple", "grey"]))
+        for name in names:
+            paper, strip = hex_rgb(d[name + "Paper"]["value"]), hex_rgb(d[name + "Strip"]["value"])
+            self.assertGreaterEqual(wcag(ink, paper), 4.5, "%s paper: %.2f:1" % (name, wcag(ink, paper)))
+            self.assertGreaterEqual(wcag(ink, strip), 4.5, "%s strip: %.2f:1" % (name, wcag(ink, strip)))
+            box = over(ink, d["boxOpacity"]["value"], strip)
+            self.assertGreaterEqual(wcag(box, strip), 3.0, "%s box: %.2f:1" % (name, wcag(box, strip)))
+            # The strip is a darker step of its paper, not another colour.
+            self.assertLess(lum(strip), lum(paper), name)
 
     def test_no_token_copies_a_macos_system_colour(self):
         import colorsys

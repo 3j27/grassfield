@@ -98,6 +98,14 @@ ShellRoot {
         value: authAgent.queuePresent || secretAgent.requestActive || secretAgent.sinkingKeys
     }
 
+    // Apps the person cannot see get less CPU and I/O (ADR-0048). While the overview or the app switcher is open every
+    // window counts as visible and every limit is lifted at once (the person is about to pick one). Also starts the service.
+    Binding {
+        target: AppEnergy
+        property: "awake"
+        value: overviewSurface.open || switcher.active
+    }
+
     Connections {
         target: SessionState
 
@@ -403,6 +411,8 @@ ShellRoot {
                 Notifications.postInternalAction(qsTr("Updates are stopped"), qsTr("Grassfield's update repository cannot be used, and this stops every system update. Open Software Update to turn Grassfield updates off."), open);
             else if (kind === "grassfield")
                 Notifications.postInternalAction(qsTr("Grassfield %1 is available").arg(name), qsTr("See what's new in Software Update."), open);
+            else if (kind === "security")   // ADR-0050: a Grassfield release its descriptor marks as a security release
+                Notifications.postInternalAction(qsTr("Important security update"), qsTr("Grassfield %1 includes important security fixes. Install it in Software Update.").arg(name), open);
             else if (kind === "omarchy")
                 Notifications.postInternalAction(qsTr("Omarchy %1 is available").arg(name), qsTr("Update Now in Software Update installs it."), open);
             else if (kind === "toolkit")   // ADR-0041 step 2b (U31): no package name in the sentence (the service logs them)
@@ -438,6 +448,12 @@ ShellRoot {
                 Notifications.postInternalAction(notice[0], notice[1], open);
             updateNotice.announce();
         }
+    }
+
+    // ADR-0044 A-1: displays connected together for the first time (settled, two or more, never seen, not while locked): one
+    // notice whose click opens Settings > Displays (macOS extends without asking; the arrangement is one click away).
+    DisplayArrival {
+        onOffered: key => Notifications.postInternalAction(qsTr("New display arrangement"), qsTr("These displays are connected together for the first time. Open Displays Settings to arrange them and choose the main display."), () => SettingsApp.openSection("displays"))
     }
 
     // ADR-0035 D-2: Hyprland's config errors, as one notice per new set (its red bar stays: on 0.56.2 the source is empty,
@@ -583,6 +599,8 @@ ShellRoot {
     // checks and registers its IPC target "update" (ADR-0033 d.7); referencing ActivityLink registers its IPC target "activity"
     // and writes Activity Monitor's projection while the app's window is open (ADR-0038 AM60, AM61); referencing KeyWindow
     // writes the key window's file for the apps from the start (ADR-0039 step 17); referencing Emoji registers its IPC target
-    // "emoji" for Ctrl+Super+Space and reads Recently Used (ADR-0045 OC-3; Omarchy's list waits for the first opening).
-    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "share picker", SharePicker.current === null ? "idle" : "open", "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder", "key window", KeyWindow.path !== "" ? "written" : "no runtime folder", "terminal theme", TerminalTheme.state, "emoji", Emoji.state)
+    // "emoji" for Ctrl+Super+Space and reads Recently Used (ADR-0045 OC-3; Omarchy's list waits for the first opening);
+    // referencing Sounds makes it listen to the compositor's bell and the power adapter from the start, and Audio starts its
+    // output routing (ADR-0047).
+    Component.onCompleted: console.info("grassfield-shell: started, version", SystemInfo.grassfieldVersion, "plugin protocol", Capabilities.protocol, "lock", Lock.lockState, "recent items", RecentItems.max, "clipboard history", Clipboard.state, "not responding", NotResponding.marks.length, "share picker", SharePicker.current === null ? "idle" : "open", "tiling popover", TilingHover.address === "" ? "closed" : "open", "tiling suggestions", TilingSuggest.shown ? "shown" : "none", "software update", SoftwareUpdate.count, "activity link", ActivityLink.folder !== "" ? "ready" : "no runtime folder", "key window", KeyWindow.path !== "" ? "written" : "no runtime folder", "terminal theme", TerminalTheme.state, "emoji", Emoji.state, "sounds", Sounds.devSession ? "dev: silent" : "on", "audio routing", Audio.routingFile)
 }

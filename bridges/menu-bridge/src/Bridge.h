@@ -23,10 +23,14 @@
 // - ScreenSaver (GF-016, ScreenSaver.h): while it runs, org.freedesktop.ScreenSaver Inhibit/UnInhibit are served (the
 //   name is owned when free, never taken from another owner) and the shell gets one "screensaver" boolean; replayed
 //   when a shell connects.
+// - Ongoing activities (ADR-0052, OngoingObject.h): while it runs, org.grassfield.Ongoing1 is served (owned when free, never
+//   taken over); every change is an "ongoing" or "ongoing-end" line, redacted until the connected shell reports the session
+//   unlocked; the shell's clicks on an activity's buttons come back as "ongoing-action". Replayed when a shell connects.
 
 #include "DBusObjects.h"
 #include "LauncherWatcher.h"
 #include "MenuClient.h"
+#include "OngoingObject.h"
 #include "Penalties.h"
 #include "Protocol.h"
 #include "ScreenSaver.h"
@@ -130,6 +134,9 @@ namespace gf::menubridge {
         // hangs without exiting stops repeating it, and the shell then drops a stale "inhibited" (idle locking on).
         QTimer                      m_screensaverHeartbeat;
         void                        setScreenSaver(bool wanted);
+        ongoing::OngoingObject      m_ongoing; // ADR-0052: applications' ongoing activities
+        bool                        m_ongoingOwned = false;
+        void                        setOngoing(bool wanted);
         struct Calls {
             int     count     = 0;
             qint64  startedMs = 0; // monotonic clock, start of the oldest call in flight

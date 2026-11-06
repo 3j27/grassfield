@@ -13,6 +13,7 @@ import "BarHide.js" as BarHide
 import "../dock/AutoHide.js" as AutoHide
 import "StatusLogic.js" as Logic
 import "ClockFormat.js" as ClockFormat
+import "../platform/Ongoing.js" as OngoingLogic
 
 // Top bar, one per screen. Left: Grassfield menu (the Grassfield mark), the focused app name with its
 // application menu, then the app's own menus when it exports them (T1/T2 through MenuBridge) or the
@@ -318,6 +319,29 @@ Scope {
             // A screen recording runs (ADR-0045 OC-1, grassfield-capture's state through CaptureState): its stop item with the
             // elapsed time. Never optional either: the screen being recorded, and how to stop it, always show.
             readonly property bool showRecording: CaptureState.recording
+            // Applications' ongoing activities (ADR-0052 D6): one item each, the Tokens.ongoingBarMax most recently started, right
+            // of the third-party items. Redacted again here while locked (the bridge already sends them so, and the bar is
+            // under the lock surface then). Optional: they give way when the bar is crowded, as Now Playing.
+            readonly property var ongoingItems: OngoingLogic.barItems(MenuBridge.ongoing, Tokens.ongoingBarMax).map(it => OngoingLogic.view(it, SessionState.locked))
+            // A timer's time moves once a second while one is shown: the clock is MenuBridge's, shared with the popover.
+            readonly property real ongoingNow: MenuBridge.ongoingNow
+            // The text of an item: a time, a percent, or "" (indeterminate).
+            function ongoingText(item: var): string {
+                const shown = OngoingLogic.compact(item, win.ongoingNow);
+                return shown.kind === "time" ? shown.text : (shown.kind === "percent" ? qsTr("%1%").arg(shown.value) : "");
+            }
+            // "<App>: <title>" ("In Progress" when redacted), for assistive technologies.
+            function ongoingName(item: var): string {
+                if (item.redacted || item.title === "")
+                    return qsTr("In Progress");
+                const app = item.app !== "" ? Apps.nameFor(item.app) : "";
+                return app !== "" ? qsTr("%1: %2").arg(app).arg(item.title) : item.title;
+            }
+            // Width of an item for the crowding decision: the glyph, and its text at the widest digits of its form.
+            function ongoingWidth(item: var): real {
+                const text = win.ongoingText(item);
+                return statusIconWidth + (text !== "" ? Tokens.spacingXs + ongoingDigits.advanceWidth * text.length : 0);
+            }
             // The Input menu (macOS: shown as soon as there are two input sources, Settings > Keyboard > Input Sources can hide
             // it): the source in use, FR or US.
             readonly property bool showInput: InputSource.available && Settings.keyboardShowInputMenu
@@ -373,6 +397,8 @@ Scope {
                 const trays = Settings.menubarShowTrayItems ? TrayHost.items : [];
                 for (let i = 0; i < trays.length; i++)
                     list.push({key: "tray" + i, width: statusIconWidth, optional: true});
+                for (let i = 0; i < ongoingItems.length; i++)
+                    list.push({key: "ongoing" + ongoingItems[i].id, width: ongoingWidth(ongoingItems[i]), optional: true});
                 if (showNowPlaying)
                     list.push({key: "nowplaying", width: statusIconWidth, optional: true});
                 if (showRecording)
@@ -523,7 +549,7 @@ Scope {
 
             // macOS menu tracking: while one of this bar's menus is open, moving onto another title or status item opens
             // its menu without a click. The clock (Notification Center) and the Do Not Disturb indicator are not menus.
-            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "nowplaying", "screenshare", "input"]
+            readonly property var trackedKinds: ["system", "app", "appfile", "appwindow", "appbridge", "network", "volume", "battery", "controlcenter", "tray", "ongoing", "nowplaying", "screenshare", "input"]
             readonly property bool tracking: Popups.active && Popups.screenName === (win.screen ? win.screen.name : "") && trackedKinds.indexOf(Popups.kind) >= 0
 
             function hoverSwitch(kind: string): void {
@@ -534,6 +560,21 @@ Scope {
             function hoverSwitchBridge(button: Item, menu: var): void {
                 if (win.tracking && !(Popups.kind === "appbridge" && Popups.data.dbusId === menu.dbusId))
                     win.openBridge(button, menu);
+            }
+
+            function hoverSwitchOngoing(button: Item): void {
+                if (win.tracking && !(Popups.kind === "ongoing" && Popups.data.id === button.ongoingId))
+                    win.openOngoing(button);
+            }
+
+            // Opens (or closes, if it is open) an ongoing activity's popover, aligned to the right edge of its item (ADR-0052).
+            function openOngoing(button: Item): void {
+                if (isOpen("ongoing") && Popups.data.id === button.ongoingId) {
+                    Popups.close();
+                    return;
+                }
+                const x = button.mapToItem(null, button.width, 0).x;
+                Popups.open("ongoing", (win.screen ? win.screen.name : ""), x, Tokens.menubarHeight, "right", {id: button.ongoingId});
             }
 
             function hoverSwitchTray(button: Item, item: var): void {
@@ -582,6 +623,8 @@ Scope {
                         continue;
                     if (k.objectName === "menubar-tray")
                         out.push({kind: "tray", button: k, menu: null});
+                    else if (k.objectName === "menubar-ongoing")
+                        out.push({kind: "ongoing", button: k, menu: null});
                     else if (k.menuKind !== "")
                         out.push({kind: k.menuKind, button: k, menu: null});
                 }
@@ -598,6 +641,8 @@ Scope {
                     return Popups.data.dbusId === t.menu.dbusId;
                 if (t.kind === "tray")
                     return Popups.data.item === t.button.item;
+                if (t.kind === "ongoing")
+                    return Popups.data.id === t.button.ongoingId;
                 return true;
             }
 
@@ -606,6 +651,8 @@ Scope {
                     win.openBridge(t.button, t.menu);
                 else if (t.kind === "tray")
                     win.openTray(t.button, t.button.item);
+                else if (t.kind === "ongoing")
+                    win.openOngoing(t.button);
                 else
                     win.popup(t.kind === "file" ? "appfile" : t.kind === "window" ? "appwindow" : t.kind);
             }
@@ -627,7 +674,7 @@ Scope {
             function openFirstStatus(): void {
                 const all = win.navEntries();
                 for (let i = 0; i < all.length; i++) {
-                    if (["input", "network", "volume", "battery", "controlcenter", "nowplaying", "screenshare", "tray"].indexOf(all[i].kind) >= 0) {
+                    if (["input", "network", "volume", "battery", "controlcenter", "nowplaying", "screenshare", "tray", "ongoing"].indexOf(all[i].kind) >= 0) {
                         win.openEntry(all[i]);
                         return;
                     }
@@ -1178,6 +1225,61 @@ Scope {
                                 shadowed: !win.showBackground
                                 shadowColor: win.barShadow
                             }
+                        }
+
+                        // Ongoing activities (ADR-0052 D6): the kind's glyph and its time or percent; a click opens the
+                        // activity's popover (OngoingPopover: the app, its text, its progress and buttons).
+                        Repeater {
+                            model: win.ongoingItems
+
+                            delegate: BarButton {
+                                id: ongoingButton
+
+                                required property var modelData
+                                required property int index
+                                readonly property string ongoingId: modelData.id
+                                readonly property string compactText: win.ongoingText(modelData)
+
+                                objectName: "menubar-ongoing"
+                                tint: win.barTint
+                                shadowed: !win.showBackground
+                                shadowColor: win.barShadow
+                                padding: Tokens.menubarStatusItemPadding
+                                visible: !win.hiddenStatus["ongoing" + modelData.id]
+                                accessibleName: win.ongoingName(modelData)
+                                active: win.isOpen("ongoing") && Popups.data.id === modelData.id
+                                opensMenu: true
+                                onActivated: win.openOngoing(ongoingButton)
+                                onEntered: win.hoverSwitchOngoing(ongoingButton)
+
+                                Icon {
+                                    size: Tokens.menubarIconSize
+                                    heavy: true
+                                    color: win.barText
+                                    name: OngoingLogic.symbolOf(ongoingButton.modelData.kind)
+                                }
+
+                                Text {
+                                    visible: text !== ""
+                                    textFormat: Text.PlainText
+                                    text: ongoingButton.compactText
+                                    color: win.barText
+                                    font.family: Appearance.fontFamily
+                                    font.pixelSize: Tokens.typographyMenuSize
+                                    font.weight: Tokens.typographyMenuWeight
+                                    // Tabular figures: the item keeps its width while the seconds change.
+                                    font.features: {"tnum": 1}
+                                }
+                            }
+                        }
+
+                        // The widest digit of the bar's font, for ongoingWidth.
+                        TextMetrics {
+                            id: ongoingDigits
+                            text: "0"
+                            font.family: Appearance.fontFamily
+                            font.pixelSize: Tokens.typographyMenuSize
+                            font.weight: Tokens.typographyMenuWeight
                         }
 
                         // Screen recording (ADR-0045 OC-1): while grassfield-capture records, the stop glyph and the elapsed

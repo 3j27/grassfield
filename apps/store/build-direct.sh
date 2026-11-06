@@ -29,10 +29,11 @@ if [[ ${1:-} == "--tests" ]]; then
   "$moc" "$here/src/storebackend.h" -o "$out/moc_storebackend$suffix.cpp"
   "$moc" "$here/src/operations.h" -o "$out/moc_operations$suffix.cpp"
   "$moc" "$here/src/storeinstance.h" -o "$out/moc_storeinstance$suffix.cpp"
+  "$moc" "$here/../ongoing.h" -o "$out/moc_store_ongoing$suffix.cpp"
   # shellcheck disable=SC2046
   g++ "${cxxflags[@]}" "${extra[@]}" -I"$here/src" -I"$here/.." -I"$root/ui/i18n" \
     "-DSTORE_FIXTURES=\"$root/tests/fixtures/store\"" $(pkg-config --cflags Qt6Core Qt6Gui Qt6Network Qt6DBus zlib) \
-    "${backend[@]}" "$out/moc_storebackend$suffix.cpp" "$out/moc_operations$suffix.cpp" "$out/moc_storeinstance$suffix.cpp" \
+    "${backend[@]}" "$out/moc_storebackend$suffix.cpp" "$out/moc_operations$suffix.cpp" "$out/moc_storeinstance$suffix.cpp" "$out/moc_store_ongoing$suffix.cpp" \
     "$root"/tests/unit/store/tst_*.cpp \
     $(pkg-config --libs Qt6Core Qt6Gui Qt6Network Qt6DBus zlib) -lgtest -lgtest_main -pthread -o "$out/store-unit-tests$suffix"
   echo "built $out/store-unit-tests$suffix"
@@ -46,6 +47,7 @@ fi
 "$moc" "$here/src/storebackend.h" -o "$out/moc_storebackend.cpp"
 "$moc" "$here/src/operations.h" -o "$out/moc_operations.cpp"
 "$moc" "$here/src/storeinstance.h" -o "$out/moc_storeinstance.cpp"
+"$moc" "$here/../ongoing.h" -o "$out/moc_store_ongoing.cpp"
 qtver=$(pkg-config --modversion Qt6Gui)
 # shellcheck disable=SC2046
 g++ "${cxxflags[@]}" "${defs[@]}" \
@@ -53,7 +55,7 @@ g++ "${cxxflags[@]}" "${defs[@]}" \
   $(pkg-config --cflags Qt6Gui Qt6Network Qt6Qml Qt6Quick Qt6DBus zlib) $(pkg-config --cflags wayland-client) \
   -I"/usr/include/qt6/QtGui/$qtver" -I"/usr/include/qt6/QtGui/$qtver/QtGui" -I"/usr/include/qt6/QtCore/$qtver" \
   "${backend[@]}" "$here/src/main.cpp" "$here/src/screenshotprovider.cpp" "$out/moc_storebackend.cpp" "$out/moc_operations.cpp" \
-  "$out/moc_storeinstance.cpp" $(pkg-config --libs Qt6Gui Qt6Network Qt6Qml Qt6Quick Qt6DBus zlib) -lwayland-client \
+  "$out/moc_storeinstance.cpp" "$out/moc_store_ongoing.cpp" $(pkg-config --libs Qt6Gui Qt6Network Qt6Qml Qt6Quick Qt6DBus zlib) -lwayland-client \
   -o "$out/grassfield-store"
 echo "built $out/grassfield-store"
 

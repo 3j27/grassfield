@@ -96,6 +96,9 @@ for h in foldermodel placesmodel filesapp tagsearch filesearch savedsearches arc
   "$moc" "${kf_includes[@]}" "$here/src/$h.h" -o "$out/moc_files_$h.cpp"
   mocs+=("$out/moc_files_$h.cpp")
 done
+# The apps' shared ongoing-activity client (ADR-0052).
+"$moc" "$here/../ongoing.h" -o "$out/moc_files_ongoing.cpp"
+mocs+=("$out/moc_files_ongoing.cpp")
 compile "$out/files-core-obj" "$here/src/filesapp.cpp" "$here/src/foldermodel.cpp" "$here/src/placesmodel.cpp" "$here/src/diskprobe.cpp" "$here/src/volumelogic.cpp" \
   "$here/src/imageproviders.cpp" "$here/src/filelogic.cpp" "$here/src/launchguard.cpp" "$here/src/taglogic.cpp" "$here/src/tagstore.cpp" \
   "$here/src/tagsearch.cpp" "$here/src/searchlogic.cpp" "$here/src/navlogic.cpp" "$here/src/renamelogic.cpp" "$here/src/archivelogic.cpp" "$here/src/batchops.cpp" "$here/src/archivejob.cpp" "$here/src/permissionlogic.cpp" "$here/src/filesearch.cpp" "$here/src/savedsearches.cpp" "$here/src/applicationslogic.cpp" "$here/src/appicons.cpp" "$here/src/folderstylelogic.cpp" "$here/src/folderstylestore.cpp" "$here/src/folderviews.cpp" "$here/src/imagerotate.cpp" "$here/src/imagesize.cpp" "$here/src/recents.cpp" \

@@ -1,0 +1,8 @@
+[Sound Theme]
+Name=Grassfield
+Comment=Grassfield's own interface sounds (ADR-0047)
+Inherits=freedesktop
+Directories=stereo
+
+[stereo]
+OutputProfile=stereo

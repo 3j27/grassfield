@@ -180,6 +180,7 @@ function sanitizeItems(items, depth, budget) {
 
 // One bridge line -> {type: "status", state, registrar} | {type: "menu", window, revision, items}
 // | {type: "launcher", app, count, progress, urgent} | {type: "screensaver", inhibited, count}
+// | {type: "ongoing", msg} (the raw object, for Ongoing.js parse) | {type: "ongoing-end", id}
 // | {type: "error", window, code, message}, or null.
 function parseBridgeLine(line) {
     if (typeof line !== "string" || line.length === 0 || line.length > limits.line)
@@ -223,6 +224,11 @@ function parseBridgeLine(line) {
         if (typeof msg.inhibited !== "boolean" || !Number.isInteger(msg.count) || msg.count < 0 || msg.count > limits.inhibitors)
             return null;
         return {type: "screensaver", inhibited: msg.inhibited, count: msg.count};
+    case "ongoing":
+        // ADR-0052: an application's ongoing activity; Ongoing.js parse() checks its fields (MenuBridge.qml).
+        return {type: "ongoing", msg: msg};
+    case "ongoing-end":
+        return /^[0-9a-f]{16}$/.test(String(msg.id)) ? {type: "ongoing-end", id: msg.id} : null;
     case "error":
         return {
             type: "error",

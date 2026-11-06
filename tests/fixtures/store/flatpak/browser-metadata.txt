@@ -1,0 +1,32 @@
+# Modelled on the finish-args a Flathub web browser commonly declares (written for this test, not copied from Flathub;
+# ADR-0049: real Flathub metadata is NOT VERIFIED here).
+[Application]
+name=org.example.Browser
+runtime=org.freedesktop.Platform/x86_64/25.08
+sdk=org.freedesktop.Sdk/x86_64/25.08
+command=browser
+
+[Context]
+shared=network;ipc;
+sockets=x11;wayland;pulseaudio;fallback-x11;pcsc;cups;
+devices=all;
+filesystems=xdg-download;/run/.heim_org.h5l.kcm-socket;xdg-run/pipewire-0;
+persistent=.browser;
+
+[Session Bus Policy]
+org.freedesktop.FileManager1=talk
+org.a11y.Bus=talk
+org.gtk.vfs.*=talk
+org.mpris.MediaPlayer2.browser.*=own
+org.example.Browser.*=own
+org.freedesktop.ScreenSaver=talk
+
+[System Bus Policy]
+org.freedesktop.NetworkManager=talk
+
+[Environment]
+MOZ_ENABLE_WAYLAND=1
+
+[Extension org.example.Browser.Locale]
+directory=share/runtime/locale
+autodelete=true

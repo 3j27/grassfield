@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Memos
+Name[fr]=Mémos
+GenericName=Desktop Notes
+GenericName[fr]=Notes sur le bureau
+Comment=Keep short notes on the desktop
+Comment[fr]=Garder de courtes notes sur le bureau
+Keywords=notes;memo;reminder;desktop;
+Keywords[fr]=notes;mémo;pense-bête;bureau;
+Exec=grassfield-memos
+Icon=org.grassfield.Memos
+Terminal=false
+Categories=Utility;
+StartupWMClass=org.grassfield.Memos

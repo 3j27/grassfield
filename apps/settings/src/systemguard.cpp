@@ -347,7 +347,33 @@ bool isActionProgram(const QString &program)
 {
     return program == QLatin1String("wpctl") || program == QLatin1String("xdg-open") || program == QLatin1String("omarchy-language")
         || program == QLatin1String("omarchy-powerprofiles-set") || program == QLatin1String("brightnessctl") || program == QLatin1String("lpoptions")
-        || program == QLatin1String("timeout") || program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set");
+        || program == QLatin1String("timeout") || program == QLatin1String("/usr/lib/grassfield/grassfield-channel-set")
+        || program == QLatin1String("/usr/lib/grassfield/grassfield-report")
+        || program == QLatin1String("pw-play");
+}
+
+bool isSoundPreview(const QStringList &argv)
+{
+    // Settings > Sound's alert previews (ADR-0047 B-4; ui/Grassfield/Ui/SoundEffects.js previewArgv): one of Grassfield's own
+    // alert sounds at a stream volume of 0.000 to 1.000, through the default output or one PipeWire node named like the
+    // schema's sound.effectsOutput:
+    //   pw-play --media-role Notification --volume <v> [--target <node>] -- /usr/share/sounds/grassfield/stereo/grassfield-alert-<id>.wav
+    static const QRegularExpression volume(QRegularExpression::anchoredPattern(QStringLiteral("0\\.[0-9]{3}|1\\.000")));
+    static const QRegularExpression node(QRegularExpression::anchoredPattern(QStringLiteral("[A-Za-z0-9_][A-Za-z0-9_.:@+-]{0,254}")));
+    static const QRegularExpression file(QRegularExpression::anchoredPattern(
+        QStringLiteral("/usr/share/sounds/grassfield/stereo/grassfield-alert-(meadow|dewdrop|reed|lantern|ember|thistle)\\.wav")));
+    if (argv.size() != 7 && argv.size() != 9)
+        return false;
+    if (argv.at(0) != QLatin1String("pw-play") || argv.at(1) != QLatin1String("--media-role") || argv.at(2) != QLatin1String("Notification")
+        || argv.at(3) != QLatin1String("--volume") || !volume.match(argv.at(4)).hasMatch())
+        return false;
+    int i = 5;
+    if (argv.size() == 9) {
+        if (argv.at(5) != QLatin1String("--target") || !node.match(argv.at(6)).hasMatch())
+            return false;
+        i = 7;
+    }
+    return argv.at(i) == QLatin1String("--") && file.match(argv.at(i + 1)).hasMatch();
 }
 
 bool isBacklightName(const QString &name)
@@ -410,7 +436,26 @@ bool asksForPassword(const QStringList &argv)
 int actionTimeoutMs(const QStringList &argv, int requested)
 {
     constexpr int kPromptMs = 130000;
+    // The diagnostic report runs a few read-only commands with their own timeouts (10 s each, the journal 20 s).
+    constexpr int kReportMs = 90000;
+    if (!argv.isEmpty() && argv.first() == QLatin1String("/usr/lib/grassfield/grassfield-report"))
+        return std::max(requested, kReportMs);
     return asksForPassword(argv) ? std::max(requested, kPromptMs) : requested;
+}
+
+bool isRevealInFiles(const QStringList &argv, const QString &home)
+{
+    if (argv.size() != 3 || argv.at(0) != QLatin1String("/usr/bin/grassfield-files") || argv.at(1) != QLatin1String("--"))
+        return false;
+    const QString &folder = argv.at(2);
+    const QString h = QDir::cleanPath(home);
+    if (!h.startsWith(QLatin1Char('/')) || h == QLatin1String("/") || folder.size() > 4096 || QDir::cleanPath(folder) != folder)
+        return false;
+    for (const QChar c : folder) {
+        if (c.category() == QChar::Other_Control || c.category() == QChar::Other_Format)
+            return false;
+    }
+    return folder == h || folder.startsWith(h + QLatin1Char('/'));
 }
 
 bool isLaunch(const QStringList &argv)
@@ -444,6 +489,8 @@ bool isAllowedAction(const QStringList &argv)
 {
     if (argv.isEmpty() || !isActionProgram(argv.first()))
         return false;
+    if (argv.first() == QLatin1String("pw-play"))
+        return isSoundPreview(argv);
     // Omarchy's own per-user language switch (it generates the locale through Omarchy's sudoers grant or pkexec): one code.
     if (argv.first() == QLatin1String("omarchy-language"))
         return argv.size() == 2 && isLanguageCode(argv.at(1));
@@ -489,6 +536,9 @@ bool isAllowedAction(const QStringList &argv)
         return (argv.size() == 3 && argv.at(1) == QLatin1String("-d") && isPrinterName(argv.at(2)))
             || (argv.size() == 5 && argv.at(1) == QLatin1String("-p") && isPrinterName(argv.at(2)) && argv.at(3) == QLatin1String("-o")
                 && argv.at(4).startsWith(QLatin1String("PageSize=")) && isPaperKeyword(argv.at(4).mid(9)));
+    // About > Create Diagnostic Report… (ADR-0053): the installed report, no argument (it writes into the Downloads folder).
+    if (argv.first() == QLatin1String("/usr/lib/grassfield/grassfield-report"))
+        return argv.size() == 1;
     if (argv.first() != QLatin1String("xdg-open"))
         return true;
     if (argv.size() != 2)

@@ -209,6 +209,14 @@ Scope {
     readonly property real clipboardPinnedClearedAt: read("search.clipboard.pinnedClearedAt")
     // Software Update's automatic checks (ADR-0033 d.5): on by default; opening the pane checks whatever this says.
     readonly property bool updatesAutomaticCheck: read("updates.automaticCheck")
+    // Apps the person cannot see get less CPU and I/O (ADR-0048, Settings > Battery > Options…): on by default.
+    readonly property bool energySlowHiddenApps: read("energy.slowHiddenApps")
+    // Sound effects (ADR-0047 part B): the alert's id and volume, where effects play, interface sounds, volume feedback.
+    readonly property string soundAlert: read("sound.alert")
+    readonly property real soundAlertVolume: read("sound.alertVolume")
+    readonly property string soundEffectsOutput: read("sound.effectsOutput")
+    readonly property bool soundUiEffects: read("sound.uiEffects")
+    readonly property bool soundVolumeFeedback: read("sound.volumeFeedback")
     // The default list of the first releases (a file written by them holds it) reads as the current default: Files is the
     // fixed first tile now and Nautilus is no default any more (same rule as DockModel.migratePinned). Any other list, a
     // user's own, is returned as it is. Nothing is written back. The Dock owns this key and its recent list and stack options.

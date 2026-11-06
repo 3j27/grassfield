@@ -262,6 +262,47 @@ TEST(ActionGuard, BrightnessTakesOneBacklightAndAPercentage)
     EXPECT_FALSE(isReadOnlyQuery(cmd("intel_backlight", "50%")));
 }
 
+// Sound effects (ADR-0047 B-4): pw-play plays only one of Grassfield's alert sounds, in SoundEffects.js previewArgv's form.
+TEST(ActionGuard, SoundPreviewPlaysOnlyGrassfieldAlerts)
+{
+    const QString dir = QStringLiteral("/usr/share/sounds/grassfield/stereo/");
+    const auto cmd = [&](const char *volume, const char *alert, const char *target) {
+        QStringList argv{QStringLiteral("pw-play"), QStringLiteral("--media-role"), QStringLiteral("Notification"), QStringLiteral("--volume"),
+                         QString::fromLatin1(volume)};
+        if (target)
+            argv << QStringLiteral("--target") << QString::fromLatin1(target);
+        return argv << QStringLiteral("--") << dir + QString::fromLatin1(alert);
+    };
+    for (const char *alert : {"meadow", "dewdrop", "reed", "lantern", "ember", "thistle"}) {
+        const QByteArray file = QByteArray("grassfield-alert-") + alert + ".wav";
+        EXPECT_TRUE(isAllowedAction(cmd("0.422", file.constData(), nullptr))) << alert;
+    }
+    EXPECT_TRUE(isAllowedAction(cmd("1.000", "grassfield-alert-reed.wav", "bluez_output.AA_BB_CC_DD_EE_FF.1")));
+    EXPECT_TRUE(isAllowedAction(cmd("0.000", "grassfield-alert-reed.wav", "alsa_output.pci-0000_00_1f.3.analog-stereo")));
+    // Other files, other volumes, a target that is an option or not a node name: refused.
+    for (const char *no : {"screen-capture.wav", "grassfield-alert-x.wav", "grassfield-alert-reed.ogg", "../grassfield-alert-reed.wav", ""})
+        EXPECT_FALSE(isAllowedAction(cmd("0.500", no, nullptr))) << no;
+    for (const char *no : {"1.5", "2.000", "0.5", "-0.100", "1.001", "0,500", ""})
+        EXPECT_FALSE(isAllowedAction(cmd(no, "grassfield-alert-reed.wav", nullptr))) << no;
+    for (const char *no : {"-x", "", "a b", "node;rm", "--", "x\n"})
+        EXPECT_FALSE(isAllowedAction(cmd("0.500", "grassfield-alert-reed.wav", no))) << no;
+    // Another media role, a missing --, a file elsewhere, a recording option, a path for the program: refused.
+    QStringList role = cmd("0.500", "grassfield-alert-reed.wav", nullptr);
+    role[2] = QStringLiteral("Music");
+    EXPECT_FALSE(isAllowedAction(role));
+    QStringList dash = cmd("0.500", "grassfield-alert-reed.wav", nullptr);
+    dash.removeAt(5);
+    EXPECT_FALSE(isAllowedAction(dash));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("pw-play"), QStringLiteral("--"), QStringLiteral("/tmp/grassfield-alert-reed.wav")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("pw-play"), QStringLiteral("--media-role"), QStringLiteral("Notification"), QStringLiteral("--volume"),
+                                  QStringLiteral("0.500"), QStringLiteral("--record"), QStringLiteral("x"), QStringLiteral("--"),
+                                  dir + QStringLiteral("grassfield-alert-reed.wav")}));
+    QStringList path = cmd("0.500", "grassfield-alert-reed.wav", nullptr);
+    path[0] = QStringLiteral("/usr/bin/pw-play");
+    EXPECT_FALSE(isAllowedAction(path));
+    EXPECT_FALSE(isReadOnlyQuery(cmd("0.500", "grassfield-alert-reed.wav", nullptr)));
+}
+
 // Displays > Brightness of an external display (ADR-0045 OC-4): Omarchy's DDC/CI command with one connector and one whole
 // percentage, bounded by coreutils' timeout, which ends its whole process group (ddcutil included) within 14 s, before the
 // action's 15 s (security review, LOW 3): exactly `timeout -k 2 12 omarchy-brightness-display-ddc <connector> <N>%`. The bare
@@ -478,7 +519,7 @@ TEST(ActionGuard, OnlyTheNamedProgramsRun)
 {
     // xdg-open opens the attribution links of the wallpaper page (by bare name, never a path or a shell); omarchy-language is
     // Language & Region's (one code, ActionGuard.OmarchyLanguageTakesOneCodeOnly).
-    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language", "omarchy-powerprofiles-set", "lpoptions"})
+    for (const char *ok : {"wpctl", "xdg-open", "omarchy-language", "omarchy-powerprofiles-set", "lpoptions", "pw-play"})
         EXPECT_TRUE(isActionProgram(QString::fromLatin1(ok))) << ok;
     // nmcli and bluetoothctl are gone: Wi-Fi and Bluetooth are D-Bus calls (systembus.h), never commands.
     for (const char *no : {"", "sh", "bash", "/usr/bin/xdg-open", "xdg-open ", "gio", "rm", "env", "nmcli", "bluetoothctl"})
@@ -616,6 +657,50 @@ TEST(LaunchGuard, OmarchysSetupsInItsTerminalExactly)
     EXPECT_FALSE(isLaunch({launcher, QStringLiteral("passwd")}));
     EXPECT_FALSE(isLaunch({launcher, QStringLiteral("voxtype setup model")}));
     EXPECT_FALSE(isLaunch({QStringLiteral("/usr/bin/omarchy-launch-floating-terminal-with-presentation"), QStringLiteral("omarchy-drive-password")}));
+}
+
+// About > Create Diagnostic Report… (ADR-0053): the installed report with no argument is an action (90 s at least); nothing
+// else of its name is, and it is no query and no launch.
+TEST(ActionGuard, DiagnosticReportExactly)
+{
+    const QString report = QStringLiteral("/usr/lib/grassfield/grassfield-report");
+    EXPECT_TRUE(isActionProgram(report));
+    EXPECT_TRUE(isAllowedAction({report}));
+    EXPECT_FALSE(isAllowedAction({report, QStringLiteral("--output")}));
+    EXPECT_FALSE(isAllowedAction({report, QStringLiteral("--output"), QStringLiteral("/etc/x")}));
+    EXPECT_FALSE(isAllowedAction({report, QStringLiteral("--help")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("grassfield-report")}));
+    EXPECT_FALSE(isAllowedAction({QStringLiteral("/usr/bin/grassfield-report")}));
+    EXPECT_FALSE(isReadOnlyQuery({report}));
+    EXPECT_FALSE(isLaunch({report}));
+    EXPECT_EQ(actionTimeoutMs({report}, 15000), 90000);
+    EXPECT_EQ(actionTimeoutMs({report}, 120000), 120000);
+    EXPECT_EQ(actionTimeoutMs({QStringLiteral("wpctl"), QStringLiteral("set-mute"), QStringLiteral("1"), QStringLiteral("0")}, 15000), 15000);
+    EXPECT_FALSE(asksForPassword({report}));
+}
+
+// The report's folder shown in Files: /usr/bin/grassfield-files -- <a clean folder in the home>, nothing else.
+TEST(LaunchGuard, RevealInFilesOnlyAFolderOfTheHome)
+{
+    const QString files = QStringLiteral("/usr/bin/grassfield-files");
+    const QString dd = QStringLiteral("--");
+    const QString home = QStringLiteral("/home/u");
+    EXPECT_TRUE(isRevealInFiles({files, dd, QStringLiteral("/home/u/Downloads")}, home));
+    EXPECT_TRUE(isRevealInFiles({files, dd, QString::fromUtf8("/home/u/Téléchargements")}, home));
+    EXPECT_TRUE(isRevealInFiles({files, dd, home}, home));
+    EXPECT_TRUE(isRevealInFiles({files, dd, QStringLiteral("/home/u/Downloads")}, QStringLiteral("/home/u/")));
+    for (const char *no : {"/home/uu/Downloads", "/home/u/../v", "/home/u/./x", "/home/u//x", "/home/u/x/", "/etc", "Downloads", "",
+                           "/home/u/a\nb", "/home/u/a‮b", "-x", "/"})
+        EXPECT_FALSE(isRevealInFiles({files, dd, QString::fromUtf8(no)}, home)) << no;
+    EXPECT_FALSE(isRevealInFiles({files, QStringLiteral("/home/u/Downloads")}, home));
+    EXPECT_FALSE(isRevealInFiles({QStringLiteral("grassfield-files"), dd, QStringLiteral("/home/u/Downloads")}, home));
+    EXPECT_FALSE(isRevealInFiles({files, QStringLiteral("--info"), QStringLiteral("/home/u/Downloads")}, home));
+    EXPECT_FALSE(isRevealInFiles({files, dd, QStringLiteral("/home/u/Downloads"), QStringLiteral("/home/u")}, home));
+    EXPECT_FALSE(isRevealInFiles({files, dd, QStringLiteral("/home/u/Downloads")}, QStringLiteral("/")));
+    EXPECT_FALSE(isRevealInFiles({files, dd, QStringLiteral("/home/u/Downloads")}, QStringLiteral("relative")));
+    EXPECT_FALSE(isRevealInFiles({files, dd, QStringLiteral("/home/u/") + QString(5000, QLatin1Char('a'))}, home));
+    EXPECT_FALSE(isLaunch({files, dd, QStringLiteral("/home/u/Downloads")}));
+    EXPECT_FALSE(isAllowedAction({files, dd, QStringLiteral("/home/u/Downloads")}));
 }
 
 TEST(ActionGuard, XdgOpenOnlyOpensOneCleanHttpsLink)

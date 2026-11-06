@@ -10,7 +10,8 @@ import "Store.js" as Store
 //     other system packages; Update All… opens Software Update, which updates the whole system with its password and its
 //     progress (SD32); Software Update… when only it can act (updates blocked, not set up).
 //   - Flatpak apps (Flathub on): their updates (flatpak remote-ls --updates, S31), each with Update, and Update All for the
-//     group; the runtimes' updates counted.
+//     group; the runtimes' updates counted. An update that asks for more than the installed version (ADR-0049) says
+//     "Asks for more: …" and Update All leaves it out: its own Update shows what it asks for.
 ScrollPage {
     id: root
 
@@ -219,6 +220,18 @@ ScrollPage {
         font.pixelSize: Tokens.storeBodySize
     }
 
+    // Update All leaves out what asks for more (ADR-0049): said once, under the group's line.
+    Text {
+        width: Math.min(root.contentWidth, Tokens.storeTextMaxWidth)
+        visible: root.flatpak.on && root.flatpakApps.some(a => a.asksForMore === true)
+        textFormat: Text.PlainText
+        text: qsTr("Apps that ask for more than before update only when you update them one by one.")
+        wrapMode: Text.Wrap
+        color: Appearance.windowSecondary
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.storeBadgeSize
+    }
+
     Column {
         width: root.contentWidth
         visible: root.flatpak.on && root.flatpakApps.length > 0
@@ -227,11 +240,14 @@ ScrollPage {
         Repeater {
             model: root.flatpakApps
 
+            // An update that asks for more (ADR-0049) says so where its summary is: Update All leaves it to its own Update.
             delegate: AppLockup {
+                id: flatpakLockup
                 required property var modelData
                 required property int index
+                readonly property string asks: Store.asksForMoreText(flatpakLockup.modelData)
                 width: root.contentWidth
-                app: modelData
+                app: flatpakLockup.asks === "" ? flatpakLockup.modelData : Object.assign({}, flatpakLockup.modelData, {summary: flatpakLockup.asks})
                 separator: index < root.flatpakApps.length - 1
                 onOpened: id => root.opened(id)
             }

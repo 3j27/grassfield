@@ -353,6 +353,11 @@ Scope {
             Trash.refresh();
             return;
         }
+        // The app's CPU and I/O limits (ADR-0048) are lifted before its windows come forward.
+        if (item.kind === "minimized")
+            AppEnergy.wakeToplevels([item.toplevel]);
+        else if (item.kind !== "folder" && Array.isArray(item.windows) && item.windows.length > 0)
+            AppEnergy.wakeToplevels(item.windows);
         if (item.kind === "minimized") {
             Compositor.unminimizeWithGroup(item.toplevel); // its tile group comes forward with it (TL29)
             return;
@@ -1064,6 +1069,7 @@ Scope {
                         holdLayout = true;
                         holdTimer.restart();
                         win.poof(cx, cy);
+                        Sounds.play("dock-remove");
                     } else {
                         tileItem.glideFrom(dx, dy);
                     }

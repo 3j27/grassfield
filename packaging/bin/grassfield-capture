@@ -47,6 +47,8 @@
 # starts; a recording writes its state ("starting") at once, so that the shell stops one that becomes active under the lock,
 # and the recording helper reads the marker every LOCK_POLL_SECONDS and ends the recording when the session locks, even
 # without a shell.
+# Once a picture is taken (saved, or copied alone), the shutter sound plays when Settings > Sound > "Play user
+# interface sound effects" is on (ADR-0047 B-5: pw-play, at the alert volume, through the effects output).
 import contextlib
 import datetime
 import fcntl
@@ -129,6 +131,57 @@ CATALOG = {
         REC_OPEN: "Ouvrir",
     },
 }
+
+
+# The shutter (branding/sounds, installed by grassfield-desktop) and the settings it follows (ADR-0047 B-3), read with the
+# settings contract's rules (ADR-0020: a number is clamped, any other invalid value is the default; the file is opened only
+# when it is a regular file of at most 1 MiB, never waited on). ui/Grassfield/Ui/SoundEffects.js is the shell's twin.
+SHUTTER = "/usr/share/sounds/grassfield/stereo/screen-capture.wav"
+SOUND_DEFAULTS = {"uiEffects": True, "alertVolume": 0.75, "effectsOutput": ""}
+NODE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.:@+-]{0,254}")
+
+
+def sound_settings():
+    out = dict(SOUND_DEFAULTS)
+    home = os.environ.get("GRASSFIELD_CONFIG_HOME") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config"), "grassfield")
+    sound = None
+    try:
+        fd = os.open(os.path.join(home, "grassfield.json"), os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+        with os.fdopen(fd, "rb") as f:
+            st = os.fstat(f.fileno())
+            if stat.S_ISREG(st.st_mode) and st.st_size <= 1 << 20:
+                data = json.loads(f.read(1 << 20).decode("utf-8"))
+                sound = data.get("sound") if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        sound = None
+    if not isinstance(sound, dict):
+        return out
+    if isinstance(sound.get("uiEffects"), bool):
+        out["uiEffects"] = sound["uiEffects"]
+    volume = sound.get("alertVolume")
+    if isinstance(volume, (int, float)) and not isinstance(volume, bool) and volume == volume and abs(volume) != float("inf"):
+        out["alertVolume"] = max(0.0, min(1.0, float(volume)))
+    output = sound.get("effectsOutput")
+    if isinstance(output, str) and (output == "" or NODE_NAME.fullmatch(output)):
+        out["effectsOutput"] = output
+    return out
+
+
+def shutter():
+    s = sound_settings()
+    player = shutil.which("pw-play")
+    if not s["uiEffects"] or s["alertVolume"] <= 0 or player is None:
+        return
+    # The level on the volume keys' cubic scale; a target that is not connected falls back to the default output (WirePlumber).
+    argv = [player, "--media-role", "Notification", "--volume", "%.3f" % s["alertVolume"] ** 3]
+    if s["effectsOutput"]:
+        argv += ["--target", s["effectsOutput"]]
+    try:
+        subprocess.Popen(argv + ["--", SHUTTER], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,  # i18n-ignore (a file path)
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
 
 
 class Cancelled(Exception):
@@ -727,6 +780,7 @@ def shot(opts):
         r = run(shots[0] + ["-"], timeout=30)
         if r is None or r.returncode != 0 or not r.stdout:
             return 1
+        shutter()
         copy_png(r.stdout)
         return 0
     folder = destination(save)
@@ -737,6 +791,7 @@ def shot(opts):
     paths = [p for p in (save_picture(folder, stem, grim) for grim in shots) if p]
     if not paths:
         return 1
+    shutter()
     if save == "preview":
         open_with(PREVIEW, paths)
         return 0

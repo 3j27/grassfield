@@ -92,6 +92,10 @@ Singleton {
     // `address` is lower-case hex without 0x. The Dock bounces the app's icon until the app is activated.
     signal attention(string address)
 
+    // An application rang the bell (Hyprland's `bell` event, xdg-system-bell-v1: GTK 4's error bell); `address` is the
+    // window's, lower-case hex without 0x, or "" (ADR-0047 B-5). Sounds plays the alert sound.
+    signal bell(string address)
+
     // A window closed (Hyprland's `closewindow`), `address` lower-case hex without 0x. The clipboard history drops a paste
     // aimed at it: a new window can reuse the address (ADR-0034 §4).
     signal windowClosed(string address)
@@ -1405,6 +1409,10 @@ Singleton {
                     root.titlebarReveals = WindowTiling.revealsAfter(root.titlebarReveals, reveal);
                 return;
             }
+            if (event.name === "bell") {
+                root.bell(Minimized.normalizeAddress(event.data));
+                return;
+            }
             if (event.name === "urgent") {
                 const urgent = Minimized.normalizeAddress(event.data);
                 if (urgent !== "")
@@ -1777,6 +1785,51 @@ Singleton {
             return null;
         const at = list.indexOf(current);
         return list[(at + 1) % list.length];
+    }
+
+    // What app energy (services/AppEnergy.qml, ADR-0048) needs to know of the windows, as plain data for AppEnergyLogic.js:
+    // {windows: [{address, pid, workspaceId, workspaceName, mapped, hidden, minimized, floating, pinned, fullscreen, x, y, w,
+    // h}], focused: [addresses], shown: [workspace ids the displays show], parked: [workspace names that park windows]}.
+    // Addresses are lower-case hex without 0x; the pid is 0 and the geometry NaN until Hyprland's data was read for the
+    // window (requestWindowRefresh). `focused` holds the focused window and the one in front of a quick look.
+    function energySnapshot(): var {
+        const all = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const parkedList = minimizedAddresses().map(a => Minimized.normalizeAddress(a));
+        const windows = all.map(t => {
+            const d = t.lastIpcObject || {};
+            const at = Array.isArray(d.at) ? d.at : [NaN, NaN];
+            const size = Array.isArray(d.size) ? d.size : [NaN, NaN];
+            const address = Minimized.normalizeAddress(t.address);
+            return {
+                address: address,
+                pid: d.pid > 0 ? d.pid : 0,
+                workspaceId: t.workspace ? t.workspace.id : (d.workspace ? d.workspace.id : 0),
+                workspaceName: t.workspace ? t.workspace.name : (d.workspace ? d.workspace.name : ""),
+                mapped: d.mapped !== false,
+                hidden: d.hidden === true,
+                minimized: parkedList.indexOf(address) >= 0,
+                floating: d.floating === true,
+                pinned: d.pinned === true,
+                fullscreen: typeof d.fullscreen === "number" ? d.fullscreen : 0,
+                x: at[0],
+                y: at[1],
+                w: size[0],
+                h: size[1]
+            };
+        });
+        const focused = [];
+        [root.focusedToplevel, root.frontToplevel].forEach(top => {
+            const address = top ? addressOf(top) : "";
+            if (address !== "" && focused.indexOf(address) < 0)
+                focused.push(address);
+        });
+        const monitors = Hyprland.monitors ? Hyprland.monitors.values : [];
+        return {
+            windows: windows,
+            focused: focused,
+            shown: monitors.filter(m => m.activeWorkspace).map(m => m.activeWorkspace.id),
+            parked: [minimizedWorkspace, hiddenWorkspace, ShowDesktop.PARKING]
+        };
     }
 
     // Running toplevels belonging to an app id (case-insensitive, as desktop entry ids and

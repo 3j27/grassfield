@@ -30,6 +30,12 @@ What it does, in order (its own lock first: a second run answers `busy`):
      grassfield-notes.json and its .sig next to the database, fetched with curl (https only; file only when this build's
      base is file://, the container tests), checked with gpgv against grassfield-keyring's private folder (the signer is
      VALIDSIG's argument 10, the primary key: listed in grassfield-trusted, absent from grassfield-revoked);
+  6. the staged rollout (ADR-0050 3), only when its own [grassfield] sync lists the marker grassfield-rollout: the signed
+     grassfield-rollout.json and its .sig from the channel's plain path (a /cohort/NN segment of the Server URLs removed),
+     checked as the notes are, then read strictly (schema 1, this channel and architecture, 20 cohorts, at most 16 KiB and
+     16 releases, fresh: generatedAt at most a day ahead and never older than one already accepted, expiresAt ahead and at
+     most 31 days after generatedAt). It only explains the pane: which machines get a release is decided by the cohort
+     paths pacman syncs, never here;
   0. before all of that (ADR-0041 step 2b, U31, every state carries it): the toolkit installed now, each tracked
      package with the time pacman installed it (/var/lib/pacman/local/<name>-<version>/desc, readable by every user),
      the version this Grassfield was built with (/usr/share/grassfield/BUILD-DEPS) and whether it moved away from that
@@ -42,6 +48,8 @@ Output: {"version":1,"state":…,"channel":…,"checkedAt":…,"lastSuccessAt":�
          "grassfield":{"installed":…,"available":…,"notes":[{"version","date","notes":{"en","fr"}}],"notesError":…},
          "omarchy":{"installed":…,"available":…},"others":N,"otherPackages":[{"name","installed","available"}],
          "otherPackagesTruncated":true (only when cut),"retryAt":…,"episode":…,
+         "rollout":{"descriptor":"ok|none|invalid|stale","cohort":N|null,"staged":{"version","security","offerAt"}|null,
+                    "withdrawn":…|null,"security":true|false} (null when [grassfield] is not set up),
          "toolkit":{"record":true|false,"packages":[{"name","installed","installedAt","built","moved"}]} (one entry per
          tracked package pacman lists; built and moved null without a record, moved true when the record does not name
          the package)}
@@ -50,6 +58,7 @@ At the 256 KiB cap the list of other updates is cut first, then the notes (notes
 States: not-set-up, repair, blocking, up-to-date, available, failed (error offline|unavailable), update-running, busy.
 """
 import argparse
+import calendar
 import fcntl
 import functools
 import json
@@ -84,6 +93,18 @@ RECORD_NAME = re.compile(r"^[a-z0-9@_+][a-z0-9@._+-]*$")
 RECORD_VERSION = re.compile(r"^[A-Za-z0-9:._+~-]+$")
 DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 UPDATE_LINE = re.compile(r"^(\S+) (\S+) -> (\S+)$")
+# The staged rollout's descriptor (ADR-0050 3).
+ROLLOUT_NAME = "grassfield-rollout.json"
+ROLLOUT_MARKER = "grassfield-rollout"
+ROLLOUT_CAP = 16384
+ROLLOUT_RELEASES = 16
+COHORTS = 20
+ROLLOUT_MAX_LIFE = 31 * 86400
+CLOCK_AHEAD = 86400
+TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+ROLLOUT_KEYS = {"schema", "channel", "arch", "cohorts", "generatedAt", "expiresAt", "releases"}
+RELEASE_KEYS = {"version", "importance", "state", "rollout"}
+RAMP_KEYS = {"startAt", "startPercent", "durationHours"}
 # Control characters except the line feed, and the bidirectional formatting characters: notes are plain text.
 UNSAFE = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]")
 
@@ -230,11 +251,144 @@ def sections(conf_text):
     return sum(1 for line in conf_text.splitlines() if line.split("#", 1)[0].strip() == "[grassfield]")
 
 
+COHORT_FORM = re.compile(r"^/cohort/([01][0-9])/\$arch$")
+
+
 def channel_of(primary, base):
+    """stable or beta for this build's plain form <base>/<channel>/$arch or the staged rollout's cohort form
+    <base>/<channel>/cohort/<NN>/$arch (ADR-0050 2); custom for anything else."""
+    return form_of(primary, base)[0]
+
+
+def form_of(primary, base):
+    """(channel, cohort): cohort None for the plain form, an int 0-19 for the cohort form; ("custom", None) otherwise."""
     for name in ("stable", "beta"):
-        if base and primary == f"{base}/{name}/$arch":
-            return name
-    return "custom"
+        prefix = f"{base}/{name}"
+        if not base or not primary.startswith(prefix):
+            continue
+        rest = primary[len(prefix):]
+        if rest == "/$arch":
+            return name, None
+        m = COHORT_FORM.fullmatch(rest)
+        if m and int(m.group(1)) < COHORTS:
+            return name, int(m.group(1))
+    return "custom", None
+
+
+def plain_url(url):
+    """A Server URL without its /cohort/NN segment: the channel's own path, where the descriptor is published."""
+    return re.sub(r"/cohort/[01][0-9](/[^/]+)$", r"\1", url)
+
+
+class Stale(ValueError):
+    """The descriptor is expired, dated ahead of the clock, or older than one already accepted."""
+
+
+def parse_time(value, what):
+    if not isinstance(value, str) or not TIMESTAMP.fullmatch(value):
+        raise ValueError(f"rollout: {what} is not YYYY-MM-DDTHH:MM:SSZ")
+    try:
+        return calendar.timegm(time.strptime(value, "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        raise ValueError(f"rollout: {what} is not a valid time") from None
+
+
+def whole(value, low, high, what):
+    if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+        raise ValueError(f"rollout: {what} must be a whole number from {low} to {high}")
+    return value
+
+
+def parse_rollout(raw, channel, arch, now, seen):
+    """The verified descriptor's bytes, read strictly (ADR-0050 3): anything outside the schema refuses the whole file
+    (ValueError), a file out of date raises Stale. Returns {"generatedAt", "releases": [{version, importance, state,
+    rollout: None | {startAt, startPercent, durationHours, pausedAt}}]}."""
+    if len(raw) > ROLLOUT_CAP:
+        raise ValueError("rollout: larger than 16 KiB")
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except RecursionError:
+        raise ValueError("rollout: nested too deep") from None
+    if not isinstance(doc, dict) or set(doc) != ROLLOUT_KEYS:
+        raise ValueError("rollout: not the schema's keys")
+    if isinstance(doc["schema"], bool) or doc["schema"] != 1:
+        raise ValueError("rollout: not schema 1")
+    if doc["channel"] != channel or doc["arch"] != arch:
+        raise ValueError("rollout: another channel or architecture")
+    if whole(doc["cohorts"], 1, 1000, "cohorts") != COHORTS:
+        raise ValueError(f"rollout: not {COHORTS} cohorts")
+    generated, expires = parse_time(doc["generatedAt"], "generatedAt"), parse_time(doc["expiresAt"], "expiresAt")
+    if not generated < expires <= generated + ROLLOUT_MAX_LIFE:
+        raise ValueError("rollout: expiresAt must come after generatedAt, within 31 days")
+    releases = doc["releases"]
+    if not isinstance(releases, list) or len(releases) > ROLLOUT_RELEASES:
+        raise ValueError(f"rollout: releases must be a list of at most {ROLLOUT_RELEASES}")
+    out, versions = [], set()
+    for r in releases:
+        if not isinstance(r, dict) or set(r) != RELEASE_KEYS:
+            raise ValueError("rollout: a release is not the schema's keys")
+        if not isinstance(r["version"], str) or not VERSION.fullmatch(r["version"]) or r["version"] in versions:
+            raise ValueError("rollout: a release version is malformed or repeated")
+        versions.add(r["version"])
+        if r["importance"] not in ("normal", "security") or r["state"] not in ("rolling", "paused", "withdrawn"):
+            raise ValueError("rollout: unknown importance or state")
+        ramp = r["rollout"]
+        if ramp is None:
+            if r["importance"] != "security" and r["state"] != "withdrawn":
+                raise ValueError("rollout: only a security or withdrawn release skips the ramp")
+        else:
+            paused = r["state"] == "paused"
+            if not isinstance(ramp, dict) or set(ramp) != (RAMP_KEYS | {"pausedAt"} if paused else RAMP_KEYS):
+                raise ValueError("rollout: a ramp is not the schema's keys (pausedAt only, and always, when paused)")
+            ramp = {"startAt": parse_time(ramp["startAt"], "startAt"),
+                    "startPercent": whole(ramp["startPercent"], 0, 100, "startPercent"),
+                    "durationHours": whole(ramp["durationHours"], 0, 8760, "durationHours"),
+                    "pausedAt": parse_time(ramp["pausedAt"], "pausedAt") if paused else None}
+            if ramp["pausedAt"] is not None and ramp["pausedAt"] < ramp["startAt"]:
+                raise ValueError("rollout: pausedAt before startAt")
+        out.append({"version": r["version"], "importance": r["importance"], "state": r["state"], "rollout": ramp})
+    # Freshness last: a malformed file is `invalid`, never `stale`.
+    if generated > now + CLOCK_AHEAD:
+        raise Stale("rollout: dated ahead of this computer's clock")
+    if expires <= now:
+        raise Stale("rollout: expired")
+    if seen is not None and generated < seen:
+        raise Stale("rollout: older than one already accepted")
+    return {"generatedAt": generated, "releases": out}
+
+
+def reach(release, now):
+    """The share of machines a release has reached, 0 to 1 (ADR-0050 3, the publisher's formula, g.4): a security release
+    or one without a ramp 1; before its start 0; then linear from startPercent over durationHours, frozen at pausedAt."""
+    ramp = release["rollout"]
+    if release["importance"] == "security" or ramp is None:
+        return 1.0
+    t = min(now, ramp["pausedAt"]) if ramp["pausedAt"] is not None else now
+    if t < ramp["startAt"]:
+        return 0.0
+    if ramp["durationHours"] == 0:
+        return 1.0
+    s = ramp["startPercent"] / 100.0
+    return s + (1.0 - s) * min(1.0, (t - ramp["startAt"]) / (ramp["durationHours"] * 3600.0))
+
+
+def offered(cohort, value):
+    """Cohort k gets a release once k < reach x 20; an unenrolled machine (the plain path, the last cohort) at reach 1."""
+    return value >= 1.0 if cohort is None else cohort < value * COHORTS
+
+
+def offer_at(release, cohort):
+    """When the ramp reaches this machine's cohort (a Unix time), or None when it cannot be told (paused, no ramp, a
+    security release: offered at once)."""
+    ramp = release["rollout"]
+    if release["importance"] == "security" or ramp is None or ramp["pausedAt"] is not None:
+        return None
+    s = ramp["startPercent"] / 100.0
+    target = 1.0 if cohort is None else cohort / COHORTS
+    if s >= 1.0 or ramp["durationHours"] == 0 or (cohort is not None and target < s):
+        return ramp["startAt"]
+    # The first whole second at which the reach passes the target (for a cohort: k < reach x 20).
+    return ramp["startAt"] + int((target - s) * ramp["durationHours"] * 3600.0 / (1.0 - s)) + (0 if cohort is None else 1)
 
 
 def update_lock_path():
@@ -295,7 +449,7 @@ class Checker:
                        "lastSuccessAt": None, "error": None, "message": None,
                        "grassfield": {"installed": None, "available": None, "notes": [], "notesError": None},
                        "omarchy": {"installed": None, "available": None}, "others": 0,
-                       "retryAt": None, "episode": None, "toolkit": None}
+                       "retryAt": None, "episode": None, "toolkit": None, "rollout": None}
 
     # -- helpers
     def path(self, *parts):
@@ -462,6 +616,8 @@ class Checker:
         self.result["lastSuccessAt"] = iso(int(self.now))
         if gf["available"]:
             self.notes(gf)
+        if state != "not-set-up" and ROLLOUT_MARKER in grassfield:
+            self.rollout(gf)
         return self.result
 
     def health_sync(self):
@@ -506,28 +662,86 @@ class Checker:
             self.result["message"] = f"release notes: {e}"[:200] if str(e) else "release notes are not available"
 
     def fetch_notes(self, installed, available):
+        return self.parse_notes(self.fetch_signed("grassfield-notes.json", NOTES_CAP), installed, available)
+
+    def fetch_signed(self, name, cap, plain=False):
+        """`name` and its .sig from the first [grassfield] Server that serves both (`plain`: each Server's channel path,
+        without a /cohort/NN segment), checked with gpgv (verify); its bytes, at most cap + 1 of them."""
         rc, out, _ = self.children.run(["pacman-conf", "--repo", "grassfield", "Server"], env=child_env())
         urls = [u.strip().rstrip("/") for u in out.splitlines() if u.strip()] if rc == 0 else []
+        if plain:
+            urls = list(dict.fromkeys(plain_url(u) for u in urls))
         protocols = "=https,file" if repository_value("GRASSFIELD_REPO_BASE").startswith("file://") else "=https"
         with tempfile.TemporaryDirectory(dir=self.health) as tmp:
-            data, sig = os.path.join(tmp, "notes.json"), os.path.join(tmp, "notes.json.sig")
+            data, sig = os.path.join(tmp, "data"), os.path.join(tmp, "data.sig")
             for url in urls:
-                if all(self.download(f"{url}/grassfield-notes.json{suffix}", path, protocols)
+                if all(self.download(f"{url}/{name}{suffix}", path, protocols, cap)
                        for suffix, path in (("", data), (".sig", sig))):
                     break
             else:
                 raise ValueError("not published")
             self.verify(sig, data)
             with open(data, "rb") as f:
-                raw = f.read(NOTES_CAP + 1)
-        return self.parse_notes(raw, installed, available)
+                return f.read(cap + 1)
 
-    def download(self, url, path, protocols):
+    def download(self, url, path, protocols, cap=NOTES_CAP):
         rc, _, _ = self.children.run(
             ["curl", "-fsSL", "--proto", protocols, "--proto-redir", protocols, "--max-redirs", "5",
-             "--max-filesize", str(NOTES_CAP), "--max-time", str(NOTES_SECONDS), "-o", path, "--", url],
+             "--max-filesize", str(cap), "--max-time", str(NOTES_SECONDS), "-o", path, "--", url],
             env=child_env(), timeout=NOTES_SECONDS + 5)
-        return rc == 0 and os.path.getsize(path) <= NOTES_CAP
+        return rc == 0 and os.path.getsize(path) <= cap
+
+    def rollout(self, gf):
+        """ADR-0050 3: the descriptor's explanation of what this machine's cohort path offers. Never fails the check."""
+        listed = servers(read_text(GRASSFIELD_CONF) or "")
+        cohort = form_of(listed[0] if listed else "", repository_value("GRASSFIELD_REPO_BASE"))[1]
+        view = {"descriptor": "none", "cohort": cohort, "staged": None, "withdrawn": None, "security": False}
+        self.result["rollout"] = view
+        channel = self.result["channel"]
+        if channel not in ("stable", "beta"):
+            return
+        seen_path = self.path(f"rollout-seen-{channel}")
+        text = (read_text(seen_path) or "").strip()
+        seen = int(text) if re.fullmatch(r"[0-9]{1,12}", text) else None
+        try:
+            raw = self.fetch_signed(ROLLOUT_NAME, ROLLOUT_CAP, plain=True)
+            desc = parse_rollout(raw, channel, os.uname().machine, self.now, seen)
+        except Stale as e:
+            view["descriptor"] = "stale"
+            self.result["message"] = self.result["message"] or str(e)[:200]
+            return
+        except (ValueError, UnicodeDecodeError, Timeout, Missing, OSError) as e:
+            if str(e) != "not published":
+                view["descriptor"] = "invalid"
+                self.result["message"] = self.result["message"] or (f"rollout: {e}" if str(e) else "rollout: unavailable")[:200]
+            return
+        write_text(seen_path, str(desc["generatedAt"]))
+        view["descriptor"] = "ok"
+        view.update(self.rollout_view(desc, gf["installed"], gf["available"], cohort))
+
+    def rollout_view(self, desc, installed, available, cohort):
+        """staged: the newest rolling release newer than the installed version and than what the database offers (the
+        database is the truth: a release not in it is not offered yet, whatever the formula says); withdrawn: the
+        installed version when the descriptor withdraws it; security: what the database offers is a security release."""
+        out = {"staged": None, "withdrawn": None, "security": False}
+        newest = None
+        for r in desc["releases"]:
+            if available and r["version"] == available and r["importance"] == "security":
+                out["security"] = True
+            if installed and r["version"] == installed and r["state"] == "withdrawn":
+                out["withdrawn"] = r["version"]
+            if r["state"] != "rolling":
+                continue
+            if installed and self.vercmp(r["version"], installed) <= 0:
+                continue
+            if available and self.vercmp(r["version"], available) <= 0:
+                continue
+            if newest is None or self.vercmp(r["version"], newest["version"]) > 0:
+                newest = r
+        if newest is not None:
+            out["staged"] = {"version": newest["version"], "security": newest["importance"] == "security",
+                             "offerAt": iso(offer_at(newest, cohort))}
+        return out
 
     def verify(self, sig, data):
         keyring = os.path.join(KEYRING_DIR, "grassfield.gpg")

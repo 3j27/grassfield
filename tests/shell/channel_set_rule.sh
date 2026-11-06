@@ -97,6 +97,21 @@ version '1.0.0\n'
 run repair
 expect "repair when off: the hint names stable on a plain version" "$rc:$([[ $out == *'grassfield-channel-set stable sets them up'* ]] && echo hint)" "1:hint"
 
+echo "== the staged rollout's cohort form reads as its channel (ADR-0050 2)"
+printf '[options]\n[grassfield]\nInclude = %s/etc/pacman.d/grassfield.conf\n' "$T" >"$T/etc/pacman.conf"
+for pair in 'stable/cohort/07:stable' 'beta/cohort/19:beta' 'stable/cohort/20:custom' 'beta/cohort/7:custom' 'stable:stable'; do
+  printf 'SigLevel = Required\nServer = https://packages.grassfield.site/%s/$arch\nServer = https://packages.grassfield.site/stable/$arch\n' \
+    "${pair%%:*}" >"$T/etc/pacman.d/grassfield.conf"
+  run
+  expect "primary .../${pair%%:*}/\$arch prints ${pair##*:}" "$out" "${pair##*:}"
+done
+printf 'SigLevel = Required\nServer = https://old.example/beta/cohort/04/$arch\n' >"$T/etc/pacman.d/grassfield.conf"
+version '1.0.0\n'
+run repair
+expect "repair of another host's beta cohort form keeps beta" "$(calls)" "set beta|"
+rm -f "$T/etc/pacman.d/grassfield.conf"
+printf '[options]\n' >"$T/etc/pacman.conf"
+
 echo "== the root helper's library enforces the same rule (a direct call is not a way round it)"
 sed "s#^GF_VERSION_FILE=.*#GF_VERSION_FILE=$T/usr/share/grassfield/VERSION#" "$root/packaging/pacman/grassfield-channel.sh" >"$tmp/channel.sh"
 allowed() { (. "$tmp/channel.sh"; gf_stable_allowed) && echo yes || echo no; }

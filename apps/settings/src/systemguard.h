@@ -58,9 +58,14 @@ bool namesWallpaperTool(const QString &program);
 
 // Programs the pages may run as actions in a real session (wpctl for Sound, xdg-open for links, omarchy-language for Language
 // & Region, omarchy-powerprofiles-set for Battery, brightnessctl and timeout (around omarchy-brightness-display-ddc only) for Displays, lpoptions for
-// Printers: the user's own CUPS defaults; /usr/lib/grassfield/grassfield-channel-set for Software Update). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
+// Printers: the user's own CUPS defaults; /usr/lib/grassfield/grassfield-channel-set for Software Update; pw-play for Sound's alert previews). Anything else is refused: Wi-Fi, Bluetooth, the General pane's system
 // changes and adding or removing a printer are D-Bus calls (Backend::busAct).
 bool isActionProgram(const QString &program);
+
+// Settings > Sound's alert preview (ADR-0047 B-4), exactly ui/Grassfield/Ui/SoundEffects.js previewArgv's form:
+//   pw-play --media-role Notification --volume <0.000-1.000> [--target <PipeWire node name>] --
+//       /usr/share/sounds/grassfield/stereo/grassfield-alert-<one of the six ids>.wav
+bool isSoundPreview(const QStringList &argv);
 
 // A backlight's name under /sys/class/backlight ("intel_backlight", "amdgpu_bl1"): 1 to 64 of [A-Za-z0-9_.:-], not starting with "-".
 bool isBacklightName(const QString &name);
@@ -94,7 +99,8 @@ bool isPrinterUri(const QString &uri);
 // ~/.cups/lpoptions; Settings never runs as root, where CUPS would write /etc/cups/lpoptions), for grassfield-channel-set (the
 // installed /usr/lib/grassfield/grassfield-channel-set, never one found on PATH) exactly one of `stable`, `beta`, `repair`,
 // `off` (ADR-0033 c.3; docs/specs/updates.md U12, U13: it runs as the user and asks for the administrator's password itself,
-// through pkexec and the polkit action org.grassfield.packages.set-channel).
+// through pkexec and the polkit action org.grassfield.packages.set-channel), for /usr/lib/grassfield/grassfield-report (About >
+// Create Diagnostic Report…, ADR-0053: read-only commands, one private file in the user's Downloads folder) no argument at all.
 bool isAllowedAction(const QStringList &argv);
 
 // An allowed action that may wait for a password (omarchy-language: Omarchy's own pkexec prompt; grassfield-channel-set: the
@@ -103,8 +109,14 @@ bool isAllowedAction(const QStringList &argv);
 bool asksForPassword(const QStringList &argv);
 
 // How long an allowed action may run: `requested`, or 130 s for an action that asks for a password (asksForPassword), which may
-// wait for its prompt as long as a polkit call of ADR-0030 waits for the user.
+// wait for its prompt as long as a polkit call of ADR-0030 waits for the user; at least 90 s for the diagnostic report.
 int actionTimeoutMs(const QStringList &argv, int requested);
+
+// About > Create Diagnostic Report… shows the report in Files (ADR-0053; Backend::launch, in the session's own language):
+// exactly `/usr/bin/grassfield-files -- <folder>` with <folder> a clean absolute path (QDir::cleanPath leaves it unchanged: no
+// "..", no "//", no trailing "/"), at most 4096 characters, without control or format characters, that is `home` or lies
+// inside it. Files opens a folder there (a file would open its folder); nothing else is started.
+bool isRevealInFiles(const QStringList &argv, const QString &home);
 
 // A program Settings starts and leaves running (Backend::launch: detached, never stopped by a timeout or by Settings closing):
 //   /usr/lib/grassfield/grassfield-update-run                            Software Update > Update Now (U24, owner decision

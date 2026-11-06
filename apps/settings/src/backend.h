@@ -70,6 +70,9 @@ class Backend : public QObject
     // The runner, its root helper and pkexec are installed (checked, not run); without them Update Now opens Omarchy's
     // terminal, as in step 2.
     Q_PROPERTY(bool updateRunner READ updateRunner CONSTANT)
+    // The diagnostic report (ADR-0053, /usr/lib/grassfield/grassfield-report) is installed (checked, not run): About shows
+    // "Create Diagnostic Report…".
+    Q_PROPERTY(bool reportTool READ reportTool CONSTANT)
     // The actions that may wait for a password and still run, tag -> what (polkit actions of busAct, omarchy-language of act:
     // one per tag, busjobs.h InFlight). A page shows its waiting state from it, also when it is opened again while the dialog
     // is up.
@@ -113,6 +116,7 @@ public:
     bool omarchyUpdate() const;
     QString softwareUpdateRunFile() const;
     bool updateRunner() const;
+    bool reportTool() const;
     QVariantMap pendingActions() const { return m_actions.map(); }
 
     // {exists: bool, ok: bool, text: string}. Reads at most 4 MiB.

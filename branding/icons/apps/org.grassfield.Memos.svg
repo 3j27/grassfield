@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Grassfield Memos: one memo window on a light tile, drawn as the app draws it: its darker strip with the close box and the
+       collapse box, three lines of text on the yellow paper of the memos.* tokens (ADR-0051 D-1, the grammar of the own app
+       icons of ADR-0040; a single window with its strip, not a pile of notes). CC-BY-SA-4.0, see branding/LICENSES.md. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6F8F6"/>
+      <stop offset="1" stop-color="#DCE4DE"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDF3B4"/>
+      <stop offset="1" stop-color="#FCEFA1"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="104" height="104" rx="23.4" fill="url(#tile)"/>
+  <rect x="12.5" y="12.5" width="103" height="103" rx="22.9" fill="none" stroke="#FFFFFF" stroke-opacity=".35"/>
+  <rect x="30" y="31" width="68" height="68" rx="3" fill="#2B2E35" fill-opacity=".12"/>
+  <rect x="29" y="28" width="70" height="70" rx="3" fill="url(#paper)"/>
+  <path d="M32 28H96A3 3 0 0 1 99 31V39H29V31A3 3 0 0 1 32 28Z" fill="#F2DC6E"/>
+  <rect x="33.5" y="31.5" width="4" height="4" fill="none" stroke="#26231E" stroke-opacity=".6"/>
+  <rect x="90.5" y="31.5" width="4" height="4" fill="none" stroke="#26231E" stroke-opacity=".6"/>
+  <rect x="90.5" y="34.5" width="4" height="1" fill="#26231E" fill-opacity=".6"/>
+  <rect x="37" y="50" width="40" height="5" rx="2.5" fill="#26231E" fill-opacity=".78"/>
+  <rect x="37" y="63" width="52" height="4" rx="2" fill="#26231E" fill-opacity=".45"/>
+  <rect x="37" y="74" width="34" height="4" rx="2" fill="#26231E" fill-opacity=".45"/>
+  <path d="M93 92L96 89M89 92L96 85" stroke="#26231E" stroke-opacity=".45" stroke-linecap="round"/>
+  <rect x="37" y="85" width="22" height="4" rx="2" fill="#4FB36B"/>
+</svg>

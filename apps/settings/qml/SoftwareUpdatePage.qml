@@ -113,6 +113,11 @@ SettingsPage {
         return null;
     }
 
+    // The installed release was withdrawn and no newer one is offered yet (ADR-0050, U37).
+    readonly property bool withdrawnNow: root.view.rollout.withdrawn !== "" && root.view.grassfield === null && !root.running
+    // "Up to date" is not said under a release that was withdrawn: the headline says that instead (macOS's headline is the news).
+    readonly property string upToDateText: root.withdrawnNow ? qsTr("Grassfield %1 has been withdrawn").arg(SoftwareUpdateLogic.displayVersion(root.view.rollout.withdrawn))
+                                                             : qsTr("This computer is up to date")
     // The status's headline and the line under it.
     readonly property string headline: {
         if (root.running)
@@ -123,9 +128,9 @@ SettingsPage {
         case "update-running":
             return qsTr("An update is running in Omarchy's terminal");
         case "up-to-date":
-            return qsTr("This computer is up to date");
+            return root.upToDateText;
         case "available":
-            return root.hasReleases ? qsTr("Updates are available") : qsTr("This computer is up to date");
+            return root.hasReleases ? qsTr("Updates are available") : root.upToDateText;
         case "failed":
             return qsTr("Software Update could not check for updates");
         case "blocking":
@@ -136,7 +141,7 @@ SettingsPage {
             // A build without a host or key cannot set Grassfield's updates up; the system's are still offered.
             if (root.updates.buildReady)
                 return qsTr("Grassfield updates are not set up");
-            return root.hasReleases ? qsTr("Updates are available") : qsTr("This computer is up to date");
+            return root.hasReleases ? qsTr("Updates are available") : root.upToDateText;
         }
         return root.updates.channel === "custom" ? qsTr("Grassfield updates need to be repaired") : qsTr("Software Update has not checked for updates yet");
     }
@@ -327,12 +332,34 @@ SettingsPage {
             // The mark's tile in the brand green, as General > About's (ADR-0040 ID-11; review of 5391761).
             tileColor: "grassfield"
             title: root.view.grassfield ? qsTr("Grassfield %1").arg(SoftwareUpdateLogic.releaseName(root.view.grassfield.available, root.view.grassfield.installed)) : ""
-            subtitle: root.view.grassfield ? qsTr("Installed: %1").arg(SoftwareUpdateLogic.displayVersion(root.view.grassfield.installed)) : ""
+            // ADR-0050 (U36): a release its descriptor marks as a security release says so.
+            subtitle: !root.view.grassfield ? ""
+                : root.view.rollout.security ? qsTr("Important security update. Installed: %1").arg(SoftwareUpdateLogic.displayVersion(root.view.grassfield.installed))
+                : qsTr("Installed: %1").arg(SoftwareUpdateLogic.displayVersion(root.view.grassfield.installed))
 
             LinkText {
                 text: qsTr("More Info…")
                 onActivated: root.infoRequested("notes")
             }
+        }
+        // The staged rollout (ADR-0050, U35): a newer release still being released gradually, which the database this
+        // computer syncs does not offer yet. No button: it is installed once offered.
+        SettingsRow {
+            visible: root.view.rollout.staged !== null && !root.running
+            glyph: "grassfield-logo"
+            tileColor: "grassfield"
+            title: !root.view.rollout.staged ? ""
+                : root.view.rollout.staged.security ? qsTr("Grassfield %1 is an important security update.").arg(SoftwareUpdateLogic.releaseName(root.view.rollout.staged.version, root.view.installed.grassfield))
+                : qsTr("Grassfield %1 is being released gradually.").arg(SoftwareUpdateLogic.releaseName(root.view.rollout.staged.version, root.view.installed.grassfield))
+            subtitle: qsTr("It will be offered to this computer soon.")
+        }
+        // The installed release was withdrawn (ADR-0050, U37), while no newer one is offered yet.
+        SettingsRow {
+            visible: root.withdrawnNow
+            glyph: "grassfield-logo"
+            tileColor: "grassfield"
+            title: qsTr("A corrected version is on its way.")
+            subtitle: qsTr("It will be offered to this computer as soon as it's ready.")
         }
         SettingsRow {
             visible: root.view.omarchy !== null

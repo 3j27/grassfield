@@ -6,6 +6,7 @@
 #include "appstream.h"
 #include "aur.h"
 #include "catalog.h"
+#include "flatpakpermissions.h"
 #include "pacman.h"
 #include "storemodel.h"
 
@@ -44,6 +45,13 @@ QVariantMap summary(const StoreApp &app, const QString &language);
 // verified flag. `component` may be null (no AppStream data).
 QVariantMap detail(const StoreApp &app, const AppStreamComponent *component, const QList<CatalogCategory> &categories,
                    const QString &language, const QLocale &locale);
+
+// A Flatpak's grants for QML (ADR-0049; the words are Store.js's): [{key, name, level}], then {key: "more", name:
+// <count>} when the list was cut.
+QVariantList permissions(const QList<FlatpakGrant> &grants, int more);
+// An update's changes for QML: [{change: added | widened | removed | narrowed, key, name, level, previous: {key,
+// name, level} or null}], at most `limit` (the rest counted in a last {change: "more", name: <count>}).
+QVariantList permissionChanges(const QList<FlatpakPermissionChange> &changes, int limit = 64);
 
 // pacman -Si's facts for the Information list: version, the sizes and the build day as `locale` writes them.
 QVariantMap packageFacts(const PackageInfo &info, const QLocale &locale);

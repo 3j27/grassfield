@@ -1,0 +1,555 @@
+#!/usr/bin/python3 -I
+"""grassfield-report: a diagnostic report for beta testers (ADR-0053).
+
+  grassfield-report [--output PATH]
+
+Writes ONE private text file (mode 0600, never overwriting) and prints its path on stdout:
+  - in the user's Downloads folder (XDG_DOWNLOAD_DIR of user-dirs.dirs, else ~/Downloads when it exists, else the home),
+    or at PATH (a file, or an existing folder to write into);
+  - named grassfield-report-<YYYYMMDD-HHMMSS>.txt (-2, -3... when that name exists).
+It holds the versions (Grassfield, its packages, Omarchy, Hyprland, Quickshell, Qt), the compositor plugin's status, the
+displays, the audio devices, the crashes of the last 7 days, this boot's journal of the Grassfield user units (bounded) and
+Grassfield's configuration files with secret-looking values removed. The home path, the user name, the real name and the
+host name are replaced everywhere. The person reads it and decides whether to share it.
+
+Rules: never as root, no sudo, no network, no recording or playback, no configuration change. Every command is read-only,
+run without a shell, with a timeout and LC_ALL=C; a missing tool is one line in the report, never a failure.
+Inspired by Project Luma's support report (MPL-2.0): the rules and the idea; no code copied. Standard library only.
+Exit status: 0 written, 1 not written (the reason on stderr), 2 usage or run as root.
+Test hook (dev sessions only): GRASSFIELD_REPORT_ROOT prefixes the two system files read (VERSION, os-release);
+tests/shell/diagnostic_report.sh.
+"""
+import datetime
+import json
+import os
+import platform
+import pwd
+import re
+import socket
+import subprocess
+import sys
+
+# A dev-plumbing hook (ADR-0019): honoured only in a dev session (GRASSFIELD_DEV "1", GRASSFIELD_SESSION not "1").
+DEV = os.environ.get("GRASSFIELD_DEV") == "1" and os.environ.get("GRASSFIELD_SESSION") != "1"
+FILE_ROOT = os.environ.get("GRASSFIELD_REPORT_ROOT", "") if DEV else ""
+VERSION_FILE = FILE_ROOT + "/usr/share/grassfield/VERSION"
+OS_RELEASE = FILE_ROOT + "/etc/os-release"
+
+TIMEOUT = 10
+JOURNAL_TIMEOUT = 20
+JOURNAL_LINES = 3000
+JOURNAL_MAX = 512 * 1024
+SECTION_MAX = 64 * 1024
+CRASH_LINES = 100
+CONFIG_FILES = 20
+CONFIG_MAX = 256 * 1024
+PACKAGES = re.compile(r"^(grassfield\S*|omarchy\S*|hyprland|quickshell|quickshell-git|qt6-base|qt6-declarative|qt6-wayland)$")
+MONITOR_FIELDS = ("name", "make", "model", "width", "height", "refreshRate", "x", "y", "scale", "transform", "focused",
+                  "dpmsStatus", "vrr", "disabled", "mirrorOf", "currentFormat")
+# Names too common to be replaced as words (a user called "user" would turn every "user unit" into "<user> unit").
+GENERIC_NAMES = {"user", "users", "admin", "test", "guest", "live", "demo", "root", "home", "localhost", "linux", "archlinux",
+                 "omarchy", "grassfield"}
+REDACTED = "[redacted]"
+SECRET_WORDS = {"password", "passwd", "passphrase", "pass", "pwd", "secret", "secrets", "token", "tokens", "credential",
+                "credentials", "cookie", "cookies", "psk", "auth", "authorization", "bearer", "private", "apikey"}
+KEY_QUALIFIERS = {"api", "access", "private", "secret", "signing", "encryption", "auth", "ssh", "session", "gpg", "pgp",
+                  "master", "client", "shared", "wifi", "wpa", "license", "licence"}
+# Free text the user typed, redacted whole: (section, key) of grassfield.json.
+FREE_TEXT = {("lock", "message")}
+# A display identity (ADR-0044 D-2 `s:<make>|<model>|<serial>`, WallpaperConfig.displayKey `s:<model>|<serial>`): the serial is
+# the last field.
+SERIAL_KEY = re.compile(r"^(s:(?:[^|]*\|){1,2})[^|]+$")
+
+
+def usage(message=""):
+    if message:
+        print("grassfield-report: " + message, file=sys.stderr)
+    print("usage: grassfield-report [--output PATH]", file=sys.stderr)
+    return 2
+
+
+def run(argv, timeout=TIMEOUT, limit=SECTION_MAX, tail=False):
+    """(ok, text) of a read-only command: no shell, C locale, stdin closed, bounded output."""
+    env = dict(os.environ, LC_ALL="C", LANG="C")
+    env.pop("LANGUAGE", None)
+    try:
+        p = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, env=env, check=False)
+    except FileNotFoundError:
+        return False, "(not available: %s is not installed)" % argv[0]
+    except subprocess.TimeoutExpired:
+        return False, "(no answer from %s within %d s)" % (argv[0], timeout)
+    except OSError as e:
+        return False, "(%s could not run: %s)" % (argv[0], e.strerror or "error")
+    out = p.stdout.decode("utf-8", "replace")
+    if p.returncode != 0 and not out.strip():
+        err = p.stderr.decode("utf-8", "replace").strip().splitlines()
+        return False, "(%s exited with %d%s)" % (argv[0], p.returncode, ": " + err[-1][:200] if err else "")
+    return True, bounded(out, limit, tail)
+
+
+def bounded(text, limit, tail=False):
+    data = text.encode("utf-8")
+    if len(data) <= limit:
+        return text
+    cut = data[-limit:] if tail else data[:limit]
+    note = "[... %d bytes left out ...]" % (len(data) - limit)
+    body = cut.decode("utf-8", "ignore")
+    return note + "\n" + body if tail else body + "\n" + note
+
+
+def read_file(path, limit=SECTION_MAX):
+    try:
+        with open(path, "rb") as f:
+            data = f.read(limit + 1)
+    except OSError:
+        return None
+    text = data[:limit].decode("utf-8", "replace")
+    return text + ("\n[... cut at %d bytes ...]" % limit if len(data) > limit else "")
+
+
+# ---- secrets ---------------------------------------------------------------------------------------------------------
+
+def key_words(key):
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", str(key))
+    return [w for w in re.split(r"[^A-Za-z0-9]+", spaced.lower()) if w]
+
+
+def secret_key(key):
+    words = key_words(key)
+    if any(w in SECRET_WORDS for w in words):
+        return True
+    if "".join(words) in ("apikey", "accesskey", "privatekey", "secretkey"):
+        return True
+    return any(w == "key" and i > 0 and words[i - 1] in KEY_QUALIFIERS for i, w in enumerate(words))
+
+
+def redact_json(value, parent=""):
+    """Secret-looking values, the user's free text (FREE_TEXT) and monitor serials: a `serial` field, and the serial field of a
+    display identity string (displays.main's `set` and `main`, wallpaper outputs) become "present"."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if (secret_key(k) or (parent, k) in FREE_TEXT) and v not in (None, "", [], {}) and not isinstance(v, bool):
+                out[k] = REDACTED
+            elif k == "serial" and isinstance(v, str):
+                out[k] = "present" if v.strip() else ""
+            else:
+                out[k] = redact_json(v, k)
+        return out
+    if isinstance(value, list):
+        return [redact_json(v, parent) for v in value]
+    if isinstance(value, str):
+        return SERIAL_KEY.sub(r"\1present", value)
+    return value
+
+
+PATH_RULES = {"pathList", "wallpaperPath"}  # x-grassfield rules of config/schema/grassfield.schema.json that hold a path
+SCHEMA_FILE = FILE_ROOT + "/usr/share/grassfield/schema/grassfield.schema.json"
+LEFT_OUT = "(a path, left out of the report)"
+PATH_START = ("/", "~/", "$HOME/", "file://")
+PATH_TOKEN = re.compile(r"file://|\$HOME/|(?<![\w~.])~/|(?<![\w.:/])/(?=[^\s/])")
+
+
+def is_path(value):
+    """An absolute path, a `~/` or `$HOME/` path or a file:// URL."""
+    return isinstance(value, str) and value.strip().startswith(PATH_START)
+
+
+def path_name(value):
+    """The file name of a path or file:// URL (percent-decoded), "" when there is none."""
+    text = value.strip()
+    if text.startswith("file://"):  # file://[host]/path: the path from the first slash after the host, percent-decoded
+        text = text[len("file://"):]
+        text = text[text.find("/"):] if "/" in text else ""
+        text = re.sub(r"%([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), text)
+    return os.path.basename(text.rstrip("/"))
+
+
+def schema_path_types():
+    """The settings whose schema type is a path (x-grassfield rule pathList or wallpaperPath), from the installed schema:
+    {key tuple: rule}. Missing or unreadable: empty, and the shape of the values (is_path) still applies."""
+    text = read_file(SCHEMA_FILE, 1024 * 1024)
+    try:
+        schema = json.loads(text) if text else {}
+    except ValueError:
+        return {}
+    found = {}
+
+    def walk(node, trail):
+        if not isinstance(node, dict):
+            return
+        ann = node.get("x-grassfield")
+        rule = ann.get("rule") if isinstance(ann, dict) else None
+        if rule in PATH_RULES and trail:
+            found[trail] = rule
+        props = node.get("properties")
+        if isinstance(props, dict):
+            for k, v in props.items():
+                walk(v, trail + (k,))
+
+    walk(schema, ())
+    return found
+
+
+def scrub_paths(value, types=None, trail=(), wallpaper=False, siblings=None):
+    """No folder path leaves (ADR-0053): a value of a path type in the schema becomes a count (a list) or, for a wallpaper,
+    its file name; any other value that looks like a path (absolute, ~/, $HOME/, file://) is left out, or reduced to its file
+    name under a wallpaper* key or file; a key that is itself a path (stackOptions) is replaced by a numbered label."""
+    types = types or {}
+    if isinstance(value, dict):
+        out = {}
+        for i, (k, v) in enumerate(value.items()):
+            key = "(path %d, left out)" % (i + 1) if is_path(k) else k
+            out[key] = scrub_paths(v, types, trail + (k,), wallpaper or str(k).lower().startswith("wallpaper"), value)
+        return out
+    rule = types.get(trail)
+    if isinstance(value, list):
+        if rule == "pathList" or any(is_path(v) for v in value):
+            return "%d entries (the folder paths are left out of the report)" % len(value)
+        return [scrub_paths(v, types, trail, wallpaper, siblings) for v in value]
+    if isinstance(value, str) and (rule or is_path(value)):
+        if not value.strip():
+            return value
+        folder = trail[-1:] == ("folder",) or (siblings or {}).get("source") == "folder" or value.strip().endswith("/")
+        if (rule == "wallpaperPath" or wallpaper) and not folder:
+            return path_name(value) or LEFT_OUT
+        return LEFT_OUT
+    return value
+
+
+def scrub_text(text, wallpaper=False):
+    """Non-JSON files: a path in a `key = value` line, or anywhere in a line, is left out (file name only for wallpaper*)."""
+    out = []
+    for line in text.splitlines():
+        m = LINE_PAIR.match(line)
+        if m:
+            raw = m.group(3).strip().strip("\"'")
+            if is_path(raw):
+                out.append(m.group(1) + ((path_name(raw) or LEFT_OUT) if wallpaper else LEFT_OUT))
+                continue
+        t = PATH_TOKEN.search(line)
+        if t:  # a folder name may hold spaces: everything from the first path on is the path
+            rest = line[t.start():]
+            line = line[:t.start()] + ((path_name(rest) or LEFT_OUT) if wallpaper else LEFT_OUT)
+        out.append(line)
+    return "\n".join(out)
+
+
+def folder_styles(value):
+    """folder-styles.json keys up to 20,000 folder paths: the report counts them and shows none."""
+    folders = value.get("folders") if isinstance(value, dict) else None
+    count = len(folders) if isinstance(folders, (dict, list)) else 0
+    return {"folders": "%d entries (the folder paths are left out of the report)" % count}
+
+
+LINE_PAIR = re.compile(r"^(\s*[\"']?([A-Za-z0-9_.\-]+)[\"']?\s*[=:]\s*)(.+)$")
+
+
+def redact_lines(text):
+    out = []
+    for line in text.splitlines():
+        m = LINE_PAIR.match(line)
+        if m and secret_key(m.group(2)) and m.group(3).strip():
+            line = m.group(1) + REDACTED
+        out.append(line)
+    return "\n".join(out)
+
+
+# Anywhere in the report (the journal included).
+PRIVATE_BLOCK = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?(-----END [A-Z0-9 ]*PRIVATE KEY-----|\Z)", re.S)
+BEARER = re.compile(r"(?i)\b(authorization\s*[:=]\s*(?:bearer|basic|token)\s+|bearer\s+)[A-Za-z0-9._~+/=-]{8,}")
+SECRET_NAME = (r"(?:password|passwd|passphrase|pass|pwd|secret|token|psk|(?:api|access|private|ssh|session|secret|client)[_-]?key"
+               r"|[a-z]*[_-]token|[a-z]*[_-]secret)")
+INLINE_PAIR = re.compile(r"(?i)\b(" + SECRET_NAME + r"[\"']?\s*[=:]\s*[\"']?)([^\s\"',;]{1,})")
+# `psk 'value'`, `password "value"` (nmcli, wpa_supplicant and shell styles): a quoted value after a space.
+QUOTED_PAIR = re.compile(r"(?i)\b(" + SECRET_NAME + r"\s+)([\"'])(.*?)\2")
+KNOWN_TOKENS = re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr|github_pat|glpat|xox[abpr]|sk)[-_][A-Za-z0-9_-]{16,}\b")
+# A Bluetooth or network hardware address (also in PipeWire node names: bluez_output.A0:B1:...; with _ or - as separator).
+HW_ADDRESS = re.compile(r"(?i)(?<![0-9a-f])[0-9a-f]{2}(?:([:_-])[0-9a-f]{2})(?:\1[0-9a-f]{2}){4}(?![0-9a-f])")
+# A device named after a person: "Marie’s AirPods", "Paul's Headphones" (Bluetooth names, in wpctl status and the journal).
+POSSESSIVE = re.compile(r"(?<![\w<])[A-Z][\w\-]{1,30}(?=['’]s\b)")
+
+
+def redact_secrets(text):
+    text = PRIVATE_BLOCK.sub(REDACTED, text)
+    text = BEARER.sub(lambda m: m.group(1) + REDACTED, text)
+    text = QUOTED_PAIR.sub(lambda m: m.group(1) + m.group(2) + REDACTED + m.group(2), text)
+    text = INLINE_PAIR.sub(lambda m: m.group(1) + REDACTED, text)
+    text = KNOWN_TOKENS.sub(REDACTED, text)
+    return HW_ADDRESS.sub("XX:XX:XX:XX:XX:XX", text)
+
+
+# Device names after a person ("Marie’s AirPods") are removed only where device names are: the audio devices section, and the
+# journal lines about audio or Bluetooth. Elsewhere a possessive is the interface's own words ("the Dock's tile", "Wayland's
+# socket") and is kept as context.
+DEVICE_LINE = re.compile(r"(?i)\b(audio|sink|source|output|input|speaker|headphone|headset|microphone|bluetooth|bluez|pipewire|"
+                         r"wireplumber|airpods|earbuds|device)")
+
+
+def redact_device_names(text, every_line=False):
+    def one(line):
+        if not every_line and not DEVICE_LINE.search(line):
+            return line
+        return POSSESSIVE.sub(lambda m: m.group(0) if m.group(0).lower() in PRODUCT_NAMES else "<name>", line)
+    return "\n".join(one(l) for l in text.split("\n"))
+
+
+# Possessives that are not people.
+PRODUCT_NAMES = {"grassfield", "omarchy", "hyprland", "quickshell", "pipewire", "wireplumber", "linux", "arch", "qt", "gtk", "kde",
+                 "gnome", "firefox", "chromium", "bluez", "systemd", "today", "yesterday", "it", "that", "there", "here", "let",
+                 "what", "who"}
+
+
+# ---- identity --------------------------------------------------------------------------------------------------------
+
+def identity():
+    """(home, [(word, replacement)]) to remove from the report."""
+    home = os.path.realpath(os.environ.get("HOME") or pwd.getpwuid(os.getuid()).pw_dir).rstrip("/")
+    names = []
+    user = os.environ.get("USER") or os.environ.get("LOGNAME") or ""
+    gecos = ""
+    try:
+        entry = pwd.getpwuid(os.getuid())
+        user = user or entry.pw_name
+        gecos = entry.pw_gecos
+    except KeyError:
+        pass
+    return home, identity_words(user, gecos, socket.gethostname())
+
+
+def identity_words(user, gecos, host):
+    """[(word, replacement)], longest first: the real name (the first GECOS field) whole and each of its words, the user name,
+    the host's short name; a word shorter than 3 characters or a generic one is left (it would mangle the report)."""
+    full = (gecos or "").split(",")[0].strip()
+    candidates = [(full, "<name>")] + [(w, "<name>") for w in re.split(r"[\s\-]+", full)]
+    candidates += [(user or "", "<user>"), ((host or "").split(".")[0], "<host>")]
+    names = []
+    for word, repl in candidates:
+        word = word.strip(".,'’\"()")
+        if len(word) >= 3 and word.lower() not in GENERIC_NAMES and word.lower() not in [n.lower() for n, _ in names]:
+            names.append((word, repl))
+    names.sort(key=lambda n: -len(n[0]))
+    return names
+
+
+def redact_identity(text, home, names):
+    if home and home != "/":
+        text = re.sub(re.escape(home) + r"(?=/|\b|$)", "~", text)
+        # The unresolved $HOME too, when it was a symbolic link.
+        raw = (os.environ.get("HOME") or "").rstrip("/")
+        if raw and raw != home and raw != "/":
+            text = re.sub(re.escape(raw) + r"(?=/|\b|$)", "~", text)
+    for word, repl in names:
+        text = re.sub(r"(?<![A-Za-z0-9])" + re.escape(word) + r"(?![A-Za-z0-9])", repl, text, flags=re.I)
+    return text
+
+
+# ---- sections --------------------------------------------------------------------------------------------------------
+
+def os_release():
+    text = read_file(OS_RELEASE) or ""
+    values = {}
+    for line in text.splitlines():
+        m = re.match(r"^([A-Z_]+)=(.*)$", line)
+        if m:
+            values[m.group(1)] = m.group(2).strip().strip("\"'")
+    return values
+
+
+def packages():
+    ok, text = run(["pacman", "-Q"], limit=4 * 1024 * 1024)
+    if not ok:
+        return text
+    lines = [l for l in text.splitlines() if l.split(" ")[0] and PACKAGES.match(l.split(" ")[0])]
+    return "\n".join(lines) if lines else "(none of the listed packages is installed)"
+
+
+def monitors():
+    ok, text = run(["hyprctl", "-j", "monitors"])
+    if not ok:
+        return text
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return "(hyprctl's answer is not JSON)\n" + text[:2000]
+    if not isinstance(data, list):
+        return "(unexpected answer)"
+    out = []
+    for m in data:
+        if not isinstance(m, dict):
+            continue
+        row = {k: m[k] for k in MONITOR_FIELDS if k in m}
+        row["serial"] = "present" if str(m.get("serial") or "").strip() else "none"
+        out.append(row)
+    return json.dumps(out, indent=1, ensure_ascii=False)
+
+
+def plugin():
+    ok, text = run(["hyprctl", "grassfield"])
+    if not ok:
+        return text
+    if re.search(r"(?i)unknown request|invalid", text):
+        return "not loaded (hyprctl grassfield: %s)" % text.strip()[:200]
+    return "loaded\n" + text.strip()
+
+
+def crashes():
+    ok, text = run(["coredumpctl", "--no-pager", "--no-legend", "list", "--since=-7d"])
+    if not ok:
+        return text
+    lines = [l for l in text.splitlines() if l.strip()]
+    if not lines:
+        return "(no crash in the last 7 days)"
+    more = len(lines) - CRASH_LINES
+    return "\n".join(lines[-CRASH_LINES:]) + ("\n[... %d older lines left out ...]" % more if more > 0 else "")
+
+
+def journal():
+    ok, text = run(["journalctl", "--user", "-b", "0", "-u", "grassfield-*", "--no-pager", "-o", "short-iso", "-n", str(JOURNAL_LINES)],
+                   timeout=JOURNAL_TIMEOUT, limit=JOURNAL_MAX, tail=True)
+    return text if text.strip() else "(no entry)"
+
+
+def config_dir():
+    own = os.environ.get("GRASSFIELD_CONFIG_HOME", "")
+    if own:
+        return own
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    base = xdg if xdg.startswith("/") else os.path.join(os.environ.get("HOME", ""), ".config")
+    return os.path.join(base, "grassfield")
+
+
+def configuration():
+    folder = config_dir()
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return "(no configuration folder: Grassfield's defaults apply)"
+    parts = []
+    shown = 0
+    for name in names:
+        path = os.path.join(folder, name)
+        if os.path.islink(path) or not os.path.isfile(path):
+            continue
+        if shown >= CONFIG_FILES:
+            parts.append("[... more files left out ...]")
+            break
+        shown += 1
+        text = read_file(path, CONFIG_MAX)
+        if text is None:
+            parts.append("--- %s: (cannot be read)" % name)
+            continue
+        wallpaper = name.lower().startswith("wallpaper")
+        try:
+            data = json.loads(text)
+            if name == "folder-styles.json":
+                data = folder_styles(data)
+            types = schema_path_types() if name == "grassfield.json" else {}
+            body = json.dumps(scrub_paths(redact_json(data), types, (), wallpaper), indent=1, ensure_ascii=False)
+        except ValueError:
+            body = "(not JSON: left out)" if name == "folder-styles.json" else scrub_text(redact_lines(text), wallpaper)
+        parts.append("--- %s\n%s" % (name, body))
+    return "\n".join(parts) if parts else "(the folder is empty)"
+
+
+def default_folder():
+    home = os.environ.get("HOME", "")
+    xdg = os.environ.get("XDG_CONFIG_HOME", "")
+    dirs = os.path.join(xdg if xdg.startswith("/") else os.path.join(home, ".config"), "user-dirs.dirs")
+    text = read_file(dirs) or ""
+    for line in text.splitlines():
+        m = re.match(r'^\s*XDG_DOWNLOAD_DIR\s*=\s*"(.*)"\s*$', line)
+        if m:
+            value = m.group(1).replace("$HOME", home, 1) if m.group(1).startswith("$HOME") else m.group(1)
+            if value.startswith("/") and os.path.isdir(value) and os.path.realpath(value) != os.path.realpath(home):
+                return value
+    downloads = os.path.join(home, "Downloads")
+    return downloads if os.path.isdir(downloads) else home
+
+
+def create(target, stamp):
+    """Open a new file (0600, O_EXCL, no link followed) at `target` (a folder or a file path): (fd, path)."""
+    if os.path.isdir(target):
+        base, ext = os.path.join(target, "grassfield-report-" + stamp), ".txt"
+    else:
+        base, ext = os.path.splitext(target)
+        ext = ext or ".txt"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+    for n in range(1, 100):
+        path = base + ("" if n == 1 else "-%d" % n) + ext
+        try:
+            fd = os.open(path, flags, 0o600)
+        except FileExistsError:
+            continue
+        os.fchmod(fd, 0o600)
+        return fd, path
+    raise FileExistsError(base + ext)
+
+
+def report(now):
+    rel = os_release()
+    version = (read_file(VERSION_FILE, 200) or "").strip() or "unknown (no %s)" % VERSION_FILE[len(FILE_ROOT):]
+    head = [
+        "Grassfield diagnostic report",
+        "Created: %s UTC by grassfield-report (read-only; nothing was sent anywhere)." % now.strftime("%Y-%m-%d %H:%M:%S"),
+        "Removed: the home folder (shown as ~), the user name (<user>), the real name (<name>), the computer's name (<host>),",
+        "and values that look like passwords, tokens or keys ([redacted]). Read it before you share it.",
+        "",
+        "Grassfield version: %s" % version,
+        "Session: GRASSFIELD_SESSION=%s XDG_CURRENT_DESKTOP=%s XDG_SESSION_TYPE=%s" % (
+            os.environ.get("GRASSFIELD_SESSION", ""), os.environ.get("XDG_CURRENT_DESKTOP", ""), os.environ.get("XDG_SESSION_TYPE", "")),
+        "Kernel: %s %s" % (platform.release(), platform.machine()),
+    ]
+    sections = [
+        ("Packages", packages()),
+        ("Omarchy", "\n".join("%s=%s" % (k, rel[k]) for k in ("NAME", "VERSION_ID", "BUILD_ID") if k in rel) or "(no os-release)"),
+        ("Compositor", run(["hyprctl", "version"])[1]),
+        ("Compositor plugin", plugin()),
+        ("Displays", monitors()),
+        ("Audio devices", redact_device_names(run(["wpctl", "status"])[1], every_line=True)),
+        ("Crashes (last 7 days)", crashes()),
+        ("Journal of the Grassfield units (this boot)", redact_device_names(journal())),
+        ("Configuration (%s)" % config_dir(), configuration()),
+    ]
+    body = "\n".join(head) + "\n"
+    for title, text in sections:
+        body += "\n== %s ==\n%s\n" % (title, text.rstrip("\n"))
+    return body
+
+
+def main(argv):
+    output = ""
+    args = argv[1:]
+    while args:
+        a = args.pop(0)
+        if a in ("-h", "--help"):
+            print(__doc__.strip())
+            return 0
+        if a == "--output" and args:
+            output = args.pop(0)
+        elif a.startswith("--output="):
+            output = a[len("--output="):]
+        else:
+            return usage("unknown argument: " + a)
+    if os.geteuid() == 0:
+        print("grassfield-report: run it as yourself, not as root (it reads your session, not the system's)", file=sys.stderr)
+        return 2
+    now = datetime.datetime.now(datetime.timezone.utc)
+    target = output or default_folder()
+    if not target:
+        return usage("no folder to write into (HOME is not set)")
+    home, names = identity()
+    text = redact_identity(redact_secrets(report(now)), home, names)
+    try:
+        fd, path = create(target, now.strftime("%Y%m%d-%H%M%S"))
+    except OSError as e:
+        print("grassfield-report: cannot write the report in %s: %s" % (target, e.strerror or e), file=sys.stderr)
+        return 1
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(os.path.abspath(path))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

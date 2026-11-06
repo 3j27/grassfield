@@ -30,6 +30,7 @@ TestCase {
             readonly property string softwareUpdateFile: "/home/u/.local/state/grassfield/software-update.json"
             readonly property bool omarchyUpdate: true
             readonly property bool updateRunner: false
+            property bool reportTool: false
             readonly property string softwareUpdateRunFile: "/run/user/1000/grassfield/software-update-run.json"
             readonly property var applicationDirs: ["/home/u/.local/share/applications", "/usr/share/applications"]
             readonly property string appVersion: "1.0.0-rc1"
@@ -282,8 +283,16 @@ TestCase {
         QtObject {
             property var errors: ({})
             property bool suppressedNote: false
+            property bool dev: false
             property var queried: []
+            property var acted: []
+            property var launched: []
             function act(what: string, op: var, tag: string): bool {
+                acted.push({what: what, op: op, tag: tag});
+                return true;
+            }
+            function launch(what: string, argv: var): bool {
+                launched.push(argv);
                 return true;
             }
             function queryBus(what: string, tag: string): void {
@@ -312,6 +321,51 @@ TestCase {
         verify(!find(grassfield, i => i.radius !== undefined && i.visible && Qt.colorEqual(i.color, Tokens.colorLight.accent)), "dark: not the light one");
         Appearance.dark = wasDark;
         verify(!Qt.colorEqual(Tokens.colorLight.accent, Tokens.colorAccentLight.green), "the pickable Green is another green");
+    }
+
+    // ADR-0053: General > About > Create Diagnostic Report… runs the installed report (no argument), says it is running, then
+    // names the file and shows its folder in Files; a failure, or an answer that is not a report in the home, says so and
+    // opens nothing. Without the tool (and outside a dev session) the group is not shown.
+    function test_createDiagnosticReport() {
+        const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/settings/qml/AboutPage.qml"));
+        compare(comp.status, Component.Ready, comp.errorString());
+        const hidden = createTemporaryObject(comp, testCase, {backend: fakeBackend.createObject(testCase), system: fakeSystem.createObject(testCase), width: 600});
+        const none = find(hidden, i => i.text === "Create Diagnostic Report…" && i.clicked !== undefined);
+        verify(!none || !none.visible, "no tool: no button");
+
+        const backend = fakeBackend.createObject(testCase, {reportTool: true});
+        const system = fakeSystem.createObject(testCase);
+        const page = createTemporaryObject(comp, testCase, {backend: backend, system: system, width: 600});
+        const button = find(page, i => i.text === "Create Diagnostic Report…" && i.clicked !== undefined);
+        verify(button && button.visible, "the button");
+        const row = find(page, i => i.title === "Diagnostic Report" && i.subtitle !== undefined);
+        verify(row.subtitle.indexOf("Downloads") >= 0, row.subtitle);
+        button.clicked();
+        compare(page.system.acted.length, 1);
+        compare(page.system.acted[0].op, ["/usr/lib/grassfield/grassfield-report"]);
+        compare(page.system.acted[0].tag, "report.act");
+        compare(row.subtitle, "Creating the report…");
+        verify(!button.enabled, "one report at a time");
+        button.clicked();
+        compare(page.system.acted.length, 1);
+
+        page.backend.finished("report.act", true, "/home/u/Downloads/grassfield-report-20261105-100000.txt\n");
+        compare(row.subtitle, "Saved as “grassfield-report-20261105-100000.txt”.");
+        compare(page.system.launched, [["/usr/bin/grassfield-files", "--", "/home/u/Downloads"]]);
+        verify(button.enabled);
+
+        button.clicked();
+        page.backend.finished("report.act", false, "");
+        compare(row.subtitle, "The report could not be created.");
+        button.clicked();
+        // A Downloads folder outside the home (XDG_DOWNLOAD_DIR): the report was made and is named; Files is not opened there.
+        button.clicked();
+        page.backend.finished("report.act", true, "/data/downloads/grassfield-report-1.txt\n");
+        compare(row.subtitle, "Saved as “grassfield-report-1.txt”.");
+        compare(page.system.launched.length, 1, "nothing outside the home is opened");
+        button.clicked();
+        page.backend.finished("report.act", true, "not a path\n");
+        compare(row.subtitle, "The report could not be created.");
     }
 
     function test_markKeepsTheBrandGreen() {

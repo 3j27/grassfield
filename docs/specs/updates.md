@@ -93,7 +93,8 @@ Checker (`grassfield-update-check`, a one-shot child of the shell, ADR-0033 d)
 
 When it runs (shell)
 - U7. `updates.automaticCheck` (bool, default true; schema-generated, ADR-0020): 10 min after the session starts, then every
-  6 h, skipped while the shell's connectivity says offline or metered.
+  6 h, skipped while the shell's connectivity says offline or metered, or while the computer runs on its battery at 30 % or
+  less (ADR-0050 6: checked again when it is plugged in; a computer with no battery, or whose power is unknown, checks).
 - U8. The pane checks when it opens (unless a check finished less than 60 s ago or one is running) and on "Check Now"
   (fr « Vérifier maintenant »), whatever U7 says.
 - U9. `omarchy-shell -q omarchy.system-update refresh|clear` (called by `omarchy update`, under its lock) reaches
@@ -304,6 +305,26 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
   stays. The shell
   watches the runner's state in its runtime folder (made 0700 first, as the runner makes it); a dev session watches its own
   folder (ADR-0019 `UPDATE_RUN_DIR`).
+- U34. Staged rollout (ADR-0050): a machine syncs `[grassfield]` from one of 20 cohort paths
+  (`<base>/<channel>/cohort/<NN>/$arch`, then the plain lines), chosen from a wariness root draws once and keeps in
+  `/var/lib/grassfield/rollout-wariness`. Only `grassfield-desktop`'s `post_upgrade` enrolls, and only when the verified
+  database lists the marker `grassfield-rollout 1`; a listing without it gives the plain form, as before; no listing, or a
+  file an administrator changed, changes nothing. The synced `[grassfield]` files are never deleted inside the transaction
+  (GF-045: `yay -Sua` later in `omarchy update`); their time goes to the epoch when they must be downloaded again. Set Up…, Beta Updates and Repair…
+  write the plain form (the next Grassfield upgrade enrolls again). `grassfield-channel-set` and Grassfield Store read the
+  cohort form as its channel.
+- U35. With the marker, the checker reads the signed `grassfield-rollout.json` (strict schema, freshness, anti-replay;
+  ADR-0050 3). A newer release still being released gradually shows a row "Grassfield 1.0.1 is being released gradually."
+  with "It will be offered to this computer soon." (fr « Grassfield 1.0.1 est en cours de déploiement progressif. » /
+  « Elle sera bientôt proposée sur cet ordinateur. »), with no button: Update Now installs only what the database offers.
+- U36. A Grassfield release the descriptor marks as a security release says "Important security update. Installed: …" in
+  its row and is announced as "Important security update" (once per version, whatever a later descriptor says); one not
+  yet in the database reads "Grassfield 1.0.2 is an important security update."
+- U37. An installed release the descriptor withdraws, while nothing newer is offered: the status headline is
+  "Grassfield 1.0.1 has been withdrawn" (never "This computer is up to date" above it) and the row under it says "A corrected
+  version is on its way." / "It will be offered to this computer as soon as it's ready." A paused release shows nothing.
+- U38. A descriptor that is missing, invalid, unsigned, stale or expired removes the explanation only: the database
+  decides what is offered, and the check succeeds as before.
 
 ## Refusals (what is refused, and what the user sees)
 | Case | Behaviour |
@@ -357,6 +378,7 @@ Update Now without a terminal (step 3, owner decision SU-M1; ADR-0033 "Step 3")
 | A13 | the update helper as root: usage and privilege refusals, a hostile environment dropped, up to date without touching the sync databases, a `db.lck` held (busy) or left behind (stale) before anything is read, its own lock busy, Omarchy's key missing (after an incompatible update is said so), a plan line it cannot read, pacman's lock taken for the swap and gone after it, Omarchy's 4.x layout (commands in `usr/bin`, links in `usr/share/omarchy/bin`), a migration reading `/dev/tty`, no command file to scan, a migration that is a link, more than 64 pending (the runner), an update through Omarchy's real guard hook, the compatibility check (a toolkit change refused; joined by a matching Grassfield build; major.minor; Quickshell whole; a build without a record), Omarchy's migrations (a new one that calls a `sudo` command through another; a plain one; one named pending), conflicts inside the transaction, the 16 newest operations kept; through real polkitd and pkexec (a password each time, a wrong one, a user refused); the runner as a user (its state file, migrations run as the user without a terminal, a pending one that asks, Omarchy's lock held) | `tests/integration/update_helper.sh` (throwaway Arch container) | L0 (container) |
 | A14 | the pane's run: Update Now's one launch, each phase and count, the bar, the pane opened again mid-run, a runner gone with or without its helper, a reused process id, each outcome's sentence and action, the end's sheet, no restart after a failed startup image, the dev guard | `tests/unit/tst_softwareupdate.qml` (the run's logic), `tst_settingssoftwareupdate.qml`, `tst_settingsmain.qml`; the launch vectors in `tst_systemguard.cpp`, `tst_backend.cpp`; captures `software-update-run.png` | L0/L1 |
 | A16 | one password (U32): the migrations' sudo inside its unit (root, input, folder, status, arguments, temporary files, options, lookup; other names, verbs and operations refused) and refused everywhere else without a dialog; the person's other processes kept out of the unit's `/proc` entries; the real helper from a runner through pkexec: a non-administrator, a group with a member, an older migration pending, a rule that grants nothing or none, all to the terminal; an administrator's migration as the person with its sudo as root, `migrations ran`, its output root's; a failed sudo left pending; `gum` to the terminal; root without a person; the unit form outside the unit | `tests/integration/update_migrate.sh` (throwaway Arch container run by systemd) | L0 (container) |
+| A17 | staged rollout (U34-U38): the root enrollment (wariness drawn once, kept, a damaged one redrawn, a link refused; a link or another user's state folder refused; cohort bounds; marker present, absent, of another scheme, or no listing: pacman failing or no synced database (unchanged); plain↔cohort; a custom or administrator-changed file untouched; the synced files never deleted inside the transaction, their time set to the epoch on every change of form or cohort and a host migration (GF-045); a previous host's cohort form migrated); the descriptor's schema, bounds, freshness, anti-replay and signature; the reach formula and cohort offering; staged, withdrawn, security; the pane's rows; the battery gate; the Store's channel | `tests/shell/staged_rollout_root.sh`, `tests/shell/update_check.sh`, `tests/shell/channel_set_rule.sh`, `tests/fuzz/fuzz_helpers.py` (update-check), `tests/unit/tst_softwareupdate.qml`, `tst_settingssoftwareupdate.qml`, `tests/unit/store/tst_channel.cpp`; end to end with a publisher: NOT VERIFIED | L0 |
 | A15 | real flow: Update Now with a published test channel (the dialog once, the snapshot, the progress, closing and reopening Settings mid-run, Restart Later then Restart); a toolkit update without a matching build refused; an Omarchy release with a `sudo` migration sent to the terminal | owner, real session (the integrator's L2) | L2 |
 
 ## Interfaces / contracts (versions)

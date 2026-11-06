@@ -91,6 +91,7 @@ ShellRoot {
         ["lock.displayOffBattery", 3, () => Settings.lockDisplayOffBattery === 3],
         ["lock.displayOffPower", 0, () => Settings.lockDisplayOffPower === 0],
         ["lock.showUser", false, () => Settings.lockShowUser === false],
+        ["energy.slowHiddenApps", false, () => Settings.energySlowHiddenApps === false],
         ["lock.showMessage", true, () => Settings.lockShowMessage === true],
         ["lock.message", "Back at 3", () => Settings.lockMessage === "Back at 3"],
         ["lock.message", "two\nlines", () => Settings.lockMessage === ""],
