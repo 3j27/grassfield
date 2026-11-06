@@ -28,7 +28,7 @@ Facts (2026-11-05, main 78733ac):
   for it. Whether a user may write it in a scope of its delegated user manager could not be checked here (this container
   runs cgroup v1 and no user manager): NOT VERIFIED, see D-5.
 - PipeWire clients play through the PipeWire socket, not `/dev/snd`: an open `/dev/snd/*` descriptor catches only ALSA
-  clients; the stream nodes (with `pipewire.sec.pid`) catch the others.
+  clients; the stream nodes, resolved to their client's pid (D-3), catch the others.
 
 ## Options
 1. **A daemon** (Luma's model: a D-Bus service owning the policy). Cons: §5.8 asks for a versioned D-Bus interface, a
@@ -77,8 +77,12 @@ no limit.
 ### D-3 Claims (never limited) and protected units
 Checked by the helper only for apps that would be limited or are limited:
 - the person's choice to keep the app running (`--keep`, see Consequences: no UI in this slice);
-- sound or video: a PipeWire stream node of one of its processes (the shell reads `pipewire.sec.pid`, the pid the PipeWire server saw on the socket, of the stream
-  nodes it tracks; never the client-set `application.process.id`, which any app can set to another's pid) or an open `/dev/snd/*`, `/dev/video*`, `/dev/media*` descriptor in any process of its scope;
+- sound or video: a PipeWire stream node of one of its processes, or an open `/dev/snd/*`, `/dev/video*`, `/dev/media*` descriptor
+  in any process of its scope. The shell passes only the ids of the stream nodes (`--streams`); the helper reads `pw-dump`
+  (only when an app would be limited and a stream exists, at most once per round, 5 s timeout, 8 MiB at most) and maps node
+  -> its `client.id` -> that Client object's `pipewire.sec.pid`. A pid on the node itself (`pipewire.sec.pid`,
+  `application.process.id`) is never read. A missing dump, node or client is no claim (the app may be limited: fail-safe as
+  for every unreadable input; `--keep` and the `/dev/snd` check remain). Facts proved on a private daemon (below);
 - an alarm: a timerfd on `CLOCK_REALTIME_ALARM` (8) or `CLOCK_BOOTTIME_ALARM` (9) (`clockid:` in `/proc/PID/fdinfo`);
 - working: more than 0.5 % of one core over the last sampling window (`cpu.stat` `usage_usec` of the scope, a window of at
   least 10 s); the first sample of an app is not judged (counts as working);
@@ -154,20 +158,17 @@ decisions (`status` explains them) and never runs `systemctl` nor writes a cgrou
 - NOT VERIFIED (no Hyprland, Quickshell runtime, user manager or cgroup v2 in the agent's container): the shell wiring at
   run time, `systemctl set-property` with empty values on a real scope, uclamp writability, the battery gain, no stutter
   when switching back to an app (owner L2), the Settings sheet's rendering (visual NOT verified), and that the stream nodes' property
-  maps in Quickshell carry `pipewire.sec.pid`, and whether a client can forge it there. Facts read from sources
-  (second security review, finding 3): `pipewire/keys.h` says `PW_KEY_SEC_PID` is the "Client pid, set by protocol", and that
-  the `PW_KEY_SEC_*` keys "must be obtained from trusted sources by the protocol and placed as read-only properties": that is
-  a property of the CLIENT object, which the server fills from the socket's credentials. Whether it is also on the stream NODE,
-  and whether a node property set by the client (`pw-cat -P`) can override it, is not documented. Quickshell's `PwNode`
-  (`quickshell-service-pipewire.qmltypes`) exposes only `properties` (the node's), no Client object, so the unforgeable route
-  (the node's `client.id`, then that Client's `pipewire.sec.pid`) would need the helper to read it from `pw-dump`.
-  `tests/shell/pipewire_sec_pid.sh` proves it on a PRIVATE daemon (own runtime folder and socket, no session manager, never the
-  default socket; a forging `pw-cat` stream; `pw-dump` on the private socket) and prints the node's and the Client's values; it
-  SKIPs where a daemon cannot start. The agent's sandbox forbids creating a socket, so it SKIPped there: NOT VERIFIED.
-  Until the facts are known the code is unchanged: a node without the property names no process (no claim, no crash:
-  `tst_appenergy.qml` `test_streamPids`), the helper's `/dev/snd` check still applies, and `--keep` is the remedy. Owner
-  command (private daemon only, read-only for the session): `tests/shell/pipewire_sec_pid.sh`; if the node's value is absent
-  or forged, switch the shell to the node's `client.id` and a `pw-dump` lookup in `grassfield-energy`.
+  maps in Quickshell can be trusted for a pid: SETTLED (second security review, finding 3), see the next item.
+- PipeWire pid claims, proved (2026-11-06, `tests/shell/pipewire_sec_pid.sh`, a PRIVATE daemon in a temporary runtime folder,
+  a `pw-cat` stream forging `pipewire.sec.pid`, `application.process.id` and `client.id`, `pw-dump` on the private socket):
+  the stream node kept the forged `pipewire.sec.pid` (1) and `application.process.id` (1): both are as forgeable as each
+  other; the node's `client.id` is the server's (the forged value was overwritten); the Client object's `pipewire.sec.pid`
+  was the real pid of the process on the socket (`keys.h`: "set by protocol", read-only). So the shell reads no pid from
+  Quickshell's `PwNode.properties` (which has no Client object anyway); the helper resolves node -> client -> sec pid
+  (`stream_client_pids`, `tests/shell/app_energy.sh` with a dump fixture, and against the private daemon's real dump in
+  the PipeWire test). The test SKIPs (rc 0) where a daemon cannot start (a sandbox that forbids sockets); outside, run
+  `bash tests/shell/pipewire_sec_pid.sh` (private daemon only, never the default socket). Still NOT VERIFIED: the
+  shell's `PwNode.id` matching the id `pw-dump` shows, and the whole chain on a real playing stream in a session (owner L2).
 
 ## Consequences
 - New: `packaging/bin/grassfield-energy` (installed with the other helpers in `/usr/lib/grassfield`),

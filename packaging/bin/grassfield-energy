@@ -8,7 +8,7 @@ This helper maps each process to its app scope, checks why an app must be left a
 a state file under $XDG_RUNTIME_DIR, which lives exactly as long as those runtime properties: `reset` (shell start, setting
 turned off, grassfield-shell.service ExecStopPost) lifts all of it.
 
-  grassfield-energy round --power battery|mains --windows '{"<pid>": "<state>", ...}' [--media PIDS] [--keep PIDS]
+  grassfield-energy round --power battery|mains --windows '{"<pid>": "<state>", ...}' [--streams NODEIDS] [--keep PIDS]
   grassfield-energy wake (--all | --pid PID ...)
   grassfield-energy reset
   grassfield-energy status [--json]
@@ -26,8 +26,13 @@ app-graphical.slice, a scope holding a session process, an app playing or record
 0.5 % of a core over the sampling window, its first sample counting as working), kept running by the person, or whose
 weight someone else set (Activity Monitor's Efficiency Mode) is left alone.
 
+Audio and video claims (ADR-0048 D-3): the shell passes the ids of the PipeWire stream nodes it sees (--streams); only when
+an app would be limited, and once per run, the helper reads `pw-dump` and maps node -> its `client.id` (set by the server)
+-> that Client object's `pipewire.sec.pid` (the pid the server read from the socket). A pid a node carries
+(`pipewire.sec.pid`, `application.process.id`) is a client-set property and is never read. No dump, or no such client: no claim.
+
 Test seams, honoured only in a dev session (ADR-0019's rule for dev plumbing, as grassfield-report): GRASSFIELD_PROC_ROOT,
-GRASSFIELD_CGROUP_ROOT, GRASSFIELD_ENERGY_NOW (the monotonic clock, seconds). Standard library only.
+GRASSFIELD_CGROUP_ROOT, GRASSFIELD_ENERGY_NOW (the monotonic clock, seconds), GRASSFIELD_PWDUMP_FILE (a `pw-dump` output). Standard library only.
 """
 import fcntl
 import json
@@ -148,6 +153,63 @@ def parse_pids(text):
         part = part.strip()
         if part.isdigit() and 0 < int(part) < 1 << 22:
             out.append(int(part))
+    return out
+
+
+PWDUMP_MAX = 8 * 1024 * 1024
+
+
+def read_pw_dump():
+    """The parsed output of `pw-dump` (the user's own PipeWire socket; read-only), or None. In a dev session a test may name
+    a file of that output (GRASSFIELD_PWDUMP_FILE)."""
+    fixture = os.environ.get("GRASSFIELD_PWDUMP_FILE") if DEV else ""
+    try:
+        if fixture:
+            with open(fixture, "rb") as f:
+                raw = f.read(PWDUMP_MAX + 1)
+        else:
+            keep = ("PATH", "XDG_RUNTIME_DIR", "PIPEWIRE_REMOTE", "PIPEWIRE_RUNTIME_DIR")
+            env = {k: os.environ[k] for k in keep if k in os.environ}
+            env["LC_ALL"] = "C"
+            done = subprocess.run(["pw-dump"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                  timeout=5, check=False, env=env)
+            if done.returncode != 0:
+                return None
+            raw = done.stdout[:PWDUMP_MAX + 1]
+        if len(raw) > PWDUMP_MAX:
+            return None
+        data = json.loads(raw.decode("utf-8", "replace"))
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    return data if isinstance(data, list) else None
+
+
+def stream_client_pids(dump, node_ids):
+    """The pids behind these PipeWire node ids, from a `pw-dump` list: node id -> info.props["client.id"] (the server sets it,
+    a client cannot) -> the Client object of that id -> its props["pipewire.sec.pid"] (read from the socket's credentials).
+    Nothing a node says about a pid is read. A node or a client that is missing or malformed gives no pid."""
+    objects = {}
+    for obj in dump if isinstance(dump, list) else []:
+        if isinstance(obj, dict) and isinstance(obj.get("id"), int) and isinstance(obj.get("type"), str):
+            objects[(obj["type"], obj["id"])] = obj
+
+    def props(obj):
+        info = obj.get("info") if isinstance(obj, dict) else None
+        found = info.get("props") if isinstance(info, dict) else None
+        return found if isinstance(found, dict) else {}
+
+    def number(value):
+        text = str(value).strip() if isinstance(value, (int, str)) and not isinstance(value, bool) else ""
+        return int(text) if text.isdigit() and 0 < int(text) < 1 << 22 else None
+
+    out = set()
+    for node_id in set(node_ids):
+        node = objects.get(("PipeWire:Interface:Node", node_id))
+        client_id = number(props(node).get("client.id")) if node else None
+        client = objects.get(("PipeWire:Interface:Client", client_id)) if client_id else None
+        pid = number(props(client).get("pipewire.sec.pid")) if client else None
+        if pid:
+            out.add(pid)
     return out
 
 
@@ -282,8 +344,15 @@ class Probe:
     """The claims of an app that would be limited (D-3), read from /proc and the cgroup tree."""
 
     def __init__(self, media_units, keep_units):
-        self.media_units = media_units
+        # media_units: a function giving the set of units (called once, only when an app would be limited), or a set.
+        self._media = media_units
         self.keep_units = keep_units
+
+    @property
+    def media_units(self):
+        if callable(self._media):
+            self._media = self._media()
+        return self._media
 
     def __call__(self, unit, r, now):
         found = []
@@ -485,7 +554,13 @@ def cmd_round(args, data, dry):
     for unit, cg in cgroups.items():
         if unit in apps:
             apps[unit]["cgroup"] = cg
-    probe = Probe(units_of(parse_pids(args.get("media")), uid, cache), units_of(parse_pids(args.get("keep")), uid, cache))
+    streams = parse_pids(args.get("streams"))
+
+    def media_units():  # pw-dump runs at most once per round, and only when a stream is playing and an app would be limited
+        dump = read_pw_dump() if streams else None
+        return units_of(sorted(stream_client_pids(dump, streams)), uid, cache) if dump is not None else set()
+
+    probe = Probe(media_units, units_of(parse_pids(args.get("keep")), uid, cache))
     gone = {u: dict(r) for u, r in apps.items() if u not in report}
     for unit in report:
         if unit not in apps:
@@ -567,7 +642,7 @@ def parse_args(argv):
         a = argv[i]
         if a in ("--dry-run", "--all", "--json"):
             args[a[2:].replace("-", "_")] = True
-        elif a in ("--state", "--power", "--windows", "--media", "--keep", "--pid") and i + 1 < len(argv):
+        elif a in ("--state", "--power", "--windows", "--streams", "--keep", "--pid") and i + 1 < len(argv):
             if a == "--pid":
                 args["pid"].append(argv[i + 1])
             else:

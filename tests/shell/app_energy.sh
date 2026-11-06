@@ -209,8 +209,46 @@ check("claims: a quiet hidden app with nothing open is limited", limited_after(b
 check("claims: an open sound device protects it", limited_after(base(fds={"7": "/dev/snd/pcmC0D0p"})) == [] and state()["apps"][PLAYER]["reasons"] == ["device"])
 check("claims: an open camera protects it", limited_after(base(fds={"7": "/dev/video0"})) == [])
 check("claims: a render node alone does not", limited_after(base(fds={"7": "/dev/dri/renderD128"})) != [])
-check("claims: a PipeWire stream of one of its processes protects it", limited_after(base(), extra=["--media", "300"]) == [] and "media" in state()["apps"][PLAYER]["reasons"])
-check("claims: another app's stream does not", limited_after(base(), extra=["--media", "999"]) != [])
+# PipeWire claims (D-3): stream node ids -> the node's client.id -> that Client's pipewire.sec.pid, from pw-dump (here a fixture).
+def dump(nodes, clients):
+    out = [{"id": i, "type": "PipeWire:Interface:Node", "info": {"props": p}} for i, p in nodes.items()]
+    out += [{"id": i, "type": "PipeWire:Interface:Client", "info": {"props": p}} for i, p in clients.items()]
+    return out
+
+def with_dump(data, raw=None):
+    path = tmp + "/pwdump.json"
+    open(path, "w").write(raw if raw is not None else json.dumps(data))
+    return {"GRASSFIELD_PWDUMP_FILE": path}
+
+def limited_env(env, extra):
+    reset_fs(); base()()
+    ws = {300: "hidden"}
+    rnd(ws, 0, "battery", extra, env); rnd(ws, 15, "battery", extra, env); rnd(ws, 31, "battery", extra, env)
+    return [l for l in log() if "CPUWeight=2" in l or "CPUWeight=4" in l]
+
+real = dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "300"}})
+check("claims: a PipeWire stream of one of its processes (node -> client -> sec pid) protects it",
+      limited_env(with_dump(real), ["--streams", "50"]) == [] and "media" in state()["apps"][PLAYER]["reasons"])
+check("claims: another app's stream does not", limited_env(with_dump(dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "999"}})), ["--streams", "50"]) != [])
+forged = dump({50: {"client.id": "7", "pipewire.sec.pid": "300", "application.process.id": "300"}}, {7: {"pipewire.sec.pid": "999"}})
+check("claims: a pid the NODE carries (forged pipewire.sec.pid, application.process.id) protects nothing",
+      limited_env(with_dump(forged), ["--streams", "50"]) != [])
+check("claims: a node without client.id, or whose client is missing, protects nothing",
+      limited_env(with_dump(dump({50: {"pipewire.sec.pid": "300"}}, {7: {"pipewire.sec.pid": "300"}})), ["--streams", "50"]) != []
+      and limited_env(with_dump(dump({50: {"client.id": "8"}}, {7: {"pipewire.sec.pid": "300"}})), ["--streams", "50"]) != [])
+check("claims: a stream id that is not in the dump protects nothing", limited_env(with_dump(real), ["--streams", "51"]) != [])
+check("claims: a dump that is not JSON, or not a list, is no claim and no failure",
+      limited_env(with_dump(None, "not json"), ["--streams", "50"]) != [] and limited_env(with_dump(None, "{}"), ["--streams", "50"]) != [])
+check("claims: an unreadable dump (no file) is no claim and no failure",
+      limited_env({"GRASSFIELD_PWDUMP_FILE": tmp + "/missing.json"}, ["--streams", "50"]) != [])
+check("claims: no stream passed, no dump read: the real pid in the dump alone protects nothing", limited_env(with_dump(real), []) != [])
+check("claims: stream_client_pids reads only the client's pid, bounded and typed",
+      m.stream_client_pids(real, [50]) == {300} and m.stream_client_pids(real, [1]) == set()
+      and m.stream_client_pids(dump({50: {"client.id": 7}}, {7: {"pipewire.sec.pid": 300}}), [50]) == {300}
+      and m.stream_client_pids(dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "-1"}}), [50]) == set()
+      and m.stream_client_pids(dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "99999999"}}), [50]) == set()
+      and m.stream_client_pids(dump({50: {"client.id": "7"}}, {7: {}}), [50]) == set()
+      and m.stream_client_pids([None, 3, {"id": "x"}, {"id": 1}], [1]) == set() and m.stream_client_pids(None, [1]) == set())
 check("claims: the person's choice protects it", limited_after(base(), extra=["--keep", "300"]) == [] and "keep" in state()["apps"][PLAYER]["reasons"])
 check("claims: an alarm timerfd (CLOCK_BOOTTIME_ALARM) protects it",
       limited_after(base(fds={"9": "anon_inode:[timerfd]"}, fdinfo={"9": "pos:\t0\nflags:\t02\nclockid: 9\nticks: 0\n"})) == [] and state()["apps"][PLAYER]["reasons"] == ["alarm"])

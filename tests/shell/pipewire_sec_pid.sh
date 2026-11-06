@@ -53,10 +53,10 @@ if ! pwcli create-node adapter '{ factory.name=support.null-audio-sink node.name
   exit 0
 fi
 
-# A playing stream that claims to be pid 1 (init) twice over.
+# A playing stream that claims to be pid 1 (init) twice over and to belong to client 0.
 head -c 4000000 /dev/zero >"$tmp/silence.raw"
 "${pwenv[@]}" pw-cat -p --raw --rate 48000 --channels 1 --format s16 --target gf-null \
-  -P '{ "pipewire.sec.pid" = "1", "application.process.id" = "1", "node.name" = "gf-forger" }' "$tmp/silence.raw" \
+  -P '{ "pipewire.sec.pid" = "1", "application.process.id" = "1", "client.id" = "0", "node.name" = "gf-forger" }' "$tmp/silence.raw" \
   >"$tmp/cat.log" 2>&1 &
 cat_pid=$!
 pids+=($cat_pid)
@@ -80,16 +80,29 @@ node_app=$(jq -r '.info.props["application.process.id"] // "absent"' <<<"$node")
 client_sec=$(jq -r '.info.props["pipewire.sec.pid"] // "absent"' <<<"$client")
 echo "node.client.id=${client_id:-none} node.sec.pid=$node_sec node.application.process.id=$node_app client.sec.pid=$client_sec real.pid=$cat_pid"
 
-check "the stream node names its client (client.id)" "$([[ -n $client_id && -n $client ]] && echo 0 || echo 1)"
-check "the client's pipewire.sec.pid is the real pid of the process on the socket, set by the server" "$([[ $client_sec == "$cat_pid" ]] && echo 0 || echo 1)"
-check "the client's pipewire.sec.pid is not the forged value" "$([[ $client_sec != 1 ]] && echo 0 || echo 1)"
-# The two outcomes that decide the code (ADR-0048 D-3): printed as facts, not asserted either way.
+check "the stream node names a client that exists" "$([[ -n $client_id && -n $client ]] && echo 0 || echo 1)"
+check "the node's client.id is the server's, not the forged client.id 0" "$([[ -n $client_id && $client_id != 0 ]] && echo 0 || echo 1)"
+check "the Client's pipewire.sec.pid is the real pid of the process on the socket, set by the server" "$([[ $client_sec == "$cat_pid" ]] && echo 0 || echo 1)"
+check "the Client's pipewire.sec.pid is not the forged value" "$([[ $client_sec != 1 ]] && echo 0 || echo 1)"
+# Facts that decided the code (ADR-0048 D-3), recorded as they are on this machine.
 if [[ $node_sec == absent ]]; then
-  echo "FACT the stream node carries no pipewire.sec.pid: reading it from the node would never exempt an app"
+  echo "FACT the stream node carries no pipewire.sec.pid"
 elif [[ $node_sec == 1 ]]; then
   echo "FACT the forged pipewire.sec.pid survived on the stream node: the node's value is as forgeable as application.process.id"
 else
   echo "FACT the stream node's pipewire.sec.pid is $node_sec (not the forged value)"
 fi
 check "the forged application.process.id survives on the node (so it is not a source to trust)" "$([[ $node_app == 1 ]] && echo 0 || echo 1)"
+# The helper's own resolution (packaging/bin/grassfield-energy stream_client_pids) on this dump: the real pid, never the forged one.
+node_id=$(jq -r '.id' <<<"$node")
+resolved=$(env -i PATH="$PATH" python3 -I -c '
+import importlib.machinery, importlib.util, json, sys
+loader = importlib.machinery.SourceFileLoader("energy", sys.argv[1])
+spec = importlib.util.spec_from_loader("energy", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+print(" ".join(str(p) for p in sorted(m.stream_client_pids(json.load(open(sys.argv[2])), [int(sys.argv[3])]))))
+' "$(dirname "$0")/../../packaging/bin/grassfield-energy" "$dump" "$node_id")
+echo "helper resolves node $node_id to: ${resolved:-nothing}"
+check "the helper resolves the stream to the real pid, not the forged 1" "$([[ $resolved == "$cat_pid" ]] && echo 0 || echo 1)"
 exit $fails
