@@ -143,19 +143,96 @@ def redact_json(value, parent=""):
     return value
 
 
+PATH_RULES = {"pathList", "wallpaperPath"}  # x-grassfield rules of config/schema/grassfield.schema.json that hold a path
+SCHEMA_FILE = FILE_ROOT + "/usr/share/grassfield/schema/grassfield.schema.json"
+LEFT_OUT = "(a path, left out of the report)"
+PATH_START = ("/", "~/", "$HOME/", "file://")
+PATH_TOKEN = re.compile(r"file://|\$HOME/|(?<![\w~.])~/|(?<![\w.:/])/(?=[^\s/])")
+
+
 def is_path(value):
-    return isinstance(value, str) and (value.startswith("/") or value.startswith("~/") or value.startswith("$HOME/"))
+    """An absolute path, a `~/` or `$HOME/` path or a file:// URL."""
+    return isinstance(value, str) and value.strip().startswith(PATH_START)
 
 
-def wallpaper_names(value, wallpaper=False):
-    """A wallpaper's path says where the user keeps their pictures: only the file name stays (an owner's folder names are theirs)."""
+def path_name(value):
+    """The file name of a path or file:// URL (percent-decoded), "" when there is none."""
+    text = value.strip()
+    if text.startswith("file://"):  # file://[host]/path: the path from the first slash after the host, percent-decoded
+        text = text[len("file://"):]
+        text = text[text.find("/"):] if "/" in text else ""
+        text = re.sub(r"%([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), text)
+    return os.path.basename(text.rstrip("/"))
+
+
+def schema_path_types():
+    """The settings whose schema type is a path (x-grassfield rule pathList or wallpaperPath), from the installed schema:
+    {key tuple: rule}. Missing or unreadable: empty, and the shape of the values (is_path) still applies."""
+    text = read_file(SCHEMA_FILE, 1024 * 1024)
+    try:
+        schema = json.loads(text) if text else {}
+    except ValueError:
+        return {}
+    found = {}
+
+    def walk(node, trail):
+        if not isinstance(node, dict):
+            return
+        ann = node.get("x-grassfield")
+        rule = ann.get("rule") if isinstance(ann, dict) else None
+        if rule in PATH_RULES and trail:
+            found[trail] = rule
+        props = node.get("properties")
+        if isinstance(props, dict):
+            for k, v in props.items():
+                walk(v, trail + (k,))
+
+    walk(schema, ())
+    return found
+
+
+def scrub_paths(value, types=None, trail=(), wallpaper=False, siblings=None):
+    """No folder path leaves (ADR-0053): a value of a path type in the schema becomes a count (a list) or, for a wallpaper,
+    its file name; any other value that looks like a path (absolute, ~/, $HOME/, file://) is left out, or reduced to its file
+    name under a wallpaper* key or file; a key that is itself a path (stackOptions) is replaced by a numbered label."""
+    types = types or {}
     if isinstance(value, dict):
-        return {k: wallpaper_names(v, wallpaper or k.lower().startswith("wallpaper")) for k, v in value.items()}
+        out = {}
+        for i, (k, v) in enumerate(value.items()):
+            key = "(path %d, left out)" % (i + 1) if is_path(k) else k
+            out[key] = scrub_paths(v, types, trail + (k,), wallpaper or str(k).lower().startswith("wallpaper"), value)
+        return out
+    rule = types.get(trail)
     if isinstance(value, list):
-        return [wallpaper_names(v, wallpaper) for v in value]
-    if wallpaper and is_path(value):
-        return os.path.basename(value.rstrip("/")) or REDACTED
+        if rule == "pathList" or any(is_path(v) for v in value):
+            return "%d entries (the folder paths are left out of the report)" % len(value)
+        return [scrub_paths(v, types, trail, wallpaper, siblings) for v in value]
+    if isinstance(value, str) and (rule or is_path(value)):
+        if not value.strip():
+            return value
+        folder = trail[-1:] == ("folder",) or (siblings or {}).get("source") == "folder" or value.strip().endswith("/")
+        if (rule == "wallpaperPath" or wallpaper) and not folder:
+            return path_name(value) or LEFT_OUT
+        return LEFT_OUT
     return value
+
+
+def scrub_text(text, wallpaper=False):
+    """Non-JSON files: a path in a `key = value` line, or anywhere in a line, is left out (file name only for wallpaper*)."""
+    out = []
+    for line in text.splitlines():
+        m = LINE_PAIR.match(line)
+        if m:
+            raw = m.group(3).strip().strip("\"'")
+            if is_path(raw):
+                out.append(m.group(1) + ((path_name(raw) or LEFT_OUT) if wallpaper else LEFT_OUT))
+                continue
+        t = PATH_TOKEN.search(line)
+        if t:  # a folder name may hold spaces: everything from the first path on is the path
+            rest = line[t.start():]
+            line = line[:t.start()] + ((path_name(rest) or LEFT_OUT) if wallpaper else LEFT_OUT)
+        out.append(line)
+    return "\n".join(out)
 
 
 def folder_styles(value):
@@ -362,15 +439,15 @@ def configuration():
         if text is None:
             parts.append("--- %s: (cannot be read)" % name)
             continue
+        wallpaper = name.lower().startswith("wallpaper")
         try:
             data = json.loads(text)
             if name == "folder-styles.json":
                 data = folder_styles(data)
-            elif name.lower().startswith("wallpaper"):
-                data = wallpaper_names(data, True)
-            body = json.dumps(wallpaper_names(redact_json(data)), indent=1, ensure_ascii=False)
+            types = schema_path_types() if name == "grassfield.json" else {}
+            body = json.dumps(scrub_paths(redact_json(data), types, (), wallpaper), indent=1, ensure_ascii=False)
         except ValueError:
-            body = "(not JSON: left out)" if name == "folder-styles.json" else redact_lines(text)
+            body = "(not JSON: left out)" if name == "folder-styles.json" else scrub_text(redact_lines(text), wallpaper)
         parts.append("--- %s\n%s" % (name, body))
     return "\n".join(parts) if parts else "(the folder is empty)"
 
