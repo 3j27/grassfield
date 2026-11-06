@@ -11,6 +11,9 @@ import "Nav.js" as Nav
 // header, scrolled sideways, and Show All lays the group out in full (Finder).
 FocusScope {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var tab
     required property var model
@@ -238,7 +241,7 @@ FocusScope {
         id: grid
         anchors.fill: parent
         anchors.margins: Tokens.spacingSm
-        anchors.rightMargin: Tokens.spacingSm + scrollBar.width
+        // The overlay scroll bar floats over the icons (macOS), no lane of its own (UI audit 2026-11-05 U32).
         visible: !root.grouped
         cellWidth: root.cellWidth
         cellHeight: Tokens.filesIconCellHeight
@@ -403,7 +406,8 @@ FocusScope {
                             textFormat: Text.PlainText
                             x: Tokens.spacingSm
                             anchors.verticalCenter: header.verticalCenter
-                            width: showAll.x - x - Tokens.spacingSm
+                            // Up to "Show All" when it shows, else the row's width (UI audit 2026-11-05, LOW).
+                            width: (showAll.visible ? showAll.x : parent.width) - x - Tokens.spacingSm
                             text: section.title
                             elide: Text.ElideRight
                             color: Appearance.colors.text
@@ -528,7 +532,7 @@ FocusScope {
         visible: background.banding
         y: root.flick.y + contentTop - root.flick.contentY + root.flick.originY
         color: Appearance.withAlpha(Appearance.colors.accent, Tokens.filesRubberBandOpacity)
-        border.width: Tokens.appsBorderWidth
+        border.width: root.hairline
         border.color: Appearance.colors.accent
     }
 
@@ -629,7 +633,7 @@ FocusScope {
             width: Math.min(label.paintedWidth + 2 * Tokens.spacingXs, cell.width - Tokens.spacingXs)
             height: label.paintedHeight + Tokens.spacingXs
             radius: Tokens.radiusControl / 2
-            color: cell.focused ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+            color: cell.focused ? Appearance.colors.selection : Appearance.unemphasizedSelection
         }
 
         // Colour tags: dots before the first line of the name; dots and name are centred together.

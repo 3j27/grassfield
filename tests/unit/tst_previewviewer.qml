@@ -350,6 +350,30 @@ TestCase {
         }
     }
 
+    // UI audit 2026-11-05: opening the search keeps the thumbnails where the field's least width fits (U34: the shared
+    // SearchField, the count kept); the tools still clear the toggle.
+    function test_searchKeepsTheThumbnails() {
+        const v = pdfViewer;
+        v.sidebarOpen = true;
+        v.width = Math.ceil(Tokens.previewSidebarWidth + v.toolbarNeed + Tokens.previewSearchMinWidth - Tokens.toolbarCapsule);
+        wait(300);
+        verify(v.showSidebar, "the sidebar fits");
+        v.openSearch();
+        wait(100);
+        verify(v.searchOpen);
+        verify(v.showSidebar, "still shown with the search open");
+        const field = findIn(v.contentItem, it => it.cleared !== undefined && it.toolbar === true);
+        verify(field !== null && field.visible, "the shared search field");
+        verify(field.width >= Tokens.previewSearchMinWidth && field.width <= Tokens.previewSearchWidth, "its width " + field.width);
+        const tools = findChild(v.contentItem, "toolsRow");
+        const toolbar = findIn(v.contentItem, it => it.contentStart !== undefined && it.controls !== undefined && it.objectName === "");
+        const toggle = findIn(toolbar, it => it.accessibleName === "Thumbnails");
+        verify(tools.x >= toggle.mapToItem(toolbar, toggle.width, 0).x, "the tools clear the toggle");
+        verify(tools.x + tools.width <= toolbar.width, "and stay in the toolbar");
+        v.closeSearch();
+        v.sidebarOpen = false;
+    }
+
     // Preview never writes its own window's width (on Wayland the compositor keeps the size, so the layout would be wrong).
     function test_neverWritesItsOwnWidth() {
         for (const file of ["../../apps/preview/qml/Viewer.qml", "../../apps/preview/qml/Content.qml", "../../apps/preview/qml/Thumbnails.qml"]) {

@@ -48,6 +48,6 @@ ScrollPage {
         wrapMode: Text.Wrap
         color: Appearance.windowSecondary
         font.family: Appearance.fontFamily
-        font.pixelSize: Tokens.storeBodySize
+        font.pixelSize: Tokens.typographyBodySize
     }
 }

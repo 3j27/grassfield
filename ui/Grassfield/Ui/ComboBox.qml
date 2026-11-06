@@ -2,8 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Templates as T
 
-// Pop-up button (QtQuick.Templates ComboBox): the current choice on a rounded translucent button with a chevron; the list
-// is a Grassfield PopupMenu in a Popup below the button (above it where the window has no room), the current row checked.
+// Pop-up button (QtQuick.Templates ComboBox): the current choice on a rounded translucent button with up/down chevrons; the
+// list is a Grassfield PopupMenu in a Popup over the button, its checked row on the shown value (macOS), inside the window.
 // model: [{id, text}]; value is the selected id (the host owns it: the control reports `picked(id)` and shows `value`
 // again at once); Space, Return, Enter and the arrow keys open the list.
 // `inline`: the pop-up of a settings row (macOS 27 System Settings): the value as plain text, then a round disc with two
@@ -66,7 +66,8 @@ T.ComboBox {
             onImplicitWidthChanged: root.measureItems()
         }
     }
-    implicitHeight: root.inline ? Tokens.settingsPopupIndicatorSize : Tokens.menuItemHeight + Tokens.spacingSm
+    // The button form is as tall as a push button (UI audit 2026-11-05 U19).
+    implicitHeight: root.inline ? Tokens.settingsPopupIndicatorSize : Tokens.controlButtonHeight
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.ComboBox
@@ -109,7 +110,7 @@ T.ComboBox {
         // outline instead.
         border.width: Appearance.increaseContrast && !root.inline ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
 
         Rectangle {
             anchors.fill: parent
@@ -118,9 +119,18 @@ T.ComboBox {
             visible: !root.inline && root.enabled && (root.hovered || root.down)
         }
 
-        FocusRing {
-            visible: root.visualFocus
-            shapeRadius: root.inline ? root.height / 2 : Tokens.radiusControl
+        // Inline: the ring goes round the shown value and its disc (a capsule, the value half a height inside it), not round
+        // the room the widest choice keeps (UI audit 2026-11-05, LOW).
+        Item {
+            readonly property real valueWidth: (root.contentItem as Text).contentWidth + Tokens.settingsPopupIndicatorGap + Tokens.settingsPopupIndicatorSize + Tokens.settingsPopupInset + root.height / 2
+            x: root.inline ? Math.max(0, root.width - width) : 0
+            width: root.inline ? Math.min(root.width, valueWidth) : root.width
+            height: parent.height
+
+            FocusRing {
+                visible: root.visualFocus
+                shapeRadius: root.inline ? root.height / 2 : Tokens.radiusControl
+            }
         }
     }
 
@@ -132,7 +142,7 @@ T.ComboBox {
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         text: root.displayText
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
         color: Appearance.colors.text
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize
@@ -145,7 +155,7 @@ T.ComboBox {
         y: (root.height - height) / 2
         width: root.inline ? Tokens.settingsPopupIndicatorSize : Tokens.menuIconSize
         height: width
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
 
         // The inline disc: the text colour at a low alpha, a step stronger under the pointer or while pressed.
         Rectangle {
@@ -160,7 +170,8 @@ T.ComboBox {
 
         Icon {
             anchors.centerIn: parent
-            name: root.inline ? "chevron-up-down" : "chevron-down"
+            // Up and down chevrons in both forms: the list opens over the value, not below it (macOS pop-up button).
+            name: "chevron-up-down"
             size: root.inline ? Tokens.settingsPopupGlyphSize : Tokens.menuIconSize
         }
     }
@@ -181,7 +192,9 @@ T.ComboBox {
         padding: 0
         closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
 
-        // Below the button and right-aligned with it, above it when that does not fit, always inside the window.
+        // macOS: over the button, the checked row on the shown value and its label on the value's text, moved (or scrolled, for a
+        // list taller than the window) to stay inside the window (UI audit 2026-11-05 U21). `align`: also scroll a long list so
+        // that its checked row lies on the value (on opening).
         // The window's content item: the top of the parent chain.
         function windowItem(): Item {
             let win = root as Item;
@@ -190,7 +203,13 @@ T.ComboBox {
             return win;
         }
 
-        function place(): void {
+        // The shown value's text: after the leading padding, or right-aligned before the disc (inline).
+        function valueX(): real {
+            const t = root.contentItem as Text;
+            return t.x + (root.inline ? t.width - t.rightPadding - t.contentWidth : t.leftPadding);
+        }
+
+        function place(align: bool): void {
             const win = popup.windowItem();
             const margin = Tokens.spacingSm;
             popup.maxHeight = Math.max(0, win.height - 2 * margin);
@@ -198,10 +217,14 @@ T.ComboBox {
             const at = root.mapToItem(win, 0, 0);
             const w = Math.min(menu.width, popup.maxWidth);
             const h = Math.min(menu.height, popup.maxHeight);
-            const left = Math.max(margin, Math.min(win.width - w - margin, at.x + root.width - w));
-            const below = at.y + root.height + Tokens.spacingXs;
-            const above = at.y - Tokens.spacingXs - h;
-            const top = below + h > win.height - margin && above >= margin ? above : Math.max(margin, Math.min(win.height - h - margin, below));
+            const textX = popup.valueX();
+            // A row's label starts after the menu's padding and its check column (every row of the list is checkable).
+            const left = Math.max(margin, Math.min(win.width - w - margin, at.x + textX - Tokens.menuPadding - Tokens.menuCheckInset));
+            const rowMiddle = Tokens.menuPadding + (Math.max(0, root.valueIndex) + 0.5) * Tokens.menuItemHeight;
+            const valueMiddle = at.y + root.height / 2;
+            const top = Math.max(margin, Math.min(win.height - h - margin, valueMiddle - rowMiddle));
+            if (align)
+                scroller.contentY = h < menu.height ? Math.max(0, Math.min(menu.height - h, rowMiddle - (valueMiddle - top))) : 0;
             popup.x = left - at.x;
             popup.y = top - at.y;
         }
@@ -225,10 +248,11 @@ T.ComboBox {
                 items.push({id: m[i].id, text: metrics.elidedText, checked: i === root.valueIndex});
             }
             menu.model = items;
+            // From the label column, set on the value's text, to the button's right edge at least (macOS: the list covers it).
+            menu.minimumWidth = Math.max(Tokens.menuMinWidth, root.width - popup.valueX() + Tokens.menuPadding + Tokens.menuCheckInset);
             menu.measure();
             menu.currentIndex = Math.max(0, root.valueIndex);
-            popup.place();
-            scroller.contentY = 0;
+            popup.place(true);
             scroller.reveal();
         }
         onOpened: menu.forceActiveFocus()
@@ -272,8 +296,8 @@ T.ComboBox {
                 accessibleName: root.accessibleName
                 onCloseRequested: popup.close()
                 onCurrentIndexChanged: scroller.reveal()
-                onWidthChanged: if (popup.visible) popup.place()
-                onHeightChanged: if (popup.visible) popup.place()
+                onWidthChanged: if (popup.visible) popup.place(false)
+                onHeightChanged: if (popup.visible) popup.place(false)
                 onActivated: item => {
                     popup.close();
                     if (!root.visible || !root.enabled)

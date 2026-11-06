@@ -8,6 +8,9 @@ import Grassfield.Ui
 // kiod's own dialog (decision F-9) and never kept by Files (NavLogic::serverUrl drops one typed in the address).
 Window {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     // The BrowserWindow that opened it (its tab shows the server).
@@ -122,13 +125,13 @@ Window {
             width: parent.width
             height: Tokens.filesConnectRowHeight * Tokens.filesConnectListRows
             color: Appearance.colors.windowBackground
-            border.width: Tokens.appsBorderWidth
+            border.width: root.hairline
             border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
             ListView {
                 id: favorites
                 anchors.fill: parent
-                anchors.margins: Tokens.appsBorderWidth
+                anchors.margins: root.hairline
                 clip: true
                 model: root.app.favoriteServers
                 boundsBehavior: Flickable.StopAtBounds
@@ -179,9 +182,9 @@ Window {
                 delegate: Rectangle {
                     required property int index
                     readonly property int row: favorites.count + index
-                    x: Tokens.appsBorderWidth
-                    y: Tokens.appsBorderWidth + row * Tokens.filesConnectRowHeight
-                    width: parent.width - 2 * Tokens.appsBorderWidth
+                    x: root.hairline
+                    y: root.hairline + row * Tokens.filesConnectRowHeight
+                    width: parent.width - 2 * root.hairline
                     height: Tokens.filesConnectRowHeight
                     color: row % 2 === 1 ? Appearance.withAlpha(Appearance.colors.text, Tokens.filesStripeOpacity) : "transparent"
                 }

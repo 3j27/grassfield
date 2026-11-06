@@ -52,6 +52,8 @@ def main():
     s = replace_block(s, r"\n    IpcHandler \{", "\n")
     s = replace_block(s, r"\n        anchors \{\n            top: true", "\n        width: 800\n        height: 600")
     s = replace_block(s, r"\n        Region \{", "\n")
+    # The dim's fade animates the window's colour, which goes below (an Item has none).
+    s = replace_block(s, r"\n        Behavior on color \{", "\n")
     for old, new in (("\n    PanelWindow {\n", "\n    FakePanel {\n" if panel else "\n    Item {\n"), ("\nScope {\n", "\nItem {\n")):
         if s.count(old) != 1:
             raise ValueError("not found once: " + old.strip())

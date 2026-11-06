@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Grassfield.Ui
 import qs.services
 import qs.widgets
@@ -40,7 +41,8 @@ WidgetBase {
             anchors.fill: parent
             radius: width / 2
             color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-            border.width: 1
+            // One device pixel at every scale (UI audit 2026-11-05 U37).
+            border.width: 1 / Math.max(1, Screen.devicePixelRatio)
             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
         }
 

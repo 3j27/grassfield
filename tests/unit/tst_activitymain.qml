@@ -119,6 +119,28 @@ TestCase {
         verify(tip.visibleNow);
     }
 
+    // UI audit 2026-11-05 U5: a narrow window folds the five tabs into a pop-up and narrows the search field; the toolbar's
+    // right group never reaches the lights or the title's room.
+    function test_narrowToolbarFolds() {
+        const t = make();
+        verify(!t.win.compactToolbar, "the default width keeps the tabs");
+        verify(t.win.tabs.visible && !t.win.tabsPopup.visible);
+        compare(t.win.searchField.width, Tokens.activitySearchWidth);
+        t.win.width = Tokens.activityWindowMinWidth;
+        tryVerify(() => t.win.compactToolbar, 1000, "the minimum width folds them");
+        verify(!t.win.tabs.visible && t.win.tabsPopup.visible);
+        compare(t.win.searchField.width, Tokens.activitySearchCompactWidth);
+        compare(t.win.tabsPopup.value, "cpu");
+        t.win.tabsPopup.picked("disk");
+        compare(t.backend.tab, "disk");
+        const left = t.win.tabsPopup.mapToItem(t.win.contentItem, 0, 0).x;
+        const actions = t.win.stopButton.mapToItem(t.win.contentItem, 0, 0).x;
+        verify(actions >= Tokens.activityToolbarTitleMinWidth, "the actions start right of the title's room: " + actions);
+        verify(left > actions, "the pop-up after the actions");
+        t.win.width = Tokens.activityWindowWidth;
+        tryVerify(() => !t.win.compactToolbar, 1000, "wide again: the tabs");
+    }
+
     function test_columnsMenuShowsAnOptionalColumn() {
         const t = make();
         const header = findAll(t.win.contentItem, i => i.Accessible && i.Accessible.role === Accessible.ColumnHeader && i.Accessible.name === "% CPU")[0];

@@ -489,14 +489,44 @@ Window {
             focus: true
         }
 
-        Text {
-            anchors.centerIn: parent
-            visible: root.backend.loading && root.sections.length === 0
-            textFormat: Text.PlainText
-            text: qsTr("Loading apps…")
-            color: Appearance.windowSecondary
-            font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.storeBodySize
+        // The catalogue still loading: the shared spinner over its line once nothing has shown for store.loadingDelay, as Files'
+        // loading note (UI audit 2026-11-05, LOW: the line flashed at every quick start).
+        Item {
+            id: loadingNote
+            readonly property bool waiting: root.backend.loading && root.sections.length === 0
+            property bool delayed: false
+
+            anchors.fill: parent
+            visible: loadingNote.waiting && loadingNote.delayed
+            onWaitingChanged: if (!loadingNote.waiting)
+                loadingNote.delayed = false
+
+            Timer {
+                interval: Tokens.storeLoadingDelay
+                running: loadingNote.waiting && !loadingNote.delayed
+                onTriggered: loadingNote.delayed = true
+            }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: Tokens.spacingSm
+
+                Spinner {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    running: loadingNote.visible
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    textFormat: Text.PlainText
+                    text: qsTr("Loading apps…")
+                    color: Appearance.windowSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.storeBodySize
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                }
+            }
         }
 
         // How an operation ended (the latest result that says something), pacman's lock left behind, an app that could not

@@ -7,6 +7,9 @@ import Grassfield.Ui
 // (`gpu: true`). Opened by Main.qml (View > CPU History, Ctrl+3; View > GPU History, Ctrl+4).
 Window {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     // GPU History: one graph per GPU instead of one per processor.
@@ -125,12 +128,12 @@ Window {
                         height: root.gpu ? Tokens.activityPerformanceGraphHeight / 2 : Tokens.activityPerformanceTileHeight
                         radius: Tokens.radiusControl
                         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                        border.width: Tokens.appsBorderWidth
+                        border.width: root.hairline
                         border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
                         Graph {
                             anchors.fill: parent
-                            anchors.margins: Tokens.appsBorderWidth
+                            anchors.margins: root.hairline
                             graph: tile.modelData.graph
                             capacity: root.app.performance.capacity
                         }

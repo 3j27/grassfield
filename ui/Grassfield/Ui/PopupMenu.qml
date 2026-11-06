@@ -56,11 +56,14 @@ FocusScope {
 
     readonly property Item surface: material
 
+    // The least width (a pop-up button's list covers its button: ComboBox sets it).
+    property real minimumWidth: Tokens.menuMinWidth
     // Widest row; a Column sizes by width, not implicitWidth, so rows report through measure().
     property real rowsWidth: 0
 
-    // Whole pixels: the menu's right edge, its rim and the right-aligned shortcuts stay sharp.
-    width: Math.ceil(Math.max(Tokens.menuMinWidth, rowsWidth + 2 * Tokens.menuPadding))
+    // Whole pixels: the menu's right edge, its rim and the right-aligned shortcuts stay sharp. Never wider than menu.maxWidth: a
+    // longer label is shortened in its middle (MenuItem; UI audit 2026-11-05 U10).
+    width: Math.ceil(Math.max(root.minimumWidth, Math.min(Tokens.menuMaxWidth, rowsWidth + 2 * Tokens.menuPadding)))
     height: column.implicitHeight + 2 * Tokens.menuPadding
     activeFocusOnTab: true
     Accessible.role: Accessible.PopupMenu

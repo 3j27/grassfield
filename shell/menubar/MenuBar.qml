@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -328,6 +329,11 @@ Scope {
             // The clock's text: date part by the setting (the date setting resolves to `withDate`), time part by the hour format,
             // seconds and AM/PM options; `off` is the dark beat of the flashing separators.
             function clockString(withDate: bool, off: bool): string {
+                const parts = clockParts(withDate);
+                return ClockFormat.join(parts.date, ClockFormat.flash(parts.time, off), Tokens.menubarClockGap);
+            }
+            // The clock's date part ("" for none) and time part, as clockString joins them.
+            function clockParts(withDate: bool): var {
                 const kind = ClockFormat.dateKind(withDate, Settings.menubarClockShowDayOfWeek);
                 const d = FixedTime.date(clock.date);
                 let dateText = "";
@@ -340,8 +346,9 @@ Scope {
                 else if (kind === "date")
                     dateText = Qt.locale().toString(d, ClockFormat.orderDate(qsTr("MMM d"), monthFirst));
                 const t = Qt.formatTime(d, ClockFormat.timePattern(Qt.locale().timeFormat(Locale.ShortFormat), Settings.menubarClockHours, Settings.menubarClockShowSeconds, Settings.menubarClockShowAmPm));
-                return ClockFormat.join(dateText, ClockFormat.flash(t, off), Tokens.menubarClockGap);
+                return {date: dateText, time: t};
             }
+            readonly property var clockShownParts: clockParts(clockDateShown)
             readonly property bool clockFlashOff: Settings.menubarClockFlashSeparators && clock.date.getSeconds() % 2 === 1
             // Widths of the clock with and without the date (never of what is drawn now, so the choice cannot feed back).
             readonly property real clockFullWidth: clockFullMetrics.width
@@ -393,6 +400,25 @@ Scope {
             readonly property real appTitleMax: Math.max(0, win.width - (Tokens.menubarInsetLeft - Tokens.menubarItemPadding) - (Tokens.menubarInsetRight - Tokens.menubarItemPadding)
                 - systemButton.implicitWidth - (hasFileMenu ? fileButton.implicitWidth : 0) - (hasApp ? windowButton.implicitWidth : 0)
                 - 2 * Tokens.menubarItemPadding - statusMandatoryShortWidth - 2 * Tokens.menubarItemPadding)
+            // The app's own menus that fit (UI audit 2026-11-05 U15): after the application name, in the app's order, as long
+            // as they end before the status items that never give way; the trailing ones that would run under them are
+            // hidden (macOS cuts an app's menus where the bar has no more room). The name keeps its own room first (it
+            // only elides when even the shell's menus leave it none).
+            readonly property int bridgeShown: {
+                const count = bridgeRepeater.count;
+                let room = appTitleMax - appTitle.width;
+                let n = 0;
+                for (let i = 0; i < count; i++) {
+                    const b = bridgeRepeater.itemAt(i);
+                    if (!b)
+                        break;
+                    room -= b.implicitWidth;
+                    if (room < 0)
+                        break;
+                    n++;
+                }
+                return n;
+            }
             readonly property real statusAvailable: win.width - (Tokens.menubarInsetRight - Tokens.menubarItemPadding) - (leftRow.x + leftRow.width) - Tokens.menubarItemPadding
             readonly property var hiddenStatus: Logic.hiddenItems(statusAvailable, statusItems, 0)
             readonly property bool hasBattery: !VisualFixtures.active && battery !== null && battery.isPresent && battery.isLaptopBattery
@@ -972,7 +998,8 @@ Scope {
                         right: parent.right
                         bottom: parent.bottom
                     }
-                    height: 1
+                    // One device pixel at every scale (UI audit 2026-11-05 U37).
+                    height: 1 / Math.max(1, Screen.devicePixelRatio)
                     color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
                 }
             }
@@ -1029,6 +1056,7 @@ Scope {
                             onEntered: win.hoverSwitch("app")
 
                             Text {
+                                id: appTitle
                                 textFormat: Text.PlainText
                                 text: win.appName
                                 color: win.barText
@@ -1043,6 +1071,7 @@ Scope {
 
                         // The app's own menus (T1/T2), in the app's order.
                         Repeater {
+                            id: bridgeRepeater
                             model: win.bridgeMenus
 
                             delegate: BarButton {
@@ -1053,7 +1082,11 @@ Scope {
                             highlightOutset: Tokens.menubarHighlightOutset
 
                                 required property var modelData
+                                required property int index
 
+                                // Hidden when it would run under the status items (win.bridgeShown); out of the keyboard
+                                // cycle then too (menuTitles skips hidden titles).
+                                visible: index < win.bridgeShown
                                 objectName: "menubar-bridge:" + modelData.title
                                 accessibleName: qsTr("%1 menu").arg(modelData.title)
                                 active: win.isOpen("appbridge") && Popups.data.dbusId === modelData.dbusId
@@ -1398,18 +1431,40 @@ Scope {
                             shadowColor: win.barShadow
                             highlightOutset: Tokens.menubarHighlightOutset
                             leftPadding: Tokens.menubarStatusItemPadding
-                            accessibleName: qsTr("Date and time: %1. Open Notifications").arg(clockText.text)
+                            accessibleName: qsTr("Date and time: %1. Open Notifications").arg(win.clockString(win.clockDateShown, false))
                             active: Notifications.centerOpen && Notifications.centerScreen === (win.screen ? win.screen.name : "")
                             onActivated: Notifications.toggleCenter(win.screen.name)
 
-                            Text {
-                                textFormat: Text.PlainText
-                                id: clockText
-                                text: win.clockString(win.clockDateShown, win.clockFlashOff)
-                                color: win.barText
-                                font.family: Appearance.fontFamily
-                                font.pixelSize: Tokens.typographyMenuSize
-                                font.weight: Tokens.typographyMenuWeight
+                            // A steady width (LOW, UI audit 2026-11-05): tabular figures, so the time keeps its width from
+                            // second to second, and on the dark beat of the flashing separators the colons turn
+                            // invisible instead of becoming spaces, so they keep their advance. The time is drawn
+                            // character by character as plain text (no rich text); clockText's font is the metrics' too.
+                            Row {
+                                Text {
+                                    id: clockText
+                                    textFormat: Text.PlainText
+                                    text: win.clockShownParts.date !== "" ? win.clockShownParts.date + Tokens.menubarClockGap : ""
+                                    visible: text !== ""
+                                    color: win.barText
+                                    font.family: Appearance.fontFamily
+                                    font.pixelSize: Tokens.typographyMenuSize
+                                    font.weight: Tokens.typographyMenuWeight
+                                    font.features: {
+                                        "tnum": 1
+                                    }
+                                }
+
+                                Repeater {
+                                    model: String(win.clockShownParts.time).split("")
+
+                                    Text {
+                                        required property string modelData
+                                        textFormat: Text.PlainText
+                                        text: modelData
+                                        color: modelData === ":" && win.clockFlashOff ? "transparent" : win.barText
+                                        font: clockText.font
+                                    }
+                                }
                             }
                         }
                     }

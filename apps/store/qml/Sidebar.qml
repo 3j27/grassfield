@@ -182,7 +182,8 @@ FocusScope {
                 color: Appearance.colors.text
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.storeSidebarLabelSize
-                font.weight: row.selected ? Tokens.typographyMenuBoldWeight : Tokens.typographyMenuWeight
+                // Regular when selected too, as Files and Settings (UI audit 2026-11-05, LOW): the pill marks it.
+                font.weight: Tokens.typographyMenuWeight
                 font.letterSpacing: Appearance.tracking(Tokens.storeSidebarLabelSize)
             }
 
@@ -194,7 +195,7 @@ FocusScope {
                 visible: row.count > 0
                 textFormat: Text.PlainText
                 text: row.count
-                color: Appearance.colors.textSecondary
+                color: Appearance.windowSecondary
                 font.family: Appearance.fontFamily
                 font.pixelSize: Tokens.storeSidebarLabelSize
                 font.letterSpacing: Appearance.tracking(Tokens.storeSidebarLabelSize)
@@ -310,7 +311,8 @@ FocusScope {
             color: Appearance.colors.text
             font.family: Appearance.fontFamily
             font.pixelSize: Tokens.storeSidebarLabelSize
-            font.weight: Tokens.typographyMenuBoldWeight
+            // The title weight, as Settings' account name (UI audit 2026-11-05, LOW).
+            font.weight: Tokens.typographyTitleWeight
         }
 
         HoverHandler {

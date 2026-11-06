@@ -3,6 +3,7 @@ import QtQuick
 import Grassfield.Ui
 import qs.services
 import "SaverModel.js" as SaverModel
+import "../menubar/ClockFormat.js" as ClockFormat
 
 // One display's screen saver (ADR-0032), the owner's four, all Grassfield drawings: the artwork drifting slowly, the
 // wallpaper with a clock, a folder's pictures as a slideshow, a clock alone on black; and the moving artwork (ADR-0040 step
@@ -62,21 +63,27 @@ Rectangle {
         }
     }
 
-    // The date over the time, white, as the lock screen writes them (the saver has no account and no field).
+    // The date over the time, white, as the lock screen writes them (the saver has no account and no field). The family and
+    // tracking follow the size as the clock widget's (Inter Display above typography.displayFrom: the 104-px digits set
+    // tight, UI audit 2026-11-05 U24); the date in the region's order as the menu bar clock's (macOS: "Wednesday, November 5"
+    // in the US, "Wednesday 5 November" in the UK).
     component ClockText: Column {
         property date date: new Date()
         property real textOpacity: 1
+
+        readonly property bool monthFirst: ClockFormat.monthFirst(Qt.locale().dateFormat(Locale.ShortFormat))
 
         opacity: textOpacity
 
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.locale().toString(FixedTime.date(parent.date), qsTr("dddd d MMMM"))
+            text: Qt.locale().toString(FixedTime.date(parent.date), ClockFormat.orderDate(parent.monthFirst ? qsTr("dddd, MMMM d") : qsTr("dddd d MMMM"), parent.monthFirst))
             color: Appearance.darkColors.text
-            font.family: Appearance.fontFamily
+            font.family: Appearance.fontFamilyFor(Tokens.saverDateSize)
             font.pixelSize: Tokens.saverDateSize
             font.weight: Tokens.saverDateWeight
+            font.letterSpacing: Appearance.trackingFor(Tokens.saverDateSize)
         }
 
         Text {
@@ -84,9 +91,10 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatTime(FixedTime.date(parent.date), SaverModel.clockFormat(Qt.locale().timeFormat(Locale.ShortFormat)))
             color: Appearance.darkColors.text
-            font.family: Appearance.fontFamily
+            font.family: Appearance.fontFamilyFor(Tokens.saverClockSize)
             font.pixelSize: Tokens.saverClockSize
             font.weight: Tokens.saverClockWeight
+            font.letterSpacing: Appearance.trackingFor(Tokens.saverClockSize)
         }
     }
 
@@ -94,25 +102,15 @@ Rectangle {
     component Slide: Image {
         id: slide
 
-        property bool shown: false
-
         signal loaded
 
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: false
-        opacity: shown ? 1 : 0
+        opacity: 0
         onStatusChanged: if (status === Image.Ready && source !== "")
             slide.loaded()
-
-        // The slides' crossfade is a dissolve, not motion: it is kept whole under Reduce Motion, as macOS keeps its dissolves
-        // (capped at 100 ms it read as a cut; the integrator's call on #74, ADR-0039 step 6).
-        Behavior on opacity {
-            NumberAnimation {
-                duration: Tokens.saverSlideFadeMs
-            }
-        }
     }
 
     SaverSlides {
@@ -191,10 +189,14 @@ Rectangle {
     }
 
     // ---- the slideshow: two pictures crossfading, each panning ----
+    // The new picture fades in on top while the one it replaces stays whole under it, hidden once the fade completes (as
+    // Wallpaper.qml): fading both at once over the black ground dipped the light mid-dissolve (UI audit 2026-11-05 U7).
     Item {
         id: slideshow
 
         property int front: 0
+        // The picture under the fade, hidden when it completes.
+        property Item outgoing: null
 
         anchors.fill: parent
         visible: root.effectiveKind === "slideshow"
@@ -203,15 +205,42 @@ Rectangle {
             target: slides
 
             function onUrlChanged(): void {
+                // A fade in flight completes first: its outgoing picture is the one about to be replaced.
+                if (dissolve.running)
+                    dissolve.complete();
                 const back = slideshow.front === 0 ? slideB : slideA;
                 back.source = slides.url;
             }
         }
 
         function bring(slide: Item): void {
-            slideA.shown = slide === slideA;
-            slideB.shown = slide === slideB;
+            if (dissolve.running)
+                dissolve.complete();
+            const other = slide === slideA ? slideB : slideA;
             front = slide === slideA ? 0 : 1;
+            // Nothing on screen yet (the first picture): it fades in over the ground.
+            outgoing = other.opacity > 0 ? other : null;
+            other.z = 1;
+            slide.z = 2;
+            slide.opacity = 0;
+            dissolve.target = slide;
+            dissolve.start();
+        }
+
+        // The slides' crossfade is a dissolve, not motion: it is kept whole under Reduce Motion, as macOS keeps its dissolves
+        // (capped at 100 ms it read as a cut; the integrator's call on #74, ADR-0039 step 6).
+        NumberAnimation {
+            id: dissolve
+
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: Tokens.saverSlideFadeMs
+            onFinished: {
+                if (slideshow.outgoing !== null)
+                    slideshow.outgoing.opacity = 0;
+                slideshow.outgoing = null;
+            }
         }
 
         Drift {

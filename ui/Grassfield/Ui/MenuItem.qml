@@ -33,7 +33,8 @@ Item {
 
     // The shortcut and the chevron sit in their own right-aligned column (macOS model, docs/specs/ui.md); the
     // minimum gap to the label is unchanged. Whole pixels, so that the menu's edges and right-aligned shortcuts are sharp.
-    implicitWidth: Math.ceil(root.labelX + label.implicitWidth + (trail.implicitWidth > 0 ? Tokens.menuShortcutGap + 2 * Tokens.spacingSm + trail.implicitWidth : 0) + Tokens.menuItemPadding)
+    readonly property real trailRoom: trail.implicitWidth > 0 ? Tokens.menuShortcutGap + 2 * Tokens.spacingSm + trail.implicitWidth : 0
+    implicitWidth: Math.ceil(root.labelX + label.implicitWidth + root.trailRoom + Tokens.menuItemPadding)
     implicitHeight: Tokens.menuItemHeight
     Accessible.role: Accessible.MenuItem
     Accessible.name: root.text
@@ -86,6 +87,10 @@ Item {
         textFormat: Text.PlainText
         id: label
         x: root.labelX
+        // A row narrower than its label (a menu at menu.maxWidth, the Sound menu's fixed width) shortens it in the middle, so a
+        // long file or device name keeps its start and its end (macOS; UI audit 2026-11-05 U10).
+        width: Math.max(0, root.width - root.labelX - root.trailRoom - Tokens.menuItemPadding)
+        elide: Text.ElideMiddle
         anchors.verticalCenter: parent.verticalCenter
         text: root.text
         color: root.foreground

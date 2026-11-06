@@ -10,7 +10,9 @@ T.Switch {
     property string accessibleName: ""
     // On, the track takes the selection colour, the fill of a checked box and a default button (ADR-0039 step 11, D-Q4); the
     // white knob is outlined in the fill's mark colour where it holds under 3:1 there (Accent.knobOutlined).
-    readonly property bool knobOutlined: root.checked && Accent.knobOutlined(String(Appearance.colors.knob), String(Appearance.colors.selection), Tokens.controlKnobMinContrast)
+    // The accent only while the window looks key, inside an app window (Appearance.accentShown, UI audit 2026-11-05 U17).
+    readonly property bool keyLook: Appearance.accentShown(root.Window.window, root.Window.active)
+    readonly property bool knobOutlined: root.checked && root.keyLook && Accent.knobOutlined(String(Appearance.colors.knob), String(Appearance.colors.selection), Tokens.controlKnobMinContrast)
 
     implicitWidth: Tokens.controlToggleWidth
     implicitHeight: Tokens.controlToggleHeight
@@ -35,12 +37,13 @@ T.Switch {
     indicator: Item {
         width: root.width
         height: root.height
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
 
         Rectangle {
             anchors.fill: parent
             radius: height / 2
-            color: root.checked ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+            // Off, light: black at control.toggleOffTrackOpacity, as macOS 27 (UI audit 2026-11-05 U35).
+            color: root.checked ? (root.keyLook ? Appearance.colors.selection : Appearance.inactiveFill) : Appearance.withAlpha(Appearance.colors.fill, Appearance.dark ? Appearance.fillOpacity : Tokens.controlToggleOffTrackOpacity)
             // Increase Contrast outlines the track, as the other controls: the off track alone is barely apart from its backdrop.
             border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)

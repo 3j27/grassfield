@@ -26,6 +26,15 @@ Window {
     readonly property alias moreButton: moreButton
     readonly property alias actionMenu: actionMenuItem
     readonly property alias sheets: sheetsItem
+    readonly property alias tabsPopup: tabsPopup
+    // The five tabs fold into one pop-up and the search field narrows where the whole toolbar would leave the title less
+    // than its room (UI audit 2026-11-05 U5); measured with the unfolded widths, so folding cannot unfold it again (as Files'
+    // compactViews).
+    readonly property bool compactToolbar: {
+        const trailing = actionGroup.width + tabs.implicitWidth + Tokens.activitySearchWidth + 2 * Tokens.windowItemsGap;
+        const room = toolbar.width - toolbar.contentStart - Tokens.spacingSm - trailing - Tokens.windowItemsInset;
+        return room < Math.min(titleText.implicitWidth, Tokens.activityToolbarTitleMinWidth);
+    }
 
     title: qsTr("Activity Monitor")
     width: root.backend.savedWidth > 0 ? root.backend.savedWidth : Tokens.activityWindowWidth
@@ -320,6 +329,11 @@ Window {
             SegmentedControl {
                 id: tabs
                 objectName: "tabs"
+                visible: !root.compactToolbar
+                // A toolbar control as tall as the search field beside it (UI audit U19 follow-up: the library's 24-pt
+                // default would sit 4 pt shorter than the 28-pt field).
+                height: Tokens.toolbarSearchHeight
+                anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                 model: root.backend.tabs.map(t => ({id: t.key, text: t.title}))
                 value: root.backend.tab
                 accessibleName: qsTr("Resource")
@@ -329,11 +343,30 @@ Window {
                     id: tabsHover
                 }
             },
+            // The tabs folded (U5): the current resource on a pop-up button, its list the five tabs.
+            ComboBox {
+                id: tabsPopup
+                objectName: "tabsPopup"
+                visible: root.compactToolbar
+                minimumWidth: 0
+                height: Tokens.toolbarSearchHeight
+                anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+                // A toolbar control never takes the focus from the table (as ToolButton).
+                focusPolicy: Qt.NoFocus
+                model: tabs.model
+                value: root.backend.tab
+                accessibleName: qsTr("Resource")
+                onPicked: id => root.backend.tab = id
+
+                HoverHandler {
+                    id: tabsPopupHover
+                }
+            },
             SearchField {
                 id: search
                 objectName: "search"
                 toolbar: true
-                width: Tokens.activitySearchWidth
+                width: root.compactToolbar ? Tokens.activitySearchCompactWidth : Tokens.activitySearchWidth
                 anchors.verticalCenter: parent ? parent.verticalCenter : undefined
                 Accessible.name: qsTr("Search processes")
                 // AM14: a live filter, no Return needed.
@@ -354,6 +387,7 @@ Window {
             visible: width > 0
 
             Text {
+                id: titleText
                 width: parent.width
                 elide: Text.ElideRight
                 textFormat: Text.PlainText
@@ -429,11 +463,11 @@ Window {
     Tooltip {
         id: toolbarTip
         objectName: "toolbarTip"
-        readonly property Item over: tabsHover.hovered ? tabs : searchHover.hovered ? search : stopHover.hovered ? stopButton
+        readonly property Item over: tabsHover.hovered ? tabs : tabsPopupHover.hovered && !tabsPopup.open ? tabsPopup : searchHover.hovered ? search : stopHover.hovered ? stopButton
             : infoHover.hovered ? infoButton : moreHover.hovered ? moreButton : null
         readonly property point place: over ? over.mapToItem(root.contentItem, 0, over.height) : Qt.point(0, 0)
         // AM50: with another owner's process or the Kernel row selected, the Stop button says why it is off.
-        text: over === tabs ? qsTr("Choose the resource the table shows") : over === search ? qsTr("Search processes by name, user, command or PID")
+        text: over === tabs || over === tabsPopup ? qsTr("Choose the resource the table shows") : over === search ? qsTr("Search processes by name, user, command or PID")
             : over === stopButton ? (root.backend.actions.refusal !== "" ? root.backend.actions.refusal : qsTr("Quit the selected processes"))
             : over === infoButton ? qsTr("Inspect the selected process")
             : over === moreButton ? qsTr("Act on the selected processes") : ""

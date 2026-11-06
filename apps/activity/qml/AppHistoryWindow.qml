@@ -9,6 +9,9 @@ import Grassfield.Ui
 // and nothing else. Opened by Main.qml as one of its own windows (View > App History, Ctrl+6).
 Window {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     // ADR-0015: the titlebar-only style, as Inspect and Files' Get Info.
@@ -141,7 +144,7 @@ Window {
 
                 Rectangle {
                     visible: column.index > 0
-                    width: Tokens.appsBorderWidth
+                    width: root.hairline
                     height: parent.height - Tokens.spacingSm
                     anchors.verticalCenter: parent.verticalCenter
                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
@@ -190,7 +193,7 @@ Window {
         anchors.top: headerRow.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Tokens.appsBorderWidth
+        height: root.hairline
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -199,7 +202,7 @@ Window {
         objectName: "historyRows"
         visible: !root.history.unavailable
         anchors.top: headerRow.bottom
-        anchors.topMargin: Tokens.appsBorderWidth
+        anchors.topMargin: root.hairline
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

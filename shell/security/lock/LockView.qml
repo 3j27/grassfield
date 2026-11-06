@@ -309,11 +309,14 @@ Item {
         Text {
             textFormat: Text.PlainText
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.locale().toString(FixedTime.date(clock.date), qsTr("dddd d MMMM"))
+            // The region's order: "Wednesday, November 5" where the month comes first (LockMachine.datePattern).
+            text: Qt.locale().toString(FixedTime.date(clock.date), Machine.datePattern(qsTr("dddd d MMMM"), Qt.locale().dateFormat(Locale.ShortFormat)))
             color: root.colors.text
-            font.family: Appearance.fontFamily
+            // Inter Display at display sizes, with its tracking, as every display text (Appearance.fontFamilyFor; U24).
+            font.family: Appearance.fontFamilyFor(Tokens.lockDateSize)
             font.pixelSize: Tokens.lockDateSize
             font.weight: Tokens.lockDateWeight
+            font.letterSpacing: Appearance.trackingFor(Tokens.lockDateSize)
             Accessible.role: Accessible.StaticText
             Accessible.name: text
         }
@@ -323,9 +326,10 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatTime(FixedTime.date(clock.date), Machine.clockFormat(Qt.locale().timeFormat(Locale.ShortFormat)))
             color: root.colors.text
-            font.family: Appearance.fontFamily
+            font.family: Appearance.fontFamilyFor(Tokens.lockClockSize)
             font.pixelSize: Tokens.lockClockSize
             font.weight: Tokens.lockClockWeight
+            font.letterSpacing: Appearance.trackingFor(Tokens.lockClockSize)
             Accessible.role: Accessible.StaticText
             Accessible.name: qsTr("Time: %1").arg(text)
         }
@@ -450,12 +454,14 @@ Item {
                 showSubmit: true
                 radius: height / 2
                 fontSize: Tokens.typographyBodySize
-                // Dark frosted inset: white dots and caret, secondary placeholder, white focus ring (no layer or
-                // effect on the field: it renders and takes input whatever happens to the decoration).
+                // Dark frosted capsule: white dots and caret, secondary placeholder centred, no focus ring (the field always
+                // has the focus here; macOS draws none: UI audit 2026-11-05 U23). No layer or effect on the field: it renders
+                // and takes input whatever happens to the decoration.
                 textColor: root.colors.text
                 placeholderColor: root.colors.textSecondary
+                placeholderAlignment: Text.AlignHCenter
                 fillColor: Appearance.withAlpha(root.colors.shadow, Tokens.lockFieldFillOpacity)
-                focusColor: Appearance.withAlpha(root.colors.text, Tokens.lockFocusRingOpacity)
+                focusRing: false
                 // Selection: the dark palette's accent behind dark accent-text dots (was the focus ring colour behind
                 // white dots, 1.7-2.1:1).
                 selectionColor: root.colors.accent

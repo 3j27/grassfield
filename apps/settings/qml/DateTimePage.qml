@@ -111,8 +111,8 @@ SettingsPage {
         }
         SettingsRow {
             title: qsTr("Source")
+            // Disabled, the row dims its labels and its value itself (SettingsRow.dimmed), not its separator.
             enabled: root.time !== null && root.time.ntp
-            opacity: enabled ? 1 : Tokens.materialDisabledOpacity
             valueText: root.time ? (root.time.server || root.time.servers[0] || qsTr("None")) : ""
         }
     }

@@ -498,6 +498,38 @@ TestCase {
         compare(tab.searchText, "");
     }
 
+    // UI audit 2026-11-05 U11: in a narrow window an open search never covers back and forward; Tags and Action yield first.
+    function test_narrowSearchKeepsBackAndForward() {
+        const files = test.openFiles(false);
+        const browser = files.windows[0];
+        const tab = browser.tab;
+        const find = (item, pred) => {
+            if (pred(item))
+                return item;
+            for (const c of item.children) {
+                const r = find(c, pred);
+                if (r)
+                    return r;
+            }
+            return null;
+        };
+        const field = find(browser.contentItem, i => i.expandedWidth !== undefined && i.tab !== undefined);
+        const nav = find(browser.contentItem, i => i.Accessible.name === "Navigation" && i.tab !== undefined);
+        verify(field && nav);
+        browser.width = Tokens.filesWindowMinWidth;
+        tab.setSearch("aq");
+        tryCompare(tab, "fileSearch", true, 2000);
+        tryVerify(() => field.expanded);
+        verify(!browser.toolbarTagsShown, "Tags and Action yield first");
+        verify(field.width >= Tokens.filesSearchMinWidth);
+        const navRight = nav.mapToItem(browser.contentItem, nav.width, 0).x;
+        verify(field.mapToItem(browser.contentItem, 0, 0).x >= navRight, "the field starts right of back and forward");
+        verify(field.mapToItem(browser.contentItem, field.width, 0).x <= browser.width, "and ends inside the window");
+        browser.width = Tokens.filesWindowWidth;
+        tryVerify(() => browser.toolbarTagsShown, 1000, "wide: Tags and Action back");
+        tab.setSearch("");
+    }
+
     // Decision F-6: no Cut for files; Move Item Here moves the copied items into the shown folder. Empty Trash is never
     // offered in a dev session (ADR-0011), whatever asks for it.
     function test_moveItemHereAndNoCut() {

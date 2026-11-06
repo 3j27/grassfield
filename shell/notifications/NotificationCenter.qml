@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
@@ -531,8 +532,17 @@ Variants {
                             anchors.fill: parent
                             radius: width / 2
                             color: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.fixedGlassAlpha(Tokens.notificationCloseTintOpacity))
-                            border.width: 1
+                            // One device pixel at every scale (UI audit 2026-11-05 U37).
+                            border.width: 1 / Math.max(1, Screen.devicePixelRatio)
                             border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+                        }
+
+                        // Pressed: the shared pressed fill over the disk (LOW, UI audit 2026-11-05).
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: width / 2
+                            color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+                            visible: clearAllArea.pressed
                         }
 
                         Icon {
@@ -542,6 +552,7 @@ Variants {
                         }
 
                         MouseArea {
+                            id: clearAllArea
                             anchors.fill: parent
                             cursorShape: Qt.ArrowCursor
                             onClicked: Notifications.clearAll()

@@ -3,8 +3,8 @@ import QtQuick
 import QtQuick.Templates as T
 
 // Modal sheet over its window: a title, a message, an optional text field and Cancel / confirm buttons, with more buttons
-// at the leading edge when asked (macOS: "Keep Both", "Show Certificate"). Return confirms (or cancels: returnCancels),
-// Esc cancels, a click outside the panel is swallowed. Used for Go to Folder, for irreversible actions (Empty Trash) and
+// at the leading edge when asked (macOS: "Keep Both", "Show Certificate"). Return activates the visible default button: the
+// confirm one (red when `destructive`), or Cancel with `returnCancels`; Esc cancels, a click outside the panel is swallowed. Used for Go to Folder, for irreversible actions (Empty Trash) and
 // for KIO's questions in Files (apps/files/qml/KioSheets.qml).
 // Declare it as a child of the window's content; it fills it. The panel is a QtQuick.Templates Pane on the frosted material.
 Item {
@@ -53,8 +53,25 @@ Item {
     visible: false
     z: 900
 
+    // Motion (owner decision Q6; UI audit 2026-11-05 U6): the panel drops in from above the window on the panel spring
+    // (motion.panel, curvePanel) while the dim fades in (motion.fast); what travels is the panel's image, the panel itself
+    // stays in its place under it (hidden, not moved), so the keys, the focus and a click reach it as before. Closing, the
+    // sheet is hidden at once as before (`visible` and `shown` change exactly as they did) and a still image of it rises out
+    // on curveExit while its dim fades.
+    // Reduce Motion: no travel, a short crossfade. A sheet opened again while its image leaves (a queued question replacing
+    // the answered one) takes its place without either motion.
+    readonly property real travel: Appearance.reduceMotion ? 0 : panel.y + panel.height + Tokens.shadowBlur + Tokens.shadowOffsetY
+    property Item leaving: null
+
     function open(): void {
         root.errorText = "";
+        const replacing = root.leaving !== null;
+        if (root.leaving) {
+            root.leaving.destroy();
+            root.leaving = null;
+        }
+        if (!root.visible && !replacing)
+            enter.restart();
         root.visible = true;
         if (root.withField) {
             field.forceActiveFocus();
@@ -73,7 +90,25 @@ Item {
         // The focus goes back first: hiding may open the window's next sheet (Files' queued KIO question), which then takes it.
         if (root.focusBack)
             root.focusBack.forceActiveFocus();
+        if (root.visible)
+            root.leave();
         root.visible = false;
+    }
+
+    // The leaving image, in the window's content beside the sheet (the hidden sheet draws nothing); it takes no input.
+    function leave(): void {
+        enter.stop();
+        if (!root.parent || root.leaving)
+            return;
+        root.leaving = leavingComponent.createObject(root.parent, {
+            x: root.x,
+            y: root.y,
+            width: root.width,
+            height: root.height,
+            z: root.z,
+            dimFrom: dim.opacity,
+            panelY: panel.y + (enter.running ? entering.shiftY : 0)
+        });
     }
 
     function cancel(): void {
@@ -123,6 +158,7 @@ Item {
     }
 
     Rectangle {
+        id: dim
         anchors.fill: parent
         color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity)
 
@@ -312,12 +348,125 @@ Item {
                             width: mainRow.pairWidth
                             text: root.confirmText
                             focusPolicy: Qt.TabFocus
-                            primary: !root.destructive && !root.returnCancels
+                            // Return's button is always the visible default: a destructive one is drawn as the red default
+                            // (macOS: the action the user asked for, Empty Trash, stays the default and is marked destructive;
+                            // UI audit 2026-11-05 U20). A choice not to take by habit sets returnCancels instead.
+                            primary: !root.returnCancels
                             destructive: root.destructive
                             enabled: root.confirmEnabled
                             onClicked: root.confirm()
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // The panel's image while it drops in, drawn instead of the panel (hideSource), which keeps its place and its input.
+    ShaderEffectSource {
+        id: entering
+
+        property real shiftY: 0
+        // Room for the panel's shadow around its image (Material.shadowMargin).
+        readonly property real margin: Tokens.shadowBlur + Tokens.shadowOffsetY
+
+        visible: enter.running
+        sourceItem: enter.running ? panel : null
+        hideSource: enter.running
+        live: true
+        sourceRect: Qt.rect(-margin, -margin, panel.width + 2 * margin, panel.height + 2 * margin)
+        x: panel.x - margin
+        y: panel.y - margin + shiftY
+        width: panel.width + 2 * margin
+        height: panel.height + 2 * margin
+    }
+
+    ParallelAnimation {
+        id: enter
+
+        NumberAnimation {
+            target: dim
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: Appearance.duration(Tokens.motionFast)
+        }
+        NumberAnimation {
+            target: entering
+            property: "shiftY"
+            from: -root.travel
+            to: 0
+            duration: Appearance.duration(Tokens.motionPanel)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.curvePanel
+        }
+        // Under Reduce Motion the panel crossfades instead of travelling.
+        NumberAnimation {
+            target: entering
+            property: "opacity"
+            from: Appearance.reduceMotion ? 0 : 1
+            to: 1
+            duration: Appearance.duration(Tokens.motionFast)
+        }
+    }
+
+    Component {
+        id: leavingComponent
+
+        Item {
+            id: leavingItem
+
+            property real dimFrom: 1
+            property real panelY: 0
+            // Room for the panel's shadow around its image (Material.shadowMargin).
+            readonly property real margin: Tokens.shadowBlur + Tokens.shadowOffsetY
+
+            Rectangle {
+                id: leavingDim
+                anchors.fill: parent
+                color: dim.color
+                opacity: leavingItem.dimFrom
+            }
+
+            ShaderEffectSource {
+                id: still
+                sourceItem: panel
+                live: false
+                hideSource: false
+                sourceRect: Qt.rect(-leavingItem.margin, -leavingItem.margin, panel.width + 2 * leavingItem.margin, panel.height + 2 * leavingItem.margin)
+                x: panel.x - leavingItem.margin
+                y: leavingItem.panelY - leavingItem.margin
+                width: panel.width + 2 * leavingItem.margin
+                height: panel.height + 2 * leavingItem.margin
+            }
+
+            ParallelAnimation {
+                running: true
+                onFinished: {
+                    if (root.leaving === leavingItem)
+                        root.leaving = null;
+                    leavingItem.destroy();
+                }
+
+                NumberAnimation {
+                    target: leavingDim
+                    property: "opacity"
+                    to: 0
+                    duration: Appearance.duration(Tokens.motionFast)
+                }
+                NumberAnimation {
+                    target: still
+                    property: "y"
+                    to: leavingItem.panelY - leavingItem.margin - root.travel
+                    duration: Appearance.duration(Tokens.motionNormal)
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.curveExit
+                }
+                NumberAnimation {
+                    target: still
+                    property: "opacity"
+                    to: Appearance.reduceMotion ? 0 : 1
+                    duration: Appearance.duration(Tokens.motionFast)
                 }
             }
         }

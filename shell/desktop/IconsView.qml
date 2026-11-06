@@ -28,6 +28,9 @@ FocusScope {
     // The desktop surface holds the keyboard (KeyboardFocus.js "held"): the desktop keyboard actions below
     // (arrows, Return, Ctrl+O, Ctrl+Backspace, Ctrl+A, Space, Esc) run only then.
     property bool keysActive: false
+    // The desktop is the key surface (it holds the keyboard or its menu, or a press on it is getting the keyboard): a selection
+    // is drawn emphasized (the accent label) only then, grey otherwise, as Files' views (UI audit 2026-11-05 U25).
+    property bool isKey: false
     // An icon drag (real drag-and-drop) is in progress.
     property bool dragging: false
 
@@ -180,7 +183,9 @@ FocusScope {
         if (lay[name] === undefined)
             return Qt.rect(0, 0, 0, 0);
         const s = Logic.slotPos(lay[name].col, lay[name].row, areaW, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
-        return Qt.rect(leftInset + s.x, topInset + s.y, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
+        // On whole device pixels: the icons and labels stay crisp at a fractional scale (UI audit 2026-11-05, LOW).
+        const dpr = Math.max(1, Screen.devicePixelRatio);
+        return Qt.rect(Math.round((leftInset + s.x) * dpr) / dpr, Math.round((topInset + s.y) * dpr) / dpr, Tokens.desktopIconCellWidth, Tokens.desktopIconCellHeight);
     }
 
     function iconAt(x: real, y: real): string {
@@ -663,6 +668,7 @@ FocusScope {
             x: root.rectOf(modelData.name).x
             y: root.rectOf(modelData.name).y
             selected: root.selected[modelData.name] === true
+            key: root.isKey
             renaming: root.renaming === modelData.name
             renameError: root.renameError
             dragPaths: root.selectedPaths
@@ -688,7 +694,8 @@ FocusScope {
         height: root.band ? root.band.h : 0
         radius: Tokens.desktopIconSelectionRadius / 2
         color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconRubberBandOpacity)
-        border.width: 1
+        // One device pixel (UI audit 2026-11-05, LOW).
+        border.width: 1 / Math.max(1, Screen.devicePixelRatio)
         border.color: Appearance.withAlpha(Appearance.colors.accent, Tokens.desktopIconSelectionOpacity)
     }
 

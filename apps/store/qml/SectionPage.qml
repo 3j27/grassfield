@@ -97,9 +97,9 @@ ScrollPage {
             text: qsTr("The Store Isn't Available Right Now")
             wrapMode: Text.Wrap
             color: Appearance.colors.text
-            font.family: Appearance.fontFamilyFor(Tokens.storeEmptyTextSize)
-            font.pixelSize: Tokens.storeEmptyTextSize
-            font.weight: Tokens.typographyMenuBoldWeight
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyTitleSize
+            font.weight: Tokens.typographyTitleWeight
         }
 
         Text {
@@ -112,7 +112,7 @@ ScrollPage {
             wrapMode: Text.Wrap
             color: Appearance.windowSecondary
             font.family: Appearance.fontFamily
-            font.pixelSize: Tokens.storeBodySize
+            font.pixelSize: Tokens.typographyBodySize
         }
 
         Row {

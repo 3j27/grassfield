@@ -9,6 +9,9 @@ import Grassfield.Ui
 // its own windows (View > Performance, Ctrl+5).
 Window {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var app
     // ADR-0015: the titlebar-only style, as Inspect and Files' Get Info.
@@ -90,7 +93,7 @@ Window {
             Rectangle {
                 anchors.fill: parent
                 radius: Tokens.radiusControl
-                color: resource.chosen ? (sidebarItem.activeFocus ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2))
+                color: resource.chosen ? (sidebarItem.activeFocus ? Appearance.colors.selection : Appearance.unemphasizedSelection)
                      : mouse.containsMouse ? Appearance.withAlpha(Appearance.colors.hover, Tokens.materialHoverOpacity) : "transparent"
             }
 
@@ -102,12 +105,12 @@ Window {
                 height: parent.height - 2 * Tokens.spacingSm
                 radius: Tokens.radiusControl / 2
                 color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-                border.width: Tokens.appsBorderWidth
+                border.width: root.hairline
                 border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
                 Graph {
                     anchors.fill: parent
-                    anchors.margins: Tokens.appsBorderWidth
+                    anchors.margins: root.hairline
                     graph: resource.modelData.graph
                     capacity: root.performance.capacity
                 }
@@ -167,7 +170,7 @@ Window {
         anchors.bottom: parent.bottom
         anchors.left: sidebarItem.right
         anchors.leftMargin: Tokens.spacingSm
-        width: Tokens.appsBorderWidth
+        width: root.hairline
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -360,12 +363,12 @@ Window {
         property var graph: ({})
         radius: Tokens.radiusControl
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: Tokens.appsBorderWidth
+        border.width: root.hairline
         border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
         Graph {
             anchors.fill: parent
-            anchors.margins: Tokens.appsBorderWidth
+            anchors.margins: root.hairline
             graph: frame.graph
             capacity: root.performance.capacity
         }

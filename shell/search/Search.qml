@@ -192,6 +192,8 @@ Scope {
         Clipboard.watchTarget(target ? target.address : "");
         screenName = focusedScreenName();
         recentFile.reload();
+        // Opened again during the fade-out of a Clipboard view: it opens on the results, as after the release.
+        released();
         setQuery(text);
         open = true;
     }
@@ -200,13 +202,20 @@ Scope {
         open = false;
         // A paste the helper has not confirmed yet ends with Search: a late confirmation pastes nothing (ADR-0034 §4).
         Clipboard.searchClosed();
-        closePreview();
-        view = "";
-        clipNotice = "";
         leaveChips();
         fileTimer.stop();
         cancelFiles();
         fileHits = [];
+    }
+
+    // The panel is gone (its fade-out and keyboard release ran, SearchPanel): the Clipboard view, its preview and notice reset
+    // only now, so the glyph, the placeholder and the preview never change while the panel fades out (UI audit 2026-11-05 U9).
+    function released(): void {
+        if (open)
+            return;
+        closePreview();
+        view = "";
+        clipNotice = "";
     }
 
     function toggle(): void {
@@ -531,13 +540,13 @@ Scope {
             return;
         // Restart, Shut Down and Log Out: no message, the dialog shows its countdown (ADR-0040 ID-21).
         case "restart":
-            Popups.confirm(qsTr("Are you sure you want to restart your computer now?"), "", qsTr("Restart"), "restart", {}, true, screenName);
+            Popups.confirm(qsTranslate("Search", "Are you sure you want to restart your computer now?"), "", qsTranslate("Search", "Restart"), "restart", {}, true, screenName);
             return;
         case "shutdown":
-            Popups.confirm(qsTr("Are you sure you want to shut down your computer now?"), "", qsTr("Shut Down"), "shutdown", {}, true, screenName);
+            Popups.confirm(qsTranslate("Search", "Are you sure you want to shut down your computer now?"), "", qsTranslate("Search", "Shut Down"), "shutdown", {}, true, screenName);
             return;
         case "logout":
-            Popups.confirm(qsTr("Are you sure you want to quit all applications and log out %1?").arg(SystemInfo.user), "", qsTr("Log Out"), "logout", {}, true, screenName);
+            Popups.confirm(qsTranslate("Search", "Are you sure you want to quit all applications and log out %1?").arg(SystemInfo.user), "", qsTranslate("Search", "Log Out"), "logout", {}, true, screenName);
             return;
         }
     }

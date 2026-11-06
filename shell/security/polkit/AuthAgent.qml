@@ -272,6 +272,13 @@ Scope {
         }
         exclusionMode: ExclusionMode.Ignore
         color: win.shown ? Appearance.withAlpha(Appearance.colors.shadow, Tokens.shadowOpacity) : "transparent"
+        // The dim fades in with the sheet (UI audit 2026-11-05 U22). Display only: the window's mapping and keyboard
+        // (visible, takesKeys) never read the colour.
+        Behavior on color {
+            ColorAnimation {
+                duration: Appearance.duration(Tokens.motionFast)
+            }
+        }
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: win.takesKeys ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "grassfield-polkit"
@@ -317,10 +324,22 @@ Scope {
             }
         }
 
+        // A little above the middle and faded in, as the shell's centred alerts (Overlay.qml: panel.dialogRaise, motion.fast;
+        // UI audit 2026-11-05 U22). Display only: the sheet takes its focus and keys at once whatever its opacity (opacity
+        // stops no input, and no focus call waits for the fade).
         Loader {
             id: holder
             active: dialogModel.active
             anchors.centerIn: parent
+            anchors.verticalCenterOffset: -win.height * Tokens.panelDialogRaise
+            opacity: item ? 1 : 0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionFast)
+                }
+            }
+
             sourceComponent: AuthDialog {
                 model: dialogModel
                 // The action's theme icon (sanitized by the model), only when the theme has it (no broken image) and every
@@ -345,7 +364,9 @@ Scope {
             id: endedNotice
             objectName: "polkitEndedNotice"
             visible: root.lingering
+            // Where the sheet was (holder).
             anchors.centerIn: parent
+            anchors.verticalCenterOffset: -win.height * Tokens.panelDialogRaise
             width: Tokens.panelDialogWidth
             height: endedColumn.implicitHeight + 2 * Tokens.spacingLg
             radius: Tokens.radiusDialog

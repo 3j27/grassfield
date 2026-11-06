@@ -8,6 +8,9 @@ import Grassfield.Ui
 // the window closes when the process ends. Opened by Main.qml as one of its own windows.
 Window {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     // The app's backend and this window's inspection (src/inspection.h).
     required property var app
@@ -219,7 +222,7 @@ Window {
         height: Math.max(0, footer.y - Tokens.spacingMd - y)
         radius: Tokens.radiusControl
         color: Appearance.colors.groupFill
-        border.width: Tokens.appsBorderWidth
+        border.width: root.hairline
         border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
         ListView {

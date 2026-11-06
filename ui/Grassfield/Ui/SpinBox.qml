@@ -71,7 +71,7 @@ T.SpinBox {
         readOnly: !root.editable || !root.visible || !root.enabled  // also refuses the accessibility InsertText
         validator: root.validator
         inputMethodHints: Qt.ImhFormattedNumbersOnly
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
         Accessible.role: Accessible.EditableText
         Accessible.name: root.accessibleName
         // Never takes input while hidden or disabled: every key but Tab, Backtab and Escape is swallowed, on press and on release.
@@ -91,7 +91,7 @@ T.SpinBox {
         x: root.width - width
         height: root.height / 2
         width: Tokens.controlStepperWidth + Tokens.spacingXs
-        opacity: root.enabled && root.value < root.to ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) || root.value >= root.to ? Tokens.materialDisabledOpacity : 1
 
         Rectangle {
             anchors.fill: parent
@@ -115,7 +115,7 @@ T.SpinBox {
         y: root.height / 2
         height: root.height / 2
         width: Tokens.controlStepperWidth + Tokens.spacingXs
-        opacity: root.enabled && root.value > root.from ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) || root.value <= root.from ? Tokens.materialDisabledOpacity : 1
 
         Rectangle {
             anchors.fill: parent
@@ -133,10 +133,12 @@ T.SpinBox {
         }
     }
 
+    // The field of a TextField (UI audit 2026-11-05, LOW: a grey well here, a white field there): white with a fine border in
+    // the light appearance, the translucent fill in the dark one.
     background: Rectangle {
         radius: Tokens.radiusControl
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        border.width: Appearance.increaseContrast ? Tokens.controlBorderWidth : 0
+        color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity) : Appearance.colors.windowBackground
+        border.width: Appearance.increaseContrast || !Appearance.dark ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
 
         FocusRing {

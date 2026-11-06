@@ -46,7 +46,8 @@ Item {
 
         ShapePath {
             fillColor: "transparent"
-            strokeColor: Appearance.colors.accent
+            // The selection colour, as the progress bar and every "on" control (UI audit 2026-11-05, LOW: two greens in dark).
+            strokeColor: Appearance.colors.selection
             strokeWidth: root.stroke
             capStyle: ShapePath.RoundCap
 
@@ -75,6 +76,6 @@ Item {
         width: Tokens.controlProgressRingStopSize
         height: Tokens.controlProgressRingStopSize
         radius: Tokens.controlProgressRingStopRadius
-        color: Appearance.colors.accent
+        color: Appearance.colors.selection
     }
 }

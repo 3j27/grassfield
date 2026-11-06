@@ -10,6 +10,9 @@ import "Nav.js" as Nav
 // toggles), a double click opens, items drag out as text/uri-list and folders accept drops.
 FocusScope {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var tab
     required property var model
@@ -259,15 +262,15 @@ FocusScope {
     Rectangle {
         y: pager.height
         width: pager.width
-        height: Tokens.appsBorderWidth
+        height: root.hairline
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     ListView {
         id: strip
-        y: pager.height + Tokens.appsBorderWidth
+        y: pager.height + root.hairline
         width: pager.width
-        height: Tokens.filesGalleryStripHeight - Tokens.appsBorderWidth
+        height: Tokens.filesGalleryStripHeight - root.hairline
         orientation: ListView.Horizontal
         model: root.model
         clip: true
@@ -290,6 +293,12 @@ FocusScope {
         Accessible.name: qsTr("Gallery")
 
         Keys.onPressed: event => root.tab.handleViewKey(event, root.model, key => Nav.stripMove(root.model.currentRow, key, strip.count, root.pageItems))
+
+        // The keyboard's focus (not a click's) rings the selected thumbnail.
+        KeyFocus {
+            id: stripKeyFocus
+            target: strip
+        }
 
         delegate: FocusScope {
             id: cell
@@ -328,10 +337,13 @@ FocusScope {
                 width: Tokens.filesGalleryStripIconSize + 2 * Tokens.filesIconBackdropPadding
                 height: width
                 radius: Tokens.radiusControl
-                color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+                // Selected: a fill as every content view, the accent while the strip has the focus, the shared unemphasized
+                // grey otherwise (UI audit 2026-11-05 U16, LOW); a ring only for the keyboard's focus.
+                color: cell.selected && strip.activeFocus ? Appearance.colors.selection
+                    : cell.selected ? Appearance.unemphasizedSelection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                 visible: cell.selected || drop.containsDrag
-                border.width: drop.containsDrag ? Tokens.filesDropBorder : cell.selected && strip.activeFocus ? Tokens.controlFocusOutline : 0
-                border.color: Appearance.focusRingColor
+                border.width: drop.containsDrag ? Tokens.filesDropBorder : cell.selected && stripKeyFocus.active ? Tokens.controlFocusOutline : 0
+                border.color: drop.containsDrag ? Appearance.colors.accent : Appearance.focusRingColor
             }
 
             FileIcon {

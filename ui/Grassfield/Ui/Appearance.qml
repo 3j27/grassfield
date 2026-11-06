@@ -75,6 +75,10 @@ QtObject {
     // colour at inactiveTextOpacity). Read with looksKey(item.Window.window, item.Window.active).
     readonly property real inactiveSelectionOpacity: dark ? Tokens.windowInactiveSelectionOpacityDark : Tokens.windowInactiveSelectionOpacityLight
     readonly property real inactiveTextOpacity: dark ? Tokens.windowInactiveTextOpacityDark : Tokens.windowInactiveTextOpacityLight
+    // A selected row, cell or icon of a CONTENT view (list, columns, icons, gallery, processes) that is not focused, or whose
+    // window is not key: one neutral fill in every app (UI audit 2026-11-05 U16; macOS's unemphasized content selection). The
+    // label keeps the text colour. A sidebar keeps inactiveSelectionOpacity.
+    readonly property color unemphasizedSelection: withAlpha(colors.hover, dark ? Tokens.windowUnemphasizedSelectionOpacityDark : Tokens.windowUnemphasizedSelectionOpacityLight)
     // The window that keeps its key look while a shell menu or the Control Center holds the keyboard (the integrator's macOS
     // decision on #88, ADR-0039 step 17): the compositor then withdraws the window's activation, but only another window
     // taking the focus makes it inactive. Set by the app from the shell's key-window file (apps/keywindow.h); null otherwise.
@@ -271,6 +275,29 @@ QtObject {
     // Animation duration: Reduce Motion caps every animation at reducedMax (crossfade).
     function duration(ms: real): real {
         return reduceMotion ? Math.min(ms, Tokens.motionReducedMax) : ms;
+    }
+
+    // Accent controls in a window that is not key (UI audit 2026-11-05 U17, macOS 27): inside an app window (windowSurface) an on
+    // switch, a checked box or radio button, the default button, a slider's fill and a prominent selected segment draw the accent
+    // only while their window looks key; otherwise they turn neutral (inactiveFill, or their plain look). The shell's glass
+    // surfaces keep the accent. Read with accentShown(item.Window.window, item.Window.active).
+    function accentShown(window: var, active: bool): bool {
+        return !windowSurface || looksKey(window, active);
+    }
+    readonly property real inactiveFillOpacity: dark ? Tokens.controlInactiveFillOpacityDark : Tokens.controlInactiveFillOpacity
+    readonly property color inactiveFill: withAlpha(colors.fill, inactiveFillOpacity)
+
+    // One disabled look (UI audit 2026-11-05 U18): a disabled control dims itself (material.disabledOpacity) unless a disabled
+    // container around it is drawn dimmed already (an opacity below 1: Settings' blocked pane), so nothing dims twice. Only the
+    // disabled ancestors are read, up to the first enabled one.
+    function dimsDisabled(item: var): bool {
+        if (!item || item.enabled)
+            return false;
+        for (let p = item.parent; p && !p.enabled; p = p.parent) {
+            if (p.opacity < 1)
+                return false;
+        }
+        return true;
     }
 
     function withAlpha(color: color, alpha: real): color {

@@ -65,9 +65,8 @@ ScrollPage {
         text: qsTr("No Results for “%1”").arg(root.query)
         wrapMode: Text.Wrap
         color: Appearance.windowSecondary
-        font.family: Appearance.fontFamilyFor(Tokens.storeEmptyTextSize)
-        font.pixelSize: Tokens.storeEmptyTextSize
-        font.weight: Tokens.typographyMenuBoldWeight
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.typographyBodySize
         Accessible.role: Accessible.AlertMessage
         Accessible.name: text
     }

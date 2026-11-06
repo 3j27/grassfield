@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Grassfield.Ui
 
 // One banner (N2-N5): material card, hover pauses the timeout (the timer lives in Notifications)
@@ -18,8 +19,17 @@ Item {
     property real time: 0
     property int urgency: 1
     property string actionsJson: "[]"
+    // Set by the stack: the banner is on its way out (the model already dropped it). It takes no input then, and its
+    // hover no longer holds a timer (a banner of the same key may already be in the stack).
+    property bool leaving: false
+    // The exit's slide (the stack's remove transition), added to the card's own offset.
+    property real exitSlide: 0
+    // How far the close button stands out of the card's top-left corner (the stack's, on whole device pixels).
+    property real closeOverhang: Tokens.notificationCloseSize / 3
 
     readonly property Item cardItem: card
+    // The image as the app's preview setting allows it (the icon tile's stand-in or the trailing thumbnail).
+    readonly property string shownImage: Notifications.imageFor(root.image, root.appName)
     // The area of the output whose backdrop the card's glass is judged over (Material.backdropRect; set by the stack).
     property alias backdropRect: material.backdropRect
     readonly property bool hovered: hover.hovered
@@ -44,7 +54,11 @@ Item {
         entrance = 1;
     }
 
-    onHeldChanged: Notifications.holdBanner(key, held)
+    enabled: !leaving
+    onHeldChanged: {
+        if (!leaving)
+            Notifications.holdBanner(key, held);
+    }
 
     Behavior on entrance {
         enabled: Appearance.reduceMotion
@@ -69,7 +83,7 @@ Item {
 
     Item {
         id: card
-        x: root.slide + dragX
+        x: root.slide + dragX + root.exitSlide
         width: root.width
         height: content.implicitHeight + 2 * Tokens.spacingMd
         opacity: root.entrance * (1 - Math.min(1, Math.max(0, dragX / root.width)))
@@ -95,7 +109,8 @@ Item {
             live: root.nid >= 0
             body: Notifications.bodyFor(root.bodyHtml, root.appName)
             timeText: Notifications.timeFor(root.time)
-            iconSource: Notifications.iconSource(Notifications.imageFor(root.image, root.appName), Notifications.appIconFor(root.appIcon, root.appName))
+            iconSource: Notifications.appIconSource(root.shownImage, Notifications.appIconFor(root.appIcon, root.appName))
+            imageSource: Notifications.thumbnailSource(root.shownImage)
             onActionTriggered: actionId => Notifications.invokeAction(root.key, actionId)
         }
 
@@ -134,8 +149,8 @@ Item {
         // Close button, top-left corner, only on hover.
         Item {
             id: close
-            x: -Tokens.notificationCloseSize / 3
-            y: -Tokens.notificationCloseSize / 3
+            x: -root.closeOverhang
+            y: -root.closeOverhang
             width: Tokens.notificationCloseSize
             height: width
             opacity: root.hovered ? 1 : 0
@@ -154,8 +169,17 @@ Item {
                 anchors.fill: parent
                 radius: width / 2
                 color: Appearance.withAlpha(Appearance.colors.materialTint, Appearance.fixedGlassAlpha(Tokens.notificationCloseTintOpacity))
-                border.width: 1
+                // One device pixel at every scale (UI audit 2026-11-05 U37).
+                border.width: 1 / Math.max(1, Screen.devicePixelRatio)
                 border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity * Tokens.notificationCloseBorderScale)
+            }
+
+            // Pressed: the shared pressed fill over the badge (LOW, UI audit 2026-11-05).
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+                visible: closeArea.pressed
             }
 
             Icon {
@@ -165,6 +189,7 @@ Item {
             }
 
             MouseArea {
+                id: closeArea
                 anchors.fill: parent
                 enabled: close.opacity > 0
                 cursorShape: Qt.ArrowCursor

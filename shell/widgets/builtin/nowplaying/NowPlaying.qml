@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Grassfield.Ui
 import qs.services
 import qs.widgets
@@ -29,7 +30,9 @@ WidgetBase {
             Media.previous();
     }
 
-    Rectangle {
+    // A cover art's corner, concentric with the tile (ADR-0039 step 13, G5): a real mask, as the Overview's thumbnails
+    // (UI audit 2026-11-05 U3: clip on a Rectangle clips to its bounding box, the corners stayed square).
+    Item {
         id: art
 
         readonly property real edge: root.isSmall ? Tokens.widgetBigSize : root.height - 2 * root.padding
@@ -38,10 +41,18 @@ WidgetBase {
         y: root.padding
         width: edge
         height: edge
-        // A cover art's corner, concentric with the tile (ADR-0039 step 13, G5).
-        radius: Tokens.radiusArtwork
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        clip: true
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: artMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        }
 
         Image {
             anchors.fill: parent
@@ -60,6 +71,15 @@ WidgetBase {
             color: Appearance.colors.textSecondary
             visible: !root.hasTrack
         }
+    }
+
+    Rectangle {
+        id: artMask
+        width: art.width
+        height: art.height
+        radius: Tokens.radiusArtwork
+        visible: false
+        layer.enabled: true
     }
 
     // macOS: the artwork and the title open the app that plays (not while the widgets are being edited).
@@ -156,6 +176,14 @@ WidgetBase {
                     color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
                 }
 
+                // Pressed: the shared pressed fill over the disk (LOW, UI audit 2026-11-05).
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+                    visible: press.pressed
+                }
+
                 // The shared ring outside the button, after a key only (ADR-0039 step 7).
                 KeyFocus {
                     id: buttonFocus
@@ -173,6 +201,7 @@ WidgetBase {
                 }
 
                 MouseArea {
+                    id: press
                     anchors.fill: parent
                     enabled: root.transportEnabled
                     cursorShape: Qt.ArrowCursor

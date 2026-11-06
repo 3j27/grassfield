@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Grassfield.Ui
 import qs.platform
@@ -75,7 +76,8 @@ Dialog {
             height: 6 * Tokens.menuItemHeight + 2 * Tokens.spacingXs
             radius: Tokens.radiusControl
             color: Appearance.dark ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2) : Appearance.lightWellFill
-            border.width: 1
+            // One device pixel at every scale (UI audit 2026-11-05 U37).
+            border.width: 1 / Math.max(1, Screen.devicePixelRatio)
             border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
             // The well keeps its hairline; the shared ring goes round it while the list has the keyboard (ADR-0039 step 7).

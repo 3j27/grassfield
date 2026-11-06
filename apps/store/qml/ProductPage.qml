@@ -198,21 +198,25 @@ ScrollPage {
                     }
                 }
 
+                // Never past the content's edge (UI audit 2026-11-05 U12): a long source is elided.
                 SourceBadge {
                     anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, Math.max(0, texts.width - x))
                     kind: root.app.kind || ""
                     repo: root.app.repo || ""
                 }
+            }
 
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    textFormat: Text.PlainText
-                    text: root.app.license ? qsTr("Licence: %1").arg(root.app.license) : qsTr("Licence not stated")
-                    color: Appearance.windowSecondary
-                    font.family: Appearance.fontFamily
-                    font.pixelSize: Tokens.storeBadgeSize
-                    font.letterSpacing: Appearance.tracking(Tokens.storeBadgeSize)
-                }
+            // The licence on its own line under the button (U12): a long SPDX expression is elided, never past the edge.
+            Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: root.app.license ? qsTr("Licence: %1").arg(root.app.license) : qsTr("Licence not stated")
+                elide: Text.ElideRight
+                color: Appearance.windowSecondary
+                font.family: Appearance.fontFamily
+                font.pixelSize: Tokens.storeBadgeSize
+                font.letterSpacing: Appearance.tracking(Tokens.storeBadgeSize)
             }
 
             // How its last operation ended (SR19), with Try Again and Details…, or Update Now… when the system must be updated

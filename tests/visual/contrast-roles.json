@@ -22,7 +22,7 @@
  "roles": [
   {"id": "text on material", "fg": "colors.text", "backdrop": "material", "kind": "text", "sites": [
    {"file": "shell/security/PasswordField.qml", "class": "primary", "count": 1},
-   {"file": "shell/security/PasswordField.qml", "class": "backdrop", "count": 2},
+   {"file": "shell/security/PasswordField.qml", "class": "backdrop", "count": 1},
    {"file": "shell/security/polkit/AuthDialog.qml", "class": "primary", "count": 6},
    {"file": "shell/security/polkit/AuthDialog.qml", "class": "backdrop", "count": 2},
    {"file": "shell/security/polkit/AuthAgent.qml", "class": "backdrop", "count": 1},
@@ -106,13 +106,14 @@
     {"file": "shell/launchpad/AppsWindow.qml", "class": "opacity-dynamic", "count": 4},
     {"file": "shell/desktop/IconsView.qml", "class": "opacity-dynamic", "count": 2},
     {"file": "shell/security/lock/LockView.qml", "class": "opacity-dynamic", "count": 8},
+    {"file": "shell/security/polkit/AuthAgent.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/notifications/Banner.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/notifications/NotificationList.qml", "class": "opacity-dynamic", "count": 2},
     {"file": "shell/osd/OsdWindow.qml", "class": "opacity-dynamic", "count": 1},
     {"file": "shell/overlay/StackPopup.qml", "class": "opacity-dynamic", "count": 5},
     {"file": "shell/overview/OverviewWindow.qml", "class": "opacity-dynamic", "count": 3},
     {"file": "shell/saver/Saver.qml", "class": "opacity-dynamic", "count": 1},
-    {"file": "shell/search/SearchPanel.qml", "class": "opacity-dynamic", "count": 13},
+    {"file": "shell/search/SearchPanel.qml", "class": "opacity-dynamic", "count": 14},
     {"file": "shell/desktop/DesktopIcon.qml", "class": "opacity-dynamic", "count": 4},
     {"file": "shell/dock/Dock.qml", "class": "opacity-dynamic", "count": 2},
     {"file": "ui/Grassfield/Ui/Tooltip.qml", "class": "opacity-dynamic", "count": 1},
@@ -138,9 +139,7 @@
    {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 1}
   ]},
   {"id": "lock return arrow (rest and hover)", "fg": "darkColors.text", "backdrop": "lock-submit", "kind": "icon", "sites": []},
-  {"id": "lock password field focus ring", "fg": "darkColors.text", "opacity": ["lock.focusRingOpacity"], "backdrop": "lock", "kind": "icon", "sites": [
-   {"file": "shell/security/lock/LockView.qml", "class": "alpha", "count": 1}
-  ]},
+  {"id": "lock password field focus ring", "fg": "darkColors.text", "opacity": ["lock.focusRingOpacity"], "backdrop": "lock", "kind": "icon", "note": "drawn only by the SDDM greeter (packaging/sddm/theme/Main.qml, border at lockFocusRingOpacity), outside the scanned QML trees; the shell lock draws no ring since UI audit 2026-11-05 U23", "sites": []},
   {"id": "lock password selection (dots on the accent band)", "fg": "darkColors.accentText", "backdrop": "lock-selection", "kind": "text", "sites": [
    {"file": "shell/security/lock/LockView.qml", "class": "primary", "count": 1},
    {"file": "shell/security/lock/LockView.qml", "class": "backdrop", "count": 1}
@@ -150,7 +149,7 @@
    "exempt": "the idle dim fades the session to the shadow colour for the last seconds before the lock and draws no text of its own",
    "sites": [{"file": "shell/security/idle/Idle.qml", "class": "backdrop", "count": 1}]},
   {"id": "menu bar of an output that is not the active one, light foreground (dimmed, macOS)", "fg": "darkColors.barText", "opacity": ["menubar.inactiveOpacity"], "backdrop": "bar-light-tone", "kind": "icon", "sites": [
-   {"file": "shell/menubar/MenuBar.qml", "class": "opacity-dynamic", "count": 8}
+   {"file": "shell/menubar/MenuBar.qml", "class": "opacity-dynamic", "count": 9}
   ]},
   {"id": "menu bar of an output that is not the active one, dark foreground (dimmed, macOS)", "fg": "lightColors.barText", "opacity": ["menubar.inactiveOpacity"], "backdrop": "bar-dark-tone", "kind": "icon", "sites": []},
   {"id": "disabled text", "fg": "colors.textSecondary", "opacity": ["material.disabledOpacity"], "backdrop": "material", "kind": "text",

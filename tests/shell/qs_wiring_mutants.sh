@@ -16,7 +16,7 @@ files = [
     "shell/services/Popups.qml", "shell/search/Search.qml", "shell/services/Connectivity.qml",
 ]
 mutants = [
-    ("Banner.qml: the image is no longer hidden", "shell/notifications/Banner.qml", "Notifications.iconSource(Notifications.imageFor(root.image, root.appName), ", "Notifications.iconSource(root.image, "),
+    ("Banner.qml: the image is no longer hidden", "shell/notifications/Banner.qml", "Notifications.imageFor(root.image, root.appName)", "root.image"),
     ("Banner.qml: the app icon path is no longer dropped", "shell/notifications/Banner.qml", "Notifications.appIconFor(root.appIcon, root.appName)", "root.appIcon"),
     ("Banner.qml: the actions are no longer hidden", "shell/notifications/Banner.qml", "Notifications.actionsFor(root.actionsJson, root.appName)", "root.actionsJson"),
     ("Banner.qml: the title is no longer hidden", "shell/notifications/Banner.qml", "summary: Notifications.summaryFor(root.summary, root.appName)", "summary: root.summary"),
