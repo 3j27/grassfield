@@ -88,7 +88,7 @@ Source catalogSource()
     const std::optional<Channel> conf = channelFromConf(readSmall(env::grassfieldConf(), 64 * 1024));
     // A channel set up through grassfield.conf needed the key; the build's own base counts only when the build names a key
     // (ADR-0033 b.3): without one the catalog cannot be verified, so nothing is requested from the host.
-    const QByteArray repository = readSmall(QStringLiteral("/usr/share/grassfield/pacman/repository.conf"), 64 * 1024);
+    const QByteArray repository = readSmall(env::repositoryConf(), 64 * 1024);
     const QByteArray version = readSmall(env::versionFile(), 256);
     const Channel channel = conf ? *conf : buildChannel(repository, version);
     s.channel = channel.name;
