@@ -1461,8 +1461,7 @@ Scope {
                                         required property string modelData
                                         textFormat: Text.PlainText
                                         text: modelData
-                                        opacity: modelData === ":" && win.clockFlashOff ? 0 : 1
-                                        color: win.barText
+                                        color: modelData === ":" && win.clockFlashOff ? "transparent" : win.barText
                                         font: clockText.font
                                     }
                                 }
