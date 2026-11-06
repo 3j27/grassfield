@@ -99,8 +99,12 @@ table, a cell, a paragraph or a run; the text kept), so a hand-edited file loads
   memo went behind any clicked window), so nothing that worked is lost.
 - The placement rule matches the app id exactly (`org.grassfield.Memos`, case-sensitive) and a tag of exactly 32 lowercase hex digits
   (`tests/shell/memos_rules.sh`). Residual risk (review of the memos slice): a Wayland client chooses its own app id and
-  tag, so another program can claim Memos' and open its window at a position of its choice inside the free area (the
-  position only: no stacking is granted by a name any more). Binding the rules to Memos' process
+  tag, so another program can claim Memos' and have its own window placed and sized by the rules, always inside the free
+  area of its display (no stacking is granted by a name any more). `memo_resize` clamps the size to the free area (width,
+  and height minus the title bar, as `fit` does), does nothing without a display, and refuses a tag longer than 96
+  characters, a size under 1 or over 16384 and a digit overflow; cycling the size suffix can therefore only move or size
+  the sender's own window within what an xdg-shell client could reach by resizing itself. Pinned by
+  `tests/shell/memos_rules.sh` (a Lua harness over a stub of the API: oversize, no display, long tag, zero and negative sizes). Binding the rules to Memos' process
   needs a pid that Lua can trust (Hyprland 0.56's Lua window object is not known here to carry one, and a pid alone does not
   name the program); left for the nested session with the `hl.meta.lua` stub at hand.
 - **Collapse resizes the window** (nested review, finding 6). Hyprland 0.56 keeps a floating window at the size it has when
@@ -145,6 +149,5 @@ filtered, the tag built and read. `tests/unit/tst_memos.qml`: MemoLogic.js (colo
 and a memo window offscreen with a fake backend (strip, collapse, close alert, colour, translucent, menu-less keys).
 
 The Lua placement rule (the collapse resize, the square corners and the Cancel button were checked in nested, review fix 2026-11-06), the
-The Lua placement rule, (the collapse resize, the square corners and the Cancel button were checked in nested, review fix 2026-11-06), the
 global menu export, the window's look on screen (visual NOT verified unless the spec says otherwise), multi-display
 positions (a memo whose display is gone is fitted onto the display it opens on).

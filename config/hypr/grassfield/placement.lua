@@ -190,6 +190,7 @@ end
 -- request is only ever for the window that sent it, and the size is bounded: nothing here gives a client more than it could
 -- take by resizing its own window. Only a change of the suffix acts, so a resize by the user is never undone.
 local MEMO_SIZE_MAX = 16384
+local MEMO_TAG_MAX = 96 -- a real tag is at most ~70 characters; a longer one is not Memos'
 local memo_sizes = {}
 
 local function memo_resize(window)
@@ -197,6 +198,9 @@ local function memo_resize(window)
     return
   end
   local tag = window.xdg_tag or ""
+  if #tag > MEMO_TAG_MAX then
+    return
+  end
   local id = "^memo:" .. string.rep("[0-9a-f]", 32)
   -- The tag also carries the position the memo had when it asked ("@x,y": the app read it from Hyprland just before the
   -- change); Hyprland moves a window whose surface grows or shrinks, so the corner is put back there.
@@ -221,12 +225,19 @@ local function memo_resize(window)
   if not x or w < 1 or h < 1 or w > MEMO_SIZE_MAX or h > MEMO_SIZE_MAX then
     return
   end
-  -- The corner is kept inside the free area of the display, as memo_place does.
+  -- The size and the corner stay inside the free area of the display, as `fit` and memo_place do: a client gets no more
+  -- than a window it could resize itself within its display. Without a display there is nothing to bound it by: no action.
   local area_x, area_y, area_w, area_h = work_area(window.monitor)
-  if area_x then
-    x = math.max(area_x, math.min(x, area_x + area_w - w))
-    y = math.max(area_y + TITLEBAR, math.min(y, area_y + area_h - h))
+  if not area_x then
+    return
   end
+  w = math.min(w, area_w)
+  h = math.min(h, area_h - TITLEBAR)
+  if w < 1 or h < 1 then
+    return
+  end
+  x = math.max(area_x, math.min(x, area_x + area_w - w))
+  y = math.max(area_y + TITLEBAR, math.min(y, area_y + area_h - h))
   hl.dispatch(hl.dsp.window.resize({ x = w, y = h, exact = true, window = window }))
   hl.dispatch(hl.dsp.window.move({ x = x, y = y, window = window }))
 end
