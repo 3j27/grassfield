@@ -63,7 +63,7 @@ check has $D "chosenScreen = Geometry.settleScreen(chosenScreen, screenNames, Co
 desc="Dock: resetHide starts the machine from AutoHide.initial(autohide)"
 check has $D "hideMachine = AutoHide.initial(autohide);"
 desc="Dock: the inputs are the settings file and the apps model"
-check bash -c 'grep -q "settings: Settings.loaded," "$1" && grep -q "apps: Apps.hiddenReady," "$1"' _ $D
+check bash -c 'grep -q "settings: Settings.loaded && MainDisplay.ready," "$1" && grep -q "apps: Apps.hiddenReady," "$1"' _ $D
 desc="Dock: a settled Dock settles once and the input change calls settle()"
 check bash -c 'grep -q "onInputsFinalChanged" "$1" && grep -q "if (settled)" "$1"' _ $D
 
@@ -77,8 +77,8 @@ check test -n "$bad" -a -n "$tb" -a -n "$ld" -a "$((tb - bad))" -le 3 -a "$((ld 
 
 desc="Store: the first read starts at once, not behind the folder's mkdir"
 check has $S "root.started = true;"
-desc="Desktop: lay is empty until ready"
-check has $V "readonly property var lay: ready ? Logic.layout("
+desc="Desktop: lay is empty until ready (and on a display that does not hold the icons)"
+check has $V "readonly property var lay: ready && iconsHere ? Logic.layout("
 desc="Desktop: ready waits for the settings, the widgets, the positions and the listing"
 check bash -c 'grep -q "settings: Settings.loaded" "$1" && grep -q "widgets: Widgets.loaded" "$1" && grep -q "positions: files.positionsLoaded" "$1" && grep -q "listed: files.entriesListed" "$1"' _ $V
 desc="Desktop: Clean Up waits for ready"
