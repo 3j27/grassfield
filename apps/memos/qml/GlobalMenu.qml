@@ -183,7 +183,7 @@ Platform.MenuBar {
     }
 
     Platform.Menu {
-        title: qsTr("Memo")
+        title: qsTr("Note")
 
         Platform.MenuItem {
             text: qsTr("Translucent")

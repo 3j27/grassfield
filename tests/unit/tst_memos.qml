@@ -5,7 +5,7 @@ import "memos"
 import "../../apps/memos/qml/MemoLogic.js" as MemoLogic
 
 // Grassfield Memos (apps/memos/qml, ADR-0051, docs/specs/memos.md): MemoLogic.js, a memo window with a fake backend (colours,
-// collapse, the close rule and its alert, Translucent, Float on Top's tag, the Font keys and the plain paste, the text
+// collapse, the close rule and its alert, Translucent, the collapse's size tag, the Font keys and the plain paste, the text
 // pushed to the backend), and Main.qml opening the stored memos, a new one near the front one, and a memo the compositor
 // closed coming back on activation. The backend's own logic has its gtest cases (tests/unit/memos).
 TestCase {
@@ -15,6 +15,8 @@ TestCase {
     height: 300
     visible: true
     when: windowShown
+    // The backend of the refusal test (typed var: a created object is a QObject to qmllint).
+    property var refusingBackend: null
 
     Component {
         id: fakeBackend
@@ -386,12 +388,12 @@ TestCase {
     function test_mainRefusesANewerStore() {
         const m = makeMain([{id: "a", color: "yellow", html: "", width: 240, height: 200, collapsed: false, translucent: false}]);
         cleanupMain(m);
-        const backend = fakeBackend.createObject(testCase, {refusal: "newer"});
+        testCase.refusingBackend = fakeBackend.createObject(testCase, {refusal: "newer"});
         const comp = Qt.createComponent(Qt.resolvedUrl("../../apps/memos/qml/Main.qml"));
-        const main = createTemporaryObject(comp, testCase, {backend: backend, globalMenu: false});
+        const main = createTemporaryObject(comp, testCase, {backend: testCase.refusingBackend, globalMenu: false});
         compare(main.windows.length, 0);
         verify(main.refusalWindow);
-        compare(backend["created"], 0);
+        compare(testCase.refusingBackend.created, 0);
         verify(main.newMemo() === null);
         main.refusalWindow.destroy();
     }
