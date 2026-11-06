@@ -79,6 +79,14 @@ inline QString grassfieldConf()
     return f.isEmpty() ? QStringLiteral("/etc/pacman.d/grassfield.conf") : f + QStringLiteral("/grassfield.conf");
 }
 
+// The build's repository settings (/usr/share/grassfield/pacman/repository.conf): with a key named there, the build's own
+// base is a catalog host (ADR-0033 b.3). In a dev session with a fixture, the fixture's copy (or none): never the host's.
+inline QString repositoryConf()
+{
+    const QString f = fixture();
+    return f.isEmpty() ? QStringLiteral("/usr/share/grassfield/pacman/repository.conf") : f + QStringLiteral("/repository.conf");
+}
+
 // The installed Grassfield version (/usr/share/grassfield/VERSION): it decides which channel a build not set up follows
 // (releaseChannelOf).
 inline QString versionFile()
