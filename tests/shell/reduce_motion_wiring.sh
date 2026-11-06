@@ -44,8 +44,8 @@ check bash -c 'grep -q "property real slide: Appearance.reduceMotion ? 0 : Token
   && awk "/Behavior on entrance \\{/{getline; print}" "$0" | grep -q "enabled: Appearance.reduceMotion"' shell/notifications/Banner.qml
 
 desc="Notification Center: under Reduce Motion the column fades in at its place instead of sliding"
-check bash -c 'grep -q "property real slideOffset: host.shown || Appearance.reduceMotion ? 0 : " "$0" \
-  && grep -q "opacity: host.shown || !Appearance.reduceMotion ? 1 : 0" "$0" \
+check bash -c 'grep -q "property real slideOffset: hostItem.shown || Appearance.reduceMotion ? 0 : " "$0" \
+  && grep -q "opacity: hostItem.shown || !Appearance.reduceMotion ? 1 : 0" "$0" \
   && awk "/Behavior on opacity \\{/{getline; print}" "$0" | grep -q "enabled: Appearance.reduceMotion"' shell/notifications/NotificationCenter.qml
 
 desc="Stack fan: its items stand at their places under Reduce Motion and fade in"
