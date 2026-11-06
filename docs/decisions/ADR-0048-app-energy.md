@@ -82,7 +82,7 @@ Checked by the helper only for apps that would be limited or are limited:
   (only when an app would be limited and a stream exists, at most once per round, 5 s timeout, 8 MiB at most) and maps node
   -> its `client.id` -> that Client object's `pipewire.sec.pid`, and only when the Client is older than the node (a lower
   `object.serial`: PipeWire reuses object ids but never serials, so a node that outlived its client never resolves to a
-  later client that took the same id). A pid on the node itself (`pipewire.sec.pid`, `application.process.id`) is never
+  later client that took the same id; a node marked `object.linger` is never a claim). A pid on the node itself (`pipewire.sec.pid`, `application.process.id`) is never
   read. Ids are ASCII digits only; a dump that is not a list, too large or nested too deep is no dump. A missing dump,
   node, client or serial is no claim (the app may be limited: fail-safe as
   for every unreadable input; `--keep` and the `/dev/snd` check remain). Facts proved on a private daemon (below);

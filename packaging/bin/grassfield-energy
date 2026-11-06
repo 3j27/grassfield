@@ -217,6 +217,9 @@ def stream_client_pids(dump, node_ids):
         node = objects.get(("PipeWire:Interface:Node", node_id))
         client_id = number(props(node).get("client.id")) if node else None
         client = objects.get(("PipeWire:Interface:Client", client_id)) if client_id else None
+        # A lingering node (object.linger) outlives its client: never a claim, whatever its client id names now.
+        if client and str(props(node).get("object.linger", "")).strip().lower() in ("true", "1"):
+            continue
         node_serial, client_serial = (serial(node), serial(client)) if client else (None, None)
         if node_serial is None or client_serial is None or client_serial >= node_serial:
             continue

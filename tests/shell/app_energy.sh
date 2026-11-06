@@ -243,6 +243,9 @@ check("claims: a node without client.id, or whose client is missing, protects no
 reused = dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "300"}})
 reused[1]["info"]["props"]["object.serial"] = "5000"
 check("claims: a client newer than the stream (a reused client id) protects nothing", limited_env(with_dump(reused), ["--streams", "50"]) != [])
+check("claims: a lingering node (object.linger) protects nothing",
+      limited_env(with_dump(dump({50: {"client.id": "7", "object.linger": "true"}}, {7: {"pipewire.sec.pid": "300"}})), ["--streams", "50"]) != []
+      and limited_env(with_dump(dump({50: {"client.id": "7", "object.linger": True}}, {7: {"pipewire.sec.pid": "300"}})), ["--streams", "50"]) != [])
 check("claims: a node or client without object.serial protects nothing",
       limited_env(with_dump(dump({50: {"client.id": "7"}}, {7: {"pipewire.sec.pid": "300"}}, serials=False)), ["--streams", "50"]) != [])
 check("claims: a dump nested deeper than the parser allows is no claim and no failure",
