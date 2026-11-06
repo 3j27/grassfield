@@ -11,8 +11,16 @@
 # Reduce Motion is off for the run (the exits are animations). tests/visual/banner-top-y.py reads the top card per frame.
 source "$(dirname "$0")/lib.sh"
 
-[[ ${1:-} == --no-plugin ]] && { export GRASSFIELD_NO_PLUGIN=1; shift; }  # the session was started with --no-plugin
-out=${1:?usage: flow-banner-exit.sh [--no-plugin] OUTDIR}
+rm_on=0
+while [[ ${1:-} == --* ]]; do
+  case $1 in
+    --no-plugin) export GRASSFIELD_NO_PLUGIN=1 ;;  # the session was started with --no-plugin
+    --reduce-motion) rm_on=1 ;;                    # Reduce Motion stays on: the exits fade in place, the gap closes at once
+    *) echo "unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+out=${1:?usage: flow-banner-exit.sh [--no-plugin] [--reduce-motion] OUTDIR}
 bus=
 cap_pid=
 cleanup() {
@@ -24,7 +32,7 @@ trap cleanup EXIT
 vs_session >/dev/null
 vs_reset dark >/dev/null
 set +e
-vs_ipc controlcenter reduceMotion false >/dev/null
+(( rm_on )) || vs_ipc controlcenter reduceMotion false >/dev/null
 vs_ipc notifications dnd false >/dev/null
 bus=$(<"$VS_DEV/bus.address")
 send() { DBUS_SESSION_BUS_ADDRESS=$bus notify-send -a "$1" -t "$2" "$3" "Body text of $3, long enough to take a second line in the card."; }
@@ -54,6 +62,20 @@ capture() { # DIR SECONDS
   wait
 }
 
+# after NAME: the strip two seconds after an exit, as a PNG (a stale blur region would show as a faint empty band)
+after() {
+  vs_sleep 2
+  WAYLAND_DISPLAY=$(vs_nested_wayland) grim -g "$region" -s "$scale" "$out/$1-after.png"
+}
+
+swipe_top() {
+  vs_pointer abs $((cardleft + 170)) 70 >/dev/null; vs_sleep 0.4
+  vs_pointer abs $((cardleft + 170)) 70 down >/dev/null
+  vs_pointer drag $((cardleft + 330)) 70 >/dev/null
+  vs_pointer up >/dev/null
+  vs_pointer abs "$VS_PARK_X" "$VS_PARK_Y" >/dev/null
+}
+
 fresh() {
   vs_ipc notifications clearAll >/dev/null
   vs_sleep 2
@@ -81,6 +103,27 @@ cap_pid=$!
 vs_sleep 0.8
 send Messages 3000 "Banner C (expires)"
 wait "$cap_pid"; cap_pid=
+after expire3
+
+# expire-bottom: the OLDEST (bottom) banner expires.
+fresh
+send Mail 3000 "Banner A (expires)"; vs_sleep 0.4
+send Calendar 0 "Banner B"; vs_sleep 0.4
+send Messages 0 "Banner C"
+capture "$out/expire-bottom" 6 &
+cap_pid=$!
+wait "$cap_pid"; cap_pid=
+after expire-bottom
+
+# swipe: the top banner dragged away.
+fresh
+three
+capture "$out/swipe" 4 &
+cap_pid=$!
+vs_sleep 0.6
+swipe_top
+wait "$cap_pid"; cap_pid=
+after swipe
 
 # close: dismissed by its close button.
 fresh
@@ -90,6 +133,7 @@ cap_pid=$!
 vs_sleep 0.8
 click_close
 wait "$cap_pid"; cap_pid=
+after close
 
 # arrival: a new banner during the exit.
 fresh
@@ -101,5 +145,6 @@ click_close
 vs_sleep 0.12
 send Photos 0 "Banner D (arrives during the exit)"
 wait "$cap_pid"; cap_pid=
+after arrival
 fresh
 echo "done: $out"

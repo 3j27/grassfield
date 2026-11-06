@@ -42,7 +42,11 @@ PanelWindow {
     // The close button stands out of the card's top-left corner by a third of its size, on whole device pixels (LOW,
     // UI audit 2026-11-05); the input region takes it in.
     readonly property real closeOverhang: Math.round(Tokens.notificationCloseSize / 3 * stack.dpr) / stack.dpr
-    // The cards drawn now, leaving ones included: each has a blur region until its delegate is gone.
+    // The slots whose card is drawn now, leaving ones included: each has a blur region until its delegate is gone.
+    // A Region that follows an Item only hears the item's own geometry: a card carried by its slot in the Column moved
+    // without a word, and a region made in the frame a gap closed (Reduce Motion: the exit's end) stayed at the old place,
+    // a faint band under the stack. The regions are therefore explicit rects (slot.blurX...), built from the properties
+    // that do change: the stack's and the slot's place and the card's offset.
     property var cards: []
     readonly property int bannerCount: Notifications.bannerCount
     // Ids for the rows below.
@@ -182,8 +186,11 @@ PanelWindow {
         model: win.cards
 
         Region {
-            required property Item modelData
-            item: modelData
+            required property var modelData
+            x: modelData.blurX
+            y: modelData.blurY
+            width: modelData.blurW
+            height: modelData.blurH
             radius: Tokens.radiusBanner
         }
     }
@@ -256,6 +263,10 @@ PanelWindow {
                 property real collapse: 0
                 property real grow: 0
                 property Item card: null
+                readonly property int blurX: card ? Math.round(stack.x + slot.x + card.x) : 0
+                readonly property int blurY: card ? Math.round(stack.y + slot.y + card.y) : 0
+                readonly property int blurW: card ? Math.round(card.width) : 0
+                readonly property int blurH: card ? Math.round(card.height) : 0
 
                 width: stack.width
                 height: shown && banner.item ? ((banner.item as Item).height + Tokens.notificationBannerGap) * grow * (1 - collapse) : 0
@@ -273,7 +284,7 @@ PanelWindow {
                     if (gone)
                         exit.start();
                 }
-                Component.onDestruction: win.cards = win.cards.filter(c => c !== slot.card)
+                Component.onDestruction: win.cards = win.cards.filter(c => c && c !== slot)
 
                 function open(): void {
                     grow = 0;
@@ -338,11 +349,11 @@ PanelWindow {
                     active: slot.shown
                     onLoaded: {
                         slot.card = (item as Banner).cardItem;
-                        win.cards = win.cards.concat([slot.card]);
+                        win.cards = win.cards.concat([slot]);
                     }
                     onActiveChanged: {
                         if (!active && slot.card !== null) {
-                            win.cards = win.cards.filter(c => c !== slot.card);
+                            win.cards = win.cards.filter(c => c && c !== slot);
                             slot.card = null;
                         }
                     }
