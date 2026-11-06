@@ -76,6 +76,14 @@ local function fixture(dir, input_body)
   if input_body then put("input.lua", input_body) end
 end
 
+-- Hermetic: the host's /etc/xkb may define Omarchy 4.5.0's option (then the fallback rightly uses it); these cases test the stock options.
+local function hide_host_xkb()
+  local open = io.open
+  io.open = function(path, mode)
+    if path == "/etc/xkb/rules/evdev" or path == "/etc/xkb/symbols/omarchy" then return nil end
+    return open(path, mode)
+  end
+end
 if case == "omarchy-input" then
   -- Omarchy's module sets a French layout; the user's input.lua adds a marker; Grassfield's input.lua must change no kb key.
   local d = os.getenv("TMPCASE")
@@ -197,6 +205,7 @@ elseif case == "gestures" then
   say("none", "[" .. run({ gesture_spaces = false, gesture_overview = false, gesture_apps = false }) .. "]")
 elseif case == "fallback" then
   local d = os.getenv("TMPCASE")
+  hide_host_xkb()
   fixture(d .. "/omarchy", "error('renamed upstream')\n")
   local m = dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
   say("ok", tostring(m.ok), "input", m.input, "problems", #m.problems)
@@ -207,6 +216,7 @@ elseif case == "fallback-non-latin" then
   local d = os.getenv("TMPCASE")
   fixture(d .. "/omarchy", "error('renamed upstream')\n")
   local f = assert(io.open(d .. "/vconsole.conf", "w")); f:write("KEYMAP=ru\nXKBLAYOUT=ru\nXKBVARIANT=phonetic\n"); f:close()
+  hide_host_xkb()
   local open = io.open
   io.open = function(path, mode) return open(path == "/etc/vconsole.conf" and d .. "/vconsole.conf" or path, mode) end
   dofile(repo .. "/config/hypr/grassfield/omarchy.lua")
