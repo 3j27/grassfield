@@ -97,6 +97,7 @@ check "the forged application.process.id survives on the node (so it is not a so
 node_id=$(jq -r '.id' <<<"$node")
 resolved=$(env -i PATH="$PATH" python3 -I -c '
 import importlib.machinery, importlib.util, json, sys
+sys.dont_write_bytecode = True
 loader = importlib.machinery.SourceFileLoader("energy", sys.argv[1])
 spec = importlib.util.spec_from_loader("energy", loader)
 m = importlib.util.module_from_spec(spec)
