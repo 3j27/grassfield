@@ -165,17 +165,15 @@ TestCase {
         verify(!Logic.anyLimitable({}));
     }
 
-    function test_streamPids() {
-        compare(Logic.streamPids([{"pipewire.sec.pid": "42"}, {"pipewire.sec.pid": 42}, {"pipewire.sec.pid": "7"}, {}, null,
-            {"pipewire.sec.pid": "-1"}, {"pipewire.sec.pid": "x"}, {"pipewire.sec.pid": "99999999"}]), [7, 42]);
-        compare(Logic.streamPids(undefined), []);
+    function test_streamIds() {
+        compare(Logic.streamIds([50, "51", 50, 0, -1, "x", 99999999, 1.5, null]), [50, 51]);
+        compare(Logic.streamIds(undefined), []);
     }
 
-    // The client-set process id is not a claim (review finding 3): a stream that names a process of its own choosing
-    // protects nothing but what the server saw.
-    function test_streamPidsIgnoreTheClientsOwnClaim() {
-        compare(Logic.streamPids([{"application.process.id": "1234", "pipewire.sec.pid": "42"}]), [42]);
-        compare(Logic.streamPids([{"application.process.id": "1234"}]), []);
+    // A node's own pid properties are client-set (proved on a private PipeWire daemon): only node ids leave the shell, the
+    // helper reads the pid from the server's Client object.
+    function test_streamIdsCarryNoPid() {
+        compare(Logic.streamIds([{"pipewire.sec.pid": "42", "application.process.id": "1234"}]), []);
     }
 
     function test_theDigestChangesOnlyWithThePicture() {
@@ -189,7 +187,7 @@ TestCase {
     function test_helperArguments() {
         const base = ["/usr/lib/grassfield/grassfield-energy"];
         compare(Logic.roundArgs(base, {"12": "hidden"}, true, [7, 8]),
-            ["/usr/lib/grassfield/grassfield-energy", "round", "--power", "battery", "--windows", "{\"12\":\"hidden\"}", "--media", "7,8"]);
+            ["/usr/lib/grassfield/grassfield-energy", "round", "--power", "battery", "--windows", "{\"12\":\"hidden\"}", "--streams", "7,8"]);
         compare(Logic.roundArgs(base, {}, false, []), ["/usr/lib/grassfield/grassfield-energy", "round", "--power", "mains", "--windows", "{}"]);
         // A dev session: every command is a dry run on the dev state file.
         const dev = ["p", "--dry-run", "--state", "/s/app-energy.json"];

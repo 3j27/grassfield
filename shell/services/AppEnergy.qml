@@ -27,10 +27,10 @@ Singleton {
     readonly property string program: Mode.dev ? Quickshell.shellPath("../packaging/bin/grassfield-energy") : "/usr/lib/grassfield/grassfield-energy"
     readonly property var base: Mode.dev ? [program, "--dry-run", "--state", Mode.stateDir + "/app-energy.json"] : [program]
 
-    // The PipeWire streams and the processes behind them (playing or recording: never limited). The stream nodes are bound
-    // so that their properties (pipewire.sec.pid, set by the PipeWire server) are known.
+    // The PipeWire stream nodes (playing or recording: their processes are never limited). Only the node ids go to the helper,
+    // which finds the process in the server's Client object (a node's own pid properties are client-set: ADR-0048 D-3).
     readonly property var streams: (Pipewire.nodes ? Pipewire.nodes.values : []).filter(n => n.isStream)
-    readonly property var mediaPids: Logic.streamPids(streams.map(n => n.properties))
+    readonly property var streamNodeIds: Logic.streamIds(streams.map(n => n.id))
 
     // The last picture sent ({pid: state}), its digest, and what the helper said: limits held or a run asked for.
     property var sent: ({})
@@ -80,7 +80,7 @@ Singleton {
             Compositor.requestWindowRefresh();
             return;
         }
-        const digest = Logic.digest(result.pids, root.onBattery ? "battery" : "mains", root.mediaPids);
+        const digest = Logic.digest(result.pids, root.onBattery ? "battery" : "mains", root.streamNodeIds);
         const due = root.roundDue;
         root.roundDue = false;
         if (digest === root.lastDigest && !due)
@@ -90,7 +90,7 @@ Singleton {
         // Nothing can be limited and nothing is held: the helper has nothing to do.
         if (!root.engaged && !Logic.anyLimitable(result.pids))
             return;
-        roundProc.command = Logic.roundArgs(root.base, result.pids, root.onBattery, root.mediaPids);
+        roundProc.command = Logic.roundArgs(root.base, result.pids, root.onBattery, root.streamNodeIds);
         roundProc.running = true;
     }
 
@@ -258,7 +258,7 @@ Singleton {
             root.resetAll();
     }
 
-    onMediaPidsChanged: settle.restart()
+    onStreamNodeIdsChanged: settle.restart()
 
     // Crash recovery: whatever an earlier shell left applied is lifted before anything is judged.
     Component.onCompleted: resetProc.running = true

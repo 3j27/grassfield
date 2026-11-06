@@ -32,11 +32,36 @@ check "the app's tag starts memo:<id>" $?
 grep -q 'setDesktopFileName(QStringLiteral("org.grassfield.Memos"))' "$root/apps/memos/src/main.cpp"
 check "the app's id is org.grassfield.Memos" $?
 # Float on Top is not shipped (ADR-0051 D-6): no rule may raise a window on the strength of a name the client chose.
-if grep -v '^ *--' "$root/config/hypr/grassfield/stacking.lua" | grep -q 'org.grassfield.Memos\|:top'; then
-  check "stacking.lua grants nothing to the Memos app id or a :top tag" 1
-else
-  check "stacking.lua grants nothing to the Memos app id or a :top tag" 0
-fi
+# Every Lua file of the config is scanned (comments left out), not only stacking.lua. Only placement.lua (compares the id)
+# and windows.lua (square corners) may name the id, and never on a line that raises, pins or floats. apps.lua's
+# Picture-in-Picture and webcam rules are a known, separately tracked LOW: they carry no Memos id and no :top tag.
+raise_words='pin\|above\|float\|raise\|stay_focused\|zindex\|order\|top *='
+for lua in "$root"/config/hypr/grassfield/*.lua; do
+  name=$(basename "$lua")
+  code=$(grep -v '^ *--' "$lua")
+  if printf '%s\n' "$code" | grep -q ':top'; then
+    check "$name has no :top tag" 1
+  else
+    check "$name has no :top tag" 0
+  fi
+  idlines=$(printf '%s\n' "$code" | grep 'org.grassfield.Memos\|org\\\\.grassfield\\\\.Memos')
+  case $name in
+    placement.lua | windows.lua)
+      if printf '%s\n' "$idlines" | grep -v 'window.floating' | grep -q "$raise_words"; then
+        check "$name grants no raise, pin or float-above by the Memos app id" 1
+      else
+        check "$name grants no raise, pin or float-above by the Memos app id" 0
+      fi
+      ;;
+    *)
+      if [[ -n $idlines ]]; then
+        check "$name grants nothing to the Memos app id" 1
+      else
+        check "$name grants nothing to the Memos app id" 0
+      fi
+      ;;
+  esac
+done
 if grep -q ':top' "$root/apps/memos/src/hyprframes.cpp" "$root/config/hypr/grassfield/placement.lua"; then
   check "no :top tag suffix is built or read" 1
 else
@@ -48,4 +73,11 @@ check "the memo windows have square corners (rounding 0, by the app id exactly)"
 # The collapse's resize (placement.lua memo_resize): bounded, one action per size-suffix change.
 grep -q 'local MEMO_SIZE_MAX = 16384' "$root/config/hypr/grassfield/placement.lua" && grep -q 'memo_sizes\[key\] == want' "$root/config/hypr/grassfield/placement.lua"
 check "memo_resize is bounded and acts only when the size suffix changes" $?
+# memo_resize against a stub of Hyprland's Lua API (tests/shell/lua/memo_resize_harness.lua).
+if command -v lua >/dev/null; then
+  lua "$root/tests/shell/lua/memo_resize_harness.lua" "$root/config/hypr/grassfield/placement.lua"
+  check "memo_resize clamps the size to the work area; no display, a long tag and bad sizes do nothing" $?
+else
+  echo "SKIP memo_resize harness (no lua interpreter)"
+fi
 exit $fails

@@ -57,7 +57,12 @@ and prints its path:
    files have `key = value` / `key: value` lines with such a key redacted. Paths of the user's own folders stay out
    (security review of the Luma pull request, finding 2): `folder-styles.json` (up to 20,000 folder paths) is replaced by
    the count of its entries, and a wallpaper path (any value under a `wallpaper*` key or in a `wallpaper*` file) keeps only
-   its file name.
+   its file name. The rule is generic (second review fix, 2026-11-06): every setting whose schema type is a path
+   (`x-grassfield.rule` `pathList` or `wallpaperPath`, read from the installed `grassfield.schema.json`: `dock.folders`,
+   `screensaver.folder`, `wallpaper.path`) becomes a count or, for a picture, its file name (a folder: left out); so does any
+   other value that is an absolute path, a `~/` or `$HOME/` path or a `file://` URL (percent-decoded to its file name); a
+   key that is itself a path (`dock.stackOptions`) becomes a numbered label; in a file that is not JSON, everything from the
+   first path of a line on is the path (a folder name may hold spaces). Without the schema the shape of the values still applies.
 
 ### D-3 Redaction (the whole file, last)
 The home path becomes `~`. The user name, the real name and the host name become `<user>`, `<name>` and `<host>` wherever

@@ -127,24 +127,24 @@ function stripStates(stages) {
     return out;
 }
 
-// Processes with a PipeWire stream (the `properties` maps of the stream nodes): playing or recording (a claim, D-3). The
-// process is the one the PipeWire server saw on the other end of the socket (`pipewire.sec.pid`): `application.process.id`
-// is set by the client, so one app could name another's process and keep it from being slowed (security review of the Luma
-// pull request, finding 3). A stream without the server's pid names no process.
-function streamPids(propertyMaps) {
+// The PipeWire stream nodes (their ids) playing or recording: a claim (D-3) once the helper maps them to processes. A node's own
+// pid properties (`pipewire.sec.pid`, `application.process.id`) are set by the client and can name any process (proved with a
+// private daemon, tests/shell/pipewire_sec_pid.sh), so the shell passes only node ids; the helper reads the pid from the
+// Client object the server made (`client.id` -> `pipewire.sec.pid`). A bad id is dropped.
+function streamIds(ids) {
     const out = [];
-    (propertyMaps || []).forEach(p => {
-        const n = p ? parseInt(p["pipewire.sec.pid"], 10) : NaN;
-        if (n > 0 && n < 4194304 && out.indexOf(n) < 0)
+    (ids || []).forEach(v => {
+        const n = typeof v === "number" ? v : parseInt(v, 10);
+        if (Number.isInteger(n) && n > 0 && n < 4194304 && out.indexOf(n) < 0)
             out.push(n);
     });
     return out.sort((a, b) => a - b);
 }
 
 // The picture the helper acts on, as one string: a round runs only when it changed (or when the helper asked to run again).
-function digest(pids, power, media) {
+function digest(pids, power, streams) {
     const keys = Object.keys(pids || {}).sort((a, b) => a - b);
-    return JSON.stringify([power, keys.map(k => [k, pids[k]]), media || []]);
+    return JSON.stringify([power, keys.map(k => [k, pids[k]]), streams || []]);
 }
 
 // Whether the helper may run at all: on battery, or on the power adapter only to lift what is still held (`engaged`: the last
@@ -173,11 +173,11 @@ function anyLimitable(pids) {
 }
 
 // The helper's argv for a round. `base`: the program and the options every command takes (--dry-run, --state).
-function roundArgs(base, pids, onBattery, media) {
+function roundArgs(base, pids, onBattery, streams) {
     const args = base.slice(0, 1).concat(["round"]).concat(base.slice(1));
     args.push("--power", onBattery ? "battery" : "mains", "--windows", JSON.stringify(pids || {}));
-    if (media && media.length > 0)
-        args.push("--media", media.join(","));
+    if (streams && streams.length > 0)
+        args.push("--streams", streams.join(","));
     return args;
 }
 
