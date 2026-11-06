@@ -33,6 +33,7 @@ QtObject {
         statusOff: "#FF6B63",  // own red of a status dot, dark appearance: 4.7:1 on the dark group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#25231F",  // estimate: the floating sidebar panel, dark appearance, 6 levels under the window (#2B2925), the same step as the light appearance's 6 (no dark macOS 26 or 27 sidebar captured, so this is a proportional estimate and unchanged by the 2026-11-03 floating-sidebar amendment); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #232323 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay [ref: macOS 27 release captures at 2 px/pt; docs/audits/ui-finesse-2026-10-25.md § 7.2 Dark appearance: the first references; ADR-0024]
         windowTextSecondary: "#A4A19C",  // Secondary text drawn directly on the opaque app window, on its group fill or on its sidebar, dark appearance (Appearance.windowSecondary): the owner's answer to ADR-0039 Q3 (2026-10-29), #A1A1A6, close to macOS's secondary label, warm as the owner's warm neutrals of 2026-10-30 make every neutral (ADR-0040: OKLCH hue 85, chroma 0.0075, its lightness kept); 5.6:1 on the window, 5.0:1 on a group, 6.1:1 on the sidebar, tested (tests/visual/test_contrast_tokens.py WindowSurfacePairs); was #DFDDD7, the material's textSecondary, which read like the titles (10.7:1 against the text's 13.4:1); fields, tabs and chips keep textSecondary on their own fills [ref: docs/decisions/ADR-0039-design-polish.md § Questions for the owner]
+        fieldPlaceholder: "#C2BFBA",  // the placeholder of a text field in an app window, dark appearance (TextField, SearchField): lighter than the typed text, which it read almost like (#DFDDD7, the material's textSecondary, against the text's #F8F5F0), and 4.5:1 or more on every field fill of an app window (the field at material.fillOpacity over the window, a group or the sidebar; the search field's and the toolbar capsule's fills), tested (tests/visual/test_contrast_tokens.py WindowSurfacePairs); windowTextSecondary itself is 3.6:1 on the field; warm as the owner's warm neutrals (ADR-0040) (UI audit 2026-11-05 U4)
         chipFill: "#FFFFFF",  // Dark appearance: unchanged, drawn at material.fillOpacity like every dark fill; audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass) [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#FF6B63",  // own value: the CPU Load graph's System share (AM29), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
         activityGraphUser: "#5AA2FF",  // own value: the CPU Load graph's User share and the Energy Impact graph (AM29, AM39), dark appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -74,6 +75,7 @@ QtObject {
         statusOff: "#D7372F",  // own red of a status dot (a service that is not connected): 4.4:1 on the light group fill [ref: docs/audits/settings-parity-2026-10-26.md § Wi-Fi]
         sidebarFill: "#F7F6F3",  // the floating sidebar panel, light appearance: 6 levels under the window (#FDFCF9), the owner's calm-sidebar request of 2026-11-02 (was 15 under: #EEECE7); macOS 26 System Settings measures the panel at 249 against a 252 content ground, a white rim lighting it (system-settings ss-004-005 at 2 px/pt, measured 2026-11-03); the window's own warmth kept (R-G 1, G-B 3) [ref: ADR-0024 amendment 2026-11-03; docs/audits/refinement-2026-11-02.md § 08-settings-sidebar]
         windowTextSecondary: "#716E6A",  // Secondary text drawn directly on the opaque white app window or on its 3 % group fill (Appearance.windowSecondary), 4.7:1 or more on both, tested; fields, tabs and chips keep textSecondary, which holds 4.5:1 on their own fills; visual-audit-2 review fixes (docs/audits/visual-tahoe-2026-10-25.md; tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): #6E6E73 at OKLCH hue 85, chroma 0.0075, its lightness kept, so its contrasts stay
+        fieldPlaceholder: "#65625E",  // the placeholder of a text field in an app window, light appearance (TextField, SearchField): lighter than the typed text, which it read almost like (#3D3B37, the material's textSecondary, against the text's #1D1B18), and 4.5:1 or more on every field fill of an app window (the white field, the sidebar search field's grey: windowTextSecondary #716E6A is 3.9:1 there; the toolbar capsule), tested (tests/visual/test_contrast_tokens.py WindowSurfacePairs); warm as the owner's warm neutrals (ADR-0040) (UI audit 2026-11-05 U4)
         chipFill: "#FDFCF9",  // Chip and field fill on light glass: white, as macOS chips (255 on 239); audit 2026-10-25 (docs/audits/visual-tahoe-2026-10-25.md, priority 6: light controls on light glass); warm since the owner's warm neutrals of 2026-10-30 (ADR-0040): the white of #FFFFFF, warmed [ref: docs/testing/f1-reference-gaps.md; docs/specs/ui.md]
         activityGraphSystem: "#D7372F",  // own value: the CPU Load graph's System share (AM29), light appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
         activityGraphUser: "#1F6FD8",  // own value: the CPU Load graph's User share and the Energy Impact graph (AM29, AM39), light appearance; 3:1 or more against the graph's fill and the window (AM7, A2), tested in tests/visual/test_contrast_tokens.py [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -598,6 +600,8 @@ QtObject {
     readonly property int menuItemHeight: 24
     // F1 gap 5: no real minimum, menus as narrow as ~151 [ref: docs/testing/f1-reference-gaps.md § Menus and popovers; docs/specs/ui.md]
     readonly property int menuMinWidth: 150
+    // the widest a menu grows: a longer row (a recent file, a tray or app menu label, a sound device) is shortened in its middle instead of widening the menu off the screen (macOS menus cap their width and middle-truncate long items; UI audit 2026-11-05 U10) [ref: docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int menuMaxWidth: 400
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
     readonly property int menuPadding: 5
     // estimate, no measured value yet, F1 sign-off pending (docs/testing/f1-reference-gaps.md § Menus and popovers)
@@ -641,7 +645,7 @@ QtObject {
     readonly property int controlToggleLargeKnobHeight: 16
     // F1 gap 12: toggle track 36x16 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleHeight: 16
-    // inner border of the security surfaces only (lock password field, polkit dialog; their spec pins it, reviewed separately); every other surface draws the one ring, control.focusOutline [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
+    // inner border of the polkit identity rows only (the password fields wear the shared outside ring since UI audit 2026-11-05 U23; the lock field none); every other surface draws the one ring, control.focusOutline [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlFocusRing: 2
     // F1 gap 13: macOS keyboard focus ring ~3.5; the one keyboard focus ring of every surface (UX-09): this width, opaque, in Appearance.focusRingColor [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlFocusOutline: 3
@@ -659,6 +663,12 @@ QtObject {
     readonly property int controlToggleKnobWidth: 21
     // F1 gap 12: pill knob 21x12 [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/ui.md]
     readonly property int controlToggleKnobHeight: 12
+    // the track of a switch that is off, light appearance: black at 0.10 (macOS 27 Settings measured about 0.10, where material.fillOpacityLight 0.06 drew it fainter, 234 on the group fill); the dark appearance keeps material.fillOpacity (UI audit 2026-11-05 U35) [ref: docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property real controlToggleOffTrackOpacity: 0.1
+    // estimate: in an app window that is not key, an on switch's track, a slider's fill and a prominent segment's selected fill turn a neutral grey, the fill colour (black) at this opacity, light appearance (macOS 27 greys its accent controls in a background window; no inactive control measured, so a grey clearly darker than the off track at control.toggleOffTrackOpacity); checked boxes, radio buttons and the default button take their plain look then (UI audit 2026-11-05 U17) [ref: docs/audits/ui-audit-2026-11-05.md § State consistency]
+    readonly property real controlInactiveFillOpacity: 0.25
+    // estimate: the same, dark appearance, the fill colour (white) at this opacity over the dark window, clearly lighter than the off track at material.fillOpacity (UI audit 2026-11-05 U17) [ref: docs/audits/ui-audit-2026-11-05.md § State consistency]
+    readonly property real controlInactiveFillOpacityDark: 0.3
     // estimate: a disabled switch keeps its track (visible when off, on white too) and fades its knob, and its accent when on (macOS 27) [ref: docs/specs/ui.md § Controls on QtQuick.Templates]
     readonly property real controlToggleDisabledKnobOpacity: 0.5
     // pill knob 20 wide (macOS 27 Settings > Sound, Alert volume; F1 gap 18 read about 21x16 +-2) [ref: docs/audits/settings-parity-2026-10-26.md § Sound]
@@ -709,11 +719,9 @@ QtObject {
     readonly property int controlToolIconSize: 18
     // a toolbar glyph is a dark grey, not the full text colour: ss-004-005 back chevron #4C4C4C and gs-010-011 glyphs #393939 to #404040 on white, the text colour #1D1B18 at about 0.85 (so a disabled glyph at 0.38 of it reads about #B6B6B6, the 181 to 190 measured) [ref: docs/audits/refinement-2026-11-02.md § Surface 1: windows and toolbars; docs/specs/ui.md § Controls on QtQuick.Templates]
     readonly property real controlToolGlyphOpacity: 0.85
-    // GF-085: check box and radio button box, 14 as the AppKit control [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
-    readonly property int controlCheckSize: 14
     // GF-085: check box corner radius [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlCheckRadius: 4
-    // macOS 27 Settings check box (Desktop & Dock, Show items): 16 x 16 [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
+    // macOS 27 Settings check box (Desktop & Dock, Show items): 16 x 16, and the radio button disc (one size for both; control.checkSize 14 removed, UI audit 2026-11-05 LOW) [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property int controlCheckBoxSize: 16
     // macOS 27: a check box's name 5.5 after its box [ref: docs/audits/settings-parity-2026-10-26.md § Desktop & Dock]
     readonly property real controlCheckBoxGap: 5.5
@@ -727,6 +735,8 @@ QtObject {
     readonly property int controlProgressHeight: 6
     // GF-085: overlay scroll bar thumb width (moved from files.scrollbarWidth) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlScrollbarWidth: 6
+    // the overlay scroll bar's thumb sits this far inside its lane, from the view's edge and from the lane's ends (macOS 27 overlay scrollers: a thin thumb clear of the edge and of the corners); the lane stays scrollbarWidth + 2 x inset = 10 wide, the thumb scrollbarWidth (UI audit 2026-11-05 U31) [ref: docs/specs/ui.md § Controls on QtQuick.Templates]
+    readonly property int controlScrollbarInset: 2
     // GF-085: shortest scroll bar thumb [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
     readonly property int controlScrollbarMinLength: 24
     // macOS 27 overlay scroll bars: hidden while the view is still, shown while it scrolls or under the pointer (owner report 2026-11-02: a half-visible bar on a still Settings sidebar) [ref: docs/specs/ui.md § Controls on QtQuick.Templates; docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets]
@@ -1010,6 +1020,12 @@ QtObject {
     readonly property int notificationCenterCache: 2000
     // Banner and card action capsules, macOS 22 tall, equal width across the card (audit 2026-10-25, Banners) [ref: docs/testing/f1-reference-gaps.md § Notifications and widgets; docs/specs/notifications.md]
     readonly property int notificationActionHeight: 22
+    // estimate: the picture a notification attaches, shown as a trailing thumbnail beside its text (UI audit 2026-11-05 U27: macOS keeps the app icon at the leading edge and shows the image at the trailing one)
+    readonly property int notificationThumbnailSize: 40
+    // estimate: the rounded corner of a notification thumbnail, a photo corner at 40 pt between notification.iconRadius 7 at 32 and radius.artwork (UI audit 2026-11-05 U27)
+    readonly property int notificationThumbnailRadius: 8
+    // estimate: room between the text column of a notification and its trailing thumbnail (UI audit 2026-11-05 U27)
+    readonly property int notificationThumbnailGap: 8
 
     // estimate: compact pill [ref: docs/testing/f1-reference-gaps.md § Lock / login, OSD, polkit; docs/specs/osd.md]
     readonly property int osdWidth: 220
@@ -2405,6 +2421,8 @@ QtObject {
     readonly property int filesToolbarIconSize: 18
     // Expanded width of the search capsule (macOS ~200); collapsed it is a 36-pt circle; audit 2026-10-25 priority 11 (toolbar capsules; docs/audits/visual-tahoe-2026-10-25.md) [ref: docs/testing/f1-reference-gaps.md § Settings and Dialogs, alerts and sheets; docs/specs/files.md]
     readonly property int filesSearchWidth: 200
+    // UI audit 2026-11-05 U11: the open search field never narrower than this where the title and then Tags and Action have yielded their room (the glyph, the placeholder and the clear button still whole) [ref: docs/specs/files.md]
+    readonly property int filesSearchMinWidth: 120
     // macOS 26 AppKit tab bar (the Finder's): the capsule track 27.5 tall, measured on a Tahoe capture at 2 px/pt; also the round + button [ref: docs/specs/files.md § Tabs and windows]
     readonly property int filesTabHeight: 28
     // macOS 26 tab bar: the track right under the toolbar, 8 under it to the hairline [ref: docs/specs/files.md § Tabs and windows]
@@ -2431,6 +2449,8 @@ QtObject {
     readonly property int filesLoadingDelay: 500
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesPathBarHeight: 26
+    // UI audit 2026-11-05 (LOW, the path bar never shortens middle segments): the least label width a middle segment of a long path is shortened to (a few letters and the ellipsis, as Finder), the first and last kept whole [ref: docs/audits/ui-audit-2026-11-05.md; docs/specs/files.md]
+    readonly property int filesPathSegmentMinWidth: 40
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesStatusBarHeight: 22
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
@@ -2447,8 +2467,8 @@ QtObject {
     readonly property int filesListRowHeight: 20
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesListIconSize: 16
-    // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
-    readonly property int filesListHeaderHeight: 26
+    // UI audit 2026-11-05 U38: 28, a multiple of 4, so that the header and the 1-pt rule under it (1 px at 1.25) start the rows on a whole device pixel at 1.25 (26 + 1 put them at 33.75 px); was 26, an estimate (docs/specs/files.md) [ref: docs/audits/ui-audit-2026-11-05.md; docs/testing/f1-reference-gaps.md § Files]
+    readonly property int filesListHeaderHeight: 28
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
     readonly property int filesListDateWidth: 180
     // estimate: Files app (docs/specs/files.md) [ref: docs/testing/f1-reference-gaps.md § Files]
@@ -2611,8 +2631,8 @@ QtObject {
     readonly property string filesTagPurple: "#9B5DE5"
     // own value: colour tag Gray (not copied) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property string filesTagGray: "#8B8D93"
-    // F1 gap 17: column view rows 22 [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
-    readonly property int filesColumnRowHeight: 22
+    // UI audit 2026-11-05 U38: 24, the multiple of 4 next to the 22 measured (F1 gap 17), so that every row lands on a whole device pixel at 1.25 (22 drew 27.5 px; 24 draws 30); a 16-pt icon with 4 pt above and below, the side of 22 that macOS 27 metrics grew toward (the list row stays 20) [ref: docs/audits/ui-audit-2026-11-05.md; docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
+    readonly property int filesColumnRowHeight: 24
     // minimum width of the list Name column (was filesColumnWidth) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/files.md]
     readonly property int filesListNameMinWidth: 230
     // estimate: the header row above each group of the list view (no capture of the Finder's grouped list) [ref: docs/specs/files.md § Views and selection]
@@ -2717,6 +2737,8 @@ QtObject {
     readonly property int filesScopeAddWidth: 32
     // macOS 27 Finder-Search: Save to +, 4 px at 2x [ref: docs/specs/files.md § Search]
     readonly property int filesScopeButtonGap: 2
+    // UI audit 2026-11-05 (found with U13): Save and + on a light grey, the text colour at half the chosen pill's 12.5% so that pressed (12.5%) reads darker; they borrowed toolbar.capsuleFillOpacity, which became 0.7 of white on 2026-11-03 and turned them dark grey [ref: docs/specs/files.md § Search]
+    readonly property real filesScopeButtonOpacity: 0.06
     // macOS 27 Finder-Search: + to the window edge, 20 px at 2x [ref: docs/specs/files.md § Search]
     readonly property int filesScopeTrailingInset: 10
     // estimate: a filter row as tall as the scope bar (no capture of the Finder's + rows) [ref: docs/specs/files.md § Search]
@@ -2831,6 +2853,8 @@ QtObject {
     readonly property int previewSidebarItemHeight: Math.round(28 * Appearance.textScale)
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
     readonly property int previewSearchWidth: 200
+    // UI audit 2026-11-05 (LOW, Preview hides its thumbnails when search opens): the least width of the open search field, the one the sidebar's room and the window's minimum count, so that opening it keeps the thumbnails in a 490 to 653-pt window; as files.searchMinWidth [ref: docs/audits/ui-audit-2026-11-05.md; docs/specs/preview.md]
+    readonly property int previewSearchMinWidth: 120
     // page background of PDF thumbnails (documents are white in both themes) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview; docs/specs/preview.md]
     readonly property string previewPaper: "#FFFFFF"
     // estimate: Preview app (docs/specs/preview.md) [ref: docs/testing/f1-reference-gaps.md § Glance and Preview]
@@ -3417,6 +3441,10 @@ QtObject {
     readonly property real windowInactiveSelectionOpacityLight: 0.045
     // estimate: the same, dark appearance (macOS's unemphasized dark selection, about #464646 on a #2B2B2B sidebar, white at 0.11; no dark macOS 27 inactive selection measured) (ADR-0039 step 17) [ref: docs/audits/design-polish-2026-10-29.md § 3.13 Inactive windows]
     readonly property real windowInactiveSelectionOpacityDark: 0.11
+    // a selected row, cell or icon of a content view (list, columns, icons, gallery, processes) that is not focused or whose window is not key, light appearance: the hover ink at this opacity over the white content (macOS unemphasizedSelectedContentBackgroundColor #DCDCDC on #FFFFFF, black at 0.137); a sidebar keeps inactiveSelectionOpacity (UI audit 2026-11-05 U16) [ref: docs/audits/ui-audit-2026-11-05.md]
+    readonly property real windowUnemphasizedSelectionOpacityLight: 0.137
+    // estimate: the same, dark appearance (macOS #464646 on its dark content, white at about 0.14 over the window background) (UI audit 2026-11-05 U16) [ref: docs/audits/ui-audit-2026-11-05.md]
+    readonly property real windowUnemphasizedSelectionOpacityDark: 0.14
 
     // estimate: tile box the plugin fits a stage's windows into (macOS model: small live thumbnails in a left-edge strip)
     readonly property int stagesTileWidth: 160
@@ -3450,6 +3478,8 @@ QtObject {
     readonly property int stagesRingWidth: 3
     // estimate: outline radius, close to the window corner radius
     readonly property int stagesRingRadius: 12
+    // UI audit 2026-11-05 (LOW): the hover and drop-target ring sits outside the tile, this far clear of it, as the Overview's selection rings (overview.ringGap): one ring model for the Overview's windows and Desktops and for Stages [ref: docs/audits/ui-audit-2026-11-05.md]
+    readonly property int stagesRingGap: 1
     // estimate: pointer travel (px) before a press on a tile becomes a drag
     readonly property int stagesDragThreshold: 6
     // estimate: opacity of the badge ghost following a dragged tile
@@ -3507,6 +3537,8 @@ QtObject {
     readonly property int storeWindowHeight: 724
     // estimate: the sidebar and one column of cards [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeWindowMinWidth: 760
+    // UI audit 2026-11-05 (LOW, "Loading apps…" flashes): the catalogue that has shown nothing after this long shows the shared spinner over its line, as Files' files.loadingDelay, so a quick start never flashes it [ref: docs/audits/ui-audit-2026-11-05.md; docs/decisions/ADR-0039-design-polish.md § Decision]
+    readonly property int storeLoadingDelay: 500
     // estimate: the sidebar's items and the account row [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeWindowMinHeight: 520
     // estimate: a notice that goes by itself (an app that could not be opened) stays this long, ms [ref: docs/decisions/ADR-0039-design-polish.md step 2]
@@ -3521,8 +3553,8 @@ QtObject {
     readonly property int storeSidebarSearchHeight: 29
     // the first row's top (Discover) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeSidebarListTop: 106
-    // rows 38 pt apart, the selected one a 38-pt pill (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
-    readonly property int storeSidebarRowHeight: 38
+    // UI audit 2026-11-05 U38: 40, the multiple of 4 next to the 38 measured, so that every row lands on a whole device pixel at 1.25 (38 drew 47.5 px; 40 draws 50); measured: rows 38 pt apart, the selected one a 38-pt pill (macOS 27 Discover, the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed)) [ref: docs/audits/ui-audit-2026-11-05.md; docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture]
+    readonly property int storeSidebarRowHeight: 40
     // the pill's corner (circle fit on its top-left corner) (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
     readonly property int storeSidebarRowRadius: 9
     // the pill #D7D7D6 on the sidebar's #EDEDEC: the text colour at 10 % (macOS 27 Discover, measured on the capture at 2 px/pt (27-Golden-Gate-App-Store.png, not committed) [ref: docs/audits/store-2026-10-27/parity.md § Discover in the macOS 27 capture])
@@ -3687,8 +3719,6 @@ QtObject {
     readonly property int storeTextMaxWidth: 680
     // estimate: an empty page's message under the title area [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeEmptyTop: 80
-    // estimate: No Results [ref: docs/audits/store-2026-10-27/parity.md]
-    readonly property int storeEmptyTextSize: Math.round(20 * Appearance.textScale)
     // estimate: between an empty page's heading, its reason and its button [ref: docs/audits/store-2026-10-27/parity.md]
     readonly property int storeEmptyGap: 12
     // estimate: under a page's last block [ref: docs/audits/store-2026-10-27/parity.md]
@@ -4005,14 +4035,14 @@ QtObject {
     readonly property int activityWindowWidth: 980
     // estimate: the window's default height (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityWindowHeight: 620
-    // estimate: the name and three columns, as Files' minimum (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
-    readonly property int activityWindowMinWidth: 600
+    // UI audit 2026-11-05 U5: the folded toolbar fits in English and French with a margin (lights 87, title room 120, actions 106, the resource pop-up 116 in French, the compact search 140, gaps and inset 32: 601 measured off-screen); was 600, the name and three columns as Files' minimum [ref: docs/specs/activity.md]
+    readonly property int activityWindowMinWidth: 640
     // estimate: the toolbar and about ten rows, as Files' minimum (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activityWindowMinHeight: 360
     // list row 20, as Files' list view (F1 gap 17: list row 20 +-0.5) [ref: docs/testing/f1-reference-gaps.md § Files; docs/specs/activity.md]
     readonly property int activityRowHeight: 20
-    // the list header, as Files' list view [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
-    readonly property int activityHeaderHeight: 26
+    // the list header, as Files' list view (files.listHeaderHeight, 28 since UI audit 2026-11-05 U38: the rows start on a whole device pixel at 1.25) [ref: docs/audits/ui-audit-2026-11-05.md; docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
+    readonly property int activityHeaderHeight: 28
     // the sort arrow in a header, as Files' list view [ref: docs/specs/activity.md; docs/specs/files.md]
     readonly property int activityChevronSize: 10
     // the row's icon, 16 pt (spec AM10) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
@@ -4027,6 +4057,10 @@ QtObject {
     readonly property int activityColumnMinWidth: 40
     // the toolbar's search field: Files' expanded capsule less 20, beside the five tabs [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]
     readonly property int activitySearchWidth: 180
+    // UI audit 2026-11-05 U5: the search field while the five tabs are folded into their pop-up in a narrow window (macOS toolbars narrow the field before anything else goes), its placeholder still whole [ref: docs/specs/activity.md]
+    readonly property int activitySearchCompactWidth: 140
+    // UI audit 2026-11-05 U5: the room the title and its subtitle keep before the five tabs fold into a pop-up, as Files' toolbarTitleMinWidth [ref: docs/specs/activity.md]
+    readonly property int activityToolbarTitleMinWidth: 120
     // the alternate rows' fill opacity, as Files' list stripes (spec AM7) [ref: docs/specs/activity.md; docs/specs/files.md]
     readonly property real activityRowAlternate: 0.04
     // estimate: the summary under the table holds four figure rows at the caption size and a graph under its title, as macOS's (no macOS 27 capture measured yet; step 5 checks F1 against public captures) [ref: docs/specs/activity.md; docs/decisions/ADR-0038-activity-monitor.md]

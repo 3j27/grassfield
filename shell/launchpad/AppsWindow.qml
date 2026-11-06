@@ -452,15 +452,19 @@ Variants {
                         radius: Tokens.launcherPanelRadius
                     }
 
-                    // Category chips (scroll sideways when the panel is narrower than the row).
+                    // Category chips (scroll sideways when the panel is narrower than the row). The view reaches the focus
+                    // ring's width beyond the chips on every side, so its clip no longer cuts the ring outside a chip
+                    // (UI audit 2026-11-05 LOW); the chips stay where they were.
                     Flickable {
                         id: chipFlick
 
-                        x: Tokens.launcherPadding
-                        y: Tokens.launcherChipsTop
-                        width: panel.width - 2 * Tokens.launcherPadding
-                        height: Tokens.launcherChipHeight
-                        contentWidth: chipRow.width
+                        readonly property real ringRoom: Tokens.controlFocusOutline
+
+                        x: Tokens.launcherPadding - ringRoom
+                        y: Tokens.launcherChipsTop - ringRoom
+                        width: panel.width - 2 * Tokens.launcherPadding + 2 * ringRoom
+                        height: Tokens.launcherChipHeight + 2 * ringRoom
+                        contentWidth: chipRow.width + 2 * ringRoom
                         contentHeight: height
                         clip: true
                         flickableDirection: Flickable.HorizontalFlick
@@ -471,6 +475,8 @@ Variants {
 
                         Row {
                             id: chipRow
+                            x: chipFlick.ringRoom
+                            y: chipFlick.ringRoom
                             spacing: Tokens.launcherChipGap
 
                             Repeater {
@@ -488,7 +494,7 @@ Variants {
                                     onClicked: root.controller.selectCategory(modelData)
                                     onFocusedChanged: {
                                         if (focused)
-                                            chipFlick.contentX = Math.max(0, Math.min(chipFlick.contentWidth - chipFlick.width, x + width / 2 - chipFlick.width / 2));
+                                            chipFlick.contentX = Math.max(0, Math.min(chipFlick.contentWidth - chipFlick.width, chipRow.x + x + width / 2 - chipFlick.width / 2));
                                     }
                                 }
                             }
@@ -500,7 +506,7 @@ Variants {
                         id: grid
 
                         x: Tokens.launcherPadding
-                        y: chipFlick.y + chipFlick.height
+                        y: Tokens.launcherChipsTop + Tokens.launcherChipHeight
                         width: panel.width - 2 * Tokens.launcherPadding
                         // Down to the panel's edge (inside its border): rows scroll out under it, the last one clears it.
                         height: panel.height - y - Tokens.appsBorderWidth

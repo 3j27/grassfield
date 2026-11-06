@@ -543,7 +543,8 @@ class ContrastTokens(unittest.TestCase):
                      "textColor: root.colors.text",
                      "placeholderColor: root.colors.textSecondary",
                      "fillColor: Appearance.withAlpha(root.colors.shadow, Tokens.lockFieldFillOpacity)",
-                     "focusColor: Appearance.withAlpha(root.colors.text, Tokens.lockFocusRingOpacity)",
+                     # No focus ring on the lock's field (UI audit 2026-11-05 U23): it always has the focus, macOS draws none.
+                     "focusRing: false\n",
                      "selectionColor: root.colors.accent\n",
                      "selectedTextColor: root.colors.accentText\n"):
             self.assertIn(line, view)
@@ -554,7 +555,7 @@ class ContrastTokens(unittest.TestCase):
                      "property color selectedTextColor: Appearance.colors.accentText\n",
                      "color: root.placeholderColor",
                      "color: root.fillColor",
-                     "border.color: root.focusColor"):
+                     "visible: root.focusRing && input.activeFocus"):
             self.assertIn(line, field)
         # Every text item on the scrim and the disc uses the primary text colour: date, clock, the user's message, initials,
         # name, error, notice.
@@ -1043,6 +1044,25 @@ class WindowSurfacePairs(unittest.TestCase):
             self.assertGreaterEqual(wcag(fg, bg), 4.5, "windowTextSecondary on %s, dark: %.2f:1" % (what, wcag(fg, bg)))
             self.assertGreaterEqual(wcag(text, bg) / wcag(fg, bg), 2.0,
                                     "text %.2f:1 against secondary %.2f:1 on %s, dark" % (wcag(text, bg), wcag(fg, bg), what))
+
+    def test_field_placeholder_on_every_field_of_an_app_window(self):
+        # UI audit 2026-11-05 U4: a field's placeholder in an app window (TextField, SearchField: colors.fieldPlaceholder) holds
+        # 4.5:1 on the field (light: the window colour; dark: the fill at material.fillOpacity over the window, a group or the
+        # sidebar), on the search field's fill (the text colour at toolbar.fieldFillOpacity) and on the toolbar capsule (white
+        # at toolbar.capsuleFillOpacity), and reads lighter than the typed text.
+        for ap in APPEARANCES:
+            fg = self.tok.color("colors", ap, "fieldPlaceholder")
+            text = self.tok.color("colors", ap, "text")
+            sfx = "Dark" if ap == "dark" else ""
+            grounds = [self.tok.color("colors", ap, n) for n in ("windowBackground", "groupFill", "sidebarFill")]
+            fields = [self.window(ap)] if ap == "light" else \
+                [over(self.tok.color("colors", ap, "fill"), self.tok.path("material.fillOpacity"), g) for g in grounds]
+            for g in grounds:
+                fields.append(over(text, self.tok.path("toolbar.fieldFillOpacity" + sfx), g))
+                fields.append(over(self.tok.color("colors", ap, "knob"), self.tok.path("toolbar.capsuleFillOpacity" + sfx), g))
+            for bg in fields:
+                self.assertGreaterEqual(wcag(fg, bg), 4.5, "fieldPlaceholder on %s, %s: %.2f:1" % (bg, ap, wcag(fg, bg)))
+                self.assertGreater(wcag(text, bg), wcag(fg, bg) * 1.4, "the placeholder reads lighter than the text, %s" % ap)
 
     def test_permission_alert_symbol_on_the_window(self):
         # grassfield-portal's permission alert (apps/files/qml/AccessAlert.qml): the frontend's symbolic icon, for an application

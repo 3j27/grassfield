@@ -8,6 +8,10 @@ T.CheckBox {
     id: root
 
     property string accessibleName: ""
+    // Checked: the accent only while the window looks key, inside an app window (Appearance.accentShown, UI audit 2026-11-05 U17).
+    readonly property bool keyLook: Appearance.accentShown(root.Window.window, root.Window.active)
+    // Not key, a checked box keeps its plain look and its mark takes the text colour (macOS 27).
+    readonly property bool accentFill: root.checkState !== Qt.Unchecked && root.keyLook
 
     // Whole pixels, so that the next control in a row stays on the pixel grid.
     implicitWidth: Math.ceil(Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding))
@@ -39,10 +43,10 @@ T.CheckBox {
         width: Tokens.controlCheckBoxSize
         height: Tokens.controlCheckBoxSize
         radius: Tokens.controlCheckRadius
-        color: root.checkState !== Qt.Unchecked ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
-        border.width: Appearance.increaseContrast || root.checkState === Qt.Unchecked ? Tokens.controlBorderWidth : 0
+        color: root.accentFill ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+        border.width: Appearance.increaseContrast || !root.accentFill ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
 
         Behavior on color {
             ColorAnimation {
@@ -61,7 +65,7 @@ T.CheckBox {
             anchors.centerIn: parent
             name: root.checkState === Qt.PartiallyChecked ? "minimize-glyph" : "checkmark"
             size: parent.width - 2 * Tokens.controlCheckMarkInset
-            color: Appearance.colors.selectionText
+            color: root.accentFill ? Appearance.colors.selectionText : Appearance.colors.text
             visible: root.checkState !== Qt.Unchecked
         }
 
@@ -76,7 +80,7 @@ T.CheckBox {
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         text: root.text
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
         color: Appearance.colors.text
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize

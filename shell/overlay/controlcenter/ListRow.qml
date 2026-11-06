@@ -17,10 +17,19 @@ NavItem {
     checkable: true
     checked: selected
 
+    // Lit under the pointer or with the keyboard focus only: a click gives the row the focus, and it stayed lit after one
+    // (UI audit 2026-11-05 U26). Pressed: the shared pressed fill on top.
     Rectangle {
         anchors.fill: parent
         radius: Tokens.radiusControl
-        color: hover.containsMouse || root.activeFocus ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity) : "transparent"
+        color: hover.containsMouse || root.visualFocus ? Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity) : "transparent"
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        radius: Tokens.radiusControl
+        color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+        visible: hover.pressed
     }
 
     Row {

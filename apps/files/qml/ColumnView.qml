@@ -9,6 +9,9 @@ import "Nav.js" as Nav
 // column. Left/Right move between columns.
 FocusScope {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var tab
 
@@ -276,7 +279,7 @@ FocusScope {
 
         Rectangle {
             anchors.right: parent.right
-            width: Tokens.appsBorderWidth
+            width: root.hairline
             height: parent.height
             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
@@ -341,7 +344,7 @@ FocusScope {
         ListView {
             id: lv
             anchors.fill: parent
-            anchors.rightMargin: Tokens.appsBorderWidth
+            anchors.rightMargin: root.hairline
             anchors.topMargin: Tokens.spacingXs
             model: col.model
             clip: true
@@ -405,7 +408,7 @@ FocusScope {
                     anchors.rightMargin: Tokens.spacingXs
                     radius: Tokens.radiusControl
                     visible: entry.selected || entryDrop.containsDrag
-                    color: entry.emphasized ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
+                    color: entry.emphasized ? Appearance.colors.selection : Appearance.unemphasizedSelection
                     border.width: entryDrop.containsDrag ? Tokens.filesDropBorder : 0
                     border.color: Appearance.colors.accent
                 }
@@ -550,17 +553,71 @@ FocusScope {
             width: Math.abs(col.bandEnd.x - col.bandOrigin.x)
             height: Math.abs(col.bandEnd.y - col.bandOrigin.y)
             color: Appearance.withAlpha(Appearance.colors.accent, Tokens.filesRubberBandOpacity)
-            border.width: Tokens.appsBorderWidth
+            border.width: root.hairline
             border.color: Appearance.colors.accent
         }
 
         ScrollBar {
             flickable: lv
             anchors.right: parent.right
-            anchors.rightMargin: Tokens.appsBorderWidth
+            anchors.rightMargin: root.hairline
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             anchors.margins: Tokens.spacingXs
+        }
+
+        // A column still listing (UI audit 2026-11-05 U33): the shared spinner over "Loading…" once it has shown nothing for
+        // files.loadingDelay, as the other views' note (BrowserTab's loadingNote).
+        Item {
+            id: colLoading
+            readonly property bool waiting: col.model !== null && col.model.loading && lv.count === 0
+            property bool delayed: false
+
+            anchors.fill: lv
+            visible: colLoading.waiting && colLoading.delayed
+            onWaitingChanged: if (!colLoading.waiting)
+                colLoading.delayed = false
+
+            Timer {
+                interval: Tokens.filesLoadingDelay
+                running: colLoading.waiting && !colLoading.delayed
+                onTriggered: colLoading.delayed = true
+            }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: Tokens.spacingSm
+
+                Spinner {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    running: colLoading.visible
+                }
+
+                Text {
+                    textFormat: Text.PlainText
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: col.model && col.model.isSearch ? qsTr("Searching…") : qsTr("Loading…")
+                    color: Appearance.windowSecondary
+                    font.family: Appearance.fontFamily
+                    font.pixelSize: Tokens.typographyCaptionSize
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                }
+            }
+        }
+
+        // A column that could not be listed says why, centred in it, as the list view's empty text (U33).
+        Text {
+            textFormat: Text.PlainText
+            anchors.centerIn: lv
+            visible: lv.count === 0 && col.model !== null && !col.model.loading && col.model.error !== ""
+            text: col.model ? col.model.error : ""
+            width: lv.width - 2 * Tokens.spacingSm
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            color: Appearance.windowSecondary
+            font.family: Appearance.fontFamily
+            font.pixelSize: Tokens.typographyBodySize
         }
     }
 }

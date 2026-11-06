@@ -11,6 +11,9 @@ import "TabsLogic.js" as TabsLogic
 // spring-loading delay.
 Item {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     // BrowserWindow.qml.
     required property var win
@@ -258,7 +261,7 @@ Item {
         height: width
         radius: width / 2
         color: Appearance.dark ? root.pillColor : Appearance.colors.chipFill
-        border.width: Tokens.appsBorderWidth
+        border.width: root.hairline
         border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
 
         ToolButton {

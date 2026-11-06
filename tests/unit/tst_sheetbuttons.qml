@@ -183,4 +183,22 @@ TestCase {
             compare(dialog.height - corner.y, Tokens.panelSheetPadding, "20 from the bottom edge");
         }
     }
+
+    // UI audit 2026-11-05 U2: alert buttons that do not fit side by side stack full width, the default (last) one on top.
+    function test_theShellsAlertStacks() {
+        const component = Qt.createComponent(Qt.resolvedUrl("../../shell/overlay/Dialog.qml"));
+        compare(component.status, Component.Ready, component.errorString());
+        const dialog = createTemporaryObject(component, tc, {title: "Voulez-vous vraiment fermer la session ?"});
+        const cancel = createTemporaryObject(dialogButton, null, {text: "Annuler"});
+        const quit = createTemporaryObject(dialogButton, null, {text: "Fermer la session maintenant", primary: true});
+        dialog.buttons = [cancel, quit];
+        wait(50);
+        const room = dialog.width - 2 * dialog.pad;
+        compare(cancel.width, room, "full width");
+        compare(quit.width, room, "full width");
+        compare(cancel.x, quit.x, "one column");
+        verify(quit.y < cancel.y, "the default button on top");
+        const bottom = cancel.mapToItem(dialog, 0, cancel.height).y;
+        compare(dialog.height - bottom, dialog.pad, "the stack ends one padding above the bottom edge");
+    }
 }

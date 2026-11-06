@@ -8,6 +8,9 @@ import Grassfield.Ui
 // samples (the model never resets), so the scroll position never jumps (AM11).
 FocusScope {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     required property var backend
     readonly property var table: root.backend.table
@@ -96,7 +99,7 @@ FocusScope {
 
                 Rectangle {
                     visible: column.index > 0
-                    width: Tokens.appsBorderWidth
+                    width: root.hairline
                     height: parent.height - Tokens.spacingSm
                     anchors.verticalCenter: parent.verticalCenter
                     color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
@@ -181,7 +184,7 @@ FocusScope {
     Rectangle {
         anchors.top: headerRow.bottom
         width: parent.width
-        height: Tokens.appsBorderWidth
+        height: root.hairline
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
@@ -226,10 +229,11 @@ FocusScope {
         id: list
         objectName: "processRows"
         anchors.top: headerRow.bottom
-        anchors.topMargin: Tokens.appsBorderWidth
+        anchors.topMargin: root.hairline
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.rightMargin: scrollBar.width
+        // The overlay scroll bar floats over the rows (macOS), no lane of its own (UI audit 2026-11-05 U32); the rows keep
+        // their inner padding.
         anchors.bottom: parent.bottom
         model: root.table
         clip: true
@@ -316,7 +320,7 @@ FocusScope {
                 anchors.leftMargin: Tokens.spacingXs
                 anchors.rightMargin: Tokens.spacingXs
                 radius: Tokens.radiusControl
-                color: row.selected ? (row.emphasized ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2))
+                color: row.selected ? (row.emphasized ? Appearance.colors.selection : Appearance.unemphasizedSelection)
                      : row.index % 2 === 1 ? Appearance.withAlpha(Appearance.colors.fill, Tokens.activityRowAlternate) : "transparent"
             }
 

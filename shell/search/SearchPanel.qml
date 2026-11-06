@@ -104,6 +104,16 @@ Variants {
             shown: win.shown
         }
 
+        // Unmapped after its fade-out: the view it showed resets now, never during the fade (U9).
+        Connections {
+            target: release
+
+            function onMappedChanged(): void {
+                if (!release.mapped)
+                    root.controller.released();
+            }
+        }
+
         // Closed but still mapped (the hold): a press the compositor delivered before the empty mask landed (late whenever
         // the GUI thread was busy) is swallowed here, never handled by the result under it.
         MouseArea {
@@ -1055,13 +1065,21 @@ Variants {
             readonly property var item: root.controller.clipPreview
             readonly property bool fitsRight: panel.x + panel.width + Tokens.searchClipPreviewGap + width <= win.width - Tokens.searchEdgeMargin
 
-            visible: win.shown && item !== null && panel.visible
+            // It fades out with the panel; the controller drops it once the panel is released (U9).
+            visible: item !== null && panel.visible
+            opacity: win.shown ? 1 : 0
             x: fitsRight ? panel.x + panel.width + Tokens.searchClipPreviewGap : Math.max(Tokens.searchEdgeMargin, panel.x - Tokens.searchClipPreviewGap - width)
             y: panel.y
             width: Tokens.searchClipPreviewWidth
             height: Math.max(panel.height, Tokens.searchEmptyHeight)
             Accessible.role: Accessible.Pane
             Accessible.name: qsTr("Preview")
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionFast)
+                }
+            }
 
             MouseArea {
                 anchors.fill: parent

@@ -23,6 +23,18 @@ TestCase {
         compare(Logic.cycle({}, "", false), "");
     }
 
+    // UI audit 2026-11-05 (LOW): two lines at most, wrapped at words, a long name cut in the middle of the second line so the
+    // extension stays; a first word wider than the label breaks anywhere. A 12-character label and a middle cut keeping 5 + 6.
+    function test_labelLinesKeepTheExtension() {
+        const fits = t => t.length <= 12;
+        const elide = t => t.length <= 12 ? t : t.slice(0, 5) + "…" + t.slice(t.length - 6);
+        compare(Logic.labelLines("short.txt", fits, elide), "short.txt");
+        compare(Logic.labelLines("Project plan.odt", fits, elide), "Project\nplan.odt");
+        compare(Logic.labelLines("My Holiday Photos 2026 final version.jpeg", fits, elide), "My Holiday\nPhoto…n.jpeg");
+        compare(Logic.labelLines("AVeryLongFileNameWithoutSpaces.pdf", fits, elide), "AVeryLongFil\neName…es.pdf");
+        compare(Logic.labelLines("", fits, elide), "");
+    }
+
     // GF-105: a drop never creates an NFC/NFD twin on the desktop.
     function test_uniqueNameTreatsATwinAsTaken() {
         const nfc = "R\u00e9sum\u00e9.txt";

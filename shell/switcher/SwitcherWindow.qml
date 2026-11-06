@@ -197,9 +197,13 @@ Variants {
                         // ADR-0039 step 12, G6), no longer the material's rim token.
                         color: Appearance.withAlpha(Appearance.colors.hover, Tokens.materialSelectionOpacity)
 
-                        // The shared ring outside the selection (ADR-0039 step 7).
+                        // macOS 27's App Switcher marks the selection with the neutral plate only (UI audit 2026-11-05 U28):
+                        // the switcher is driven by the keyboard from start to end, so the accent ring of step 7 (keyboard
+                        // focus) was always on. Under Increase Contrast the shared ring outside the plate stays, the
+                        // stronger outline that setting asks for (ADR-0039 step 7).
                         FocusRing {
                             shapeRadius: Tokens.switcherSelectionRadius
+                            visible: Appearance.increaseContrast
                         }
                     }
 

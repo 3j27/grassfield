@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Grassfield.Ui
 import "Placements.js" as Placements
 
@@ -66,7 +67,8 @@ FocusScope {
         visible: root.flat
         radius: Tokens.widgetRadius
         color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity / 2)
-        border.width: 1
+        // One device pixel at every scale (UI audit 2026-11-05 U37).
+        border.width: 1 / Math.max(1, Screen.devicePixelRatio)
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
     }
 

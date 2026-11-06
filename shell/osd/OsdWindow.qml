@@ -115,14 +115,27 @@ Variants {
                 color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity * 2)
 
                 Rectangle {
+                    id: level
+
+                    // The kind the bar shows now: when another kind arrives (volume after brightness), the bar takes the new
+                    // level at once instead of sliding from the previous kind's (LOW, UI audit 2026-11-05). Osd sets the
+                    // kind before the level; the Behavior is enabled again once that level is in.
+                    property bool steady: true
+                    readonly property string kind: Osd.kind
+
                     width: track.width * (Osd.muted ? 0 : Osd.level)
                     height: parent.height
                     radius: parent.radius
                     color: Appearance.colors.text
 
+                    onKindChanged: {
+                        level.steady = false;
+                        Qt.callLater(() => level.steady = true);
+                    }
+
                     // Under Reduce Motion the level jumps; the OSD itself still fades in and out (ADR-0039 step 5).
                     Behavior on width {
-                        enabled: !Appearance.reduceMotion
+                        enabled: !Appearance.reduceMotion && level.steady
                         NumberAnimation {
                             duration: Appearance.duration(Tokens.motionFast)
                         }

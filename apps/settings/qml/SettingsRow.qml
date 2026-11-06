@@ -19,9 +19,25 @@ Item {
     // The labels' offset from the row's middle (macOS 27 slider rows set their title a little higher).
     property real labelsOffset: 0
     default property alias control: slot.data
+    // The labels dim with the row's control, once (UI audit 2026-11-05 U18): when the row itself is disabled or a control in it
+    // draws its own disabled look (Appearance.dimsDisabled), never again inside a pane that is dimmed as a whole (Settings'
+    // blocked page). A row that places its control outside the slot (LevelRow) sets it.
+    property bool dimmed: {
+        if (Appearance.dimsDisabled(root))
+            return true;
+        for (let i = 0; i < slot.children.length; i++) {
+            const c = slot.children[i];
+            if (c.visible && Appearance.dimsDisabled(c))
+                return true;
+        }
+        return false;
+    }
 
     width: parent ? parent.width : implicitWidth
-    implicitHeight: Math.max(Tokens.settingsRowHeight, Math.max(labels.implicitHeight, slot.implicitHeight) + 2 * Tokens.spacingSm)
+    // A control keeps the margin a push button has in a plain row (settings.rowHeight 38 for control.buttonHeight 24, macOS 27),
+    // so a row with a pop-up button or a segmented control is 38 like the others (UI audit 2026-11-05 U19); the labels keep
+    // spacingSm above and below.
+    implicitHeight: Math.max(Tokens.settingsRowHeight, labels.implicitHeight + 2 * Tokens.spacingSm, slot.implicitHeight + Math.min(2 * Tokens.spacingSm, Tokens.settingsRowHeight - Tokens.controlButtonHeight))
 
     TextMetrics {
         id: valueMetrics
@@ -67,6 +83,7 @@ Item {
 
     Column {
         id: labels
+        opacity: root.dimmed ? Tokens.materialDisabledOpacity : 1
         anchors {
             left: parent.left
             leftMargin: root.glyph !== "" ? 2 * Tokens.settingsNavTileInset + root.tileSize : Tokens.settingsRowInset
@@ -113,6 +130,7 @@ Item {
             // Centred on the row's control (Date & Time: the date beside its Set… button).
             anchors.verticalCenter: parent.verticalCenter
             visible: root.valueText !== ""
+            opacity: root.dimmed ? Tokens.materialDisabledOpacity : 1
             // The natural width comes from TextMetrics, not from this Text's implicitWidth, which changes as the text
             // wraps and looped (real session 2026-10-22, "SettingsRow.qml:72: Binding loop detected for property width").
             width: visible ? Math.min(Math.ceil(valueMetrics.advanceWidth), root.width - Tokens.settingsGroupLabelWidth - 3 * Tokens.spacingLg) : 0

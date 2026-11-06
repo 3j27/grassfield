@@ -34,9 +34,8 @@ ScrollPage {
         text: qsTr("No apps in the Store open “%1” documents.").arg(root.description)
         wrapMode: Text.Wrap
         color: Appearance.windowSecondary
-        font.family: Appearance.fontFamilyFor(Tokens.storeEmptyTextSize)
-        font.pixelSize: Tokens.storeEmptyTextSize
-        font.weight: Tokens.typographyMenuBoldWeight
+        font.family: Appearance.fontFamily
+        font.pixelSize: Tokens.typographyBodySize
         Accessible.role: Accessible.AlertMessage
         Accessible.name: text
     }

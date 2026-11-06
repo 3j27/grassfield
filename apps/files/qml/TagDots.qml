@@ -9,6 +9,9 @@ import "TagColors.js" as TagColors
 // `colors`: palette indices (role tagColors).
 Row {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     property var colors: []
     property int size: Tokens.filesTagDotSize
@@ -51,7 +54,7 @@ Row {
 
             Rectangle {
                 anchors.fill: parent
-                anchors.margins: -Tokens.appsBorderWidth
+                anchors.margins: -root.hairline
                 radius: width / 2
                 color: root.ringColor
             }
@@ -60,7 +63,7 @@ Row {
                 anchors.fill: parent
                 radius: width / 2
                 color: dot.fill
-                border.width: Tokens.appsBorderWidth
+                border.width: root.hairline
                 border.color: Qt.darker(dot.fill, Tokens.filesTagDotOutlineDarker)
             }
         }

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
 import Grassfield.Ui
@@ -333,9 +334,13 @@ Variants {
                 return Popups.anchorY;
             }
 
+            // On whole device pixels (UI audit 2026-11-05 U36: centring on an anchor and the dialog raise put popups on half
+            // pixels at 1.25, their text and rims soft).
+            readonly property real dpr: Math.max(1, Screen.devicePixelRatio)
+
             active: win.open
-            x: Math.max(margin, Math.min(win.width - width - margin, wantedX))
-            y: Math.max(0, Math.min(win.height - height - margin, wantedY))
+            x: Math.round(Math.max(margin, Math.min(win.width - width - margin, wantedX)) * dpr) / dpr
+            y: Math.round(Math.max(0, Math.min(win.height - height - margin, wantedY)) * dpr) / dpr
             opacity: item ? 1 : 0
 
             // Menus and the menu bar's popovers appear at once (macOS: no motion on a frequent interaction, audit F6, C-23);

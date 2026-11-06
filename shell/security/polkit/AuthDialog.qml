@@ -381,6 +381,8 @@ FocusScope {
                 onSubmitted: password => root.model.submit(password)
             }
 
+            // The lock's shake (LockView.qml): four eased legs, the third half as wide (UI audit 2026-11-05 U22). Display only:
+            // nothing waits for it (onFailed restores the focus at once).
             SequentialAnimation {
                 id: shakeAnimation
 
@@ -391,18 +393,28 @@ FocusScope {
                     property: "x"
                     to: -Tokens.lockShakeDistance
                     duration: shakeAnimation.leg / 2
+                    easing.type: Easing.OutQuad
                 }
                 NumberAnimation {
                     target: field
                     property: "x"
                     to: Tokens.lockShakeDistance
                     duration: shakeAnimation.leg
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    target: field
+                    property: "x"
+                    to: -Tokens.lockShakeDistance / 2
+                    duration: shakeAnimation.leg
+                    easing.type: Easing.InOutQuad
                 }
                 NumberAnimation {
                     target: field
                     property: "x"
                     to: 0
                     duration: shakeAnimation.leg / 2
+                    easing.type: Easing.OutQuad
                 }
             }
         }

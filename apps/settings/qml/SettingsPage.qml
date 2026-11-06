@@ -15,6 +15,8 @@ Flickable {
     contentHeight: column.y + column.height + Tokens.settingsContentMargin
     clip: true
     boundsBehavior: Flickable.StopAtBounds
+    // The pane's overlay scroll bar, shown while it scrolls or under the pointer (macOS 27; UI audit 2026-11-05 U30).
+    ScrollBar.vertical: ScrollBar {}
     Accessible.role: Accessible.Pane
     Accessible.name: root.title
 

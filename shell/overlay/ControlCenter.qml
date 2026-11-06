@@ -328,15 +328,17 @@ FocusScope {
                 height: Tokens.quicksettingsSliderModuleHeight
 
                 ModuleTitle {
+                    id: displayTitle
                     text: qsTr("Display")
                 }
 
                 // Night Shift (macOS: in the Display module): warmer colours, grassfield-nightshift. Hidden without hyprsunset.
+                // On the Display title's line (LOW, UI audit 2026-11-05: it sat at the module's top, off that line).
                 Row {
                     visible: NightShift.available
                     anchors.right: parent.right
                     anchors.rightMargin: root.pad
-                    y: Tokens.spacingXs
+                    anchors.verticalCenter: displayTitle.verticalCenter
                     spacing: Tokens.spacingSm
 
                     Label {

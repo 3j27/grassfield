@@ -365,7 +365,8 @@ TestCase {
     function test_progressBar() {
         fuzzyCompare(bar.visualPosition, 0.5, 1e-9);
         bar.value = 10;
-        fuzzyCompare(bar.contentItem.children[0].width, bar.width, 1);
+        // The fill grows to the new value (Behavior on width, UI audit 2026-11-05 LOW).
+        tryVerify(() => Math.abs(bar.contentItem.children[0].width - bar.width) <= 1, 1000, "the fill reaches the new value");
         compare(bar.height, Tokens.controlProgressHeight);
         compare(bar.Accessible.name, "Copy");
         bar.indeterminate = true;
@@ -460,6 +461,16 @@ TestCase {
         sheet.open();
         keyClick(Qt.Key_Return);
         compare([accepted, canceled], [1, 1]);
+        // A destructive sheet: Return still confirms, and the confirm button is the visible default, drawn red (UI audit
+        // 2026-11-05 U20); Esc cancels.
+        sheet.destructive = true;
+        const ok = buttons.find(b => b.text === "OK");
+        compare(ok.primary, true, "the destructive confirm is the visible default");
+        verify(Qt.colorEqual(ok.background.color, Appearance.colors.destructive), "drawn as the red default");
+        sheet.open();
+        keyClick(Qt.Key_Escape);
+        compare([accepted, canceled], [1, 2]);
+        sheet.destructive = false;
         sheet.accepted.disconnect(onAccepted);
         sheet.canceled.disconnect(onCanceled);
     }

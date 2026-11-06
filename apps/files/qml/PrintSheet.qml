@@ -18,6 +18,9 @@ import Grassfield.Ui
 // - A sheet that gets the keyboard late takes keys only after a click in it (the panels' rule, FilePanel.qml).
 Window {
     id: sheetItem
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     // Print (apps/portal/src/print.h).
     required property var host
@@ -447,7 +450,7 @@ Window {
                     width: pageImage.paintedWidth
                     height: pageImage.paintedHeight
                     color: "transparent"
-                    border.width: Tokens.appsBorderWidth
+                    border.width: sheetItem.hairline
                     border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                 }
 
@@ -775,7 +778,7 @@ Window {
 
                         Rectangle {
                             width: parent.width
-                            height: Tokens.appsBorderWidth
+                            height: sheetItem.hairline
                             color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
                         }
                         Text {
@@ -846,7 +849,7 @@ Window {
 
             Rectangle {
                 width: parent.width
-                height: Tokens.appsBorderWidth
+                height: sheetItem.hairline
                 color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
             }
 

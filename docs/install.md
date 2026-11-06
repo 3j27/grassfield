@@ -4,7 +4,7 @@ PUBLISHED, BETA ONLY (ADR-0043 h, owner decisions of 2026-11-04 and 2026-11-05).
 https://packages.grassfield.site with signing key E4921A382C349308BAA50D2F44C31B5D862EBEFA. Since 2026-11-05 the official
 site's Download page gives this installation (commands, requirements, the key's fingerprint and the script's checksum, an
 independent copy of the host's .sha256); the site stays noindex and the legal review stays mandatory before any public
-announcement. The only channel is beta (1.0.0-rc3; the script installs from it by default and refuses `--channel stable`
+announcement. The only channel is beta (its latest release candidate; the script installs from it by default and refuses `--channel stable`
 while stable is empty). The checksum below is for the script rendered from the current `repository.conf` and `VERSION`
 (`just render-install`; recompute it with `sha256sum` after any change to the template, the conf or VERSION, and update the
 site's copy with it). Publié en bêta : la page Télécharger du site donne l'installation depuis le 2026-11-05 ; le site reste

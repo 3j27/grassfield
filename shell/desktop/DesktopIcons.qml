@@ -196,6 +196,7 @@ Scope {
                 files: desktopFiles
                 iconsHere: win.iconsHere
                 keysActive: Focus.keysActive(win.kb)
+                isKey: win.holding || win.armed
                 fileKeyActions: Focus.fileKeyActions(win.policy) && win.iconsHere
                 onFocusEvent: event => win.feed(event)
             }

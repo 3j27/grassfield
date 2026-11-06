@@ -340,6 +340,18 @@ TestCase {
         compare(Machine.clockFormat("HH:mm"), "H:mm");
     }
 
+    // UI audit 2026-11-05 U24: the month first where the region writes it first, else the pattern as translated.
+    function test_datePattern() {
+        compare(Machine.datePattern("dddd d MMMM", "M/d/yy"), "dddd, MMMM d");
+        compare(Machine.datePattern("dddd d MMMM", "dd/MM/yyyy"), "dddd d MMMM");
+        compare(Machine.datePattern("dddd d MMMM", "yyyy-MM-dd"), "dddd, MMMM d");
+        compare(Machine.datePattern("dddd d MMMM", "'d' M/d"), "dddd, MMMM d");
+        compare(Machine.datePattern("dddd d MMMM", ""), "dddd d MMMM");
+        compare(Machine.datePattern("dddd d MMMM", undefined), "dddd d MMMM");
+        // A translated pattern of another shape is left alone.
+        compare(Machine.datePattern("dddd, d. MMMM", "M/d/yy"), "dddd, d. MMMM");
+    }
+
     // Lock.currentlySecure() (Omarchy 4.0.6 port): only locked/authenticating hold a lock; anything else waits.
     function test_isHolding() {
         verify(Machine.isHolding("locked"));

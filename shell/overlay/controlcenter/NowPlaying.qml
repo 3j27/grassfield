@@ -1,4 +1,6 @@
+pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Grassfield.Ui
 import qs.services
 import qs.overlay.controlcenter
@@ -15,16 +17,26 @@ Module {
     Accessible.role: Accessible.Grouping
     Accessible.name: qsTr("Now Playing")
 
-    Rectangle {
+    // A cover art's corner, as macOS 27's Control Center (ADR-0039 step 13, G5): a real mask, as the Overview's thumbnails
+    // (UI audit 2026-11-05 U3: clip on a Rectangle clips to its bounding box, the corners stayed square).
+    Item {
         id: art
         x: root.pad
         y: root.pad
         width: Tokens.panelCcArtSize
         height: width
-        // A cover art's corner, as macOS 27's Control Center (ADR-0039 step 13, G5).
-        radius: Tokens.radiusArtwork
-        color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
-        clip: true
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: artMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Appearance.withAlpha(Appearance.colors.fill, Tokens.materialFillOpacity)
+        }
 
         Image {
             anchors.fill: parent
@@ -34,6 +46,15 @@ Module {
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
         }
+    }
+
+    Rectangle {
+        id: artMask
+        width: art.width
+        height: art.height
+        radius: Tokens.radiusArtwork
+        visible: false
+        layer.enabled: true
     }
 
     // macOS: the artwork and the title open the app that plays; the panel closes.
@@ -106,6 +127,14 @@ Module {
                         Media.previous();
                 }
 
+                // Pressed: the shared pressed fill on a disk behind the glyph (LOW, UI audit 2026-11-05).
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: Appearance.withAlpha(Appearance.colors.hover, Tokens.controlPressedOpacity)
+                    visible: press.pressed
+                }
+
                 Icon {
                     anchors.centerIn: parent
                     size: Tokens.menuIconSize
@@ -113,6 +142,7 @@ Module {
                 }
 
                 MouseArea {
+                    id: press
                     anchors.fill: parent
                     cursorShape: Qt.ArrowCursor
                     onClicked: {

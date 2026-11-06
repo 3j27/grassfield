@@ -3707,6 +3707,14 @@
         <source>Columns</source>
         <translation>Colonnes</translation>
     </message>
+    <message>
+        <source>Searching…</source>
+        <translation>Recherche…</translation>
+    </message>
+    <message>
+        <source>Loading…</source>
+        <translation>Chargement…</translation>
+    </message>
 </context>
 <context>
     <name>ConfigStore</name>
@@ -11794,6 +11802,10 @@
         <source>dddd d MMMM</source>
         <translation>dddd d MMMM</translation>
     </message>
+    <message>
+        <source>dddd, MMMM d</source>
+        <translation>dddd d MMMM</translation>
+    </message>
 </context>
 <context>
     <name>ScopeBar</name>
@@ -16369,10 +16381,6 @@
     <message>
         <source>Search in document</source>
         <translation>Rechercher dans le document</translation>
-    </message>
-    <message>
-        <source>Search</source>
-        <translation>Recherche</translation>
     </message>
     <message>
         <source>%1 found</source>

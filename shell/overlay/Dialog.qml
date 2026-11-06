@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Grassfield.Ui
 
 // Dialog frame on the material, in one of two shapes (measured on macOS 27, ADR-0039 step 10):
@@ -100,42 +101,75 @@ FocusScope {
         x: 0
         y: root.height - Tokens.panelSheetFooterHeight
         width: root.width
-        height: 1
+        // One device pixel at every scale (UI audit 2026-11-05 U37).
+        height: 1 / Math.max(1, Screen.devicePixelRatio)
         color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
     }
 
     // Buttons. Alert: capsules of one width filling the row (two of them are half each), never narrower than the widest
-    // label. Sheet: 24-pt sheet buttons of one width (a pair is equal width), right-aligned in the footer.
-    Row {
+    // label; when they do not fit side by side (long labels, French), they stack full width, the default (last) one on
+    // top, as macOS stacks an alert's buttons (UI audit 2026-11-05 U2). Sheet: 24-pt sheet buttons of one width (a pair is
+    // equal width), right-aligned in the footer. Laid out by hand (not a positioner): a stack reverses the order.
+    Item {
         id: buttonRow
+
+        readonly property real spacing: Tokens.controlAlertButtonGap
+        property bool stacked: false
+
         x: root.sheet ? root.width - root.pad - width : root.pad
         y: root.sheet ? root.height - Tokens.panelSheetFooterHeight + (Tokens.panelSheetFooterHeight - height) / 2 : root.pad + column.implicitHeight + Tokens.spacingLg
-        spacing: Tokens.controlAlertButtonGap
+        width: implicitWidth
+        height: implicitHeight
 
         function equalize(): void {
             const kids = buttonRow.children;
+            const shown = [];
             let widest = 0;
-            let count = 0;
             for (let i = 0; i < kids.length; i++) {
                 if (!("capsule" in kids[i]))
                     continue;
                 kids[i]["capsule"] = !root.sheet;
                 kids[i]["push"] = false;
                 kids[i]["sheet"] = root.sheet;
+                if (!kids[i].visible)
+                    continue;
                 widest = Math.max(widest, kids[i].implicitWidth);
-                count++;
+                shown.push(kids[i]);
             }
-            if (count === 0)
+            const count = shown.length;
+            const room = root.width - 2 * root.pad;
+            buttonRow.stacked = !root.sheet && count > 1 && count * widest + (count - 1) * buttonRow.spacing > room;
+            if (buttonRow.stacked) {
+                let y = 0;
+                for (let i = count - 1; i >= 0; i--) {
+                    shown[i].width = room;
+                    shown[i].x = 0;
+                    shown[i].y = y;
+                    y += shown[i].height + buttonRow.spacing;
+                }
+                buttonRow.implicitWidth = room;
+                buttonRow.implicitHeight = y - buttonRow.spacing;
                 return;
-            const fill = root.sheet ? 0 : (root.width - 2 * root.pad - (count - 1) * buttonRow.spacing) / count;
-            const wanted = Math.max(widest, fill);
-            for (let i = 0; i < kids.length; i++) {
-                if ("capsule" in kids[i])
-                    kids[i].width = wanted;
             }
+            const fill = root.sheet || count === 0 ? 0 : (room - (count - 1) * buttonRow.spacing) / count;
+            const wanted = Math.max(widest, fill);
+            let x = 0;
+            let tallest = 0;
+            for (let i = 0; i < count; i++) {
+                shown[i].width = wanted;
+                shown[i].x = x;
+                shown[i].y = 0;
+                x += wanted + buttonRow.spacing;
+                tallest = Math.max(tallest, shown[i].height);
+            }
+            buttonRow.implicitWidth = count > 0 ? x - buttonRow.spacing : 0;
+            buttonRow.implicitHeight = tallest;
         }
 
         Component.onCompleted: equalize()
         onChildrenChanged: Qt.callLater(equalize)
     }
+
+    onWidthChanged: Qt.callLater(buttonRow.equalize)
+    onSheetChanged: Qt.callLater(buttonRow.equalize)
 }

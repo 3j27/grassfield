@@ -13,12 +13,15 @@ T.ScrollBar {
     readonly property bool standalone: root.flickable !== null
     readonly property real thumbMin: Tokens.controlScrollbarMinLength
 
-    implicitWidth: orientation === Qt.Vertical ? Tokens.controlScrollbarWidth + Tokens.spacingXs : 0
-    implicitHeight: orientation === Qt.Horizontal ? Tokens.controlScrollbarWidth + Tokens.spacingXs : 0
+    // The thumb (scrollbarWidth) sits scrollbarInset inside its lane, clear of the view's edge and of its corners (macOS 27;
+    // UI audit 2026-11-05 U31: it filled the 10-pt lane, flush with the edge).
+    implicitWidth: orientation === Qt.Vertical ? Tokens.controlScrollbarWidth + 2 * Tokens.controlScrollbarInset : 0
+    implicitHeight: orientation === Qt.Horizontal ? Tokens.controlScrollbarWidth + 2 * Tokens.controlScrollbarInset : 0
+    padding: Tokens.controlScrollbarInset
     visible: standalone ? (root.flickable.visibleArea.heightRatio < 1 && root.flickable.contentHeight > 0) : policy !== T.ScrollBar.AlwaysOff && size < 1
     hoverEnabled: true
     focusPolicy: Qt.NoFocus
-    minimumSize: root.thumbMin / Math.max(1, orientation === Qt.Vertical ? height : width)
+    minimumSize: root.thumbMin / Math.max(1, orientation === Qt.Vertical ? availableHeight : availableWidth)
     Accessible.role: Accessible.ScrollBar
     Accessible.name: qsTr("Scroll bar")
 

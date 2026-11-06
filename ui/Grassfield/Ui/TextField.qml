@@ -25,7 +25,10 @@ T.TextField {
     // The selection survives the global menu taking the keyboard (Edit > Cut/Copy act on it).
     persistentSelection: true
     color: Appearance.colors.text
-    placeholderTextColor: Appearance.colors.textSecondary
+    // In an app window the placeholder is a lighter grey than the typed text (macOS), which still holds 4.5:1 on every field
+    // fill there (colors.fieldPlaceholder, UI audit 2026-11-05 U4); on glass it keeps the material's secondary text, and
+    // Increase Contrast makes it the text colour (textSecondary then is).
+    placeholderTextColor: Appearance.windowSurface && !Appearance.increaseContrast ? Appearance.colors.fieldPlaceholder : Appearance.colors.textSecondary
     selectionColor: Appearance.highlight
     selectedTextColor: Appearance.highlightText
     font.family: Appearance.fontFamily
@@ -33,7 +36,7 @@ T.TextField {
     // Read-only while hidden or disabled: the accessibility text write (SetTextContents, InsertText) is refused with the keys. A
     // field that sets readOnly itself replaces this default (a read-only field is read-only whatever its state).
     readOnly: !root.visible || !root.enabled
-    opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+    opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
     Accessible.role: Accessible.EditableText
     Accessible.name: root.accessibleName !== "" ? root.accessibleName : root.placeholderText
 

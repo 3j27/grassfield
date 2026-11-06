@@ -140,7 +140,8 @@ FocusScope {
                     visible: row.modelData.value !== ""
                     width: parent.width
                     textFormat: Text.PlainText
-                    wrapMode: Text.WrapAnywhere
+                    // At word boundaries, a word wider than the card anywhere (UI audit 2026-11-05, LOW: it broke titles mid-word).
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     maximumLineCount: 3
                     elide: Text.ElideRight
                     text: row.modelData.value

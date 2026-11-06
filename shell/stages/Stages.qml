@@ -266,10 +266,13 @@ Scope {
                     Accessible.description: tile.count === 1 ? qsTr("1 window") : qsTr("%1 windows").arg(tile.count)
                     Accessible.onPressAction: StagesLink.send(Layout.clickRequest(win.monitorState, tile.index, false))
 
-                    // Hover and drop-target outline: the thumbnail itself is the compositor's, so only a ring is drawn.
+                    // Hover and drop-target outline: the thumbnail itself is the compositor's, so only a ring is drawn, outside
+                    // the tile and clear of it by the Overview's gap (UI audit 2026-11-05, LOW: one ring model for the Overview's
+                    // windows and Desktops and for Stages).
                     Rectangle {
                         anchors.fill: parent
-                        radius: Tokens.stagesRingRadius
+                        anchors.margins: -Tokens.stagesRingWidth - Tokens.stagesRingGap
+                        radius: Tokens.stagesRingRadius + Tokens.stagesRingWidth + Tokens.stagesRingGap
                         color: "transparent"
                         border.width: Tokens.stagesRingWidth
                         border.color: tile.dropTarget ? Appearance.colors.accent : Appearance.focusRingColor
@@ -337,8 +340,14 @@ Scope {
                 }
             }
 
-            // The dragged tile's badge follows the pointer inside the surface (the thumbnail stays where the plugin draws it).
+            // The dragged tile's badge follows the pointer inside the surface (the thumbnail stays where the plugin draws it), with
+            // the dragged stage's app icon on it (it was an empty disk; UI audit 2026-11-05, LOW).
             Material {
+                id: ghost
+
+                readonly property var apps: Layout.appIds(StagesState.stageAtSlot(win.monitorState, win.dragSlot), a => StagesLink.appIdOf(a, Compositor.topologyRevision))
+                readonly property var entry: apps.length > 0 ? Apps.lookup(apps[0]) : null
+
                 glassClass: "controls"
                 visible: win.dragSlot >= 0
                 x: win.dragPoint.x - width / 2
@@ -349,6 +358,13 @@ Scope {
                 shadowEnabled: false
                 opacity: Tokens.stagesDragOpacity
                 enabled: false
+
+                TintedIcon {
+                    anchors.centerIn: parent
+                    size: Tokens.stagesBadgeIconSize
+                    source: ThemeIcons.appIcon(ghost.entry ? ghost.entry.icon : "", "application-x-executable")
+                    asynchronous: true
+                }
             }
         }
     }

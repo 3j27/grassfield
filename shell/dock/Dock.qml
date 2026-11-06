@@ -2037,13 +2037,15 @@ Scope {
                                 }
 
                                 // Progress an application set on its tile (LauncherEntry): a thin bar near the bottom of the icon, like
-                                // macOS' progress on a Dock tile. It hops with the icon.
+                                // macOS' progress on a Dock tile. It hops with the icon, the way the icon hops (away from the screen
+                                // edge: sideways on a side Dock; it rose on every edge, UI audit 2026-11-05 LOW).
                                 Rectangle {
                                     id: progressTrack
                                     objectName: "dockProgress"
                                     visible: tile.progress >= 0
                                     transform: Translate {
-                                        y: -appIcon.lift
+                                        x: win.outDir.x * appIcon.lift
+                                        y: win.outDir.y * appIcon.lift
                                     }
                                     height: Tokens.dockProgressHeight
                                     radius: height / 2
@@ -2064,21 +2066,22 @@ Scope {
                                 }
 
                                 // Notification badge (counts from the notification history). Not a child of the icon: the press-dim layer
-                                // would clip the part that overhangs the icon. It hops with the icon.
+                                // would clip the part that overhangs the icon. It hops with the icon, and grows with it under
+                                // magnification (macOS; it kept its size on a magnified icon, UI audit 2026-11-05 LOW).
                                 Rectangle {
                                     visible: tile.badge > 0
                                     transform: Translate {
                                         x: win.outDir.x * appIcon.lift
                                         y: win.outDir.y * appIcon.lift
                                     }
-                                    height: win.dockMetrics.badgeSize
-                                    width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm)
+                                    height: win.dockMetrics.badgeSize * tile.tileScale
+                                    width: Math.max(height, badgeLabel.implicitWidth + Tokens.spacingSm * tile.tileScale)
                                     radius: height / 2
                                     color: Appearance.colors.destructive
                                     anchors.right: appIcon.right
                                     anchors.top: appIcon.top
-                                    anchors.rightMargin: -Tokens.dockBadgeOverhang
-                                    anchors.topMargin: -Tokens.dockBadgeOverhang
+                                    anchors.rightMargin: -Tokens.dockBadgeOverhang * tile.tileScale
+                                    anchors.topMargin: -Tokens.dockBadgeOverhang * tile.tileScale
 
                                     Text {
                                         id: badgeLabel
@@ -2087,7 +2090,7 @@ Scope {
                                         text: DockModel.badgeText(tile.badge)
                                         color: Appearance.colors.destructiveText
                                         font.family: Appearance.fontFamily
-                                        font.pixelSize: Tokens.typographyCaptionSize * win.dockMetrics.badgeScale
+                                        font.pixelSize: Tokens.typographyCaptionSize * win.dockMetrics.badgeScale * tile.tileScale
                                         font.weight: Tokens.typographyMenuBoldWeight
                                     }
                                 }

@@ -1,7 +1,8 @@
 import QtQuick
 import QtQuick.Templates as T
 
-// Progress bar (QtQuick.Templates ProgressBar): a pill track with an accent fill, `progressHeight` thick. Determinate
+// Progress bar (QtQuick.Templates ProgressBar): a pill track with a fill in the selection colour (the fill of every "on"
+// control: one green in both appearances; UI audit 2026-11-05, LOW), `progressHeight` thick. Determinate
 // from `from` to `to`; `indeterminate` sweeps a short fill back and forth (a still half-width fill with Reduce Motion).
 T.ProgressBar {
     id: root
@@ -28,12 +29,23 @@ T.ProgressBar {
         Rectangle {
             id: fill
             readonly property real sweep: root.width / 3
-            width: root.indeterminate ? fill.sweep : root.visualPosition * parent.width
+            // Never narrower than it is tall: a sliver of a pill drew an oval blob. It grows smoothly to a new value (macOS).
+            visible: root.indeterminate || root.visualPosition > 0
+            width: root.indeterminate ? fill.sweep : Math.max(parent.height, root.visualPosition * parent.width)
             height: parent.height
             radius: height / 2
-            color: Appearance.colors.accent
+            color: Appearance.colors.selection
+
+            Behavior on width {
+                enabled: !root.indeterminate && !Appearance.reduceMotion
+                NumberAnimation {
+                    duration: Appearance.duration(Tokens.motionNormal)
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.curve
+                }
+            }
             x: root.indeterminate && Appearance.reduceMotion ? (parent.width - width) / 2 : 0
-            opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+            opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
 
             SequentialAnimation on x {
                 running: root.sweeping

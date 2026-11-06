@@ -1,17 +1,24 @@
 import QtQuick
 import QtQuick.Templates as T
 
-// Radio button (QtQuick.Templates RadioButton): a 14 px disc, accent with a centre dot when checked, caption on its
+// Radio button (QtQuick.Templates RadioButton): a disc as big as a check box (control.checkBoxSize, its caption as far: one size
+// for both, UI audit 2026-11-05 LOW), accent with a centre dot when checked, caption on its
 // right. Siblings under one parent are exclusive (autoExclusive, as the template); a checked one is not unchecked by a click.
 T.RadioButton {
     id: root
 
     property string accessibleName: ""
+    // Checked: the accent only while the window looks key, inside an app window (Appearance.accentShown, UI audit 2026-11-05 U17).
+    readonly property bool keyLook: Appearance.accentShown(root.Window.window, root.Window.active)
+    // Not key, a checked radio button keeps its plain look and its dot takes the text colour (macOS 27).
+    readonly property bool accentFill: root.checked && root.keyLook
 
     // Whole pixels, so that the next control in a row stays on the pixel grid.
     implicitWidth: Math.ceil(Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding))
     implicitHeight: Math.max(Tokens.controlButtonHeight, implicitContentHeight + topPadding + bottomPadding)
-    leftPadding: Tokens.controlCheckSize + Tokens.spacingSm
+    // Whole device pixels, as CheckBox: the measured gap (5.5) would start the label between two pixels at scale 1.
+    readonly property real pixelRatio: Math.max(1, Screen.devicePixelRatio)
+    leftPadding: Math.round((Tokens.controlCheckBoxSize + Tokens.controlCheckBoxGap) * root.pixelRatio) / root.pixelRatio
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.RadioButton
@@ -60,13 +67,13 @@ T.RadioButton {
     indicator: Rectangle {
         x: 0
         y: (root.height - height) / 2
-        width: Tokens.controlCheckSize
-        height: Tokens.controlCheckSize
+        width: Tokens.controlCheckBoxSize
+        height: Tokens.controlCheckBoxSize
         radius: width / 2
-        color: root.checked ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
-        border.width: Appearance.increaseContrast || !root.checked ? Tokens.controlBorderWidth : 0
+        color: root.accentFill ? Appearance.colors.selection : Appearance.withAlpha(Appearance.colors.fill, Appearance.fillOpacity)
+        border.width: Appearance.increaseContrast || !root.accentFill ? Tokens.controlBorderWidth : 0
         border.color: Appearance.withAlpha(Appearance.colors.materialBorder, Tokens.materialBorderOpacity)
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
 
         Behavior on color {
             ColorAnimation {
@@ -87,7 +94,7 @@ T.RadioButton {
             width: Math.round(parent.width / 3) + (parent.width - Math.round(parent.width / 3)) % 2
             height: width
             radius: width / 2
-            color: Appearance.colors.selectionText
+            color: root.accentFill ? Appearance.colors.selectionText : Appearance.colors.text
             visible: root.checked
         }
 
@@ -102,7 +109,7 @@ T.RadioButton {
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         text: root.text
-        opacity: root.enabled ? 1 : Tokens.materialDisabledOpacity
+        opacity: Appearance.dimsDisabled(root) ? Tokens.materialDisabledOpacity : 1
         color: Appearance.colors.text
         font.family: Appearance.fontFamily
         font.pixelSize: Tokens.typographyMenuSize

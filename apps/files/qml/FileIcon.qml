@@ -7,6 +7,9 @@ import "IconSource.js" as IconSource
 // symbolic-link emblem.
 Item {
     id: root
+    // A rule or frame: one point (apps.borderWidth, ADR-0039 D5) in whole device pixels, 1 px at 1.25 where 1 pt drew a soft
+    // 1.25 px (UI audit 2026-11-05 U37); 1 px at 1x and 2 px at 2x as before.
+    readonly property real hairline: Math.max(1, Math.round(Tokens.appsBorderWidth * Screen.devicePixelRatio)) / Math.max(1, Screen.devicePixelRatio)
 
     property string iconName: ""
     property string thumbnail: ""
@@ -72,10 +75,10 @@ Item {
         // Thin frame so light thumbnails stay distinct from the window background.
         Rectangle {
             anchors.centerIn: parent
-            width: thumb.paintedWidth + 2 * Tokens.appsBorderWidth
-            height: thumb.paintedHeight + 2 * Tokens.appsBorderWidth
+            width: thumb.paintedWidth + 2 * root.hairline
+            height: thumb.paintedHeight + 2 * root.hairline
             color: "transparent"
-            border.width: Tokens.appsBorderWidth
+            border.width: root.hairline
             border.color: Appearance.withAlpha(Appearance.colors.separator, Appearance.separatorOpacity)
         }
     }

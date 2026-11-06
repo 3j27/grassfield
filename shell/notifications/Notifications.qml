@@ -167,6 +167,22 @@ Singleton {
         return NotificationPrefs.actionsShown(previewShown(appName), actionsJson);
     }
 
+    // The icon tile of a notification: always the app's icon (UI audit 2026-11-05 U27, macOS); a theme icon name the app
+    // gave as its image stands in when it named no icon of its own (that is an icon, not a picture). "" for none (bell).
+    function appIconSource(image: string, appIcon: string): string {
+        const own = iconSource("", appIcon);
+        if (own !== "")
+            return own;
+        return History.imageRef(image).kind === "themed" ? iconSource(image, "") : "";
+    }
+
+    // The picture the app attached (its image data or a local file), shown as a rounded trailing thumbnail beside the
+    // text (U27); "" for none.
+    function thumbnailSource(image: string): string {
+        const kind = History.imageRef(image).kind;
+        return kind === "attached" || kind === "file" ? iconSource(image, "") : "";
+    }
+
     // Image (hint) first, then the app icon (theme name or path); "" when none resolves, so the
     // UI falls back to the bell tile without asking Qt for a missing icon. Only local files, the image data the app sent
     // and theme names are ever loaded (History.imageRef, GF-114): never a URL.

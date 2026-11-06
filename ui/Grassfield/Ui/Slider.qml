@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Templates as T
 
 // Horizontal slider with a pill track and a pill knob, on a QtQuick.Templates Control: the host owns the value. value is
@@ -13,9 +14,12 @@ T.Control {
     property real stepSize: 0.05
     property string accessibleName: ""
     // The fill: the selection colour, as a switch that is on, a checked box and a default button (ADR-0039 step 11, D-Q4).
-    property color fillColor: Appearance.colors.selection
+    // The accent only while the window looks key, inside an app window (Appearance.accentShown, UI audit 2026-11-05 U17).
+    readonly property bool keyLook: Appearance.accentShown(root.Window.window, root.Window.active)
+    // Not key: a neutral grey (Appearance.inactiveFill).
+    property color fillColor: root.keyLook ? Appearance.colors.selection : Appearance.inactiveFill
     // The white knob is outlined in the fill's mark colour where it holds under 3:1 on the fill (Accent.knobOutlined).
-    readonly property bool knobOutlined: !root.knobless && root.position > 0 && Accent.knobOutlined(String(Appearance.colors.knob), String(root.fillColor), Tokens.controlKnobMinContrast)
+    readonly property bool knobOutlined: !root.knobless && root.position > 0 && root.keyLook && Accent.knobOutlined(String(Appearance.colors.knob), String(root.fillColor), Tokens.controlKnobMinContrast)
     // Up/Down change the value too. Quick Settings turns this off: there the vertical arrows move focus between
     // modules (macOS model), and a focused slider changes with Left/Right, Home/End only.
     property bool verticalKeys: true
@@ -50,7 +54,13 @@ T.Control {
         return to > from ? root.tickValues.map(v => Math.max(0, Math.min(1, (v - from) / (to - from)))) : [];
     }
     readonly property real knobWidth: knobless ? 0 : Tokens.controlSliderKnobWidth
+    // Disabled on its own (UI audit 2026-11-05 U18): the track and the white knob stay (a faded knob would show the fill through
+    // it), the fill and the stops dim; inside a disabled container drawn dimmed, the container dims it once already
+    // (Appearance.dimsDisabled).
+    readonly property bool dimmed: Appearance.dimsDisabled(root)
     readonly property real travel: Math.max(0, width - knobWidth)
+    // Device pixels: the stop dots and the knob's hairline land on whole pixels at every scale.
+    readonly property real pixelRatio: Math.max(1, Screen.devicePixelRatio)
 
     implicitWidth: Tokens.controlSliderDefaultWidth
     implicitHeight: Tokens.controlSliderHeight
@@ -126,6 +136,7 @@ T.Control {
             height: parent.height
             radius: height / 2
             color: root.knobless ? Appearance.colors.knob : root.fillColor
+            opacity: root.dimmed ? Tokens.materialDisabledOpacity : 1
         }
 
         // Increase Contrast outlines the track, as the other controls: drawn after the fill, which would cover an outline of the
@@ -151,12 +162,14 @@ T.Control {
         delegate: Rectangle {
             id: dot
             required property real modelData
-            x: root.knobWidth / 2 + dot.modelData * root.travel - dot.width / 2
-            y: root.height / 2 + Tokens.controlSliderStopOffset - dot.height / 2
+            // On whole device pixels: a 2-pt dot at y 16.5 drew blurred (UI audit 2026-11-05, LOW).
+            x: Math.round((root.knobWidth / 2 + dot.modelData * root.travel - dot.width / 2) * root.pixelRatio) / root.pixelRatio
+            y: Math.round((root.height / 2 + Tokens.controlSliderStopOffset - dot.height / 2) * root.pixelRatio) / root.pixelRatio
             width: Tokens.controlSliderStopSize
             height: dot.width
             radius: dot.width / 2
             color: Appearance.withAlpha(Appearance.colors.text, Tokens.controlSliderStopOpacity)
+            opacity: root.dimmed ? Tokens.materialDisabledOpacity : 1
         }
     }
 
@@ -168,9 +181,22 @@ T.Control {
         radius: height / 2
         x: root.position * root.travel
         anchors.verticalCenter: parent.verticalCenter
-        color: Appearance.colors.knob
-        border.width: Tokens.controlBorderWidth
+        // Pressed, the knob darkens a step while it is held (macOS): the shadow colour (black in both appearances) over it.
+        color: dragArea.pressed && root.enabled ? Qt.tint(Appearance.colors.knob, Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialHoverOpacity)) : Appearance.colors.knob
+        // The switch knob's look (UI audit 2026-11-05, LOW: a ring here, a soft shadow there): a soft drop shadow and a
+        // device-pixel edge in the shadow colour; the full outline where white holds under 3:1 on the fill, or with Increase
+        // Contrast.
+        border.width: root.knobOutlined || Appearance.increaseContrast ? Tokens.controlBorderWidth : 1 / root.pixelRatio
         border.color: root.knobOutlined ? Appearance.colors.selectionText : Appearance.withAlpha(Appearance.colors.shadow, Tokens.materialBorderOpacity)
+
+        RectangularShadow {
+            anchors.fill: parent
+            z: -1
+            radius: parent.radius
+            blur: Tokens.controlKnobShadowBlur
+            offset: Qt.vector2d(0, Tokens.controlKnobShadowOffsetY)
+            color: Appearance.withAlpha(Appearance.colors.shadow, Tokens.controlKnobShadowOpacity)
+        }
 
         FocusRing {
             shapeRadius: parent.radius
@@ -179,6 +205,7 @@ T.Control {
     }
 
     MouseArea {
+        id: dragArea
         anchors.fill: parent
         cursorShape: Qt.ArrowCursor
         function at(mouseX: real): void {

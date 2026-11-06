@@ -20,7 +20,10 @@ Item {
     readonly property real tailHeight: root.tail && !root.sideTail ? Tokens.controlTooltipTailHeight : 0
     readonly property real tailExtent: root.sideTail ? Tokens.controlTooltipTailHeight : 0
 
-    implicitWidth: label.implicitWidth + 2 * Tokens.controlTooltipPaddingX + root.tailExtent
+    // Whole device pixels for the capsule, so that a tail meets its edge exactly (no gap, no overlap).
+    readonly property real pixelRatio: Math.max(1, Screen.devicePixelRatio)
+
+    implicitWidth: capsule.width + root.tailExtent
     implicitHeight: capsule.height + root.tailHeight
     width: implicitWidth
     height: implicitHeight
@@ -53,8 +56,8 @@ Item {
     Item {
         id: capsule
         x: root.sideTail && root.tailSide === "left" ? root.tailExtent : 0
-        width: label.implicitWidth + 2 * Tokens.controlTooltipPaddingX
-        height: label.implicitHeight + 2 * Tokens.controlTooltipPaddingY
+        width: Math.ceil((label.implicitWidth + 2 * Tokens.controlTooltipPaddingX) * root.pixelRatio) / root.pixelRatio
+        height: Math.ceil((label.implicitHeight + 2 * Tokens.controlTooltipPaddingY) * root.pixelRatio) / root.pixelRatio
 
         // A text surface: the menus' class (ADR-0039 step 22).
         Material {
@@ -64,6 +67,8 @@ Item {
             radius: height / 2
             highlightEnabled: false
             shadowEnabled: false
+            // With a tail, capsule and tail are one silhouette: an edge round the capsule alone would cross the joint.
+            borderEnabled: !root.tail
         }
 
         Text {
@@ -79,13 +84,14 @@ Item {
         }
     }
 
-    // Tail: a downward triangle in the material tint, overlapping the capsule by a pixel so that no seam shows.
+    // Tail: a downward triangle in the capsule's glass, from the capsule's edge (a device-pixel line, so no seam shows): it
+    // does not overlap the translucent capsule, whose tint would show twice there (UI audit 2026-11-05, LOW).
     Shape {
         visible: root.tail && !root.sideTail
-        x: (root.width - Tokens.controlTooltipTailWidth) / 2
-        y: capsule.height - 1
+        x: Math.round((root.width - Tokens.controlTooltipTailWidth) / 2 * root.pixelRatio) / root.pixelRatio
+        y: capsule.height
         width: Tokens.controlTooltipTailWidth
-        height: Tokens.controlTooltipTailHeight + 1
+        height: Tokens.controlTooltipTailHeight
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
@@ -99,7 +105,7 @@ Item {
             }
             PathLine {
                 x: Tokens.controlTooltipTailWidth / 2
-                y: Tokens.controlTooltipTailHeight + 1
+                y: Tokens.controlTooltipTailHeight
             }
             PathLine {
                 x: 0
@@ -108,30 +114,30 @@ Item {
         }
     }
 
-    // Side tail: a triangle pointing left or right, overlapping the capsule by a pixel.
+    // Side tail: a triangle pointing left or right, from the capsule's edge, as the bottom one.
     Shape {
         visible: root.sideTail
-        x: root.tailSide === "left" ? 0 : capsule.width - 1
-        y: (capsule.height - Tokens.controlTooltipTailWidth) / 2
-        width: Tokens.controlTooltipTailHeight + 1
+        x: root.tailSide === "left" ? 0 : capsule.width
+        y: Math.round((capsule.height - Tokens.controlTooltipTailWidth) / 2 * root.pixelRatio) / root.pixelRatio
+        width: Tokens.controlTooltipTailHeight
         height: Tokens.controlTooltipTailWidth
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
             strokeWidth: 0
             fillColor: glass.fillColor // the capsule's own glass (ADR-0039 step 22)
-            startX: root.tailSide === "left" ? Tokens.controlTooltipTailHeight + 1 : 0
+            startX: root.tailSide === "left" ? Tokens.controlTooltipTailHeight : 0
             startY: 0
             PathLine {
-                x: root.tailSide === "left" ? Tokens.controlTooltipTailHeight + 1 : 0
+                x: root.tailSide === "left" ? Tokens.controlTooltipTailHeight : 0
                 y: Tokens.controlTooltipTailWidth
             }
             PathLine {
-                x: root.tailSide === "left" ? 0 : Tokens.controlTooltipTailHeight + 1
+                x: root.tailSide === "left" ? 0 : Tokens.controlTooltipTailHeight
                 y: Tokens.controlTooltipTailWidth / 2
             }
             PathLine {
-                x: root.tailSide === "left" ? Tokens.controlTooltipTailHeight + 1 : 0
+                x: root.tailSide === "left" ? Tokens.controlTooltipTailHeight : 0
                 y: 0
             }
         }
