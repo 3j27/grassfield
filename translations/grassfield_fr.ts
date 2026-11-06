@@ -7057,10 +7057,6 @@
         <translation>Note</translation>
     </message>
     <message>
-        <source>Float on Top</source>
-        <translation>Toujours au premier plan</translation>
-    </message>
-    <message>
         <source>Translucent</source>
         <translation>Translucide</translation>
     </message>
