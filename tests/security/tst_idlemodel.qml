@@ -412,6 +412,38 @@ TestCase {
         verify(/if \(!sleepMonitor\.enabled \|\| !IdleModel\.autoSleepDue\(root\.autoSleepArmed, sleepMonitor\.isIdle, root\.autoSleepWaited, root\.autoSleepAsked\)\)\s*return;/.test(text));
     }
 
+    // The owner's rc6 report ("waking from sleep is very slow"). macOS: waking the computer lights its displays on the lock
+    // screen; without input they go off again after the lock screen's delay. Hyprland keeps the displays off across a suspend
+    // that started with them off (the automatic sleep always does), and the key that woke the computer is usually not delivered
+    // as input, so they stayed dark until a second input. Only a session that is locked is lit, and only when this module had
+    // turned the displays off: anything else (unknown values included) changes nothing.
+    function test_wakeAtResume() {
+        verify(IdleModel.wakeAtResume(true, true));
+        verify(!IdleModel.wakeAtResume(false, true));
+        verify(!IdleModel.wakeAtResume(true, false));
+        for (const v of [undefined, null, 1, "true", {}])
+            verify(!IdleModel.wakeAtResume(v, true) && !IdleModel.wakeAtResume(true, v), String(v));
+        // The resume is waited on a little (logind sends PrepareForSleep(false) as the outputs come back): a monotonic Timer.
+        verify(IdleModel.RESUME_WAKE_MS >= 500 && IdleModel.RESUME_WAKE_MS <= 3000, String(IdleModel.RESUME_WAKE_MS));
+    }
+
+    // Idle.qml: the resume path only starts the lock screen's display-off countdown over (its idle monitor and the unlocked one
+    // re-armed); it never locks, unlocks, releases or delays a lock, and it reads the decision afresh when the Timer fires.
+    function test_resumeLightsTheLockScreenOnly() {
+        const text = source();
+        const wake = (/function wakeAfterResume\(\): void \{([\s\S]*?)\n    \}/.exec(text) || ["", ""])[1];
+        verify(wake.length > 0, "wakeAfterResume found");
+        verify(/if \(!IdleModel\.wakeAtResume\(root\.displayOff, Lock\.locked\)\)\s*return;/.test(wake));
+        verify(/root\.rearmingInactive = true;\s*root\.rearmingLocked = true;/.test(wake));
+        verify(!/Lock\.(lock|unlock|release|requestUnlock)\(|autoSleep|systemctl|dispatch/.test(wake), "the resume path only re-arms the monitors");
+        // The lock screen's monitor is disarmed while re-arming (the displays come on), then armed again: 30 s from now.
+        verify(/enabled: Lock\.holding && root\.displayOffSeconds > 0 && !root\.rearmingLocked/.test(text));
+        // The Timer is started by the sleep inhibitor's resume, and nothing else starts it.
+        verify(/onResumed: resumeWake\.restart\(\)/.test(text));
+        compare(text.split("\n").filter(l => l.indexOf("resumeWake.restart()") >= 0).length, 1);
+        verify(/Timer \{\s*id: resumeWake\s*interval: IdleModel\.RESUME_WAKE_MS\s*onTriggered: root\.wakeAfterResume\(\)\s*\}/.test(text));
+    }
+
     function source() {
         const xhr = new XMLHttpRequest();
         xhr.open("GET", Qt.resolvedUrl("../../shell/security/idle/Idle.qml"), false);

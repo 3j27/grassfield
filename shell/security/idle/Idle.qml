@@ -247,7 +247,7 @@ Scope {
     // acquired: the displays never go dark over a session that is not locked yet.
     IdleMonitor {
         id: lockedMonitor
-        enabled: Lock.holding && root.displayOffSeconds > 0
+        enabled: Lock.holding && root.displayOffSeconds > 0 && !root.rearmingLocked
         timeout: Math.max(1, root.displayOffSeconds)
         respectInhibitors: false
         onIsIdleChanged: root.updateDisplays()
@@ -385,8 +385,38 @@ Scope {
         }
     }
 
+    // ---- A resume from sleep lights the lock screen (macOS: waking the computer lights its displays; without input they go off
+    // again after the lock screen's delay; the owner's rc6 report: "waking from sleep is very slow"). The displays stay
+    // off across a suspend that started with them off (Hyprland changes its DPMS state only on a dpms request or input; the
+    // automatic sleep always starts that way) and the key that woke the computer is
+    // usually not delivered as input: the displays stayed dark until a second input, and only then did each external display
+    // start to sync. Here the lock screen's display-off countdown starts over: its idle monitor (and the unlocked one) is
+    // re-armed, so the displays come on (updateDisplays) and go off again after displayOffSeconds without input. Display only:
+    // nothing here locks, unlocks, releases or delays a lock; only a locked session with the displays turned off by this module
+    // is lit (IdleModel.wakeAtResume, read when the Timer fires). ----
+    property bool rearmingLocked: false
+
+    function wakeAfterResume(): void {
+        if (!IdleModel.wakeAtResume(root.displayOff, Lock.locked))
+            return;
+        console.info("grassfield-idle: resumed with the displays off; lighting the lock screen");
+        root.rearmingInactive = true;
+        root.rearmingLocked = true;
+        Qt.callLater(() => {
+            root.rearmingInactive = false;
+            root.rearmingLocked = false;
+        });
+    }
+
+    Timer {
+        id: resumeWake
+        interval: IdleModel.RESUME_WAKE_MS
+        onTriggered: root.wakeAfterResume()
+    }
+
     SleepInhibitor {
         id: sleepInhibitor
+        onResumed: resumeWake.restart()
     }
 
     // Dim layer: no input region, so pointer motion reaches the compositor and counts as activity.
