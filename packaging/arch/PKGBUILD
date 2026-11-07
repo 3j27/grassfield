@@ -30,7 +30,7 @@ if [[ -n ${GRASSFIELD_PKGREL:-} && ! $GRASSFIELD_PKGREL =~ ^[1-9][0-9]*$ ]]; the
 fi
 pkgrel=${GRASSFIELD_PKGREL:-1}
 pkgdesc="Grassfield Desktop: a polished desktop session for Omarchy (built for Omarchy, based on Arch Linux)"
-arch=(x86_64)
+arch=(x86_64 aarch64)
 url="https://grassfield.invalid"
 # Grassfield's own code is MIT (ADR-0005, accepted by the owner 2026-10-18; root LICENSE, installed by every package).
 # Each package function sets its own license= array (own art CC-BY-SA-4.0, generated appmenu code LGPL-2.1-or-later,

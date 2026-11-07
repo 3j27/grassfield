@@ -14,7 +14,7 @@ noindex et la revue juridique précède toute annonce.
 
 ## English
 
-Grassfield is a desktop session for **Omarchy 4.0.6 or newer** (Arch Linux, x86_64). Installing it does not remove Omarchy: you
+Grassfield is a desktop session for **Omarchy 4.0.6 or newer** (Arch Linux, x86_64; aarch64 is accepted but experimental and no aarch64 build is published yet). Installing it does not remove Omarchy: you
 choose which one starts at login, and you can go back at any time.
 
 ### Before you start
@@ -33,7 +33,7 @@ curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh
 curl -fsSLO https://packages.grassfield.site/install/grassfield-install.sh.sha256
 sha256sum -c grassfield-install.sh.sha256 && bash grassfield-install.sh
 ```
-Checksum: `SHA256: c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2` (`grassfield-install.sh`), also published next to the script as `grassfield-install.sh.sha256`; the site and the README will carry it at the announcement (SITE.PLACEHOLDER, README.PLACEHOLDER).
+Checksum: `SHA256: ecded0faa8eed4fba6c8169c56592330b9978e1388931f02107e06e0cfbb6a04` (`grassfield-install.sh`), also published next to the script as `grassfield-install.sh.sha256`; the site and the README will carry it at the announcement (SITE.PLACEHOLDER, README.PLACEHOLDER).
 
 **What each form protects against, and what it does not**
 - *The one line* runs whatever the host serves at that moment. You rely on the TLS connection to the host and on the host
@@ -85,7 +85,7 @@ Run the install again at any time to repair or update: it never duplicates anyth
 
 ## Français
 
-Grassfield est une session de bureau pour **Omarchy 4.0.6 ou plus récent** (Arch Linux, x86_64). L'installer ne supprime pas
+Grassfield est une session de bureau pour **Omarchy 4.0.6 ou plus récent** (Arch Linux, x86_64 ; aarch64 est accepté mais expérimental et aucun build aarch64 n'est publié pour l'instant). L'installer ne supprime pas
 Omarchy : tu choisis ce qui démarre à la connexion et tu peux revenir en arrière à tout moment.
 
 ### Avant de commencer
@@ -107,7 +107,7 @@ sha256sum -c grassfield-install.sh.sha256 && bash grassfield-install.sh
 Limite connue : la seule somme publiée aujourd'hui est servie par le même hôte que le script ; elle protège d'un téléchargement
 abîmé, pas d'un hôte compromis. Une copie indépendante (site, README) viendra avec l'annonce.
 
-Somme de contrôle : `SHA256: c395efb528b93bcc0ea2f6a43d1fed8bba7ae4d364ce62bc4e79263740964df2` (`grassfield-install.sh`), aussi publiée à côté du script (`grassfield-install.sh.sha256`) ; le site et le README la porteront à l'annonce (SITE.PLACEHOLDER, README.PLACEHOLDER).
+Somme de contrôle : `SHA256: ecded0faa8eed4fba6c8169c56592330b9978e1388931f02107e06e0cfbb6a04` (`grassfield-install.sh`), aussi publiée à côté du script (`grassfield-install.sh.sha256`) ; le site et le README la porteront à l'annonce (SITE.PLACEHOLDER, README.PLACEHOLDER).
 
 **Ce que chaque forme protège, et ce qu'elle ne protège pas**
 - *La ligne unique* exécute ce que l'hôte sert à cet instant. Tu t'appuies sur la connexion TLS vers l'hôte et sur l'hôte
