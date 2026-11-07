@@ -46,7 +46,7 @@ app icons stays on the legal-review list (docs/legal/). Earlier decisions that t
 - **The session already refuses to touch dconf**: `config/hypr/session.lua:20-23` sets
   `cursor.sync_gsettings_theme = false` because dconf is "a database shared with the Omarchy session".
 - **Session environment paths.**
-  - The real session starts as `uwsm start -e -D Hyprland:Grassfield ...`
+  - The real session starts as `uwsm start -e -D Grassfield:Hyprland ...`
     (`packaging/wayland-sessions/grassfield.desktop:4`).
   - `config/hypr/grassfield/autostart.lua:5-9` hands named variables to systemd with `uwsm finalize` (the cursor
     variables, ADR-0014), then starts `grassfield-shell.service` (:21).
@@ -179,7 +179,7 @@ Quickshell's `//@ pragma IconTheme`: existence not verified for 0.3.1, and not n
    `branding/LICENSES.md`). `Name=Grassfield`, `Hidden=true` so that theme pickers in other sessions do not list it.
 2. **Qt and the shell** (Q-A). A package file `/usr/share/uwsm/env-grassfield`:
    ```sh
-   # Grassfield session only (uwsm sources env-${desktop} for XDG_CURRENT_DESKTOP=Hyprland:Grassfield).
+   # Grassfield session only (uwsm sources env-${desktop} for XDG_CURRENT_DESKTOP=Grassfield:Hyprland).
    export QT_QPA_SYSTEM_ICON_THEME=grassfield-icons
    ```
    uwsm exports it before the compositor and every user service start, and unsets it at the end of the session.

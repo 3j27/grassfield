@@ -138,7 +138,7 @@ log out, type your password at the greeter, and write down what you got.
 2. Press Ctrl+Alt+F3 and log in with your user and password.
 3. Run exactly the line of the session file:
    ```bash
-   uwsm start -e -D Hyprland:Grassfield -N Grassfield -C "Grassfield Desktop" -- start-hyprland -- --config /usr/share/grassfield/hypr/session.lua
+   uwsm start -e -D Grassfield:Hyprland -N Grassfield -C "Grassfield Desktop" -- start-hyprland -- --config /usr/share/grassfield/hypr/session.lua
    ```
 4. Back to Omarchy: Grassfield menu (leaf) > Log Out. Then either `reboot` from the TTY (autologin brings the normal
    Omarchy session back) or Ctrl+Alt+F1 or F2 for the greeter and log in (it picks the "uwsm" Hyprland session).

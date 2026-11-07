@@ -1,9 +1,9 @@
 # Grassfield session environment (ADR-0017). Installed as /usr/share/uwsm/env-grassfield.
 # uwsm sources uwsm/env-<desktop> from $XDG_CONFIG_HOME, $XDG_CONFIG_DIRS and $XDG_DATA_DIRS for each lowercased item of
-# XDG_CURRENT_DESKTOP ("Hyprland:Grassfield" for packaging/wayland-sessions/grassfield.desktop), exports the difference to
+# XDG_CURRENT_DESKTOP ("Grassfield:Hyprland" for packaging/wayland-sessions/grassfield.desktop), exports the difference to
 # the systemd user manager and the D-Bus activation environment, and unsets it again at the end of the session.
 # The Omarchy session never sources this file: its XDG_CURRENT_DESKTOP has no Grassfield item.
-# Note: "Hyprland:Grassfield" is the value only while uwsm prepares the session. Omarchy's envs.lua (loaded by
+# Note: "Grassfield:Hyprland" is set by UWSM from the session entry. Omarchy's envs.lua (loaded by
 # config/hypr/grassfield/omarchy.lua) sets XDG_CURRENT_DESKTOP=Hyprland in the compositor; config/hypr/session.lua then makes it
 # "Grassfield:Hyprland" (since Omarchy 4.5.0: the frontend of the portals must read the session's routing before the user's
 # hyprland-portals.conf, and a configuration is looked up item by item), and `uwsm finalize` exports that value. Hyprland stays
