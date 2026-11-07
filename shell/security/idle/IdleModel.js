@@ -52,9 +52,11 @@ var ACQUIRE_DISPLAYS_ON_TRIES = 5;
 // across a suspend that started with them off (the automatic sleep always does), and the key that woke the computer is usually
 // not delivered as input, so they stayed dark until a second input. Only when this module turned them off (`displayOff`) and
 // the session is locked (`locked`, Lock.locked: the lock before sleep is the sleep inhibitor's; a session found unlocked at the
-// resume is locked first by afterResume): display only, exact values only (anything else changes nothing).
-function wakeAtResume(displayOff, locked) {
-    return displayOff === true && locked === true;
+// resume is locked first by afterResume), and no new sleep is under way (`sleeping`, SleepInhibitor.sleeping: a sleep that
+// started before the wake was due is not lit; review of c94e3195): display only, exact values only (anything else changes
+// nothing).
+function wakeAtResume(displayOff, locked, sleeping) {
+    return displayOff === true && locked === true && sleeping === false;
 }
 
 // How long after logind's PrepareForSleep(false) the lock screen is lit: the outputs are coming back then (a DPMS commit that

@@ -393,25 +393,39 @@ Scope {
     // start to sync. Here the lock screen's display-off countdown starts over: its idle monitor (and the unlocked one) is
     // re-armed, so the displays come on (updateDisplays) and go off again after displayOffSeconds without input. Display only:
     // nothing here locks, unlocks, releases or delays a lock; only a locked session with the displays turned off by this module
-    // is lit (IdleModel.wakeAtResume, read when the Timer fires). ----
+    // is lit, never while a new sleep is under way (IdleModel.wakeAtResume, read when the Timer fires; the Timer also stops when
+    // a sleep starts). ----
     property bool rearmingLocked: false
 
     function wakeAfterResume(): void {
-        if (!IdleModel.wakeAtResume(root.displayOff, Lock.locked))
+        if (!IdleModel.wakeAtResume(root.displayOff, Lock.locked, sleepInhibitor.sleeping))
             return;
         console.info("grassfield-idle: resumed with the displays off; lighting the lock screen");
         root.rearmingInactive = true;
         root.rearmingLocked = true;
-        Qt.callLater(() => {
-            root.rearmingInactive = false;
-            root.rearmingLocked = false;
-        });
+        Qt.callLater(root.armAfterResume);
+    }
+
+    // One event-loop turn after wakeAfterResume: both monitors armed again, so the lock screen's countdown runs from now (without
+    // this the lock screen's display-off would stay disarmed for the rest of the session: lit all night, no automatic sleep).
+    function armAfterResume(): void {
+        root.rearmingInactive = false;
+        root.rearmingLocked = false;
     }
 
     Timer {
         id: resumeWake
         interval: IdleModel.RESUME_WAKE_MS
         onTriggered: root.wakeAfterResume()
+    }
+
+    // A sleep that starts before the wake was due: no wake from the previous resume (review of c94e3195).
+    Connections {
+        target: sleepInhibitor
+        function onSleepingChanged(): void {
+            if (sleepInhibitor.sleeping)
+                resumeWake.stop();
+        }
     }
 
     SleepInhibitor {

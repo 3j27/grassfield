@@ -25,7 +25,8 @@
 #                when it gives a frame; Hyprland reports LOCK on every monitor
 #   display-off  D-4: with `idle devDisplayOff 4` set before the lock, the shell turns the displays off after 4 s
 #                without input (idle status displayOff, Hyprland dpmsStatus) and on again on pointer motion; dark again,
-#                then `idle devSleep after` (the after-resume path) lights them without input, still locked
+#                then `idle devSleep after` (the after-resume path) lights them without input, still locked, and they go
+#                dark again 4 s later; a `devSleep before` right after a resume keeps them dark; the next resume lights them
 #   auto-sleep   automatic sleep: energy.preventSleep false in the dev config and `idle devAutoSleep 2`: 2 s after the
 #                displays went off on the lock screen one sleep comes due and the dev session suppresses it (counted, never
 #                run), the 5-minute retry armed; with it true none comes due (battery or power adapter); locked
@@ -564,6 +565,31 @@ step_display_off() {
   done
   [[ -n $off ]] && pass "display-off: a resume lights the lock screen without input" || fail "display-off: still off after the resume: $st"
   compositor_locked && pass "display-off: still locked after the resume" || fail "display-off: Hyprland no longer reports LOCK after the resume"
+  # ...and the lock screen's countdown runs again from the resume: dark again after its 4 s without input (review of c94e3195:
+  # without Idle.armAfterResume the monitor stayed disarmed, the displays lit for the rest of the session). Within 8 s.
+  off=""
+  for _ in $(seq 1 32); do
+    st=$(ipc idle status)
+    [[ $(jq -r '.displayOff' <<<"$st" 2>/dev/null) == true ]] && { off=1; break; }
+    sleep 0.25
+  done
+  [[ -n $off ]] && pass "display-off: dark again without input after the resume" || fail "display-off: still lit 8 s after the resume: $st"
+  # A sleep that starts before the wake is due (review of c94e3195): a resume, then at once the before-sleep path: the displays
+  # stay dark past IdleModel.RESUME_WAKE_MS; the next resume lights them.
+  echo "idle devSleep after -> $(ipc idle devSleep after); idle devSleep before -> $(ipc idle devSleep before)"
+  sleep 2.5
+  st=$(ipc idle status)
+  [[ $(jq -r '.displayOff' <<<"$st" 2>/dev/null) == true ]] && pass "display-off: a sleep that starts before the wake keeps the displays dark" \
+    || fail "display-off: lit by the previous resume although a sleep had started: $st"
+  echo "idle devSleep after -> $(ipc idle devSleep after)"
+  off=""
+  for _ in $(seq 1 16); do
+    st=$(ipc idle status)
+    [[ $(jq -r '.displayOff' <<<"$st" 2>/dev/null) == false ]] && { off=1; break; }
+    sleep 0.25
+  done
+  [[ -n $off ]] && pass "display-off: the next resume lights them" || fail "display-off: still off after the next resume: $st"
+  compositor_locked && pass "display-off: still locked at the end" || fail "display-off: Hyprland no longer reports LOCK at the end"
 }
 
 # The dev config this nested shell reads (GRASSFIELD_CONFIG_HOME=.dev/config, scripts/dev/shell-run.sh): energy.preventSleep

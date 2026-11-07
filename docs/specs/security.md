@@ -896,10 +896,14 @@ screen): NOT VERIFIED.
   (1.5 s, a monotonic Timer) after the sleep inhibitor's resume (`SleepInhibitor.resumed`, emitted at the end of
   `afterResume`, after its lock decision), `Idle.wakeAfterResume` re-arms the lock screen's idle monitor and the unlocked one
   (`rearmingLocked`, `rearmingInactive` for one event-loop turn): the displays come on (`updateDisplays`) and the 30 s
-  countdown starts over. Only when this module had turned the displays off and the session is locked
-  (`IdleModel.wakeAtResume(displayOff, Lock.locked)`, read when the Timer fires; exact values only); display only: it never
-  locks, unlocks, releases or delays a lock, and an unlocked session is never lit by it. `tst_idlemodel.qml`
-  `test_wakeAtResume`, `test_resumeLightsTheLockScreenOnly`. NOT VERIFIED on hardware (no suspend on the development laptop
+  countdown starts over (`Idle.armAfterResume`, one turn later, arms both again: without it the lock screen's display-off
+  would stay disarmed for the session). Only when this module had turned the displays off, the session is locked and no new
+  sleep is under way (`IdleModel.wakeAtResume(displayOff, Lock.locked, SleepInhibitor.sleeping)`, read when the Timer fires;
+  exact values only; the Timer also stops when a sleep starts); display only: it never locks, unlocks, releases or delays a
+  lock, and an unlocked session is never lit by it. `resumed` is emitted last in `afterResume`. `tst_idlemodel.qml`
+  `test_wakeAtResume`, `test_resumeLightsTheLockScreenOnly`, `test_resumeArmsTheMonitorsAgain`,
+  `test_resumeTimerStopsWhenSleepStarts`, `test_resumedIsEmittedLast`; `lock_privacy.sh display-off` (nested): lit after the
+  resume, dark again 4 s later, kept dark by a sleep that starts before the wake. NOT VERIFIED on hardware (no suspend on the development laptop
   since 2026-10-17; owner check in the report of the fix).
 - Display power-off while unlocked (2026-10-26, Settings > Lock Screen; ADR-0010 amendment of that date): a second
   `IdleMonitor` (`respectInhibitors: true`, armed only while unlocked and no ScreenSaver cookie is held,
